@@ -183,7 +183,7 @@ export function useFileBrowser() {
   }, [])
 
   const selectItem = React.useCallback(
-    async (path: string) => {
+    async (path: string, shouldLoadDirectory = true) => {
       const item = modelRef.current.items[path]
       if (!item) {
         return
@@ -192,6 +192,13 @@ export function useFileBrowser() {
       setSelectedItemPath(path)
       if (item.type === "file") {
         await openFile(item)
+        return
+      }
+
+      if (
+        !shouldLoadDirectory ||
+        Object.hasOwn(modelRef.current.childrenByPath, path)
+      ) {
         return
       }
 

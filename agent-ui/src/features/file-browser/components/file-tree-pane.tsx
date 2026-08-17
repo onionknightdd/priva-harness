@@ -39,7 +39,10 @@ export function FileTreePane({
   model: FileBrowserModel
   onDeleteRequest: (item: FileBrowserItem) => void
   onDownload: (item: FileBrowserItem) => void
-  onItemSelect: (path: string) => Promise<void>
+  onItemSelect: (
+    path: string,
+    shouldLoadDirectory: boolean
+  ) => Promise<void>
   onRefresh: () => Promise<void>
   onRetry: () => Promise<void>
   onUpload: (directory: string) => void

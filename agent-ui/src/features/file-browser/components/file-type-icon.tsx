@@ -9,6 +9,8 @@ import jsonIcon from "material-icon-theme/icons/json.svg?url"
 import licenseIcon from "material-icon-theme/icons/license.svg?url"
 import markdownIcon from "material-icon-theme/icons/markdown.svg?url"
 import nodeIcon from "material-icon-theme/icons/nodejs.svg?url"
+import pythonIcon from "material-icon-theme/icons/python.svg?url"
+import pythonMiscIcon from "material-icon-theme/icons/python-misc.svg?url"
 import reactIcon from "material-icon-theme/icons/react.svg?url"
 import reactTypescriptIcon from "material-icon-theme/icons/react_ts.svg?url"
 import readmeIcon from "material-icon-theme/icons/readme.svg?url"
@@ -50,6 +52,10 @@ const iconByExtension: Record<string, string> = {
   md: markdownIcon,
   mdx: markdownIcon,
   png: imageIcon,
+  py: pythonIcon,
+  pyc: pythonMiscIcon,
+  pyi: pythonIcon,
+  pyw: pythonIcon,
   svg: imageIcon,
   ts: typescriptIcon,
   tsx: reactTypescriptIcon,

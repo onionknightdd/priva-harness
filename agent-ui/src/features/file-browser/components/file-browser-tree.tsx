@@ -8,6 +8,7 @@ import {
   type ItemInstance,
 } from "@headless-tree/core"
 import { useTree } from "@headless-tree/react"
+import gsap from "gsap"
 import {
   CopyIcon,
   DownloadIcon,
@@ -49,6 +50,106 @@ import { FileTypeIcon } from "./file-type-icon"
 
 const FILE_TREE_INDENT = 20
 const FILE_TREE_STICKY_ROW_HEIGHT = 34
+const FOLDER_ICON_TRANSITION_DURATION = 0.2
+
+function AnimatedFolderIcon({ expanded }: { expanded: boolean }) {
+  const iconRef = React.useRef<HTMLSpanElement>(null)
+  const previousExpandedRef = React.useRef(expanded)
+
+  React.useLayoutEffect(() => {
+    const icon = iconRef.current
+    const closedIcon = icon?.querySelector<SVGSVGElement>(
+      "[data-folder-icon=closed]"
+    )
+    const openIcon = icon?.querySelector<SVGSVGElement>(
+      "[data-folder-icon=open]"
+    )
+
+    if (!icon || !closedIcon || !openIcon) {
+      return
+    }
+
+    const previousExpanded = previousExpandedRef.current
+    const incomingIcon = expanded ? openIcon : closedIcon
+    const outgoingIcon = expanded ? closedIcon : openIcon
+    const iconTargets = [closedIcon, openIcon]
+    const reducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches
+
+    previousExpandedRef.current = expanded
+    gsap.killTweensOf(iconTargets)
+
+    if (previousExpanded === expanded || reducedMotion) {
+      gsap.set(incomingIcon, { opacity: 1, scale: 1, y: 0 })
+      gsap.set(outgoingIcon, { opacity: 0, scale: 1, y: 0 })
+
+      return () => gsap.killTweensOf(iconTargets)
+    }
+
+    const context = gsap.context(() => {
+      gsap
+        .timeline()
+        .set(incomingIcon, {
+          opacity: 0,
+          scale: 0.9,
+          transformOrigin: "50% 50%",
+          y: expanded ? 1 : -1,
+        })
+        .set(outgoingIcon, {
+          opacity: 1,
+          scale: 1,
+          transformOrigin: "50% 50%",
+          y: 0,
+        })
+        .to(
+          outgoingIcon,
+          {
+            opacity: 0,
+            scale: 0.9,
+            duration: FOLDER_ICON_TRANSITION_DURATION * 0.55,
+            ease: "power2.in",
+            y: expanded ? -1 : 1,
+          },
+          0
+        )
+        .to(
+          incomingIcon,
+          {
+            opacity: 1,
+            scale: 1,
+            duration: FOLDER_ICON_TRANSITION_DURATION * 0.8,
+            ease: "power2.out",
+            y: 0,
+          },
+          FOLDER_ICON_TRANSITION_DURATION * 0.2
+        )
+    }, icon)
+
+    return () => context.revert()
+  }, [expanded])
+
+  return (
+    <span
+      ref={iconRef}
+      aria-hidden="true"
+      className="relative size-4 shrink-0"
+    >
+      <FolderIcon
+        data-folder-icon="closed"
+        className={`absolute inset-0 size-4 text-muted-foreground ${
+          expanded ? "opacity-0" : "opacity-100"
+        }`}
+      />
+      <FolderOpenIcon
+        data-folder-icon="open"
+        className={`absolute inset-0 size-4 text-muted-foreground ${
+          expanded ? "opacity-100" : "opacity-0"
+        }`}
+      />
+    </span>
+  )
+}
 
 function FileBrowserTreeNode({
   item,
@@ -100,6 +201,7 @@ function FileBrowserTreeNode({
     <TreeItem
       item={item}
       level={level}
+      aria-busy={loading || undefined}
       data-file-tree-folder-row={item.isFolder() || undefined}
       className="relative box-border w-full min-w-0 max-w-full overflow-hidden pb-0! text-start data-[file-tree-folder-row=true]:sticky data-[file-tree-folder-row=true]:bg-background"
       style={
@@ -113,18 +215,15 @@ function FileBrowserTreeNode({
     >
       <TreeItemLabel className="min-h-8 w-full min-w-0 max-w-full gap-1 pr-1 in-data-popup-open:bg-accent">
         <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
-          {loading ? (
-            <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground motion-reduce:animate-none" />
-          ) : item.isFolder() ? (
-            item.isExpanded() ? (
-              <FolderOpenIcon className="size-4 text-muted-foreground" />
-            ) : (
-              <FolderIcon className="size-4 text-muted-foreground" />
-            )
+          {item.isFolder() ? (
+            <AnimatedFolderIcon expanded={item.isExpanded()} />
           ) : (
             <FileTypeIcon name={data.name} />
           )}
           <span className="min-w-0 truncate">{data.name}</span>
+          {loading && (
+            <LoaderCircleIcon className="size-3 shrink-0 animate-spin text-muted-foreground motion-reduce:animate-none" />
+          )}
         </span>
         <span className="flex min-w-0 shrink-0 items-center gap-[clamp(0.25rem,2cqi,0.75rem)] overflow-hidden">
           <span className="w-[clamp(2.25rem,15cqi,3rem)] shrink-0 overflow-hidden text-right text-[10px] leading-none whitespace-nowrap tabular-nums text-muted-foreground">
@@ -250,7 +349,10 @@ export function FileBrowserTree({
   onActionFeedback: (message: string) => void
   onDeleteRequest: (item: FileBrowserItem) => void
   onDownload: (item: FileBrowserItem) => void
-  onItemSelect: (path: string) => Promise<void>
+  onItemSelect: (
+    path: string,
+    shouldLoadDirectory: boolean
+  ) => Promise<void>
   onUpload: (directory: string) => void
   query: string
   rootPath: string
@@ -280,11 +382,14 @@ export function FileBrowserTree({
           : model.childrenByPath[itemId] ?? [],
     },
     onPrimaryAction: (item) => {
-      void onItemSelect(item.getId()).catch((error: unknown) =>
-        onActionFeedback(
-          error instanceof Error ? error.message : String(error)
+      const shouldLoadDirectory = item.isFolder() && !item.isExpanded()
+
+      void onItemSelect(item.getId(), shouldLoadDirectory).catch(
+        (error: unknown) =>
+          onActionFeedback(
+            error instanceof Error ? error.message : String(error)
+          )
         )
-      )
     },
     features: [
       syncDataLoaderFeature,

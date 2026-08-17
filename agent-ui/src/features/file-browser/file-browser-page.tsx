@@ -219,9 +219,12 @@ export function FileBrowserPage() {
     setDesktopTreeVisibility(visible)
   }
 
-  const handleItemSelect = async (path: string) => {
+  const handleItemSelect = async (
+    path: string,
+    shouldLoadDirectory: boolean
+  ) => {
     const item = browser.model.items[path]
-    await browser.selectItem(path)
+    await browser.selectItem(path, shouldLoadDirectory)
 
     if (isMobile && item?.type === "file") {
       setTreeVisible(false)
