@@ -3,6 +3,10 @@ import gsap from "gsap"
 import { useTranslation } from "react-i18next"
 
 import {
+  Tabs,
+  TabsContent,
+} from "@/components/assistant-ui/tabs"
+import {
   canRenderFile,
   canShowFileSource,
   type FilePreviewMode,
@@ -56,34 +60,22 @@ function RenderedFile({ file }: { file: PreviewFile }) {
   return <UnsupportedPreview hasFile />
 }
 
-export function RichFilePreview({
-  className,
-  expanded = false,
+function FilePreviewPanel({
+  active,
   file,
   mode,
-  onExpandedChange,
-  onModeChange,
 }: {
-  className?: string
-  expanded?: boolean
-  file: PreviewFile | null
-  mode?: FilePreviewMode
-  onExpandedChange?: (expanded: boolean) => void
-  onModeChange?: (mode: FilePreviewMode) => void
+  active: boolean
+  file: PreviewFile
+  mode: FilePreviewMode | null
 }) {
-  const { t } = useTranslation()
   const contentRef = React.useRef<HTMLDivElement>(null)
-  const [internalMode, setInternalMode] =
-    React.useState<FilePreviewMode>("source")
-  const preferredMode = mode ?? internalMode
-  const activeMode = getAvailableMode(file, preferredMode)
-  const sourceAvailable = canShowFileSource(file)
-  const renderAvailable = canRenderFile(file)
 
   React.useLayoutEffect(() => {
     const content = contentRef.current
 
     if (
+      !active ||
       !content ||
       window.matchMedia("(prefers-reduced-motion: reduce)").matches
     ) {
@@ -105,7 +97,54 @@ export function RichFilePreview({
     }, content)
 
     return () => context.revert()
-  }, [activeMode, file?.id])
+  }, [active, file.id, mode])
+
+  return (
+    <TabsContent
+      value={file.id}
+      className="min-h-0 flex-1 overflow-auto"
+    >
+      <div ref={contentRef} className="min-h-full">
+        {mode === "source" && file.content !== undefined ? (
+          <SourcePreview content={file.content} fileName={file.name} />
+        ) : (
+          <RenderedFile file={file} />
+        )}
+      </div>
+    </TabsContent>
+  )
+}
+
+export function RichFilePreview({
+  activeFileId,
+  className,
+  expanded = false,
+  files,
+  mode,
+  onActiveFileChange,
+  onCloseAll,
+  onExpandedChange,
+  onModeChange,
+}: {
+  activeFileId: string | null
+  className?: string
+  expanded?: boolean
+  files: PreviewFile[]
+  mode?: FilePreviewMode
+  onActiveFileChange: (fileId: string) => void
+  onCloseAll: () => void
+  onExpandedChange?: (expanded: boolean) => void
+  onModeChange?: (mode: FilePreviewMode) => void
+}) {
+  const { t } = useTranslation()
+  const [internalMode, setInternalMode] =
+    React.useState<FilePreviewMode>("source")
+  const preferredMode = mode ?? internalMode
+  const activeFile =
+    files.find((file) => file.id === activeFileId) ?? null
+  const activeMode = getAvailableMode(activeFile, preferredMode)
+  const sourceAvailable = canShowFileSource(activeFile)
+  const renderAvailable = canRenderFile(activeFile)
 
   const handleModeChange = (nextMode: FilePreviewMode) => {
     setInternalMode(nextMode)
@@ -116,28 +155,46 @@ export function RichFilePreview({
     <section
       aria-label={t("filePreview.label")}
       className={cn(
-        "flex min-h-0 min-w-0 flex-1 flex-col bg-card text-card-foreground",
+        "rich-file-preview flex min-h-0 min-w-0 flex-1 flex-col bg-card text-card-foreground",
         className
       )}
     >
-      <FilePreviewToolbar
-        expanded={expanded}
-        fileName={file?.name}
-        mode={activeMode}
-        onExpandedChange={onExpandedChange}
-        onModeChange={handleModeChange}
-        renderAvailable={renderAvailable}
-        sourceAvailable={sourceAvailable}
-      />
-      <div ref={contentRef} className="min-h-0 flex-1 overflow-auto">
-        {!file ? (
-          <UnsupportedPreview hasFile={false} />
-        ) : activeMode === "source" && file.content !== undefined ? (
-          <SourcePreview content={file.content} fileName={file.name} />
+      <Tabs
+        value={activeFileId ?? ""}
+        onValueChange={(fileId) => {
+          if (files.some((file) => file.id === fileId)) {
+            onActiveFileChange(fileId)
+          }
+        }}
+        className="min-h-0 flex-1 gap-0"
+      >
+        <FilePreviewToolbar
+          activeFile={activeFile}
+          expanded={expanded}
+          files={files}
+          mode={activeMode}
+          onCloseAll={onCloseAll}
+          onExpandedChange={onExpandedChange}
+          onModeChange={handleModeChange}
+          renderAvailable={renderAvailable}
+          sourceAvailable={sourceAvailable}
+        />
+
+        {files.length > 0 ? (
+          files.map((file) => (
+            <FilePreviewPanel
+              key={file.id}
+              active={file.id === activeFileId}
+              file={file}
+              mode={getAvailableMode(file, preferredMode)}
+            />
+          ))
         ) : (
-          <RenderedFile file={file} />
+          <div className="min-h-0 flex-1 overflow-auto">
+            <UnsupportedPreview hasFile={false} />
+          </div>
         )}
-      </div>
+      </Tabs>
     </section>
   )
 }

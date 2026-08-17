@@ -4,6 +4,11 @@ export type FileBrowserItem = {
   children?: string[]
 }
 
+export type FileBrowserItemMetadata = {
+  modifiedAt: string
+  size?: number
+}
+
 export const FILE_BROWSER_ROOT_ID = "root"
 
 export const FILE_BROWSER_DEFAULT_ITEM_ID = "file-browser-page"
@@ -119,6 +124,42 @@ export const fileBrowserItems: Record<string, FileBrowserItem> = {
 }
 
 export const fileBrowserItemCount = Object.keys(fileBrowserItems).length - 1
+
+const fileBrowserFileSizes: Record<string, number> = {
+  "app-tsx": 6842,
+  "index-css": 4891,
+  "main-tsx": 516,
+  "file-browser-page": 9826,
+  "file-browser-data": 4184,
+  "app-sidebar-tsx": 1734,
+  "canvas-shell-tsx": 3218,
+  "vite-svg": 1497,
+  "agent-runner-ts": 3672,
+  "agent-package-json": 1248,
+  "vite-config": 482,
+  "tsconfig-json": 736,
+  dockerfile: 524,
+  "package-json": 891,
+  readme: 2864,
+  license: 1072,
+}
+
+const metadataItemIds = Object.keys(fileBrowserItems).filter(
+  (itemId) => itemId !== FILE_BROWSER_ROOT_ID
+)
+const metadataBaseTime = Date.parse("2026-08-17T06:30:00.000Z")
+
+export const fileBrowserItemMetadata = Object.fromEntries(
+  metadataItemIds.map((itemId, index) => [
+    itemId,
+    {
+      modifiedAt: new Date(
+        metadataBaseTime - index * 37 * 60 * 1000
+      ).toISOString(),
+      size: fileBrowserFileSizes[itemId],
+    },
+  ])
+) as Record<string, FileBrowserItemMetadata>
 
 const fileBrowserParentIds = Object.entries(fileBrowserItems).reduce<
   Record<string, string>

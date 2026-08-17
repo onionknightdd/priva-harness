@@ -1,8 +1,11 @@
 import * as React from "react"
+import gsap from "gsap"
 import {
   ChevronDownIcon,
   FolderIcon,
+  FolderPlusIcon,
   FoldersIcon,
+  UploadIcon,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
@@ -102,7 +105,7 @@ function PathItem({
 
   return (
     <div
-      className="inline-flex min-w-0 items-center rounded-md bg-muted/40"
+      className="inline-flex min-w-0 items-center rounded-md"
       data-current={current || undefined}
     >
       <Button
@@ -110,7 +113,7 @@ function PathItem({
         variant="ghost"
         size="xs"
         aria-current={current ? "location" : undefined}
-        className="max-w-12 min-w-0 rounded-r-none px-1.5 font-normal data-[current=true]:text-foreground sm:max-w-36 sm:px-2"
+        className="max-w-12 min-w-0 rounded-r-none px-1.5 font-normal data-[current=true]:bg-muted data-[current=true]:text-foreground sm:max-w-36 sm:px-2"
         data-current={current || undefined}
         title={item.name}
         onClick={() => onNavigate(itemId)}
@@ -125,7 +128,7 @@ function PathItem({
                 type="button"
                 variant="ghost"
                 size="icon-xs"
-                className="rounded-l-none border-l border-border/60"
+                className="rounded-l-none"
                 aria-label={t("fileBrowser.openDirectories", {
                   directory: item.name,
                 })}
@@ -163,14 +166,62 @@ export function FileAddressBar({
   treeVisible: boolean
 }) {
   const { t } = useTranslation()
+  const announcementTimerRef = React.useRef<number | null>(null)
+  const [announcement, setAnnouncement] = React.useState("")
   const path = getFileBrowserPath(selectedItemId)
   const entries = getBreadcrumbEntries(path)
   const treeToggleLabel = treeVisible
     ? t("fileBrowser.hideTree")
     : t("fileBrowser.showTree")
 
+  React.useEffect(
+    () => () => {
+      if (announcementTimerRef.current !== null) {
+        window.clearTimeout(announcementTimerRef.current)
+      }
+    },
+    []
+  )
+
+  const handlePlaceholderAction = (
+    event: React.MouseEvent<HTMLButtonElement>,
+    action: string
+  ) => {
+    const icon = event.currentTarget.querySelector("svg")
+
+    setAnnouncement(t("fileBrowser.actionUnavailable", { action }))
+
+    if (announcementTimerRef.current !== null) {
+      window.clearTimeout(announcementTimerRef.current)
+    }
+
+    announcementTimerRef.current = window.setTimeout(
+      () => setAnnouncement(""),
+      1600
+    )
+
+    if (
+      icon &&
+      !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      gsap.fromTo(
+        icon,
+        { scale: 0.78 },
+        {
+          scale: 1,
+          duration: 0.28,
+          ease: "back.out(2.5)",
+          clearProps: "transform",
+        }
+      )
+    }
+  }
+
   return (
-    <div className="flex h-11 shrink-0 items-center gap-1.5 border-b px-2">
+    <div
+      data-file-browser-enter
+      className="flex h-10 shrink-0 items-center gap-1.5 px-1"
+    >
       <Tooltip>
         <TooltipTrigger
           render={
@@ -217,6 +268,50 @@ export function FileAddressBar({
           ))}
         </BreadcrumbList>
       </Breadcrumb>
+      <div className="flex shrink-0 items-center gap-1">
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={t("fileBrowser.createFolder")}
+                onClick={(event) =>
+                  handlePlaceholderAction(
+                    event,
+                    t("fileBrowser.createFolder")
+                  )
+                }
+              />
+            }
+          >
+            <FolderPlusIcon aria-hidden="true" />
+          </TooltipTrigger>
+          <TooltipContent>{t("fileBrowser.createFolder")}</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={t("fileBrowser.upload")}
+                onClick={(event) =>
+                  handlePlaceholderAction(event, t("fileBrowser.upload"))
+                }
+              />
+            }
+          >
+            <UploadIcon aria-hidden="true" />
+          </TooltipTrigger>
+          <TooltipContent>{t("fileBrowser.upload")}</TooltipContent>
+        </Tooltip>
+      </div>
+      <p className="sr-only" role="status" aria-live="polite">
+        {announcement}
+      </p>
     </div>
   )
 }

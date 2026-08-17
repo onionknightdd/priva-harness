@@ -8,7 +8,10 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable"
-import { RichFilePreview } from "@/features/files"
+import {
+  RichFilePreview,
+  type PreviewFile,
+} from "@/features/files"
 import { useIsMobile } from "@/hooks/use-mobile"
 
 import { FileAddressBar } from "./components/file-address-bar"
@@ -21,7 +24,7 @@ import { getFileBrowserPreviewFile } from "./file-browser-preview-data"
 
 const TREE_DEFAULT_SIZE = 30
 const TREE_MIN_SIZE = 18
-const TREE_MAX_SIZE = 45
+const TREE_MAX_SIZE = 65
 
 function clampTreeSize(size: number) {
   return Math.min(TREE_MAX_SIZE, Math.max(TREE_MIN_SIZE, size))
@@ -38,9 +41,21 @@ export function FileBrowserPage() {
   const [selectedItemId, setSelectedItemId] = React.useState(
     FILE_BROWSER_DEFAULT_ITEM_ID
   )
+  const [openedFileIds, setOpenedFileIds] = React.useState<string[]>([
+    FILE_BROWSER_DEFAULT_ITEM_ID,
+  ])
+  const [activeFileId, setActiveFileId] = React.useState<string | null>(
+    FILE_BROWSER_DEFAULT_ITEM_ID
+  )
   const [treeVisible, setTreeVisible] = React.useState(true)
   const [panelTransitioning, setPanelTransitioning] = React.useState(false)
-  const selectedFile = getFileBrowserPreviewFile(selectedItemId)
+  const openedFiles = React.useMemo(
+    () =>
+      openedFileIds
+        .map(getFileBrowserPreviewFile)
+        .filter((file): file is PreviewFile => file !== null),
+    [openedFileIds]
+  )
 
   React.useLayoutEffect(() => {
     const page = pageRef.current
@@ -201,28 +216,51 @@ export function FileBrowserPage() {
   const handleNavigate = (itemId: string) => {
     setSelectedItemId(itemId)
 
-    if (isMobile && fileBrowserItems[itemId].type === "file") {
-      setTreeVisible(false)
+    if (fileBrowserItems[itemId].type === "file") {
+      const previewFile = getFileBrowserPreviewFile(itemId)
+
+      if (previewFile) {
+        setOpenedFileIds((currentFileIds) =>
+          currentFileIds.includes(itemId)
+            ? currentFileIds
+            : [...currentFileIds, itemId]
+        )
+        setActiveFileId(itemId)
+      }
+
+      if (isMobile) {
+        setTreeVisible(false)
+      }
     }
+  }
+
+  const handleActiveFileChange = (fileId: string) => {
+    setActiveFileId(fileId)
+    setSelectedItemId(fileId)
+  }
+
+  const handleCloseAll = () => {
+    setOpenedFileIds([])
+    setActiveFileId(null)
   }
 
   return (
     <div
       ref={pageRef}
-      className="flex min-h-0 flex-1 flex-col p-4 pt-0"
+      className="flex min-h-0 flex-1 flex-col gap-1 p-4 pt-0"
     >
+      <FileAddressBar
+        selectedItemId={selectedItemId}
+        treeVisible={treeVisible}
+        onNavigate={handleNavigate}
+        onTreeVisibilityChange={handleTreeVisibilityChange}
+      />
+
       <section
         data-file-browser-enter
         aria-label={t("fileBrowser.contentLabel")}
         className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card text-card-foreground"
       >
-        <FileAddressBar
-          selectedItemId={selectedItemId}
-          treeVisible={treeVisible}
-          onNavigate={handleNavigate}
-          onTreeVisibilityChange={handleTreeVisibilityChange}
-        />
-
         {isMobile ? (
           <div data-mobile-file-pane className="flex min-h-0 flex-1">
             {treeVisible ? (
@@ -232,8 +270,11 @@ export function FileBrowserPage() {
               />
             ) : (
               <RichFilePreview
-                file={selectedFile}
+                activeFileId={activeFileId}
                 expanded
+                files={openedFiles}
+                onActiveFileChange={handleActiveFileChange}
+                onCloseAll={handleCloseAll}
                 onExpandedChange={(expanded) =>
                   handleTreeVisibilityChange(!expanded)
                 }
@@ -287,10 +328,13 @@ export function FileBrowserPage() {
                   : "pointer-events-none opacity-0"
               }
             />
-            <ResizablePanel id="file-preview-panel" minSize="40%">
+            <ResizablePanel id="file-preview-panel" minSize="35%">
               <RichFilePreview
-                file={selectedFile}
+                activeFileId={activeFileId}
                 expanded={!treeVisible}
+                files={openedFiles}
+                onActiveFileChange={handleActiveFileChange}
+                onCloseAll={handleCloseAll}
                 onExpandedChange={(expanded) =>
                   handleTreeVisibilityChange(!expanded)
                 }

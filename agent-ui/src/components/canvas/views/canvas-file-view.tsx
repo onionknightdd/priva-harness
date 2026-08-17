@@ -1,3 +1,4 @@
+import * as React from "react"
 import { ArrowLeftIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
@@ -9,6 +10,12 @@ import {
 
 export function CanvasFileView({ onBack }: { onBack: () => void }) {
   const { t } = useTranslation()
+  const [openedFiles, setOpenedFiles] = React.useState([
+    canvasReadmePreview,
+  ])
+  const [activeFileId, setActiveFileId] = React.useState<string | null>(
+    canvasReadmePreview.id
+  )
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -24,7 +31,15 @@ export function CanvasFileView({ onBack }: { onBack: () => void }) {
           <span className="truncate">{t("canvas.backToHome")}</span>
         </Button>
       </div>
-      <RichFilePreview file={canvasReadmePreview} />
+      <RichFilePreview
+        activeFileId={activeFileId}
+        files={openedFiles}
+        onActiveFileChange={setActiveFileId}
+        onCloseAll={() => {
+          setOpenedFiles([])
+          setActiveFileId(null)
+        }}
+      />
     </div>
   )
 }

@@ -37,9 +37,8 @@ export function FileTreePane({
     []
   )
 
-  const handleRefresh = () => {
-    setRefreshVersion((version) => version + 1)
-    setAnnouncement(t("fileBrowser.refreshed"))
+  const announceAction = React.useCallback((message: string) => {
+    setAnnouncement(message)
 
     if (announcementTimerRef.current !== null) {
       window.clearTimeout(announcementTimerRef.current)
@@ -47,8 +46,13 @@ export function FileTreePane({
 
     announcementTimerRef.current = window.setTimeout(
       () => setAnnouncement(""),
-      1200
+      1600
     )
+  }, [])
+
+  const handleRefresh = () => {
+    setRefreshVersion((version) => version + 1)
+    announceAction(t("fileBrowser.refreshed"))
 
     if (
       refreshIconRef.current &&
@@ -105,6 +109,7 @@ export function FileTreePane({
           key={refreshVersion}
           query={query}
           selectedItemId={selectedItemId}
+          onActionFeedback={announceAction}
           onItemSelect={onItemSelect}
         />
       </div>
