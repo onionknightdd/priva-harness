@@ -29,15 +29,20 @@ import {
 } from "../file-browser-data"
 import { FileTypeIcon } from "./file-type-icon"
 
+const FILE_TREE_INDENT = 20
+
 function FileBrowserTreeNode({
   item,
+  level,
 }: {
   item: ItemInstance<FileBrowserItem>
+  level: number
 }) {
   const data = item.getItemData()
   const treeItem = (
     <TreeItem
       item={item}
+      level={level}
       className="relative w-full text-start before:pointer-events-none before:absolute before:-inset-y-0.5 before:start-0 before:-ms-1 before:w-[var(--tree-padding)] before:bg-[repeating-linear-gradient(to_right,transparent_0,transparent_calc(var(--tree-indent)-1px),var(--border)_calc(var(--tree-indent)-1px),var(--border)_calc(var(--tree-indent)))]"
     >
       <TreeItemLabel className="min-h-8 w-full gap-2">
@@ -68,10 +73,14 @@ function FileBrowserTreeNode({
       {treeItem}
       <CollapsibleContent
         role="group"
-        className="flex h-[var(--collapsible-panel-height)] flex-col gap-0.5 overflow-hidden pt-0.5 transition-[height,opacity] duration-200 ease-out data-[ending-style]:h-0 data-[ending-style]:opacity-0 data-[starting-style]:h-0 data-[starting-style]:opacity-0 motion-reduce:transition-none"
+        className="flex h-[var(--collapsible-panel-height)] flex-col gap-0.5 overflow-hidden pt-0.5 transition-[height] duration-200 ease-out data-[ending-style]:h-0 data-[starting-style]:h-0 motion-reduce:transition-none"
       >
         {item.getChildren().map((child) => (
-          <FileBrowserTreeNode key={child.getId()} item={child} />
+          <FileBrowserTreeNode
+            key={child.getId()}
+            item={child}
+            level={level + 1}
+          />
         ))}
       </CollapsibleContent>
     </Collapsible>
@@ -135,12 +144,12 @@ export function FileBrowserTree({ query }: { query: string }) {
   return (
     <Tree
       tree={tree}
-      indent={20}
+      indent={FILE_TREE_INDENT}
       aria-label={t("fileBrowser.treeLabel")}
       className="min-w-max gap-0.5"
     >
       {tree.getRootItem().getChildren().map((item) => (
-        <FileBrowserTreeNode key={item.getId()} item={item} />
+        <FileBrowserTreeNode key={item.getId()} item={item} level={0} />
       ))}
     </Tree>
   )

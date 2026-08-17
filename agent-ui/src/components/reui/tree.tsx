@@ -72,17 +72,21 @@ interface TreeItemProps<T = any> extends Omit<
 > {
   item: ItemInstance<T>
   indent?: number
+  level?: number
 }
 
 function TreeItem<T = any>({
   item,
+  indent: itemIndent,
+  level,
   className,
   render,
   children,
   ...props
 }: TreeItemProps<T>) {
   const parentContext = useTreeContext<T>()
-  const { indent } = parentContext
+  const indent = itemIndent ?? parentContext.indent
+  const itemLevel = level ?? item.getItemMeta()?.level ?? 0
 
   const itemProps = typeof item.getProps === "function" ? item.getProps() : {}
   const mergedProps = { ...props, children, ...itemProps }
@@ -93,7 +97,7 @@ function TreeItem<T = any>({
   // Merge styles
   const mergedStyle = {
     ...propStyle,
-    "--tree-padding": `${item.getItemMeta().level * indent}px`,
+    "--tree-padding": `${itemLevel * indent}px`,
   } as React.CSSProperties
 
   const defaultProps = {
