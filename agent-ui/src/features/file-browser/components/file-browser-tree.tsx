@@ -18,6 +18,11 @@ import {
   Trash2Icon,
   UploadIcon,
 } from "lucide-react"
+import {
+  LayoutGroup,
+  motion,
+  useReducedMotion,
+} from "motion/react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -36,6 +41,7 @@ import {
   TreeItem,
   TreeItemLabel,
 } from "@/components/reui/tree"
+import { menuHighlightTransition } from "@/components/motion/menu-highlight-transition"
 import { writeClipboardText } from "@/lib/clipboard"
 
 import {
@@ -151,7 +157,31 @@ function AnimatedFolderIcon({ expanded }: { expanded: boolean }) {
   )
 }
 
+function FileTreeHoverHighlight({ visible }: { visible: boolean }) {
+  const shouldReduceMotion = Boolean(useReducedMotion())
+
+  return (
+    <motion.span
+      layoutId="file-tree-hover-highlight"
+      data-slot="file-tree-hover-highlight"
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-y-0 right-0 left-(--tree-padding) z-0 rounded-sm bg-accent in-data-[stuck=true]:left-0 in-data-[stuck=true]:rounded-none"
+      initial={false}
+      animate={{ opacity: visible ? 1 : 0 }}
+      transition={
+        shouldReduceMotion
+          ? { duration: 0 }
+          : visible
+            ? menuHighlightTransition
+            : { ...menuHighlightTransition, delay: 0.2 }
+      }
+    />
+  )
+}
+
 function FileBrowserTreeNode({
+  hoverHighlightVisible,
+  hoveredItemId,
   item,
   level,
   loadingDirectories,
@@ -160,6 +190,8 @@ function FileBrowserTreeNode({
   onDownload,
   onUpload,
 }: {
+  hoverHighlightVisible: boolean
+  hoveredItemId: string | null
   item: ItemInstance<FileBrowserItem>
   level: number
   loadingDirectories: Set<string>
@@ -263,8 +295,9 @@ function FileBrowserTreeNode({
       item={item}
       level={level}
       aria-busy={loading || undefined}
+      data-file-tree-item-id={item.getId()}
       data-file-tree-folder-row={isFolder || undefined}
-      className="relative box-border w-full min-w-0 max-w-full overflow-hidden rounded-none pb-0! text-start data-[file-tree-folder-row=true]:sticky data-[stuck=true]:bg-card data-[stuck=true]:hover:bg-accent data-[stuck=true]:data-[selected=true]:bg-accent! data-[stuck=true]:data-[selected=true]:text-accent-foreground data-[stuck=true]:data-popup-open:bg-accent!"
+      className="relative box-border w-full min-w-0 max-w-full rounded-none pb-0! text-start data-[file-tree-folder-row=true]:sticky data-[stuck=true]:bg-card data-[stuck=true]:data-[selected=true]:bg-accent! data-[stuck=true]:data-[selected=true]:text-accent-foreground data-[stuck=true]:data-popup-open:bg-accent!"
       style={
         isFolder
           ? {
@@ -274,7 +307,10 @@ function FileBrowserTreeNode({
           : undefined
       }
     >
-      <TreeItemLabel className="min-h-8 w-full min-w-0 max-w-full gap-1 bg-card pe-4 in-data-[stuck=true]:rounded-none in-data-popup-open:bg-accent">
+      {hoveredItemId === item.getId() && (
+        <FileTreeHoverHighlight visible={hoverHighlightVisible} />
+      )}
+      <TreeItemLabel className="relative z-[1] min-h-8 w-full min-w-0 max-w-full gap-1 bg-transparent! pe-4 hover:bg-transparent! in-data-[selected=true]:bg-accent! in-data-[stuck=true]:rounded-none in-data-popup-open:bg-accent!">
         <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
           {isFolder ? (
             <AnimatedFolderIcon expanded={item.isExpanded()} />
@@ -383,6 +419,8 @@ function FileBrowserTreeNode({
           {item.getChildren().map((child) => (
             <FileBrowserTreeNode
               key={child.getId()}
+              hoverHighlightVisible={hoverHighlightVisible}
+              hoveredItemId={hoveredItemId}
               item={child}
               level={level + 1}
               loadingDirectories={loadingDirectories}
@@ -425,6 +463,12 @@ export function FileBrowserTree({
   selectedItemPath: string | null
 }) {
   const { t } = useTranslation()
+  const hoverLayoutGroupId = React.useId()
+  const [hoverHighlightVisible, setHoverHighlightVisible] =
+    React.useState(false)
+  const [hoveredItemId, setHoveredItemId] = React.useState<string | null>(
+    null
+  )
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const hasMatches = Object.values(model.items).some(
     (item) =>
@@ -465,6 +509,24 @@ export function FileBrowserTree({
       expandAllFeature,
     ],
   })
+
+  const activateHoverTarget = React.useCallback(
+    (target: EventTarget | null) => {
+      const treeItem =
+        target instanceof Element
+          ? target.closest<HTMLElement>("[data-file-tree-item-id]")
+          : null
+      const nextItemId = treeItem?.dataset.fileTreeItemId ?? null
+
+      setHoverHighlightVisible(Boolean(nextItemId))
+      setHoveredItemId((currentItemId) =>
+        !nextItemId || currentItemId === nextItemId
+          ? currentItemId
+          : nextItemId
+      )
+    },
+    []
+  )
 
   React.useLayoutEffect(() => {
     tree.rebuildTree()
@@ -519,25 +581,39 @@ export function FileBrowserTree({
   }
 
   return (
-    <Tree
-      tree={tree}
-      indent={FILE_TREE_INDENT}
-      aria-label={t("fileBrowser.treeLabel")}
-      className="w-full min-w-0 max-w-full gap-0.5 overflow-x-clip"
-    >
-      {tree.getRootItem().getChildren().map((item) => (
-        <FileBrowserTreeNode
-          key={item.getId()}
-          item={item}
-          level={0}
-          loadingDirectories={loadingDirectories}
-          onActionFeedback={onActionFeedback}
-          onDeleteRequest={onDeleteRequest}
-          onDownload={onDownload}
-          onUpload={onUpload}
-        />
-      ))}
-    </Tree>
+    <LayoutGroup id={hoverLayoutGroupId}>
+      <div
+        className="w-full min-w-0 max-w-full"
+        onPointerMove={(event) => activateHoverTarget(event.target)}
+        onPointerLeave={() => setHoverHighlightVisible(false)}
+        onFocusCapture={(event) => activateHoverTarget(event.target)}
+        onBlurCapture={(event) =>
+          activateHoverTarget(event.relatedTarget)
+        }
+      >
+        <Tree
+          tree={tree}
+          indent={FILE_TREE_INDENT}
+          aria-label={t("fileBrowser.treeLabel")}
+          className="w-full min-w-0 max-w-full gap-0.5 overflow-x-clip"
+        >
+          {tree.getRootItem().getChildren().map((item) => (
+            <FileBrowserTreeNode
+              key={item.getId()}
+              hoverHighlightVisible={hoverHighlightVisible}
+              hoveredItemId={hoveredItemId}
+              item={item}
+              level={0}
+              loadingDirectories={loadingDirectories}
+              onActionFeedback={onActionFeedback}
+              onDeleteRequest={onDeleteRequest}
+              onDownload={onDownload}
+              onUpload={onUpload}
+            />
+          ))}
+        </Tree>
+      </div>
+    </LayoutGroup>
   )
 }
 

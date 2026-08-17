@@ -9,18 +9,13 @@ import {
 } from "motion/react"
 
 import { cn } from "@/lib/utils"
+import { menuHighlightTransition } from "./menu-highlight-transition"
 
 type HighlightBounds = {
   top: number
   left: number
   width: number
   height: number
-}
-
-const springTransition: Transition = {
-  type: "spring",
-  stiffness: 350,
-  damping: 35,
 }
 
 function getHighlightTarget(
@@ -124,7 +119,7 @@ function SidebarMenuHighlight({
 
   const transition: Transition = shouldReduceMotion
     ? { duration: 0 }
-    : springTransition
+    : menuHighlightTransition
 
   return (
     <div
@@ -161,7 +156,7 @@ function SidebarMenuHighlight({
               opacity: 0,
               transition: shouldReduceMotion
                 ? { duration: 0 }
-                : { ...springTransition, delay: 0.2 },
+                : { ...menuHighlightTransition, delay: 0.2 },
             }}
             transition={transition}
           />
