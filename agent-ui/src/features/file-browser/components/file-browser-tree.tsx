@@ -213,7 +213,7 @@ function FileBrowserTreeNode({
           : undefined
       }
     >
-      <TreeItemLabel className="min-h-8 w-full min-w-0 max-w-full gap-1 bg-transparent pr-1 in-data-popup-open:bg-accent">
+      <TreeItemLabel className="min-h-8 w-full min-w-0 max-w-full gap-1 bg-card pr-1 in-data-popup-open:bg-accent">
         <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
           {item.isFolder() ? (
             <AnimatedFolderIcon expanded={item.isExpanded()} />
