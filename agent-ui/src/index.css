@@ -122,15 +122,16 @@
     @apply border-border outline-ring/50;
     }
   body {
-    @apply bg-background text-foreground;
+    @apply h-full overflow-hidden bg-background text-foreground;
     }
   html {
-    @apply font-sans;
+    @apply h-full overflow-hidden font-sans;
     }
 }
 
 #root {
-  min-height: 100svh;
+  height: 100svh;
+  overflow: hidden;
 }
 
 .rich-file-preview {
@@ -152,6 +153,10 @@
   .file-preview-toolbar__tabs {
     grid-column: 1;
     grid-row: 1;
+  }
+
+  .file-preview-toolbar__actions {
+    display: contents;
   }
 
   .file-preview-toolbar__close {

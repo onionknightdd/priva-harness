@@ -93,13 +93,16 @@ export function CanvasShell({
   return (
     <SidebarProvider
       ref={shellRef}
+      className="h-full min-h-0 overflow-hidden"
       keyboardShortcut={false}
       defaultWidth={CANVAS_DEFAULT_WIDTH}
       maxWidth={canvasMaxWidth}
       widthCookieName="canvas_width"
       stateCookieName="canvas_state"
     >
-      <SidebarInset>{children}</SidebarInset>
+      <SidebarInset className="min-h-0 overflow-hidden">
+        {children}
+      </SidebarInset>
       {canvasEnabled && (
         <>
           <CanvasToggle

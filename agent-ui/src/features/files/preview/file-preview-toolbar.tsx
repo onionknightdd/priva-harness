@@ -186,12 +186,12 @@ export function FilePreviewToolbar({
               <div
                 key={file.id}
                 data-file-preview-tab
-                className="inline-flex min-w-0 max-w-48 shrink-0 items-center"
+                className="relative inline-flex min-w-0 max-w-48 shrink-0 items-center"
               >
                 <TabsTrigger
                   value={file.id}
                   title={file.path}
-                  className="min-w-0 max-w-40 flex-1 truncate pr-1 font-normal dark:data-active:text-foreground"
+                  className="min-w-0 max-w-48 flex-1 truncate pr-7 font-normal dark:data-active:text-foreground"
                 >
                   <span className="truncate">{file.name}</span>
                 </TabsTrigger>
@@ -202,7 +202,7 @@ export function FilePreviewToolbar({
                         type="button"
                         variant="ghost"
                         size="icon-xs"
-                        className="-ml-1 size-5 rounded-sm border-0 shadow-none"
+                        className="absolute top-1/2 right-0.5 z-20 size-5 -translate-y-1/2 rounded-sm border-0 shadow-none"
                         aria-label={t("filePreview.closeFile", {
                           fileName: file.name,
                         })}
@@ -230,112 +230,69 @@ export function FilePreviewToolbar({
         )}
       </div>
 
-      <Button
-        type="button"
-        variant="secondary"
-        size="xs"
-        className="file-preview-toolbar__close rounded-full font-normal"
-        disabled={files.length === 0}
-        onClick={handleCloseAll}
-      >
-        <XIcon aria-hidden="true" />
-        {t("filePreview.closeAll")}
-      </Button>
-
-      <div className="file-preview-toolbar__separator flex w-5 shrink-0 self-stretch items-center justify-center">
-        <Separator orientation="vertical" className="h-5 self-auto" />
-      </div>
-
-      <div className="file-preview-toolbar__controls flex shrink-0 items-center gap-1">
-        <ToggleGroup
-          aria-label={t("filePreview.modeLabel")}
-          value={mode ? [mode] : []}
-          onValueChange={(values) => {
-            const nextMode = values[0] as FilePreviewMode | undefined
-
-            if (nextMode) {
-              onModeChange(nextMode)
-            }
-          }}
-          variant="outline"
-          size="sm"
-          spacing={0}
+      <div className="file-preview-toolbar__actions flex shrink-0 items-center">
+        <Button
+          type="button"
+          variant="secondary"
+          size="xs"
+          className="file-preview-toolbar__close rounded-full font-normal"
+          disabled={files.length === 0}
+          onClick={handleCloseAll}
         >
-          <ToggleGroupItem
-            value="source"
-            disabled={!sourceAvailable}
-            aria-label={t("filePreview.source")}
-            title={
-              sourceAvailable
-                ? t("filePreview.source")
-                : t("filePreview.sourceUnavailable")
-            }
-            className="px-2 text-xs font-normal"
-          >
-            {t("filePreview.source")}
-          </ToggleGroupItem>
-          <ToggleGroupItem
-            value="render"
-            disabled={!renderAvailable}
-            aria-label={t("filePreview.preview")}
-            title={
-              renderAvailable
-                ? t("filePreview.preview")
-                : t("filePreview.previewUnavailable")
-            }
-            className="px-2 text-xs font-normal"
-          >
-            {t("filePreview.preview")}
-          </ToggleGroupItem>
-        </ToggleGroup>
+          <XIcon aria-hidden="true" />
+          {t("filePreview.closeAll")}
+        </Button>
 
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                disabled={activeFile?.content === undefined}
-                aria-label={
-                  copied
-                    ? t("filePreview.copied")
-                    : t("filePreview.copy")
-                }
-                onClick={handleCopy}
-              />
-            }
-          >
-            {copied ? (
-              <CheckIcon aria-hidden="true" />
-            ) : (
-              <CopyIcon aria-hidden="true" />
-            )}
-          </TooltipTrigger>
-          <TooltipContent>
-            {copied ? t("filePreview.copied") : t("filePreview.copy")}
-          </TooltipContent>
-        </Tooltip>
+        <Separator
+          orientation="vertical"
+          className="file-preview-toolbar__separator mx-2 h-5 data-vertical:self-center"
+        />
 
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                disabled={!activeFile}
-                aria-label={t("filePreview.download")}
-                onClick={handleDownload}
-              />
-            }
-          >
-            <DownloadIcon aria-hidden="true" />
-          </TooltipTrigger>
-          <TooltipContent>{t("filePreview.download")}</TooltipContent>
-        </Tooltip>
+        <div className="file-preview-toolbar__controls flex shrink-0 items-center gap-1">
+          <ToggleGroup
+            aria-label={t("filePreview.modeLabel")}
+            value={mode ? [mode] : []}
+            onValueChange={(values) => {
+              const nextMode = values[0] as
+                | FilePreviewMode
+                | undefined
 
-        {onExpandedChange && (
+              if (nextMode) {
+                onModeChange(nextMode)
+              }
+            }}
+            variant="outline"
+            size="sm"
+            spacing={0}
+          >
+            <ToggleGroupItem
+              value="source"
+              disabled={!sourceAvailable}
+              aria-label={t("filePreview.source")}
+              title={
+                sourceAvailable
+                  ? t("filePreview.source")
+                  : t("filePreview.sourceUnavailable")
+              }
+              className="px-2 text-xs font-normal"
+            >
+              {t("filePreview.source")}
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="render"
+              disabled={!renderAvailable}
+              aria-label={t("filePreview.preview")}
+              title={
+                renderAvailable
+                  ? t("filePreview.preview")
+                  : t("filePreview.previewUnavailable")
+              }
+              className="px-2 text-xs font-normal"
+            >
+              {t("filePreview.preview")}
+            </ToggleGroupItem>
+          </ToggleGroup>
+
           <Tooltip>
             <TooltipTrigger
               render={
@@ -343,17 +300,69 @@ export function FilePreviewToolbar({
                   type="button"
                   variant="ghost"
                   size="icon-sm"
-                  aria-label={expandLabel}
-                  aria-pressed={expanded}
-                  onClick={() => onExpandedChange(!expanded)}
+                  disabled={activeFile?.content === undefined}
+                  aria-label={
+                    copied
+                      ? t("filePreview.copied")
+                      : t("filePreview.copy")
+                  }
+                  onClick={handleCopy}
                 />
               }
             >
-              {expanded ? <Minimize2Icon /> : <Maximize2Icon />}
+              {copied ? (
+                <CheckIcon aria-hidden="true" />
+              ) : (
+                <CopyIcon aria-hidden="true" />
+              )}
             </TooltipTrigger>
-            <TooltipContent>{expandLabel}</TooltipContent>
+            <TooltipContent>
+              {copied
+                ? t("filePreview.copied")
+                : t("filePreview.copy")}
+            </TooltipContent>
           </Tooltip>
-        )}
+
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  disabled={!activeFile}
+                  aria-label={t("filePreview.download")}
+                  onClick={handleDownload}
+                />
+              }
+            >
+              <DownloadIcon aria-hidden="true" />
+            </TooltipTrigger>
+            <TooltipContent>
+              {t("filePreview.download")}
+            </TooltipContent>
+          </Tooltip>
+
+          {onExpandedChange && (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={expandLabel}
+                    aria-pressed={expanded}
+                    onClick={() => onExpandedChange(!expanded)}
+                  />
+                }
+              >
+                {expanded ? <Minimize2Icon /> : <Maximize2Icon />}
+              </TooltipTrigger>
+              <TooltipContent>{expandLabel}</TooltipContent>
+            </Tooltip>
+          )}
+        </div>
       </div>
 
       <p className="sr-only" role="status" aria-live="polite">

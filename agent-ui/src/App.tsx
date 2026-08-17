@@ -141,7 +141,10 @@ function WorkspacePlaceholder() {
   }, [])
 
   return (
-    <div ref={contentRef} className="flex flex-1 flex-col gap-4 p-4 pt-0">
+    <div
+      ref={contentRef}
+      className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto overscroll-contain p-4 pt-0"
+    >
       <div className="grid auto-rows-min gap-4 md:grid-cols-3">
         <div
           data-harness-panel
@@ -168,7 +171,7 @@ function AgentHarness() {
   const [activeView, setActiveView] = React.useState<AppView>("workspace")
 
   return (
-    <SidebarProvider>
+    <SidebarProvider className="h-svh min-h-0 overflow-hidden">
       <AppSidebar
         activeView={activeView}
         onViewChange={setActiveView}

@@ -102,7 +102,7 @@ function FilePreviewPanel({
   return (
     <TabsContent
       value={file.id}
-      className="min-h-0 flex-1 overflow-auto"
+      className="min-h-0 flex-1 overflow-auto overscroll-contain"
     >
       <div ref={contentRef} className="min-h-full">
         {mode === "source" && file.content !== undefined ? (
@@ -193,7 +193,7 @@ export function RichFilePreview({
             />
           ))
         ) : (
-          <div className="min-h-0 flex-1 overflow-auto">
+          <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
             <UnsupportedPreview hasFile={false} />
           </div>
         )}

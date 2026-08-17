@@ -1,4 +1,27 @@
+import { useTheme } from "next-themes"
+import { Highlight, themes } from "prism-react-renderer"
 import { useTranslation } from "react-i18next"
+
+import { cn } from "@/lib/utils"
+
+import { Prism } from "./prism"
+import { getSourceLanguage } from "./source-language"
+
+const sourceFrameClassName =
+  "min-h-full min-w-max bg-muted/20 py-3 font-mono text-[13px] leading-6"
+const sourceLineClassName =
+  "grid grid-cols-[3.5rem_minmax(max-content,1fr)] px-3"
+
+function LineNumber({ value }: { value: number }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="sticky left-0 z-10 select-none border-r bg-muted/95 pr-3 text-right text-muted-foreground/70"
+    >
+      {value}
+    </span>
+  )
+}
 
 export function SourcePreview({
   content,
@@ -7,29 +30,75 @@ export function SourcePreview({
   content: string
   fileName: string
 }) {
+  const { resolvedTheme } = useTheme()
   const { t } = useTranslation()
-  const lines = content.split("\n")
+  const language = getSourceLanguage(fileName)
+  const label = t("filePreview.sourceLabel", { fileName })
+
+  if (!language) {
+    return (
+      <div
+        role="region"
+        aria-label={label}
+        className={sourceFrameClassName}
+      >
+        {content.split("\n").map((line, index) => (
+          <div key={index} className={sourceLineClassName}>
+            <LineNumber value={index + 1} />
+            <code className="whitespace-pre pl-4">
+              {line || "\u200b"}
+            </code>
+          </div>
+        ))}
+      </div>
+    )
+  }
 
   return (
-    <div
-      role="region"
-      aria-label={t("filePreview.sourceLabel", { fileName })}
-      className="min-h-full min-w-max bg-muted/20 py-3 font-mono text-[13px] leading-6"
+    <Highlight
+      prism={Prism}
+      theme={resolvedTheme === "dark" ? themes.vsDark : themes.github}
+      code={content}
+      language={language}
     >
-      {lines.map((line, index) => (
+      {({
+        getLineProps,
+        getTokenProps,
+        style,
+        tokens,
+      }) => (
         <div
-          key={`${index}-${line}`}
-          className="grid grid-cols-[3.5rem_minmax(max-content,1fr)] px-3"
+          role="region"
+          aria-label={label}
+          className={sourceFrameClassName}
+          style={{ color: style.color }}
         >
-          <span
-            aria-hidden="true"
-            className="sticky left-0 select-none border-r bg-muted/20 pr-3 text-right text-muted-foreground/70"
-          >
-            {index + 1}
-          </span>
-          <code className="whitespace-pre pl-4">{line || "\u200b"}</code>
+          {tokens.map((line, lineIndex) => {
+            const {
+              className: lineClassName,
+              ...lineProps
+            } = getLineProps({ line })
+
+            return (
+              <div
+                key={lineIndex}
+                {...lineProps}
+                className={cn(sourceLineClassName, lineClassName)}
+              >
+                <LineNumber value={lineIndex + 1} />
+                <code className="whitespace-pre pl-4">
+                  {line.map((token, tokenIndex) => (
+                    <span
+                      key={tokenIndex}
+                      {...getTokenProps({ token })}
+                    />
+                  ))}
+                </code>
+              </div>
+            )
+          })}
         </div>
-      ))}
-    </div>
+      )}
+    </Highlight>
   )
 }

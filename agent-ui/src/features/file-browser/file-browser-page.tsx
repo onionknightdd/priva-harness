@@ -272,7 +272,7 @@ export function FileBrowserPage() {
   return (
     <div
       ref={pageRef}
-      className="flex min-h-0 flex-1 flex-col gap-1 p-4 pt-0"
+      className="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden p-4 pt-0"
     >
       <FileAddressBar
         selectedItemId={selectedItemId}
@@ -314,6 +314,7 @@ export function FileBrowserPage() {
           >
             <ResizablePanel
               id="file-tree-panel"
+              className="!flex !min-h-0 !overflow-hidden"
               panelRef={treePanelRef}
               defaultSize={`${TREE_DEFAULT_SIZE}%`}
               minSize={
@@ -354,7 +355,11 @@ export function FileBrowserPage() {
                   : "pointer-events-none opacity-0"
               }
             />
-            <ResizablePanel id="file-preview-panel" minSize="35%">
+            <ResizablePanel
+              id="file-preview-panel"
+              minSize="35%"
+              className="!flex !min-h-0 !overflow-hidden"
+            >
               <RichFilePreview
                 activeFileId={activeFileId}
                 expanded={!treeVisible}
