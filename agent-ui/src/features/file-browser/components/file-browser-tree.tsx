@@ -38,7 +38,7 @@ function FileBrowserTreeNode({
   const treeItem = (
     <TreeItem
       item={item}
-      className="relative w-full text-start before:pointer-events-none before:absolute before:-inset-y-0.5 before:-ms-1 before:w-[var(--tree-padding)] before:bg-[repeating-linear-gradient(to_right,transparent_0,transparent_calc(var(--tree-indent)-1px),var(--border)_calc(var(--tree-indent)-1px),var(--border)_calc(var(--tree-indent)))]"
+      className="relative w-full text-start before:pointer-events-none before:absolute before:-inset-y-0.5 before:start-0 before:-ms-1 before:w-[var(--tree-padding)] before:bg-[repeating-linear-gradient(to_right,transparent_0,transparent_calc(var(--tree-indent)-1px),var(--border)_calc(var(--tree-indent)-1px),var(--border)_calc(var(--tree-indent)))]"
     >
       <TreeItemLabel className="min-h-8 w-full gap-2">
         {item.isFolder() ? (
@@ -139,7 +139,9 @@ export function FileBrowserTree({ query }: { query: string }) {
       aria-label={t("fileBrowser.treeLabel")}
       className="min-w-max gap-0.5"
     >
-      <FileBrowserTreeNode item={tree.getRootItem()} />
+      {tree.getRootItem().getChildren().map((item) => (
+        <FileBrowserTreeNode key={item.getId()} item={item} />
+      ))}
     </Tree>
   )
 }
