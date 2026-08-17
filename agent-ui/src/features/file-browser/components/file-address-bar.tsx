@@ -8,7 +8,6 @@ import {
 } from "motion/react"
 import {
   ChevronDownIcon,
-  FolderIcon,
   FolderPlusIcon,
   FolderSearchIcon,
   FoldersIcon,
@@ -27,8 +26,6 @@ import {
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
@@ -44,6 +41,7 @@ import {
   type FileBrowserItem,
   type FileBrowserModel,
 } from "../file-browser-data"
+import { SearchablePathMenuContent } from "./searchable-path-menu"
 
 const goToTransition: Transition = {
   type: "spring",
@@ -78,9 +76,10 @@ function CollapsedPathMenu({
   onNavigate: (path: string, type: FileBrowserItem["type"]) => void
 }) {
   const { t } = useTranslation()
+  const [open, setOpen] = React.useState(false)
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger
         render={
           <Button
@@ -93,17 +92,11 @@ function CollapsedPathMenu({
       >
         <BreadcrumbEllipsis />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">
-        {entries.map((entry) => (
-          <DropdownMenuItem
-            key={entry.path}
-            onClick={() => onNavigate(entry.path, entry.type)}
-          >
-            <FolderIcon aria-hidden="true" />
-            {entry.name}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
+      <SearchablePathMenuContent
+        entries={entries}
+        open={open}
+        onNavigate={onNavigate}
+      />
     </DropdownMenu>
   )
 }
@@ -120,6 +113,7 @@ function PathItem({
   onNavigate: (path: string, type: FileBrowserItem["type"]) => void
 }) {
   const { t } = useTranslation()
+  const [directoryMenuOpen, setDirectoryMenuOpen] = React.useState(false)
   const childFolders = getFileBrowserChildFolders(model, entry.path)
   const hasDirectoryOptions = childFolders.length > 1
 
@@ -141,7 +135,10 @@ function PathItem({
         <span className="truncate">{entry.name}</span>
       </Button>
       {hasDirectoryOptions && (
-        <DropdownMenu>
+        <DropdownMenu
+          open={directoryMenuOpen}
+          onOpenChange={setDirectoryMenuOpen}
+        >
           <DropdownMenuTrigger
             render={
               <Button
@@ -157,17 +154,11 @@ function PathItem({
           >
             <ChevronDownIcon aria-hidden="true" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            {childFolders.map((childFolder) => (
-              <DropdownMenuItem
-                key={childFolder.path}
-                onClick={() => onNavigate(childFolder.path, "folder")}
-              >
-                <FolderIcon aria-hidden="true" />
-                {childFolder.name}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
+          <SearchablePathMenuContent
+            entries={childFolders}
+            open={directoryMenuOpen}
+            onNavigate={onNavigate}
+          />
         </DropdownMenu>
       )}
     </div>
