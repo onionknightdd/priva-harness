@@ -203,7 +203,7 @@ function FileBrowserTreeNode({
       level={level}
       aria-busy={loading || undefined}
       data-file-tree-folder-row={item.isFolder() || undefined}
-      className="relative box-border w-full min-w-0 max-w-full overflow-hidden pb-0! text-start data-[file-tree-folder-row=true]:sticky data-[file-tree-folder-row=true]:bg-background"
+      className="relative box-border w-full min-w-0 max-w-full overflow-hidden pb-0! text-start data-[file-tree-folder-row=true]:sticky data-[file-tree-folder-row=true]:bg-card"
       style={
         item.isFolder()
           ? {
@@ -213,7 +213,7 @@ function FileBrowserTreeNode({
           : undefined
       }
     >
-      <TreeItemLabel className="min-h-8 w-full min-w-0 max-w-full gap-1 pr-1 in-data-popup-open:bg-accent">
+      <TreeItemLabel className="min-h-8 w-full min-w-0 max-w-full gap-1 bg-transparent pr-1 in-data-popup-open:bg-accent">
         <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
           {item.isFolder() ? (
             <AnimatedFolderIcon expanded={item.isExpanded()} />
