@@ -4,6 +4,8 @@ import type {
   RefAttributes,
 } from "react"
 
+import type { AppView } from "@/lib/app-view"
+
 export type SidebarAnimatedIconHandle = {
   startAnimation: () => void
   stopAnimation: () => void
@@ -36,13 +38,13 @@ export type SidebarTeam = {
 
 export type SidebarNavSubItem = {
   titleKey: string
-  url: string
+  view?: AppView
   icon: ReactNode
 }
 
 export type SidebarNavItem = {
   titleKey: string
-  url: string
+  view?: AppView
   icon: SidebarAnimatedIcon
   items?: SidebarNavSubItem[]
 }

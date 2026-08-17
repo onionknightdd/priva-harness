@@ -2,6 +2,7 @@ export const zhCN = {
   common: {
     breadcrumb: "面包屑导航",
     close: "关闭",
+    loading: "正在加载",
     more: "更多",
     sidebar: "侧边栏",
     sidebarDescription: "显示移动端侧边栏。",
@@ -14,6 +15,18 @@ export const zhCN = {
   breadcrumb: {
     buildYourApplication: "构建你的应用",
     dataFetching: "数据获取",
+    dataAndUsage: "数据与用量",
+    fileBrowser: "文件浏览器",
+  },
+  fileBrowser: {
+    searchLabel: "搜索文件和文件夹",
+    searchPlaceholder: "搜索文件和文件夹…",
+    refresh: "刷新文件",
+    refreshed: "文件列表已刷新",
+    treeLabel: "工作区文件树",
+    contentLabel: "文件浏览器内容",
+    noResults: "未找到与“{{query}}”匹配的文件或文件夹",
+    itemCount: "共 {{count}} 项",
   },
   sidebar: {
     modes: {

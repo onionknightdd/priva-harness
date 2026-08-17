@@ -5,10 +5,10 @@ import { useTranslation } from "react-i18next"
 
 import { CanvasShell } from "@/components/canvas"
 import { AppSidebar } from "@/components/sidebar"
+import type { AppView } from "@/lib/app-view"
 import {
   Breadcrumb,
   BreadcrumbItem,
-  BreadcrumbLink,
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
@@ -16,7 +16,14 @@ import {
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { SidebarProvider, useSidebar } from "@/components/ui/sidebar"
+import { Skeleton } from "@/components/ui/skeleton"
 import { TooltipProvider } from "@/components/ui/tooltip"
+
+const FileBrowserPage = React.lazy(async () => {
+  const module = await import("@/features/file-browser")
+
+  return { default: module.FileBrowserPage }
+})
 
 function MobileSidebarLogoTrigger({ onOpen }: { onOpen: () => void }) {
   const { t } = useTranslation()
@@ -34,10 +41,72 @@ function MobileSidebarLogoTrigger({ onOpen }: { onOpen: () => void }) {
   )
 }
 
-function AgentWorkspace() {
-  const contentRef = React.useRef<HTMLDivElement>(null)
+function AgentWorkspace({ activeView }: { activeView: AppView }) {
   const { setOpenMobile } = useSidebar()
   const { t } = useTranslation()
+  const isFileBrowser = activeView === "file-browser"
+
+  const breadcrumbParent = isFileBrowser
+    ? t("breadcrumb.dataAndUsage")
+    : t("breadcrumb.buildYourApplication")
+  const breadcrumbPage = isFileBrowser
+    ? t("breadcrumb.fileBrowser")
+    : t("breadcrumb.dataFetching")
+
+  return (
+    <CanvasShell>
+      <header className="flex h-10 shrink-0 items-center gap-2">
+        <div className="flex items-center gap-2 px-4">
+          <div className="flex items-center gap-2 md:hidden">
+            <MobileSidebarLogoTrigger
+              onOpen={() => setOpenMobile(true)}
+            />
+            <Separator
+              orientation="vertical"
+              className="mr-2 data-[orientation=vertical]:h-4"
+            />
+          </div>
+          <Breadcrumb>
+            <BreadcrumbList>
+              <BreadcrumbItem className="hidden md:block">
+                <span>{breadcrumbParent}</span>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator className="hidden md:block" />
+              <BreadcrumbItem>
+                <BreadcrumbPage>{breadcrumbPage}</BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
+        </div>
+      </header>
+      {isFileBrowser ? (
+        <React.Suspense fallback={<WorkspacePageFallback />}>
+          <FileBrowserPage />
+        </React.Suspense>
+      ) : (
+        <WorkspacePlaceholder />
+      )}
+    </CanvasShell>
+  )
+}
+
+function WorkspacePageFallback() {
+  const { t } = useTranslation()
+
+  return (
+    <div
+      role="status"
+      aria-label={t("common.loading")}
+      className="flex min-h-0 flex-1 flex-col gap-3 p-4 pt-0"
+    >
+      <Skeleton className="h-9 w-full sm:max-w-sm" />
+      <Skeleton className="min-h-56 flex-1 rounded-xl" />
+    </div>
+  )
+}
+
+function WorkspacePlaceholder() {
+  const contentRef = React.useRef<HTMLDivElement>(null)
 
   React.useLayoutEffect(() => {
     const content = contentRef.current
@@ -68,64 +137,39 @@ function AgentWorkspace() {
   }, [])
 
   return (
-    <CanvasShell>
-      <header className="flex h-10 shrink-0 items-center gap-2">
-        <div className="flex items-center gap-2 px-4">
-          <div className="flex items-center gap-2 md:hidden">
-            <MobileSidebarLogoTrigger
-              onOpen={() => setOpenMobile(true)}
-            />
-            <Separator
-              orientation="vertical"
-              className="mr-2 data-[orientation=vertical]:h-4"
-            />
-          </div>
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem className="hidden md:block">
-                <BreadcrumbLink href="#">
-                  {t("breadcrumb.buildYourApplication")}
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator className="hidden md:block" />
-              <BreadcrumbItem>
-                <BreadcrumbPage>
-                  {t("breadcrumb.dataFetching")}
-                </BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
-      </header>
-      <div ref={contentRef} className="flex flex-1 flex-col gap-4 p-4 pt-0">
-        <div className="grid auto-rows-min gap-4 md:grid-cols-3">
-          <div
-            data-harness-panel
-            className="aspect-video rounded-xl bg-muted/50"
-          />
-          <div
-            data-harness-panel
-            className="aspect-video rounded-xl bg-muted/50"
-          />
-          <div
-            data-harness-panel
-            className="aspect-video rounded-xl bg-muted/50"
-          />
-        </div>
+    <div ref={contentRef} className="flex flex-1 flex-col gap-4 p-4 pt-0">
+      <div className="grid auto-rows-min gap-4 md:grid-cols-3">
         <div
           data-harness-panel
-          className="min-h-[100vh] flex-1 rounded-xl bg-muted/50 md:min-h-min"
+          className="aspect-video rounded-xl bg-muted/50"
+        />
+        <div
+          data-harness-panel
+          className="aspect-video rounded-xl bg-muted/50"
+        />
+        <div
+          data-harness-panel
+          className="aspect-video rounded-xl bg-muted/50"
         />
       </div>
-    </CanvasShell>
+      <div
+        data-harness-panel
+        className="min-h-[100vh] flex-1 rounded-xl bg-muted/50 md:min-h-min"
+      />
+    </div>
   )
 }
 
 function AgentHarness() {
+  const [activeView, setActiveView] = React.useState<AppView>("workspace")
+
   return (
     <SidebarProvider>
-      <AppSidebar />
-      <AgentWorkspace />
+      <AppSidebar
+        activeView={activeView}
+        onViewChange={setActiveView}
+      />
+      <AgentWorkspace activeView={activeView} />
     </SidebarProvider>
   )
 }

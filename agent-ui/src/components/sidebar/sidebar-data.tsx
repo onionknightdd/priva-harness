@@ -48,69 +48,57 @@ export const sidebarData = {
   menu: [
     {
       titleKey: "sidebar.navigation.newChat",
-      url: "#",
       icon: PlusIcon,
     },
     {
       titleKey: "sidebar.navigation.automation",
-      url: "#",
       icon: CalendarClockIcon,
     },
     {
       titleKey: "sidebar.navigation.plugins",
-      url: "#",
       icon: PackageSearchIcon,
       items: [
         {
           titleKey: "sidebar.navigation.agentSkill",
-          url: "#",
           icon: <ScrollTextIcon />,
         },
         {
           titleKey: "sidebar.navigation.mcp",
-          url: "#",
           icon: <CableIcon />,
         },
         {
           titleKey: "sidebar.navigation.hook",
-          url: "#",
           icon: <WebhookIcon />,
         },
         {
           titleKey: "sidebar.navigation.subAgent",
-          url: "#",
           icon: <BotIcon />,
         },
         {
           titleKey: "sidebar.navigation.memory",
-          url: "#",
           icon: <NotebookPenIcon />,
         },
       ],
     },
     {
       titleKey: "sidebar.navigation.dataAndUsage",
-      url: "#",
       icon: ChartNoAxesCombinedIcon,
       items: [
         {
           titleKey: "sidebar.navigation.usage",
-          url: "#",
           icon: <ChartNoAxesColumnIncreasingIcon />,
         },
         {
           titleKey: "sidebar.navigation.activityAndTraces",
-          url: "#",
           icon: <ActivityIcon />,
         },
         {
           titleKey: "sidebar.navigation.uploads",
-          url: "#",
           icon: <UploadIcon />,
         },
         {
           titleKey: "sidebar.navigation.fileBrowser",
-          url: "#",
+          view: "file-browser",
           icon: <FolderSearchIcon />,
         },
       ],

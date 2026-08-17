@@ -2,6 +2,7 @@ export const en = {
   common: {
     breadcrumb: "Breadcrumb",
     close: "Close",
+    loading: "Loading",
     more: "More",
     sidebar: "Sidebar",
     sidebarDescription: "Displays the mobile sidebar.",
@@ -14,6 +15,18 @@ export const en = {
   breadcrumb: {
     buildYourApplication: "Build Your Application",
     dataFetching: "Data Fetching",
+    dataAndUsage: "Data and Usage",
+    fileBrowser: "File Browser",
+  },
+  fileBrowser: {
+    searchLabel: "Search files and folders",
+    searchPlaceholder: "Search files and folders...",
+    refresh: "Refresh files",
+    refreshed: "File list refreshed",
+    treeLabel: "Workspace file tree",
+    contentLabel: "File browser content",
+    noResults: "No files or folders match “{{query}}”",
+    itemCount: "{{count}} items",
   },
   sidebar: {
     modes: {

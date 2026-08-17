@@ -17,24 +17,60 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
+  useSidebar,
 } from "@/components/ui/sidebar"
+import type { AppView } from "@/lib/app-view"
 
 import type {
   SidebarAnimatedIconHandle,
   SidebarNavItem,
 } from "../sidebar.types"
 
-function NavMenuItem({ item }: { item: SidebarNavItem }) {
+function NavMenuItem({
+  item,
+  activeView,
+  onViewChange,
+}: {
+  item: SidebarNavItem
+  activeView: AppView
+  onViewChange: (view: AppView) => void
+}) {
   const { t } = useTranslation()
+  const { isMobile, setOpenMobile } = useSidebar()
   const iconRef = React.useRef<SidebarAnimatedIconHandle>(null)
   const Icon = item.icon
   const title = t(item.titleKey)
   const hasSubmenu = Boolean(item.items?.length)
+  const isItemActive = item.view === activeView
+  const hasActiveSubmenuItem = Boolean(
+    item.items?.some((subItem) => subItem.view === activeView)
+  )
+  const [submenuOpen, setSubmenuOpen] = React.useState(
+    hasActiveSubmenuItem
+  )
   const iconAnimationHandlers = {
     onMouseEnter: () => iconRef.current?.startAnimation(),
     onMouseLeave: () => iconRef.current?.stopAnimation(),
     onFocus: () => iconRef.current?.startAnimation(),
     onBlur: () => iconRef.current?.stopAnimation(),
+  }
+
+  React.useEffect(() => {
+    if (hasActiveSubmenuItem) {
+      setSubmenuOpen(true)
+    }
+  }, [hasActiveSubmenuItem])
+
+  const selectView = (view?: AppView) => {
+    if (!view) {
+      return
+    }
+
+    onViewChange(view)
+
+    if (isMobile) {
+      setOpenMobile(false)
+    }
   }
 
   const content = (
@@ -56,8 +92,9 @@ function NavMenuItem({ item }: { item: SidebarNavItem }) {
     return (
       <SidebarMenuItem>
         <SidebarMenuButton
-          render={<a href={item.url} />}
+          isActive={isItemActive}
           tooltip={title}
+          onClick={() => selectView(item.view)}
           {...iconAnimationHandlers}
         >
           {content}
@@ -68,12 +105,15 @@ function NavMenuItem({ item }: { item: SidebarNavItem }) {
 
   return (
     <Collapsible
+      open={submenuOpen}
+      onOpenChange={setSubmenuOpen}
       className="group/collapsible"
       render={<SidebarMenuItem />}
     >
       <CollapsibleTrigger
         render={
           <SidebarMenuButton
+            isActive={hasActiveSubmenuItem}
             tooltip={title}
             {...iconAnimationHandlers}
           />
@@ -85,7 +125,12 @@ function NavMenuItem({ item }: { item: SidebarNavItem }) {
         <SidebarMenuSub>
           {item.items?.map((subItem) => (
             <SidebarMenuSubItem key={subItem.titleKey}>
-              <SidebarMenuSubButton render={<a href={subItem.url} />}>
+              <SidebarMenuSubButton
+                render={<button type="button" />}
+                className="w-full text-left"
+                isActive={subItem.view === activeView}
+                onClick={() => selectView(subItem.view)}
+              >
                 {subItem.icon}
                 <span>{t(subItem.titleKey)}</span>
               </SidebarMenuSubButton>
@@ -97,12 +142,25 @@ function NavMenuItem({ item }: { item: SidebarNavItem }) {
   )
 }
 
-export function NavMenu({ items }: { items: SidebarNavItem[] }) {
+export function NavMenu({
+  items,
+  activeView,
+  onViewChange,
+}: {
+  items: SidebarNavItem[]
+  activeView: AppView
+  onViewChange: (view: AppView) => void
+}) {
   return (
     <SidebarGroup>
       <SidebarMenu>
         {items.map((item) => (
-          <NavMenuItem key={item.titleKey} item={item} />
+          <NavMenuItem
+            key={item.titleKey}
+            item={item}
+            activeView={activeView}
+            onViewChange={onViewChange}
+          />
         ))}
       </SidebarMenu>
     </SidebarGroup>

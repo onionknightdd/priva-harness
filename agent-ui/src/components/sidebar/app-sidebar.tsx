@@ -2,6 +2,8 @@
 
 import * as React from "react"
 
+import type { AppView } from "@/lib/app-view"
+
 import {
   Sidebar,
   SidebarContent,
@@ -16,7 +18,14 @@ import { SidebarModeTabs } from "./header/sidebar-mode-tabs"
 import { TeamSwitcher } from "./header/team-switcher"
 import { sidebarData } from "./sidebar-data"
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+export function AppSidebar({
+  activeView,
+  onViewChange,
+  ...props
+}: React.ComponentProps<typeof Sidebar> & {
+  activeView: AppView
+  onViewChange: (view: AppView) => void
+}) {
   return (
     <Sidebar collapsible="icon" resizable {...props}>
       <SidebarHeader>
@@ -24,7 +33,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarModeTabs />
       </SidebarHeader>
       <SidebarContent>
-        <NavMenu items={sidebarData.menu} />
+        <NavMenu
+          items={sidebarData.menu}
+          activeView={activeView}
+          onViewChange={onViewChange}
+        />
         <NavProjects projects={sidebarData.projects} />
       </SidebarContent>
       <SidebarFooter>
