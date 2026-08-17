@@ -320,9 +320,6 @@ export function FileBrowserTree({
       .forEach((path) => tree.getItemInstance(path).expand())
 
     const selectedItem = tree.getItemInstance(selectedItemPath)
-    if (selectedItem.isFolder()) {
-      selectedItem.expand()
-    }
 
     window.requestAnimationFrame(() => {
       void selectedItem.scrollTo({ block: "nearest" })

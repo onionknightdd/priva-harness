@@ -2,7 +2,7 @@ import ReactMarkdown from "react-markdown"
 
 export function MarkdownRenderer({ content }: { content: string }) {
   return (
-    <article className="mx-auto w-full max-w-3xl space-y-4 p-5 text-sm leading-7 sm:p-8">
+    <article className="mx-auto w-full min-w-0 max-w-3xl space-y-4 break-words p-5 text-sm leading-7 sm:p-8">
       <ReactMarkdown
         components={{
           h1: ({ node: _node, ...props }) => (
@@ -18,7 +18,10 @@ export function MarkdownRenderer({ content }: { content: string }) {
             <h3 className="text-lg font-medium" {...props} />
           ),
           p: ({ node: _node, ...props }) => (
-            <p className="text-foreground/90" {...props} />
+            <p
+              className="whitespace-pre-wrap text-foreground/90"
+              {...props}
+            />
           ),
           ul: ({ node: _node, ...props }) => (
             <ul className="ml-5 list-disc space-y-1" {...props} />
