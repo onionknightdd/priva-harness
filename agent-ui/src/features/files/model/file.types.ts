@@ -8,8 +8,10 @@ export type PreviewFile = {
   path: string
   mediaType: string
   content?: string
+  error?: string
   renderKind?: FileRenderKind
   renderSource?: string
+  status?: "loading" | "ready" | "error"
 }
 
 export function canShowFileSource(file: PreviewFile | null) {

@@ -9,6 +9,7 @@ import type {
 import { UserFileError } from '../../../core/resource/user-file.js'
 import {
   createDirectorySchema,
+  deletePathSchema,
   downloadFileSchema,
   listDirectorySchema,
   previewFileSchema,
@@ -45,7 +46,15 @@ export const userFileRoutes: FastifyPluginCallback<UserFileRoutesOptions> = (
   fastify.get<{ Querystring: ListDirectoryQuery }>(
     `${FILE_ROUTE_PREFIX}/list`,
     { schema: listDirectorySchema },
-    async (request) => await fileSystem.listDirectory(request.query.path ?? '~'),
+    async (request) => await fileSystem.listDirectory(
+      request.query.path ?? fileSystem.initialDirectory,
+    ),
+  )
+
+  fastify.delete<{ Querystring: PathQuery }>(
+    FILE_ROUTE_PREFIX,
+    { schema: deletePathSchema },
+    async (request) => await fileSystem.deletePath(request.query.path),
   )
 
   fastify.post<{ Body: CreateDirectoryBody }>(

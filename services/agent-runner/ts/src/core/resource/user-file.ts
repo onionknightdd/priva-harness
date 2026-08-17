@@ -4,6 +4,7 @@ export const USER_FILE_PREVIEW_LIMIT_BYTES = 1024 * 1024
 export type UserFileEntryType = 'file' | 'directory'
 
 export interface UserFileEntry {
+  readonly path: string
   readonly name: string
   readonly type: UserFileEntryType
   readonly size: number | null
@@ -20,6 +21,11 @@ export interface UserFileDirectory {
 export interface CreatedUserDirectory {
   readonly path: string
   readonly name: string
+}
+
+export interface DeletedUserPath {
+  readonly status: 'ok'
+  readonly path: string
 }
 
 export interface UserFileDownload {

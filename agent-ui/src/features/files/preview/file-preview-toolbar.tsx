@@ -58,6 +58,7 @@ export function FilePreviewToolbar({
   mode,
   onCloseAll,
   onFileClose,
+  onDownload,
   onExpandedChange,
   onModeChange,
   renderAvailable,
@@ -69,6 +70,7 @@ export function FilePreviewToolbar({
   mode: FilePreviewMode | null
   onCloseAll: () => void
   onFileClose: (fileId: string) => void
+  onDownload?: (file: PreviewFile) => void
   onExpandedChange?: (expanded: boolean) => void
   onModeChange: (mode: FilePreviewMode) => void
   renderAvailable: boolean
@@ -131,7 +133,13 @@ export function FilePreviewToolbar({
 
   const handleDownload = (event: React.MouseEvent<HTMLButtonElement>) => {
     animateControl(event.currentTarget)
-    announce(t("filePreview.downloadUnavailable"))
+    if (!activeFile || !onDownload) {
+      announce(t("filePreview.downloadUnavailable"))
+      return
+    }
+
+    onDownload(activeFile)
+    announce(t("filePreview.downloadStarted"))
   }
 
   const handleFileClose = (
@@ -347,7 +355,7 @@ export function FilePreviewToolbar({
                   type="button"
                   variant="ghost"
                   size="icon-sm"
-                  disabled={!activeFile}
+                  disabled={!activeFile || activeFile.status === "loading"}
                   aria-label={t("filePreview.download")}
                   onClick={handleDownload}
                 />

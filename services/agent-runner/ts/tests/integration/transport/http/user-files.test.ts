@@ -32,7 +32,7 @@ describe('/api/sandbox/files', () => {
     canonicalWorkspace = await realpath(workspace)
     server = buildHttpServer({
       userFileSystem: new NodeUserFileSystem({
-        workspaceDirectory: workspace,
+        initialDirectory: workspace,
         temporaryDirectory: staging,
         maxUploadBytes: 16,
       }),
@@ -55,7 +55,12 @@ describe('/api/sandbox/files', () => {
     expect(listResponse.statusCode).toBe(200)
     expect(parseJson(listResponse.body)).toMatchObject({
       path: canonicalWorkspace,
-      entries: [{ name: 'hello world.txt', type: 'file', size: 5 }],
+      entries: [{
+        path: join(canonicalWorkspace, 'hello world.txt'),
+        name: 'hello world.txt',
+        type: 'file',
+        size: 5,
+      }],
     })
 
     const mkdirResponse = await server.inject({
@@ -93,6 +98,22 @@ describe('/api/sandbox/files', () => {
       "attachment; filename*=UTF-8''hello%20world.txt",
     )
     expect(downloadResponse.body).toBe('hello')
+
+    await writeFile(join(canonicalWorkspace, 'reports', 'report.txt'), 'report')
+    const deleteResponse = await server.inject({
+      method: 'DELETE',
+      url: `/api/sandbox/files?${new URLSearchParams({
+        path: join(canonicalWorkspace, 'reports'),
+      }).toString()}`,
+    })
+    expect(deleteResponse.statusCode).toBe(200)
+    expect(parseJson(deleteResponse.body)).toEqual({
+      status: 'ok',
+      path: join(canonicalWorkspace, 'reports'),
+    })
+    await expect(readdir(join(canonicalWorkspace, 'reports'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    })
   })
 
   it('accepts the existing file-first multipart field order and prevents overwrite', async () => {

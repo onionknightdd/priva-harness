@@ -6,10 +6,11 @@ import {
   readdir,
   realpath,
   rm,
+  symlink,
   writeFile,
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, parse } from 'node:path'
 import { Readable } from 'node:stream'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -31,7 +32,7 @@ describe('NodeUserFileSystem', () => {
     await Promise.all([mkdir(workspace), mkdir(staging)])
     canonicalWorkspace = await realpath(workspace)
     fileSystem = new NodeUserFileSystem({
-      workspaceDirectory: workspace,
+      initialDirectory: workspace,
       temporaryDirectory: staging,
       maxUploadBytes: 16,
     })
@@ -49,7 +50,7 @@ describe('NodeUserFileSystem', () => {
       writeFile(join(workspace, 'Z-file.txt'), 'zulu'),
     ])
 
-    const listing = await fileSystem.listDirectory('~')
+    const listing = await fileSystem.listDirectory('.')
 
     expect(listing.path).toBe(await realpath(workspace))
     expect(listing.entries.map(({ name }) => name)).toEqual([
@@ -77,6 +78,37 @@ describe('NodeUserFileSystem', () => {
     })
     await expect(fileSystem.createDirectory('projects', '../outside')).rejects.toMatchObject({
       kind: 'invalid-path-segment',
+    })
+  })
+
+  it('allows absolute paths and follows directory symlinks outside the initial directory', async () => {
+    const outside = join(testRoot, 'outside')
+    await mkdir(outside)
+    await writeFile(join(outside, 'outside.txt'), 'outside')
+    await symlink(outside, join(workspace, 'outside-link'), 'dir')
+
+    await expect(fileSystem.listDirectory(outside)).resolves.toMatchObject({
+      path: await realpath(outside),
+      entries: [{ name: 'outside.txt', type: 'file' }],
+    })
+    await expect(fileSystem.listDirectory('outside-link')).resolves.toMatchObject({
+      path: await realpath(outside),
+      entries: [{ name: 'outside.txt', type: 'file' }],
+    })
+  })
+
+  it('recursively deletes paths but refuses to delete a filesystem root', async () => {
+    const directory = join(workspace, 'delete-me')
+    await mkdir(join(directory, 'nested'), { recursive: true })
+    await writeFile(join(directory, 'nested', 'note.txt'), 'note')
+
+    await expect(fileSystem.deletePath(directory)).resolves.toEqual({
+      status: 'ok',
+      path: directory,
+    })
+    await expect(readdir(directory)).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(fileSystem.deletePath(parse(directory).root)).rejects.toMatchObject({
+      kind: 'invalid-request',
     })
   })
 

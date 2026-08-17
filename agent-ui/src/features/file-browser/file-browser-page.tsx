@@ -8,19 +8,18 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable"
-import {
-  RichFilePreview,
-  type PreviewFile,
-} from "@/features/files"
+import { RichFilePreview } from "@/features/files"
 import { useIsMobile } from "@/hooks/use-mobile"
 
 import { FileAddressBar } from "./components/file-address-bar"
-import { FileTreePane } from "./components/file-tree-pane"
 import {
-  FILE_BROWSER_DEFAULT_ITEM_ID,
-  fileBrowserItems,
-} from "./file-browser-data"
-import { getFileBrowserPreviewFile } from "./file-browser-preview-data"
+  CreateFolderDialog,
+  DeletePathDialog,
+} from "./components/file-operation-dialogs"
+import { FileTreePane } from "./components/file-tree-pane"
+import { startFileDownload } from "./file-browser-api"
+import type { FileBrowserItem } from "./file-browser-data"
+import { useFileBrowser } from "./use-file-browser"
 
 const TREE_DEFAULT_SIZE = 30
 const TREE_MIN_SIZE = 18
@@ -32,30 +31,25 @@ function clampTreeSize(size: number) {
 
 export function FileBrowserPage() {
   const { t } = useTranslation()
+  const browser = useFileBrowser()
   const isMobile = useIsMobile()
   const pageRef = React.useRef<HTMLDivElement>(null)
   const treePaneContentRef = React.useRef<HTMLDivElement>(null)
   const panelAnimationRef = React.useRef<gsap.core.Timeline | null>(null)
   const previousTreeSizeRef = React.useRef(TREE_DEFAULT_SIZE)
+  const uploadInputRef = React.useRef<HTMLInputElement>(null)
+  const uploadDirectoryRef = React.useRef<string | null>(null)
+  const announcementTimerRef = React.useRef<number | null>(null)
   const treePanelRef = usePanelRef()
-  const [selectedItemId, setSelectedItemId] = React.useState(
-    FILE_BROWSER_DEFAULT_ITEM_ID
-  )
-  const [openedFileIds, setOpenedFileIds] = React.useState<string[]>([
-    FILE_BROWSER_DEFAULT_ITEM_ID,
-  ])
-  const [activeFileId, setActiveFileId] = React.useState<string | null>(
-    FILE_BROWSER_DEFAULT_ITEM_ID
-  )
   const [treeVisible, setTreeVisible] = React.useState(true)
   const [panelTransitioning, setPanelTransitioning] = React.useState(false)
-  const openedFiles = React.useMemo(
-    () =>
-      openedFileIds
-        .map(getFileBrowserPreviewFile)
-        .filter((file): file is PreviewFile => file !== null),
-    [openedFileIds]
+  const [createFolderDirectory, setCreateFolderDirectory] = React.useState<
+    string | null
+  >(null)
+  const [deleteTarget, setDeleteTarget] = React.useState<FileBrowserItem | null>(
+    null
   )
+  const [announcement, setAnnouncement] = React.useState("")
 
   React.useLayoutEffect(() => {
     const page = pageRef.current
@@ -119,9 +113,23 @@ export function FileBrowserPage() {
   React.useEffect(
     () => () => {
       panelAnimationRef.current?.kill()
+      if (announcementTimerRef.current !== null) {
+        window.clearTimeout(announcementTimerRef.current)
+      }
     },
     []
   )
+
+  const announce = React.useCallback((message: string) => {
+    setAnnouncement(message)
+    if (announcementTimerRef.current !== null) {
+      window.clearTimeout(announcementTimerRef.current)
+    }
+    announcementTimerRef.current = window.setTimeout(
+      () => setAnnouncement(""),
+      2400
+    )
+  }, [])
 
   const setDesktopTreeVisibility = React.useCallback(
     (visible: boolean) => {
@@ -164,9 +172,7 @@ export function FileBrowserPage() {
           gsap.set(treeContent, { opacity: 0, x: -8 })
         }
 
-        const sizeState = {
-          value: visible ? 0 : currentSize,
-        }
+        const sizeState = { value: visible ? 0 : currentSize }
         const timeline = gsap.timeline({
           defaults: { duration: 0.3, ease: "power2.inOut" },
           onComplete: () => {
@@ -213,61 +219,89 @@ export function FileBrowserPage() {
     setDesktopTreeVisibility(visible)
   }
 
-  const handleNavigate = (itemId: string) => {
-    setSelectedItemId(itemId)
+  const handleItemSelect = async (path: string) => {
+    const item = browser.model.items[path]
+    await browser.selectItem(path)
 
-    if (fileBrowserItems[itemId].type === "file") {
-      const previewFile = getFileBrowserPreviewFile(itemId)
-
-      if (previewFile) {
-        setOpenedFileIds((currentFileIds) =>
-          currentFileIds.includes(itemId)
-            ? currentFileIds
-            : [...currentFileIds, itemId]
-        )
-        setActiveFileId(itemId)
-      }
-
-      if (isMobile) {
-        setTreeVisible(false)
-      }
+    if (isMobile && item?.type === "file") {
+      setTreeVisible(false)
     }
   }
 
-  const handleActiveFileChange = (fileId: string) => {
-    setActiveFileId(fileId)
-    setSelectedItemId(fileId)
+  const handleBreadcrumbNavigate = (
+    path: string,
+    type: FileBrowserItem["type"]
+  ) => {
+    void browser.navigateBreadcrumb(path, type)
+    if (isMobile && type === "file") {
+      setTreeVisible(false)
+    }
   }
 
-  const handleFileClose = (fileId: string) => {
-    const fileIndex = openedFileIds.indexOf(fileId)
+  const handleUploadRequest = (directory: string) => {
+    uploadDirectoryRef.current = directory
+    if (uploadInputRef.current) {
+      uploadInputRef.current.value = ""
+      uploadInputRef.current.click()
+    }
+  }
 
-    if (fileIndex === -1) {
+  const handleUploadSelection = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const directory = uploadDirectoryRef.current
+    const files = Array.from(event.currentTarget.files ?? [])
+    event.currentTarget.value = ""
+
+    if (!directory || files.length === 0) {
       return
     }
 
-    setOpenedFileIds((currentFileIds) =>
-      currentFileIds.filter((currentFileId) => currentFileId !== fileId)
-    )
-
-    if (fileId === activeFileId) {
-      const adjacentFileId =
-        openedFileIds[fileIndex + 1] ??
-        openedFileIds[fileIndex - 1] ??
-        null
-
-      setActiveFileId(adjacentFileId)
-
-      if (adjacentFileId) {
-        setSelectedItemId(adjacentFileId)
-      }
+    try {
+      await browser.uploadFiles(directory, files)
+      announce(t("fileBrowser.uploadComplete", { count: files.length }))
+    } catch (error) {
+      announce(error instanceof Error ? error.message : String(error))
     }
   }
 
-  const handleCloseAll = () => {
-    setOpenedFileIds([])
-    setActiveFileId(null)
+  const handleDownload = (item: FileBrowserItem) => {
+    if (item.type === "file") {
+      startFileDownload(item.path, item.name)
+    }
   }
+
+  const treePane = (
+    <FileTreePane
+      initialError={browser.initialError}
+      initialLoading={browser.initialLoading}
+      loadingDirectories={browser.loadingDirectories}
+      model={browser.model}
+      rootPath={browser.rootPath}
+      selectedItemPath={browser.selectedItemPath}
+      onDeleteRequest={setDeleteTarget}
+      onDownload={handleDownload}
+      onItemSelect={handleItemSelect}
+      onRefresh={browser.refreshLoadedDirectories}
+      onRetry={browser.loadInitialDirectory}
+      onUpload={handleUploadRequest}
+    />
+  )
+
+  const filePreview = (
+    <RichFilePreview
+      activeFileId={browser.activeFileId}
+      expanded={!treeVisible}
+      files={browser.openedFiles}
+      onActiveFileChange={browser.setActiveFile}
+      onCloseAll={browser.closeAllFiles}
+      onDownload={(file) => startFileDownload(file.path, file.name)}
+      onFileClose={browser.closeFile}
+      onExpandedChange={(expanded) =>
+        handleTreeVisibilityChange(!expanded)
+      }
+    />
+  )
 
   return (
     <div
@@ -275,10 +309,15 @@ export function FileBrowserPage() {
       className="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden p-4 pt-0"
     >
       <FileAddressBar
-        selectedItemId={selectedItemId}
+        breadcrumb={browser.breadcrumb}
+        currentDirectory={browser.currentDirectory}
+        model={browser.model}
         treeVisible={treeVisible}
-        onNavigate={handleNavigate}
+        onCreateFolder={setCreateFolderDirectory}
+        onGoTo={browser.goToDirectory}
+        onNavigate={handleBreadcrumbNavigate}
         onTreeVisibilityChange={handleTreeVisibilityChange}
+        onUpload={handleUploadRequest}
       />
 
       <section
@@ -288,24 +327,7 @@ export function FileBrowserPage() {
       >
         {isMobile ? (
           <div data-mobile-file-pane className="flex min-h-0 flex-1">
-            {treeVisible ? (
-              <FileTreePane
-                selectedItemId={selectedItemId}
-                onItemSelect={handleNavigate}
-              />
-            ) : (
-              <RichFilePreview
-                activeFileId={activeFileId}
-                expanded
-                files={openedFiles}
-                onActiveFileChange={handleActiveFileChange}
-                onCloseAll={handleCloseAll}
-                onFileClose={handleFileClose}
-                onExpandedChange={(expanded) =>
-                  handleTreeVisibilityChange(!expanded)
-                }
-              />
-            )}
+            {treeVisible ? treePane : filePreview}
           </div>
         ) : (
           <ResizablePanelGroup
@@ -341,10 +363,7 @@ export function FileBrowserPage() {
                 aria-hidden={!treeVisible}
                 className="flex h-full min-w-0 flex-1"
               >
-                <FileTreePane
-                  selectedItemId={selectedItemId}
-                  onItemSelect={handleNavigate}
-                />
+                {treePane}
               </div>
             </ResizablePanel>
             <ResizableHandle
@@ -360,21 +379,46 @@ export function FileBrowserPage() {
               minSize="35%"
               className="!flex !min-h-0 !overflow-hidden"
             >
-              <RichFilePreview
-                activeFileId={activeFileId}
-                expanded={!treeVisible}
-                files={openedFiles}
-                onActiveFileChange={handleActiveFileChange}
-                onCloseAll={handleCloseAll}
-                onFileClose={handleFileClose}
-                onExpandedChange={(expanded) =>
-                  handleTreeVisibilityChange(!expanded)
-                }
-              />
+              {filePreview}
             </ResizablePanel>
           </ResizablePanelGroup>
         )}
       </section>
+
+      <input
+        ref={uploadInputRef}
+        type="file"
+        multiple
+        hidden
+        onChange={(event) => void handleUploadSelection(event)}
+      />
+      <CreateFolderDialog
+        directory={createFolderDirectory}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCreateFolderDirectory(null)
+          }
+        }}
+        onCreate={async (directory, name) => {
+          await browser.makeDirectory(directory, name)
+          announce(t("fileBrowser.createDialog.complete", { name }))
+        }}
+      />
+      <DeletePathDialog
+        item={deleteTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteTarget(null)
+          }
+        }}
+        onDelete={async (item) => {
+          await browser.deleteItem(item)
+          announce(t("fileBrowser.deleteDialog.complete", { name: item.name }))
+        }}
+      />
+      <p className="sr-only" role="status" aria-live="polite">
+        {announcement}
+      </p>
     </div>
   )
 }

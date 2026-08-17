@@ -6,6 +6,7 @@ import {
   open,
   readdir,
   realpath,
+  rm,
   rmdir,
   stat,
   unlink,
@@ -34,6 +35,7 @@ import {
   USER_FILE_PREVIEW_LIMIT_BYTES,
   UserFileError,
   type CreatedUserDirectory,
+  type DeletedUserPath,
   type UserFileDirectory,
   type UserFileDownload,
   type UserFileEntry,
@@ -71,7 +73,7 @@ const TEXT_FILENAMES = new Set([
 ])
 
 export interface NodeUserFileSystemOptions {
-  readonly workspaceDirectory: string
+  readonly initialDirectory: string
   readonly maxUploadBytes?: number
   readonly temporaryDirectory?: string
 }
@@ -85,14 +87,14 @@ interface OpenUserFile {
 }
 
 export class NodeUserFileSystem implements UserFileSystem {
+  readonly initialDirectory: string
   readonly maxUploadBytes: number
 
-  private readonly workspaceDirectory: string
   private readonly temporaryDirectory: string
 
   constructor(options: NodeUserFileSystemOptions) {
-    if (options.workspaceDirectory.trim() === '') {
-      throw new TypeError('workspaceDirectory must not be empty')
+    if (options.initialDirectory.trim() === '') {
+      throw new TypeError('initialDirectory must not be empty')
     }
 
     const maxUploadBytes = options.maxUploadBytes ?? DEFAULT_USER_FILE_UPLOAD_LIMIT_BYTES
@@ -100,7 +102,7 @@ export class NodeUserFileSystem implements UserFileSystem {
       throw new TypeError('maxUploadBytes must be a positive safe integer')
     }
 
-    this.workspaceDirectory = resolve(expandHome(options.workspaceDirectory))
+    this.initialDirectory = resolve(expandHome(options.initialDirectory))
     this.temporaryDirectory = resolve(
       expandHome(options.temporaryDirectory ?? tmpdir()),
     )
@@ -108,9 +110,7 @@ export class NodeUserFileSystem implements UserFileSystem {
   }
 
   async listDirectory(requestedPath: string): Promise<UserFileDirectory> {
-    const candidate = requestedPath === '~'
-      ? this.workspaceDirectory
-      : this.resolveCandidate(requestedPath)
+    const candidate = this.resolveCandidate(requestedPath)
     const directoryPath = await this.requireDirectory(candidate)
 
     let names: string[]
@@ -176,6 +176,42 @@ export class NodeUserFileSystem implements UserFileSystem {
     }
 
     return { path: targetPath, name }
+  }
+
+  async deletePath(requestedPath: string): Promise<DeletedUserPath> {
+    const targetPath = this.resolveCandidate(requestedPath)
+    if (targetPath === parse(targetPath).root) {
+      throw new UserFileError(
+        'invalid-request',
+        'The filesystem root cannot be deleted',
+      )
+    }
+
+    try {
+      await rm(targetPath, { recursive: true })
+    } catch (error) {
+      if (hasErrorCode(error, 'ENOENT')) {
+        throw new UserFileError(
+          'file-not-found',
+          `Path not found: ${targetPath}`,
+          { cause: error },
+        )
+      }
+      if (isAccessError(error)) {
+        throw new UserFileError(
+          'access-denied',
+          `Access denied: ${targetPath}`,
+          { cause: error },
+        )
+      }
+      throw new UserFileError(
+        'io-failure',
+        `Could not delete path: ${errorMessage(error)}`,
+        { cause: error },
+      )
+    }
+
+    return { status: 'ok', path: targetPath }
   }
 
   async openDownload(requestedPath: string): Promise<UserFileDownload> {
@@ -360,7 +396,7 @@ export class NodeUserFileSystem implements UserFileSystem {
     const expandedPath = expandHome(requestedPath)
     return isAbsolute(expandedPath)
       ? resolve(expandedPath)
-      : resolve(this.workspaceDirectory, expandedPath)
+      : resolve(this.initialDirectory, expandedPath)
   }
 
   private async requireDirectory(candidatePath: string): Promise<string> {
@@ -413,10 +449,12 @@ export class NodeUserFileSystem implements UserFileSystem {
 }
 
 async function describeEntry(directoryPath: string, name: string): Promise<UserFileEntry> {
+  const path = join(directoryPath, name)
   try {
-    const stats = await stat(join(directoryPath, name))
+    const stats = await stat(path)
     const type = stats.isDirectory() ? 'directory' : 'file'
     return {
+      path,
       name,
       type,
       size: type === 'file' ? stats.size : null,
@@ -425,6 +463,7 @@ async function describeEntry(directoryPath: string, name: string): Promise<UserF
     }
   } catch {
     return {
+      path,
       name,
       type: 'file',
       size: null,

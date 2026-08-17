@@ -1,4 +1,5 @@
 import { mkdir } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import { pathToFileURL } from 'node:url'
 
 import { NodeUserFileSystem } from './infrastructure/filesystem/node-user-file-system.js'
@@ -7,10 +8,10 @@ import { buildHttpServer } from './transport/http/server.js'
 const DEFAULT_PORT = 8000
 
 export async function startServer(): Promise<void> {
-  const workspaceDirectory = process.env['WORKSPACE_DIR'] ?? process.cwd()
-  await mkdir(workspaceDirectory, { recursive: true })
+  const initialDirectory = process.env['WORKSPACE_DIR'] ?? homedir()
+  await mkdir(initialDirectory, { recursive: true })
   const fileSystem = new NodeUserFileSystem({
-    workspaceDirectory,
+    initialDirectory,
   })
   const server = buildHttpServer({ userFileSystem: fileSystem, logger: true })
   const port = parsePort(process.env['PORT'])

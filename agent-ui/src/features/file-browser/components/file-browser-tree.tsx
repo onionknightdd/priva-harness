@@ -13,6 +13,7 @@ import {
   DownloadIcon,
   FolderIcon,
   FolderOpenIcon,
+  LoaderCircleIcon,
   Trash2Icon,
   UploadIcon,
 } from "lucide-react"
@@ -37,12 +38,12 @@ import {
 import { writeClipboardText } from "@/lib/clipboard"
 
 import {
-  FILE_BROWSER_INITIAL_EXPANDED_ITEMS,
   FILE_BROWSER_ROOT_ID,
-  fileBrowserItems,
-  fileBrowserItemMetadata,
-  getFileBrowserPath,
+  getFileBrowserAncestorPaths,
+  getFileBrowserParentPath,
+  isSameOrDescendantPath,
   type FileBrowserItem,
+  type FileBrowserModel,
 } from "../file-browser-data"
 import { FileTypeIcon } from "./file-type-icon"
 
@@ -52,32 +53,49 @@ const FILE_TREE_STICKY_ROW_HEIGHT = 34
 function FileBrowserTreeNode({
   item,
   level,
+  loadingDirectories,
   onActionFeedback,
+  onDeleteRequest,
+  onDownload,
+  onUpload,
 }: {
   item: ItemInstance<FileBrowserItem>
   level: number
+  loadingDirectories: Set<string>
   onActionFeedback: (message: string) => void
+  onDeleteRequest: (item: FileBrowserItem) => void
+  onDownload: (item: FileBrowserItem) => void
+  onUpload: (directory: string) => void
 }) {
   const { i18n, t } = useTranslation()
   const data = item.getItemData()
-  const metadata = fileBrowserItemMetadata[item.getId()]
-  const itemPath = getFileBrowserPath(item.getId())
-    .map((itemId) => fileBrowserItems[itemId].name)
-    .join("/")
-  const modifiedAt = new Intl.DateTimeFormat(i18n.resolvedLanguage, {
-    day: "2-digit",
-    hour: "2-digit",
-    hour12: false,
-    minute: "2-digit",
-    month: "2-digit",
-  }).format(new Date(metadata.modifiedAt))
-  const fullModifiedAt = new Intl.DateTimeFormat(i18n.resolvedLanguage, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(metadata.modifiedAt))
-  const size = metadata.size
-    ? formatFileSize(metadata.size, i18n.resolvedLanguage)
+  const loading = item.isFolder() && loadingDirectories.has(data.path)
+  const modifiedDate = data.modifiedAt
+    ? new Date(data.modifiedAt * 1000)
+    : null
+  const modifiedAt = modifiedDate
+    ? new Intl.DateTimeFormat(i18n.resolvedLanguage, {
+        day: "2-digit",
+        hour: "2-digit",
+        hour12: false,
+        minute: "2-digit",
+        month: "2-digit",
+      }).format(modifiedDate)
     : ""
+  const fullModifiedAt = modifiedDate
+    ? new Intl.DateTimeFormat(i18n.resolvedLanguage, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(modifiedDate)
+    : undefined
+  const size =
+    data.type === "file" && data.size !== null
+      ? formatFileSize(data.size, i18n.resolvedLanguage)
+      : ""
+  const uploadDirectory =
+    data.type === "folder"
+      ? data.path
+      : data.parentPath ?? getFileBrowserParentPath(data.path)
   const treeItemButton = (
     <TreeItem
       item={item}
@@ -95,7 +113,9 @@ function FileBrowserTreeNode({
     >
       <TreeItemLabel className="min-h-8 w-full min-w-0 max-w-full gap-1 pr-1 in-data-popup-open:bg-accent">
         <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
-          {item.isFolder() ? (
+          {loading ? (
+            <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground motion-reduce:animate-none" />
+          ) : item.isFolder() ? (
             item.isExpanded() ? (
               <FolderOpenIcon className="size-4 text-muted-foreground" />
             ) : (
@@ -106,12 +126,12 @@ function FileBrowserTreeNode({
           )}
           <span className="min-w-0 truncate">{data.name}</span>
         </span>
-        <span className="flex min-w-0 shrink-0 items-center gap-[clamp(0.125rem,1.5cqi,0.5rem)] overflow-hidden">
+        <span className="flex min-w-0 shrink-0 items-center gap-[clamp(0.25rem,2cqi,0.75rem)] overflow-hidden">
           <span className="w-[clamp(2.25rem,15cqi,3rem)] shrink-0 overflow-hidden text-right text-[10px] leading-none whitespace-nowrap tabular-nums text-muted-foreground">
             {size}
           </span>
           <time
-            dateTime={metadata.modifiedAt}
+            dateTime={modifiedDate?.toISOString()}
             title={fullModifiedAt}
             className="w-[clamp(3rem,22cqi,4rem)] shrink-0 overflow-hidden text-right text-[10px] leading-none whitespace-nowrap tabular-nums text-muted-foreground"
           >
@@ -127,10 +147,10 @@ function FileBrowserTreeNode({
       <ContextMenuContent>
         <ContextMenuItem
           onClick={() => {
-            void writeClipboardText(itemPath)
+            void writeClipboardText(data.path)
               .then(() =>
                 onActionFeedback(
-                  t("fileBrowser.pathCopied", { path: itemPath })
+                  t("fileBrowser.pathCopied", { path: data.path })
                 )
               )
               .catch(() =>
@@ -143,25 +163,19 @@ function FileBrowserTreeNode({
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem
-          onClick={() =>
-            onActionFeedback(
-              t("fileBrowser.actionUnavailable", {
-                action: t("fileBrowser.contextMenu.download"),
-              })
-            )
-          }
+          disabled={data.type === "folder"}
+          onClick={() => onDownload(data)}
         >
           <DownloadIcon aria-hidden="true" />
           {t("fileBrowser.contextMenu.download")}
         </ContextMenuItem>
         <ContextMenuItem
-          onClick={() =>
-            onActionFeedback(
-              t("fileBrowser.actionUnavailable", {
-                action: t("fileBrowser.contextMenu.uploadHere"),
-              })
-            )
-          }
+          disabled={!uploadDirectory}
+          onClick={() => {
+            if (uploadDirectory) {
+              onUpload(uploadDirectory)
+            }
+          }}
         >
           <UploadIcon aria-hidden="true" />
           {t("fileBrowser.contextMenu.uploadHere")}
@@ -169,13 +183,7 @@ function FileBrowserTreeNode({
         <ContextMenuSeparator />
         <ContextMenuItem
           variant="destructive"
-          onClick={() =>
-            onActionFeedback(
-              t("fileBrowser.actionUnavailable", {
-                action: t("fileBrowser.contextMenu.delete"),
-              })
-            )
-          }
+          onClick={() => onDeleteRequest(data)}
         >
           <Trash2Icon aria-hidden="true" />
           {t("fileBrowser.contextMenu.delete")}
@@ -212,7 +220,11 @@ function FileBrowserTreeNode({
               key={child.getId()}
               item={child}
               level={level + 1}
+              loadingDirectories={loadingDirectories}
               onActionFeedback={onActionFeedback}
+              onDeleteRequest={onDeleteRequest}
+              onDownload={onDownload}
+              onUpload={onUpload}
             />
           ))}
         </div>
@@ -222,36 +234,58 @@ function FileBrowserTreeNode({
 }
 
 export function FileBrowserTree({
+  loadingDirectories,
+  model,
   onActionFeedback,
+  onDeleteRequest,
+  onDownload,
   onItemSelect,
+  onUpload,
   query,
-  selectedItemId,
+  rootPath,
+  selectedItemPath,
 }: {
+  loadingDirectories: Set<string>
+  model: FileBrowserModel
   onActionFeedback: (message: string) => void
-  onItemSelect: (itemId: string) => void
+  onDeleteRequest: (item: FileBrowserItem) => void
+  onDownload: (item: FileBrowserItem) => void
+  onItemSelect: (path: string) => Promise<void>
+  onUpload: (directory: string) => void
   query: string
-  selectedItemId: string
+  rootPath: string
+  selectedItemPath: string | null
 }) {
   const { t } = useTranslation()
   const normalizedQuery = query.trim().toLocaleLowerCase()
-  const hasMatches = Object.entries(fileBrowserItems).some(
-    ([itemId, item]) =>
-      itemId !== FILE_BROWSER_ROOT_ID &&
+  const hasMatches = Object.values(model.items).some(
+    (item) =>
+      item.path !== FILE_BROWSER_ROOT_ID &&
+      isSameOrDescendantPath(item.path, rootPath) &&
       item.name.toLocaleLowerCase().includes(normalizedQuery)
   )
   const tree = useTree<FileBrowserItem>({
     initialState: {
-      expandedItems: FILE_BROWSER_INITIAL_EXPANDED_ITEMS,
-      selectedItems: [selectedItemId],
+      expandedItems: [rootPath],
+      selectedItems: selectedItemPath ? [selectedItemPath] : [],
     },
     rootItemId: FILE_BROWSER_ROOT_ID,
     getItemName: (item) => item.getItemData().name,
     isItemFolder: (item) => item.getItemData().type === "folder",
     dataLoader: {
-      getItem: (itemId) => fileBrowserItems[itemId],
-      getChildren: (itemId) => fileBrowserItems[itemId].children ?? [],
+      getItem: (itemId) => model.items[itemId],
+      getChildren: (itemId) =>
+        itemId === FILE_BROWSER_ROOT_ID
+          ? [rootPath]
+          : model.childrenByPath[itemId] ?? [],
     },
-    onPrimaryAction: (item) => onItemSelect(item.getId()),
+    onPrimaryAction: (item) => {
+      void onItemSelect(item.getId()).catch((error: unknown) =>
+        onActionFeedback(
+          error instanceof Error ? error.message : String(error)
+        )
+      )
+    },
     features: [
       syncDataLoaderFeature,
       selectionFeature,
@@ -261,16 +295,31 @@ export function FileBrowserTree({
     ],
   })
 
+  React.useLayoutEffect(() => {
+    tree.rebuildTree()
+  }, [model, rootPath, tree])
+
   React.useEffect(() => {
-    tree.setSelectedItems([selectedItemId])
+    if (
+      !selectedItemPath ||
+      !model.items[selectedItemPath] ||
+      !isSameOrDescendantPath(selectedItemPath, rootPath)
+    ) {
+      tree.setSelectedItems([])
+      return
+    }
 
-    getFileBrowserPath(selectedItemId)
-      .slice(0, -1)
-      .forEach((itemId) => {
-        tree.getItemInstance(itemId).expand()
-      })
+    tree.setSelectedItems([selectedItemPath])
 
-    const selectedItem = tree.getItemInstance(selectedItemId)
+    getFileBrowserAncestorPaths(
+      model.items,
+      selectedItemPath,
+      rootPath
+    )
+      .filter((path) => Boolean(model.items[path]))
+      .forEach((path) => tree.getItemInstance(path).expand())
+
+    const selectedItem = tree.getItemInstance(selectedItemPath)
     if (selectedItem.isFolder()) {
       selectedItem.expand()
     }
@@ -278,7 +327,7 @@ export function FileBrowserTree({
     window.requestAnimationFrame(() => {
       void selectedItem.scrollTo({ block: "nearest" })
     })
-  }, [selectedItemId, tree])
+  }, [model, rootPath, selectedItemPath, tree])
 
   React.useEffect(() => {
     if (normalizedQuery) {
@@ -288,10 +337,6 @@ export function FileBrowserTree({
     }
 
     tree.setSearch(null)
-    tree.collapseAll()
-    FILE_BROWSER_INITIAL_EXPANDED_ITEMS.forEach((itemId) => {
-      tree.getItemInstance(itemId).expand()
-    })
   }, [normalizedQuery, tree])
 
   if (normalizedQuery && !hasMatches) {
@@ -317,7 +362,11 @@ export function FileBrowserTree({
           key={item.getId()}
           item={item}
           level={0}
+          loadingDirectories={loadingDirectories}
           onActionFeedback={onActionFeedback}
+          onDeleteRequest={onDeleteRequest}
+          onDownload={onDownload}
+          onUpload={onUpload}
         />
       ))}
     </Tree>
@@ -329,7 +378,7 @@ function formatFileSize(bytes: number, language?: string) {
     return `${bytes} B`
   }
 
-  const units = ["KB", "MB", "GB"]
+  const units = ["KB", "MB", "GB", "TB"]
   let value = bytes / 1024
   let unitIndex = 0
 

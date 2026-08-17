@@ -5,28 +5,54 @@ import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 
-import { fileBrowserItemCount } from "../file-browser-data"
+import {
+  countFileBrowserTreeItems,
+  type FileBrowserItem,
+  type FileBrowserModel,
+} from "../file-browser-data"
 import { FileBrowserTree } from "./file-browser-tree"
 
 export function FileTreePane({
+  initialError,
+  initialLoading,
+  loadingDirectories,
+  model,
+  onDeleteRequest,
+  onDownload,
   onItemSelect,
-  selectedItemId,
+  onRefresh,
+  onRetry,
+  onUpload,
+  rootPath,
+  selectedItemPath,
 }: {
-  onItemSelect: (itemId: string) => void
-  selectedItemId: string
+  initialError: string | null
+  initialLoading: boolean
+  loadingDirectories: Set<string>
+  model: FileBrowserModel
+  onDeleteRequest: (item: FileBrowserItem) => void
+  onDownload: (item: FileBrowserItem) => void
+  onItemSelect: (path: string) => Promise<void>
+  onRefresh: () => Promise<void>
+  onRetry: () => Promise<void>
+  onUpload: (directory: string) => void
+  rootPath: string | null
+  selectedItemPath: string | null
 }) {
   const { t } = useTranslation()
   const refreshIconRef = React.useRef<SVGSVGElement>(null)
   const announcementTimerRef = React.useRef<number | null>(null)
   const [query, setQuery] = React.useState("")
-  const [refreshVersion, setRefreshVersion] = React.useState(0)
+  const [refreshing, setRefreshing] = React.useState(false)
   const [announcement, setAnnouncement] = React.useState("")
+  const itemCount = countFileBrowserTreeItems(model, rootPath)
 
   React.useEffect(
     () => () => {
@@ -46,13 +72,16 @@ export function FileTreePane({
 
     announcementTimerRef.current = window.setTimeout(
       () => setAnnouncement(""),
-      1600
+      2200
     )
   }, [])
 
-  const handleRefresh = () => {
-    setRefreshVersion((version) => version + 1)
-    announceAction(t("fileBrowser.refreshed"))
+  const handleRefresh = async () => {
+    if (refreshing) {
+      return
+    }
+
+    setRefreshing(true)
 
     if (
       refreshIconRef.current &&
@@ -68,6 +97,17 @@ export function FileTreePane({
           clearProps: "transform",
         }
       )
+    }
+
+    try {
+      await onRefresh()
+      announceAction(t("fileBrowser.refreshed"))
+    } catch (error) {
+      announceAction(
+        error instanceof Error ? error.message : String(error)
+      )
+    } finally {
+      setRefreshing(false)
     }
   }
 
@@ -94,8 +134,9 @@ export function FileTreePane({
                 type="button"
                 variant="ghost"
                 size="icon-sm"
+                disabled={refreshing || !rootPath}
                 aria-label={t("fileBrowser.refresh")}
-                onClick={handleRefresh}
+                onClick={() => void handleRefresh()}
               />
             }
           >
@@ -108,16 +149,58 @@ export function FileTreePane({
         data-file-tree-scroll
         className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain p-2 [container-type:inline-size]"
       >
-        <FileBrowserTree
-          key={refreshVersion}
-          query={query}
-          selectedItemId={selectedItemId}
-          onActionFeedback={announceAction}
-          onItemSelect={onItemSelect}
-        />
+        {initialLoading ? (
+          <div
+            role="status"
+            aria-label={t("fileBrowser.loadingDirectory")}
+            className="space-y-2 p-1"
+          >
+            {Array.from({ length: 7 }, (_, index) => (
+              <Skeleton
+                key={index}
+                className="h-8"
+                style={{ width: `${82 - (index % 3) * 9}%` }}
+              />
+            ))}
+          </div>
+        ) : initialError || !rootPath ? (
+          <div className="flex min-h-48 flex-col items-center justify-center gap-3 px-6 text-center">
+            <p className="text-sm text-destructive">
+              {t("fileBrowser.loadFailed")}
+            </p>
+            {initialError && (
+              <p className="max-w-sm text-xs text-muted-foreground">
+                {initialError}
+              </p>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void onRetry()}
+            >
+              <RefreshCwIcon aria-hidden="true" />
+              {t("fileBrowser.retry")}
+            </Button>
+          </div>
+        ) : (
+          <FileBrowserTree
+            key={rootPath}
+            loadingDirectories={loadingDirectories}
+            model={model}
+            query={query}
+            rootPath={rootPath}
+            selectedItemPath={selectedItemPath}
+            onActionFeedback={announceAction}
+            onDeleteRequest={onDeleteRequest}
+            onDownload={onDownload}
+            onItemSelect={onItemSelect}
+            onUpload={onUpload}
+          />
+        )}
       </div>
       <div className="flex h-9 shrink-0 items-center border-t px-3 text-xs text-muted-foreground">
-        {t("fileBrowser.itemCount", { count: fileBrowserItemCount })}
+        {t("fileBrowser.itemCount", { count: itemCount })}
       </div>
       <p className="sr-only" role="status" aria-live="polite">
         {announcement}

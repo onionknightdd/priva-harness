@@ -9,8 +9,9 @@ const nullableString = {
 const fileEntrySchema = {
   type: 'object',
   additionalProperties: false,
-  required: ['name', 'type', 'size', 'modified', 'permissions'],
+  required: ['path', 'name', 'type', 'size', 'modified', 'permissions'],
   properties: {
+    path: { type: 'string' },
     name: { type: 'string' },
     type: { type: 'string', enum: ['file', 'directory'] },
     size: nullableNumber,
@@ -58,6 +59,28 @@ export const createDirectorySchema = {
       properties: {
         path: { type: 'string' },
         name: { type: 'string' },
+      },
+    },
+  },
+} as const
+
+export const deletePathSchema = {
+  querystring: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['path'],
+    properties: {
+      path: { type: 'string', minLength: 1 },
+    },
+  },
+  response: {
+    200: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['status', 'path'],
+      properties: {
+        status: { type: 'string', const: 'ok' },
+        path: { type: 'string' },
       },
     },
   },

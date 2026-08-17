@@ -25,13 +25,13 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Input } from "@/components/ui/input"
 import {
   Tooltip,
   TooltipContent,
@@ -39,10 +39,10 @@ import {
 } from "@/components/ui/tooltip"
 
 import {
-  fileBrowserItems,
-  findFileBrowserFolderIdByPath,
-  getFileBrowserChildFolderIds,
-  getFileBrowserPath,
+  getFileBrowserChildFolders,
+  type FileBrowserBreadcrumbEntry,
+  type FileBrowserItem,
+  type FileBrowserModel,
 } from "../file-browser-data"
 
 const goToTransition: Transition = {
@@ -52,28 +52,30 @@ const goToTransition: Transition = {
   mass: 0.75,
 }
 
-type BreadcrumbEntry =
-  | { id: string; type: "item" }
-  | { ids: string[]; type: "collapsed" }
+type VisibleBreadcrumbEntry =
+  | { entry: FileBrowserBreadcrumbEntry; type: "item" }
+  | { entries: FileBrowserBreadcrumbEntry[]; type: "collapsed" }
 
-function getBreadcrumbEntries(path: string[]): BreadcrumbEntry[] {
+function getVisibleBreadcrumbEntries(
+  path: FileBrowserBreadcrumbEntry[]
+): VisibleBreadcrumbEntry[] {
   if (path.length <= 4) {
-    return path.map((id) => ({ id, type: "item" }))
+    return path.map((entry) => ({ entry, type: "item" }))
   }
 
   return [
-    { id: path[0], type: "item" },
-    { ids: path.slice(1, -3), type: "collapsed" },
-    ...path.slice(-3).map((id) => ({ id, type: "item" }) as const),
+    { entry: path[0], type: "item" },
+    { entries: path.slice(1, -3), type: "collapsed" },
+    ...path.slice(-3).map((entry) => ({ entry, type: "item" }) as const),
   ]
 }
 
 function CollapsedPathMenu({
-  itemIds,
+  entries,
   onNavigate,
 }: {
-  itemIds: string[]
-  onNavigate: (itemId: string) => void
+  entries: FileBrowserBreadcrumbEntry[]
+  onNavigate: (path: string, type: FileBrowserItem["type"]) => void
 }) {
   const { t } = useTranslation()
 
@@ -92,13 +94,13 @@ function CollapsedPathMenu({
         <BreadcrumbEllipsis />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
-        {itemIds.map((itemId) => (
+        {entries.map((entry) => (
           <DropdownMenuItem
-            key={itemId}
-            onClick={() => onNavigate(itemId)}
+            key={entry.path}
+            onClick={() => onNavigate(entry.path, entry.type)}
           >
             <FolderIcon aria-hidden="true" />
-            {fileBrowserItems[itemId].name}
+            {entry.name}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
@@ -108,17 +110,18 @@ function CollapsedPathMenu({
 
 function PathItem({
   current,
-  itemId,
+  entry,
+  model,
   onNavigate,
 }: {
   current: boolean
-  itemId: string
-  onNavigate: (itemId: string) => void
+  entry: FileBrowserBreadcrumbEntry
+  model: FileBrowserModel
+  onNavigate: (path: string, type: FileBrowserItem["type"]) => void
 }) {
   const { t } = useTranslation()
-  const item = fileBrowserItems[itemId]
-  const childFolderIds = getFileBrowserChildFolderIds(itemId)
-  const hasDirectoryOptions = childFolderIds.length > 1
+  const childFolders = getFileBrowserChildFolders(model, entry.path)
+  const hasDirectoryOptions = childFolders.length > 1
 
   return (
     <div
@@ -132,10 +135,10 @@ function PathItem({
         aria-current={current ? "location" : undefined}
         className="max-w-12 min-w-0 rounded-r-none px-1.5 text-sm font-normal data-[current=true]:bg-muted data-[current=true]:text-foreground sm:max-w-36 sm:px-2"
         data-current={current || undefined}
-        title={item.name}
-        onClick={() => onNavigate(itemId)}
+        title={entry.path}
+        onClick={() => onNavigate(entry.path, entry.type)}
       >
-        <span className="truncate">{item.name}</span>
+        <span className="truncate">{entry.name}</span>
       </Button>
       {hasDirectoryOptions && (
         <DropdownMenu>
@@ -147,7 +150,7 @@ function PathItem({
                 size="icon-xs"
                 className="rounded-l-none"
                 aria-label={t("fileBrowser.openDirectories", {
-                  directory: item.name,
+                  directory: entry.name,
                 })}
               />
             }
@@ -155,13 +158,13 @@ function PathItem({
             <ChevronDownIcon aria-hidden="true" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            {childFolderIds.map((childId) => (
+            {childFolders.map((childFolder) => (
               <DropdownMenuItem
-                key={childId}
-                onClick={() => onNavigate(childId)}
+                key={childFolder.path}
+                onClick={() => onNavigate(childFolder.path, "folder")}
               >
                 <FolderIcon aria-hidden="true" />
-                {fileBrowserItems[childId].name}
+                {childFolder.name}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
@@ -171,15 +174,47 @@ function PathItem({
   )
 }
 
+function animateActionIcon(control: HTMLButtonElement) {
+  const icon = control.querySelector("svg")
+
+  if (
+    !icon ||
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  ) {
+    return
+  }
+
+  gsap.fromTo(
+    icon,
+    { scale: 0.78 },
+    {
+      scale: 1,
+      duration: 0.28,
+      ease: "back.out(2.5)",
+      clearProps: "transform",
+    }
+  )
+}
+
 export function FileAddressBar({
+  breadcrumb,
+  currentDirectory,
+  model,
+  onCreateFolder,
+  onGoTo,
   onNavigate,
   onTreeVisibilityChange,
-  selectedItemId,
+  onUpload,
   treeVisible,
 }: {
-  onNavigate: (itemId: string) => void
+  breadcrumb: FileBrowserBreadcrumbEntry[]
+  currentDirectory: string | null
+  model: FileBrowserModel
+  onCreateFolder: (directory: string) => void
+  onGoTo: (path: string) => Promise<boolean>
+  onNavigate: (path: string, type: FileBrowserItem["type"]) => void
   onTreeVisibilityChange: (visible: boolean) => void
-  selectedItemId: string
+  onUpload: (directory: string) => void
   treeVisible: boolean
 }) {
   const { t } = useTranslation()
@@ -190,14 +225,15 @@ export function FileAddressBar({
   const [announcement, setAnnouncement] = React.useState("")
   const [goToPath, setGoToPath] = React.useState("")
   const [goToInvalid, setGoToInvalid] = React.useState(false)
+  const [goToPending, setGoToPending] = React.useState(false)
   const [isGoingTo, setIsGoingTo] = React.useState(false)
   const goToIconLayoutId = React.useId()
   const shouldReduceMotion = Boolean(useReducedMotion())
   const transition: Transition = shouldReduceMotion
     ? { duration: 0 }
     : goToTransition
-  const path = getFileBrowserPath(selectedItemId)
-  const entries = getBreadcrumbEntries(path)
+  const entries = getVisibleBreadcrumbEntries(breadcrumb)
+  const currentPath = breadcrumb.at(-1)?.path
   const treeToggleLabel = treeVisible
     ? t("fileBrowser.hideTree")
     : t("fileBrowser.showTree")
@@ -240,50 +276,28 @@ export function FileAddressBar({
     restoreGoToFocusRef.current = restoreFocus
     setGoToPath("")
     setGoToInvalid(false)
+    setGoToPending(false)
     setIsGoingTo(false)
   }
 
-  const navigateToDirectory = () => {
-    const directoryId = findFileBrowserFolderIdByPath(goToPath)
-
-    if (!directoryId || !goToPath.trim()) {
+  const navigateToDirectory = async () => {
+    const path = goToPath.trim()
+    if (!path || goToPending) {
       setGoToInvalid(true)
-      announce(t("fileBrowser.goToInvalidPath", { path: goToPath }))
       return
     }
 
-    onNavigate(directoryId)
-    closeGoTo(true)
-  }
+    setGoToPending(true)
+    const found = await onGoTo(path)
+    setGoToPending(false)
 
-  const handleGoTo = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    navigateToDirectory()
-  }
-
-  const handlePlaceholderAction = (
-    event: React.MouseEvent<HTMLButtonElement>,
-    action: string
-  ) => {
-    const icon = event.currentTarget.querySelector("svg")
-
-    announce(t("fileBrowser.actionUnavailable", { action }))
-
-    if (
-      icon &&
-      !window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
-      gsap.fromTo(
-        icon,
-        { scale: 0.78 },
-        {
-          scale: 1,
-          duration: 0.28,
-          ease: "back.out(2.5)",
-          clearProps: "transform",
-        }
-      )
+    if (!found) {
+      setGoToInvalid(true)
+      announce(t("fileBrowser.goToInvalidPath", { path }))
+      return
     }
+
+    closeGoTo(true)
   }
 
   return (
@@ -320,9 +334,7 @@ export function FileAddressBar({
             <BreadcrumbList className="flex-nowrap gap-0 overflow-hidden text-sm sm:gap-1.5">
               {entries.map((entry, index) => (
                 <React.Fragment
-                  key={
-                    entry.type === "item" ? entry.id : "collapsed"
-                  }
+                  key={entry.type === "item" ? entry.entry.path : "collapsed"}
                 >
                   {index > 0 && (
                     <BreadcrumbSeparator className="shrink-0" />
@@ -330,13 +342,14 @@ export function FileAddressBar({
                   <BreadcrumbItem className="min-w-0 shrink-0">
                     {entry.type === "collapsed" ? (
                       <CollapsedPathMenu
-                        itemIds={entry.ids}
+                        entries={entry.entries}
                         onNavigate={onNavigate}
                       />
                     ) : (
                       <PathItem
-                        itemId={entry.id}
-                        current={entry.id === selectedItemId}
+                        entry={entry.entry}
+                        current={entry.entry.path === currentPath}
+                        model={model}
                         onNavigate={onNavigate}
                       />
                     )}
@@ -354,21 +367,20 @@ export function FileAddressBar({
                     type="button"
                     variant="ghost"
                     size="icon-sm"
+                    disabled={!currentDirectory}
                     aria-label={t("fileBrowser.createFolder")}
-                    onClick={(event) =>
-                      handlePlaceholderAction(
-                        event,
-                        t("fileBrowser.createFolder")
-                      )
-                    }
+                    onClick={(event) => {
+                      animateActionIcon(event.currentTarget)
+                      if (currentDirectory) {
+                        onCreateFolder(currentDirectory)
+                      }
+                    }}
                   />
                 }
               >
                 <FolderPlusIcon aria-hidden="true" />
               </TooltipTrigger>
-              <TooltipContent>
-                {t("fileBrowser.createFolder")}
-              </TooltipContent>
+              <TooltipContent>{t("fileBrowser.createFolder")}</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger
@@ -377,13 +389,14 @@ export function FileAddressBar({
                     type="button"
                     variant="ghost"
                     size="icon-sm"
+                    disabled={!currentDirectory}
                     aria-label={t("fileBrowser.upload")}
-                    onClick={(event) =>
-                      handlePlaceholderAction(
-                        event,
-                        t("fileBrowser.upload")
-                      )
-                    }
+                    onClick={(event) => {
+                      animateActionIcon(event.currentTarget)
+                      if (currentDirectory) {
+                        onUpload(currentDirectory)
+                      }
+                    }}
                   />
                 }
               >
@@ -413,7 +426,10 @@ export function FileAddressBar({
                     : { opacity: 0, scaleX: 0.96, y: -1 }
                 }
                 transition={transition}
-                onSubmit={handleGoTo}
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  void navigateToDirectory()
+                }}
                 onBlurCapture={(event) => {
                   const nextTarget = event.relatedTarget
 
@@ -433,14 +449,12 @@ export function FileAddressBar({
                   className="pointer-events-none absolute top-1/2 left-2.5 z-10 flex -translate-y-1/2 text-muted-foreground"
                   transition={transition}
                 >
-                  <FolderSearchIcon
-                    className="size-4"
-                    aria-hidden="true"
-                  />
+                  <FolderSearchIcon className="size-4" aria-hidden="true" />
                 </motion.span>
                 <Input
                   ref={goToInputRef}
                   value={goToPath}
+                  disabled={goToPending}
                   onChange={(event) => {
                     setGoToPath(event.target.value)
                     setGoToInvalid(false)
@@ -448,7 +462,7 @@ export function FileAddressBar({
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
                       event.preventDefault()
-                      navigateToDirectory()
+                      void navigateToDirectory()
                       return
                     }
 
@@ -477,9 +491,7 @@ export function FileAddressBar({
                   >
                     <XIcon aria-hidden="true" />
                   </TooltipTrigger>
-                  <TooltipContent>
-                    {t("fileBrowser.closeGoTo")}
-                  </TooltipContent>
+                  <TooltipContent>{t("fileBrowser.closeGoTo")}</TooltipContent>
                 </Tooltip>
               </motion.form>
             ) : (
@@ -487,11 +499,7 @@ export function FileAddressBar({
                 key="go-to-trigger"
                 layout
                 className="shrink-0"
-                initial={
-                  shouldReduceMotion
-                    ? false
-                    : { opacity: 0, scale: 0.9 }
-                }
+                initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={
                   shouldReduceMotion
@@ -521,9 +529,7 @@ export function FileAddressBar({
                       <FolderSearchIcon aria-hidden="true" />
                     </motion.span>
                   </TooltipTrigger>
-                  <TooltipContent>
-                    {t("fileBrowser.goTo")}
-                  </TooltipContent>
+                  <TooltipContent>{t("fileBrowser.goTo")}</TooltipContent>
                 </Tooltip>
               </motion.div>
             )}
