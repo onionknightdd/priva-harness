@@ -218,7 +218,7 @@ function FileBrowserTreeNode({
           {item.isFolder() ? (
             <AnimatedFolderIcon expanded={item.isExpanded()} />
           ) : (
-            <FileTypeIcon name={data.name} />
+            <FileTypeIcon name={data.name} path={data.path} />
           )}
           <span className="min-w-0 truncate">{data.name}</span>
           {loading && (

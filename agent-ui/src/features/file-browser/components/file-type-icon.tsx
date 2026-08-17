@@ -1,92 +1,140 @@
-import cssIcon from "material-icon-theme/icons/css.svg?url"
-import dockerIcon from "material-icon-theme/icons/docker.svg?url"
-import defaultFileIcon from "material-icon-theme/icons/file.svg?url"
-import gitIcon from "material-icon-theme/icons/git.svg?url"
-import htmlIcon from "material-icon-theme/icons/html.svg?url"
-import imageIcon from "material-icon-theme/icons/image.svg?url"
-import javascriptIcon from "material-icon-theme/icons/javascript.svg?url"
-import jsonIcon from "material-icon-theme/icons/json.svg?url"
-import licenseIcon from "material-icon-theme/icons/license.svg?url"
-import markdownIcon from "material-icon-theme/icons/markdown.svg?url"
-import nodeIcon from "material-icon-theme/icons/nodejs.svg?url"
-import pythonIcon from "material-icon-theme/icons/python.svg?url"
-import pythonMiscIcon from "material-icon-theme/icons/python-misc.svg?url"
-import reactIcon from "material-icon-theme/icons/react.svg?url"
-import reactTypescriptIcon from "material-icon-theme/icons/react_ts.svg?url"
-import readmeIcon from "material-icon-theme/icons/readme.svg?url"
-import tsconfigIcon from "material-icon-theme/icons/tsconfig.svg?url"
-import tuneIcon from "material-icon-theme/icons/tune.svg?url"
-import typescriptIcon from "material-icon-theme/icons/typescript.svg?url"
-import viteIcon from "material-icon-theme/icons/vite.svg?url"
-import yamlIcon from "material-icon-theme/icons/yaml.svg?url"
+import {
+  file as defaultFileIconId,
+  fileExtensions,
+  fileNames,
+  iconDefinitions,
+  light,
+} from "material-icon-theme/dist/material-icons.json"
+import { useTheme } from "next-themes"
 
 import { cn } from "@/lib/utils"
 
-const iconByFileName: Record<string, string> = {
-  ".gitignore": gitIcon,
-  ".npmrc": nodeIcon,
-  ".env": tuneIcon,
-  ".env.example": tuneIcon,
-  "dockerfile": dockerIcon,
-  "license": licenseIcon,
-  "package-lock.json": nodeIcon,
-  "package.json": nodeIcon,
-  "readme.md": readmeIcon,
-  "tsconfig.json": tsconfigIcon,
-  "vite.config.js": viteIcon,
-  "vite.config.ts": viteIcon,
-  "vite.config.tsx": viteIcon,
+type IconAssociations = Record<string, string>
+type IconDefinition = { iconPath: string }
+
+const definitions = iconDefinitions as Record<string, IconDefinition>
+const baseFileNameIcons = normalizeAssociations(fileNames)
+const baseFileExtensionIcons = normalizeAssociations(fileExtensions)
+const lightFileNameIcons = normalizeAssociations(light.fileNames)
+const lightFileExtensionIcons = normalizeAssociations(light.fileExtensions)
+const materialIconAssetDirectory = import.meta.env.DEV
+  ? "node_modules/material-icon-theme/icons"
+  : "material-icon-theme"
+
+function normalizeAssociations(associations: IconAssociations) {
+  return new Map(
+    Object.entries(associations).map(([association, iconId]) => [
+      normalizeFilePath(association),
+      iconId,
+    ])
+  )
 }
 
-const iconByExtension: Record<string, string> = {
-  css: cssIcon,
-  gif: imageIcon,
-  htm: htmlIcon,
-  html: htmlIcon,
-  jpeg: imageIcon,
-  jpg: imageIcon,
-  js: javascriptIcon,
-  jsx: reactIcon,
-  json: jsonIcon,
-  jsonc: jsonIcon,
-  md: markdownIcon,
-  mdx: markdownIcon,
-  png: imageIcon,
-  py: pythonIcon,
-  pyc: pythonMiscIcon,
-  pyi: pythonIcon,
-  pyw: pythonIcon,
-  svg: imageIcon,
-  ts: typescriptIcon,
-  tsx: reactTypescriptIcon,
-  webp: imageIcon,
-  yaml: yamlIcon,
-  yml: yamlIcon,
+function normalizeFilePath(path: string) {
+  return path.replaceAll("\\", "/").toLowerCase()
 }
 
-function getMaterialFileIcon(name: string) {
-  const normalizedName = name.toLocaleLowerCase()
-  const exactMatch = iconByFileName[normalizedName]
+function getFileNameCandidates(name: string, path?: string) {
+  const normalizedName = normalizeFilePath(name)
+  const pathSegments = normalizeFilePath(path ?? name)
+    .split("/")
+    .filter(Boolean)
+  const candidates = pathSegments.map((_, index) =>
+    pathSegments.slice(index).join("/")
+  )
 
-  if (exactMatch) {
-    return exactMatch
+  if (!candidates.includes(normalizedName)) {
+    candidates.push(normalizedName)
   }
 
-  const extension = normalizedName.split(".").at(-1)
+  return candidates
+}
 
-  return (extension && iconByExtension[extension]) || defaultFileIcon
+function getFileExtensionCandidates(name: string) {
+  const normalizedName = normalizeFilePath(name)
+  const candidates = new Set<string>()
+
+  for (let index = 0; index < normalizedName.length; index += 1) {
+    if (normalizedName[index] !== ".") {
+      continue
+    }
+
+    candidates.add(normalizedName.slice(index))
+    candidates.add(normalizedName.slice(index + 1))
+  }
+
+  return [...candidates].sort(
+    (firstCandidate, secondCandidate) =>
+      secondCandidate.length - firstCandidate.length
+  )
+}
+
+function findIconAssociation(
+  candidates: string[],
+  baseAssociations: Map<string, string>,
+  lightAssociations: Map<string, string>,
+  preferLightIcon: boolean
+) {
+  for (const candidate of candidates) {
+    const iconId = preferLightIcon
+      ? lightAssociations.get(candidate) ?? baseAssociations.get(candidate)
+      : baseAssociations.get(candidate)
+
+    if (iconId) {
+      return iconId
+    }
+  }
+
+  return null
+}
+
+function getMaterialIconUrl(iconId: string) {
+  const iconPath = definitions[iconId]?.iconPath
+  const iconFileName = iconPath?.split("/").at(-1) ?? "file.svg"
+
+  return `${import.meta.env.BASE_URL}${materialIconAssetDirectory}/${encodeURIComponent(iconFileName)}`
+}
+
+function getMaterialFileIcon(
+  name: string,
+  path: string | undefined,
+  preferLightIcon: boolean
+) {
+  const fileNameIcon = findIconAssociation(
+    getFileNameCandidates(name, path),
+    baseFileNameIcons,
+    lightFileNameIcons,
+    preferLightIcon
+  )
+
+  if (fileNameIcon) {
+    return getMaterialIconUrl(fileNameIcon)
+  }
+
+  const fileExtensionIcon = findIconAssociation(
+    getFileExtensionCandidates(name),
+    baseFileExtensionIcons,
+    lightFileExtensionIcons,
+    preferLightIcon
+  )
+
+  return getMaterialIconUrl(fileExtensionIcon ?? defaultFileIconId)
 }
 
 export function FileTypeIcon({
   name,
+  path,
   className,
 }: {
   name: string
+  path?: string
   className?: string
 }) {
+  const { resolvedTheme } = useTheme()
+
   return (
     <img
-      src={getMaterialFileIcon(name)}
+      src={getMaterialFileIcon(name, path, resolvedTheme === "light")}
       alt=""
       aria-hidden="true"
       draggable={false}
