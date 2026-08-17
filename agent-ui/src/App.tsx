@@ -5,7 +5,10 @@ import { useTranslation } from "react-i18next"
 
 import { CanvasShell } from "@/components/canvas"
 import { AppSidebar } from "@/components/sidebar"
-import type { AppView } from "@/lib/app-view"
+import {
+  isSidebarContentView,
+  type AppView,
+} from "@/lib/app-view"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -45,6 +48,7 @@ function AgentWorkspace({ activeView }: { activeView: AppView }) {
   const { setOpenMobile } = useSidebar()
   const { t } = useTranslation()
   const isFileBrowser = activeView === "file-browser"
+  const canvasEnabled = !isSidebarContentView(activeView)
 
   const breadcrumbParent = isFileBrowser
     ? t("breadcrumb.dataAndUsage")
@@ -54,7 +58,7 @@ function AgentWorkspace({ activeView }: { activeView: AppView }) {
     : t("breadcrumb.dataFetching")
 
   return (
-    <CanvasShell>
+    <CanvasShell canvasEnabled={canvasEnabled}>
       <header className="flex h-10 shrink-0 items-center gap-2">
         <div className="flex items-center gap-2 px-4">
           <div className="flex items-center gap-2 md:hidden">

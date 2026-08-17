@@ -29,13 +29,19 @@ function getInitialCanvasLayout(): CanvasLayout {
 
 export function CanvasShell({
   children,
+  canvasEnabled = true,
 }: {
   children: React.ReactNode
+  canvasEnabled?: boolean
 }) {
   const shellRef = React.useRef<HTMLDivElement>(null)
   const [layout, setLayout] = React.useState(getInitialCanvasLayout)
 
   React.useLayoutEffect(() => {
+    if (!canvasEnabled) {
+      return
+    }
+
     const shell = shellRef.current
 
     if (!shell) {
@@ -70,7 +76,7 @@ export function CanvasShell({
       resizeObserver.disconnect()
       window.removeEventListener("resize", updateLayout)
     }
-  }, [])
+  }, [canvasEnabled])
 
   const canvasMaxWidth = Math.max(
     0,
@@ -94,11 +100,15 @@ export function CanvasShell({
       stateCookieName="canvas_state"
     >
       <SidebarInset>{children}</SidebarInset>
-      <CanvasToggle
-        hideWhenMobileOpen
-        className="fixed top-1 right-4 z-40"
-      />
-      <CanvasSidebar />
+      {canvasEnabled && (
+        <>
+          <CanvasToggle
+            hideWhenMobileOpen
+            className="fixed top-1 right-4 z-40"
+          />
+          <CanvasSidebar />
+        </>
+      )}
     </SidebarProvider>
   )
 }
