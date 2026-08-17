@@ -5,12 +5,16 @@ import {
   searchFeature,
   selectionFeature,
   syncDataLoaderFeature,
+  type ItemInstance,
 } from "@headless-tree/core"
 import { useTree } from "@headless-tree/react"
 import { FolderIcon, FolderOpenIcon } from "lucide-react"
-import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
+import {
+  Collapsible,
+  CollapsibleContent,
+} from "@/components/ui/collapsible"
 import {
   Tree,
   TreeItem,
@@ -25,9 +29,57 @@ import {
 } from "../file-browser-data"
 import { FileTypeIcon } from "./file-type-icon"
 
+function FileBrowserTreeNode({
+  item,
+}: {
+  item: ItemInstance<FileBrowserItem>
+}) {
+  const data = item.getItemData()
+  const treeItem = (
+    <TreeItem
+      item={item}
+      className="relative w-full text-start before:pointer-events-none before:absolute before:-inset-y-0.5 before:-ms-1 before:w-[var(--tree-padding)] before:bg-[repeating-linear-gradient(to_right,transparent_0,transparent_calc(var(--tree-indent)-1px),var(--border)_calc(var(--tree-indent)-1px),var(--border)_calc(var(--tree-indent)))]"
+    >
+      <TreeItemLabel className="min-h-8 w-full gap-2">
+        {item.isFolder() ? (
+          item.isExpanded() ? (
+            <FolderOpenIcon className="size-4 text-muted-foreground" />
+          ) : (
+            <FolderIcon className="size-4 text-muted-foreground" />
+          )
+        ) : (
+          <FileTypeIcon name={data.name} />
+        )}
+        <span className="truncate">{data.name}</span>
+      </TreeItemLabel>
+    </TreeItem>
+  )
+
+  if (!item.isFolder()) {
+    return treeItem
+  }
+
+  return (
+    <Collapsible
+      open={item.isExpanded()}
+      role="none"
+      className="flex flex-col"
+    >
+      {treeItem}
+      <CollapsibleContent
+        role="group"
+        className="flex h-[var(--collapsible-panel-height)] flex-col gap-0.5 overflow-hidden pt-0.5 transition-[height,opacity] duration-200 ease-out data-[ending-style]:h-0 data-[ending-style]:opacity-0 data-[starting-style]:h-0 data-[starting-style]:opacity-0 motion-reduce:transition-none"
+      >
+        {item.getChildren().map((child) => (
+          <FileBrowserTreeNode key={child.getId()} item={child} />
+        ))}
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
 export function FileBrowserTree({ query }: { query: string }) {
   const { t } = useTranslation()
-  const shouldReduceMotion = Boolean(useReducedMotion())
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const hasMatches = Object.entries(fileBrowserItems).some(
     ([itemId, item]) =>
@@ -85,50 +137,9 @@ export function FileBrowserTree({ query }: { query: string }) {
       tree={tree}
       indent={20}
       aria-label={t("fileBrowser.treeLabel")}
-      className="relative min-w-max gap-0.5 before:absolute before:inset-0 before:-ms-1 before:bg-[repeating-linear-gradient(to_right,transparent_0,transparent_calc(var(--tree-indent)-1px),var(--border)_calc(var(--tree-indent)-1px),var(--border)_calc(var(--tree-indent)))]"
+      className="min-w-max gap-0.5"
     >
-      <AnimatePresence initial={false}>
-        {tree.getItems().map((item) => {
-          const data = item.getItemData()
-
-          return (
-            <TreeItem
-              key={item.getId()}
-              item={item}
-              className="w-full overflow-hidden text-start"
-              render={
-                <motion.button
-                  initial={
-                    shouldReduceMotion
-                      ? false
-                      : { height: 0, opacity: 0 }
-                  }
-                  animate={{ height: "auto", opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={
-                    shouldReduceMotion
-                      ? { duration: 0 }
-                      : { duration: 0.2, ease: "easeOut" }
-                  }
-                />
-              }
-            >
-              <TreeItemLabel className="relative min-h-8 w-full gap-2 before:absolute before:inset-x-0 before:-inset-y-0.5 before:-z-10 before:bg-background">
-                {item.isFolder() ? (
-                  item.isExpanded() ? (
-                    <FolderOpenIcon className="size-4 text-muted-foreground" />
-                  ) : (
-                    <FolderIcon className="size-4 text-muted-foreground" />
-                  )
-                ) : (
-                  <FileTypeIcon name={data.name} />
-                )}
-                <span className="truncate">{data.name}</span>
-              </TreeItemLabel>
-            </TreeItem>
-          )
-        })}
-      </AnimatePresence>
+      <FileBrowserTreeNode item={tree.getRootItem()} />
     </Tree>
   )
 }
