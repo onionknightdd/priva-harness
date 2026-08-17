@@ -53,6 +53,7 @@ export const en = {
     sourceLabel: "{{fileName}} source",
     sourceUnavailable: "Source preview is unavailable for this file",
     previewUnavailable: "Preview is unavailable for this file",
+    closeFile: "Close {{fileName}}",
     closeAll: "Close all",
     copy: "Copy content",
     copied: "Copied",

@@ -96,16 +96,18 @@ function FileBrowserTreeNode({
           )}
           <span className="truncate">{data.name}</span>
         </span>
-        <span className="w-12 shrink-0 text-right text-[10px] leading-none tabular-nums text-muted-foreground">
-          {size}
+        <span className="flex shrink-0 items-center gap-2">
+          <span className="w-12 shrink-0 text-right text-[10px] leading-none tabular-nums text-muted-foreground">
+            {size}
+          </span>
+          <time
+            dateTime={metadata.modifiedAt}
+            title={fullModifiedAt}
+            className="w-16 shrink-0 text-right text-[10px] leading-none tabular-nums text-muted-foreground"
+          >
+            {modifiedAt}
+          </time>
         </span>
-        <time
-          dateTime={metadata.modifiedAt}
-          title={fullModifiedAt}
-          className="w-16 shrink-0 text-right text-[10px] leading-none tabular-nums text-muted-foreground"
-        >
-          {modifiedAt}
-        </time>
       </TreeItemLabel>
     </TreeItem>
   )

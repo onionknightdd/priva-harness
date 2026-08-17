@@ -123,6 +123,7 @@ export function RichFilePreview({
   mode,
   onActiveFileChange,
   onCloseAll,
+  onFileClose,
   onExpandedChange,
   onModeChange,
 }: {
@@ -133,6 +134,7 @@ export function RichFilePreview({
   mode?: FilePreviewMode
   onActiveFileChange: (fileId: string) => void
   onCloseAll: () => void
+  onFileClose: (fileId: string) => void
   onExpandedChange?: (expanded: boolean) => void
   onModeChange?: (mode: FilePreviewMode) => void
 }) {
@@ -174,6 +176,7 @@ export function RichFilePreview({
           files={files}
           mode={activeMode}
           onCloseAll={onCloseAll}
+          onFileClose={onFileClose}
           onExpandedChange={onExpandedChange}
           onModeChange={handleModeChange}
           renderAvailable={renderAvailable}

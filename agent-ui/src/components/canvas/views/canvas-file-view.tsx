@@ -17,6 +17,25 @@ export function CanvasFileView({ onBack }: { onBack: () => void }) {
     canvasReadmePreview.id
   )
 
+  const handleFileClose = (fileId: string) => {
+    const fileIndex = openedFiles.findIndex((file) => file.id === fileId)
+
+    if (fileIndex === -1) {
+      return
+    }
+
+    const adjacentFile =
+      openedFiles[fileIndex + 1] ?? openedFiles[fileIndex - 1] ?? null
+
+    setOpenedFiles((currentFiles) =>
+      currentFiles.filter((file) => file.id !== fileId)
+    )
+
+    if (fileId === activeFileId) {
+      setActiveFileId(adjacentFile?.id ?? null)
+    }
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex h-10 shrink-0 items-center border-b px-2">
@@ -39,6 +58,7 @@ export function CanvasFileView({ onBack }: { onBack: () => void }) {
           setOpenedFiles([])
           setActiveFileId(null)
         }}
+        onFileClose={handleFileClose}
       />
     </div>
   )

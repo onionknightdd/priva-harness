@@ -53,6 +53,7 @@ export const zhCN = {
     sourceLabel: "{{fileName}} 源码",
     sourceUnavailable: "此文件不支持源码预览",
     previewUnavailable: "此文件不支持预览",
+    closeFile: "关闭 {{fileName}}",
     closeAll: "关闭全部",
     copy: "复制内容",
     copied: "已复制",

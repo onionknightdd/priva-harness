@@ -113,7 +113,7 @@ function PathItem({
         variant="ghost"
         size="xs"
         aria-current={current ? "location" : undefined}
-        className="max-w-12 min-w-0 rounded-r-none px-1.5 font-normal data-[current=true]:bg-muted data-[current=true]:text-foreground sm:max-w-36 sm:px-2"
+        className="max-w-12 min-w-0 rounded-r-none px-1.5 text-sm font-normal data-[current=true]:bg-muted data-[current=true]:text-foreground sm:max-w-36 sm:px-2"
         data-current={current || undefined}
         title={item.name}
         onClick={() => onNavigate(itemId)}
@@ -241,8 +241,8 @@ export function FileAddressBar({
         </TooltipTrigger>
         <TooltipContent>{treeToggleLabel}</TooltipContent>
       </Tooltip>
-      <Breadcrumb className="min-w-0 flex-1 overflow-hidden">
-        <BreadcrumbList className="flex-nowrap gap-0 overflow-hidden text-xs sm:gap-1.5">
+      <Breadcrumb className="min-w-0 shrink overflow-hidden">
+        <BreadcrumbList className="flex-nowrap gap-0 overflow-hidden text-sm sm:gap-1.5">
           {entries.map((entry, index) => (
             <React.Fragment
               key={entry.type === "item" ? entry.id : "collapsed"}
@@ -309,6 +309,7 @@ export function FileAddressBar({
           <TooltipContent>{t("fileBrowser.upload")}</TooltipContent>
         </Tooltip>
       </div>
+      <div aria-hidden="true" className="min-w-0 flex-1" />
       <p className="sr-only" role="status" aria-live="polite">
         {announcement}
       </p>

@@ -56,6 +56,7 @@ export function FilePreviewToolbar({
   files,
   mode,
   onCloseAll,
+  onFileClose,
   onExpandedChange,
   onModeChange,
   renderAvailable,
@@ -66,6 +67,7 @@ export function FilePreviewToolbar({
   files: PreviewFile[]
   mode: FilePreviewMode | null
   onCloseAll: () => void
+  onFileClose: (fileId: string) => void
   onExpandedChange?: (expanded: boolean) => void
   onModeChange: (mode: FilePreviewMode) => void
   renderAvailable: boolean
@@ -73,6 +75,9 @@ export function FilePreviewToolbar({
 }) {
   const { t } = useTranslation()
   const feedbackTimerRef = React.useRef<number | null>(null)
+  const closeTweensRef = React.useRef(
+    new Map<string, gsap.core.Tween>()
+  )
   const [announcement, setAnnouncement] = React.useState("")
   const [copied, setCopied] = React.useState(false)
   const expandLabel = expanded
@@ -84,6 +89,9 @@ export function FilePreviewToolbar({
       if (feedbackTimerRef.current !== null) {
         window.clearTimeout(feedbackTimerRef.current)
       }
+
+      closeTweensRef.current.forEach((tween) => tween.kill())
+      closeTweensRef.current.clear()
     },
     []
   )
@@ -122,6 +130,48 @@ export function FilePreviewToolbar({
     announce(t("filePreview.downloadUnavailable"))
   }
 
+  const handleFileClose = (
+    event: React.MouseEvent<HTMLButtonElement>,
+    fileId: string
+  ) => {
+    event.stopPropagation()
+
+    if (closeTweensRef.current.has(fileId)) {
+      return
+    }
+
+    const tab = event.currentTarget.closest<HTMLElement>(
+      "[data-file-preview-tab]"
+    )
+    const reducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches
+
+    if (!tab || reducedMotion) {
+      onFileClose(fileId)
+      return
+    }
+
+    const tween = gsap.to(tab, {
+      opacity: 0,
+      scale: 0.96,
+      duration: 0.16,
+      ease: "power2.in",
+      onComplete: () => {
+        closeTweensRef.current.delete(fileId)
+        onFileClose(fileId)
+      },
+    })
+
+    closeTweensRef.current.set(fileId, tween)
+  }
+
+  const handleCloseAll = () => {
+    closeTweensRef.current.forEach((tween) => tween.kill())
+    closeTweensRef.current.clear()
+    onCloseAll()
+  }
+
   return (
     <div className="file-preview-toolbar flex h-11 shrink-0 items-center gap-2 border-b px-2 sm:px-3">
       <div className="file-preview-toolbar__tabs min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -133,14 +183,44 @@ export function FilePreviewToolbar({
             className="h-10 min-w-max border-0 pb-0"
           >
             {files.map((file) => (
-              <TabsTrigger
+              <div
                 key={file.id}
-                value={file.id}
-                title={file.path}
-                className="max-w-40 truncate font-normal dark:data-active:text-foreground"
+                data-file-preview-tab
+                className="inline-flex min-w-0 max-w-48 shrink-0 items-center"
               >
-                <span className="truncate">{file.name}</span>
-              </TabsTrigger>
+                <TabsTrigger
+                  value={file.id}
+                  title={file.path}
+                  className="min-w-0 max-w-40 flex-1 truncate pr-1 font-normal dark:data-active:text-foreground"
+                >
+                  <span className="truncate">{file.name}</span>
+                </TabsTrigger>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        className="-ml-1 size-5 rounded-sm border-0 shadow-none"
+                        aria-label={t("filePreview.closeFile", {
+                          fileName: file.name,
+                        })}
+                        onClick={(event) =>
+                          handleFileClose(event, file.id)
+                        }
+                      />
+                    }
+                  >
+                    <XIcon aria-hidden="true" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {t("filePreview.closeFile", {
+                      fileName: file.name,
+                    })}
+                  </TooltipContent>
+                </Tooltip>
+              </div>
             ))}
           </TabsList>
         ) : (
@@ -156,16 +236,15 @@ export function FilePreviewToolbar({
         size="xs"
         className="file-preview-toolbar__close rounded-full font-normal"
         disabled={files.length === 0}
-        onClick={onCloseAll}
+        onClick={handleCloseAll}
       >
         <XIcon aria-hidden="true" />
         {t("filePreview.closeAll")}
       </Button>
 
-      <Separator
-        orientation="vertical"
-        className="file-preview-toolbar__separator h-5 self-center"
-      />
+      <div className="file-preview-toolbar__separator flex w-5 shrink-0 self-stretch items-center justify-center">
+        <Separator orientation="vertical" className="h-5 self-auto" />
+      </div>
 
       <div className="file-preview-toolbar__controls flex shrink-0 items-center gap-1">
         <ToggleGroup

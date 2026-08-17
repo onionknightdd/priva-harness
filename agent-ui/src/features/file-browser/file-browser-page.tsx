@@ -239,6 +239,31 @@ export function FileBrowserPage() {
     setSelectedItemId(fileId)
   }
 
+  const handleFileClose = (fileId: string) => {
+    const fileIndex = openedFileIds.indexOf(fileId)
+
+    if (fileIndex === -1) {
+      return
+    }
+
+    setOpenedFileIds((currentFileIds) =>
+      currentFileIds.filter((currentFileId) => currentFileId !== fileId)
+    )
+
+    if (fileId === activeFileId) {
+      const adjacentFileId =
+        openedFileIds[fileIndex + 1] ??
+        openedFileIds[fileIndex - 1] ??
+        null
+
+      setActiveFileId(adjacentFileId)
+
+      if (adjacentFileId) {
+        setSelectedItemId(adjacentFileId)
+      }
+    }
+  }
+
   const handleCloseAll = () => {
     setOpenedFileIds([])
     setActiveFileId(null)
@@ -275,6 +300,7 @@ export function FileBrowserPage() {
                 files={openedFiles}
                 onActiveFileChange={handleActiveFileChange}
                 onCloseAll={handleCloseAll}
+                onFileClose={handleFileClose}
                 onExpandedChange={(expanded) =>
                   handleTreeVisibilityChange(!expanded)
                 }
@@ -335,6 +361,7 @@ export function FileBrowserPage() {
                 files={openedFiles}
                 onActiveFileChange={handleActiveFileChange}
                 onCloseAll={handleCloseAll}
+                onFileClose={handleFileClose}
                 onExpandedChange={(expanded) =>
                   handleTreeVisibilityChange(!expanded)
                 }
