@@ -104,7 +104,10 @@ export function FileTreePane({
           <TooltipContent>{t("fileBrowser.refresh")}</TooltipContent>
         </Tooltip>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto overscroll-contain p-2">
+      <div
+        data-file-tree-scroll
+        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain p-2 [container-type:inline-size]"
+      >
         <FileBrowserTree
           key={refreshVersion}
           query={query}

@@ -14,6 +14,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/assistant-ui/tabs"
+import { OverflowMarquee } from "@/components/motion/overflow-marquee"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import {
@@ -79,6 +80,9 @@ export function FilePreviewToolbar({
     new Map<string, gsap.core.Tween>()
   )
   const [announcement, setAnnouncement] = React.useState("")
+  const [marqueeFileId, setMarqueeFileId] = React.useState<
+    string | null
+  >(null)
   const [copied, setCopied] = React.useState(false)
   const expandLabel = expanded
     ? t("filePreview.restore")
@@ -186,14 +190,27 @@ export function FilePreviewToolbar({
               <div
                 key={file.id}
                 data-file-preview-tab
-                className="relative inline-flex min-w-0 max-w-48 shrink-0 items-center"
+                className="relative inline-flex min-w-0 max-w-20 shrink-0 items-center"
+                onPointerEnter={() => setMarqueeFileId(file.id)}
+                onPointerLeave={() => setMarqueeFileId(null)}
+                onFocusCapture={() => setMarqueeFileId(file.id)}
+                onBlurCapture={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget)) {
+                    setMarqueeFileId(null)
+                  }
+                }}
               >
                 <TabsTrigger
                   value={file.id}
                   title={file.path}
-                  className="min-w-0 max-w-48 flex-1 truncate pr-7 font-normal dark:data-active:text-foreground"
+                  className="min-w-0 max-w-20 flex-none justify-start overflow-hidden pr-7! font-normal dark:data-active:text-foreground"
                 >
-                  <span className="truncate">{file.name}</span>
+                  <OverflowMarquee
+                    active={marqueeFileId === file.id}
+                    className="flex-1"
+                  >
+                    {file.name}
+                  </OverflowMarquee>
                 </TabsTrigger>
                 <Tooltip>
                   <TooltipTrigger

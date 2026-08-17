@@ -1,11 +1,19 @@
 import * as React from "react"
 import gsap from "gsap"
 import {
+  AnimatePresence,
+  motion,
+  useReducedMotion,
+  type Transition,
+} from "motion/react"
+import {
   ChevronDownIcon,
   FolderIcon,
   FolderPlusIcon,
+  FolderSearchIcon,
   FoldersIcon,
   UploadIcon,
+  XIcon,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
@@ -17,6 +25,7 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,9 +40,17 @@ import {
 
 import {
   fileBrowserItems,
+  findFileBrowserFolderIdByPath,
   getFileBrowserChildFolderIds,
   getFileBrowserPath,
 } from "../file-browser-data"
+
+const goToTransition: Transition = {
+  type: "spring",
+  stiffness: 420,
+  damping: 34,
+  mass: 0.75,
+}
 
 type BreadcrumbEntry =
   | { id: string; type: "item" }
@@ -167,7 +184,18 @@ export function FileAddressBar({
 }) {
   const { t } = useTranslation()
   const announcementTimerRef = React.useRef<number | null>(null)
+  const goToInputRef = React.useRef<HTMLInputElement>(null)
+  const goToTriggerRef = React.useRef<HTMLButtonElement>(null)
+  const restoreGoToFocusRef = React.useRef(false)
   const [announcement, setAnnouncement] = React.useState("")
+  const [goToPath, setGoToPath] = React.useState("")
+  const [goToInvalid, setGoToInvalid] = React.useState(false)
+  const [isGoingTo, setIsGoingTo] = React.useState(false)
+  const goToIconLayoutId = React.useId()
+  const shouldReduceMotion = Boolean(useReducedMotion())
+  const transition: Transition = shouldReduceMotion
+    ? { duration: 0 }
+    : goToTransition
   const path = getFileBrowserPath(selectedItemId)
   const entries = getBreadcrumbEntries(path)
   const treeToggleLabel = treeVisible
@@ -183,13 +211,20 @@ export function FileAddressBar({
     []
   )
 
-  const handlePlaceholderAction = (
-    event: React.MouseEvent<HTMLButtonElement>,
-    action: string
-  ) => {
-    const icon = event.currentTarget.querySelector("svg")
+  React.useEffect(() => {
+    if (isGoingTo) {
+      goToInputRef.current?.focus()
+      return
+    }
 
-    setAnnouncement(t("fileBrowser.actionUnavailable", { action }))
+    if (restoreGoToFocusRef.current) {
+      restoreGoToFocusRef.current = false
+      goToTriggerRef.current?.focus()
+    }
+  }, [isGoingTo])
+
+  const announce = React.useCallback((message: string) => {
+    setAnnouncement(message)
 
     if (announcementTimerRef.current !== null) {
       window.clearTimeout(announcementTimerRef.current)
@@ -199,6 +234,40 @@ export function FileAddressBar({
       () => setAnnouncement(""),
       1600
     )
+  }, [])
+
+  const closeGoTo = (restoreFocus: boolean) => {
+    restoreGoToFocusRef.current = restoreFocus
+    setGoToPath("")
+    setGoToInvalid(false)
+    setIsGoingTo(false)
+  }
+
+  const navigateToDirectory = () => {
+    const directoryId = findFileBrowserFolderIdByPath(goToPath)
+
+    if (!directoryId || !goToPath.trim()) {
+      setGoToInvalid(true)
+      announce(t("fileBrowser.goToInvalidPath", { path: goToPath }))
+      return
+    }
+
+    onNavigate(directoryId)
+    closeGoTo(true)
+  }
+
+  const handleGoTo = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    navigateToDirectory()
+  }
+
+  const handlePlaceholderAction = (
+    event: React.MouseEvent<HTMLButtonElement>,
+    action: string
+  ) => {
+    const icon = event.currentTarget.querySelector("svg")
+
+    announce(t("fileBrowser.actionUnavailable", { action }))
 
     if (
       icon &&
@@ -241,75 +310,222 @@ export function FileAddressBar({
         </TooltipTrigger>
         <TooltipContent>{treeToggleLabel}</TooltipContent>
       </Tooltip>
-      <Breadcrumb className="min-w-0 shrink overflow-hidden">
-        <BreadcrumbList className="flex-nowrap gap-0 overflow-hidden text-sm sm:gap-1.5">
-          {entries.map((entry, index) => (
-            <React.Fragment
-              key={entry.type === "item" ? entry.id : "collapsed"}
+      <div className="relative h-8 min-w-0 flex-1">
+        <AnimatePresence initial={false} mode="popLayout">
+          {isGoingTo ? (
+            <motion.form
+              key="go-to-input"
+              layout
+              className="absolute inset-0 z-[1]"
+              initial={
+                shouldReduceMotion
+                  ? false
+                  : { opacity: 0, scaleX: 0.94, y: -2 }
+              }
+              animate={{ opacity: 1, scaleX: 1, y: 0 }}
+              exit={
+                shouldReduceMotion
+                  ? { opacity: 0 }
+                  : { opacity: 0, scaleX: 0.96, y: -1 }
+              }
+              transition={transition}
+              onSubmit={handleGoTo}
+              onBlurCapture={(event) => {
+                const nextTarget = event.relatedTarget
+
+                if (
+                  goToPath ||
+                  (nextTarget instanceof Node &&
+                    event.currentTarget.contains(nextTarget))
+                ) {
+                  return
+                }
+
+                closeGoTo(false)
+              }}
             >
-              {index > 0 && (
-                <BreadcrumbSeparator className="shrink-0" />
-              )}
-              <BreadcrumbItem className="min-w-0 shrink-0">
-                {entry.type === "collapsed" ? (
-                  <CollapsedPathMenu
-                    itemIds={entry.ids}
-                    onNavigate={onNavigate}
-                  />
-                ) : (
-                  <PathItem
-                    itemId={entry.id}
-                    current={entry.id === selectedItemId}
-                    onNavigate={onNavigate}
-                  />
-                )}
-              </BreadcrumbItem>
-            </React.Fragment>
-          ))}
-        </BreadcrumbList>
-      </Breadcrumb>
-      <div className="flex shrink-0 items-center gap-1">
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={t("fileBrowser.createFolder")}
-                onClick={(event) =>
-                  handlePlaceholderAction(
-                    event,
-                    t("fileBrowser.createFolder")
-                  )
-                }
+              <motion.span
+                layoutId={goToIconLayoutId}
+                className="pointer-events-none absolute top-1/2 left-2.5 z-10 flex -translate-y-1/2 text-muted-foreground"
+                transition={transition}
+              >
+                <FolderSearchIcon
+                  className="size-4"
+                  aria-hidden="true"
+                />
+              </motion.span>
+              <Input
+                ref={goToInputRef}
+                value={goToPath}
+                onChange={(event) => {
+                  setGoToPath(event.target.value)
+                  setGoToInvalid(false)
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault()
+                    navigateToDirectory()
+                    return
+                  }
+
+                  if (event.key === "Escape") {
+                    event.preventDefault()
+                    closeGoTo(true)
+                  }
+                }}
+                aria-label={t("fileBrowser.goTo")}
+                aria-invalid={goToInvalid || undefined}
+                placeholder={t("fileBrowser.goToPlaceholder")}
+                className="h-8 border-0 bg-muted/60 pr-8 pl-8 text-xs shadow-none focus-visible:border-0 focus-visible:ring-0 aria-invalid:bg-destructive/10"
               />
-            }
-          >
-            <FolderPlusIcon aria-hidden="true" />
-          </TooltipTrigger>
-          <TooltipContent>{t("fileBrowser.createFolder")}</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={t("fileBrowser.upload")}
-                onClick={(event) =>
-                  handlePlaceholderAction(event, t("fileBrowser.upload"))
-                }
-              />
-            }
-          >
-            <UploadIcon aria-hidden="true" />
-          </TooltipTrigger>
-          <TooltipContent>{t("fileBrowser.upload")}</TooltipContent>
-        </Tooltip>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      className="absolute top-1/2 right-1 z-10 -translate-y-1/2"
+                      aria-label={t("fileBrowser.closeGoTo")}
+                      onClick={() => closeGoTo(true)}
+                    />
+                  }
+                >
+                  <XIcon aria-hidden="true" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  {t("fileBrowser.closeGoTo")}
+                </TooltipContent>
+              </Tooltip>
+            </motion.form>
+          ) : (
+            <motion.div
+              key="address-actions"
+              layout
+              className="absolute inset-0 flex min-w-0 items-center gap-1"
+              initial={
+                shouldReduceMotion
+                  ? false
+                  : { opacity: 0, scaleX: 0.96, y: 1 }
+              }
+              animate={{ opacity: 1, scaleX: 1, y: 0 }}
+              exit={
+                shouldReduceMotion
+                  ? { opacity: 0 }
+                  : { opacity: 0, scaleX: 0.94, y: 1 }
+              }
+              transition={transition}
+            >
+              <Breadcrumb className="min-w-0 shrink overflow-hidden">
+                <BreadcrumbList className="flex-nowrap gap-0 overflow-hidden text-sm sm:gap-1.5">
+                  {entries.map((entry, index) => (
+                    <React.Fragment
+                      key={
+                        entry.type === "item"
+                          ? entry.id
+                          : "collapsed"
+                      }
+                    >
+                      {index > 0 && (
+                        <BreadcrumbSeparator className="shrink-0" />
+                      )}
+                      <BreadcrumbItem className="min-w-0 shrink-0">
+                        {entry.type === "collapsed" ? (
+                          <CollapsedPathMenu
+                            itemIds={entry.ids}
+                            onNavigate={onNavigate}
+                          />
+                        ) : (
+                          <PathItem
+                            itemId={entry.id}
+                            current={entry.id === selectedItemId}
+                            onNavigate={onNavigate}
+                          />
+                        )}
+                      </BreadcrumbItem>
+                    </React.Fragment>
+                  ))}
+                </BreadcrumbList>
+              </Breadcrumb>
+
+              <div className="flex shrink-0 items-center gap-1">
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={t("fileBrowser.createFolder")}
+                        onClick={(event) =>
+                          handlePlaceholderAction(
+                            event,
+                            t("fileBrowser.createFolder")
+                          )
+                        }
+                      />
+                    }
+                  >
+                    <FolderPlusIcon aria-hidden="true" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {t("fileBrowser.createFolder")}
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={t("fileBrowser.upload")}
+                        onClick={(event) =>
+                          handlePlaceholderAction(
+                            event,
+                            t("fileBrowser.upload")
+                          )
+                        }
+                      />
+                    }
+                  >
+                    <UploadIcon aria-hidden="true" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {t("fileBrowser.upload")}
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+
+              <div aria-hidden="true" className="min-w-0 flex-1" />
+
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      ref={goToTriggerRef}
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={t("fileBrowser.goTo")}
+                      onClick={() => setIsGoingTo(true)}
+                    />
+                  }
+                >
+                  <motion.span
+                    layoutId={goToIconLayoutId}
+                    className="flex"
+                    transition={transition}
+                  >
+                    <FolderSearchIcon aria-hidden="true" />
+                  </motion.span>
+                </TooltipTrigger>
+                <TooltipContent>{t("fileBrowser.goTo")}</TooltipContent>
+              </Tooltip>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
-      <div aria-hidden="true" className="min-w-0 flex-1" />
       <p className="sr-only" role="status" aria-live="polite">
         {announcement}
       </p>

@@ -188,3 +188,51 @@ export function getFileBrowserChildFolderIds(itemId: string) {
     (childId) => fileBrowserItems[childId]?.type === "folder"
   )
 }
+
+export function findFileBrowserFolderIdByPath(path: string) {
+  const workspaceId = fileBrowserItems[FILE_BROWSER_ROOT_ID].children?.find(
+    (itemId) => fileBrowserItems[itemId]?.type === "folder"
+  )
+
+  if (!workspaceId) {
+    return null
+  }
+
+  const segments = path
+    .trim()
+    .replaceAll("\\", "/")
+    .split("/")
+    .filter((segment) => segment && segment !== ".")
+
+  if (
+    segments[0]?.toLocaleLowerCase() ===
+    fileBrowserItems[workspaceId].name.toLocaleLowerCase()
+  ) {
+    segments.shift()
+  }
+
+  let currentId = workspaceId
+
+  for (const segment of segments) {
+    if (segment === "..") {
+      return null
+    }
+
+    const childFolderId = (
+      fileBrowserItems[currentId].children ?? []
+    ).find(
+      (itemId) =>
+        fileBrowserItems[itemId]?.type === "folder" &&
+        fileBrowserItems[itemId].name.toLocaleLowerCase() ===
+          segment.toLocaleLowerCase()
+    )
+
+    if (!childFolderId) {
+      return null
+    }
+
+    currentId = childFolderId
+  }
+
+  return currentId
+}

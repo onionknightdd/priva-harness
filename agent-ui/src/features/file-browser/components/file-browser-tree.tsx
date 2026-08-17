@@ -47,6 +47,7 @@ import {
 import { FileTypeIcon } from "./file-type-icon"
 
 const FILE_TREE_INDENT = 20
+const FILE_TREE_STICKY_ROW_HEIGHT = 34
 
 function FileBrowserTreeNode({
   item,
@@ -81,10 +82,19 @@ function FileBrowserTreeNode({
     <TreeItem
       item={item}
       level={level}
-      className="relative w-full pb-0! text-start"
+      data-file-tree-folder-row={item.isFolder() || undefined}
+      className="relative box-border w-full min-w-0 max-w-full overflow-hidden pb-0! text-start data-[file-tree-folder-row=true]:sticky data-[file-tree-folder-row=true]:bg-background"
+      style={
+        item.isFolder()
+          ? {
+              top: `${level * FILE_TREE_STICKY_ROW_HEIGHT}px`,
+              zIndex: 50 - level,
+            }
+          : undefined
+      }
     >
-      <TreeItemLabel className="min-h-8 w-full min-w-0 gap-1.5 pr-1 in-data-popup-open:bg-accent">
-        <span className="flex min-w-0 flex-1 items-center gap-2">
+      <TreeItemLabel className="min-h-8 w-full min-w-0 max-w-full gap-1 pr-1 in-data-popup-open:bg-accent">
+        <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
           {item.isFolder() ? (
             item.isExpanded() ? (
               <FolderOpenIcon className="size-4 text-muted-foreground" />
@@ -94,16 +104,16 @@ function FileBrowserTreeNode({
           ) : (
             <FileTypeIcon name={data.name} />
           )}
-          <span className="truncate">{data.name}</span>
+          <span className="min-w-0 truncate">{data.name}</span>
         </span>
-        <span className="flex shrink-0 items-center gap-2">
-          <span className="w-12 shrink-0 text-right text-[10px] leading-none tabular-nums text-muted-foreground">
+        <span className="flex min-w-0 shrink-0 items-center gap-[clamp(0.125rem,1.5cqi,0.5rem)] overflow-hidden">
+          <span className="w-[clamp(2.25rem,15cqi,3rem)] shrink-0 overflow-hidden text-right text-[10px] leading-none whitespace-nowrap tabular-nums text-muted-foreground">
             {size}
           </span>
           <time
             dateTime={metadata.modifiedAt}
             title={fullModifiedAt}
-            className="w-16 shrink-0 text-right text-[10px] leading-none tabular-nums text-muted-foreground"
+            className="w-[clamp(3rem,22cqi,4rem)] shrink-0 overflow-hidden text-right text-[10px] leading-none whitespace-nowrap tabular-nums text-muted-foreground"
           >
             {modifiedAt}
           </time>
@@ -182,15 +192,15 @@ function FileBrowserTreeNode({
     <Collapsible
       open={item.isExpanded()}
       role="none"
-      className="flex flex-col"
+      className="flex w-full min-w-0 max-w-full flex-col"
     >
       {treeItem}
       <CollapsibleContent
         role="group"
-        className="h-[var(--collapsible-panel-height)] overflow-hidden transition-[height,opacity] duration-200 ease-out data-[ending-style]:h-0 data-[ending-style]:opacity-0 data-[starting-style]:h-0 data-[starting-style]:opacity-0 motion-reduce:transition-none"
+        className="h-[var(--collapsible-panel-height)] overflow-hidden transition-[height,opacity] duration-200 ease-out data-open:overflow-visible data-[ending-style]:h-0 data-[ending-style]:overflow-hidden data-[ending-style]:opacity-0 data-[starting-style]:h-0 data-[starting-style]:overflow-hidden data-[starting-style]:opacity-0 motion-reduce:transition-none"
       >
         <div
-          className="relative flex flex-col gap-0.5 pt-0.5 before:pointer-events-none before:absolute before:inset-y-0 before:start-[var(--file-tree-line-offset)] before:w-px before:bg-border"
+          className="relative flex w-full min-w-0 max-w-full flex-col gap-0.5 pt-0.5 before:pointer-events-none before:absolute before:inset-y-0 before:start-[var(--file-tree-line-offset)] before:w-px before:bg-border"
           style={
             {
               "--file-tree-line-offset": `${(level + 1) * FILE_TREE_INDENT - 5}px`,
@@ -300,7 +310,7 @@ export function FileBrowserTree({
       tree={tree}
       indent={FILE_TREE_INDENT}
       aria-label={t("fileBrowser.treeLabel")}
-      className="w-full min-w-0 gap-0.5"
+      className="w-full min-w-0 max-w-full gap-0.5 overflow-x-clip"
     >
       {tree.getRootItem().getChildren().map((item) => (
         <FileBrowserTreeNode
