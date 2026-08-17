@@ -190,7 +190,7 @@ export function FilePreviewToolbar({
               <div
                 key={file.id}
                 data-file-preview-tab
-                className="relative inline-flex min-w-0 max-w-20 shrink-0 items-center"
+                className="relative inline-flex w-[100px] min-w-[100px] max-w-[100px] shrink-0 items-center"
                 onPointerEnter={() => setMarqueeFileId(file.id)}
                 onPointerLeave={() => setMarqueeFileId(null)}
                 onFocusCapture={() => setMarqueeFileId(file.id)}
@@ -203,7 +203,7 @@ export function FilePreviewToolbar({
                 <TabsTrigger
                   value={file.id}
                   title={file.path}
-                  className="min-w-0 max-w-20 flex-none justify-start overflow-hidden pr-7! font-normal dark:data-active:text-foreground"
+                  className="w-full min-w-0 flex-none justify-start overflow-hidden pr-7! font-normal dark:data-active:text-foreground"
                 >
                   <OverflowMarquee
                     active={marqueeFileId === file.id}

@@ -339,7 +339,7 @@ export function FileBrowserPage() {
                 id="file-browser-tree-pane"
                 ref={treePaneContentRef}
                 aria-hidden={!treeVisible}
-                className="flex h-full min-w-0"
+                className="flex h-full min-w-0 flex-1"
               >
                 <FileTreePane
                   selectedItemId={selectedItemId}

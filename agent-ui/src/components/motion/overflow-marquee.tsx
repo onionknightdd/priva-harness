@@ -56,7 +56,12 @@ export function OverflowMarquee({
       <motion.span
         ref={contentRef}
         aria-label={children}
-        className="block w-max"
+        className={cn(
+          "block",
+          shouldAnimate
+            ? "w-max"
+            : "max-w-full overflow-hidden text-ellipsis"
+        )}
         initial={false}
         animate={
           shouldAnimate

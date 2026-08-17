@@ -34,6 +34,15 @@ export function SourcePreview({
   const { t } = useTranslation()
   const language = getSourceLanguage(fileName)
   const label = t("filePreview.sourceLabel", { fileName })
+  const isDark = resolvedTheme === "dark"
+  const theme =
+    language === "markdown"
+      ? isDark
+        ? themes.duotoneDark
+        : themes.duotoneLight
+      : isDark
+        ? themes.vsDark
+        : themes.github
 
   if (!language) {
     return (
@@ -57,7 +66,7 @@ export function SourcePreview({
   return (
     <Highlight
       prism={Prism}
-      theme={resolvedTheme === "dark" ? themes.vsDark : themes.github}
+      theme={theme}
       code={content}
       language={language}
     >
