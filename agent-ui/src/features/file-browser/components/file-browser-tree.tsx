@@ -153,10 +153,6 @@ function AnimatedFolderIcon({ expanded }: { expanded: boolean }) {
 }
 
 function resolveFileTreeHighlightElement(item: HTMLElement) {
-  if (item.dataset.stuck === "true") {
-    return item
-  }
-
   return item.querySelector<HTMLElement>(
     '[data-slot="tree-item-label"]'
   )
@@ -276,7 +272,7 @@ function FileBrowserTreeNode({
       aria-busy={loading || undefined}
       data-file-tree-item-id={item.getId()}
       data-file-tree-folder-row={isFolder || undefined}
-      className="relative box-border w-full min-w-0 max-w-full rounded-none pb-0! text-start data-[file-tree-folder-row=true]:sticky data-[stuck=true]:bg-card data-[stuck=true]:hover:bg-accent data-[stuck=true]:data-[selected=true]:bg-accent! data-[stuck=true]:data-[selected=true]:text-accent-foreground data-[stuck=true]:data-popup-open:bg-accent!"
+      className="relative box-border w-full min-w-0 max-w-full rounded-none pb-0! text-start data-[file-tree-folder-row=true]:sticky data-[stuck=true]:bg-card"
       style={
         isFolder
           ? {
@@ -286,7 +282,19 @@ function FileBrowserTreeNode({
           : undefined
       }
     >
-      <TreeItemLabel className="relative z-[1] min-h-8 w-full min-w-0 max-w-full gap-1 bg-transparent! pe-4 hover:bg-transparent! in-data-[selected=true]:bg-accent! in-data-[stuck=true]:rounded-none in-data-popup-open:bg-accent!">
+      {isFolder &&
+        Array.from({ length: level }, (_, lineIndex) => (
+          <span
+            key={lineIndex}
+            aria-hidden="true"
+            data-slot="file-tree-sticky-indent-line"
+            className="pointer-events-none absolute inset-y-0 z-[1] hidden w-px bg-border in-data-[stuck=true]:block"
+            style={{
+              left: `${(lineIndex + 1) * FILE_TREE_INDENT - 5}px`,
+            }}
+          />
+        ))}
+      <TreeItemLabel className="relative z-[1] min-h-8 w-full min-w-0 max-w-full gap-1 bg-transparent! pe-5 hover:bg-transparent! in-data-[selected=true]:bg-accent! in-data-[stuck=true]:hover:bg-accent! in-data-popup-open:bg-accent!">
         <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
           {isFolder ? (
             <AnimatedFolderIcon expanded={item.isExpanded()} />

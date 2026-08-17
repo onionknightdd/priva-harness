@@ -133,7 +133,7 @@ function PathItem({
         variant="ghost"
         size="xs"
         aria-current={current ? "location" : undefined}
-        className="max-w-12 min-w-0 rounded-r-none px-1.5 text-sm font-normal data-[current=true]:bg-muted data-[current=true]:text-foreground sm:max-w-36 sm:px-2"
+        className="max-w-12 min-w-0 rounded-r-none px-1.5 text-sm font-normal data-[current=true]:bg-muted data-[current=true]:text-foreground sm:max-w-36"
         data-current={current || undefined}
         title={entry.path}
         onClick={() => onNavigate(entry.path, entry.type)}
@@ -303,7 +303,7 @@ export function FileAddressBar({
   return (
     <div
       data-file-browser-enter
-      className="flex h-10 shrink-0 items-center gap-1.5 px-1"
+      className="flex h-10 shrink-0 items-center gap-1 px-1"
     >
       <Tooltip>
         <TooltipTrigger
@@ -327,11 +327,11 @@ export function FileAddressBar({
       <div className="relative h-8 min-w-0 flex-1">
         <motion.div
           layout
-          className="absolute inset-0 flex min-w-0 items-center gap-1"
+          className="absolute inset-0 flex min-w-0 items-center gap-0.5"
           transition={transition}
         >
           <Breadcrumb className="min-w-0 shrink overflow-hidden">
-            <BreadcrumbList className="flex-nowrap gap-0 overflow-hidden text-sm sm:gap-1.5">
+            <BreadcrumbList className="flex-nowrap gap-0 overflow-hidden text-sm sm:gap-0.5">
               {entries.map((entry, index) => (
                 <React.Fragment
                   key={entry.type === "item" ? entry.entry.path : "collapsed"}
@@ -359,7 +359,7 @@ export function FileAddressBar({
             </BreadcrumbList>
           </Breadcrumb>
 
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="flex shrink-0 items-center gap-0.5">
             <Tooltip>
               <TooltipTrigger
                 render={
