@@ -16,8 +16,19 @@ following commands from `agent-ui/`:
 - Build for production: `npm run build`
 - Preview the production build: `npm run preview`
 
-No automated test command or formatter is currently configured. Add their
-exact commands here when those tools are introduced.
+The TypeScript Agent Runner lives in `services/agent-runner/ts/`. Use npm and
+run the following commands from that directory:
+
+- Install dependencies: `npm ci`
+- Start development: `npm run dev`
+- Run static analysis: `npm run lint`
+- Run strict type checking: `npm run typecheck`
+- Run tests: `npm test`
+- Build for production: `npm run build`
+- Start the production build: `npm start`
+
+No frontend automated test command or repository-wide formatter is currently
+configured. Add their exact commands here when those tools are introduced.
 
 ## Engineering Principles
 
