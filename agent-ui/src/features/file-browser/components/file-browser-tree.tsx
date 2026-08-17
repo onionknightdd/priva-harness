@@ -264,7 +264,7 @@ function FileBrowserTreeNode({
       level={level}
       aria-busy={loading || undefined}
       data-file-tree-folder-row={isFolder || undefined}
-      className="relative box-border w-full min-w-0 max-w-full overflow-hidden rounded-none pb-0! text-start data-[file-tree-folder-row=true]:sticky data-[stuck=true]:bg-card! data-[file-tree-folder-row=true][data-popup-open]:bg-accent! data-[file-tree-folder-row=true][data-selected=true]:bg-accent! data-[file-tree-folder-row=true][data-selected=true]:text-accent-foreground"
+      className="relative box-border w-full min-w-0 max-w-full overflow-hidden rounded-none pb-0! text-start hover:bg-accent data-[file-tree-folder-row=true]:sticky data-[stuck=true]:bg-card data-[selected=true]:bg-accent! data-[selected=true]:text-accent-foreground data-popup-open:bg-accent!"
       style={
         isFolder
           ? {
