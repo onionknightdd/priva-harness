@@ -16,19 +16,19 @@ type HighlightBounds = {
   left: number
   width: number
   height: number
+  borderRadius: string
 }
 
 function getHighlightTarget(
   target: EventTarget | null,
-  container: HTMLElement | null
+  container: HTMLElement | null,
+  itemSelector: string
 ) {
   if (!(target instanceof Element) || !container) {
     return null
   }
 
-  const menuItem = target.closest<HTMLElement>(
-    '[data-sidebar="menu-button"], [data-sidebar="menu-sub-button"]'
-  )
+  const menuItem = target.closest<HTMLElement>(itemSelector)
 
   if (
     !menuItem ||
@@ -41,53 +41,70 @@ function getHighlightTarget(
   return menuItem
 }
 
-function SidebarMenuHighlight({
+function MenuItemHighlight({
   className,
   children,
+  highlightClassName,
+  highlightSlot = "menu-item-highlight",
+  itemSelector,
   onPointerMove,
   onPointerLeave,
   onFocusCapture,
   onBlurCapture,
+  resolveHighlightElement,
   style,
   ...props
-}: React.ComponentProps<"div">) {
+}: React.ComponentProps<"div"> & {
+  highlightClassName?: string
+  highlightSlot?: string
+  itemSelector: string
+  resolveHighlightElement?: (
+    item: HTMLElement
+  ) => HTMLElement | null
+}) {
   const containerRef = React.useRef<HTMLDivElement>(null)
   const [activeElement, setActiveElement] =
     React.useState<HTMLElement | null>(null)
   const [bounds, setBounds] = React.useState<HighlightBounds | null>(null)
   const shouldReduceMotion = useReducedMotion()
 
-  const updateBounds = React.useCallback((element: HTMLElement) => {
-    const container = containerRef.current
+  const updateBounds = React.useCallback(
+    (item: HTMLElement) => {
+      const container = containerRef.current
+      const element = resolveHighlightElement?.(item) ?? item
 
-    if (!container || !container.contains(element)) {
-      setActiveElement(null)
-      setBounds(null)
-      return
-    }
-
-    const containerRect = container.getBoundingClientRect()
-    const elementRect = element.getBoundingClientRect()
-    const nextBounds = {
-      top: elementRect.top - containerRect.top,
-      left: elementRect.left - containerRect.left,
-      width: elementRect.width,
-      height: elementRect.height,
-    }
-
-    setBounds((previousBounds) => {
-      if (
-        previousBounds?.top === nextBounds.top &&
-        previousBounds.left === nextBounds.left &&
-        previousBounds.width === nextBounds.width &&
-        previousBounds.height === nextBounds.height
-      ) {
-        return previousBounds
+      if (!container || !container.contains(element)) {
+        setActiveElement(null)
+        setBounds(null)
+        return
       }
 
-      return nextBounds
-    })
-  }, [])
+      const containerRect = container.getBoundingClientRect()
+      const elementRect = element.getBoundingClientRect()
+      const nextBounds = {
+        top: elementRect.top - containerRect.top,
+        left: elementRect.left - containerRect.left,
+        width: elementRect.width,
+        height: elementRect.height,
+        borderRadius: window.getComputedStyle(element).borderRadius,
+      }
+
+      setBounds((previousBounds) => {
+        if (
+          previousBounds?.top === nextBounds.top &&
+          previousBounds.left === nextBounds.left &&
+          previousBounds.width === nextBounds.width &&
+          previousBounds.height === nextBounds.height &&
+          previousBounds.borderRadius === nextBounds.borderRadius
+        ) {
+          return previousBounds
+        }
+
+        return nextBounds
+      })
+    },
+    [resolveHighlightElement]
+  )
 
   React.useLayoutEffect(() => {
     if (!activeElement) {
@@ -109,12 +126,16 @@ function SidebarMenuHighlight({
 
   const activateFromTarget = React.useCallback(
     (target: EventTarget | null) => {
-      const menuItem = getHighlightTarget(target, containerRef.current)
+      const menuItem = getHighlightTarget(
+        target,
+        containerRef.current,
+        itemSelector
+      )
       setActiveElement((current) =>
         current === menuItem ? current : menuItem
       )
     },
-    []
+    [itemSelector]
   )
 
   const transition: Transition = shouldReduceMotion
@@ -147,9 +168,12 @@ function SidebarMenuHighlight({
       <AnimatePresence initial={false} mode="wait">
         {bounds && (
           <motion.div
-            data-slot="sidebar-menu-highlight"
+            data-slot={highlightSlot}
             aria-hidden="true"
-            className="pointer-events-none absolute z-0 rounded-md bg-sidebar-accent"
+            className={cn(
+              "pointer-events-none absolute z-0",
+              highlightClassName
+            )}
             initial={{ ...bounds, opacity: 0 }}
             animate={{ ...bounds, opacity: 1 }}
             exit={{
@@ -167,4 +191,15 @@ function SidebarMenuHighlight({
   )
 }
 
-export { SidebarMenuHighlight }
+function SidebarMenuHighlight(props: React.ComponentProps<"div">) {
+  return (
+    <MenuItemHighlight
+      {...props}
+      highlightClassName="bg-sidebar-accent"
+      highlightSlot="sidebar-menu-highlight"
+      itemSelector='[data-sidebar="menu-button"], [data-sidebar="menu-sub-button"]'
+    />
+  )
+}
+
+export { MenuItemHighlight, SidebarMenuHighlight }
