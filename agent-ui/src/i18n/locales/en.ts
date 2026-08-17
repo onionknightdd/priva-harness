@@ -162,7 +162,7 @@ export const en = {
     description: "Manage your account and application preferences.",
     sections: {
       account: "Account",
-      llmProviders: "LLM Providers",
+      llmProviders: "Models",
       dm: "DM",
       personalization: "Personalization",
       advanced: "Advanced",

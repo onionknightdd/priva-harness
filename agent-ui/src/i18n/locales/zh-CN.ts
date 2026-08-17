@@ -162,7 +162,7 @@ export const zhCN = {
     description: "管理你的账户和应用偏好设置。",
     sections: {
       account: "账户",
-      llmProviders: "LLM 供应商",
+      llmProviders: "模型",
       dm: "DM",
       personalization: "个性化配置",
       advanced: "高级",
