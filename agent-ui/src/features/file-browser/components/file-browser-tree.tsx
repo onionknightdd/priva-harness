@@ -43,7 +43,7 @@ function FileBrowserTreeNode({
     <TreeItem
       item={item}
       level={level}
-      className="relative w-full text-start before:pointer-events-none before:absolute before:-inset-y-0.5 before:start-0 before:-ms-1 before:w-[var(--tree-padding)] before:bg-[repeating-linear-gradient(to_right,transparent_0,transparent_calc(var(--tree-indent)-1px),var(--border)_calc(var(--tree-indent)-1px),var(--border)_calc(var(--tree-indent)))]"
+      className="relative w-full pb-0! text-start"
     >
       <TreeItemLabel className="min-h-8 w-full gap-2">
         {item.isFolder() ? (
@@ -73,15 +73,24 @@ function FileBrowserTreeNode({
       {treeItem}
       <CollapsibleContent
         role="group"
-        className="flex h-[var(--collapsible-panel-height)] flex-col gap-0.5 overflow-hidden pt-0.5 transition-[height] duration-200 ease-out data-[ending-style]:h-0 data-[starting-style]:h-0 motion-reduce:transition-none"
+        className="h-[var(--collapsible-panel-height)] overflow-hidden transition-[height,opacity] duration-200 ease-out data-[ending-style]:h-0 data-[ending-style]:opacity-0 data-[starting-style]:h-0 data-[starting-style]:opacity-0 motion-reduce:transition-none"
       >
-        {item.getChildren().map((child) => (
-          <FileBrowserTreeNode
-            key={child.getId()}
-            item={child}
-            level={level + 1}
-          />
-        ))}
+        <div
+          className="relative flex flex-col gap-0.5 pt-0.5 before:pointer-events-none before:absolute before:inset-y-0 before:start-[var(--file-tree-line-offset)] before:w-px before:bg-border"
+          style={
+            {
+              "--file-tree-line-offset": `${(level + 1) * FILE_TREE_INDENT - 5}px`,
+            } as React.CSSProperties
+          }
+        >
+          {item.getChildren().map((child) => (
+            <FileBrowserTreeNode
+              key={child.getId()}
+              item={child}
+              level={level + 1}
+            />
+          ))}
+        </div>
       </CollapsibleContent>
     </Collapsible>
   )
