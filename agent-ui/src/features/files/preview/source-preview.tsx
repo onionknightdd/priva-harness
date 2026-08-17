@@ -8,12 +8,8 @@ import { Prism } from "./prism"
 import { getSourceLanguage } from "./source-language"
 
 const sourceFrameClassName =
-  "min-h-full min-w-max bg-muted/20 py-3 font-mono text-[13px] leading-6"
-const sourceLineClassName =
-  "grid grid-cols-[3.5rem_minmax(max-content,1fr)] px-3"
-const wrappedSourceFrameClassName =
   "min-h-full min-w-0 w-full bg-muted/20 py-3 font-mono text-[13px] leading-6"
-const wrappedSourceLineClassName =
+const sourceLineClassName =
   "grid grid-cols-[3.5rem_minmax(0,1fr)] px-3"
 
 function LineNumber({ value }: { value: number }) {
@@ -37,7 +33,6 @@ export function SourcePreview({
   const { resolvedTheme } = useTheme()
   const { t } = useTranslation()
   const language = getSourceLanguage(fileName)
-  const wrapLines = language === "markdown"
   const label = t("filePreview.sourceLabel", { fileName })
   const isDark = resolvedTheme === "dark"
   const theme =
@@ -59,7 +54,7 @@ export function SourcePreview({
         {content.split("\n").map((line, index) => (
           <div key={index} className={sourceLineClassName}>
             <LineNumber value={index + 1} />
-            <code className="whitespace-pre pl-4">
+            <code className="break-words whitespace-pre-wrap pl-4">
               {line || "\u200b"}
             </code>
           </div>
@@ -84,11 +79,7 @@ export function SourcePreview({
         <div
           role="region"
           aria-label={label}
-          className={
-            wrapLines
-              ? wrappedSourceFrameClassName
-              : sourceFrameClassName
-          }
+          className={sourceFrameClassName}
           style={{ color: style.color }}
         >
           {tokens.map((line, lineIndex) => {
@@ -101,21 +92,11 @@ export function SourcePreview({
               <div
                 key={lineIndex}
                 {...lineProps}
-                className={cn(
-                  wrapLines
-                    ? wrappedSourceLineClassName
-                    : sourceLineClassName,
-                  lineClassName
-                )}
+                className={cn(sourceLineClassName, lineClassName)}
               >
                 <LineNumber value={lineIndex + 1} />
                 <code
-                  className={cn(
-                    "pl-4",
-                    wrapLines
-                      ? "break-words whitespace-pre-wrap"
-                      : "whitespace-pre"
-                  )}
+                  className="break-words whitespace-pre-wrap pl-4"
                 >
                   {line.map((token, tokenIndex) => (
                     <span

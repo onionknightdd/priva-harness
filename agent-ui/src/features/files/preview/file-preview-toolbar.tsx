@@ -256,22 +256,25 @@ export function FilePreviewToolbar({
       </div>
 
       <div className="file-preview-toolbar__actions flex shrink-0 items-center">
-        <Button
-          type="button"
-          variant="secondary"
-          size="xs"
-          className="file-preview-toolbar__close rounded-full font-normal"
-          disabled={files.length === 0}
-          onClick={handleCloseAll}
-        >
-          <XIcon aria-hidden="true" />
-          {t("filePreview.closeAll")}
-        </Button>
+        {files.length > 2 && (
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              size="xs"
+              className="file-preview-toolbar__close rounded-full font-normal"
+              onClick={handleCloseAll}
+            >
+              <XIcon aria-hidden="true" />
+              {t("filePreview.closeAll")}
+            </Button>
 
-        <Separator
-          orientation="vertical"
-          className="file-preview-toolbar__separator mx-2 h-5 data-vertical:self-center"
-        />
+            <Separator
+              orientation="vertical"
+              className="file-preview-toolbar__separator mx-2 h-5 data-vertical:self-center"
+            />
+          </>
+        )}
 
         <div className="file-preview-toolbar__controls flex shrink-0 items-center gap-1">
           <ToggleGroup
