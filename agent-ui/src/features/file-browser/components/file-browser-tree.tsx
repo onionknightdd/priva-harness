@@ -49,7 +49,7 @@ import {
 import { FileTypeIcon } from "./file-type-icon"
 
 const FILE_TREE_INDENT = 20
-const FILE_TREE_STICKY_ROW_HEIGHT = 34
+const FILE_TREE_STICKY_ROW_HEIGHT = 32
 const FOLDER_ICON_TRANSITION_DURATION = 0.2
 
 function AnimatedFolderIcon({ expanded }: { expanded: boolean }) {
@@ -170,7 +170,9 @@ function FileBrowserTreeNode({
 }) {
   const { i18n, t } = useTranslation()
   const data = item.getItemData()
-  const loading = item.isFolder() && loadingDirectories.has(data.path)
+  const isFolder = item.isFolder()
+  const loading = isFolder && loadingDirectories.has(data.path)
+  const stickySentinelRef = React.useRef<HTMLSpanElement>(null)
   const modifiedDate = data.modifiedAt
     ? new Date(data.modifiedAt * 1000)
     : null
@@ -197,15 +199,74 @@ function FileBrowserTreeNode({
     data.type === "folder"
       ? data.path
       : data.parentPath ?? getFileBrowserParentPath(data.path)
+
+  React.useEffect(() => {
+    const sentinel = stickySentinelRef.current
+    const row = sentinel?.parentElement?.querySelector<HTMLButtonElement>(
+      ':scope > [data-file-tree-folder-row="true"]'
+    )
+    const scrollContainer = sentinel?.closest<HTMLElement>(
+      "[data-file-tree-scroll]"
+    )
+
+    if (
+      !isFolder ||
+      !sentinel ||
+      !row ||
+      !scrollContainer ||
+      typeof IntersectionObserver === "undefined"
+    ) {
+      return
+    }
+
+    let isStuck = false
+    row.dataset.stuck = "false"
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry) {
+          return
+        }
+
+        const stickyBoundary =
+          entry.rootBounds?.top ??
+          scrollContainer.getBoundingClientRect().top +
+            level * FILE_TREE_STICKY_ROW_HEIGHT
+        const nextIsStuck =
+          !entry.isIntersecting &&
+          entry.boundingClientRect.top < stickyBoundary
+
+        if (nextIsStuck === isStuck) {
+          return
+        }
+
+        isStuck = nextIsStuck
+        row.dataset.stuck = String(nextIsStuck)
+      },
+      {
+        root: scrollContainer,
+        rootMargin: `-${level * FILE_TREE_STICKY_ROW_HEIGHT}px 0px 0px 0px`,
+        threshold: 0,
+      }
+    )
+
+    observer.observe(sentinel)
+
+    return () => {
+      observer.disconnect()
+      delete row.dataset.stuck
+    }
+  }, [isFolder, level])
+
   const treeItemButton = (
     <TreeItem
       item={item}
       level={level}
       aria-busy={loading || undefined}
-      data-file-tree-folder-row={item.isFolder() || undefined}
-      className="relative box-border w-full min-w-0 max-w-full overflow-hidden pb-0! text-start data-[file-tree-folder-row=true]:sticky data-[file-tree-folder-row=true]:bg-card"
+      data-file-tree-folder-row={isFolder || undefined}
+      className="relative box-border w-full min-w-0 max-w-full overflow-hidden rounded-none pb-0! text-start data-[file-tree-folder-row=true]:sticky data-[stuck=true]:bg-card! data-[file-tree-folder-row=true][data-popup-open]:bg-accent! data-[file-tree-folder-row=true][data-selected=true]:bg-accent! data-[file-tree-folder-row=true][data-selected=true]:text-accent-foreground"
       style={
-        item.isFolder()
+        isFolder
           ? {
               top: `${level * FILE_TREE_STICKY_ROW_HEIGHT}px`,
               zIndex: 50 - level,
@@ -213,9 +274,9 @@ function FileBrowserTreeNode({
           : undefined
       }
     >
-      <TreeItemLabel className="min-h-8 w-full min-w-0 max-w-full gap-1 bg-card pr-1 in-data-popup-open:bg-accent">
+      <TreeItemLabel className="min-h-8 w-full min-w-0 max-w-full gap-1 bg-card pe-4 in-data-[stuck=true]:rounded-none in-data-popup-open:bg-accent">
         <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
-          {item.isFolder() ? (
+          {isFolder ? (
             <AnimatedFolderIcon expanded={item.isExpanded()} />
           ) : (
             <FileTypeIcon name={data.name} path={data.path} />
@@ -291,7 +352,7 @@ function FileBrowserTreeNode({
     </ContextMenu>
   )
 
-  if (!item.isFolder()) {
+  if (!isFolder) {
     return treeItem
   }
 
@@ -301,6 +362,11 @@ function FileBrowserTreeNode({
       role="none"
       className="flex w-full min-w-0 max-w-full flex-col"
     >
+      <span
+        ref={stickySentinelRef}
+        aria-hidden="true"
+        className="pointer-events-none -mb-px block h-px w-full"
+      />
       {treeItem}
       <CollapsibleContent
         role="group"

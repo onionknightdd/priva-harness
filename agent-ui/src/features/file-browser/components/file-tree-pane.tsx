@@ -150,7 +150,7 @@ export function FileTreePane({
       </div>
       <div
         data-file-tree-scroll
-        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain p-2 [container-type:inline-size]"
+        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pb-2 [scrollbar-gutter:stable] [container-type:inline-size]"
       >
         {initialLoading ? (
           <div
