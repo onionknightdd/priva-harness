@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import gsap from "gsap"
 
 import type { AppView } from "@/lib/app-view"
 
@@ -26,6 +27,34 @@ export function AppSidebar({
   activeView: AppView
   onViewChange: (view: AppView) => void
 }) {
+  const footerFadeRef = React.useRef<HTMLDivElement>(null)
+
+  React.useLayoutEffect(() => {
+    const footerFade = footerFadeRef.current
+
+    if (
+      !footerFade ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return
+    }
+
+    const context = gsap.context(() => {
+      gsap.fromTo(
+        footerFade,
+        { opacity: 0 },
+        {
+          opacity: 1,
+          duration: 0.24,
+          ease: "power1.out",
+          clearProps: "opacity",
+        }
+      )
+    }, footerFade)
+
+    return () => context.revert()
+  }, [])
+
   return (
     <Sidebar collapsible="icon" resizable {...props}>
       <SidebarHeader>
@@ -40,7 +69,12 @@ export function AppSidebar({
         />
         <NavProjects projects={sidebarData.projects} />
       </SidebarContent>
-      <SidebarFooter>
+      <SidebarFooter className="relative z-20 bg-sidebar">
+        <div
+          ref={footerFadeRef}
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 -top-6 h-6 bg-linear-to-t from-sidebar to-transparent"
+        />
         <NavUser user={sidebarData.user} />
       </SidebarFooter>
     </Sidebar>
