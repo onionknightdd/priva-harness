@@ -1,27 +1,46 @@
 import * as React from "react"
 import gsap from "gsap"
-import { RefreshCwIcon, SearchIcon } from "lucide-react"
+import { usePanelRef } from "react-resizable-panels"
 import { useTranslation } from "react-i18next"
 
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable"
+import { RichFilePreview } from "@/features/files"
+import { useIsMobile } from "@/hooks/use-mobile"
 
-import { FileBrowserTree } from "./components/file-browser-tree"
-import { fileBrowserItemCount } from "./file-browser-data"
+import { FileAddressBar } from "./components/file-address-bar"
+import { FileTreePane } from "./components/file-tree-pane"
+import {
+  FILE_BROWSER_DEFAULT_ITEM_ID,
+  fileBrowserItems,
+} from "./file-browser-data"
+import { getFileBrowserPreviewFile } from "./file-browser-preview-data"
+
+const TREE_DEFAULT_SIZE = 30
+const TREE_MIN_SIZE = 18
+const TREE_MAX_SIZE = 45
+
+function clampTreeSize(size: number) {
+  return Math.min(TREE_MAX_SIZE, Math.max(TREE_MIN_SIZE, size))
+}
 
 export function FileBrowserPage() {
   const { t } = useTranslation()
+  const isMobile = useIsMobile()
   const pageRef = React.useRef<HTMLDivElement>(null)
-  const refreshIconRef = React.useRef<SVGSVGElement>(null)
-  const announcementTimerRef = React.useRef<number | null>(null)
-  const [query, setQuery] = React.useState("")
-  const [refreshVersion, setRefreshVersion] = React.useState(0)
-  const [announcement, setAnnouncement] = React.useState("")
+  const treePaneContentRef = React.useRef<HTMLDivElement>(null)
+  const panelAnimationRef = React.useRef<gsap.core.Timeline | null>(null)
+  const previousTreeSizeRef = React.useRef(TREE_DEFAULT_SIZE)
+  const treePanelRef = usePanelRef()
+  const [selectedItemId, setSelectedItemId] = React.useState(
+    FILE_BROWSER_DEFAULT_ITEM_ID
+  )
+  const [treeVisible, setTreeVisible] = React.useState(true)
+  const [panelTransitioning, setPanelTransitioning] = React.useState(false)
+  const selectedFile = getFileBrowserPreviewFile(selectedItemId)
 
   React.useLayoutEffect(() => {
     const page = pageRef.current
@@ -51,101 +70,235 @@ export function FileBrowserPage() {
     return () => context.revert()
   }, [])
 
+  React.useLayoutEffect(() => {
+    if (!isMobile) {
+      return
+    }
+
+    const pane = pageRef.current?.querySelector("[data-mobile-file-pane]")
+
+    if (
+      !pane ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return
+    }
+
+    const context = gsap.context(() => {
+      gsap.fromTo(
+        pane,
+        { opacity: 0, y: 5 },
+        {
+          opacity: 1,
+          y: 0,
+          duration: 0.22,
+          ease: "power2.out",
+          clearProps: "transform,opacity",
+        }
+      )
+    }, pageRef)
+
+    return () => context.revert()
+  }, [isMobile, treeVisible])
+
   React.useEffect(
     () => () => {
-      if (announcementTimerRef.current !== null) {
-        window.clearTimeout(announcementTimerRef.current)
-      }
+      panelAnimationRef.current?.kill()
     },
     []
   )
 
-  const handleRefresh = () => {
-    setRefreshVersion((version) => version + 1)
-    setAnnouncement(t("fileBrowser.refreshed"))
+  const setDesktopTreeVisibility = React.useCallback(
+    (visible: boolean) => {
+      const panel = treePanelRef.current
+      const treeContent = treePaneContentRef.current
 
-    if (announcementTimerRef.current !== null) {
-      window.clearTimeout(announcementTimerRef.current)
+      if (!panel || !treeContent) {
+        setTreeVisible(visible)
+        return
+      }
+
+      panelAnimationRef.current?.kill()
+
+      const currentSize = panel.getSize().asPercentage
+      if (!visible && currentSize > 0) {
+        previousTreeSizeRef.current = clampTreeSize(currentSize)
+      }
+
+      const targetSize = visible ? previousTreeSizeRef.current : 0
+      const reducedMotion = window.matchMedia(
+        "(prefers-reduced-motion: reduce)"
+      ).matches
+
+      setPanelTransitioning(true)
+      setTreeVisible(visible)
+
+      window.requestAnimationFrame(() => {
+        if (reducedMotion) {
+          panel.resize(`${targetSize}%`)
+          gsap.set(treeContent, {
+            clearProps: "transform",
+            opacity: visible ? 1 : 0,
+          })
+          setPanelTransitioning(false)
+          return
+        }
+
+        if (visible) {
+          panel.resize("0%")
+          gsap.set(treeContent, { opacity: 0, x: -8 })
+        }
+
+        const sizeState = {
+          value: visible ? 0 : currentSize,
+        }
+        const timeline = gsap.timeline({
+          defaults: { duration: 0.3, ease: "power2.inOut" },
+          onComplete: () => {
+            setPanelTransitioning(false)
+            gsap.set(treeContent, { clearProps: "transform,opacity" })
+            panelAnimationRef.current = null
+          },
+        })
+
+        timeline.to(
+          sizeState,
+          {
+            value: targetSize,
+            onUpdate: () => panel.resize(`${sizeState.value}%`),
+          },
+          0
+        )
+        timeline.to(
+          treeContent,
+          {
+            opacity: visible ? 1 : 0,
+            x: visible ? 0 : -8,
+            duration: 0.2,
+          },
+          0
+        )
+
+        panelAnimationRef.current = timeline
+      })
+    },
+    [treePanelRef]
+  )
+
+  const handleTreeVisibilityChange = (visible: boolean) => {
+    if (visible === treeVisible && !panelTransitioning) {
+      return
     }
 
-    announcementTimerRef.current = window.setTimeout(
-      () => setAnnouncement(""),
-      1200
-    )
+    if (isMobile) {
+      setTreeVisible(visible)
+      return
+    }
 
-    if (
-      refreshIconRef.current &&
-      !window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
-      gsap.fromTo(
-        refreshIconRef.current,
-        { rotate: 0 },
-        {
-          rotate: 360,
-          duration: 0.45,
-          ease: "power2.out",
-          clearProps: "transform",
-        }
-      )
+    setDesktopTreeVisibility(visible)
+  }
+
+  const handleNavigate = (itemId: string) => {
+    setSelectedItemId(itemId)
+
+    if (isMobile && fileBrowserItems[itemId].type === "file") {
+      setTreeVisible(false)
     }
   }
 
   return (
     <div
       ref={pageRef}
-      className="flex min-h-0 flex-1 flex-col gap-3 p-4 pt-0"
+      className="flex min-h-0 flex-1 flex-col p-4 pt-0"
     >
-      <div
-        data-file-browser-enter
-        className="flex shrink-0 items-center gap-2"
-      >
-        <div className="relative min-w-0 flex-1 sm:max-w-sm">
-          <SearchIcon
-            aria-hidden="true"
-            className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-          />
-          <Input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            aria-label={t("fileBrowser.searchLabel")}
-            placeholder={t("fileBrowser.searchPlaceholder")}
-            className="pl-8"
-          />
-        </div>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                aria-label={t("fileBrowser.refresh")}
-                onClick={handleRefresh}
-              />
-            }
-          >
-            <RefreshCwIcon ref={refreshIconRef} />
-          </TooltipTrigger>
-          <TooltipContent>{t("fileBrowser.refresh")}</TooltipContent>
-        </Tooltip>
-      </div>
-
       <section
         data-file-browser-enter
         aria-label={t("fileBrowser.contentLabel")}
         className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card text-card-foreground"
       >
-        <div className="min-h-0 flex-1 overflow-auto p-2 sm:p-3">
-          <FileBrowserTree key={refreshVersion} query={query} />
-        </div>
-        <div className="flex h-9 shrink-0 items-center border-t px-3 text-xs text-muted-foreground">
-          {t("fileBrowser.itemCount", { count: fileBrowserItemCount })}
-        </div>
-      </section>
+        <FileAddressBar
+          selectedItemId={selectedItemId}
+          treeVisible={treeVisible}
+          onNavigate={handleNavigate}
+          onTreeVisibilityChange={handleTreeVisibilityChange}
+        />
 
-      <p className="sr-only" role="status" aria-live="polite">
-        {announcement}
-      </p>
+        {isMobile ? (
+          <div data-mobile-file-pane className="flex min-h-0 flex-1">
+            {treeVisible ? (
+              <FileTreePane
+                selectedItemId={selectedItemId}
+                onItemSelect={handleNavigate}
+              />
+            ) : (
+              <RichFilePreview
+                file={selectedFile}
+                expanded
+                onExpandedChange={(expanded) =>
+                  handleTreeVisibilityChange(!expanded)
+                }
+              />
+            )}
+          </div>
+        ) : (
+          <ResizablePanelGroup
+            orientation="horizontal"
+            className="min-h-0 flex-1"
+          >
+            <ResizablePanel
+              id="file-tree-panel"
+              panelRef={treePanelRef}
+              defaultSize={`${TREE_DEFAULT_SIZE}%`}
+              minSize={
+                treeVisible && !panelTransitioning
+                  ? `${TREE_MIN_SIZE}%`
+                  : "0%"
+              }
+              maxSize={`${TREE_MAX_SIZE}%`}
+              onResize={(size) => {
+                if (
+                  treeVisible &&
+                  !panelTransitioning &&
+                  size.asPercentage >= TREE_MIN_SIZE
+                ) {
+                  previousTreeSizeRef.current = clampTreeSize(
+                    size.asPercentage
+                  )
+                }
+              }}
+            >
+              <div
+                id="file-browser-tree-pane"
+                ref={treePaneContentRef}
+                aria-hidden={!treeVisible}
+                className="flex h-full min-w-0"
+              >
+                <FileTreePane
+                  selectedItemId={selectedItemId}
+                  onItemSelect={handleNavigate}
+                />
+              </div>
+            </ResizablePanel>
+            <ResizableHandle
+              aria-label={t("fileBrowser.resizePanels")}
+              className={
+                treeVisible || panelTransitioning
+                  ? "opacity-100"
+                  : "pointer-events-none opacity-0"
+              }
+            />
+            <ResizablePanel id="file-preview-panel" minSize="40%">
+              <RichFilePreview
+                file={selectedFile}
+                expanded={!treeVisible}
+                onExpandedChange={(expanded) =>
+                  handleTreeVisibilityChange(!expanded)
+                }
+              />
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        )}
+      </section>
     </div>
   )
 }

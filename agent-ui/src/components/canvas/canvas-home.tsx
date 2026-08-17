@@ -40,7 +40,11 @@ const canvasActions: CanvasAction[] = [
   },
 ]
 
-export function CanvasHome() {
+export function CanvasHome({
+  onAction,
+}: {
+  onAction?: (actionId: string) => void
+}) {
   const { t } = useTranslation()
 
   return (
@@ -57,6 +61,7 @@ export function CanvasHome() {
             data-canvas-action={action.id}
             aria-label={label}
             className="h-14 w-full justify-start gap-3 px-3 text-left font-normal"
+            onClick={() => onAction?.(action.id)}
           >
             <Icon
               className="size-5"

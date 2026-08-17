@@ -6,6 +6,8 @@ export type FileBrowserItem = {
 
 export const FILE_BROWSER_ROOT_ID = "root"
 
+export const FILE_BROWSER_DEFAULT_ITEM_ID = "file-browser-page"
+
 export const FILE_BROWSER_INITIAL_EXPANDED_ITEMS = [
   "workspace",
   "agent-ui",
@@ -117,3 +119,31 @@ export const fileBrowserItems: Record<string, FileBrowserItem> = {
 }
 
 export const fileBrowserItemCount = Object.keys(fileBrowserItems).length - 1
+
+const fileBrowserParentIds = Object.entries(fileBrowserItems).reduce<
+  Record<string, string>
+>((parentIds, [parentId, item]) => {
+  item.children?.forEach((childId) => {
+    parentIds[childId] = parentId
+  })
+
+  return parentIds
+}, {})
+
+export function getFileBrowserPath(itemId: string) {
+  const path: string[] = []
+  let currentId: string | undefined = itemId
+
+  while (currentId && currentId !== FILE_BROWSER_ROOT_ID) {
+    path.unshift(currentId)
+    currentId = fileBrowserParentIds[currentId]
+  }
+
+  return path
+}
+
+export function getFileBrowserChildFolderIds(itemId: string) {
+  return (fileBrowserItems[itemId]?.children ?? []).filter(
+    (childId) => fileBrowserItems[childId]?.type === "folder"
+  )
+}

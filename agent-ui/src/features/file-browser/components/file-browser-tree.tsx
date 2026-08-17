@@ -25,6 +25,7 @@ import {
   FILE_BROWSER_INITIAL_EXPANDED_ITEMS,
   FILE_BROWSER_ROOT_ID,
   fileBrowserItems,
+  getFileBrowserPath,
   type FileBrowserItem,
 } from "../file-browser-data"
 import { FileTypeIcon } from "./file-type-icon"
@@ -96,7 +97,15 @@ function FileBrowserTreeNode({
   )
 }
 
-export function FileBrowserTree({ query }: { query: string }) {
+export function FileBrowserTree({
+  onItemSelect,
+  query,
+  selectedItemId,
+}: {
+  onItemSelect: (itemId: string) => void
+  query: string
+  selectedItemId: string
+}) {
   const { t } = useTranslation()
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const hasMatches = Object.entries(fileBrowserItems).some(
@@ -107,7 +116,7 @@ export function FileBrowserTree({ query }: { query: string }) {
   const tree = useTree<FileBrowserItem>({
     initialState: {
       expandedItems: FILE_BROWSER_INITIAL_EXPANDED_ITEMS,
-      selectedItems: [],
+      selectedItems: [selectedItemId],
     },
     rootItemId: FILE_BROWSER_ROOT_ID,
     getItemName: (item) => item.getItemData().name,
@@ -116,6 +125,7 @@ export function FileBrowserTree({ query }: { query: string }) {
       getItem: (itemId) => fileBrowserItems[itemId],
       getChildren: (itemId) => fileBrowserItems[itemId].children ?? [],
     },
+    onPrimaryAction: (item) => onItemSelect(item.getId()),
     features: [
       syncDataLoaderFeature,
       selectionFeature,
@@ -124,6 +134,25 @@ export function FileBrowserTree({ query }: { query: string }) {
       expandAllFeature,
     ],
   })
+
+  React.useEffect(() => {
+    tree.setSelectedItems([selectedItemId])
+
+    getFileBrowserPath(selectedItemId)
+      .slice(0, -1)
+      .forEach((itemId) => {
+        tree.getItemInstance(itemId).expand()
+      })
+
+    const selectedItem = tree.getItemInstance(selectedItemId)
+    if (selectedItem.isFolder()) {
+      selectedItem.expand()
+    }
+
+    window.requestAnimationFrame(() => {
+      void selectedItem.scrollTo({ block: "nearest" })
+    })
+  }, [selectedItemId, tree])
 
   React.useEffect(() => {
     if (normalizedQuery) {
