@@ -62,6 +62,11 @@ export type ModelProfileUpdateInput = {
   defaultModel: string | null
 }
 
+export type SavedModelProfileTestInput = {
+  baseUrl?: string
+  authToken?: string
+}
+
 export class ModelProfileApiError extends Error {
   readonly status: number
 
@@ -195,10 +200,22 @@ export async function testDraftModelProfile(input: ModelProfileCreateInput) {
   return response.models.map((model) => model.id)
 }
 
-export async function testSavedModelProfile(profileId: string) {
+export async function testSavedModelProfile(
+  profileId: string,
+  input: SavedModelProfileTestInput = {}
+) {
   const response = await requestJson<ModelListResponse>(
     profileEndpoint(profileId, "/test"),
-    { method: "POST" }
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...(input.baseUrl === undefined ? {} : { base_url: input.baseUrl }),
+        ...(input.authToken === undefined
+          ? {}
+          : { auth_token: input.authToken }),
+      }),
+    }
   )
 
   return response.models.map((model) => model.id)

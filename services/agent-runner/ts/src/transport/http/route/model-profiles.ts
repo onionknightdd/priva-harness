@@ -41,6 +41,11 @@ interface ModelProfilePatchBody {
   readonly default_model?: string | null
 }
 
+interface SavedModelProfileTestBody {
+  readonly base_url?: string
+  readonly auth_token?: string
+}
+
 interface ImageCapabilityProbeBody {
   readonly model_id: string
 }
@@ -129,11 +134,14 @@ export const modelProfileRoutes: FastifyPluginCallback<ModelProfileRoutesOptions
     }),
   )
 
-  fastify.post<{ Params: ProfileIdParams }>(
+  fastify.post<{ Params: ProfileIdParams; Body: SavedModelProfileTestBody }>(
     `${MODEL_PROFILE_ROUTE_PREFIX}/:profileId/test`,
     { schema: testSavedModelProfileSchema },
     async (request) => ({
-      models: await service.testSavedProfile(request.params.profileId),
+      models: await service.testSavedProfile(
+        request.params.profileId,
+        fromSavedTestBody(request.body),
+      ),
     }),
   )
 
@@ -174,6 +182,15 @@ function fromPatchBody(body: ModelProfilePatchBody): ModelProfilePatch {
     ...(body.base_url === undefined ? {} : { baseUrl: body.base_url }),
     ...(body.auth_token === undefined ? {} : { authToken: body.auth_token }),
     ...(body.default_model === undefined ? {} : { defaultModel: body.default_model }),
+  }
+}
+
+function fromSavedTestBody(
+  body: SavedModelProfileTestBody | undefined,
+): Pick<ModelProfilePatch, 'baseUrl' | 'authToken'> {
+  return {
+    ...(body?.base_url === undefined ? {} : { baseUrl: body.base_url }),
+    ...(body?.auth_token === undefined ? {} : { authToken: body.auth_token }),
   }
 }
 

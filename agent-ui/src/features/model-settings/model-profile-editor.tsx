@@ -6,7 +6,6 @@ import {
   CheckCircle2Icon,
   KeyRoundIcon,
   SaveIcon,
-  StarIcon,
   Trash2Icon,
   UnplugIcon,
 } from "lucide-react"
@@ -22,7 +21,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Combobox,
@@ -44,6 +42,7 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
+import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 
 import type { ModelProfileSummary } from "./model-profile-api"
@@ -130,6 +129,12 @@ export function ModelProfileEditor({
       draft.baseUrl.trim() &&
       (!isCreating || draft.authToken.trim())
   )
+  const canSetDefault = Boolean(
+    profile?.defaultModel &&
+      profile.defaultModel === draft.defaultModel &&
+      profile.baseUrl === draft.baseUrl.trim() &&
+      !draft.authToken.trim()
+  )
   const formTitle = isCreating
     ? t("settings.models.newProfile")
     : profile?.label ?? t("settings.models.profileEditorLabel")
@@ -190,15 +195,40 @@ export function ModelProfileEditor({
   }, [testFeedback])
 
   return (
-    <div ref={editorRef} className="max-w-2xl pb-2">
+    <div
+      ref={editorRef}
+      className="w-full min-w-0 max-w-2xl overflow-x-hidden pb-2"
+    >
       <div className="mb-5 flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2">
             <h2 className="truncate text-base font-medium">{formTitle}</h2>
-            {!isCreating && isDefault && (
-              <Badge variant="secondary">
-                {t("settings.models.defaultBadge")}
-              </Badge>
+            {!isCreating && (
+              <div className="flex shrink-0 items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">
+                  {t("settings.models.defaultBadge")}
+                </span>
+                <Switch
+                  size="sm"
+                  checked={isDefault}
+                  disabled={
+                    isDefault ||
+                    !isConnectionVerified ||
+                    !canSetDefault ||
+                    busyAction !== null ||
+                    isTesting
+                  }
+                  aria-label={t("settings.models.setDefault")}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      onSetDefault()
+                    }
+                  }}
+                />
+                {busyAction === "default" && (
+                  <Spinner className="size-3" aria-hidden="true" />
+                )}
+              </div>
             )}
           </div>
           {!isCreating && profile?.authTokenSet && (
@@ -424,35 +454,17 @@ export function ModelProfileEditor({
                   </Button>
                 )
               ) : (
-                <>
-                  {!isDefault && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      disabled={busyAction !== null || isTesting}
-                      onClick={onSetDefault}
-                    >
-                      {busyAction === "default" ? (
-                        <Spinner />
-                      ) : (
-                        <StarIcon data-icon="inline-start" />
-                      )}
-                      {t("settings.models.setDefault")}
-                    </Button>
-                  )}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="text-destructive hover:text-destructive"
-                    disabled={busyAction !== null || isTesting}
-                    onClick={() => setDeleteDialogOpen(true)}
-                  >
-                    <Trash2Icon data-icon="inline-start" />
-                    {t("settings.models.delete")}
-                  </Button>
-                </>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  disabled={busyAction !== null || isTesting}
+                  onClick={() => setDeleteDialogOpen(true)}
+                >
+                  <Trash2Icon data-icon="inline-start" />
+                  {t("settings.models.delete")}
+                </Button>
               )}
             </div>
 

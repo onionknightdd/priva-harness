@@ -120,8 +120,36 @@ describe('/api/sandbox/credentials/profiles', () => {
     const savedTestResponse = await server.inject({
       method: 'POST',
       url: '/api/sandbox/credentials/profiles/saved/test',
+      payload: {},
     })
     expect(savedTestResponse.statusCode).toBe(200)
+
+    const savedDraftTestResponse = await server.inject({
+      method: 'POST',
+      url: '/api/sandbox/credentials/profiles/saved/test',
+      payload: {
+        base_url: 'https://changed.example.com/v1',
+        auth_token: 'changed-secret',
+      },
+    })
+    expect(savedDraftTestResponse.statusCode).toBe(200)
+    expect(endpointClient.listedProfiles.at(-1)).toMatchObject({
+      id: 'saved',
+      baseUrl: 'https://changed.example.com/v1',
+      authToken: 'changed-secret',
+    })
+
+    const savedBaseUrlTestResponse = await server.inject({
+      method: 'POST',
+      url: '/api/sandbox/credentials/profiles/saved/test',
+      payload: { base_url: 'https://stored-key.example.com/v1' },
+    })
+    expect(savedBaseUrlTestResponse.statusCode).toBe(200)
+    expect(endpointClient.listedProfiles.at(-1)).toMatchObject({
+      id: 'saved',
+      baseUrl: 'https://stored-key.example.com/v1',
+      authToken: 'secret',
+    })
 
     const draftTestResponse = await server.inject({
       method: 'POST',

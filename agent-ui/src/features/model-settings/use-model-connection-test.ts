@@ -26,6 +26,8 @@ type ConnectionTestRequest =
   | {
       type: "saved"
       profileId: string
+      baseUrl?: string
+      authToken?: string
       connectionKey: string
     }
 
@@ -41,33 +43,31 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
 }
 
-function getDraftConnectionKey(baseUrl: string, authToken: string) {
-  if (!baseUrl || !authToken) {
-    return null
-  }
-
+function isValidBaseUrl(baseUrl: string) {
   try {
     const parsedUrl = new URL(baseUrl)
 
     if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
-      return null
+      return false
     }
   } catch {
-    return null
+    return false
   }
 
-  return JSON.stringify([baseUrl, authToken])
+  return true
 }
 
 export function useModelConnectionTest({
   busyAction,
   draft,
+  hasSavedAuthToken,
   isCreating,
   selectedProfileId,
   setDraft,
 }: {
   busyAction: ModelSettingsBusyAction
   draft: ProfileDraft
+  hasSavedAuthToken: boolean
   isCreating: boolean
   selectedProfileId: string | null
   setDraft: React.Dispatch<React.SetStateAction<ProfileDraft>>
@@ -113,7 +113,10 @@ export function useModelConnectionTest({
                 authToken: request.authToken,
                 defaultModel: null,
               })
-            : await testSavedModelProfile(request.profileId)
+            : await testSavedModelProfile(request.profileId, {
+                baseUrl: request.baseUrl,
+                authToken: request.authToken,
+              })
 
         if (requestId !== testRequestIdRef.current) {
           return
@@ -163,39 +166,56 @@ export function useModelConnectionTest({
 
   const normalizedBaseUrl = draft.baseUrl.trim()
   const normalizedAuthToken = draft.authToken.trim()
-  const draftConnectionKey = getDraftConnectionKey(
-    normalizedBaseUrl,
-    normalizedAuthToken
-  )
-  const canTest = normalizedAuthToken
-    ? draftConnectionKey !== null
-    : !isCreating && selectedProfileId !== null
+  const validBaseUrl = isValidBaseUrl(normalizedBaseUrl)
+  const hasUsableAuthToken =
+    normalizedAuthToken !== "" || (!isCreating && hasSavedAuthToken)
+  const canTest = validBaseUrl && hasUsableAuthToken
+  const autoConnectionKey =
+    canTest
+      ? JSON.stringify([
+          isCreating ? "draft" : selectedProfileId,
+          normalizedBaseUrl,
+          normalizedAuthToken || "stored-auth-token",
+        ])
+      : null
 
   React.useEffect(() => {
-    if (!draftConnectionKey || busyAction !== null) {
+    if (!autoConnectionKey || busyAction !== null) {
       return
     }
 
     const timeoutId = window.setTimeout(() => {
-      if (lastRequestedConnectionKeyRef.current === draftConnectionKey) {
+      if (lastRequestedConnectionKeyRef.current === autoConnectionKey) {
         return
       }
 
-      void runConnectionTest({
-        type: "draft",
-        baseUrl: normalizedBaseUrl,
-        authToken: normalizedAuthToken,
-        connectionKey: draftConnectionKey,
-      })
+      if (isCreating) {
+        void runConnectionTest({
+          type: "draft",
+          baseUrl: normalizedBaseUrl,
+          authToken: normalizedAuthToken,
+          connectionKey: autoConnectionKey,
+        })
+      } else if (selectedProfileId) {
+        void runConnectionTest({
+          type: "saved",
+          profileId: selectedProfileId,
+          baseUrl: normalizedBaseUrl,
+          ...(normalizedAuthToken ? { authToken: normalizedAuthToken } : {}),
+          connectionKey: autoConnectionKey,
+        })
+      }
     }, AUTO_TEST_DELAY_MS)
 
     return () => window.clearTimeout(timeoutId)
   }, [
     busyAction,
-    draftConnectionKey,
+    autoConnectionKey,
+    isCreating,
     normalizedAuthToken,
     normalizedBaseUrl,
     runConnectionTest,
+    selectedProfileId,
   ])
 
   React.useEffect(
@@ -206,29 +226,41 @@ export function useModelConnectionTest({
   )
 
   const handleTest = React.useCallback(() => {
-    if (normalizedAuthToken) {
-      if (!draftConnectionKey) {
-        return
-      }
+    if (!canTest) {
+      return
+    }
 
+    if (isCreating) {
+      const connectionKey = JSON.stringify([
+        "draft",
+        normalizedBaseUrl,
+        normalizedAuthToken,
+      ])
       void runConnectionTest({
         type: "draft",
         baseUrl: normalizedBaseUrl,
         authToken: normalizedAuthToken,
-        connectionKey: draftConnectionKey,
+        connectionKey,
       })
       return
     }
 
-    if (!isCreating && selectedProfileId) {
+    if (selectedProfileId) {
+      const connectionKey = JSON.stringify([
+        selectedProfileId,
+        normalizedBaseUrl,
+        normalizedAuthToken || "stored-auth-token",
+      ])
       void runConnectionTest({
         type: "saved",
         profileId: selectedProfileId,
-        connectionKey: `saved:${selectedProfileId}`,
+        baseUrl: normalizedBaseUrl,
+        ...(normalizedAuthToken ? { authToken: normalizedAuthToken } : {}),
+        connectionKey,
       })
     }
   }, [
-    draftConnectionKey,
+    canTest,
     isCreating,
     normalizedAuthToken,
     normalizedBaseUrl,
@@ -236,11 +268,27 @@ export function useModelConnectionTest({
     selectedProfileId,
   ])
 
+  const loadSavedProfileModels = React.useCallback(
+    (profileId: string, baseUrl: string) => {
+      void runConnectionTest({
+        type: "saved",
+        profileId,
+        connectionKey: JSON.stringify([
+          profileId,
+          baseUrl.trim(),
+          "stored-auth-token",
+        ]),
+      })
+    },
+    [runConnectionTest]
+  )
+
   return {
     canTest,
     handleTest,
     invalidateConnectionTest,
     isConnectionVerified: testStatus === "success" && modelIds.length > 0,
+    loadSavedProfileModels,
     modelIds,
     resetConnectionTest,
     testFeedback,

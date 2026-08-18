@@ -110,6 +110,15 @@ const modelListResponseSchema = {
   },
 } as const
 
+const savedModelProfileTestBodySchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    base_url: { type: 'string', minLength: 1 },
+    auth_token: { type: 'string', minLength: 1 },
+  },
+} as const
+
 export const listModelProfilesSchema = {
   tags: modelProfileTags,
   response: {
@@ -187,6 +196,7 @@ export const testDraftModelProfileSchema = {
 export const testSavedModelProfileSchema = {
   tags: modelProfileTags,
   params: profileIdParamsSchema,
+  body: savedModelProfileTestBodySchema,
   response: { 200: modelListResponseSchema },
 } as const
 

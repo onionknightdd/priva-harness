@@ -106,11 +106,14 @@ export function ModelSettingsView() {
     React.useState<ModelSettingsBusyAction>(null)
   const [feedback, setFeedback] =
     React.useState<ModelSettingsFeedback | null>(null)
+  const selectedProfile =
+    profiles.find((profile) => profile.id === selectedProfileId) ?? null
   const {
     canTest,
     handleTest,
     invalidateConnectionTest,
     isConnectionVerified,
+    loadSavedProfileModels,
     modelIds,
     resetConnectionTest,
     testFeedback,
@@ -118,21 +121,20 @@ export function ModelSettingsView() {
   } = useModelConnectionTest({
     busyAction,
     draft,
+    hasSavedAuthToken: selectedProfile?.authTokenSet ?? false,
     isCreating,
     selectedProfileId,
     setDraft,
   })
-
-  const selectedProfile =
-    profiles.find((profile) => profile.id === selectedProfileId) ?? null
 
   const selectProfile = React.useCallback((profile: ModelProfileSummary) => {
     setSelectedProfileId(profile.id)
     setIsCreating(false)
     setDraft(profileToDraft(profile))
     resetConnectionTest([profile.defaultModel])
+    loadSavedProfileModels(profile.id, profile.baseUrl)
     setFeedback(null)
-  }, [resetConnectionTest])
+  }, [loadSavedProfileModels, resetConnectionTest])
 
   const startCreating = React.useCallback(() => {
     setSelectedProfileId(null)
@@ -255,8 +257,8 @@ export function ModelSettingsView() {
     setFeedback(null)
 
     try {
-      await setDefaultModelProfile(selectedProfileId)
-      await loadProfiles(selectedProfileId)
+      const result = await setDefaultModelProfile(selectedProfileId)
+      setDefaultProfileId(result.default_profile_id)
       setFeedback({
         tone: "success",
         message: t("settings.models.defaultUpdated"),
@@ -269,7 +271,7 @@ export function ModelSettingsView() {
     } finally {
       setBusyAction(null)
     }
-  }, [loadProfiles, selectedProfileId, t])
+  }, [selectedProfileId, t])
 
   const handleDelete = React.useCallback(async () => {
     if (!selectedProfileId) {
@@ -308,7 +310,7 @@ export function ModelSettingsView() {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
       <aside
-        className="flex max-h-36 min-h-0 w-full shrink-0 flex-col overflow-hidden md:max-h-none md:w-48 md:pr-4"
+        className="flex max-h-36 min-h-0 w-full shrink-0 flex-col overflow-hidden md:max-h-none md:w-[182px] md:pr-4"
         aria-label={t("settings.models.profileListLabel")}
       >
         <div className="mb-2 flex shrink-0 items-center justify-between gap-2 px-1">
@@ -324,7 +326,7 @@ export function ModelSettingsView() {
           </Button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
+        <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pr-1">
           {loading ? (
             <ProfileRailSkeleton />
           ) : loadError && profiles.length === 0 ? (
@@ -344,7 +346,7 @@ export function ModelSettingsView() {
               {t("settings.models.noProfiles")}
             </p>
           ) : (
-            <ItemGroup className="gap-1" role="listbox">
+            <ItemGroup className="min-w-0 gap-1 overflow-x-hidden" role="listbox">
               {profiles.map((profile) => {
                 const isSelected =
                   !isCreating && profile.id === selectedProfileId
@@ -401,7 +403,7 @@ export function ModelSettingsView() {
       <Separator orientation="vertical" className="hidden md:block" />
 
       <section
-        className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain pt-1 md:pl-5"
+        className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pt-1 md:pl-5"
         aria-label={t("settings.models.profileEditorLabel")}
       >
         {loading ? (

@@ -125,9 +125,11 @@ export class ModelProfileService implements ModelProfileCapabilities, ModelProfi
 
   async testSavedProfile(
     profileId: string,
+    patch: Pick<ModelProfilePatch, 'baseUrl' | 'authToken'> = {},
     signal?: AbortSignal,
   ): Promise<readonly ModelInfo[]> {
-    return await this.listModels(profileId, signal)
+    const profile = patchModelProfile(await this.getProfile(profileId), patch)
+    return await this.endpointClient.listModels(profile, signal)
   }
 
   async testDraftProfile(
