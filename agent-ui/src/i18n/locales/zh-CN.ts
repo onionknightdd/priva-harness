@@ -71,6 +71,22 @@ export const zhCN = {
       complete: "已删除：{{name}}",
     },
   },
+  uploadQueue: {
+    title: "上传队列",
+    open: "打开上传队列，共 {{count}} 个文件",
+    percentage: "{{percentage}}%",
+    activeSummary: "正在上传 {{active}} / {{total}}",
+    completedSummary: "已完成 {{completed}} / {{total}}",
+    accessibleSummary:
+      "正在上传 {{active}} 个，已完成 {{completed}} 个，共 {{total}} 个",
+    cancelFile: "取消上传 {{fileName}}",
+    removeFile: "从上传队列清除 {{fileName}}",
+    status: {
+      succeeded: "100%",
+      failed: "失败",
+      canceled: "已取消",
+    },
+  },
   filePreview: {
     label: "文件预览",
     noFile: "未选择文件",

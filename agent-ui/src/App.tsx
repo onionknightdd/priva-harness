@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next"
 
 import { CanvasShell } from "@/components/canvas"
 import { AppSidebar } from "@/components/sidebar"
+import { UploadQueueProvider } from "@/features/uploads"
 import {
   isSidebarContentView,
   type AppView,
@@ -184,7 +185,9 @@ function AgentHarness() {
 export default function App() {
   return (
     <TooltipProvider>
-      <AgentHarness />
+      <UploadQueueProvider>
+        <AgentHarness />
+      </UploadQueueProvider>
     </TooltipProvider>
   )
 }

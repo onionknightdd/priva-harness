@@ -37,11 +37,16 @@ type DeletedPath = {
   path: string
 }
 
-type UploadedFile = {
+export type UploadedFile = {
   status: "ok"
   path: string
   name: string
   size: number
+}
+
+export type UploadFileOptions = {
+  signal?: AbortSignal
+  onProgress?: (progress: number) => void
 }
 
 type ErrorResponse = {
@@ -100,15 +105,88 @@ export function createDirectory(directory: string, name: string) {
   })
 }
 
-export function uploadFile(directory: string, file: File) {
+export function uploadFile(
+  directory: string,
+  file: File,
+  options: UploadFileOptions = {}
+) {
   const body = new FormData()
   body.append("directory", directory)
   body.append("file", file, file.name)
 
-  return requestJson<UploadedFile>(`${FILE_API_PREFIX}/upload`, {
-    method: "POST",
-    body,
+  return new Promise<UploadedFile>((resolve, reject) => {
+    const request = new XMLHttpRequest()
+    const handleAbort = () => request.abort()
+    const cleanup = () =>
+      options.signal?.removeEventListener("abort", handleAbort)
+
+    request.open("POST", `${FILE_API_PREFIX}/upload`)
+
+    request.upload.addEventListener("progress", (event) => {
+      if (!event.lengthComputable || event.total <= 0) {
+        return
+      }
+
+      options.onProgress?.(
+        Math.min(99, Math.max(0, (event.loaded / event.total) * 100))
+      )
+    })
+
+    request.addEventListener("load", () => {
+      cleanup()
+
+      if (request.status >= 200 && request.status < 300) {
+        try {
+          const uploadedFile = JSON.parse(request.responseText) as UploadedFile
+          options.onProgress?.(100)
+          resolve(uploadedFile)
+        } catch {
+          reject(
+            new FileBrowserApiError(
+              request.status,
+              "The upload response was not valid JSON"
+            )
+          )
+        }
+        return
+      }
+
+      reject(
+        new FileBrowserApiError(
+          request.status,
+          getUploadErrorDetail(request)
+        )
+      )
+    })
+
+    request.addEventListener("error", () => {
+      cleanup()
+      reject(new FileBrowserApiError(0, "Unable to upload file"))
+    })
+
+    request.addEventListener("abort", () => {
+      cleanup()
+      reject(new DOMException("Upload canceled", "AbortError"))
+    })
+
+    options.signal?.addEventListener("abort", handleAbort, { once: true })
+    request.send(body)
+
+    if (options.signal?.aborted) {
+      request.abort()
+    }
   })
+}
+
+function getUploadErrorDetail(request: XMLHttpRequest) {
+  const fallback = request.statusText || `HTTP ${request.status}`
+
+  try {
+    const error = JSON.parse(request.responseText) as ErrorResponse
+    return error.detail || fallback
+  } catch {
+    return fallback
+  }
 }
 
 export function deletePath(path: string) {

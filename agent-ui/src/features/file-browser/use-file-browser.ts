@@ -1,13 +1,13 @@
 import * as React from "react"
 
 import type { PreviewFile } from "@/features/files"
+import { useUploadQueue } from "@/features/uploads"
 
 import {
   createDirectory,
   deletePath as requestPathDeletion,
   listDirectory,
   previewFile,
-  uploadFile,
   type FileSystemDirectory,
 } from "./file-browser-api"
 import {
@@ -29,6 +29,7 @@ function errorMessage(error: unknown) {
 }
 
 export function useFileBrowser() {
+  const { enqueueFiles } = useUploadQueue()
   const [model, setModel] = React.useState<FileBrowserModel>(
     emptyFileBrowserModel
   )
@@ -264,12 +265,16 @@ export function useFileBrowser() {
 
   const uploadFiles = React.useCallback(
     async (directory: string, files: File[]) => {
-      for (const file of files) {
-        await uploadFile(directory, file)
+      const batch = enqueueFiles(directory, files)
+      const result = await batch.completion
+
+      if (result.succeeded > 0) {
+        await refreshDirectory(directory)
       }
-      await refreshDirectory(directory)
+
+      return result
     },
-    [refreshDirectory]
+    [enqueueFiles, refreshDirectory]
   )
 
   const deleteItem = React.useCallback(

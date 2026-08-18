@@ -261,8 +261,12 @@ export function FileBrowserPage() {
     }
 
     try {
-      await browser.uploadFiles(directory, files)
-      announce(t("fileBrowser.uploadComplete", { count: files.length }))
+      const result = await browser.uploadFiles(directory, files)
+      if (result.succeeded > 0) {
+        announce(
+          t("fileBrowser.uploadComplete", { count: result.succeeded })
+        )
+      }
     } catch (error) {
       announce(error instanceof Error ? error.message : String(error))
     }

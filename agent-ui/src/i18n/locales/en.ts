@@ -71,6 +71,22 @@ export const en = {
       complete: "Deleted: {{name}}",
     },
   },
+  uploadQueue: {
+    title: "Upload queue",
+    open: "Open upload queue with {{count}} file(s)",
+    percentage: "{{percentage}}%",
+    activeSummary: "Uploading {{active}} of {{total}}",
+    completedSummary: "Completed {{completed}} of {{total}}",
+    accessibleSummary:
+      "{{active}} uploading, {{completed}} completed, {{total}} total",
+    cancelFile: "Cancel upload for {{fileName}}",
+    removeFile: "Remove {{fileName}} from upload queue",
+    status: {
+      succeeded: "100%",
+      failed: "Failed",
+      canceled: "Canceled",
+    },
+  },
   filePreview: {
     label: "File preview",
     noFile: "No file selected",
