@@ -15,6 +15,22 @@ import { useBinaryPreview } from "./use-binary-preview"
 
 const MAX_SELECTION_TEXT_CELLS = 2_000
 
+function wheelDeltaInPixels(
+  delta: number,
+  deltaMode: number,
+  viewportSize: number
+) {
+  if (deltaMode === WheelEvent.DOM_DELTA_LINE) {
+    return delta * 20
+  }
+
+  if (deltaMode === WheelEvent.DOM_DELTA_PAGE) {
+    return delta * viewportSize
+  }
+
+  return delta
+}
+
 function cellDisplayValue(cell: Cell | null) {
   if (!cell) {
     return ""
@@ -73,6 +89,7 @@ export function SpreadsheetRenderer({
 }) {
   const { i18n } = useTranslation()
   const binary = useBinaryPreview(source)
+  const previewRootRef = React.useRef<HTMLDivElement>(null)
   const workbookRef = React.useRef<WorkbookInstance>(null)
   const selectionFrameRef = React.useRef<number | null>(null)
   const [sheets, setSheets] = React.useState<Sheet[] | null>(null)
@@ -132,6 +149,73 @@ export function SpreadsheetRenderer({
     []
   )
 
+  React.useEffect(() => {
+    const previewRoot = previewRootRef.current
+
+    if (!previewRoot || !sheets) {
+      return
+    }
+
+    const handleWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || (event.deltaX === 0 && event.deltaY === 0)) {
+        return
+      }
+
+      const scrollHorizontally =
+        event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)
+      const scrollbar = previewRoot.querySelector<HTMLDivElement>(
+        scrollHorizontally
+          ? ".luckysheet-scrollbar-x"
+          : ".luckysheet-scrollbar-y"
+      )
+
+      if (!scrollbar) {
+        return
+      }
+
+      const delta = scrollHorizontally
+        ? event.deltaX || event.deltaY
+        : event.deltaY
+      const viewportSize = scrollHorizontally
+        ? scrollbar.clientWidth
+        : scrollbar.clientHeight
+      const currentOffset = scrollHorizontally
+        ? scrollbar.scrollLeft
+        : scrollbar.scrollTop
+      const maximumOffset = scrollHorizontally
+        ? scrollbar.scrollWidth - scrollbar.clientWidth
+        : scrollbar.scrollHeight - scrollbar.clientHeight
+      const nextOffset = Math.max(
+        0,
+        Math.min(
+          maximumOffset,
+          currentOffset +
+            wheelDeltaInPixels(delta, event.deltaMode, viewportSize)
+        )
+      )
+
+      event.preventDefault()
+      event.stopPropagation()
+
+      if (scrollHorizontally) {
+        scrollbar.scrollLeft = nextOffset
+      } else {
+        scrollbar.scrollTop = nextOffset
+      }
+    }
+
+    previewRoot.addEventListener("wheel", handleWheel, {
+      capture: true,
+      passive: false,
+    })
+
+    return () => {
+      previewRoot.removeEventListener("wheel", handleWheel, {
+        capture: true,
+      })
+    }
+  }, [sheets])
+
   const handleSelectionChange = React.useCallback(
     (sheetId: string, latestSelection: Selection) => {
       if (selectionFrameRef.current !== null) {
@@ -188,7 +272,10 @@ export function SpreadsheetRenderer({
   }
 
   return (
-    <div className="h-full min-h-0 w-full bg-background">
+    <div
+      ref={previewRootRef}
+      className="h-full min-h-0 w-full bg-background"
+    >
       <Workbook
         key={workbookKey}
         ref={workbookRef}
