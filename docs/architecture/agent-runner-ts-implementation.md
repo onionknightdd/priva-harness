@@ -130,7 +130,8 @@ API：
 
 API：
 
-- `/api/sandbox/credentials/profiles` 下的 CRUD、默认 profile、模型列表和连接测试。
+- `/api/sandbox/credentials/profiles` 下的 CRUD、默认 profile、模型列表、连接测试和图片
+  能力探测。
 - `/api/sandbox/resource/mcp` 下的列表、读取、创建、更新和删除。
 - `/ws/run` 的 `mcp_servers = auto | disable | string[]`。
 
@@ -138,10 +139,28 @@ API：
 
 - 通过 `ModelProfileResolver` 解析模型、凭证和目标 `provider`，敏感值不得进入
   `core` 事件或日志。
+- profile 以 `$RUNTIME_HOME/model-profiles.json` 为唯一事实来源；文件读改写和图片能力
+  缓存更新使用非阻塞异步 I/O、跨进程锁与原子替换。
+- model profile 只保存模型端点、凭证、通用默认模型和按模型缓存的能力，不包含
+  `opus`、`sonnet`、`haiku`、`vision` 等特定 `harness` 的固定模型档位。需要模型角色
+  映射的 `harness` 使用自己的通用 `modelBindings`，并由对应 `provider` 边界解释。
 - 建立规范化 `HarnessConfigStore`，作为持久化 MCP 配置的唯一事实来源。
 - 实现 `ConfigDistributor`、所有权清单、Claude MCP `adapter` 和 Pi MCP `adapter`。
 - 创建、更新和删除 MCP 后，对选定 `provider` 执行幂等 reconcile。
 - 每次运行只解析 MCP 选择；不得把单次运行选择写回持久化配置。
+
+```text
+ModelProfile（端点 / 凭证 / 默认模型 / 能力）
+                         │
+                         ▼
+              ModelProfileResolver
+                         │
+                         ▼
+Harness 运行配置（可选 modelBindings: Record<string, string>）
+       ├── Claude provider 解释 Claude 所需角色
+       ├── Pi provider 解释 Pi 所需角色
+       └── 其他 provider 解释自己的角色
+```
 
 完成定义：
 
@@ -404,7 +423,9 @@ services/agent-runner/
     │   │   │   └── session-info.ts
     │   │   ├── event/agent-event.ts
     │   │   ├── permission/permission.ts
-    │   │   ├── resource/resource.ts
+    │   │   ├── resource/
+    │   │   │   ├── resource.ts
+    │   │   │   └── model-profile.ts
     │   │   ├── config/
     │   │   │   ├── harness-config.ts
     │   │   │   ├── projection-plan.ts
@@ -419,7 +440,7 @@ services/agent-runner/
     │   │       ├── config-distributor.ts
     │   │       ├── provider-config-adapter.ts
     │   │       ├── resource-resolver.ts
-    │   │       ├── model-profile-resolver.ts
+    │   │       ├── model-profile.ts
     │   │       ├── audit-sink.ts
     │   │       └── activity-lease.ts
     │   ├── harness/                      # provider 中立的运行时引擎
@@ -433,7 +454,8 @@ services/agent-runner/
     │   │   │   └── input-builder.ts
     │   │   ├── permission/permission-broker.ts
     │   │   ├── config/
-    │   │   │   └── harness-config-service.ts
+    │   │   │   ├── harness-config-service.ts
+    │   │   │   └── model-profile-service.ts
     │   │   ├── session/
     │   │   │   ├── session-service.ts
     │   │   │   └── session-enrichment.ts
@@ -498,7 +520,9 @@ services/agent-runner/
     │   │   ├── http/
     │   │   │   ├── server.ts
     │   │   │   ├── schema/
+    │   │   │   │   └── model-profile-schema.ts
     │   │   │   └── route/
+    │   │   │       └── model-profiles.ts
     │   │   ├── sse/
     │   │   ├── websocket/
     │   │   ├── scheduler/
@@ -508,6 +532,8 @@ services/agent-runner/
     │       ├── data-spine/
     │       ├── filesystem/
     │       ├── model-profile/
+    │       │   ├── json-model-profile-store.ts
+    │       │   └── compatible-model-endpoint-client.ts
     │       ├── observability/
     │       └── activity/
     └── tests/

@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { NodeUserFileSystem } from '../../../../src/infrastructure/filesystem/node-user-file-system.js'
 import { buildHttpServer } from '../../../../src/transport/http/server.js'
+import { createTestModelProfileService } from '../../../support/model-profile.js'
 
 describe('/api/sandbox/files', () => {
   let testRoot: string
@@ -36,6 +37,7 @@ describe('/api/sandbox/files', () => {
         temporaryDirectory: staging,
         maxUploadBytes: 16,
       }),
+      modelProfileService: createTestModelProfileService(join(testRoot, 'runtime')),
     })
     await server.ready()
   })

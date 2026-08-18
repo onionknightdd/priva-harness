@@ -1,19 +1,34 @@
 import { mkdir } from 'node:fs/promises'
 import { homedir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+import { ModelProfileService } from './harness/config/model-profile-service.js'
 import { NodeUserFileSystem } from './infrastructure/filesystem/node-user-file-system.js'
+import { CompatibleModelEndpointClient } from './infrastructure/model-profile/compatible-model-endpoint-client.js'
+import { JsonModelProfileStore } from './infrastructure/model-profile/json-model-profile-store.js'
 import { buildHttpServer } from './transport/http/server.js'
 
 const DEFAULT_PORT = 8000
 
 export async function startServer(): Promise<void> {
   const initialDirectory = process.env['WORKSPACE_DIR'] ?? homedir()
+  const runtimeHome = resolve(
+    process.env['RUNTIME_HOME'] ?? join(homedir(), '.config', 'priva'),
+  )
   await mkdir(initialDirectory, { recursive: true })
   const fileSystem = new NodeUserFileSystem({
     initialDirectory,
   })
-  const server = buildHttpServer({ userFileSystem: fileSystem, logger: true })
+  const modelProfileService = new ModelProfileService(
+    new JsonModelProfileStore({ runtimeHome }),
+    new CompatibleModelEndpointClient(),
+  )
+  const server = buildHttpServer({
+    userFileSystem: fileSystem,
+    modelProfileService,
+    logger: true,
+  })
   const port = parsePort(process.env['PORT'])
   const host = process.env['HOST'] ?? '0.0.0.0'
 
