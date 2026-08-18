@@ -315,7 +315,11 @@ function getFileRenderKind(
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
     mediaType ===
       "application/vnd.ms-excel.sheet.macroenabled.12" ||
-    ["xlsx", "xlsm", "xltx", "xltm"].includes(extension ?? "")
+    mediaType === "text/csv" ||
+    mediaType === "application/csv" ||
+    ["csv", "xlsx", "xlsm", "xltx", "xltm"].includes(
+      extension ?? ""
+    )
   ) {
     return "spreadsheet"
   }
