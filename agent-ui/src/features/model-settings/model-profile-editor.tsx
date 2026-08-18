@@ -42,6 +42,7 @@ import {
   FieldSet,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
@@ -165,7 +166,7 @@ export function ModelProfileEditor({
       animate={{ opacity: 1, x: 0 }}
       transition={shouldReduceMotion ? { duration: 0 } : editorTransition}
     >
-      <div className="mb-5 flex min-w-0 items-start justify-between gap-3">
+      <div className="mb-3 flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2">
             <h2 className="truncate text-base font-medium">{formTitle}</h2>
@@ -205,6 +206,7 @@ export function ModelProfileEditor({
           )}
         </div>
       </div>
+      <Separator className="mb-5" />
 
       <form
         onSubmit={(event) => {
