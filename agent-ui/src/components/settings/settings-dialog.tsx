@@ -203,7 +203,7 @@ export function SettingsDialog({
                 ref={panelRef}
                 data-settings-panel
                 className={cn(
-                  "flex flex-1 flex-col",
+                  "flex min-h-0 flex-1 flex-col",
                   !isModelSection && "gap-4"
                 )}
               >

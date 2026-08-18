@@ -11,9 +11,14 @@ export type ModelSettingsFeedback = {
   message: string
 }
 
+export type ModelConnectionTestStatus =
+  | "idle"
+  | "testing"
+  | "success"
+  | "error"
+
 export type ModelSettingsBusyAction =
   | "delete"
   | "default"
   | "save"
-  | "test"
   | null

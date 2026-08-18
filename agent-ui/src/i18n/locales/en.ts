@@ -197,8 +197,7 @@ export const en = {
       defaultModelPlaceholder: "Test the connection to load models",
       defaultModelDescription:
         "The model used when a request does not specify one.",
-      testSavedDescription:
-        "Connection tests for an existing profile use its last saved configuration.",
+      noModels: "No models available",
       cancel: "Cancel",
       delete: "Delete",
       setDefault: "Set as default",

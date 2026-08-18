@@ -22,13 +22,12 @@ import {
   deleteModelProfile,
   listModelProfiles,
   setDefaultModelProfile,
-  testDraftModelProfile,
-  testSavedModelProfile,
   updateModelProfile,
   type ModelProfileCreateInput,
   type ModelProfileSummary,
 } from "./model-profile-api"
 import { ModelProfileEditor } from "./model-profile-editor"
+import { useModelConnectionTest } from "./use-model-connection-test"
 import type {
   ModelSettingsBusyAction,
   ModelSettingsFeedback,
@@ -51,14 +50,6 @@ function profileToDraft(profile: ModelProfileSummary): ProfileDraft {
     authToken: "",
     defaultModel: profile.defaultModel,
   }
-}
-
-function uniqueModelIds(modelIds: Array<string | null>) {
-  return [
-    ...new Set(
-      modelIds.filter((modelId): modelId is string => Boolean(modelId))
-    ),
-  ].sort((left, right) => left.localeCompare(right))
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -109,13 +100,28 @@ export function ModelSettingsView() {
   >(null)
   const [isCreating, setIsCreating] = React.useState(false)
   const [draft, setDraft] = React.useState<ProfileDraft>(emptyProfileDraft)
-  const [modelIds, setModelIds] = React.useState<string[]>([])
   const [loading, setLoading] = React.useState(true)
   const [loadError, setLoadError] = React.useState<string | null>(null)
   const [busyAction, setBusyAction] =
     React.useState<ModelSettingsBusyAction>(null)
   const [feedback, setFeedback] =
     React.useState<ModelSettingsFeedback | null>(null)
+  const {
+    canTest,
+    handleTest,
+    invalidateConnectionTest,
+    isConnectionVerified,
+    modelIds,
+    resetConnectionTest,
+    testFeedback,
+    testStatus,
+  } = useModelConnectionTest({
+    busyAction,
+    draft,
+    isCreating,
+    selectedProfileId,
+    setDraft,
+  })
 
   const selectedProfile =
     profiles.find((profile) => profile.id === selectedProfileId) ?? null
@@ -124,17 +130,17 @@ export function ModelSettingsView() {
     setSelectedProfileId(profile.id)
     setIsCreating(false)
     setDraft(profileToDraft(profile))
-    setModelIds(uniqueModelIds([profile.defaultModel]))
+    resetConnectionTest([profile.defaultModel])
     setFeedback(null)
-  }, [])
+  }, [resetConnectionTest])
 
   const startCreating = React.useCallback(() => {
     setSelectedProfileId(null)
     setIsCreating(true)
     setDraft(emptyProfileDraft)
-    setModelIds([])
+    resetConnectionTest()
     setFeedback(null)
-  }, [])
+  }, [resetConnectionTest])
 
   const loadProfiles = React.useCallback(
     async (preferredProfileId?: string, showLoading = false) => {
@@ -182,10 +188,14 @@ export function ModelSettingsView() {
 
   const updateDraft = React.useCallback(
     <Key extends keyof ProfileDraft>(key: Key, value: ProfileDraft[Key]) => {
+      if (key === "baseUrl" || key === "authToken") {
+        invalidateConnectionTest()
+      }
+
       setDraft((currentDraft) => ({ ...currentDraft, [key]: value }))
       setFeedback(null)
     },
-    []
+    [invalidateConnectionTest]
   )
 
   const createInput = React.useCallback(
@@ -235,39 +245,6 @@ export function ModelSettingsView() {
       setBusyAction(null)
     }
   }, [createInput, draft, isCreating, loadProfiles, selectedProfileId, t])
-
-  const handleTest = React.useCallback(async () => {
-    setBusyAction("test")
-    setFeedback(null)
-
-    try {
-      const nextModelIds = isCreating
-        ? await testDraftModelProfile(createInput())
-        : await testSavedModelProfile(selectedProfileId ?? "")
-
-      const nextDefaultModel =
-        draft.defaultModel?.trim() || nextModelIds[0] || null
-
-      setDraft((currentDraft) => ({
-        ...currentDraft,
-        defaultModel: nextDefaultModel,
-      }))
-      setModelIds(uniqueModelIds([nextDefaultModel, ...nextModelIds]))
-      setFeedback({
-        tone: "success",
-        message: t("settings.models.connectionSucceeded", {
-          count: nextModelIds.length,
-        }),
-      })
-    } catch (error) {
-      setFeedback({
-        tone: "error",
-        message: getErrorMessage(error, t("settings.models.requestFailed")),
-      })
-    } finally {
-      setBusyAction(null)
-    }
-  }, [createInput, draft.defaultModel, isCreating, selectedProfileId, t])
 
   const handleSetDefault = React.useCallback(async () => {
     if (!selectedProfileId) {
@@ -329,9 +306,9 @@ export function ModelSettingsView() {
   }, [defaultProfileId, profiles, selectProfile])
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
       <aside
-        className="flex max-h-36 min-h-0 w-full shrink-0 flex-col md:max-h-none md:w-48 md:pr-4"
+        className="flex max-h-36 min-h-0 w-full shrink-0 flex-col overflow-hidden md:max-h-none md:w-48 md:pr-4"
         aria-label={t("settings.models.profileListLabel")}
       >
         <div className="mb-2 flex shrink-0 items-center justify-between gap-2 px-1">
@@ -347,7 +324,7 @@ export function ModelSettingsView() {
           </Button>
         </div>
 
-        <div className="min-h-0 overflow-y-auto pr-1">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
           {loading ? (
             <ProfileRailSkeleton />
           ) : loadError && profiles.length === 0 ? (
@@ -424,7 +401,7 @@ export function ModelSettingsView() {
       <Separator orientation="vertical" className="hidden md:block" />
 
       <section
-        className="min-h-0 min-w-0 flex-1 overflow-y-auto pt-1 md:pl-5"
+        className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain pt-1 md:pl-5"
         aria-label={t("settings.models.profileEditorLabel")}
       >
         {loading ? (
@@ -432,9 +409,11 @@ export function ModelSettingsView() {
         ) : loadError && profiles.length === 0 && !isCreating ? null : (
           <ModelProfileEditor
             busyAction={busyAction}
+            canTest={canTest}
             draft={draft}
             feedback={feedback}
             isCreating={isCreating}
+            isConnectionVerified={isConnectionVerified}
             isDefault={
               selectedProfileId !== null &&
               selectedProfileId === defaultProfileId
@@ -442,12 +421,14 @@ export function ModelSettingsView() {
             modelIds={modelIds}
             profile={selectedProfile}
             profilesExist={profiles.length > 0}
+            testFeedback={testFeedback}
+            testStatus={testStatus}
             onCancel={cancelCreating}
             onDelete={() => void handleDelete()}
             onDraftChange={updateDraft}
             onSave={() => void handleSave()}
             onSetDefault={() => void handleSetDefault()}
-            onTest={() => void handleTest()}
+            onTest={handleTest}
           />
         )}
       </section>

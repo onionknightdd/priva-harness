@@ -26,10 +26,13 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Combobox,
+  ComboboxCollection,
   ComboboxContent,
   ComboboxEmpty,
+  ComboboxGroup,
   ComboboxInput,
   ComboboxItem,
+  ComboboxLabel,
   ComboboxList,
 } from "@/components/ui/combobox"
 import {
@@ -45,20 +48,47 @@ import { cn } from "@/lib/utils"
 
 import type { ModelProfileSummary } from "./model-profile-api"
 import type {
+  ModelConnectionTestStatus,
   ModelSettingsBusyAction,
   ModelSettingsFeedback,
   ProfileDraft,
 } from "./model-settings.types"
 
+type ModelIdGroup = {
+  value: string
+  items: string[]
+}
+
+function groupModelIds(modelIds: string[]): ModelIdGroup[] {
+  const groups = new Map<string, string[]>()
+
+  for (const modelId of modelIds) {
+    const groupId = modelId.split("/")[0] || modelId
+    const groupItems = groups.get(groupId)
+
+    if (groupItems) {
+      groupItems.push(modelId)
+    } else {
+      groups.set(groupId, [modelId])
+    }
+  }
+
+  return [...groups].map(([value, items]) => ({ value, items }))
+}
+
 export function ModelProfileEditor({
   busyAction,
+  canTest,
   draft,
   feedback,
   isCreating,
+  isConnectionVerified,
   isDefault,
   modelIds,
   profile,
   profilesExist,
+  testFeedback,
+  testStatus,
   onCancel,
   onDelete,
   onDraftChange,
@@ -67,13 +97,17 @@ export function ModelProfileEditor({
   onTest,
 }: {
   busyAction: ModelSettingsBusyAction
+  canTest: boolean
   draft: ProfileDraft
   feedback: ModelSettingsFeedback | null
   isCreating: boolean
+  isConnectionVerified: boolean
   isDefault: boolean
   modelIds: string[]
   profile: ModelProfileSummary | null
   profilesExist: boolean
+  testFeedback: ModelSettingsFeedback | null
+  testStatus: ModelConnectionTestStatus
   onCancel: () => void
   onDelete: () => void
   onDraftChange: <Key extends keyof ProfileDraft>(
@@ -86,14 +120,16 @@ export function ModelProfileEditor({
 }) {
   const { t } = useTranslation()
   const editorRef = React.useRef<HTMLDivElement>(null)
+  const testFeedbackRef = React.useRef<HTMLSpanElement>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
+  const modelGroups = React.useMemo(() => groupModelIds(modelIds), [modelIds])
+  const isTesting = testStatus === "testing"
   const canSubmit = Boolean(
     draft.id.trim() &&
       draft.label.trim() &&
       draft.baseUrl.trim() &&
       (!isCreating || draft.authToken.trim())
   )
-  const canTest = isCreating ? canSubmit : Boolean(profile)
   const formTitle = isCreating
     ? t("settings.models.newProfile")
     : profile?.label ?? t("settings.models.profileEditorLabel")
@@ -124,6 +160,34 @@ export function ModelProfileEditor({
 
     return () => context.revert()
   }, [isCreating, profile?.id])
+
+  React.useLayoutEffect(() => {
+    const status = testFeedbackRef.current
+
+    if (
+      !status ||
+      !testFeedback ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return
+    }
+
+    const context = gsap.context(() => {
+      gsap.fromTo(
+        status,
+        { autoAlpha: 0, x: -4 },
+        {
+          autoAlpha: 1,
+          x: 0,
+          duration: 0.18,
+          ease: "power2.out",
+          clearProps: "opacity,transform,visibility",
+        }
+      )
+    }, status)
+
+    return () => context.revert()
+  }, [testFeedback])
 
   return (
     <div ref={editorRef} className="max-w-2xl pb-2">
@@ -240,21 +304,35 @@ export function ModelProfileEditor({
                   type="button"
                   variant="outline"
                   size="sm"
-                  disabled={!canTest || busyAction !== null}
+                  disabled={!canTest || busyAction !== null || isTesting}
                   onClick={onTest}
                 >
-                  {busyAction === "test" ? (
+                  {isTesting ? (
                     <Spinner />
                   ) : (
                     <UnplugIcon data-icon="inline-start" />
                   )}
                   {t("settings.models.testConnection")}
                 </Button>
-                {!isCreating && (
-                  <FieldDescription className="text-xs">
-                    {t("settings.models.testSavedDescription")}
-                  </FieldDescription>
-                )}
+                <span
+                  ref={testFeedbackRef}
+                  role="status"
+                  aria-live="polite"
+                  className={cn(
+                    "inline-flex min-w-0 items-center gap-1.5 text-xs",
+                    testFeedback?.tone === "error" && "text-destructive",
+                    testFeedback?.tone === "success" &&
+                      "text-emerald-600 dark:text-emerald-400"
+                  )}
+                >
+                  {testFeedback?.tone === "success" && (
+                    <CheckCircle2Icon
+                      className="size-3.5 shrink-0"
+                      aria-hidden="true"
+                    />
+                  )}
+                  {testFeedback?.message}
+                </span>
               </div>
             </Field>
 
@@ -263,8 +341,9 @@ export function ModelProfileEditor({
                 {t("settings.models.defaultModel")}
               </FieldLabel>
               <Combobox
-                items={modelIds}
+                items={modelGroups}
                 value={draft.defaultModel}
+                disabled={!isConnectionVerified}
                 onValueChange={(value) =>
                   onDraftChange("defaultModel", value)
                 }
@@ -272,19 +351,30 @@ export function ModelProfileEditor({
                 <ComboboxInput
                   id="model-profile-default-model"
                   className="w-full"
-                  disabled={modelIds.length === 0}
+                  disabled={!isConnectionVerified}
                   placeholder={t("settings.models.defaultModelPlaceholder")}
                   showClear
                 />
                 <ComboboxContent>
                   <ComboboxEmpty>
-                    {t("settings.models.modelCountUnknown")}
+                    {t("settings.models.noModels")}
                   </ComboboxEmpty>
                   <ComboboxList>
-                    {(modelId) => (
-                      <ComboboxItem key={modelId} value={modelId}>
-                        {modelId}
-                      </ComboboxItem>
+                    {(group: ModelIdGroup) => (
+                      <ComboboxGroup
+                        key={group.value}
+                        items={group.items}
+                        className="pb-1 last:pb-0"
+                      >
+                        <ComboboxLabel>{group.value}</ComboboxLabel>
+                        <ComboboxCollection>
+                          {(modelId: string) => (
+                            <ComboboxItem key={modelId} value={modelId}>
+                              {modelId}
+                            </ComboboxItem>
+                          )}
+                        </ComboboxCollection>
+                      </ComboboxGroup>
                     )}
                   </ComboboxList>
                 </ComboboxContent>
@@ -338,7 +428,7 @@ export function ModelProfileEditor({
                       type="button"
                       variant="ghost"
                       size="sm"
-                      disabled={busyAction !== null}
+                      disabled={busyAction !== null || isTesting}
                       onClick={onSetDefault}
                     >
                       {busyAction === "default" ? (
@@ -354,7 +444,7 @@ export function ModelProfileEditor({
                     variant="ghost"
                     size="sm"
                     className="text-destructive hover:text-destructive"
-                    disabled={busyAction !== null}
+                    disabled={busyAction !== null || isTesting}
                     onClick={() => setDeleteDialogOpen(true)}
                   >
                     <Trash2Icon data-icon="inline-start" />
@@ -367,7 +457,7 @@ export function ModelProfileEditor({
             <Button
               type="submit"
               size="sm"
-              disabled={!canSubmit || busyAction !== null}
+              disabled={!canSubmit || busyAction !== null || isTesting}
             >
               {busyAction === "save" ? (
                 <Spinner />

@@ -195,7 +195,7 @@ export const zhCN = {
       defaultModel: "默认模型",
       defaultModelPlaceholder: "测试连接后加载模型",
       defaultModelDescription: "请求未指定模型时使用该模型。",
-      testSavedDescription: "已有配置的连接测试使用上次保存的内容。",
+      noModels: "没有可用模型",
       cancel: "取消",
       delete: "删除",
       setDefault: "设为默认",
