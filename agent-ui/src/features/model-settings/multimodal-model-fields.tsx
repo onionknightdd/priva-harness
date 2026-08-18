@@ -128,8 +128,11 @@ function CapabilityModelField({
   const inputId = `model-profile-${capability.replaceAll("_", "-")}`
 
   return (
-    <div className="grid min-w-0 grid-cols-[6rem_minmax(0,1fr)_6.5rem] items-center gap-3 max-sm:grid-cols-1 max-sm:gap-1.5">
-      <label htmlFor={inputId} className="text-sm text-foreground">
+    <div className="grid min-w-0 grid-cols-[8.75rem_minmax(0,1fr)_6.5rem] items-center gap-3 max-sm:grid-cols-1 max-sm:gap-1.5">
+      <label
+        htmlFor={inputId}
+        className="whitespace-nowrap text-sm text-foreground"
+      >
         {label}
       </label>
       <ModelSelector
