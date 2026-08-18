@@ -245,7 +245,14 @@ export function ModelSettingsView() {
         ? await testDraftModelProfile(createInput())
         : await testSavedModelProfile(selectedProfileId ?? "")
 
-      setModelIds(uniqueModelIds([draft.defaultModel, ...nextModelIds]))
+      const nextDefaultModel =
+        draft.defaultModel?.trim() || nextModelIds[0] || null
+
+      setDraft((currentDraft) => ({
+        ...currentDraft,
+        defaultModel: nextDefaultModel,
+      }))
+      setModelIds(uniqueModelIds([nextDefaultModel, ...nextModelIds]))
       setFeedback({
         tone: "success",
         message: t("settings.models.connectionSucceeded", {
