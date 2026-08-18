@@ -366,7 +366,9 @@ export function ModelProfileEditor({
                         items={group.items}
                         className="pb-1 last:pb-0"
                       >
-                        <ComboboxLabel>{group.value}</ComboboxLabel>
+                        <ComboboxLabel className="text-sm font-semibold">
+                          {group.value}
+                        </ComboboxLabel>
                         <ComboboxCollection>
                           {(modelId: string) => (
                             <ComboboxItem key={modelId} value={modelId}>
