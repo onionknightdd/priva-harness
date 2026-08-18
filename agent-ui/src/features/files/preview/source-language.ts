@@ -1,11 +1,11 @@
-import type { Language } from "prism-react-renderer"
+import type { SourceLanguage } from "./shiki-highlighter"
 
-const sourceLanguageByExtension: Record<string, Language> = {
+const sourceLanguageByExtension: Record<string, SourceLanguage> = {
   c: "c",
   cc: "cpp",
   cjs: "javascript",
   cmake: "cmake",
-  coffee: "coffeescript",
+  coffee: "coffee",
   cpp: "cpp",
   css: "css",
   cts: "typescript",
@@ -18,30 +18,32 @@ const sourceLanguageByExtension: Record<string, Language> = {
   htm: "html",
   html: "html",
   hxx: "cpp",
+  ini: "ini",
   js: "javascript",
   json: "json",
-  jsonc: "json",
+  jsonc: "jsonc",
   jsx: "jsx",
   kt: "kotlin",
   kts: "kotlin",
-  m: "objectivec",
+  m: "objective-c",
   md: "markdown",
   markdown: "markdown",
-  mdx: "markdown",
+  mdx: "mdx",
   mdown: "markdown",
   mkd: "markdown",
   mjs: "javascript",
-  mm: "objectivec",
+  mm: "objective-cpp",
   mts: "typescript",
-  n4js: "n4js",
+  n4js: "javascript",
+  properties: "properties",
   py: "python",
   pyw: "python",
-  re: "reason",
-  regex: "regex",
+  re: "ocaml",
+  regex: "regexp",
   rs: "rust",
-  sh: "bash",
+  sh: "shellscript",
   sql: "sql",
-  svg: "svg",
+  svg: "xml",
   swift: "swift",
   ts: "typescript",
   tsx: "tsx",
@@ -49,23 +51,28 @@ const sourceLanguageByExtension: Record<string, Language> = {
   xml: "xml",
   yaml: "yaml",
   yml: "yaml",
-  zsh: "bash",
+  zsh: "shellscript",
 }
 
 const specialSourceLanguageRules: Array<{
-  language: Language
+  language: SourceLanguage
   pattern: RegExp
 }> = [
   { pattern: /^dockerfile(?:\..+)?$/i, language: "docker" },
-  { pattern: /^(?:gnu)?makefile(?:\..+)?$/i, language: "makefile" },
+  { pattern: /^(?:gnu)?makefile(?:\..+)?$/i, language: "make" },
   { pattern: /^cmakelists\.txt$/i, language: "cmake" },
-  { pattern: /^\.env(?:\..+)?$/i, language: "properties" },
-  { pattern: /^\.(?:docker|git|npm)ignore$/i, language: "ignore" },
+  { pattern: /^\.env(?:\..+)?$/i, language: "dotenv" },
+  {
+    pattern: /^\.(?:docker|git|npm)ignore$/i,
+    language: "properties",
+  },
   { pattern: /^\.npmrc$/i, language: "ini" },
-  { pattern: /^\.editorconfig$/i, language: "editorconfig" },
+  { pattern: /^\.editorconfig$/i, language: "ini" },
 ]
 
-export function getSourceLanguage(fileName: string): Language | null {
+export function getSourceLanguage(
+  fileName: string
+): SourceLanguage | null {
   const name = fileName.split(/[\\/]/).at(-1) ?? ""
   const specialFileLanguage = specialSourceLanguageRules.find(({ pattern }) =>
     pattern.test(name)

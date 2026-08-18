@@ -3,6 +3,7 @@ import gsap from "gsap"
 import { FolderIcon, SearchIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
+import { OverflowMarquee } from "@/components/motion/overflow-marquee"
 import {
   DropdownMenuContent,
   DropdownMenuItem,
@@ -18,6 +19,38 @@ type PathMenuEntry = Pick<
   FileBrowserBreadcrumbEntry,
   "name" | "path" | "type"
 >
+
+function SearchablePathMenuItem({
+  entry,
+  onNavigate,
+}: {
+  entry: PathMenuEntry
+  onNavigate: (path: string, type: FileBrowserItem["type"]) => void
+}) {
+  const [marqueeActive, setMarqueeActive] = React.useState(false)
+
+  return (
+    <DropdownMenuItem
+      data-path-menu-result
+      className="min-w-0"
+      title={entry.path}
+      onPointerEnter={() => setMarqueeActive(true)}
+      onPointerLeave={() => setMarqueeActive(false)}
+      onFocus={() => setMarqueeActive(true)}
+      onBlur={() => setMarqueeActive(false)}
+      onClick={() => onNavigate(entry.path, entry.type)}
+    >
+      <FolderIcon aria-hidden="true" />
+      <OverflowMarquee
+        active={marqueeActive}
+        playback="once"
+        className="min-w-0 flex-1"
+      >
+        {entry.name}
+      </OverflowMarquee>
+    </DropdownMenuItem>
+  )
+}
 
 export function SearchablePathMenuContent({
   entries,
@@ -121,16 +154,11 @@ export function SearchablePathMenuContent({
       >
         {filteredEntries.length > 0 ? (
           filteredEntries.map((entry) => (
-            <DropdownMenuItem
+            <SearchablePathMenuItem
               key={entry.path}
-              data-path-menu-result
-              className="min-w-0"
-              title={entry.path}
-              onClick={() => onNavigate(entry.path, entry.type)}
-            >
-              <FolderIcon aria-hidden="true" />
-              <span className="truncate">{entry.name}</span>
-            </DropdownMenuItem>
+              entry={entry}
+              onNavigate={onNavigate}
+            />
           ))
         ) : (
           <div

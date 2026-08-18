@@ -20,6 +20,7 @@ import {
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
+import { OverflowMarquee } from "@/components/motion/overflow-marquee"
 import { MenuItemHighlight } from "@/components/motion/sidebar-menu-highlight"
 import {
   Collapsible,
@@ -180,6 +181,8 @@ function FileBrowserTreeNode({
   const isFolder = item.isFolder()
   const loading = isFolder && loadingDirectories.has(data.path)
   const stickySentinelRef = React.useRef<HTMLSpanElement>(null)
+  const [nameMarqueeActive, setNameMarqueeActive] =
+    React.useState(false)
   const modifiedDate = data.modifiedAt
     ? new Date(data.modifiedAt * 1000)
     : null
@@ -273,6 +276,10 @@ function FileBrowserTreeNode({
       data-file-tree-item-id={item.getId()}
       data-file-tree-folder-row={isFolder || undefined}
       className="relative box-border w-full min-w-0 max-w-full rounded-none pb-0! text-start data-[file-tree-folder-row=true]:sticky data-[stuck=true]:bg-card"
+      onPointerEnter={() => setNameMarqueeActive(true)}
+      onPointerLeave={() => setNameMarqueeActive(false)}
+      onFocusCapture={() => setNameMarqueeActive(true)}
+      onBlurCapture={() => setNameMarqueeActive(false)}
       style={
         isFolder
           ? {
@@ -301,7 +308,13 @@ function FileBrowserTreeNode({
           ) : (
             <FileTypeIcon name={data.name} path={data.path} />
           )}
-          <span className="min-w-0 truncate">{data.name}</span>
+          <OverflowMarquee
+            active={nameMarqueeActive}
+            playback="once"
+            className="min-w-0 flex-1"
+          >
+            {data.name}
+          </OverflowMarquee>
           {loading && (
             <LoaderCircleIcon className="size-3 shrink-0 animate-spin text-muted-foreground motion-reduce:animate-none" />
           )}

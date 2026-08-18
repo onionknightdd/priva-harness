@@ -1,16 +1,26 @@
+import * as React from "react"
 import { useTheme } from "next-themes"
-import { Highlight, themes } from "prism-react-renderer"
+import type { ThemedToken, TokensResult } from "shiki"
 import { useTranslation } from "react-i18next"
 
-import { cn } from "@/lib/utils"
-
-import { Prism } from "./prism"
+import {
+  highlightSource,
+  type SourceHighlightTheme,
+  type SourceLanguage,
+} from "./shiki-highlighter"
 import { getSourceLanguage } from "./source-language"
 
 const sourceFrameClassName =
   "min-h-full min-w-0 w-full bg-muted/20 py-3 font-mono text-[13px] leading-6"
 const sourceLineClassName =
   "grid grid-cols-[3.5rem_minmax(0,1fr)] px-3"
+
+type HighlightedSource = {
+  code: string
+  language: SourceLanguage
+  result: TokensResult
+  theme: SourceHighlightTheme
+}
 
 function LineNumber({ value }: { value: number }) {
   return (
@@ -23,6 +33,62 @@ function LineNumber({ value }: { value: number }) {
   )
 }
 
+function getTokenStyle(token: ThemedToken): React.CSSProperties {
+  const fontStyle = token.fontStyle ?? 0
+  const textDecorations: string[] = []
+
+  if (fontStyle & 4) {
+    textDecorations.push("underline")
+  }
+
+  if (fontStyle & 8) {
+    textDecorations.push("line-through")
+  }
+
+  return {
+    backgroundColor: token.bgColor,
+    color: token.color,
+    fontStyle: fontStyle & 1 ? "italic" : undefined,
+    fontWeight: fontStyle & 2 ? 700 : undefined,
+    textDecorationLine:
+      textDecorations.length > 0
+        ? textDecorations.join(" ")
+        : undefined,
+  }
+}
+
+function PlainSourceLines({ content }: { content: string }) {
+  return content.split("\n").map((line, index) => (
+    <div key={index} className={sourceLineClassName}>
+      <LineNumber value={index + 1} />
+      <code className="break-words whitespace-pre-wrap pl-4">
+        {line || "\u200b"}
+      </code>
+    </div>
+  ))
+}
+
+function HighlightedSourceLines({
+  tokens,
+}: {
+  tokens: ThemedToken[][]
+}) {
+  return tokens.map((line, lineIndex) => (
+    <div key={lineIndex} className={sourceLineClassName}>
+      <LineNumber value={lineIndex + 1} />
+      <code className="break-words whitespace-pre-wrap pl-4">
+        {line.length > 0
+          ? line.map((token, tokenIndex) => (
+              <span key={tokenIndex} style={getTokenStyle(token)}>
+                {token.content}
+              </span>
+            ))
+          : "\u200b"}
+      </code>
+    </div>
+  ))
+}
+
 export function SourcePreview({
   content,
   fileName,
@@ -33,83 +99,73 @@ export function SourcePreview({
   const { resolvedTheme } = useTheme()
   const { t } = useTranslation()
   const language = getSourceLanguage(fileName)
+  const theme: SourceHighlightTheme =
+    resolvedTheme === "dark" ? "github-dark" : "github-light"
   const label = t("filePreview.sourceLabel", { fileName })
-  const isDark = resolvedTheme === "dark"
-  const theme =
-    language === "markdown"
-      ? isDark
-        ? themes.duotoneDark
-        : themes.duotoneLight
-      : isDark
-        ? themes.vsDark
-        : themes.github
+  const [highlightedSource, setHighlightedSource] =
+    React.useState<HighlightedSource | null>(null)
 
-  if (!language) {
-    return (
-      <div
-        role="region"
-        aria-label={label}
-        className={sourceFrameClassName}
-      >
-        {content.split("\n").map((line, index) => (
-          <div key={index} className={sourceLineClassName}>
-            <LineNumber value={index + 1} />
-            <code className="break-words whitespace-pre-wrap pl-4">
-              {line || "\u200b"}
-            </code>
-          </div>
-        ))}
-      </div>
-    )
-  }
+  React.useEffect(() => {
+    if (!language) {
+      setHighlightedSource(null)
+      return
+    }
+
+    let active = true
+
+    void highlightSource(content, language, theme)
+      .then((result) => {
+        if (!active) {
+          return
+        }
+
+        React.startTransition(() => {
+          setHighlightedSource({
+            code: content,
+            language,
+            result,
+            theme,
+          })
+        })
+      })
+      .catch((error: unknown) => {
+        if (!active) {
+          return
+        }
+
+        setHighlightedSource(null)
+        console.error(
+          `Shiki could not highlight ${fileName} as ${language}.`,
+          error
+        )
+      })
+
+    return () => {
+      active = false
+    }
+  }, [content, fileName, language, theme])
+
+  const currentHighlight =
+    highlightedSource?.code === content &&
+    highlightedSource.language === language &&
+    highlightedSource.theme === theme
+      ? highlightedSource.result
+      : null
 
   return (
-    <Highlight
-      prism={Prism}
-      theme={theme}
-      code={content}
-      language={language}
+    <div
+      role="region"
+      aria-label={label}
+      className={sourceFrameClassName}
+      data-highlighted={currentHighlight ? "true" : undefined}
+      data-language={language ?? undefined}
+      style={{ color: currentHighlight?.fg }}
     >
-      {({
-        getLineProps,
-        getTokenProps,
-        style,
-        tokens,
-      }) => (
-        <div
-          role="region"
-          aria-label={label}
-          className={sourceFrameClassName}
-          style={{ color: style.color }}
-        >
-          {tokens.map((line, lineIndex) => {
-            const {
-              className: lineClassName,
-              ...lineProps
-            } = getLineProps({ line })
-
-            return (
-              <div
-                key={lineIndex}
-                {...lineProps}
-                className={cn(sourceLineClassName, lineClassName)}
-              >
-                <LineNumber value={lineIndex + 1} />
-                <code
-                  className="break-words whitespace-pre-wrap pl-4"
-                >
-                  {line.map((token, tokenIndex) => (
-                    <span
-                      key={tokenIndex}
-                      {...getTokenProps({ token })}
-                    />
-                  ))}
-                </code>
-              </div>
-            )
-          })}
-        </div>
+      {currentHighlight ? (
+        <HighlightedSourceLines tokens={currentHighlight.tokens} />
+      ) : (
+        <PlainSourceLines content={content} />
       )}
-    </Highlight>
+    </div>
   )
 }

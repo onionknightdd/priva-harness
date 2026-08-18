@@ -7,15 +7,28 @@ export function OverflowMarquee({
   active,
   children,
   className,
+  playback = "loop",
 }: {
   active: boolean
   children: string
   className?: string
+  playback?: "loop" | "once"
 }) {
   const viewportRef = React.useRef<HTMLSpanElement>(null)
   const contentRef = React.useRef<HTMLSpanElement>(null)
   const [overflowDistance, setOverflowDistance] = React.useState(0)
+  const [completed, setCompleted] = React.useState(false)
   const shouldReduceMotion = Boolean(useReducedMotion())
+
+  React.useEffect(() => {
+    setCompleted(false)
+  }, [children])
+
+  React.useEffect(() => {
+    if (!active) {
+      setCompleted(false)
+    }
+  }, [active])
 
   React.useLayoutEffect(() => {
     const viewport = viewportRef.current
@@ -41,7 +54,10 @@ export function OverflowMarquee({
   }, [children])
 
   const shouldAnimate =
-    active && overflowDistance > 0 && !shouldReduceMotion
+    active &&
+    overflowDistance > 0 &&
+    !shouldReduceMotion &&
+    (playback === "loop" || !completed)
   const duration = Math.max(1.2, overflowDistance / 32)
 
   return (
@@ -70,15 +86,22 @@ export function OverflowMarquee({
         }
         transition={
           shouldAnimate
-            ? {
-                duration,
-                ease: "linear",
-                repeat: Infinity,
-                repeatDelay: 0.45,
-                repeatType: "reverse",
-              }
+            ? playback === "loop"
+              ? {
+                  duration,
+                  ease: "linear",
+                  repeat: Infinity,
+                  repeatDelay: 0.45,
+                  repeatType: "reverse",
+                }
+              : { duration, ease: "linear" }
             : { duration: shouldReduceMotion ? 0 : 0.18, ease: "easeOut" }
         }
+        onAnimationComplete={() => {
+          if (playback === "once" && shouldAnimate) {
+            setCompleted(true)
+          }
+        }}
       >
         {children}
       </motion.span>
