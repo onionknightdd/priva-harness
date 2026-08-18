@@ -78,6 +78,7 @@ export const en = {
     source: "Source",
     preview: "Preview",
     sourceLabel: "{{fileName}} source",
+    htmlFrameTitle: "{{fileName}} HTML preview",
     sourceUnavailable: "Source preview is unavailable for this file",
     previewUnavailable: "Preview is unavailable for this file",
     closeFile: "Close {{fileName}}",

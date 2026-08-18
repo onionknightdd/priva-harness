@@ -78,6 +78,7 @@ export const zhCN = {
     source: "源码",
     preview: "预览",
     sourceLabel: "{{fileName}} 源码",
+    htmlFrameTitle: "{{fileName}} HTML 预览",
     sourceUnavailable: "此文件不支持源码预览",
     previewUnavailable: "此文件不支持预览",
     closeFile: "关闭 {{fileName}}",

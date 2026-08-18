@@ -16,6 +16,7 @@ import {
 import { cn } from "@/lib/utils"
 
 import { FilePreviewToolbar } from "./file-preview-toolbar"
+import { HtmlRenderer } from "./renderers/html-renderer"
 import { ImageRenderer } from "./renderers/image-renderer"
 import { JsonRenderer } from "./renderers/json-renderer"
 import { MarkdownRenderer } from "./renderers/markdown-renderer"
@@ -54,6 +55,10 @@ function RenderedFile({ file }: { file: PreviewFile }) {
     return <JsonRenderer content={file.content} />
   }
 
+  if (file.renderKind === "html" && file.content !== undefined) {
+    return <HtmlRenderer content={file.content} fileName={file.name} />
+  }
+
   if (file.renderKind === "image" && file.renderSource) {
     return <ImageRenderer source={file.renderSource} alt={file.name} />
   }
@@ -71,6 +76,12 @@ function FilePreviewPanel({
   mode: FilePreviewMode | null
 }) {
   const contentRef = React.useRef<HTMLDivElement>(null)
+  const isHtmlPreview =
+    file.status !== "loading" &&
+    file.status !== "error" &&
+    mode === "render" &&
+    file.renderKind === "html" &&
+    file.content !== undefined
 
   React.useLayoutEffect(() => {
     const content = contentRef.current
@@ -103,9 +114,15 @@ function FilePreviewPanel({
   return (
     <TabsContent
       value={file.id}
-      className="min-h-0 flex-1 overflow-auto overscroll-contain"
+      className={cn(
+        "min-h-0 flex-1 overscroll-contain",
+        isHtmlPreview ? "overflow-hidden" : "overflow-auto"
+      )}
     >
-      <div ref={contentRef} className="min-h-full">
+      <div
+        ref={contentRef}
+        className={cn("min-h-full", isHtmlPreview && "h-full")}
+      >
         {file.status === "loading" ? (
           <PreviewRequestState loading />
         ) : file.status === "error" ? (

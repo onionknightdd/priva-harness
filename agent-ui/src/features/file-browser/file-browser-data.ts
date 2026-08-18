@@ -299,6 +299,13 @@ function getFileRenderKind(
     return "image"
   }
   if (
+    preview.mime_type === "text/html" ||
+    preview.mime_type === "application/xhtml+xml" ||
+    ["html", "htm", "xhtml"].includes(extension ?? "")
+  ) {
+    return "html"
+  }
+  if (
     preview.mime_type === "text/markdown" ||
     ["md", "markdown", "mdown", "mdx", "mkd"].includes(extension ?? "")
   ) {

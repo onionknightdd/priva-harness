@@ -1,6 +1,6 @@
 export type FilePreviewMode = "source" | "render"
 
-export type FileRenderKind = "image" | "json" | "markdown"
+export type FileRenderKind = "html" | "image" | "json" | "markdown"
 
 export type PreviewFile = {
   id: string
