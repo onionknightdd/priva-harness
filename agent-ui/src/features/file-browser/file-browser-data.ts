@@ -8,6 +8,7 @@ import type {
   FileSystemDirectory,
   FileSystemEntry,
 } from "./file-browser-api"
+import { getDownloadUrl } from "./file-browser-api"
 
 export type FileBrowserItem = {
   path: string
@@ -261,6 +262,12 @@ export function previewResponseToFile(
   preview: FilePreviewResponse
 ): PreviewFile {
   const renderKind = getFileRenderKind(preview)
+  const needsBinarySource =
+    renderKind === "document" ||
+    renderKind === "image" ||
+    renderKind === "pdf" ||
+    renderKind === "presentation" ||
+    renderKind === "spreadsheet"
 
   return {
     id: preview.path,
@@ -269,8 +276,9 @@ export function previewResponseToFile(
     mediaType: preview.mime_type,
     content: preview.content ?? undefined,
     renderKind,
-    renderSource:
-      renderKind === "image" ? preview.preview_url ?? undefined : undefined,
+    renderSource: needsBinarySource
+      ? preview.preview_url ?? getDownloadUrl(preview.path)
+      : undefined,
     status: "ready",
   }
 }
@@ -294,26 +302,56 @@ function getFileRenderKind(
   preview: FilePreviewResponse
 ): FileRenderKind | undefined {
   const extension = preview.name.split(".").at(-1)?.toLocaleLowerCase()
+  const mediaType = preview.mime_type.toLocaleLowerCase()
 
-  if (preview.preview_url && preview.mime_type.startsWith("image/")) {
+  if (
+    mediaType === "application/pdf" ||
+    extension === "pdf"
+  ) {
+    return "pdf"
+  }
+  if (
+    mediaType ===
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+    mediaType ===
+      "application/vnd.ms-excel.sheet.macroenabled.12" ||
+    ["xlsx", "xlsm", "xltx", "xltm"].includes(extension ?? "")
+  ) {
+    return "spreadsheet"
+  }
+  if (
+    mediaType ===
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    ["docx", "dotx"].includes(extension ?? "")
+  ) {
+    return "document"
+  }
+  if (
+    mediaType ===
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
+    ["pptx", "ppsx", "potx"].includes(extension ?? "")
+  ) {
+    return "presentation"
+  }
+  if (preview.preview_url && mediaType.startsWith("image/")) {
     return "image"
   }
   if (
-    preview.mime_type === "text/html" ||
-    preview.mime_type === "application/xhtml+xml" ||
+    mediaType === "text/html" ||
+    mediaType === "application/xhtml+xml" ||
     ["html", "htm", "xhtml"].includes(extension ?? "")
   ) {
     return "html"
   }
   if (
-    preview.mime_type === "text/markdown" ||
+    mediaType === "text/markdown" ||
     ["md", "markdown", "mdown", "mdx", "mkd"].includes(extension ?? "")
   ) {
     return "markdown"
   }
   if (
-    preview.mime_type === "application/json" ||
-    preview.mime_type.endsWith("+json") ||
+    mediaType === "application/json" ||
+    mediaType.endsWith("+json") ||
     extension === "json"
   ) {
     return "json"

@@ -1,6 +1,5 @@
 import * as React from "react"
 import gsap from "gsap"
-import { LoaderCircleIcon, TriangleAlertIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -13,15 +12,42 @@ import {
   type FilePreviewMode,
   type PreviewFile,
 } from "@/features/files/model/file.types"
+import {
+  PreviewSelectionBridgeProvider,
+  type PreviewSelection,
+} from "@/features/files/selection"
 import { cn } from "@/lib/utils"
 
 import { FilePreviewToolbar } from "./file-preview-toolbar"
+import { PreviewRendererBoundary } from "./preview-renderer-boundary"
+import { PreviewRequestState } from "./preview-request-state"
 import { HtmlRenderer } from "./renderers/html-renderer"
 import { ImageRenderer } from "./renderers/image-renderer"
 import { JsonRenderer } from "./renderers/json-renderer"
 import { MarkdownRenderer } from "./renderers/markdown-renderer"
 import { SourcePreview } from "./source-preview"
 import { UnsupportedPreview } from "./unsupported-preview"
+
+const DocumentRenderer = React.lazy(() =>
+  import("./renderers/document-renderer").then((module) => ({
+    default: module.DocumentRenderer,
+  }))
+)
+const PdfRenderer = React.lazy(() =>
+  import("./renderers/pdf-renderer").then((module) => ({
+    default: module.PdfRenderer,
+  }))
+)
+const PresentationRenderer = React.lazy(() =>
+  import("./renderers/presentation-renderer").then((module) => ({
+    default: module.PresentationRenderer,
+  }))
+)
+const SpreadsheetRenderer = React.lazy(() =>
+  import("./renderers/spreadsheet-renderer").then((module) => ({
+    default: module.SpreadsheetRenderer,
+  }))
+)
 
 function getAvailableMode(
   file: PreviewFile | null,
@@ -63,6 +89,31 @@ function RenderedFile({ file }: { file: PreviewFile }) {
     return <ImageRenderer source={file.renderSource} alt={file.name} />
   }
 
+  if (file.renderKind === "spreadsheet" && file.renderSource) {
+    return (
+      <SpreadsheetRenderer
+        fileId={file.id}
+        fileName={file.name}
+        mediaType={file.mediaType}
+        source={file.renderSource}
+      />
+    )
+  }
+
+  if (file.renderKind === "document" && file.renderSource) {
+    return <DocumentRenderer fileId={file.id} source={file.renderSource} />
+  }
+
+  if (file.renderKind === "presentation" && file.renderSource) {
+    return (
+      <PresentationRenderer fileId={file.id} source={file.renderSource} />
+    )
+  }
+
+  if (file.renderKind === "pdf" && file.renderSource) {
+    return <PdfRenderer fileId={file.id} source={file.renderSource} />
+  }
+
   return <UnsupportedPreview hasFile />
 }
 
@@ -76,12 +127,17 @@ function FilePreviewPanel({
   mode: FilePreviewMode | null
 }) {
   const contentRef = React.useRef<HTMLDivElement>(null)
-  const isHtmlPreview =
+  const usesInternalScroller =
     file.status !== "loading" &&
     file.status !== "error" &&
     mode === "render" &&
-    file.renderKind === "html" &&
-    file.content !== undefined
+    [
+      "document",
+      "html",
+      "pdf",
+      "presentation",
+      "spreadsheet",
+    ].includes(file.renderKind ?? "")
 
   React.useLayoutEffect(() => {
     const content = contentRef.current
@@ -116,12 +172,12 @@ function FilePreviewPanel({
       value={file.id}
       className={cn(
         "min-h-0 flex-1 overscroll-contain",
-        isHtmlPreview ? "overflow-hidden" : "overflow-auto"
+        usesInternalScroller ? "overflow-hidden" : "overflow-auto"
       )}
     >
       <div
         ref={contentRef}
-        className={cn("min-h-full", isHtmlPreview && "h-full")}
+        className={cn("min-h-full", usesInternalScroller && "h-full")}
       >
         {file.status === "loading" ? (
           <PreviewRequestState loading />
@@ -130,50 +186,16 @@ function FilePreviewPanel({
         ) : mode === "source" && file.content !== undefined ? (
           <SourcePreview content={file.content} fileName={file.name} />
         ) : (
-          <RenderedFile file={file} />
+          <PreviewRendererBoundary
+            key={`${file.id}:${file.renderSource ?? "inline"}`}
+          >
+            <React.Suspense fallback={<PreviewRequestState loading />}>
+              <RenderedFile file={file} />
+            </React.Suspense>
+          </PreviewRendererBoundary>
         )}
       </div>
     </TabsContent>
-  )
-}
-
-function PreviewRequestState({
-  error,
-  loading = false,
-}: {
-  error?: string
-  loading?: boolean
-}) {
-  const { t } = useTranslation()
-  const Icon = loading ? LoaderCircleIcon : TriangleAlertIcon
-
-  return (
-    <div
-      role={loading ? "status" : "alert"}
-      className="flex min-h-full flex-col items-center justify-center gap-3 p-8 text-center"
-    >
-      <div className="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-        <Icon
-          aria-hidden="true"
-          className={loading ? "size-5 animate-spin motion-reduce:animate-none" : "size-5"}
-          strokeWidth={1.5}
-        />
-      </div>
-      <div className="space-y-1">
-        <p className="text-sm font-medium">
-          {t(
-            loading
-              ? "filePreview.loadingTitle"
-              : "filePreview.loadFailedTitle"
-          )}
-        </p>
-        {!loading && (
-          <p className="max-w-sm text-xs leading-5 text-muted-foreground">
-            {error || t("filePreview.loadFailedDescription")}
-          </p>
-        )}
-      </div>
-    </div>
   )
 }
 
@@ -189,6 +211,7 @@ export function RichFilePreview({
   onDownload,
   onExpandedChange,
   onModeChange,
+  onSelectionChange,
 }: {
   activeFileId: string | null
   className?: string
@@ -201,6 +224,7 @@ export function RichFilePreview({
   onDownload?: (file: PreviewFile) => void
   onExpandedChange?: (expanded: boolean) => void
   onModeChange?: (mode: FilePreviewMode) => void
+  onSelectionChange?: (selection: PreviewSelection | null) => void
 }) {
   const { t } = useTranslation()
   const [internalMode, setInternalMode] =
@@ -225,44 +249,50 @@ export function RichFilePreview({
         className
       )}
     >
-      <Tabs
-        value={activeFileId ?? ""}
-        onValueChange={(fileId) => {
-          if (files.some((file) => file.id === fileId)) {
-            onActiveFileChange(fileId)
-          }
-        }}
-        className="min-h-0 flex-1 gap-0"
+      <PreviewSelectionBridgeProvider
+        activeFile={activeFile}
+        onSelectionChange={onSelectionChange}
+        scopeKey={`${activeFile?.id ?? "none"}:${activeMode ?? "none"}`}
       >
-        <FilePreviewToolbar
-          activeFile={activeFile}
-          expanded={expanded}
-          files={files}
-          mode={activeMode}
-          onCloseAll={onCloseAll}
-          onFileClose={onFileClose}
-          onDownload={onDownload}
-          onExpandedChange={onExpandedChange}
-          onModeChange={handleModeChange}
-          renderAvailable={renderAvailable}
-          sourceAvailable={sourceAvailable}
-        />
+        <Tabs
+          value={activeFileId ?? ""}
+          onValueChange={(fileId) => {
+            if (files.some((file) => file.id === fileId)) {
+              onActiveFileChange(fileId)
+            }
+          }}
+          className="min-h-0 flex-1 gap-0"
+        >
+          <FilePreviewToolbar
+            activeFile={activeFile}
+            expanded={expanded}
+            files={files}
+            mode={activeMode}
+            onCloseAll={onCloseAll}
+            onFileClose={onFileClose}
+            onDownload={onDownload}
+            onExpandedChange={onExpandedChange}
+            onModeChange={handleModeChange}
+            renderAvailable={renderAvailable}
+            sourceAvailable={sourceAvailable}
+          />
 
-        {files.length > 0 ? (
-          files.map((file) => (
-            <FilePreviewPanel
-              key={file.id}
-              active={file.id === activeFileId}
-              file={file}
-              mode={getAvailableMode(file, preferredMode)}
-            />
-          ))
-        ) : (
-          <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
-            <UnsupportedPreview hasFile={false} />
-          </div>
-        )}
-      </Tabs>
+          {files.length > 0 ? (
+            files.map((file) => (
+              <FilePreviewPanel
+                key={file.id}
+                active={file.id === activeFileId}
+                file={file}
+                mode={getAvailableMode(file, preferredMode)}
+              />
+            ))
+          ) : (
+            <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
+              <UnsupportedPreview hasFile={false} />
+            </div>
+          )}
+        </Tabs>
+      </PreviewSelectionBridgeProvider>
     </section>
   )
 }

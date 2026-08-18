@@ -4,3 +4,4 @@ export type {
   PreviewFile,
 } from "./model/file.types"
 export { RichFilePreview, canvasReadmePreview } from "./preview"
+export type { PreviewSelection } from "./selection"
