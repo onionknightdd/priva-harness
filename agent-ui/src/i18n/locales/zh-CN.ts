@@ -213,6 +213,8 @@ export const zhCN = {
       defaultModelPlaceholder: "测试连接后加载模型",
       defaultModelDescription: "请求未指定模型时使用该模型。",
       multimodal: "多模态",
+      multimodalDescription:
+        "配置模型后才会启用对应的多模态能力；每次选择模型后，系统会自动探测其是否支持该能力。",
       imageUnderstanding: "图片理解",
       imageGeneration: "图片创建",
       imageEdit: "图片编辑",

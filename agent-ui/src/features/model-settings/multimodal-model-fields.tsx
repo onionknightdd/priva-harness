@@ -71,7 +71,14 @@ export function MultimodalModelFields({
 
   return (
     <div className="flex min-w-0 flex-col gap-3">
-      <h3 className="text-sm font-medium">{t("settings.models.multimodal")}</h3>
+      <div className="space-y-1">
+        <h3 className="text-sm font-medium">
+          {t("settings.models.multimodal")}
+        </h3>
+        <p className="text-xs text-muted-foreground">
+          {t("settings.models.multimodalDescription")}
+        </p>
+      </div>
       <div className="flex min-w-0 flex-col gap-3">
         {fields.map((field) => (
           <CapabilityModelField

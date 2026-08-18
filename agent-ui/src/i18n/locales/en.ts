@@ -215,6 +215,8 @@ export const en = {
       defaultModelDescription:
         "The model used when a request does not specify one.",
       multimodal: "Multimodal",
+      multimodalDescription:
+        "Configure a model to enable the corresponding multimodal capability. Each selection is automatically probed for support.",
       imageUnderstanding: "Image understanding",
       imageGeneration: "Image creation",
       imageEdit: "Image editing",
