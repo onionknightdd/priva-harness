@@ -27,6 +27,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Separator } from "@/components/ui/separator"
 import {
   Sidebar,
   SidebarContent,
@@ -154,7 +155,7 @@ export function SettingsDialog({
                           <SidebarMenuButton
                             type="button"
                             isActive={isActive}
-                            className="text-xs [&_svg]:size-3.5"
+                            className="text-sm [&_svg]:size-3.5"
                             aria-current={isActive ? "page" : undefined}
                             onClick={() => setActiveSectionId(item.id)}
                           >
@@ -169,6 +170,11 @@ export function SettingsDialog({
               </SidebarGroup>
             </SidebarContent>
           </Sidebar>
+
+          <Separator
+            orientation="vertical"
+            className="hidden md:block"
+          />
 
           <main className="flex h-[min(576px,calc(100svh-2rem))] min-w-0 flex-1 flex-col overflow-hidden">
             <header className="flex h-12 shrink-0 items-center gap-2">

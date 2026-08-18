@@ -32,6 +32,7 @@ import {
   ComboboxItem,
   ComboboxLabel,
   ComboboxList,
+  ComboboxSeparator,
 } from "@/components/ui/combobox"
 import {
   Field,
@@ -73,6 +74,12 @@ function groupModelIds(modelIds: string[]): ModelIdGroup[] {
   }
 
   return [...groups].map(([value, items]) => ({ value, items }))
+}
+
+function formatModelGroupLabel(value: string) {
+  return value
+    ? `${value[0].toLocaleUpperCase()}${value.slice(1)}`
+    : value
 }
 
 export function ModelProfileEditor({
@@ -394,10 +401,9 @@ export function ModelProfileEditor({
                       <ComboboxGroup
                         key={group.value}
                         items={group.items}
-                        className="pb-1 last:pb-0"
                       >
-                        <ComboboxLabel className="text-sm font-semibold">
-                          {group.value}
+                        <ComboboxLabel className="text-sm font-normal">
+                          {formatModelGroupLabel(group.value)}
                         </ComboboxLabel>
                         <ComboboxCollection>
                           {(modelId: string) => (
@@ -406,6 +412,7 @@ export function ModelProfileEditor({
                             </ComboboxItem>
                           )}
                         </ComboboxCollection>
+                        <ComboboxSeparator />
                       </ComboboxGroup>
                     )}
                   </ComboboxList>
