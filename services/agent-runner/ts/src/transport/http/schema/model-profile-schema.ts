@@ -40,6 +40,9 @@ const profileProperties = {
   base_url: { type: 'string' },
   auth_token: { type: 'string' },
   default_model: nullableString,
+  image_understanding_model: nullableString,
+  image_generation_model: nullableString,
+  image_edit_model: nullableString,
   model_capabilities: modelCapabilitiesSchema,
 } as const
 
@@ -49,6 +52,9 @@ const profileRequired = [
   'base_url',
   'auth_token',
   'default_model',
+  'image_understanding_model',
+  'image_generation_model',
+  'image_edit_model',
   'model_capabilities',
 ] as const
 
@@ -80,6 +86,9 @@ const modelProfileCreateBodySchema = {
     base_url: { type: 'string', minLength: 1 },
     auth_token: { type: 'string', minLength: 1 },
     default_model: nullableString,
+    image_understanding_model: nullableString,
+    image_generation_model: nullableString,
+    image_edit_model: nullableString,
     ...removedHarnessModelProperties,
   },
 } as const
@@ -157,6 +166,9 @@ export const updateModelProfileSchema = {
       base_url: { type: 'string', minLength: 1 },
       auth_token: { type: 'string', minLength: 1 },
       default_model: nullableString,
+      image_understanding_model: nullableString,
+      image_generation_model: nullableString,
+      image_edit_model: nullableString,
       ...removedHarnessModelProperties,
     },
   },
@@ -200,28 +212,56 @@ export const testSavedModelProfileSchema = {
   response: { 200: modelListResponseSchema },
 } as const
 
-export const probeImageCapabilitySchema = {
+const modelCapabilitySchema = {
+  type: 'string',
+  enum: ['image_understanding', 'image_generation', 'image_edit'],
+} as const
+
+const modelCapabilityProbeResponseSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['model_id', 'capability', 'supported'],
+  properties: {
+    model_id: { type: 'string' },
+    capability: modelCapabilitySchema,
+    supported: { type: 'boolean' },
+  },
+} as const
+
+export const probeDraftModelCapabilitySchema = {
+  tags: modelProfileTags,
+  body: {
+    type: 'object',
+    additionalProperties: false,
+    required: [
+      'id',
+      'label',
+      'base_url',
+      'auth_token',
+      'model_id',
+      'capability',
+    ],
+    properties: {
+      ...modelProfileCreateBodySchema.properties,
+      model_id: { type: 'string', minLength: 1, maxLength: 512 },
+      capability: modelCapabilitySchema,
+    },
+  },
+  response: { 200: modelCapabilityProbeResponseSchema },
+} as const
+
+export const probeSavedModelCapabilitySchema = {
   tags: modelProfileTags,
   params: profileIdParamsSchema,
   body: {
     type: 'object',
     additionalProperties: false,
-    required: ['model_id'],
+    required: ['model_id', 'capability'],
     properties: {
+      ...savedModelProfileTestBodySchema.properties,
       model_id: { type: 'string', minLength: 1, maxLength: 512 },
+      capability: modelCapabilitySchema,
     },
   },
-  response: {
-    200: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['profile_id', 'model_id', 'image', 'cached'],
-      properties: {
-        profile_id: { type: 'string' },
-        model_id: { type: 'string' },
-        image: { type: 'boolean' },
-        cached: { type: 'boolean' },
-      },
-    },
-  },
+  response: { 200: modelCapabilityProbeResponseSchema },
 } as const

@@ -1,5 +1,6 @@
 import type { ModelEndpointClient } from '../../core/contract/model-profile.js'
 import {
+  type ModelCapability,
   type ModelInfo,
   type ModelProfile,
   ModelProfileError,
@@ -71,74 +72,153 @@ export class CompatibleModelEndpointClient implements ModelEndpointClient {
     })
   }
 
-  async probeImageCapability(
+  async probeModelCapability(
     profile: ModelProfile,
     modelId: string,
+    capability: ModelCapability,
     signal?: AbortSignal,
   ): Promise<boolean> {
-    const payload = {
-      model: modelId,
-      max_tokens: 1,
-      messages: [{
-        role: 'user',
-        content: [
-          {
-            type: 'image',
-            source: {
-              type: 'base64',
-              media_type: 'image/png',
-              data: PROBE_IMAGE_BASE64,
-            },
-          },
-          { type: 'text', text: PROBE_PROMPT },
-        ],
-      }],
-    }
-
     return await this.withTimeout(signal, async (requestSignal) => {
-      let lastResponse: Response | undefined
-      for (const url of anthropicMessageCandidates(profile.baseUrl)) {
-        const response = await this.performFetch(url, {
-          method: 'POST',
-          headers: {
-            ...authHeaders(profile),
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
-          redirect: 'error',
-          signal: requestSignal,
-        })
-        lastResponse = response
-        if (response.status !== 404 && response.status !== 405) break
-        await response.body?.cancel()
+      switch (capability) {
+        case 'image_understanding':
+          return await this.probeImageUnderstanding(profile, modelId, requestSignal)
+        case 'image_generation':
+          return await this.probeImageGeneration(profile, modelId, requestSignal)
+        case 'image_edit':
+          return await this.probeImageEdit(profile, modelId, requestSignal)
       }
-
-      if (lastResponse === undefined) {
-        throw modelUnavailable()
-      }
-      if (lastResponse.status >= 200 && lastResponse.status < 300) {
-        await lastResponse.body?.cancel()
-        return true
-      }
-      if (lastResponse.status === 404 || lastResponse.status === 405) {
-        throw modelUnavailable()
-      }
-
-      const detail = await lastResponse.text()
-      if (
-        [400, 415, 422].includes(lastResponse.status)
-        && !looksLikeNonCapabilityError(detail)
-      ) {
-        return false
-      }
-      if (lastResponse.status === 401 || lastResponse.status === 403) {
-        throw new ModelProfileError(
-          'upstream-auth-failed',
-          'Image capability probe authentication failed',
-        )
-      }
-      throw modelUnavailable()
     })
+  }
+
+  private async probeImageUnderstanding(
+    profile: ModelProfile,
+    modelId: string,
+    signal: AbortSignal,
+  ): Promise<boolean> {
+    const openAiResult = await this.probeCandidates(
+      endpointCandidates(profile.baseUrl, 'chat/completions'),
+      'image_understanding',
+      signal,
+      () => ({
+        headers: jsonAuthHeaders(profile),
+        body: JSON.stringify({
+          model: modelId,
+          max_tokens: 1,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'text', text: PROBE_PROMPT },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:image/png;base64,${PROBE_IMAGE_BASE64}`,
+                  detail: 'low',
+                },
+              },
+            ],
+          }],
+        }),
+      }),
+    )
+    if (openAiResult !== null) return openAiResult
+
+    const anthropicResult = await this.probeCandidates(
+      anthropicMessageCandidates(profile.baseUrl),
+      'image_understanding',
+      signal,
+      () => ({
+        headers: jsonAuthHeaders(profile),
+        body: JSON.stringify({
+          model: modelId,
+          max_tokens: 1,
+          messages: [{
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                source: {
+                  type: 'base64',
+                  media_type: 'image/png',
+                  data: PROBE_IMAGE_BASE64,
+                },
+              },
+              { type: 'text', text: PROBE_PROMPT },
+            ],
+          }],
+        }),
+      }),
+    )
+    if (anthropicResult !== null) return anthropicResult
+    throw modelUnavailable('image_understanding')
+  }
+
+  private async probeImageGeneration(
+    profile: ModelProfile,
+    modelId: string,
+    signal: AbortSignal,
+  ): Promise<boolean> {
+    const result = await this.probeCandidates(
+      endpointCandidates(profile.baseUrl, 'images/generations'),
+      'image_generation',
+      signal,
+      () => ({
+        headers: jsonAuthHeaders(profile),
+        body: JSON.stringify({
+          model: modelId,
+          prompt: 'A single black pixel on a white background.',
+          n: 1,
+        }),
+      }),
+    )
+    if (result !== null) return result
+    throw modelUnavailable('image_generation')
+  }
+
+  private async probeImageEdit(
+    profile: ModelProfile,
+    modelId: string,
+    signal: AbortSignal,
+  ): Promise<boolean> {
+    const image = Uint8Array.from(
+      Buffer.from(PROBE_IMAGE_BASE64, 'base64'),
+    )
+    const result = await this.probeCandidates(
+      endpointCandidates(profile.baseUrl, 'images/edits'),
+      'image_edit',
+      signal,
+      () => {
+        const body = new FormData()
+        body.set('model', modelId)
+        body.set('prompt', 'Keep this image unchanged.')
+        body.set('n', '1')
+        body.set('image', new Blob([image], { type: 'image/png' }), 'probe.png')
+        return { headers: authHeaders(profile), body }
+      },
+    )
+    if (result !== null) return result
+    throw modelUnavailable('image_edit')
+  }
+
+  private async probeCandidates(
+    candidates: readonly string[],
+    capability: ModelCapability,
+    signal: AbortSignal,
+    request: () => Pick<RequestInit, 'body' | 'headers'>,
+  ): Promise<boolean | null> {
+    for (const url of candidates) {
+      const response = await this.performFetch(url, {
+        method: 'POST',
+        ...request(),
+        redirect: 'error',
+        signal,
+      })
+      if (response.status === 404 || response.status === 405) {
+        await response.body?.cancel()
+        continue
+      }
+      return await evaluateCapabilityResponse(response, capability)
+    }
+    return null
   }
 
   private async performFetch(
@@ -216,6 +296,23 @@ function anthropicMessageCandidates(baseUrl: string): readonly string[] {
     : [`${base}/v1/messages`, `${base}/messages`]
 }
 
+function endpointCandidates(baseUrl: string, pathSuffix: string): readonly string[] {
+  const base = baseUrl.replace(/\/+$/u, '')
+  const parsed = new URL(base)
+  const path = parsed.pathname.replace(/\/+$/u, '')
+  const candidates: string[] = []
+
+  if (path.endsWith('/v1')) {
+    addCandidate(candidates, `${base}/${pathSuffix}`)
+  } else {
+    addCandidate(candidates, `${base}/v1/${pathSuffix}`)
+    addCandidate(candidates, `${base}/${pathSuffix}`)
+  }
+  addCandidate(candidates, `${parsed.origin}/v1/${pathSuffix}`)
+  addCandidate(candidates, `${parsed.origin}/${pathSuffix}`)
+  return candidates
+}
+
 function addCandidate(candidates: string[], value: string): void {
   if (!candidates.includes(value)) candidates.push(value)
 }
@@ -226,6 +323,34 @@ function authHeaders(profile: ModelProfile): Readonly<Record<string, string>> {
     'x-api-key': profile.authToken,
     'anthropic-version': ANTHROPIC_VERSION,
   }
+}
+
+function jsonAuthHeaders(profile: ModelProfile): Readonly<Record<string, string>> {
+  return { ...authHeaders(profile), 'Content-Type': 'application/json' }
+}
+
+async function evaluateCapabilityResponse(
+  response: Response,
+  capability: ModelCapability,
+): Promise<boolean> {
+  if (response.status >= 200 && response.status < 300) {
+    await response.body?.cancel()
+    return true
+  }
+  const detail = await response.text()
+  if (response.status === 401 || response.status === 403) {
+    throw new ModelProfileError(
+      'upstream-auth-failed',
+      'Model capability probe authentication failed',
+    )
+  }
+  if (
+    [400, 415, 422].includes(response.status)
+    && !looksLikeNonCapabilityError(detail)
+  ) {
+    return false
+  }
+  throw modelUnavailable(capability, response.status)
 }
 
 async function parseJsonResponse(response: Response): Promise<unknown> {
@@ -273,10 +398,15 @@ function looksLikeNonCapabilityError(detail: string): boolean {
   ].some((marker) => normalized.includes(marker))
 }
 
-function modelUnavailable(): ModelProfileError {
+function modelUnavailable(
+  capability: ModelCapability,
+  status?: number,
+): ModelProfileError {
   return new ModelProfileError(
     'upstream-unavailable',
-    'Image capability could not be determined',
+    `${capability} capability could not be determined${
+      status === undefined ? '' : ` (upstream status ${status})`
+    }`,
   )
 }
 

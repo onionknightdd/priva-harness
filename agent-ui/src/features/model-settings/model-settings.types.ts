@@ -4,6 +4,9 @@ export type ProfileDraft = {
   baseUrl: string
   authToken: string
   defaultModel: string | null
+  imageUnderstandingModel: string | null
+  imageGenerationModel: string | null
+  imageEditModel: string | null
 }
 
 export type ModelSettingsFeedback = {
@@ -22,3 +25,10 @@ export type ModelSettingsBusyAction =
   | "default"
   | "save"
   | null
+
+export type ModelCapabilityProbeStatus =
+  | "idle"
+  | "probing"
+  | "supported"
+  | "unsupported"
+  | "error"

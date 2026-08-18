@@ -17,6 +17,9 @@ describe('model profile domain', () => {
       baseUrl: 'https://api.example.com/v1/',
       authToken: ' secret ',
       defaultModel: ' model-a ',
+      imageUnderstandingModel: ' vision-a ',
+      imageGenerationModel: ' image-a ',
+      imageEditModel: ' edit-a ',
     })
 
     expect(profile).toMatchObject({
@@ -25,6 +28,9 @@ describe('model profile domain', () => {
       baseUrl: 'https://api.example.com/v1',
       authToken: 'secret',
       defaultModel: 'model-a',
+      imageUnderstandingModel: 'vision-a',
+      imageGenerationModel: 'image-a',
+      imageEditModel: 'edit-a',
     })
     expect(() => createModelProfile({
       id: 'unsafe',
@@ -34,21 +40,26 @@ describe('model profile domain', () => {
     })).toThrow('base_url must not contain embedded credentials')
   })
 
-  it('uses null to clear the default model while preserving an omitted value', () => {
+  it('clears optional model selections while preserving omitted values', () => {
     const current = createModelProfile({
       id: 'gateway',
       label: 'Gateway',
       baseUrl: 'https://api.example.com',
       authToken: 'secret',
       defaultModel: 'model-a',
+      imageUnderstandingModel: 'vision-a',
     })
 
     expect(patchModelProfile(current, { label: 'Renamed' })).toMatchObject({
       label: 'Renamed',
       defaultModel: 'model-a',
     })
-    expect(patchModelProfile(current, { defaultModel: null })).toMatchObject({
+    expect(patchModelProfile(current, {
       defaultModel: null,
+      imageUnderstandingModel: null,
+    })).toMatchObject({
+      defaultModel: null,
+      imageUnderstandingModel: null,
     })
   })
 

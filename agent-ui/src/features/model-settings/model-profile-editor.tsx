@@ -23,18 +23,6 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import {
-  Combobox,
-  ComboboxCollection,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxGroup,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxLabel,
-  ComboboxList,
-  ComboboxSeparator,
-} from "@/components/ui/combobox"
-import {
   Field,
   FieldDescription,
   FieldGroup,
@@ -48,40 +36,14 @@ import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 
 import type { ModelProfileSummary } from "./model-profile-api"
+import { ModelSelector } from "./model-selector"
+import { MultimodalModelFields } from "./multimodal-model-fields"
 import type {
   ModelConnectionTestStatus,
   ModelSettingsBusyAction,
   ModelSettingsFeedback,
   ProfileDraft,
 } from "./model-settings.types"
-
-type ModelIdGroup = {
-  value: string
-  items: string[]
-}
-
-function groupModelIds(modelIds: string[]): ModelIdGroup[] {
-  const groups = new Map<string, string[]>()
-
-  for (const modelId of modelIds) {
-    const groupId = modelId.split("/")[0] || modelId
-    const groupItems = groups.get(groupId)
-
-    if (groupItems) {
-      groupItems.push(modelId)
-    } else {
-      groups.set(groupId, [modelId])
-    }
-  }
-
-  return [...groups].map(([value, items]) => ({ value, items }))
-}
-
-function formatModelGroupLabel(value: string) {
-  return value
-    ? `${value[0].toLocaleUpperCase()}${value.slice(1)}`
-    : value
-}
 
 const editorTransition: Transition = {
   duration: 0.2,
@@ -138,7 +100,6 @@ export function ModelProfileEditor({
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
-  const modelGroups = React.useMemo(() => groupModelIds(modelIds), [modelIds])
   const isTesting = testStatus === "testing"
   const canSubmit = Boolean(
     draft.id.trim() &&
@@ -353,51 +314,31 @@ export function ModelProfileEditor({
               <FieldLabel htmlFor="model-profile-default-model">
                 {t("settings.models.defaultModel")}
               </FieldLabel>
-              <Combobox
-                items={modelGroups}
+              <ModelSelector
+                id="model-profile-default-model"
                 value={draft.defaultModel}
                 disabled={!isConnectionVerified}
-                onValueChange={(value) =>
-                  onDraftChange("defaultModel", value)
-                }
-              >
-                <ComboboxInput
-                  id="model-profile-default-model"
-                  className="w-full"
-                  disabled={!isConnectionVerified}
-                  placeholder={t("settings.models.defaultModelPlaceholder")}
-                  showClear
-                />
-                <ComboboxContent>
-                  <ComboboxEmpty>
-                    {t("settings.models.noModels")}
-                  </ComboboxEmpty>
-                  <ComboboxList>
-                    {(group: ModelIdGroup) => (
-                      <ComboboxGroup
-                        key={group.value}
-                        items={group.items}
-                      >
-                        <ComboboxLabel className="text-sm font-normal">
-                          {formatModelGroupLabel(group.value)}
-                        </ComboboxLabel>
-                        <ComboboxCollection>
-                          {(modelId: string) => (
-                            <ComboboxItem key={modelId} value={modelId}>
-                              {modelId}
-                            </ComboboxItem>
-                          )}
-                        </ComboboxCollection>
-                        <ComboboxSeparator />
-                      </ComboboxGroup>
-                    )}
-                  </ComboboxList>
-                </ComboboxContent>
-              </Combobox>
+                emptyText={t("settings.models.noModels")}
+                modelIds={modelIds}
+                placeholder={t("settings.models.defaultModelPlaceholder")}
+                onValueChange={(value) => onDraftChange("defaultModel", value)}
+              />
               <FieldDescription className="text-xs">
                 {t("settings.models.defaultModelDescription")}
               </FieldDescription>
             </Field>
+
+            <Separator />
+
+            <MultimodalModelFields
+              busyAction={busyAction}
+              draft={draft}
+              isCreating={isCreating}
+              isConnectionVerified={isConnectionVerified}
+              modelIds={modelIds}
+              selectedProfileId={profile?.id ?? null}
+              onDraftChange={(key, value) => onDraftChange(key, value)}
+            />
           </FieldGroup>
 
           <div

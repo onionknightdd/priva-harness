@@ -30,16 +30,22 @@ describe('CompatibleModelEndpointClient', () => {
     const fetch = createFetch(calls, () => jsonResponse(200, { content: [] }))
     const client = new CompatibleModelEndpointClient({ fetch })
 
-    await expect(client.probeImageCapability(profile(), 'vision-a')).resolves.toBe(true)
+    await expect(client.probeModelCapability(
+      profile(),
+      'vision-a',
+      'image_understanding',
+    )).resolves.toBe(true)
     expect(calls).toHaveLength(1)
-    expect(calls[0]?.url).toBe('https://api.example.com/anthropic/v1/messages')
+    expect(calls[0]?.url).toBe(
+      'https://api.example.com/anthropic/v1/chat/completions',
+    )
     expect(JSON.parse(requestBody(calls[0]?.init.body))).toMatchObject({
       model: 'vision-a',
       max_tokens: 1,
       messages: [{
         content: [
-          { type: 'image', source: { type: 'base64', media_type: 'image/png' } },
           { type: 'text', text: 'Reply with OK.' },
+          { type: 'image_url', image_url: { detail: 'low' } },
         ],
       }],
     })
@@ -51,16 +57,85 @@ describe('CompatibleModelEndpointClient', () => {
         error: { message: 'image content is not supported' },
       })),
     })
-    await expect(unsupported.probeImageCapability(profile(), 'text-only')).resolves.toBe(false)
+    await expect(unsupported.probeModelCapability(
+      profile(),
+      'text-only',
+      'image_understanding',
+    )).resolves.toBe(false)
 
     const missingModel = new CompatibleModelEndpointClient({
       fetch: createFetch([], () => jsonResponse(422, {
         error: { message: 'model not found' },
       })),
     })
-    await expect(missingModel.probeImageCapability(profile(), 'missing')).rejects.toMatchObject({
-      kind: 'upstream-unavailable',
+    await expect(missingModel.probeModelCapability(
+      profile(),
+      'missing',
+      'image_understanding',
+    )).rejects.toMatchObject({ kind: 'upstream-unavailable' })
+  })
+
+  it('falls back to Anthropic messages for image understanding', async () => {
+    const calls: FetchCall[] = []
+    const client = new CompatibleModelEndpointClient({
+      fetch: createFetch(calls, (url) => url.endsWith('/messages')
+        ? jsonResponse(200, { content: [] })
+        : new Response('not found', { status: 404 })),
     })
+
+    await expect(client.probeModelCapability(
+      profile(),
+      'claude-vision',
+      'image_understanding',
+    )).resolves.toBe(true)
+    const anthropicCall = calls.at(-1)
+    expect(anthropicCall?.url).toBe(
+      'https://api.example.com/anthropic/v1/messages',
+    )
+    expect(JSON.parse(requestBody(anthropicCall?.init.body))).toMatchObject({
+      model: 'claude-vision',
+      messages: [{
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: 'image/png' } },
+          { type: 'text', text: 'Reply with OK.' },
+        ],
+      }],
+    })
+  })
+
+  it('uses OpenAI-compatible generation and multipart edit requests', async () => {
+    const calls: FetchCall[] = []
+    const client = new CompatibleModelEndpointClient({
+      fetch: createFetch(calls, () => jsonResponse(200, { data: [] })),
+    })
+
+    await expect(client.probeModelCapability(
+      profile(),
+      'image-a',
+      'image_generation',
+    )).resolves.toBe(true)
+    expect(calls[0]?.url).toBe(
+      'https://api.example.com/anthropic/v1/images/generations',
+    )
+    expect(JSON.parse(requestBody(calls[0]?.init.body))).toMatchObject({
+      model: 'image-a',
+      n: 1,
+    })
+
+    await expect(client.probeModelCapability(
+      profile(),
+      'edit-a',
+      'image_edit',
+    )).resolves.toBe(true)
+    expect(calls[1]?.url).toBe(
+      'https://api.example.com/anthropic/v1/images/edits',
+    )
+    const formData = calls[1]?.init.body
+    expect(formData).toBeInstanceOf(FormData)
+    if (!(formData instanceof FormData)) throw new TypeError('Expected FormData')
+    expect(formData.get('model')).toBe('edit-a')
+    expect(formData.get('prompt')).toBe('Keep this image unchanged.')
+    expect(formData.get('image')).toBeInstanceOf(Blob)
   })
 
   it('maps authentication and timeout failures without exposing the token', async () => {

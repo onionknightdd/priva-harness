@@ -1,6 +1,7 @@
 import type { FastifyPluginCallback } from 'fastify'
 
 import type {
+  ModelCapability,
   ModelProfile,
   ModelProfileCreateInput,
   ModelProfilePatch,
@@ -13,7 +14,8 @@ import {
   getModelProfileSchema,
   listModelProfilesSchema,
   listProfileModelsSchema,
-  probeImageCapabilitySchema,
+  probeDraftModelCapabilitySchema,
+  probeSavedModelCapabilitySchema,
   setDefaultModelProfileSchema,
   testDraftModelProfileSchema,
   testSavedModelProfileSchema,
@@ -32,6 +34,9 @@ interface ModelProfileCreateBody {
   readonly base_url: string
   readonly auth_token: string
   readonly default_model?: string | null
+  readonly image_understanding_model?: string | null
+  readonly image_generation_model?: string | null
+  readonly image_edit_model?: string | null
 }
 
 interface ModelProfilePatchBody {
@@ -39,6 +44,9 @@ interface ModelProfilePatchBody {
   readonly base_url?: string
   readonly auth_token?: string
   readonly default_model?: string | null
+  readonly image_understanding_model?: string | null
+  readonly image_generation_model?: string | null
+  readonly image_edit_model?: string | null
 }
 
 interface SavedModelProfileTestBody {
@@ -46,9 +54,16 @@ interface SavedModelProfileTestBody {
   readonly auth_token?: string
 }
 
-interface ImageCapabilityProbeBody {
+interface ModelCapabilityProbeBody {
   readonly model_id: string
+  readonly capability: ModelCapability
 }
+
+interface DraftModelCapabilityProbeBody
+  extends ModelProfileCreateBody, ModelCapabilityProbeBody {}
+
+interface SavedModelCapabilityProbeBody
+  extends SavedModelProfileTestBody, ModelCapabilityProbeBody {}
 
 export interface ModelProfileRoutesOptions {
   readonly service: ModelProfileService
@@ -80,6 +95,18 @@ export const modelProfileRoutes: FastifyPluginCallback<ModelProfileRoutesOptions
       const profile = await service.createProfile(fromCreateBody(request.body))
       return await reply.code(201).send(toProfileSummaryResponse(profile))
     },
+  )
+
+  fastify.post<{ Body: DraftModelCapabilityProbeBody }>(
+    `${MODEL_PROFILE_ROUTE_PREFIX}/capabilities/probe`,
+    { schema: probeDraftModelCapabilitySchema },
+    async (request) => toCapabilityProbeResponse(
+      await service.probeDraftModelCapability(
+        fromCreateBody(request.body),
+        request.body.model_id,
+        request.body.capability,
+      ),
+    ),
   )
 
   fastify.post<{ Body: ModelProfileCreateBody }>(
@@ -145,22 +172,20 @@ export const modelProfileRoutes: FastifyPluginCallback<ModelProfileRoutesOptions
     }),
   )
 
-  fastify.post<{ Params: ProfileIdParams; Body: ImageCapabilityProbeBody }>(
-    `${MODEL_PROFILE_ROUTE_PREFIX}/:profileId/image-capability/probe`,
-    { schema: probeImageCapabilitySchema },
-    async (request) => {
-      const result = await service.probeImageCapability(
+  fastify.post<{
+    Params: ProfileIdParams
+    Body: SavedModelCapabilityProbeBody
+  }>(
+    `${MODEL_PROFILE_ROUTE_PREFIX}/:profileId/capabilities/probe`,
+    { schema: probeSavedModelCapabilitySchema },
+    async (request) => toCapabilityProbeResponse(
+      await service.probeSavedModelCapability(
         request.params.profileId,
+        fromSavedTestBody(request.body),
         request.body.model_id,
-        { force: true },
-      )
-      return {
-        profile_id: result.profileId,
-        model_id: result.modelId,
-        image: result.image,
-        cached: result.cached,
-      }
-    },
+        request.body.capability,
+      ),
+    ),
   )
 
   done()
@@ -173,6 +198,9 @@ function fromCreateBody(body: ModelProfileCreateBody): ModelProfileCreateInput {
     baseUrl: body.base_url,
     authToken: body.auth_token,
     defaultModel: body.default_model ?? null,
+    imageUnderstandingModel: body.image_understanding_model ?? null,
+    imageGenerationModel: body.image_generation_model ?? null,
+    imageEditModel: body.image_edit_model ?? null,
   }
 }
 
@@ -182,6 +210,15 @@ function fromPatchBody(body: ModelProfilePatchBody): ModelProfilePatch {
     ...(body.base_url === undefined ? {} : { baseUrl: body.base_url }),
     ...(body.auth_token === undefined ? {} : { authToken: body.auth_token }),
     ...(body.default_model === undefined ? {} : { defaultModel: body.default_model }),
+    ...(body.image_understanding_model === undefined
+      ? {}
+      : { imageUnderstandingModel: body.image_understanding_model }),
+    ...(body.image_generation_model === undefined
+      ? {}
+      : { imageGenerationModel: body.image_generation_model }),
+    ...(body.image_edit_model === undefined
+      ? {}
+      : { imageEditModel: body.image_edit_model }),
   }
 }
 
@@ -209,6 +246,9 @@ function toProfileResponse(profile: ModelProfile): Record<string, unknown> {
     base_url: profile.baseUrl,
     auth_token: profile.authToken,
     default_model: profile.defaultModel,
+    image_understanding_model: profile.imageUnderstandingModel,
+    image_generation_model: profile.imageGenerationModel,
+    image_edit_model: profile.imageEditModel,
     model_capabilities: Object.fromEntries(
       Object.entries(profile.modelCapabilities).map(([modelId, capabilities]) => [
         modelId,
@@ -218,5 +258,17 @@ function toProfileResponse(profile: ModelProfile): Record<string, unknown> {
         },
       ]),
     ),
+  }
+}
+
+function toCapabilityProbeResponse(result: {
+  readonly modelId: string
+  readonly capability: ModelCapability
+  readonly supported: boolean
+}): Record<string, unknown> {
+  return {
+    model_id: result.modelId,
+    capability: result.capability,
+    supported: result.supported,
   }
 }

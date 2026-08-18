@@ -6,7 +6,7 @@ const emptyEndpointClient: ModelEndpointClient = {
   listModels() {
     return Promise.resolve([])
   },
-  probeImageCapability() {
+  probeModelCapability() {
     return Promise.resolve(false)
   },
 }

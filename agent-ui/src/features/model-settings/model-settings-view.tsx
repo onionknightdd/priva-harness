@@ -40,6 +40,9 @@ const emptyProfileDraft: ProfileDraft = {
   baseUrl: "",
   authToken: "",
   defaultModel: null,
+  imageUnderstandingModel: null,
+  imageGenerationModel: null,
+  imageEditModel: null,
 }
 
 function profileToDraft(profile: ModelProfileSummary): ProfileDraft {
@@ -49,6 +52,9 @@ function profileToDraft(profile: ModelProfileSummary): ProfileDraft {
     baseUrl: profile.baseUrl,
     authToken: "",
     defaultModel: profile.defaultModel,
+    imageUnderstandingModel: profile.imageUnderstandingModel,
+    imageGenerationModel: profile.imageGenerationModel,
+    imageEditModel: profile.imageEditModel,
   }
 }
 
@@ -131,7 +137,12 @@ export function ModelSettingsView() {
     setSelectedProfileId(profile.id)
     setIsCreating(false)
     setDraft(profileToDraft(profile))
-    resetConnectionTest([profile.defaultModel])
+    resetConnectionTest([
+      profile.defaultModel,
+      profile.imageUnderstandingModel,
+      profile.imageGenerationModel,
+      profile.imageEditModel,
+    ])
     loadSavedProfileModels(profile.id, profile.baseUrl)
     setFeedback(null)
   }, [loadSavedProfileModels, resetConnectionTest])
@@ -207,6 +218,10 @@ export function ModelSettingsView() {
       baseUrl: draft.baseUrl.trim(),
       authToken: draft.authToken.trim(),
       defaultModel: draft.defaultModel?.trim() || null,
+      imageUnderstandingModel:
+        draft.imageUnderstandingModel?.trim() || null,
+      imageGenerationModel: draft.imageGenerationModel?.trim() || null,
+      imageEditModel: draft.imageEditModel?.trim() || null,
     }),
     [draft]
   )
@@ -228,6 +243,10 @@ export function ModelSettingsView() {
           label: draft.label.trim(),
           baseUrl: draft.baseUrl.trim(),
           defaultModel: draft.defaultModel?.trim() || null,
+          imageUnderstandingModel:
+            draft.imageUnderstandingModel?.trim() || null,
+          imageGenerationModel: draft.imageGenerationModel?.trim() || null,
+          imageEditModel: draft.imageEditModel?.trim() || null,
           ...(draft.authToken.trim()
             ? { authToken: draft.authToken.trim() }
             : {}),

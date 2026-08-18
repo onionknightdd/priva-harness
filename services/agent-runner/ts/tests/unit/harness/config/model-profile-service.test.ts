@@ -143,7 +143,7 @@ function endpointClient(
     listModels() {
       return Promise.resolve([{ id: 'model-a' }])
     },
-    async probeImageCapability() {
+    async probeModelCapability() {
       return await probe()
     },
   }

@@ -112,6 +112,9 @@ export function useModelConnectionTest({
                 baseUrl: request.baseUrl,
                 authToken: request.authToken,
                 defaultModel: null,
+                imageUnderstandingModel: null,
+                imageGenerationModel: null,
+                imageEditModel: null,
               })
             : await testSavedModelProfile(request.profileId, {
                 baseUrl: request.baseUrl,
@@ -135,6 +138,21 @@ export function useModelConnectionTest({
           return {
             ...currentDraft,
             defaultModel: nextDefaultModel,
+            imageUnderstandingModel:
+              currentDraft.imageUnderstandingModel &&
+              nextModelIds.includes(currentDraft.imageUnderstandingModel)
+                ? currentDraft.imageUnderstandingModel
+                : null,
+            imageGenerationModel:
+              currentDraft.imageGenerationModel &&
+              nextModelIds.includes(currentDraft.imageGenerationModel)
+                ? currentDraft.imageGenerationModel
+                : null,
+            imageEditModel:
+              currentDraft.imageEditModel &&
+              nextModelIds.includes(currentDraft.imageEditModel)
+                ? currentDraft.imageEditModel
+                : null,
           }
         })
         setModelIds(nextModelIds)

@@ -15,6 +15,9 @@ type ModelProfileSummaryResponse = {
   base_url: string
   auth_token: string
   default_model: string | null
+  image_understanding_model: string | null
+  image_generation_model: string | null
+  image_edit_model: string | null
   model_capabilities: Record<string, ModelCapabilitiesResponse>
   auth_token_set: boolean
   model_count: number | null
@@ -38,6 +41,9 @@ export type ModelProfileSummary = {
   label: string
   baseUrl: string
   defaultModel: string | null
+  imageUnderstandingModel: string | null
+  imageGenerationModel: string | null
+  imageEditModel: string | null
   authTokenSet: boolean
   modelCount: number | null
 }
@@ -53,6 +59,9 @@ export type ModelProfileCreateInput = {
   baseUrl: string
   authToken: string
   defaultModel: string | null
+  imageUnderstandingModel: string | null
+  imageGenerationModel: string | null
+  imageEditModel: string | null
 }
 
 export type ModelProfileUpdateInput = {
@@ -60,11 +69,31 @@ export type ModelProfileUpdateInput = {
   baseUrl: string
   authToken?: string
   defaultModel: string | null
+  imageUnderstandingModel: string | null
+  imageGenerationModel: string | null
+  imageEditModel: string | null
 }
 
 export type SavedModelProfileTestInput = {
   baseUrl?: string
   authToken?: string
+}
+
+export type ModelCapability =
+  | "image_understanding"
+  | "image_generation"
+  | "image_edit"
+
+type ModelCapabilityProbeResponse = {
+  model_id: string
+  capability: ModelCapability
+  supported: boolean
+}
+
+export type ModelCapabilityProbeResult = {
+  modelId: string
+  capability: ModelCapability
+  supported: boolean
 }
 
 export class ModelProfileApiError extends Error {
@@ -114,6 +143,9 @@ function toProfileSummary(
     label: profile.label,
     baseUrl: profile.base_url,
     defaultModel: profile.default_model,
+    imageUnderstandingModel: profile.image_understanding_model,
+    imageGenerationModel: profile.image_generation_model,
+    imageEditModel: profile.image_edit_model,
     authTokenSet: profile.auth_token_set,
     modelCount: profile.model_count,
   }
@@ -126,6 +158,9 @@ function toRequestBody(input: ModelProfileCreateInput) {
     base_url: input.baseUrl,
     auth_token: input.authToken,
     default_model: input.defaultModel,
+    image_understanding_model: input.imageUnderstandingModel,
+    image_generation_model: input.imageGenerationModel,
+    image_edit_model: input.imageEditModel,
   }
 }
 
@@ -166,6 +201,9 @@ export async function updateModelProfile(
         label: input.label,
         base_url: input.baseUrl,
         default_model: input.defaultModel,
+        image_understanding_model: input.imageUnderstandingModel,
+        image_generation_model: input.imageGenerationModel,
+        image_edit_model: input.imageEditModel,
         ...(input.authToken === undefined
           ? {}
           : { auth_token: input.authToken }),
@@ -219,4 +257,64 @@ export async function testSavedModelProfile(
   )
 
   return response.models.map((model) => model.id)
+}
+
+export async function probeDraftModelCapability(
+  input: ModelProfileCreateInput,
+  modelId: string,
+  capability: ModelCapability,
+  signal?: AbortSignal
+): Promise<ModelCapabilityProbeResult> {
+  const response = await requestJson<ModelCapabilityProbeResponse>(
+    `${MODEL_PROFILE_API_PREFIX}/capabilities/probe`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...toRequestBody(input),
+        model_id: modelId,
+        capability,
+      }),
+      signal,
+    }
+  )
+
+  return toCapabilityProbeResult(response)
+}
+
+export async function probeSavedModelCapability(
+  profileId: string,
+  input: SavedModelProfileTestInput,
+  modelId: string,
+  capability: ModelCapability,
+  signal?: AbortSignal
+): Promise<ModelCapabilityProbeResult> {
+  const response = await requestJson<ModelCapabilityProbeResponse>(
+    profileEndpoint(profileId, "/capabilities/probe"),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...(input.baseUrl === undefined ? {} : { base_url: input.baseUrl }),
+        ...(input.authToken === undefined
+          ? {}
+          : { auth_token: input.authToken }),
+        model_id: modelId,
+        capability,
+      }),
+      signal,
+    }
+  )
+
+  return toCapabilityProbeResult(response)
+}
+
+function toCapabilityProbeResult(
+  response: ModelCapabilityProbeResponse
+): ModelCapabilityProbeResult {
+  return {
+    modelId: response.model_id,
+    capability: response.capability,
+    supported: response.supported,
+  }
 }

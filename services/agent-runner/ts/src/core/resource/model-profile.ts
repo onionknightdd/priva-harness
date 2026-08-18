@@ -11,6 +11,11 @@ export type ImageReadTransport =
   | 'images_edits'
   | 'unsupported'
 
+export type ModelCapability =
+  | 'image_understanding'
+  | 'image_generation'
+  | 'image_edit'
+
 export interface ModelCapabilities {
   readonly image: boolean | null
   readonly imageReadTransport: ImageReadTransport | null
@@ -22,6 +27,9 @@ export interface ModelProfile {
   readonly baseUrl: string
   readonly authToken: string
   readonly defaultModel: string | null
+  readonly imageUnderstandingModel: string | null
+  readonly imageGenerationModel: string | null
+  readonly imageEditModel: string | null
   readonly modelCapabilities: Readonly<Record<string, ModelCapabilities>>
 }
 
@@ -42,6 +50,9 @@ export interface ModelProfileCreateInput {
   readonly baseUrl: string
   readonly authToken: string
   readonly defaultModel?: string | null
+  readonly imageUnderstandingModel?: string | null
+  readonly imageGenerationModel?: string | null
+  readonly imageEditModel?: string | null
 }
 
 export interface ModelProfilePatch {
@@ -49,6 +60,9 @@ export interface ModelProfilePatch {
   readonly baseUrl?: string
   readonly authToken?: string
   readonly defaultModel?: string | null
+  readonly imageUnderstandingModel?: string | null
+  readonly imageGenerationModel?: string | null
+  readonly imageEditModel?: string | null
 }
 
 export interface ModelInfo {
@@ -69,6 +83,12 @@ export interface ImageCapabilityProbeResult {
   readonly modelId: string
   readonly image: boolean
   readonly cached: boolean
+}
+
+export interface ModelCapabilityProbeResult {
+  readonly modelId: string
+  readonly capability: ModelCapability
+  readonly supported: boolean
 }
 
 export type ModelProfileErrorKind =
@@ -136,6 +156,9 @@ export function createModelProfile(input: ModelProfileCreateInput): ModelProfile
     baseUrl: normalizeBaseUrl(input.baseUrl),
     authToken: normalizeAuthToken(input.authToken),
     defaultModel: normalizeOptionalModel(input.defaultModel),
+    imageUnderstandingModel: normalizeOptionalModel(input.imageUnderstandingModel),
+    imageGenerationModel: normalizeOptionalModel(input.imageGenerationModel),
+    imageEditModel: normalizeOptionalModel(input.imageEditModel),
     modelCapabilities: {},
   }
 }
@@ -156,6 +179,15 @@ export function patchModelProfile(
     defaultModel: patch.defaultModel === undefined
       ? current.defaultModel
       : normalizeOptionalModel(patch.defaultModel),
+    imageUnderstandingModel: patch.imageUnderstandingModel === undefined
+      ? current.imageUnderstandingModel
+      : normalizeOptionalModel(patch.imageUnderstandingModel),
+    imageGenerationModel: patch.imageGenerationModel === undefined
+      ? current.imageGenerationModel
+      : normalizeOptionalModel(patch.imageGenerationModel),
+    imageEditModel: patch.imageEditModel === undefined
+      ? current.imageEditModel
+      : normalizeOptionalModel(patch.imageEditModel),
   }
 }
 
@@ -286,6 +318,9 @@ function parseStoredProfile(value: unknown): ModelProfile {
     'baseUrl',
     'authToken',
     'defaultModel',
+    'imageUnderstandingModel',
+    'imageGenerationModel',
+    'imageEditModel',
     'modelCapabilities',
   ], 'Profile')
   try {
@@ -295,6 +330,12 @@ function parseStoredProfile(value: unknown): ModelProfile {
       baseUrl: requiredStoredString(value, 'baseUrl'),
       authToken: requiredStoredString(value, 'authToken'),
       defaultModel: optionalStoredString(value, 'defaultModel'),
+      imageUnderstandingModel: optionalMissingStoredString(
+        value,
+        'imageUnderstandingModel',
+      ),
+      imageGenerationModel: optionalMissingStoredString(value, 'imageGenerationModel'),
+      imageEditModel: optionalMissingStoredString(value, 'imageEditModel'),
     })
     return {
       ...profile,
@@ -395,6 +436,13 @@ function optionalStoredString(
   if (field === null) return null
   if (typeof field !== 'string') throw corruptStore(`${key} must be a string or null`)
   return field
+}
+
+function optionalMissingStoredString(
+  value: Readonly<Record<string, unknown>>,
+  key: string,
+): string | null {
+  return value[key] === undefined ? null : optionalStoredString(value, key)
 }
 
 function assertOnlyStoredKeys(

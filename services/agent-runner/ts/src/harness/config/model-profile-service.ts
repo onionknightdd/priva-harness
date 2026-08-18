@@ -7,6 +7,8 @@ import type {
 import {
   createModelProfile,
   type ImageCapabilityProbeResult,
+  type ModelCapability,
+  type ModelCapabilityProbeResult,
   type ModelCapabilities,
   type ModelInfo,
   type ModelProfile,
@@ -179,6 +181,47 @@ export class ModelProfileService implements ModelProfileCapabilities, ModelProfi
     }
   }
 
+  async probeDraftModelCapability(
+    input: ModelProfileCreateInput,
+    modelId: string,
+    capability: ModelCapability,
+    signal?: AbortSignal,
+  ): Promise<ModelCapabilityProbeResult> {
+    return await this.runModelCapabilityProbe(
+      createModelProfile(input),
+      modelId,
+      capability,
+      signal,
+    )
+  }
+
+  async probeSavedModelCapability(
+    profileId: string,
+    patch: Pick<ModelProfilePatch, 'baseUrl' | 'authToken'>,
+    modelId: string,
+    capability: ModelCapability,
+    signal?: AbortSignal,
+  ): Promise<ModelCapabilityProbeResult> {
+    const profile = patchModelProfile(await this.getProfile(profileId), patch)
+    return await this.runModelCapabilityProbe(profile, modelId, capability, signal)
+  }
+
+  private async runModelCapabilityProbe(
+    profile: ModelProfile,
+    modelId: string,
+    capability: ModelCapability,
+    signal?: AbortSignal,
+  ): Promise<ModelCapabilityProbeResult> {
+    const normalizedModelId = normalizeModelId(modelId)
+    const supported = await this.endpointClient.probeModelCapability(
+      profile,
+      normalizedModelId,
+      capability,
+      signal,
+    )
+    return { modelId: normalizedModelId, capability, supported }
+  }
+
   private async runImageCapabilityProbe(
     profileId: string,
     modelId: string,
@@ -193,7 +236,11 @@ export class ModelProfileService implements ModelProfileCapabilities, ModelProfi
 
       let image: boolean
       try {
-        image = await this.endpointClient.probeImageCapability(profile, modelId)
+        image = await this.endpointClient.probeModelCapability(
+          profile,
+          modelId,
+          'image_understanding',
+        )
       } catch (error) {
         if (isUpstreamError(error)) {
           throw new ModelProfileError(

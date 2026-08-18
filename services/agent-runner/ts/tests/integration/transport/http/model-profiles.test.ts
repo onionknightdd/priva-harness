@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import type { ModelEndpointClient } from '../../../../src/core/contract/model-profile.js'
 import {
+  type ModelCapability,
   type ModelProfile,
   ModelProfileError,
 } from '../../../../src/core/resource/model-profile.js'
@@ -43,7 +44,12 @@ describe('/api/sandbox/credentials/profiles', () => {
     const createResponse = await server.inject({
       method: 'POST',
       url: '/api/sandbox/credentials/profiles',
-      payload: profilePayload('gateway'),
+      payload: {
+        ...profilePayload('gateway'),
+        image_understanding_model: 'vision-a',
+        image_generation_model: 'image-a',
+        image_edit_model: 'edit-a',
+      },
     })
     expect(createResponse.statusCode).toBe(201)
     expect(createResponse.json()).toEqual({
@@ -53,6 +59,9 @@ describe('/api/sandbox/credentials/profiles', () => {
       auth_token: 'secret',
       auth_token_set: true,
       default_model: 'model-a',
+      image_understanding_model: 'vision-a',
+      image_generation_model: 'image-a',
+      image_edit_model: 'edit-a',
       model_capabilities: {},
       model_count: null,
     })
@@ -70,12 +79,19 @@ describe('/api/sandbox/credentials/profiles', () => {
     const updateResponse = await server.inject({
       method: 'PATCH',
       url: '/api/sandbox/credentials/profiles/gateway',
-      payload: { label: 'Renamed', default_model: null },
+      payload: {
+        label: 'Renamed',
+        default_model: null,
+        image_edit_model: 'edit-b',
+      },
     })
     expect(updateResponse.statusCode).toBe(200)
     expect(updateResponse.json()).toMatchObject({
       label: 'Renamed',
       default_model: null,
+      image_understanding_model: 'vision-a',
+      image_generation_model: 'image-a',
+      image_edit_model: 'edit-b',
     })
 
     const getResponse = await server.inject({
@@ -168,34 +184,64 @@ describe('/api/sandbox/credentials/profiles', () => {
     })
   })
 
-  it('force probes image capability, persists it, and resets the transport decision', async () => {
+  it('probes draft and saved multimodal capabilities with current credentials', async () => {
     await createProfile(server, 'gateway')
-    const firstProbe = await server.inject({
-      method: 'POST',
-      url: '/api/sandbox/credentials/profiles/gateway/image-capability/probe',
-      payload: { model_id: 'model-a' },
-    })
-    expect(firstProbe.statusCode).toBe(200)
-    expect(firstProbe.json()).toEqual({
-      profile_id: 'gateway',
-      model_id: 'model-a',
-      image: true,
-      cached: false,
-    })
 
-    const getResponse = await server.inject({
-      method: 'GET',
-      url: '/api/sandbox/credentials/profiles/gateway',
-    })
-    expect(getResponse.json()).toMatchObject({
-      model_capabilities: {
-        'model-a': { image: true, image_read_transport: null },
+    const savedProbe = await server.inject({
+      method: 'POST',
+      url: '/api/sandbox/credentials/profiles/gateway/capabilities/probe',
+      payload: {
+        base_url: 'https://changed.example.com/v1',
+        auth_token: 'changed-secret',
+        model_id: 'image-a',
+        capability: 'image_generation',
       },
     })
-    expect(endpointClient.probedModels).toEqual(['model-a'])
+    expect(savedProbe.statusCode).toBe(200)
+    expect(savedProbe.json()).toEqual({
+      model_id: 'image-a',
+      capability: 'image_generation',
+      supported: true,
+    })
+    expect(endpointClient.probes.at(-1)).toMatchObject({
+      profile: {
+        id: 'gateway',
+        baseUrl: 'https://changed.example.com/v1',
+        authToken: 'changed-secret',
+      },
+      modelId: 'image-a',
+      capability: 'image_generation',
+    })
+
+    const draftProbe = await server.inject({
+      method: 'POST',
+      url: '/api/sandbox/credentials/profiles/capabilities/probe',
+      payload: {
+        ...profilePayload('draft'),
+        base_url: 'https://draft.example.com/v1',
+        auth_token: 'draft-secret',
+        model_id: 'edit-a',
+        capability: 'image_edit',
+      },
+    })
+    expect(draftProbe.statusCode).toBe(200)
+    expect(draftProbe.json()).toEqual({
+      model_id: 'edit-a',
+      capability: 'image_edit',
+      supported: true,
+    })
+    expect(endpointClient.probes.at(-1)).toMatchObject({
+      profile: {
+        id: 'draft',
+        baseUrl: 'https://draft.example.com/v1',
+        authToken: 'draft-secret',
+      },
+      modelId: 'edit-a',
+      capability: 'image_edit',
+    })
   })
 
-  it('returns model_unavailable and leaves no cache when image probing fails', async () => {
+  it('returns the upstream error when multimodal probing fails', async () => {
     await createProfile(server, 'gateway')
     endpointClient.probeError = new ModelProfileError(
       'upstream-auth-failed',
@@ -204,17 +250,14 @@ describe('/api/sandbox/credentials/profiles', () => {
 
     const probe = await server.inject({
       method: 'POST',
-      url: '/api/sandbox/credentials/profiles/gateway/image-capability/probe',
-      payload: { model_id: 'model-a' },
+      url: '/api/sandbox/credentials/profiles/gateway/capabilities/probe',
+      payload: {
+        model_id: 'model-a',
+        capability: 'image_understanding',
+      },
     })
-    expect(probe.statusCode).toBe(502)
-    expect(probe.json()).toEqual({ detail: 'model_unavailable' })
-
-    const profile = await server.inject({
-      method: 'GET',
-      url: '/api/sandbox/credentials/profiles/gateway',
-    })
-    expect(profile.json()).toMatchObject({ model_capabilities: {} })
+    expect(probe.statusCode).toBe(400)
+    expect(probe.json()).toEqual({ detail: 'authentication failed' })
   })
 
   it('requires a ready profile before changing the default and promotes on deletion', async () => {
@@ -255,7 +298,11 @@ describe('/api/sandbox/credentials/profiles', () => {
 
 class RecordingEndpointClient implements ModelEndpointClient {
   readonly listedProfiles: ModelProfile[] = []
-  readonly probedModels: string[] = []
+  readonly probes: {
+    readonly profile: ModelProfile
+    readonly modelId: string
+    readonly capability: ModelCapability
+  }[] = []
   probeError: Error | undefined
 
   listModels(profile: ModelProfile) {
@@ -263,8 +310,12 @@ class RecordingEndpointClient implements ModelEndpointClient {
     return Promise.resolve([{ id: 'model-a' }, { id: 'model-b' }])
   }
 
-  probeImageCapability(_profile: ModelProfile, modelId: string) {
-    this.probedModels.push(modelId)
+  probeModelCapability(
+    profile: ModelProfile,
+    modelId: string,
+    capability: ModelCapability,
+  ) {
+    this.probes.push({ profile, modelId, capability })
     if (this.probeError !== undefined) return Promise.reject(this.probeError)
     return Promise.resolve(true)
   }

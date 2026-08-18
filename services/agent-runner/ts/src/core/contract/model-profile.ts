@@ -1,8 +1,12 @@
 import type {
   ImageCapabilityProbeResult,
+  ModelCapability,
+  ModelCapabilityProbeResult,
   ModelInfo,
   ModelProfile,
   ModelProfileCollection,
+  ModelProfileCreateInput,
+  ModelProfilePatch,
   ResolvedModelProfile,
 } from '../resource/model-profile.js'
 
@@ -31,9 +35,10 @@ export interface ModelEndpointClient {
     signal?: AbortSignal,
   ): Promise<readonly ModelInfo[]>
 
-  probeImageCapability(
+  probeModelCapability(
     profile: ModelProfile,
     modelId: string,
+    capability: ModelCapability,
     signal?: AbortSignal,
   ): Promise<boolean>
 }
@@ -50,4 +55,19 @@ export interface ModelProfileCapabilities {
     modelId: string,
     options?: { readonly force?: boolean },
   ): Promise<ImageCapabilityProbeResult>
+
+  probeDraftModelCapability(
+    input: ModelProfileCreateInput,
+    modelId: string,
+    capability: ModelCapability,
+    signal?: AbortSignal,
+  ): Promise<ModelCapabilityProbeResult>
+
+  probeSavedModelCapability(
+    profileId: string,
+    patch: Pick<ModelProfilePatch, 'baseUrl' | 'authToken'>,
+    modelId: string,
+    capability: ModelCapability,
+    signal?: AbortSignal,
+  ): Promise<ModelCapabilityProbeResult>
 }
