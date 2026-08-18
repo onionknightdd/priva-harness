@@ -128,13 +128,17 @@ function CapabilityModelField({
   const inputId = `model-profile-${capability.replaceAll("_", "-")}`
 
   return (
-    <div className="grid min-w-0 grid-cols-[8.75rem_minmax(0,1fr)_6.5rem] items-center gap-3 max-sm:grid-cols-1 max-sm:gap-1.5">
+    <div className="grid min-w-0 grid-cols-[8.75rem_6.5rem_minmax(0,1fr)] items-center gap-3 max-sm:grid-cols-1 max-sm:gap-1.5">
       <label
         htmlFor={inputId}
         className="whitespace-nowrap text-sm text-foreground"
       >
         {label}
       </label>
+      <CapabilityProbeResult
+        errorMessage={probe.errorMessage}
+        status={probe.status}
+      />
       <ModelSelector
         id={inputId}
         className="min-w-0"
@@ -147,10 +151,6 @@ function CapabilityModelField({
           onValueChange(value)
           probe.probe(value)
         }}
-      />
-      <CapabilityProbeResult
-        errorMessage={probe.errorMessage}
-        status={probe.status}
       />
     </div>
   )
@@ -172,7 +172,7 @@ function CapabilityProbeResult({
       role="status"
       aria-live="polite"
       title={status === "error" ? errorMessage ?? undefined : undefined}
-      className="flex min-h-5 min-w-0 items-center text-xs max-sm:pl-[6.75rem]"
+      className="flex min-h-5 min-w-0 items-center text-xs"
     >
       <AnimatePresence initial={false} mode="wait">
         {content && (
