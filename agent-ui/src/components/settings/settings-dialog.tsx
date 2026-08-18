@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import gsap from "gsap"
 import {
   ArchiveIcon,
   BotIcon,
@@ -11,6 +10,7 @@ import {
   SlidersHorizontalIcon,
   UserRoundIcon,
 } from "lucide-react"
+import { motion, useReducedMotion, type Transition } from "motion/react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -81,6 +81,11 @@ const settingsNavigation = [
 
 type SettingsSectionId = (typeof settingsNavigation)[number]["id"]
 
+const settingsPanelTransition: Transition = {
+  duration: 0.22,
+  ease: [0.22, 1, 0.36, 1],
+}
+
 export function SettingsDialog({
   open,
   onOpenChange,
@@ -90,41 +95,13 @@ export function SettingsDialog({
 }) {
   const [activeSectionId, setActiveSectionId] =
     React.useState<SettingsSectionId>("account")
-  const panelRef = React.useRef<HTMLDivElement>(null)
   const { t } = useTranslation()
+  const shouldReduceMotion = Boolean(useReducedMotion())
   const activeSection =
     settingsNavigation.find((item) => item.id === activeSectionId) ??
     settingsNavigation[0]
   const activeSectionTitle = t(activeSection.titleKey)
   const isModelSection = activeSectionId === "llmProviders"
-
-  React.useLayoutEffect(() => {
-    const panel = panelRef.current
-
-    if (
-      !open ||
-      !panel ||
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
-      return
-    }
-
-    const context = gsap.context(() => {
-      gsap.fromTo(
-        panel,
-        { autoAlpha: 0.65, y: 6 },
-        {
-          autoAlpha: 1,
-          y: 0,
-          duration: 0.22,
-          ease: "power2.out",
-          clearProps: "opacity,transform,visibility",
-        }
-      )
-    }, panel)
-
-    return () => context.revert()
-  }, [activeSectionId, open])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -204,14 +181,22 @@ export function SettingsDialog({
               )}
               aria-labelledby="settings-active-section"
             >
-              <div
+              <motion.div
                 key={activeSectionId}
-                ref={panelRef}
                 data-settings-panel
                 className={cn(
                   "flex min-h-0 flex-1 flex-col",
                   !isModelSection && "gap-4"
                 )}
+                initial={
+                  shouldReduceMotion ? false : { opacity: 0.65, y: 6 }
+                }
+                animate={{ opacity: 1, y: 0 }}
+                transition={
+                  shouldReduceMotion
+                    ? { duration: 0 }
+                    : settingsPanelTransition
+                }
               >
                 {isModelSection ? (
                   <ModelSettingsView />
@@ -223,7 +208,7 @@ export function SettingsDialog({
                     />
                   ))
                 )}
-              </div>
+              </motion.div>
             </section>
           </main>
         </SidebarProvider>

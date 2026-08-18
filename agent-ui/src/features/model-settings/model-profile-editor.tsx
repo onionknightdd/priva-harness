@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import gsap from "gsap"
 import {
   CheckCircle2Icon,
   KeyRoundIcon,
@@ -9,6 +8,7 @@ import {
   Trash2Icon,
   UnplugIcon,
 } from "lucide-react"
+import { motion, useReducedMotion, type Transition } from "motion/react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -82,6 +82,16 @@ function formatModelGroupLabel(value: string) {
     : value
 }
 
+const editorTransition: Transition = {
+  duration: 0.2,
+  ease: [0.22, 1, 0.36, 1],
+}
+
+const feedbackTransition: Transition = {
+  duration: 0.18,
+  ease: [0.22, 1, 0.36, 1],
+}
+
 export function ModelProfileEditor({
   busyAction,
   canTest,
@@ -125,8 +135,7 @@ export function ModelProfileEditor({
   onTest: () => void
 }) {
   const { t } = useTranslation()
-  const editorRef = React.useRef<HTMLDivElement>(null)
-  const testFeedbackRef = React.useRef<HTMLSpanElement>(null)
+  const shouldReduceMotion = Boolean(useReducedMotion())
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
   const modelGroups = React.useMemo(() => groupModelIds(modelIds), [modelIds])
   const isTesting = testStatus === "testing"
@@ -146,65 +155,15 @@ export function ModelProfileEditor({
     ? t("settings.models.newProfile")
     : profile?.label ?? t("settings.models.profileEditorLabel")
 
-  React.useLayoutEffect(() => {
-    const editor = editorRef.current
-
-    if (
-      !editor ||
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
-      return
-    }
-
-    const context = gsap.context(() => {
-      gsap.fromTo(
-        editor,
-        { autoAlpha: 0.72, x: 8 },
-        {
-          autoAlpha: 1,
-          x: 0,
-          duration: 0.2,
-          ease: "power2.out",
-          clearProps: "opacity,transform,visibility",
-        }
-      )
-    }, editor)
-
-    return () => context.revert()
-  }, [isCreating, profile?.id])
-
-  React.useLayoutEffect(() => {
-    const status = testFeedbackRef.current
-
-    if (
-      !status ||
-      !testFeedback ||
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
-      return
-    }
-
-    const context = gsap.context(() => {
-      gsap.fromTo(
-        status,
-        { autoAlpha: 0, x: -4 },
-        {
-          autoAlpha: 1,
-          x: 0,
-          duration: 0.18,
-          ease: "power2.out",
-          clearProps: "opacity,transform,visibility",
-        }
-      )
-    }, status)
-
-    return () => context.revert()
-  }, [testFeedback])
-
   return (
-    <div
-      ref={editorRef}
+    <motion.div
+      key={isCreating ? "new-profile" : profile?.id ?? "empty-profile"}
       className="w-full min-w-0 max-w-2xl overflow-x-hidden pb-2"
+      initial={
+        shouldReduceMotion ? false : { opacity: 0.72, x: 8 }
+      }
+      animate={{ opacity: 1, x: 0 }}
+      transition={shouldReduceMotion ? { duration: 0 } : editorTransition}
     >
       <div className="mb-5 flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
@@ -351,8 +310,12 @@ export function ModelProfileEditor({
                   )}
                   {t("settings.models.testConnection")}
                 </Button>
-                <span
-                  ref={testFeedbackRef}
+                <motion.span
+                  key={[
+                    testStatus,
+                    testFeedback?.tone ?? "none",
+                    testFeedback?.message ?? "",
+                  ].join(":")}
                   role="status"
                   aria-live="polite"
                   className={cn(
@@ -361,6 +324,17 @@ export function ModelProfileEditor({
                     testFeedback?.tone === "success" &&
                       "text-emerald-600 dark:text-emerald-400"
                   )}
+                  initial={
+                    testFeedback && !shouldReduceMotion
+                      ? { opacity: 0, x: -4 }
+                      : false
+                  }
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={
+                    shouldReduceMotion
+                      ? { duration: 0 }
+                      : feedbackTransition
+                  }
                 >
                   {testFeedback?.tone === "success" && (
                     <CheckCircle2Icon
@@ -369,7 +343,7 @@ export function ModelProfileEditor({
                     />
                   )}
                   {testFeedback?.message}
-                </span>
+                </motion.span>
               </div>
             </Field>
 
@@ -523,6 +497,6 @@ export function ModelProfileEditor({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </motion.div>
   )
 }
