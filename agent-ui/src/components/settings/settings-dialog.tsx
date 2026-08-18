@@ -37,6 +37,8 @@ import {
   SidebarMenuItem,
   SidebarProvider,
 } from "@/components/ui/sidebar"
+import { ModelSettingsView } from "@/features/model-settings"
+import { cn } from "@/lib/utils"
 
 const settingsNavigation = [
   {
@@ -93,6 +95,7 @@ export function SettingsDialog({
     settingsNavigation.find((item) => item.id === activeSectionId) ??
     settingsNavigation[0]
   const activeSectionTitle = t(activeSection.titleKey)
+  const isModelSection = activeSectionId === "llmProviders"
 
   React.useLayoutEffect(() => {
     const panel = panelRef.current
@@ -189,21 +192,31 @@ export function SettingsDialog({
             </header>
 
             <section
-              className="flex flex-1 flex-col overflow-y-auto p-4 pt-0"
+              className={cn(
+                "flex min-h-0 flex-1 flex-col p-4 pt-0",
+                isModelSection ? "overflow-hidden" : "overflow-y-auto"
+              )}
               aria-labelledby="settings-active-section"
             >
               <div
                 key={activeSectionId}
                 ref={panelRef}
                 data-settings-panel
-                className="flex flex-col gap-4"
+                className={cn(
+                  "flex flex-1 flex-col",
+                  !isModelSection && "gap-4"
+                )}
               >
-                {Array.from({ length: 10 }, (_, index) => (
-                  <div
-                    key={index}
-                    className="aspect-video max-w-3xl rounded-xl bg-muted/50"
-                  />
-                ))}
+                {isModelSection ? (
+                  <ModelSettingsView />
+                ) : (
+                  Array.from({ length: 10 }, (_, index) => (
+                    <div
+                      key={index}
+                      className="aspect-video max-w-3xl rounded-xl bg-muted/50"
+                    />
+                  ))
+                )}
               </div>
             </section>
           </main>
