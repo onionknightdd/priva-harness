@@ -53,12 +53,12 @@ type ErrorResponse = {
   detail?: string
 }
 
-export class FileBrowserApiError extends Error {
+export class SandboxFilesApiError extends Error {
   readonly status: number
 
   constructor(status: number, message: string) {
     super(message)
-    this.name = "FileBrowserApiError"
+    this.name = "SandboxFilesApiError"
     this.status = status
   }
 }
@@ -78,7 +78,7 @@ async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
       // Keep the HTTP status text when the response has no JSON body.
     }
 
-    throw new FileBrowserApiError(response.status, detail)
+    throw new SandboxFilesApiError(response.status, detail)
   }
 
   return (await response.json()) as T
@@ -142,7 +142,7 @@ export function uploadFile(
           resolve(uploadedFile)
         } catch {
           reject(
-            new FileBrowserApiError(
+            new SandboxFilesApiError(
               request.status,
               "The upload response was not valid JSON"
             )
@@ -152,16 +152,13 @@ export function uploadFile(
       }
 
       reject(
-        new FileBrowserApiError(
-          request.status,
-          getUploadErrorDetail(request)
-        )
+        new SandboxFilesApiError(request.status, getUploadErrorDetail(request))
       )
     })
 
     request.addEventListener("error", () => {
       cleanup()
-      reject(new FileBrowserApiError(0, "Unable to upload file"))
+      reject(new SandboxFilesApiError(0, "Unable to upload file"))
     })
 
     request.addEventListener("abort", () => {

@@ -13,10 +13,14 @@ export const zhCN = {
     resizeSidebar: "调整侧边栏宽度",
   },
   breadcrumb: {
-    buildYourApplication: "构建你的应用",
-    dataFetching: "数据获取",
+    workspace: "工作区",
+    conversation: "会话",
     dataAndUsage: "数据与用量",
     fileBrowser: "文件浏览器",
+  },
+  workspace: {
+    emptyTitle: "还没有会话",
+    emptyDescription: "从侧边栏新建会话后，当前对话会出现在这里。",
   },
   fileBrowser: {
     searchLabel: "搜索文件和文件夹",
@@ -172,6 +176,7 @@ export const zhCN = {
       collapseAllSessions: "折叠全部会话",
       refreshSessions: "刷新会话",
       noResults: "未找到项目",
+      empty: "还没有项目",
       pin: "置顶",
       tag: "Tag",
       revealInFiles: "在文件中查看",
@@ -179,6 +184,9 @@ export const zhCN = {
     },
     user: {
       openMenu: "打开用户菜单",
+      guestName: "本地用户",
+      guestEmail: "未登录",
+      guestInitials: "本",
       settings: "设置",
       apiDocumentation: "API文档",
       about: "简介",
@@ -199,6 +207,9 @@ export const zhCN = {
       debug: "调试",
       archived: "已归档",
     },
+    unavailableTitle: "该分区尚未提供",
+    unavailableDescription:
+      "目前只能配置模型。其他设置会随对应功能一起出现在这里。",
     models: {
       profiles: "配置",
       profileListLabel: "模型配置",
@@ -265,6 +276,7 @@ export const zhCN = {
       files: "文件",
       terminal: "终端",
       artifacts: "产出",
+      unavailable: "{{action}}暂不可用",
     },
   },
   language: {

@@ -185,16 +185,22 @@ export function NavProjects({
                       : emptyStateTransition
                   }
                 >
-                  {t("sidebar.projects.noResults")}
+                  {t(
+                    projects.length === 0 && !normalizedQuery
+                      ? "sidebar.projects.empty"
+                      : "sidebar.projects.noResults"
+                  )}
                 </motion.p>
               </SidebarMenuItem>
             )}
-            <SidebarMenuItem>
-              <SidebarMenuButton className="text-sidebar-foreground/70">
-                <MoreHorizontalIcon className="text-sidebar-foreground/70" />
-                <span>{t("common.more")}</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
+            {projects.length > 0 && (
+              <SidebarMenuItem>
+                <SidebarMenuButton className="text-sidebar-foreground/70">
+                  <MoreHorizontalIcon className="text-sidebar-foreground/70" />
+                  <span>{t("common.more")}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            )}
           </SidebarMenu>
         </CollapsibleContent>
       </Collapsible>

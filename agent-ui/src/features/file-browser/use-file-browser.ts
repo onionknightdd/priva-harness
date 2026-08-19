@@ -9,7 +9,7 @@ import {
   listDirectory,
   previewFile,
   type FileSystemDirectory,
-} from "./file-browser-api"
+} from "@/lib/api/sandbox-files"
 import {
   emptyFileBrowserModel,
   getFileBrowserBreadcrumb,

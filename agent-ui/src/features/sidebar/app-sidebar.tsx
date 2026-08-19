@@ -75,7 +75,7 @@ export function AppSidebar({
           aria-hidden="true"
           className="pointer-events-none absolute inset-x-0 -top-6 h-6 bg-linear-to-t from-sidebar to-transparent"
         />
-        <NavUser user={sidebarData.user} />
+        <NavUser />
       </SidebarFooter>
     </Sidebar>
   )

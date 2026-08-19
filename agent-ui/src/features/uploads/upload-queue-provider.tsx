@@ -2,7 +2,7 @@
 
 import * as React from "react"
 
-import { uploadFile } from "@/features/file-browser/file-browser-api"
+import { uploadFile } from "@/lib/api/sandbox-files"
 
 import {
   UploadQueueContext,

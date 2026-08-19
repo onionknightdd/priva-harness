@@ -201,12 +201,14 @@ export function SettingsDialog({
                 {isModelSection ? (
                   <ModelSettingsView />
                 ) : (
-                  Array.from({ length: 10 }, (_, index) => (
-                    <div
-                      key={index}
-                      className="aspect-video max-w-3xl rounded-xl bg-muted/50"
-                    />
-                  ))
+                  <div className="flex max-w-lg flex-col gap-2 py-2">
+                    <p className="text-sm font-medium">
+                      {t("settings.unavailableTitle")}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {t("settings.unavailableDescription")}
+                    </p>
+                  </div>
                 )}
               </motion.div>
             </section>

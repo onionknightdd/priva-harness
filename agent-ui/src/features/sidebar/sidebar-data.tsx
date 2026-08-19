@@ -18,13 +18,8 @@ import {
 
 import type { SidebarData } from "./sidebar.types"
 
-// Sample content kept separate from the Sidebar composition for easy replacement.
+// Navigation content kept separate from the Sidebar composition.
 export const sidebarData = {
-  user: {
-    name: "shadcn",
-    email: "m@example.com",
-    avatar: "https://ui.shadcn.com/avatars/shadcn.jpg",
-  },
   menu: [
     {
       titleKey: "sidebar.navigation.newChat",
@@ -84,18 +79,5 @@ export const sidebarData = {
       ],
     },
   ],
-  projects: [
-    {
-      name: "Design Engineering",
-      url: "#",
-    },
-    {
-      name: "Sales & Marketing",
-      url: "#",
-    },
-    {
-      name: "Travel",
-      url: "#",
-    },
-  ],
+  projects: [],
 } satisfies SidebarData

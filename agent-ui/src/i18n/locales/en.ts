@@ -13,10 +13,15 @@ export const en = {
     resizeSidebar: "Resize Sidebar",
   },
   breadcrumb: {
-    buildYourApplication: "Build Your Application",
-    dataFetching: "Data Fetching",
+    workspace: "Workspace",
+    conversation: "Conversation",
     dataAndUsage: "Data and Usage",
     fileBrowser: "File Browser",
+  },
+  workspace: {
+    emptyTitle: "No conversation yet",
+    emptyDescription:
+      "Start a new chat from the sidebar. The workspace will show the active conversation here.",
   },
   fileBrowser: {
     searchLabel: "Search files and folders",
@@ -174,6 +179,7 @@ export const en = {
       collapseAllSessions: "Collapse all sessions",
       refreshSessions: "Refresh sessions",
       noResults: "No projects found",
+      empty: "No projects yet",
       pin: "Pin",
       tag: "Tag",
       revealInFiles: "Reveal in Files",
@@ -181,6 +187,9 @@ export const en = {
     },
     user: {
       openMenu: "Open user menu",
+      guestName: "Local user",
+      guestEmail: "Not signed in",
+      guestInitials: "LU",
       settings: "Settings",
       apiDocumentation: "API Documentation",
       about: "About",
@@ -201,6 +210,9 @@ export const en = {
       debug: "Debug",
       archived: "Archived",
     },
+    unavailableTitle: "This section is not available yet",
+    unavailableDescription:
+      "Only model profiles can be configured right now. Other settings will land here as those features are built.",
     models: {
       profiles: "Profiles",
       profileListLabel: "Model profiles",
@@ -269,6 +281,7 @@ export const en = {
       files: "Files",
       terminal: "Terminal",
       artifacts: "Artifacts",
+      unavailable: "{{action}} is not available yet",
     },
   },
   language: {

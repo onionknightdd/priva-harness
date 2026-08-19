@@ -10,12 +10,8 @@ import {
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from "@/components/ui/avatar"
-import { SettingsDialog } from "@/components/settings/settings-dialog"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { SettingsDialog } from "@/features/settings"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -32,7 +28,6 @@ import {
 } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
 
-import type { SidebarUser } from "../sidebar.types"
 import { LanguageToggle } from "./language-toggle"
 import { ThemeToggle } from "./theme-toggle"
 
@@ -40,41 +35,37 @@ const menuItemClassName =
   "gap-2 px-2 py-1.5 text-xs [&_svg]:text-muted-foreground"
 
 function UserAvatar({
-  user,
   className,
+  label,
 }: {
-  user: SidebarUser
   className?: string
+  label: string
 }) {
   return (
-    <Avatar
-      className={cn("size-8 rounded-lg after:rounded-lg", className)}
-    >
-      <AvatarImage
-        className="rounded-lg"
-        src={user.avatar}
-        alt={user.name}
-      />
-      <AvatarFallback className="rounded-lg">CN</AvatarFallback>
+    <Avatar className={cn("size-8 rounded-lg after:rounded-lg", className)}>
+      <AvatarFallback className="rounded-lg">{label}</AvatarFallback>
     </Avatar>
   )
 }
 
-export function NavUser({ user }: { user: SidebarUser }) {
+export function NavUser() {
   const { isMobile } = useSidebar()
   const { t } = useTranslation()
   const [settingsOpen, setSettingsOpen] = React.useState(false)
+  const name = t("sidebar.user.guestName")
+  const email = t("sidebar.user.guestEmail")
+  const initials = t("sidebar.user.guestInitials")
 
   return (
     <>
       <SidebarMenu>
         <SidebarMenuItem className="flex items-center gap-0.5 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:justify-center">
           <div className="flex min-w-0 flex-1 items-center gap-1.5 px-1 py-0.5 group-data-[collapsible=icon]:hidden">
-            <UserAvatar user={user} className="size-7" />
+            <UserAvatar className="size-7" label={initials} />
             <div className="grid min-w-0 flex-1 text-left text-xs leading-tight">
-              <span className="truncate font-medium">{user.name}</span>
+              <span className="truncate font-medium">{name}</span>
               <span className="truncate text-[11px] text-muted-foreground">
-                {user.email}
+                {email}
               </span>
             </div>
           </div>
@@ -109,7 +100,7 @@ export function NavUser({ user }: { user: SidebarUser }) {
             >
               <ChevronsUpDownIcon className="group-data-[collapsible=icon]:hidden" />
               <span className="hidden size-8 group-data-[collapsible=icon]:block">
-                <UserAvatar user={user} />
+                <UserAvatar label={initials} />
               </span>
             </DropdownMenuTrigger>
             <DropdownMenuContent

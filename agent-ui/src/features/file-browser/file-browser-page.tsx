@@ -1,48 +1,30 @@
 import * as React from "react"
 import gsap from "gsap"
-import { usePanelRef } from "react-resizable-panels"
 import { useTranslation } from "react-i18next"
 
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "@/components/ui/resizable"
 import { RichFilePreview } from "@/features/files"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { startFileDownload } from "@/lib/api/sandbox-files"
 
 import { FileAddressBar } from "./components/file-address-bar"
+import { FileBrowserWorkspace } from "./components/file-browser-workspace"
 import {
   CreateFolderDialog,
   DeletePathDialog,
 } from "./components/file-operation-dialogs"
 import { FileTreePane } from "./components/file-tree-pane"
-import { startFileDownload } from "./file-browser-api"
 import type { FileBrowserItem } from "./file-browser-data"
 import { useFileBrowser } from "./use-file-browser"
-
-const TREE_DEFAULT_SIZE = 30
-const TREE_MIN_SIZE = 18
-const TREE_MAX_SIZE = 65
-
-function clampTreeSize(size: number) {
-  return Math.min(TREE_MAX_SIZE, Math.max(TREE_MIN_SIZE, size))
-}
+import { useTreePanelVisibility } from "./use-tree-panel-visibility"
 
 export function FileBrowserPage() {
   const { t } = useTranslation()
   const browser = useFileBrowser()
   const isMobile = useIsMobile()
   const pageRef = React.useRef<HTMLDivElement>(null)
-  const treePaneContentRef = React.useRef<HTMLDivElement>(null)
-  const panelAnimationRef = React.useRef<gsap.core.Timeline | null>(null)
-  const previousTreeSizeRef = React.useRef(TREE_DEFAULT_SIZE)
   const uploadInputRef = React.useRef<HTMLInputElement>(null)
   const uploadDirectoryRef = React.useRef<string | null>(null)
   const announcementTimerRef = React.useRef<number | null>(null)
-  const treePanelRef = usePanelRef()
-  const [treeVisible, setTreeVisible] = React.useState(true)
-  const [panelTransitioning, setPanelTransitioning] = React.useState(false)
   const [createFolderDirectory, setCreateFolderDirectory] = React.useState<
     string | null
   >(null)
@@ -50,6 +32,18 @@ export function FileBrowserPage() {
     null
   )
   const [announcement, setAnnouncement] = React.useState("")
+  const {
+    TREE_DEFAULT_SIZE,
+    TREE_MAX_SIZE,
+    TREE_MIN_SIZE,
+    panelTransitioning,
+    rememberTreeSize,
+    setDesktopTreeVisibility,
+    setTreeVisible,
+    treePaneContentRef,
+    treePanelRef,
+    treeVisible,
+  } = useTreePanelVisibility()
 
   React.useLayoutEffect(() => {
     const page = pageRef.current
@@ -79,40 +73,8 @@ export function FileBrowserPage() {
     return () => context.revert()
   }, [])
 
-  React.useLayoutEffect(() => {
-    if (!isMobile) {
-      return
-    }
-
-    const pane = pageRef.current?.querySelector("[data-mobile-file-pane]")
-
-    if (
-      !pane ||
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
-      return
-    }
-
-    const context = gsap.context(() => {
-      gsap.fromTo(
-        pane,
-        { opacity: 0, y: 5 },
-        {
-          opacity: 1,
-          y: 0,
-          duration: 0.22,
-          ease: "power2.out",
-          clearProps: "transform,opacity",
-        }
-      )
-    }, pageRef)
-
-    return () => context.revert()
-  }, [isMobile, treeVisible])
-
   React.useEffect(
     () => () => {
-      panelAnimationRef.current?.kill()
       if (announcementTimerRef.current !== null) {
         window.clearTimeout(announcementTimerRef.current)
       }
@@ -130,81 +92,6 @@ export function FileBrowserPage() {
       2400
     )
   }, [])
-
-  const setDesktopTreeVisibility = React.useCallback(
-    (visible: boolean) => {
-      const panel = treePanelRef.current
-      const treeContent = treePaneContentRef.current
-
-      if (!panel || !treeContent) {
-        setTreeVisible(visible)
-        return
-      }
-
-      panelAnimationRef.current?.kill()
-
-      const currentSize = panel.getSize().asPercentage
-      if (!visible && currentSize > 0) {
-        previousTreeSizeRef.current = clampTreeSize(currentSize)
-      }
-
-      const targetSize = visible ? previousTreeSizeRef.current : 0
-      const reducedMotion = window.matchMedia(
-        "(prefers-reduced-motion: reduce)"
-      ).matches
-
-      setPanelTransitioning(true)
-      setTreeVisible(visible)
-
-      window.requestAnimationFrame(() => {
-        if (reducedMotion) {
-          panel.resize(`${targetSize}%`)
-          gsap.set(treeContent, {
-            clearProps: "transform",
-            opacity: visible ? 1 : 0,
-          })
-          setPanelTransitioning(false)
-          return
-        }
-
-        if (visible) {
-          panel.resize("0%")
-          gsap.set(treeContent, { opacity: 0, x: -8 })
-        }
-
-        const sizeState = { value: visible ? 0 : currentSize }
-        const timeline = gsap.timeline({
-          defaults: { duration: 0.3, ease: "power2.inOut" },
-          onComplete: () => {
-            setPanelTransitioning(false)
-            gsap.set(treeContent, { clearProps: "transform,opacity" })
-            panelAnimationRef.current = null
-          },
-        })
-
-        timeline.to(
-          sizeState,
-          {
-            value: targetSize,
-            onUpdate: () => panel.resize(`${sizeState.value}%`),
-          },
-          0
-        )
-        timeline.to(
-          treeContent,
-          {
-            opacity: visible ? 1 : 0,
-            x: visible ? 0 : -8,
-            duration: 0.2,
-          },
-          0
-        )
-
-        panelAnimationRef.current = timeline
-      })
-    },
-    [treePanelRef]
-  )
 
   const handleTreeVisibilityChange = (visible: boolean) => {
     if (visible === treeVisible && !panelTransitioning) {
@@ -327,70 +214,18 @@ export function FileBrowserPage() {
         onUpload={handleUploadRequest}
       />
 
-      <section
-        data-file-browser-enter
-        aria-label={t("fileBrowser.contentLabel")}
-        className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card text-card-foreground"
-      >
-        {isMobile ? (
-          <div data-mobile-file-pane className="flex min-h-0 flex-1">
-            {treeVisible ? treePane : filePreview}
-          </div>
-        ) : (
-          <ResizablePanelGroup
-            orientation="horizontal"
-            className="min-h-0 flex-1"
-          >
-            <ResizablePanel
-              id="file-tree-panel"
-              className="!flex !min-h-0 !overflow-hidden"
-              panelRef={treePanelRef}
-              defaultSize={`${TREE_DEFAULT_SIZE}%`}
-              minSize={
-                treeVisible && !panelTransitioning
-                  ? `${TREE_MIN_SIZE}%`
-                  : "0%"
-              }
-              maxSize={`${TREE_MAX_SIZE}%`}
-              onResize={(size) => {
-                if (
-                  treeVisible &&
-                  !panelTransitioning &&
-                  size.asPercentage >= TREE_MIN_SIZE
-                ) {
-                  previousTreeSizeRef.current = clampTreeSize(
-                    size.asPercentage
-                  )
-                }
-              }}
-            >
-              <div
-                id="file-browser-tree-pane"
-                ref={treePaneContentRef}
-                aria-hidden={!treeVisible}
-                className="flex h-full min-w-0 flex-1"
-              >
-                {treePane}
-              </div>
-            </ResizablePanel>
-            <ResizableHandle
-              aria-label={t("fileBrowser.resizePanels")}
-              className={
-                treeVisible || panelTransitioning
-                  ? "opacity-100"
-                  : "pointer-events-none opacity-0"
-              }
-            />
-            <ResizablePanel
-              id="file-preview-panel"
-              minSize="35%"
-              className="!flex !min-h-0 !overflow-hidden"
-            >
-              {filePreview}
-            </ResizablePanel>
-          </ResizablePanelGroup>
-        )}
-      </section>
+      <FileBrowserWorkspace
+        filePreview={filePreview}
+        onResizeTree={rememberTreeSize}
+        panelTransitioning={panelTransitioning}
+        treeDefaultSize={TREE_DEFAULT_SIZE}
+        treeMaxSize={TREE_MAX_SIZE}
+        treeMinSize={TREE_MIN_SIZE}
+        treePane={treePane}
+        treePaneContentRef={treePaneContentRef}
+        treePanelRef={treePanelRef}
+        treeVisible={treeVisible}
+      />
 
       <input
         ref={uploadInputRef}

@@ -3,12 +3,12 @@ import type {
   PreviewFile,
 } from "@/features/files"
 
-import type {
-  FilePreviewResponse,
-  FileSystemDirectory,
-  FileSystemEntry,
-} from "./file-browser-api"
-import { getDownloadUrl } from "./file-browser-api"
+import {
+  getDownloadUrl,
+  type FilePreviewResponse,
+  type FileSystemDirectory,
+  type FileSystemEntry,
+} from "@/lib/api/sandbox-files"
 
 export type FileBrowserItem = {
   path: string

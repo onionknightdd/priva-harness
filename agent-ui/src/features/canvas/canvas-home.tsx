@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button"
 
 type CanvasAction = {
   id: string
+  available: boolean
   labelKey: string
   icon: LucideIcon
 }
@@ -20,21 +21,25 @@ type CanvasAction = {
 const canvasActions: CanvasAction[] = [
   {
     id: "tasks",
+    available: false,
     labelKey: "canvas.home.tasksAndActivity",
     icon: ListTodoIcon,
   },
   {
     id: "files",
+    available: true,
     labelKey: "canvas.home.files",
     icon: FilesIcon,
   },
   {
     id: "terminal",
+    available: false,
     labelKey: "canvas.home.terminal",
     icon: TerminalIcon,
   },
   {
     id: "artifacts",
+    available: false,
     labelKey: "canvas.home.artifacts",
     icon: PackageIcon,
   },
@@ -52,16 +57,25 @@ export function CanvasHome({
       {canvasActions.map((action) => {
         const Icon = action.icon
         const label = t(action.labelKey)
+        const title = action.available
+          ? label
+          : t("canvas.home.unavailable", { action: label })
 
         return (
           <Button
             key={action.id}
             type="button"
             variant="ghost"
+            disabled={!action.available}
             data-canvas-action={action.id}
-            aria-label={label}
+            aria-label={title}
+            title={title}
             className="h-14 w-full justify-start gap-3 px-3 text-left font-normal"
-            onClick={() => onAction?.(action.id)}
+            onClick={() => {
+              if (action.available) {
+                onAction?.(action.id)
+              }
+            }}
           >
             <Icon
               className="size-5"

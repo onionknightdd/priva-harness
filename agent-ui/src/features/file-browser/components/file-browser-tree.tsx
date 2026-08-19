@@ -8,16 +8,7 @@ import {
   type ItemInstance,
 } from "@headless-tree/core"
 import { useTree } from "@headless-tree/react"
-import gsap from "gsap"
-import {
-  CopyIcon,
-  DownloadIcon,
-  FolderIcon,
-  FolderOpenIcon,
-  LoaderCircleIcon,
-  Trash2Icon,
-  UploadIcon,
-} from "lucide-react"
+import { LoaderCircleIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { OverflowMarquee } from "@/components/motion/overflow-marquee"
@@ -27,131 +18,24 @@ import {
   CollapsibleContent,
 } from "@/components/ui/collapsible"
 import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu"
-import {
   Tree,
   TreeItem,
   TreeItemLabel,
 } from "@/components/reui/tree"
-import { writeClipboardText } from "@/lib/clipboard"
 
 import {
   FILE_BROWSER_ROOT_ID,
   getFileBrowserAncestorPaths,
-  getFileBrowserParentPath,
   isSameOrDescendantPath,
   type FileBrowserItem,
   type FileBrowserModel,
 } from "../file-browser-data"
+import { FileTreeFolderIcon } from "./file-tree-folder-icon"
+import { FileTreeItemMenu } from "./file-tree-item-menu"
 import { FileTypeIcon } from "./file-type-icon"
 
 const FILE_TREE_INDENT = 20
 const FILE_TREE_STICKY_ROW_HEIGHT = 32
-const FOLDER_ICON_TRANSITION_DURATION = 0.2
-
-function AnimatedFolderIcon({ expanded }: { expanded: boolean }) {
-  const iconRef = React.useRef<HTMLSpanElement>(null)
-  const previousExpandedRef = React.useRef(expanded)
-
-  React.useLayoutEffect(() => {
-    const icon = iconRef.current
-    const closedIcon = icon?.querySelector<SVGSVGElement>(
-      "[data-folder-icon=closed]"
-    )
-    const openIcon = icon?.querySelector<SVGSVGElement>(
-      "[data-folder-icon=open]"
-    )
-
-    if (!icon || !closedIcon || !openIcon) {
-      return
-    }
-
-    const previousExpanded = previousExpandedRef.current
-    const incomingIcon = expanded ? openIcon : closedIcon
-    const outgoingIcon = expanded ? closedIcon : openIcon
-    const iconTargets = [closedIcon, openIcon]
-    const reducedMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
-    ).matches
-
-    previousExpandedRef.current = expanded
-    gsap.killTweensOf(iconTargets)
-
-    if (previousExpanded === expanded || reducedMotion) {
-      gsap.set(incomingIcon, { opacity: 1, scale: 1, y: 0 })
-      gsap.set(outgoingIcon, { opacity: 0, scale: 1, y: 0 })
-
-      return () => gsap.killTweensOf(iconTargets)
-    }
-
-    const context = gsap.context(() => {
-      gsap
-        .timeline()
-        .set(incomingIcon, {
-          opacity: 0,
-          scale: 0.9,
-          transformOrigin: "50% 50%",
-          y: expanded ? 1 : -1,
-        })
-        .set(outgoingIcon, {
-          opacity: 1,
-          scale: 1,
-          transformOrigin: "50% 50%",
-          y: 0,
-        })
-        .to(
-          outgoingIcon,
-          {
-            opacity: 0,
-            scale: 0.9,
-            duration: FOLDER_ICON_TRANSITION_DURATION * 0.55,
-            ease: "power2.in",
-            y: expanded ? -1 : 1,
-          },
-          0
-        )
-        .to(
-          incomingIcon,
-          {
-            opacity: 1,
-            scale: 1,
-            duration: FOLDER_ICON_TRANSITION_DURATION * 0.8,
-            ease: "power2.out",
-            y: 0,
-          },
-          FOLDER_ICON_TRANSITION_DURATION * 0.2
-        )
-    }, icon)
-
-    return () => context.revert()
-  }, [expanded])
-
-  return (
-    <span
-      ref={iconRef}
-      aria-hidden="true"
-      className="relative size-4 shrink-0"
-    >
-      <FolderIcon
-        data-folder-icon="closed"
-        className={`absolute inset-0 size-4 text-muted-foreground ${
-          expanded ? "opacity-0" : "opacity-100"
-        }`}
-      />
-      <FolderOpenIcon
-        data-folder-icon="open"
-        className={`absolute inset-0 size-4 text-muted-foreground ${
-          expanded ? "opacity-100" : "opacity-0"
-        }`}
-      />
-    </span>
-  )
-}
 
 function resolveFileTreeHighlightElement(item: HTMLElement) {
   return item.querySelector<HTMLElement>(
@@ -176,7 +60,7 @@ function FileBrowserTreeNode({
   onDownload: (item: FileBrowserItem) => void
   onUpload: (directory: string) => void
 }) {
-  const { i18n, t } = useTranslation()
+  const { i18n } = useTranslation()
   const data = item.getItemData()
   const isFolder = item.isFolder()
   const loading = isFolder && loadingDirectories.has(data.path)
@@ -205,10 +89,6 @@ function FileBrowserTreeNode({
     data.type === "file" && data.size !== null
       ? formatFileSize(data.size, i18n.resolvedLanguage)
       : ""
-  const uploadDirectory =
-    data.type === "folder"
-      ? data.path
-      : data.parentPath ?? getFileBrowserParentPath(data.path)
 
   React.useEffect(() => {
     const sentinel = stickySentinelRef.current
@@ -304,7 +184,7 @@ function FileBrowserTreeNode({
       <TreeItemLabel className="relative z-[1] min-h-8 w-full min-w-0 max-w-full gap-1 bg-transparent! pe-5 hover:bg-transparent! in-data-[selected=true]:bg-accent! in-data-[stuck=true]:hover:bg-accent! in-data-popup-open:bg-accent!">
         <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
           {isFolder ? (
-            <AnimatedFolderIcon expanded={item.isExpanded()} />
+            <FileTreeFolderIcon expanded={item.isExpanded()} />
           ) : (
             <FileTypeIcon name={data.name} path={data.path} />
           )}
@@ -335,54 +215,15 @@ function FileBrowserTreeNode({
     </TreeItem>
   )
   const treeItem = (
-    <ContextMenu>
-      <ContextMenuTrigger render={treeItemButton} />
-      <ContextMenuContent>
-        <ContextMenuItem
-          onClick={() => {
-            void writeClipboardText(data.path)
-              .then(() =>
-                onActionFeedback(
-                  t("fileBrowser.pathCopied", { path: data.path })
-                )
-              )
-              .catch(() =>
-                onActionFeedback(t("fileBrowser.copyPathFailed"))
-              )
-          }}
-        >
-          <CopyIcon aria-hidden="true" />
-          {t("fileBrowser.contextMenu.copyPath")}
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem
-          disabled={data.type === "folder"}
-          onClick={() => onDownload(data)}
-        >
-          <DownloadIcon aria-hidden="true" />
-          {t("fileBrowser.contextMenu.download")}
-        </ContextMenuItem>
-        <ContextMenuItem
-          disabled={!uploadDirectory}
-          onClick={() => {
-            if (uploadDirectory) {
-              onUpload(uploadDirectory)
-            }
-          }}
-        >
-          <UploadIcon aria-hidden="true" />
-          {t("fileBrowser.contextMenu.uploadHere")}
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem
-          variant="destructive"
-          onClick={() => onDeleteRequest(data)}
-        >
-          <Trash2Icon aria-hidden="true" />
-          {t("fileBrowser.contextMenu.delete")}
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
+    <FileTreeItemMenu
+      item={data}
+      onActionFeedback={onActionFeedback}
+      onDeleteRequest={onDeleteRequest}
+      onDownload={onDownload}
+      onUpload={onUpload}
+    >
+      {treeItemButton}
+    </FileTreeItemMenu>
   )
 
   if (!isFolder) {

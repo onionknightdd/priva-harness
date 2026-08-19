@@ -1,168 +1,29 @@
 import * as React from "react"
 import gsap from "gsap"
-import {
-  AnimatePresence,
-  motion,
-  useReducedMotion,
-  type Transition,
-} from "motion/react"
-import {
-  ChevronDownIcon,
-  FolderPlusIcon,
-  FolderSearchIcon,
-  FoldersIcon,
-  UploadIcon,
-  XIcon,
-} from "lucide-react"
+import { FolderPlusIcon, FoldersIcon, UploadIcon } from "lucide-react"
+import { motion, useReducedMotion, type Transition } from "motion/react"
 import { useTranslation } from "react-i18next"
 
-import {
-  Breadcrumb,
-  BreadcrumbEllipsis,
-  BreadcrumbItem,
-  BreadcrumbList,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
 import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { Input } from "@/components/ui/input"
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 
-import {
-  getFileBrowserChildFolders,
-  type FileBrowserBreadcrumbEntry,
-  type FileBrowserItem,
-  type FileBrowserModel,
+import type {
+  FileBrowserBreadcrumbEntry,
+  FileBrowserItem,
+  FileBrowserModel,
 } from "../file-browser-data"
-import { SearchablePathMenuContent } from "./searchable-path-menu"
+import { FileGoToControl } from "./file-go-to-control"
+import { FilePathBreadcrumb } from "./file-path-breadcrumb"
 
 const goToTransition: Transition = {
   type: "spring",
   stiffness: 420,
   damping: 34,
   mass: 0.75,
-}
-
-type VisibleBreadcrumbEntry =
-  | { entry: FileBrowserBreadcrumbEntry; type: "item" }
-  | { entries: FileBrowserBreadcrumbEntry[]; type: "collapsed" }
-
-function getVisibleBreadcrumbEntries(
-  path: FileBrowserBreadcrumbEntry[]
-): VisibleBreadcrumbEntry[] {
-  if (path.length <= 4) {
-    return path.map((entry) => ({ entry, type: "item" }))
-  }
-
-  return [
-    { entry: path[0], type: "item" },
-    { entries: path.slice(1, -3), type: "collapsed" },
-    ...path.slice(-3).map((entry) => ({ entry, type: "item" }) as const),
-  ]
-}
-
-function CollapsedPathMenu({
-  entries,
-  onNavigate,
-}: {
-  entries: FileBrowserBreadcrumbEntry[]
-  onNavigate: (path: string, type: FileBrowserItem["type"]) => void
-}) {
-  const { t } = useTranslation()
-  const [open, setOpen] = React.useState(false)
-
-  return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            aria-label={t("fileBrowser.openCollapsedPath")}
-          />
-        }
-      >
-        <BreadcrumbEllipsis />
-      </DropdownMenuTrigger>
-      <SearchablePathMenuContent
-        entries={entries}
-        open={open}
-        onNavigate={onNavigate}
-      />
-    </DropdownMenu>
-  )
-}
-
-function PathItem({
-  current,
-  entry,
-  model,
-  onNavigate,
-}: {
-  current: boolean
-  entry: FileBrowserBreadcrumbEntry
-  model: FileBrowserModel
-  onNavigate: (path: string, type: FileBrowserItem["type"]) => void
-}) {
-  const { t } = useTranslation()
-  const [directoryMenuOpen, setDirectoryMenuOpen] = React.useState(false)
-  const childFolders = getFileBrowserChildFolders(model, entry.path)
-  const hasDirectoryOptions = childFolders.length > 1
-
-  return (
-    <div
-      className="inline-flex min-w-0 items-center rounded-md"
-      data-current={current || undefined}
-    >
-      <Button
-        type="button"
-        variant="ghost"
-        size="xs"
-        aria-current={current ? "location" : undefined}
-        className="max-w-12 min-w-0 rounded-r-none px-1.5 text-sm font-normal data-[current=true]:bg-muted data-[current=true]:text-foreground sm:max-w-36"
-        data-current={current || undefined}
-        title={entry.path}
-        onClick={() => onNavigate(entry.path, entry.type)}
-      >
-        <span className="truncate">{entry.name}</span>
-      </Button>
-      {hasDirectoryOptions && (
-        <DropdownMenu
-          open={directoryMenuOpen}
-          onOpenChange={setDirectoryMenuOpen}
-        >
-          <DropdownMenuTrigger
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                className="rounded-l-none"
-                aria-label={t("fileBrowser.openDirectories", {
-                  directory: entry.name,
-                })}
-              />
-            }
-          >
-            <ChevronDownIcon aria-hidden="true" />
-          </DropdownMenuTrigger>
-          <SearchablePathMenuContent
-            entries={childFolders}
-            open={directoryMenuOpen}
-            onNavigate={onNavigate}
-          />
-        </DropdownMenu>
-      )}
-    </div>
-  )
 }
 
 function animateActionIcon(control: HTMLButtonElement) {
@@ -210,21 +71,11 @@ export function FileAddressBar({
 }) {
   const { t } = useTranslation()
   const announcementTimerRef = React.useRef<number | null>(null)
-  const goToInputRef = React.useRef<HTMLInputElement>(null)
-  const goToTriggerRef = React.useRef<HTMLButtonElement>(null)
-  const restoreGoToFocusRef = React.useRef(false)
   const [announcement, setAnnouncement] = React.useState("")
-  const [goToPath, setGoToPath] = React.useState("")
-  const [goToInvalid, setGoToInvalid] = React.useState(false)
-  const [goToPending, setGoToPending] = React.useState(false)
-  const [isGoingTo, setIsGoingTo] = React.useState(false)
-  const goToIconLayoutId = React.useId()
   const shouldReduceMotion = Boolean(useReducedMotion())
   const transition: Transition = shouldReduceMotion
     ? { duration: 0 }
     : goToTransition
-  const entries = getVisibleBreadcrumbEntries(breadcrumb)
-  const currentPath = breadcrumb.at(-1)?.path
   const treeToggleLabel = treeVisible
     ? t("fileBrowser.hideTree")
     : t("fileBrowser.showTree")
@@ -238,18 +89,6 @@ export function FileAddressBar({
     []
   )
 
-  React.useEffect(() => {
-    if (isGoingTo) {
-      goToInputRef.current?.focus()
-      return
-    }
-
-    if (restoreGoToFocusRef.current) {
-      restoreGoToFocusRef.current = false
-      goToTriggerRef.current?.focus()
-    }
-  }, [isGoingTo])
-
   const announce = React.useCallback((message: string) => {
     setAnnouncement(message)
 
@@ -262,34 +101,6 @@ export function FileAddressBar({
       1600
     )
   }, [])
-
-  const closeGoTo = (restoreFocus: boolean) => {
-    restoreGoToFocusRef.current = restoreFocus
-    setGoToPath("")
-    setGoToInvalid(false)
-    setGoToPending(false)
-    setIsGoingTo(false)
-  }
-
-  const navigateToDirectory = async () => {
-    const path = goToPath.trim()
-    if (!path || goToPending) {
-      setGoToInvalid(true)
-      return
-    }
-
-    setGoToPending(true)
-    const found = await onGoTo(path)
-    setGoToPending(false)
-
-    if (!found) {
-      setGoToInvalid(true)
-      announce(t("fileBrowser.goToInvalidPath", { path }))
-      return
-    }
-
-    closeGoTo(true)
-  }
 
   return (
     <div
@@ -321,34 +132,11 @@ export function FileAddressBar({
           className="absolute inset-0 flex min-w-0 items-center gap-0.5"
           transition={transition}
         >
-          <Breadcrumb className="min-w-0 shrink overflow-hidden">
-            <BreadcrumbList className="flex-nowrap gap-0 overflow-hidden text-sm sm:gap-0.5">
-              {entries.map((entry, index) => (
-                <React.Fragment
-                  key={entry.type === "item" ? entry.entry.path : "collapsed"}
-                >
-                  {index > 0 && (
-                    <BreadcrumbSeparator className="shrink-0" />
-                  )}
-                  <BreadcrumbItem className="min-w-0 shrink-0">
-                    {entry.type === "collapsed" ? (
-                      <CollapsedPathMenu
-                        entries={entry.entries}
-                        onNavigate={onNavigate}
-                      />
-                    ) : (
-                      <PathItem
-                        entry={entry.entry}
-                        current={entry.entry.path === currentPath}
-                        model={model}
-                        onNavigate={onNavigate}
-                      />
-                    )}
-                  </BreadcrumbItem>
-                </React.Fragment>
-              ))}
-            </BreadcrumbList>
-          </Breadcrumb>
+          <FilePathBreadcrumb
+            breadcrumb={breadcrumb}
+            model={model}
+            onNavigate={onNavigate}
+          />
 
           <div className="flex shrink-0 items-center gap-0.5">
             <Tooltip>
@@ -399,132 +187,7 @@ export function FileAddressBar({
 
           <div aria-hidden="true" className="min-w-0 flex-1" />
 
-          <AnimatePresence initial={false} mode="popLayout">
-            {isGoingTo ? (
-              <motion.form
-                key="go-to-input"
-                layout
-                className="relative h-8 w-1/2 min-w-0 shrink-0 origin-right"
-                initial={
-                  shouldReduceMotion
-                    ? false
-                    : { opacity: 0, scaleX: 0.94, y: -2 }
-                }
-                animate={{ opacity: 1, scaleX: 1, y: 0 }}
-                exit={
-                  shouldReduceMotion
-                    ? { opacity: 0 }
-                    : { opacity: 0, scaleX: 0.96, y: -1 }
-                }
-                transition={transition}
-                onSubmit={(event) => {
-                  event.preventDefault()
-                  void navigateToDirectory()
-                }}
-                onBlurCapture={(event) => {
-                  const nextTarget = event.relatedTarget
-
-                  if (
-                    goToPath ||
-                    (nextTarget instanceof Node &&
-                      event.currentTarget.contains(nextTarget))
-                  ) {
-                    return
-                  }
-
-                  closeGoTo(false)
-                }}
-              >
-                <motion.span
-                  layoutId={goToIconLayoutId}
-                  className="pointer-events-none absolute top-1/2 left-2.5 z-10 flex -translate-y-1/2 text-muted-foreground"
-                  transition={transition}
-                >
-                  <FolderSearchIcon className="size-4" aria-hidden="true" />
-                </motion.span>
-                <Input
-                  ref={goToInputRef}
-                  value={goToPath}
-                  disabled={goToPending}
-                  onChange={(event) => {
-                    setGoToPath(event.target.value)
-                    setGoToInvalid(false)
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault()
-                      void navigateToDirectory()
-                      return
-                    }
-
-                    if (event.key === "Escape") {
-                      event.preventDefault()
-                      closeGoTo(true)
-                    }
-                  }}
-                  aria-label={t("fileBrowser.goTo")}
-                  aria-invalid={goToInvalid || undefined}
-                  placeholder={t("fileBrowser.goToPlaceholder")}
-                  className="h-8 border-0 bg-muted/60 pr-8 pl-8 text-xs shadow-none focus-visible:border-0 focus-visible:ring-0 aria-invalid:bg-destructive/10"
-                />
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-xs"
-                        className="absolute top-1/2 right-1 z-10 -translate-y-1/2"
-                        aria-label={t("fileBrowser.closeGoTo")}
-                        onClick={() => closeGoTo(true)}
-                      />
-                    }
-                  >
-                    <XIcon aria-hidden="true" />
-                  </TooltipTrigger>
-                  <TooltipContent>{t("fileBrowser.closeGoTo")}</TooltipContent>
-                </Tooltip>
-              </motion.form>
-            ) : (
-              <motion.div
-                key="go-to-trigger"
-                layout
-                className="shrink-0"
-                initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={
-                  shouldReduceMotion
-                    ? { opacity: 0 }
-                    : { opacity: 0, scale: 0.9 }
-                }
-                transition={transition}
-              >
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Button
-                        ref={goToTriggerRef}
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label={t("fileBrowser.goTo")}
-                        onClick={() => setIsGoingTo(true)}
-                      />
-                    }
-                  >
-                    <motion.span
-                      layoutId={goToIconLayoutId}
-                      className="flex"
-                      transition={transition}
-                    >
-                      <FolderSearchIcon aria-hidden="true" />
-                    </motion.span>
-                  </TooltipTrigger>
-                  <TooltipContent>{t("fileBrowser.goTo")}</TooltipContent>
-                </Tooltip>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <FileGoToControl onAnnounce={announce} onGoTo={onGoTo} />
         </motion.div>
       </div>
       <p className="sr-only" role="status" aria-live="polite">

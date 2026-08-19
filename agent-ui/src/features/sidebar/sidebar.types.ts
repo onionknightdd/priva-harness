@@ -24,12 +24,6 @@ export type SidebarAnimatedIcon = ForwardRefExoticComponent<
   SidebarAnimatedIconProps & RefAttributes<SidebarAnimatedIconHandle>
 >
 
-export type SidebarUser = {
-  name: string
-  email: string
-  avatar: string
-}
-
 export type SidebarNavSubItem = {
   titleKey: string
   view?: AppView
@@ -49,7 +43,6 @@ export type SidebarProject = {
 }
 
 export type SidebarData = {
-  user: SidebarUser
   menu: SidebarNavItem[]
   projects: SidebarProject[]
 }
