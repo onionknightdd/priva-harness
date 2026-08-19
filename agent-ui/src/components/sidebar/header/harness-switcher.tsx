@@ -111,9 +111,7 @@ function HarnessOptionList({
                 className="w-full flex-nowrap p-2.5"
               >
                 <ItemMedia>
-                  <div className="flex size-8 items-center justify-center overflow-hidden rounded-md bg-background text-foreground ring-1 ring-border">
-                    <HarnessBrandLogo harnessId={option.id} />
-                  </div>
+                  <HarnessBrandLogo harnessId={option.id} />
                 </ItemMedia>
                 <ItemContent className="min-w-0">
                   <ItemTitle>
@@ -213,13 +211,13 @@ export function HarnessSwitcher() {
               render={
                 <SidebarMenuButton
                   size="lg"
-                  className="data-open:bg-sidebar-accent data-open:text-sidebar-accent-foreground"
+                  className="data-open:bg-sidebar-accent data-open:text-sidebar-accent-foreground [&_svg]:size-6"
                 />
               }
             >
               <div
                 ref={logoRef}
-                className="flex aspect-square size-8 items-center justify-center overflow-hidden rounded-lg bg-background text-foreground ring-1 ring-sidebar-border"
+                className="flex size-8 items-center justify-center"
               >
                 <HarnessBrandLogo harnessId={activeHarness.id} />
               </div>
