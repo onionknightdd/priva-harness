@@ -11,7 +11,7 @@ function BambuddyMark({ className }: { className?: string }) {
       viewBox="0 0 24 24"
       fill="none"
       aria-hidden="true"
-      className={cn("size-5", className)}
+      className={cn("size-6", className)}
     >
       <path
         d="M8 3.5v5M8 10.5v5M8 17.5v3"
@@ -74,7 +74,7 @@ export function HarnessBrandLogo({
       src={src}
       alt=""
       aria-hidden="true"
-      className={cn("size-5 object-contain", className)}
+      className={cn("size-6 object-contain", className)}
     />
   )
 }
