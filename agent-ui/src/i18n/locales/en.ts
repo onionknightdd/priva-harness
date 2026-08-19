@@ -143,10 +143,25 @@ export const en = {
       uploads: "Uploads",
       fileBrowser: "File Browser",
     },
-    plans: {
-      enterprise: "Enterprise",
-      startup: "Startup",
-      free: "Free",
+    harness: {
+      label: "Harness",
+      select: "Select harness",
+      comingSoon: "Coming soon",
+      bambuddy: {
+        name: "Bambuddy",
+        description:
+          "Local-first agent loop with skills, tools, and project config.",
+      },
+      claude: {
+        name: "Claude Agent SDK",
+        description:
+          "Anthropic's official agent runtime with Claude Code sessions and tools.",
+      },
+      deepseek: {
+        name: "DeepSeek Harness",
+        description:
+          "DeepSeek's native agent runtime, plugins, and tool ecosystem.",
+      },
     },
     projects: {
       search: "Search projects",

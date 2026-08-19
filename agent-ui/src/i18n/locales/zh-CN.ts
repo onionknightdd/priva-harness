@@ -143,10 +143,23 @@ export const zhCN = {
       uploads: "已上传",
       fileBrowser: "文件浏览器",
     },
-    plans: {
-      enterprise: "企业版",
-      startup: "初创版",
-      free: "免费版",
+    harness: {
+      label: "Harness",
+      select: "选择 Harness",
+      comingSoon: "即将推出",
+      bambuddy: {
+        name: "Bambuddy",
+        description: "本地优先的 Agent 循环，内置技能、工具与项目配置。",
+      },
+      claude: {
+        name: "Claude Agent SDK",
+        description:
+          "Anthropic 官方 Agent 运行时，支持 Claude Code 会话与工具。",
+      },
+      deepseek: {
+        name: "DeepSeek Harness",
+        description: "DeepSeek 原生 Agent 运行时、插件与工具生态。",
+      },
     },
     projects: {
       search: "搜索项目",

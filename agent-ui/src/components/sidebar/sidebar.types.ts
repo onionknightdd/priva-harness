@@ -30,12 +30,6 @@ export type SidebarUser = {
   avatar: string
 }
 
-export type SidebarTeam = {
-  name: string
-  logo: ReactNode
-  planKey: string
-}
-
 export type SidebarNavSubItem = {
   titleKey: string
   view?: AppView
@@ -56,7 +50,6 @@ export type SidebarProject = {
 
 export type SidebarData = {
   user: SidebarUser
-  teams: SidebarTeam[]
   menu: SidebarNavItem[]
   projects: SidebarProject[]
 }

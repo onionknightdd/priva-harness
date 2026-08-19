@@ -6,15 +6,12 @@ import {
 } from "@animateicons/react/lucide"
 import {
   ActivityIcon,
-  AudioLinesIcon,
   BotIcon,
   CableIcon,
   ChartNoAxesColumnIncreasingIcon,
   FolderSearchIcon,
-  GalleryVerticalEndIcon,
   NotebookPenIcon,
   ScrollTextIcon,
-  TerminalIcon,
   UploadIcon,
   WebhookIcon,
 } from "lucide-react"
@@ -28,23 +25,6 @@ export const sidebarData = {
     email: "m@example.com",
     avatar: "https://ui.shadcn.com/avatars/shadcn.jpg",
   },
-  teams: [
-    {
-      name: "Acme Inc",
-      logo: <GalleryVerticalEndIcon />,
-      planKey: "sidebar.plans.enterprise",
-    },
-    {
-      name: "Acme Corp.",
-      logo: <AudioLinesIcon />,
-      planKey: "sidebar.plans.startup",
-    },
-    {
-      name: "Evil Corp.",
-      logo: <TerminalIcon />,
-      planKey: "sidebar.plans.free",
-    },
-  ],
   menu: [
     {
       titleKey: "sidebar.navigation.newChat",
