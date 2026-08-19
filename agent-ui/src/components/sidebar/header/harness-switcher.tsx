@@ -98,7 +98,7 @@ function HarnessOptionList({
               key={option.id}
               data-harness-option
               disabled={option.disabled}
-              className="p-0"
+              className="p-0 [&_[data-slot=item-description]]:text-muted-foreground focus:[&_[data-slot=item-description]]:text-muted-foreground"
               onSelect={() => {
                 if (isSelectableHarnessId(option.id)) {
                   onSelect(option.id)
@@ -106,7 +106,7 @@ function HarnessOptionList({
               }}
             >
               <Item
-                size="sm"
+                size="xs"
                 variant={isActive ? "muted" : "default"}
                 className="w-full flex-nowrap p-2.5"
               >
@@ -225,7 +225,7 @@ export function HarnessSwitcher() {
                 <span className="truncate font-medium">
                   {t(activeHarness.nameKey)}
                 </span>
-                <span className="truncate text-xs">
+                <span className="truncate text-xs text-muted-foreground">
                   {t("sidebar.harness.label")}
                 </span>
               </div>
