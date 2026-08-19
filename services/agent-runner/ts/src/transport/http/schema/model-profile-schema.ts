@@ -4,14 +4,8 @@ const nullableString = {
 
 const modelProfileTags = ['model-profiles'] as const
 
-const imageReadTransportSchema = {
-  anyOf: [
-    {
-      type: 'string',
-      enum: ['chat_completions', 'images_edits', 'unsupported'],
-    },
-    { type: 'null' },
-  ],
+const nullableBoolean = {
+  anyOf: [{ type: 'boolean' }, { type: 'null' }],
 } as const
 
 const modelCapabilitiesSchema = {
@@ -19,10 +13,11 @@ const modelCapabilitiesSchema = {
   additionalProperties: {
     type: 'object',
     additionalProperties: false,
-    required: ['image', 'image_read_transport'],
+    required: ['image_understanding', 'image_generation', 'image_edit'],
     properties: {
-      image: { anyOf: [{ type: 'boolean' }, { type: 'null' }] },
-      image_read_transport: imageReadTransportSchema,
+      image_understanding: nullableBoolean,
+      image_generation: nullableBoolean,
+      image_edit: nullableBoolean,
     },
   },
 } as const
@@ -79,9 +74,8 @@ const modelProfileSummarySchema = {
 const modelProfileCreateBodySchema = {
   type: 'object',
   additionalProperties: false,
-  required: ['id', 'label', 'base_url', 'auth_token'],
+  required: ['label', 'base_url', 'auth_token'],
   properties: {
-    id: { type: 'string', minLength: 1, maxLength: 63 },
     label: { type: 'string', minLength: 1, maxLength: 120 },
     base_url: { type: 'string', minLength: 1 },
     auth_token: { type: 'string', minLength: 1 },
@@ -234,7 +228,6 @@ export const probeDraftModelCapabilitySchema = {
     type: 'object',
     additionalProperties: false,
     required: [
-      'id',
       'label',
       'base_url',
       'auth_token',

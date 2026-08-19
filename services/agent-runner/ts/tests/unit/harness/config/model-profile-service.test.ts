@@ -8,57 +8,62 @@ import type {
 import {
   createModelProfile,
   emptyModelProfileCollection,
+  GENERATED_MODEL_PROFILE_ID_PATTERN,
   type ModelProfileCollection,
   ModelProfileError,
 } from '../../../../src/core/resource/model-profile.js'
 import { ModelProfileService } from '../../../../src/harness/config/model-profile-service.js'
 
 describe('ModelProfileService', () => {
-  it('creates, updates, selects, and deletes profiles with stable default semantics', async () => {
+  it('creates, updates, selects, and deletes profiles with generated ids', async () => {
     const service = new ModelProfileService(new MemoryModelProfileStore(), endpointClient())
-    await service.createProfile(profileInput('first'))
-    await service.createProfile(profileInput('second'))
+    const first = await service.createProfile(profileInput('first'))
+    const second = await service.createProfile(profileInput('second'))
 
+    expect(first.id).toMatch(GENERATED_MODEL_PROFILE_ID_PATTERN)
+    expect(second.id).toMatch(GENERATED_MODEL_PROFILE_ID_PATTERN)
+    expect(second.id).not.toBe(first.id)
     expect(await service.listProfiles()).toMatchObject({
-      defaultProfileId: 'first',
-      profiles: [{ id: 'first' }, { id: 'second' }],
+      defaultProfileId: first.id,
+      profiles: [{ id: first.id, label: 'first' }, { id: second.id, label: 'second' }],
     })
 
-    await service.updateProfile('first', {
+    await service.updateProfile(first.id, {
       label: 'First renamed',
       defaultModel: null,
     })
-    expect(await service.getProfile('first')).toMatchObject({
+    expect(await service.getProfile(first.id)).toMatchObject({
       label: 'First renamed',
       defaultModel: null,
     })
 
-    await expect(service.setDefaultProfile('second')).resolves.toBe('second')
-    await service.deleteProfile('second')
-    expect((await service.listProfiles()).defaultProfileId).toBe('first')
-    await expect(service.createProfile(profileInput('first'))).rejects.toMatchObject({
-      kind: 'profile-id-exists',
-    })
+    await expect(service.setDefaultProfile(second.id)).resolves.toBe(second.id)
+    await service.deleteProfile(second.id)
+    expect((await service.listProfiles()).defaultProfileId).toBe(first.id)
   })
 
   it('resolves profile-qualified model references for an agent run snapshot', async () => {
     const service = new ModelProfileService(new MemoryModelProfileStore(), endpointClient())
-    await service.createProfile(profileInput('gateway'))
+    const profile = await service.createProfile(profileInput('gateway'))
 
-    await expect(service.resolve('gateway:ollama:llama3:8b[1M]')).resolves.toMatchObject({
-      profile: { id: 'gateway' },
+    await expect(service.resolve(`${profile.id}:ollama:llama3:8b[1M]`)).resolves.toMatchObject({
+      profile: { id: profile.id },
       model: 'ollama:llama3:8b[1m]',
       modelId: 'ollama:llama3:8b',
       capabilities: { context: '1m' },
     })
   })
 
-  it('caches a classified image capability and force probing resets its transport', async () => {
-    const baseProfile = createModelProfile(profileInput('gateway'))
+  it('caches a classified image capability and force probing refreshes it', async () => {
+    const baseProfile = createModelProfile({ ...profileInput('gateway'), id: 'gateway' })
     const profile = {
       ...baseProfile,
       modelCapabilities: {
-        'model-a': { image: false, imageReadTransport: 'unsupported' as const },
+        'model-a': {
+          imageUnderstanding: false,
+          imageGeneration: null,
+          imageEdit: null,
+        },
       },
     }
     const store = new MemoryModelProfileStore({
@@ -89,8 +94,42 @@ describe('ModelProfileService', () => {
     expect(second).toEqual(first)
     expect(probes).toBe(1)
     expect((await service.getProfile('gateway')).modelCapabilities['model-a']).toEqual({
-      image: true,
-      imageReadTransport: null,
+      imageUnderstanding: true,
+      imageGeneration: null,
+      imageEdit: null,
+    })
+  })
+
+  it('caches image capability probe results on the saved profile', async () => {
+    const store = new MemoryModelProfileStore()
+    const service = new ModelProfileService(store, endpointClient())
+    const profile = await service.createProfile(profileInput('gateway'))
+
+    await expect(service.probeSavedModelCapability(
+      profile.id,
+      {},
+      'image-a',
+      'image_generation',
+    )).resolves.toEqual({
+      modelId: 'image-a',
+      capability: 'image_generation',
+      supported: true,
+    })
+    await expect(service.probeSavedModelCapability(
+      profile.id,
+      {},
+      'image-a',
+      'image_edit',
+    )).resolves.toEqual({
+      modelId: 'image-a',
+      capability: 'image_edit',
+      supported: true,
+    })
+
+    expect((await service.getProfile(profile.id)).modelCapabilities['image-a']).toEqual({
+      imageUnderstanding: null,
+      imageGeneration: true,
+      imageEdit: true,
     })
   })
 
@@ -99,12 +138,18 @@ describe('ModelProfileService', () => {
     const service = new ModelProfileService(store, endpointClient(() => Promise.reject(
       new ModelProfileError('upstream-unavailable', 'model unavailable'),
     )))
-    await service.createProfile(profileInput('gateway'))
+    const profile = await service.createProfile(profileInput('gateway'))
 
     await expect(
-      service.probeImageCapability('gateway', 'model-a', { force: true }),
+      service.probeImageCapability(profile.id, 'model-a', { force: true }),
     ).rejects.toMatchObject({ kind: 'upstream-unavailable' })
-    expect((await service.getProfile('gateway')).modelCapabilities).toEqual({})
+    await expect(service.probeSavedModelCapability(
+      profile.id,
+      {},
+      'model-a',
+      'image_understanding',
+    )).rejects.toMatchObject({ kind: 'upstream-unavailable' })
+    expect((await service.getProfile(profile.id)).modelCapabilities).toEqual({})
   })
 })
 
@@ -149,10 +194,9 @@ function endpointClient(
   }
 }
 
-function profileInput(id: string) {
+function profileInput(label: string) {
   return {
-    id,
-    label: id,
+    label,
     baseUrl: 'https://api.example.com',
     authToken: 'secret',
     defaultModel: 'model-a',

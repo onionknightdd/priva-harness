@@ -107,7 +107,6 @@ export function useModelConnectionTest({
         const returnedModelIds =
           request.type === "draft"
             ? await testDraftModelProfile({
-                id: "connection-test",
                 label: "Connection test",
                 baseUrl: request.baseUrl,
                 authToken: request.authToken,

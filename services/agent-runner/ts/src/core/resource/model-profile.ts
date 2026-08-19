@@ -1,15 +1,13 @@
 export const MODEL_PROFILE_STORE_VERSION = 1
 export const MODEL_CONTEXT_1M = '1m'
+export const GENERATED_MODEL_PROFILE_ID_PATTERN = /^model-\d{8}[0-9a-f]{7}$/u
 
 const MODEL_CONTEXT_1M_SUFFIX = '[1m]'
 const MODEL_PROFILE_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,62}$/u
 const MAX_LABEL_LENGTH = 120
 const MAX_MODEL_ID_LENGTH = 512
-
-export type ImageReadTransport =
-  | 'chat_completions'
-  | 'images_edits'
-  | 'unsupported'
+const GENERATED_PROFILE_ID_ENTROPY_BYTES = 4
+const GENERATED_PROFILE_ID_HASH_LENGTH = 7
 
 export type ModelCapability =
   | 'image_understanding'
@@ -17,8 +15,9 @@ export type ModelCapability =
   | 'image_edit'
 
 export interface ModelCapabilities {
-  readonly image: boolean | null
-  readonly imageReadTransport: ImageReadTransport | null
+  readonly imageUnderstanding: boolean | null
+  readonly imageGeneration: boolean | null
+  readonly imageEdit: boolean | null
 }
 
 export interface ModelProfile {
@@ -45,7 +44,6 @@ export interface ModelProfileCollection {
 }
 
 export interface ModelProfileCreateInput {
-  readonly id: string
   readonly label: string
   readonly baseUrl: string
   readonly authToken: string
@@ -138,6 +136,74 @@ export function normalizeModelProfileId(value: string): string {
   return normalized
 }
 
+export function generateModelProfileId(
+  now: Date = new Date(),
+  entropy: Uint8Array = randomEntropy(GENERATED_PROFILE_ID_ENTROPY_BYTES),
+): string {
+  const year = String(now.getUTCFullYear()).padStart(4, '0')
+  const month = String(now.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(now.getUTCDate()).padStart(2, '0')
+  const hash = Array.from(
+    entropy,
+    (byte) => byte.toString(16).padStart(2, '0'),
+  ).join('').slice(0, GENERATED_PROFILE_ID_HASH_LENGTH)
+  if (hash.length < GENERATED_PROFILE_ID_HASH_LENGTH) {
+    throw new ModelProfileError(
+      'invalid-profile-id',
+      `Generated profile hash requires ${GENERATED_PROFILE_ID_ENTROPY_BYTES} bytes of entropy`,
+    )
+  }
+  return normalizeModelProfileId(`model-${year}${month}${day}${hash}`)
+}
+
+export function allocateUniqueModelProfileId(
+  existingIds: ReadonlySet<string>,
+): string {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const id = generateModelProfileId()
+    if (!existingIds.has(id)) return id
+  }
+  throw new ModelProfileError('profile-id-exists', 'profile_id_exists')
+}
+
+export function emptyModelCapabilities(): ModelCapabilities {
+  return {
+    imageUnderstanding: null,
+    imageGeneration: null,
+    imageEdit: null,
+  }
+}
+
+export function capabilityValue(
+  capabilities: ModelCapabilities | undefined,
+  capability: ModelCapability,
+): boolean | null {
+  if (capabilities === undefined) return null
+  switch (capability) {
+    case 'image_understanding':
+      return capabilities.imageUnderstanding
+    case 'image_generation':
+      return capabilities.imageGeneration
+    case 'image_edit':
+      return capabilities.imageEdit
+  }
+}
+
+export function withCachedCapability(
+  current: ModelCapabilities,
+  capability: ModelCapability,
+  supported: boolean,
+): ModelCapabilities {
+  switch (capability) {
+    case 'image_understanding':
+      return { ...current, imageUnderstanding: supported }
+    case 'image_generation':
+      return { ...current, imageGeneration: supported }
+    case 'image_edit':
+      return { ...current, imageEdit: supported }
+  }
+}
+
 export function normalizeModelId(value: string): string {
   const normalized = value.trim()
   if (normalized === '') {
@@ -149,9 +215,13 @@ export function normalizeModelId(value: string): string {
   return normalized
 }
 
-export function createModelProfile(input: ModelProfileCreateInput): ModelProfile {
+export function createModelProfile(
+  input: ModelProfileCreateInput & { readonly id?: string },
+): ModelProfile {
   return {
-    id: normalizeModelProfileId(input.id),
+    id: input.id === undefined
+      ? generateModelProfileId()
+      : normalizeModelProfileId(input.id),
     label: normalizeLabel(input.label),
     baseUrl: normalizeBaseUrl(input.baseUrl),
     authToken: normalizeAuthToken(input.authToken),
@@ -355,15 +425,24 @@ function parseStoredCapabilities(value: unknown): Readonly<Record<string, ModelC
     if (!isRecord(rawCapabilities)) {
       throw corruptStore(`Capabilities for ${modelId} must be an object`)
     }
-    const image = rawCapabilities['image']
-    const imageReadTransport = rawCapabilities['imageReadTransport']
-    if (image !== null && typeof image !== 'boolean') {
-      throw corruptStore(`Invalid image capability for ${modelId}`)
-    }
-    if (!isImageReadTransport(imageReadTransport)) {
-      throw corruptStore(`Invalid image read transport for ${modelId}`)
-    }
-    capabilities.push([modelId, { image, imageReadTransport }])
+    assertOnlyStoredKeys(rawCapabilities, [
+      'imageUnderstanding',
+      'imageGeneration',
+      'imageEdit',
+    ], `Capabilities for ${modelId}`)
+    capabilities.push([modelId, {
+      imageUnderstanding: parseStoredCapabilityFlag(
+        rawCapabilities,
+        'imageUnderstanding',
+        modelId,
+      ),
+      imageGeneration: parseStoredCapabilityFlag(
+        rawCapabilities,
+        'imageGeneration',
+        modelId,
+      ),
+      imageEdit: parseStoredCapabilityFlag(rawCapabilities, 'imageEdit', modelId),
+    }])
   }
   return Object.fromEntries(capabilities)
 }
@@ -457,11 +536,22 @@ function assertOnlyStoredKeys(
   }
 }
 
-function isImageReadTransport(value: unknown): value is ImageReadTransport | null {
-  return value === null
-    || value === 'chat_completions'
-    || value === 'images_edits'
-    || value === 'unsupported'
+function parseStoredCapabilityFlag(
+  value: Readonly<Record<string, unknown>>,
+  key: 'imageUnderstanding' | 'imageGeneration' | 'imageEdit',
+  modelId: string,
+): boolean | null {
+  const field = value[key]
+  if (field !== null && typeof field !== 'boolean') {
+    throw corruptStore(`Invalid ${key} capability for ${modelId}`)
+  }
+  return field
+}
+
+function randomEntropy(byteCount: number): Uint8Array {
+  const bytes = new Uint8Array(byteCount)
+  globalThis.crypto.getRandomValues(bytes)
+  return bytes
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

@@ -5,7 +5,10 @@ import type {
   ModelProfileStore,
 } from '../../core/contract/model-profile.js'
 import {
+  allocateUniqueModelProfileId,
+  capabilityValue,
   createModelProfile,
+  emptyModelCapabilities,
   type ImageCapabilityProbeResult,
   type ModelCapability,
   type ModelCapabilityProbeResult,
@@ -23,6 +26,7 @@ import {
   type ResolvedModelProfile,
   resolveModelProfile,
   summarizeModelProfile,
+  withCachedCapability,
 } from '../../core/resource/model-profile.js'
 
 export interface ModelProfilesResponse {
@@ -52,11 +56,13 @@ export class ModelProfileService implements ModelProfileCapabilities, ModelProfi
   }
 
   async createProfile(input: ModelProfileCreateInput): Promise<ModelProfileSummary> {
-    const profile = createModelProfile(input)
     return await this.store.transact((collection) => {
-      if (collection.profiles.some((candidate) => candidate.id === profile.id)) {
-        throw new ModelProfileError('profile-id-exists', 'profile_id_exists')
-      }
+      const profile = createModelProfile({
+        ...input,
+        id: allocateUniqueModelProfileId(
+          new Set(collection.profiles.map((candidate) => candidate.id)),
+        ),
+      })
       return {
         collection: {
           ...collection,
@@ -202,8 +208,31 @@ export class ModelProfileService implements ModelProfileCapabilities, ModelProfi
     capability: ModelCapability,
     signal?: AbortSignal,
   ): Promise<ModelCapabilityProbeResult> {
-    const profile = patchModelProfile(await this.getProfile(profileId), patch)
-    return await this.runModelCapabilityProbe(profile, modelId, capability, signal)
+    const normalizedProfileId = normalizeModelProfileId(profileId)
+    const normalizedModelId = normalizeModelId(modelId)
+    return await this.store.withCapabilityProbeLock(
+      normalizedProfileId,
+      `${normalizedModelId}\0${capability}`,
+      async () => {
+        const profile = patchModelProfile(
+          await this.getProfile(normalizedProfileId),
+          patch,
+        )
+        const result = await this.runModelCapabilityProbe(
+          profile,
+          normalizedModelId,
+          capability,
+          signal,
+        )
+        await this.persistModelCapability(
+          normalizedProfileId,
+          result.modelId,
+          result.capability,
+          result.supported,
+        )
+        return result
+      },
+    )
   }
 
   private async runModelCapabilityProbe(
@@ -220,6 +249,36 @@ export class ModelProfileService implements ModelProfileCapabilities, ModelProfi
       signal,
     )
     return { modelId: normalizedModelId, capability, supported }
+  }
+
+  private async persistModelCapability(
+    profileId: string,
+    modelId: string,
+    capability: ModelCapability,
+    supported: boolean,
+  ): Promise<void> {
+    await this.store.transact((collection) => {
+      const currentProfile = findProfile(collection, profileId)
+      const updatedProfile: ModelProfile = {
+        ...currentProfile,
+        modelCapabilities: {
+          ...currentProfile.modelCapabilities,
+          [modelId]: withCachedCapability(
+            modelCapabilitiesFor(currentProfile, modelId) ?? emptyModelCapabilities(),
+            capability,
+            supported,
+          ),
+        },
+      }
+      return {
+        collection: {
+          ...collection,
+          profiles: collection.profiles.map((candidate) =>
+            candidate.id === profileId ? updatedProfile : candidate),
+        },
+        result: undefined,
+      }
+    })
   }
 
   private async runImageCapabilityProbe(
@@ -251,33 +310,12 @@ export class ModelProfileService implements ModelProfileCapabilities, ModelProfi
         }
         throw error
       }
-      await this.store.transact((collection) => {
-        const currentProfile = findProfile(collection, profileId)
-        const currentCapabilities = modelCapabilitiesFor(currentProfile, modelId)
-          ?? emptyModelCapabilities()
-        const updatedCapabilities: ModelCapabilities = {
-          ...currentCapabilities,
-          image,
-          imageReadTransport: force
-            ? null
-            : currentCapabilities.imageReadTransport,
-        }
-        const updatedProfile: ModelProfile = {
-          ...currentProfile,
-          modelCapabilities: {
-            ...currentProfile.modelCapabilities,
-            [modelId]: updatedCapabilities,
-          },
-        }
-        return {
-          collection: {
-            ...collection,
-            profiles: collection.profiles.map((candidate) =>
-              candidate.id === profileId ? updatedProfile : candidate),
-          },
-          result: undefined,
-        }
-      })
+      await this.persistModelCapability(
+        profileId,
+        modelId,
+        'image_understanding',
+        image,
+      )
       return imageProbeResult(profileId, modelId, image, false)
     })
   }
@@ -292,7 +330,10 @@ function findProfile(collection: ModelProfileCollection, profileId: string): Mod
 }
 
 function cachedImageCapability(profile: ModelProfile, modelId: string): boolean | null {
-  return modelCapabilitiesFor(profile, modelId)?.image ?? null
+  return capabilityValue(
+    modelCapabilitiesFor(profile, modelId),
+    'image_understanding',
+  )
 }
 
 function modelCapabilitiesFor(
@@ -302,10 +343,6 @@ function modelCapabilitiesFor(
   return Object.hasOwn(profile.modelCapabilities, modelId)
     ? profile.modelCapabilities[modelId]
     : undefined
-}
-
-function emptyModelCapabilities(): ModelCapabilities {
-  return { image: null, imageReadTransport: null }
 }
 
 function imageProbeResult(
