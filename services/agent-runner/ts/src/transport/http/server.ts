@@ -1,4 +1,5 @@
 import multipart from '@fastify/multipart'
+import websocket from '@fastify/websocket'
 import Fastify, {
   type FastifyInstance,
   type FastifyServerOptions,
@@ -10,13 +11,16 @@ import {
   type ModelProfileErrorKind,
 } from '../../core/resource/model-profile.js'
 import { UserFileError, type UserFileErrorKind } from '../../core/resource/user-file.js'
+import type { AgentHarness } from '../../harness/agent-harness.js'
 import type { ModelProfileService } from '../../harness/config/model-profile-service.js'
+import { runWebsocketRoutes } from '../websocket/run-route.js'
 import { modelProfileRoutes } from './route/model-profiles.js'
 import { userFileRoutes } from './route/user-files.js'
 
 export interface BuildHttpServerOptions {
   readonly userFileSystem: UserFileSystem
   readonly modelProfileService: ModelProfileService
+  readonly agentHarness?: AgentHarness
   readonly logger?: FastifyServerOptions['logger']
 }
 
@@ -63,6 +67,10 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
   })
   void server.register(userFileRoutes, { fileSystem: options.userFileSystem })
   void server.register(modelProfileRoutes, { service: options.modelProfileService })
+  if (options.agentHarness !== undefined) {
+    void server.register(websocket)
+    void server.register(runWebsocketRoutes, { harness: options.agentHarness })
+  }
 
   return server
 }

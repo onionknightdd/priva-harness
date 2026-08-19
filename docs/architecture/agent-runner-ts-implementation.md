@@ -139,7 +139,9 @@ API：
 
 - 通过 `ModelProfileResolver` 解析模型、凭证和目标 `provider`，敏感值不得进入
   `core` 事件或日志。
-- profile 以 `$RUNTIME_HOME/model-profiles.json` 为唯一事实来源；文件读改写和图片能力
+- 启动层从统一的 `runtimeConfig` 导出固定运行目录 `~/.bambuddy` 和配置文件路径
+  `~/.bambuddy/bambuddy.settings.yml`；配置文件内容与 YAML 解析契约留到后续实现。
+- profile 以 `~/.bambuddy/model-profiles.json` 为唯一事实来源；文件读改写和图片能力
   缓存更新使用非阻塞异步 I/O、跨进程锁与原子替换。
 - model profile 只保存模型端点、凭证、通用默认模型和按模型缓存的能力，不包含
   `opus`、`sonnet`、`haiku`、`vision` 等特定 `harness` 的固定模型档位。需要模型角色
@@ -412,6 +414,7 @@ services/agent-runner/
     ├── eslint.config.js
     ├── src/
     │   ├── main.ts
+    │   ├── runtime-config.ts              # 启动层统一运行目录与配置文件路径
     │   ├── core/                         # 仅包含术语体系与契约
     │   │   ├── run/
     │   │   │   ├── run-command.ts
@@ -557,6 +560,7 @@ transport ──→ harness ──→ core
 provider ─────────────────→ core
 adapter ──────────────────→ core
 infrastructure ───────────→ core
+runtime-config.ts ─────────→ main.ts
 main.ts ──→ harness + provider + adapter + transport + infrastructure
 ```
 
@@ -571,6 +575,8 @@ main.ts ──→ harness + provider + adapter + transport + infrastructure
   Agent，也不暴露 HTTP 接口。
 - `transport` 将 HTTP、SSE、WebSocket 和调度器输入映射为 `harness` 调用。
 - `infrastructure` 实现存储、文件系统、data-spine、日志、指标和活动记录端口。
+- `runtime-config.ts` 固定并导出启动层共享的运行目录和配置文件路径；配置文件内容解析后
+  也从同一对象进入组装根，不允许各模块自行推导路径。
 - `main.ts` 是组装根，也是唯一允许同时引入 `harness`、`provider`、`adapter`、
   `transport` 和 `infrastructure` 具体实现的文件。
 - Claude 和 Pi 不能相互引入。

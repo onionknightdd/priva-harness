@@ -1,32 +1,39 @@
 import { mkdir } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+import { AgentHarness } from './harness/agent-harness.js'
 import { ModelProfileService } from './harness/config/model-profile-service.js'
 import { NodeUserFileSystem } from './infrastructure/filesystem/node-user-file-system.js'
 import { CompatibleModelEndpointClient } from './infrastructure/model-profile/compatible-model-endpoint-client.js'
 import { JsonModelProfileStore } from './infrastructure/model-profile/json-model-profile-store.js'
+import { ClaudeProvider } from './provider/claude/claude-provider.js'
+import { runtimeConfig } from './runtime-config.js'
 import { buildHttpServer } from './transport/http/server.js'
 
 const DEFAULT_PORT = 8000
 
 export async function startServer(): Promise<void> {
   const initialDirectory = process.env['WORKSPACE_DIR'] ?? homedir()
-  const runtimeHome = resolve(
-    process.env['RUNTIME_HOME'] ?? join(homedir(), '.config', 'priva'),
-  )
-  await mkdir(initialDirectory, { recursive: true })
+  await Promise.all([
+    mkdir(initialDirectory, { recursive: true }),
+    mkdir(runtimeConfig.runtimeHome, { recursive: true, mode: 0o700 }),
+  ])
   const fileSystem = new NodeUserFileSystem({
     initialDirectory,
   })
   const modelProfileService = new ModelProfileService(
-    new JsonModelProfileStore({ runtimeHome }),
+    new JsonModelProfileStore({ runtimeHome: runtimeConfig.runtimeHome }),
     new CompatibleModelEndpointClient(),
   )
+  const agentHarness = new AgentHarness({
+    provider: new ClaudeProvider(),
+    cwd: initialDirectory,
+  })
   const server = buildHttpServer({
     userFileSystem: fileSystem,
     modelProfileService,
+    agentHarness,
     logger: true,
   })
   const port = parsePort(process.env['PORT'])

@@ -74,6 +74,70 @@ export default tseslint.config(
     },
   },
   {
+    files: ['src/provider/claude/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/harness/**'],
+              message: 'This layer must not import from harness.',
+            },
+            {
+              group: ['**/adapter/**'],
+              message: 'This layer must not import from adapter.',
+            },
+            {
+              group: ['**/transport/**'],
+              message: 'This layer must not import from transport.',
+            },
+            {
+              group: ['**/infrastructure/**'],
+              message: 'This layer must not import from infrastructure.',
+            },
+            {
+              group: ['**/provider/pi/**'],
+              message: 'Claude provider must not import Pi.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/provider/pi/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/harness/**'],
+              message: 'This layer must not import from harness.',
+            },
+            {
+              group: ['**/adapter/**'],
+              message: 'This layer must not import from adapter.',
+            },
+            {
+              group: ['**/transport/**'],
+              message: 'This layer must not import from transport.',
+            },
+            {
+              group: ['**/infrastructure/**'],
+              message: 'This layer must not import from infrastructure.',
+            },
+            {
+              group: ['**/provider/claude/**'],
+              message: 'Pi provider must not import Claude.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ['src/adapter/**/*.ts'],
     rules: {
       'no-restricted-imports': layerRestrictions(
