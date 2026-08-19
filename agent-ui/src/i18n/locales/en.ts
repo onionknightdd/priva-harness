@@ -13,15 +13,23 @@ export const en = {
     resizeSidebar: "Resize Sidebar",
   },
   breadcrumb: {
-    workspace: "Workspace",
-    conversation: "Conversation",
     dataAndUsage: "Data and Usage",
     fileBrowser: "File Browser",
   },
-  workspace: {
-    emptyTitle: "No conversation yet",
-    emptyDescription:
-      "Start a new chat from the sidebar. The workspace will show the active conversation here.",
+  chat: {
+    contentLabel: "Conversation",
+    emptyTitle: "How can I help?",
+    emptyDescription: "Ask anything to start a new conversation.",
+    promptLabel: "Message",
+    promptPlaceholder: "Ask anything...",
+    send: "Send",
+    attach: "Attach file",
+    attachUnavailable: "Attachments are not available yet",
+    scrollToLatest: "Scroll to latest",
+    today: "Today",
+    mockAssistantReply:
+      "This is a local preview reply. Streaming is not connected yet.",
+    testSessionTitle: "How should I design the agent chat workspace?",
   },
   fileBrowser: {
     searchLabel: "Search files and folders",

@@ -29,10 +29,12 @@ import type {
 function NavMenuItem({
   item,
   activeView,
+  onNewChat,
   onViewChange,
 }: {
   item: SidebarNavItem
   activeView: AppView
+  onNewChat?: () => void
   onViewChange: (view: AppView) => void
 }) {
   const { t } = useTranslation()
@@ -61,16 +63,29 @@ function NavMenuItem({
     }
   }, [hasActiveSubmenuItem])
 
+  const closeMobileSidebar = () => {
+    if (isMobile) {
+      setOpenMobile(false)
+    }
+  }
+
   const selectView = (view?: AppView) => {
     if (!view) {
       return
     }
 
     onViewChange(view)
+    closeMobileSidebar()
+  }
 
-    if (isMobile) {
-      setOpenMobile(false)
+  const selectItem = () => {
+    if (item.action === "new-chat") {
+      onNewChat?.()
+      closeMobileSidebar()
+      return
     }
+
+    selectView(item.view)
   }
 
   const content = (
@@ -94,7 +109,7 @@ function NavMenuItem({
         <SidebarMenuButton
           isActive={isItemActive}
           tooltip={title}
-          onClick={() => selectView(item.view)}
+          onClick={selectItem}
           {...iconAnimationHandlers}
         >
           {content}
@@ -145,10 +160,12 @@ function NavMenuItem({
 export function NavMenu({
   items,
   activeView,
+  onNewChat,
   onViewChange,
 }: {
   items: SidebarNavItem[]
   activeView: AppView
+  onNewChat?: () => void
   onViewChange: (view: AppView) => void
 }) {
   return (
@@ -159,6 +176,7 @@ export function NavMenu({
             key={item.titleKey}
             item={item}
             activeView={activeView}
+            onNewChat={onNewChat}
             onViewChange={onViewChange}
           />
         ))}

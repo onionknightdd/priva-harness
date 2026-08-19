@@ -1,5 +1,5 @@
 import * as React from "react"
-import gsap from "gsap"
+import { GalleryVerticalEndIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { CanvasShell } from "@/features/canvas"
@@ -18,7 +18,12 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useSidebar } from "@/components/ui/sidebar"
-import { GalleryVerticalEndIcon } from "lucide-react"
+
+const ChatPage = React.lazy(async () => {
+  const module = await import("@/features/chat")
+
+  return { default: module.ChatPage }
+})
 
 const FileBrowserPage = React.lazy(async () => {
   const module = await import("@/features/file-browser")
@@ -42,55 +47,6 @@ function MobileSidebarLogoTrigger({ onOpen }: { onOpen: () => void }) {
   )
 }
 
-function WorkspaceEmptyState() {
-  const { t } = useTranslation()
-  const contentRef = React.useRef<HTMLDivElement>(null)
-
-  React.useLayoutEffect(() => {
-    const content = contentRef.current
-
-    if (
-      !content ||
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
-      return
-    }
-
-    const context = gsap.context(() => {
-      gsap.fromTo(
-        "[data-workspace-empty]",
-        { y: 8, opacity: 0 },
-        {
-          y: 0,
-          opacity: 1,
-          duration: 0.32,
-          ease: "power2.out",
-          clearProps: "transform,opacity",
-        }
-      )
-    }, content)
-
-    return () => context.revert()
-  }, [])
-
-  return (
-    <div
-      ref={contentRef}
-      className="flex min-h-0 flex-1 flex-col overflow-auto overscroll-contain p-4 pt-0"
-    >
-      <div
-        data-workspace-empty
-        className="flex min-h-0 flex-1 flex-col items-start justify-center gap-2 rounded-xl border border-dashed p-6"
-      >
-        <p className="text-sm font-medium">{t("workspace.emptyTitle")}</p>
-        <p className="max-w-md text-sm text-muted-foreground">
-          {t("workspace.emptyDescription")}
-        </p>
-      </div>
-    </div>
-  )
-}
-
 function WorkspacePageFallback() {
   const { t } = useTranslation()
 
@@ -106,23 +62,22 @@ function WorkspacePageFallback() {
   )
 }
 
-export function AgentWorkspace({ activeView }: { activeView: AppView }) {
+export function AgentWorkspace({
+  activeView,
+  chatSessionKey,
+}: {
+  activeView: AppView
+  chatSessionKey: number
+}) {
   const { setOpenMobile } = useSidebar()
   const { t } = useTranslation()
   const isFileBrowser = activeView === "file-browser"
   const canvasEnabled = !isSidebarContentView(activeView)
 
-  const breadcrumbParent = isFileBrowser
-    ? t("breadcrumb.dataAndUsage")
-    : t("breadcrumb.workspace")
-  const breadcrumbPage = isFileBrowser
-    ? t("breadcrumb.fileBrowser")
-    : t("breadcrumb.conversation")
-
   return (
     <CanvasShell canvasEnabled={canvasEnabled}>
-      <header className="flex h-10 shrink-0 items-center gap-2">
-        <div className="flex items-center gap-2 px-4">
+      <header className="relative z-20 flex h-10 shrink-0 items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2 px-4">
           <div className="flex items-center gap-2 md:hidden">
             <MobileSidebarLogoTrigger
               onOpen={() => setOpenMobile(true)}
@@ -132,25 +87,39 @@ export function AgentWorkspace({ activeView }: { activeView: AppView }) {
               className="mr-2 data-[orientation=vertical]:h-4"
             />
           </div>
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem className="hidden md:block">
-                <span>{breadcrumbParent}</span>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator className="hidden md:block" />
-              <BreadcrumbItem>
-                <BreadcrumbPage>{breadcrumbPage}</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
+          {isFileBrowser ? (
+            <Breadcrumb>
+              <BreadcrumbList>
+                <BreadcrumbItem className="hidden md:block">
+                  <span>{t("breadcrumb.dataAndUsage")}</span>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator className="hidden md:block" />
+                <BreadcrumbItem>
+                  <BreadcrumbPage>
+                    {t("breadcrumb.fileBrowser")}
+                  </BreadcrumbPage>
+                </BreadcrumbItem>
+              </BreadcrumbList>
+            </Breadcrumb>
+          ) : (
+            <h1 className="min-w-0 flex-1 truncate text-sm font-medium">
+              {t("chat.testSessionTitle")}
+            </h1>
+          )}
         </div>
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-full h-6 bg-linear-to-b from-background to-transparent"
+        />
       </header>
       {isFileBrowser ? (
         <React.Suspense fallback={<WorkspacePageFallback />}>
           <FileBrowserPage />
         </React.Suspense>
       ) : (
-        <WorkspaceEmptyState />
+        <React.Suspense fallback={<WorkspacePageFallback />}>
+          <ChatPage key={chatSessionKey} />
+        </React.Suspense>
       )}
     </CanvasShell>
   )

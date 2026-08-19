@@ -23,6 +23,8 @@ export const sidebarData = {
   menu: [
     {
       titleKey: "sidebar.navigation.newChat",
+      view: "workspace",
+      action: "new-chat",
       icon: PlusIcon,
     },
     {

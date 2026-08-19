@@ -13,14 +13,22 @@ export const zhCN = {
     resizeSidebar: "调整侧边栏宽度",
   },
   breadcrumb: {
-    workspace: "工作区",
-    conversation: "会话",
     dataAndUsage: "数据与用量",
     fileBrowser: "文件浏览器",
   },
-  workspace: {
-    emptyTitle: "还没有会话",
-    emptyDescription: "从侧边栏新建会话后，当前对话会出现在这里。",
+  chat: {
+    contentLabel: "会话",
+    emptyTitle: "我能帮你做什么？",
+    emptyDescription: "输入问题即可开始新对话。",
+    promptLabel: "消息",
+    promptPlaceholder: "问任何问题…",
+    send: "发送",
+    attach: "添加附件",
+    attachUnavailable: "附件功能尚未开放",
+    scrollToLatest: "跳到最新消息",
+    today: "今天",
+    mockAssistantReply: "这是本地预览回复，尚未接入实时流式输出。",
+    testSessionTitle: "我要怎么设计 Agent Chat Workspace？",
   },
   fileBrowser: {
     searchLabel: "搜索文件和文件夹",

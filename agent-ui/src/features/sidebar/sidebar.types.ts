@@ -33,6 +33,7 @@ export type SidebarNavSubItem = {
 export type SidebarNavItem = {
   titleKey: string
   view?: AppView
+  action?: "new-chat"
   icon: SidebarAnimatedIcon
   items?: SidebarNavSubItem[]
 }

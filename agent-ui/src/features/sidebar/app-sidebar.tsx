@@ -21,10 +21,12 @@ import { sidebarData } from "./sidebar-data"
 
 export function AppSidebar({
   activeView,
+  onNewChat,
   onViewChange,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
   activeView: AppView
+  onNewChat?: () => void
   onViewChange: (view: AppView) => void
 }) {
   const footerFadeRef = React.useRef<HTMLDivElement>(null)
@@ -65,6 +67,7 @@ export function AppSidebar({
         <NavMenu
           items={sidebarData.menu}
           activeView={activeView}
+          onNewChat={onNewChat}
           onViewChange={onViewChange}
         />
         <NavProjects projects={sidebarData.projects} />
