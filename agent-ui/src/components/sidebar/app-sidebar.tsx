@@ -15,8 +15,8 @@ import {
 import { NavMenu } from "./content/nav-menu"
 import { NavProjects } from "./content/nav-projects"
 import { NavUser } from "./footer/nav-user"
+import { HarnessSwitcher } from "./header/harness-switcher"
 import { SidebarModeTabs } from "./header/sidebar-mode-tabs"
-import { TeamSwitcher } from "./header/team-switcher"
 import { sidebarData } from "./sidebar-data"
 
 export function AppSidebar({
@@ -58,7 +58,7 @@ export function AppSidebar({
   return (
     <Sidebar collapsible="icon" resizable {...props}>
       <SidebarHeader>
-        <TeamSwitcher teams={sidebarData.teams} />
+        <HarnessSwitcher />
         <SidebarModeTabs />
       </SidebarHeader>
       <SidebarContent>
