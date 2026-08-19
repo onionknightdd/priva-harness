@@ -7,17 +7,31 @@ import { ModelProfileService } from './harness/config/model-profile-service.js'
 import { NodeUserFileSystem } from './infrastructure/filesystem/node-user-file-system.js'
 import { CompatibleModelEndpointClient } from './infrastructure/model-profile/compatible-model-endpoint-client.js'
 import { JsonModelProfileStore } from './infrastructure/model-profile/json-model-profile-store.js'
+import { claudeGlobalDir } from './provider/claude/claude-paths.js'
 import { ClaudeProvider } from './provider/claude/claude-provider.js'
-import { runtimeConfig } from './runtime-config.js'
+import { piGlobalDir } from './provider/pi/pi-paths.js'
+import {
+  createRuntimeConfig,
+  resolveRuntimeHome,
+  RUNTIME_HOME_ENV,
+} from './runtime-config.js'
 import { buildHttpServer } from './transport/http/server.js'
 
 const DEFAULT_PORT = 8000
 
 export async function startServer(): Promise<void> {
+  const runtimeConfig = createRuntimeConfig(
+    resolveRuntimeHome(process.env[RUNTIME_HOME_ENV]),
+  )
+  const claudeConfigDir = claudeGlobalDir(runtimeConfig.harnessHome)
+  const piConfigDir = piGlobalDir(runtimeConfig.harnessHome)
   const initialDirectory = process.env['WORKSPACE_DIR'] ?? homedir()
   await Promise.all([
     mkdir(initialDirectory, { recursive: true }),
     mkdir(runtimeConfig.runtimeHome, { recursive: true, mode: 0o700 }),
+    mkdir(runtimeConfig.harnessHome, { recursive: true, mode: 0o700 }),
+    mkdir(claudeConfigDir, { recursive: true, mode: 0o700 }),
+    mkdir(piConfigDir, { recursive: true, mode: 0o700 }),
   ])
   const fileSystem = new NodeUserFileSystem({
     initialDirectory,
@@ -27,7 +41,7 @@ export async function startServer(): Promise<void> {
     new CompatibleModelEndpointClient(),
   )
   const agentHarness = new AgentHarness({
-    provider: new ClaudeProvider(),
+    provider: new ClaudeProvider({ globalConfigDir: claudeConfigDir }),
     cwd: initialDirectory,
   })
   const server = buildHttpServer({

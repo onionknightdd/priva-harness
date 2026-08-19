@@ -139,9 +139,13 @@ API：
 
 - 通过 `ModelProfileResolver` 解析模型、凭证和目标 `provider`，敏感值不得进入
   `core` 事件或日志。
-- 启动层从统一的 `runtimeConfig` 导出固定运行目录 `~/.bambuddy` 和配置文件路径
-  `~/.bambuddy/bambuddy.settings.yml`；配置文件内容与 YAML 解析契约留到后续实现。
-- profile 以 `~/.bambuddy/model-profiles.json` 为唯一事实来源；文件读改写和图片能力
+- 启动层从统一的 `runtimeConfig` 导出产品运行根（默认 `~/.bambuddy`，`main.ts`
+  可用环境变量 `RUNTIME_HOME_DIR` 覆盖）和配置文件路径
+  `$RUNTIME_HOME/bambuddy.settings.yml`；配置文件内容与 YAML 解析契约留到后续实现。
+- Claude 全局配置目录为 `$RUNTIME_HOME/harness/.claude`，项目配置为 `<cwd>/.claude`。
+- Pi 产品化后的全局配置目录为 `$RUNTIME_HOME/harness/.bambuddy`（替代 `~/.pi/agent`），
+  项目配置为 `<cwd>/.bambuddy`（替代 `<cwd>/.pi`）。不读取旧的 `~/.pi` 与 `<cwd>/.pi`。
+- profile 以 `$RUNTIME_HOME/model-profiles.json` 为唯一事实来源；文件读改写和图片能力
   缓存更新使用非阻塞异步 I/O、跨进程锁与原子替换。
 - model profile 只保存模型端点、凭证、通用默认模型和按模型缓存的能力，不包含
   `opus`、`sonnet`、`haiku`、`vision` 等特定 `harness` 的固定模型档位。需要模型角色
@@ -162,6 +166,19 @@ Harness 运行配置（可选 modelBindings: Record<string, string>）
        ├── Claude provider 解释 Claude 所需角色
        ├── Pi provider 解释 Pi 所需角色
        └── 其他 provider 解释自己的角色
+```
+
+```text
+$RUNTIME_HOME = ~/.bambuddy            产品根（RUNTIME_HOME_DIR 可覆盖）
+├── bambuddy.settings.yml
+├── model-profiles.json
+└── harness/
+    ├── .claude/                       Claude 全局
+    └── .bambuddy/                     Pi 全局（替代 ~/.pi/agent）
+
+<cwd>/
+├── .claude/                           Claude 项目
+└── .bambuddy/                         Pi 项目（替代 <cwd>/.pi）
 ```
 
 完成定义：
@@ -311,7 +328,7 @@ API：
 3. `provider` SDK 的值不得越过 `provider` 边界。
 4. 会话始终通过 `{ provider, id }` 寻址；只有 `provider` 原生会话 ID 不能构成 `core` 身份标识。
 5. `provider` 能力必须显式声明。不支持的功能应抛出 `UnsupportedCapabilityError`，不得静默采用近似实现。
-6. 热运行时、`provider` 会话记录及私有或原始 SDK 协议都属于 `provider` 实现细节。`.claude`、`.pi` 和原生资源格式只能出现在对应 `provider` 的配置 `adapter` 中。
+6. 热运行时、`provider` 会话记录及私有或原始 SDK 协议都属于 `provider` 实现细节。`.claude`、产品化后的 Pi `.bambuddy` 和原生资源格式只能出现在对应 `provider` 的路径模块或配置 `adapter` 中。不得再使用 `~/.pi` 或 `<cwd>/.pi`。
 7. HTTP、SSE、WebSocket、定时运行和子 Agent 测试共用一个 `harness` 入口。
 8. 规范化运行时事件与公开线协议事件使用彼此独立的 schema。
 9. 随附的技能资源及其 Python 辅助脚本继续作为资源保留；迁移 Runner 不要求重写这些脚本。
@@ -376,7 +393,10 @@ API：
 - 用户/项目记忆；
 - 持久化工具策略和 `provider` 支持的资源设置。
 
-Claude `adapter` 将这些资源落地为 Claude 原生文件，例如 `.claude` 和 `.mcp.json`。Pi `adapter` 将同一批规范化资源落地到 Pi 原生目录或资源加载器输入中。映射过程会识别能力差异：不支持的语义必须上报，不得静默丢弃。
+Claude `adapter` 将这些资源落地为 Claude 原生文件，全局写入
+`$RUNTIME_HOME/harness/.claude`，项目写入 `<cwd>/.claude`。Pi `adapter` 将同一批规范化
+资源落地到产品化目录：全局 `$RUNTIME_HOME/harness/.bambuddy`，项目 `<cwd>/.bambuddy`。
+映射过程会识别能力差异：不支持的语义必须上报，不得静默丢弃。
 
 ```text
 HarnessConfigStore（事实来源）
@@ -415,6 +435,8 @@ services/agent-runner/
     ├── src/
     │   ├── main.ts
     │   ├── runtime-config.ts              # 启动层统一运行目录与配置文件路径
+    │   ├── provider/claude/claude-paths.ts
+    │   ├── provider/pi/pi-paths.ts
     │   ├── core/                         # 仅包含术语体系与契约
     │   │   ├── run/
     │   │   │   ├── run-command.ts
@@ -777,7 +799,7 @@ Claude 原始消息类型或 Pi 事件名称进行分支判断。
 | `commands.py`、`skills.py`、`subagents.py`、`memory.py` | 规范化资源模型，以及 Claude 配置 `adapter` |
 | `hooks/config_manager.py` | 规范化钩子配置，以及 Claude 配置 `adapter` |
 | 持久化的 `.claude` 路径和格式 | `adapter/claude` 投影 |
-| 持久化的 Pi 路径和格式 | `adapter/pi` 投影 |
+| 持久化的 Pi 路径和格式 | `adapter/pi` 投影到 `harness/.bambuddy` 与 `<cwd>/.bambuddy` |
 | 运行作用域内生成的 MCP/工具 SDK 对象 | 运行时 `provider` 实现 |
 | `claude_sdk/client.py` | 删除；由 `core` 契约和 Claude `provider` 取代 |
 

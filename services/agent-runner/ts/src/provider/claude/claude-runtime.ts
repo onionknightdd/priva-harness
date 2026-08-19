@@ -16,7 +16,10 @@ export class ClaudeRuntime implements AgentRuntime {
   private query: Query | undefined
   private sessionId = ''
 
-  constructor(private readonly spec: ProviderRunSpec) {}
+  constructor(
+    private readonly spec: ProviderRunSpec,
+    private readonly globalConfigDir: string,
+  ) {}
 
   get session(): SessionRef {
     return { provider: 'claude', id: this.sessionId }
@@ -26,7 +29,7 @@ export class ClaudeRuntime implements AgentRuntime {
     const mapper = new ClaudeEventMapper()
     const active = query({
       prompt: singleShotUserMessage(turn.text),
-      options: claudeOptions(this.spec),
+      options: buildClaudeQueryOptions(this.spec, this.globalConfigDir),
     })
     this.query = active
 
@@ -59,15 +62,30 @@ export class ClaudeRuntime implements AgentRuntime {
   }
 }
 
-function claudeOptions(spec: ProviderRunSpec): Options {
+export function buildClaudeQueryOptions(
+  spec: ProviderRunSpec,
+  globalConfigDir: string,
+): Options {
   const model = process.env['ANTHROPIC_MODEL']
   return {
     cwd: spec.cwd,
     includePartialMessages: true,
     permissionMode: 'bypassPermissions',
     allowDangerouslySkipPermissions: true,
+    env: {
+      ...definedProcessEnv(),
+      CLAUDE_CONFIG_DIR: globalConfigDir,
+    },
     ...(model === undefined || model === '' ? {} : { model }),
   }
+}
+
+function definedProcessEnv(): Record<string, string> {
+  const env: Record<string, string> = {}
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value !== undefined) env[key] = value
+  }
+  return env
 }
 
 function sessionIdOf(message: SDKMessage): string | undefined {
