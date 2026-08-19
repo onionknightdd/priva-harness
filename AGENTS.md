@@ -7,8 +7,8 @@ the file closest to the code being changed.
 ## Project Status
 
 The frontend lives in `agent-ui/` and uses React 19, TypeScript, Vite 8,
-Tailwind CSS 4, shadcn/ui with Base UI primitives, and GSAP. Use npm and run the
-following commands from `agent-ui/`:
+Tailwind CSS 4, shadcn/ui with Base UI primitives, Animate UI, Motion, and GSAP.
+Use npm and run the following commands from `agent-ui/`:
 
 - Install dependencies: `npm ci`
 - Start development: `npm run dev`
@@ -95,11 +95,19 @@ configured. Add their exact commands here when those tools are introduced.
 - Define colors, typography, spacing, radii, and other visual decisions through
   shared theme tokens. Do not introduce isolated styles that diverge from the
   established design system.
-- Every user-facing frontend implementation must include purposeful motion
-  implemented with GSAP. Motion should clarify hierarchy, state changes, or
-  user feedback rather than serve as decoration alone.
-- Keep animation behavior consistent and reusable. Scope GSAP timelines and
-  contexts to component lifecycles and clean them up when components unmount.
+- Use shadcn/ui for foundational UI components and visual structure.
+- Prefer Animate UI for ready-made animated components that satisfy the product
+  requirement.
+- Use Motion for custom React interactions, gestures, and component-level state
+  transitions.
+- Reserve GSAP for the small number of complex scroll-driven or timeline-based
+  animations that Motion does not express clearly.
+- Every user-facing frontend implementation must include purposeful motion.
+  Motion should clarify hierarchy, state changes, or user feedback rather than
+  serve as decoration alone.
+- Keep animation behavior consistent and reusable. Scope animation timelines
+  and contexts to component lifecycles and clean them up when components
+  unmount.
 - Respect `prefers-reduced-motion` and provide a usable reduced-motion or
   no-motion experience without removing access to content or functionality.
 - Preserve responsive behavior, keyboard navigation, visible focus states, and
