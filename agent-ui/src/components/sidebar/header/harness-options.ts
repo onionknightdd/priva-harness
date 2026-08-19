@@ -6,7 +6,7 @@ export type HarnessOption = {
   id: HarnessId
   nameKey: string
   descriptionKey: string
-  disabled?: boolean
+  disabled: boolean
 }
 
 export const DEFAULT_HARNESS_ID: HarnessId = "bambuddy"
@@ -16,11 +16,13 @@ export const harnessOptions = [
     id: "bambuddy",
     nameKey: "sidebar.harness.bambuddy.name",
     descriptionKey: "sidebar.harness.bambuddy.description",
+    disabled: false,
   },
   {
     id: "claude",
     nameKey: "sidebar.harness.claude.name",
     descriptionKey: "sidebar.harness.claude.description",
+    disabled: false,
   },
   {
     id: "deepseek",
