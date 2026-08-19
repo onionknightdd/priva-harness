@@ -1,5 +1,4 @@
 export type ProfileDraft = {
-  id: string
   label: string
   baseUrl: string
   authToken: string

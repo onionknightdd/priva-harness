@@ -35,7 +35,6 @@ import type {
 } from "./model-settings.types"
 
 const emptyProfileDraft: ProfileDraft = {
-  id: "",
   label: "",
   baseUrl: "",
   authToken: "",
@@ -47,7 +46,6 @@ const emptyProfileDraft: ProfileDraft = {
 
 function profileToDraft(profile: ModelProfileSummary): ProfileDraft {
   return {
-    id: profile.id,
     label: profile.label,
     baseUrl: profile.baseUrl,
     authToken: "",
@@ -213,7 +211,6 @@ export function ModelSettingsView() {
 
   const createInput = React.useCallback(
     (): ModelProfileCreateInput => ({
-      id: draft.id.trim(),
       label: draft.label.trim(),
       baseUrl: draft.baseUrl.trim(),
       authToken: draft.authToken.trim(),

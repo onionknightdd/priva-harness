@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import type { ModelEndpointClient } from '../../../../src/core/contract/model-profile.js'
 import {
+  GENERATED_MODEL_PROFILE_ID_PATTERN,
   type ModelCapability,
   type ModelProfile,
   ModelProfileError,
@@ -52,8 +53,9 @@ describe('/api/sandbox/credentials/profiles', () => {
       },
     })
     expect(createResponse.statusCode).toBe(201)
+    const createdId = generatedProfileId(createResponse.json())
     expect(createResponse.json()).toEqual({
-      id: 'gateway',
+      id: createdId,
       label: 'gateway',
       base_url: 'https://api.example.com',
       auth_token: 'secret',
@@ -72,13 +74,13 @@ describe('/api/sandbox/credentials/profiles', () => {
     })
     expect(listResponse.statusCode).toBe(200)
     expect(listResponse.json()).toMatchObject({
-      default_profile_id: 'gateway',
-      profiles: [{ id: 'gateway', auth_token_set: true }],
+      default_profile_id: createdId,
+      profiles: [{ id: createdId, auth_token_set: true }],
     })
 
     const updateResponse = await server.inject({
       method: 'PATCH',
-      url: '/api/sandbox/credentials/profiles/gateway',
+      url: `/api/sandbox/credentials/profiles/${createdId}`,
       payload: {
         label: 'Renamed',
         default_model: null,
@@ -96,18 +98,27 @@ describe('/api/sandbox/credentials/profiles', () => {
 
     const getResponse = await server.inject({
       method: 'GET',
-      url: '/api/sandbox/credentials/profiles/gateway',
+      url: `/api/sandbox/credentials/profiles/${createdId}`,
     })
     expect(getResponse.statusCode).toBe(200)
     expect(getResponse.json()).not.toHaveProperty('auth_token_set')
 
-    const duplicateResponse = await server.inject({
+    const secondCreate = await server.inject({
       method: 'POST',
       url: '/api/sandbox/credentials/profiles',
       payload: profilePayload('gateway'),
     })
-    expect(duplicateResponse.statusCode).toBe(409)
-    expect(duplicateResponse.json()).toEqual({ detail: 'profile_id_exists' })
+    expect(secondCreate.statusCode).toBe(201)
+    const secondId = generatedProfileId(secondCreate.json())
+    expect(secondId).not.toBe(createdId)
+
+    const clientSuppliedId = await server.inject({
+      method: 'POST',
+      url: '/api/sandbox/credentials/profiles',
+      payload: { ...profilePayload('custom'), id: 'custom-id' },
+    })
+    expect(clientSuppliedId.statusCode).toBe(201)
+    expect(generatedProfileId(clientSuppliedId.json())).not.toBe('custom-id')
   })
 
   it('rejects harness-specific fixed model slots', async () => {
@@ -124,25 +135,25 @@ describe('/api/sandbox/credentials/profiles', () => {
   })
 
   it('lists and tests models using saved and unsaved profile values', async () => {
-    await createProfile(server, 'saved')
+    const savedId = await createProfile(server, 'saved')
 
     const listResponse = await server.inject({
       method: 'GET',
-      url: '/api/sandbox/credentials/profiles/saved/models',
+      url: `/api/sandbox/credentials/profiles/${savedId}/models`,
     })
     expect(listResponse.statusCode).toBe(200)
     expect(listResponse.json()).toEqual({ models: [{ id: 'model-a' }, { id: 'model-b' }] })
 
     const savedTestResponse = await server.inject({
       method: 'POST',
-      url: '/api/sandbox/credentials/profiles/saved/test',
+      url: `/api/sandbox/credentials/profiles/${savedId}/test`,
       payload: {},
     })
     expect(savedTestResponse.statusCode).toBe(200)
 
     const savedDraftTestResponse = await server.inject({
       method: 'POST',
-      url: '/api/sandbox/credentials/profiles/saved/test',
+      url: `/api/sandbox/credentials/profiles/${savedId}/test`,
       payload: {
         base_url: 'https://changed.example.com/v1',
         auth_token: 'changed-secret',
@@ -150,19 +161,19 @@ describe('/api/sandbox/credentials/profiles', () => {
     })
     expect(savedDraftTestResponse.statusCode).toBe(200)
     expect(endpointClient.listedProfiles.at(-1)).toMatchObject({
-      id: 'saved',
+      id: savedId,
       baseUrl: 'https://changed.example.com/v1',
       authToken: 'changed-secret',
     })
 
     const savedBaseUrlTestResponse = await server.inject({
       method: 'POST',
-      url: '/api/sandbox/credentials/profiles/saved/test',
+      url: `/api/sandbox/credentials/profiles/${savedId}/test`,
       payload: { base_url: 'https://stored-key.example.com/v1' },
     })
     expect(savedBaseUrlTestResponse.statusCode).toBe(200)
     expect(endpointClient.listedProfiles.at(-1)).toMatchObject({
-      id: 'saved',
+      id: savedId,
       baseUrl: 'https://stored-key.example.com/v1',
       authToken: 'secret',
     })
@@ -177,19 +188,20 @@ describe('/api/sandbox/credentials/profiles', () => {
       },
     })
     expect(draftTestResponse.statusCode).toBe(200)
-    expect(endpointClient.listedProfiles.at(-1)).toMatchObject({
-      id: 'draft',
+    const listedDraft = endpointClient.listedProfiles.at(-1)
+    expect(listedDraft?.id).toMatch(GENERATED_MODEL_PROFILE_ID_PATTERN)
+    expect(listedDraft).toMatchObject({
       baseUrl: 'https://draft.example.com/v1',
       authToken: 'draft-secret',
     })
   })
 
   it('probes draft and saved multimodal capabilities with current credentials', async () => {
-    await createProfile(server, 'gateway')
+    const profileId = await createProfile(server, 'gateway')
 
     const savedProbe = await server.inject({
       method: 'POST',
-      url: '/api/sandbox/credentials/profiles/gateway/capabilities/probe',
+      url: `/api/sandbox/credentials/profiles/${profileId}/capabilities/probe`,
       payload: {
         base_url: 'https://changed.example.com/v1',
         auth_token: 'changed-secret',
@@ -205,12 +217,26 @@ describe('/api/sandbox/credentials/profiles', () => {
     })
     expect(endpointClient.probes.at(-1)).toMatchObject({
       profile: {
-        id: 'gateway',
+        id: profileId,
         baseUrl: 'https://changed.example.com/v1',
         authToken: 'changed-secret',
       },
       modelId: 'image-a',
       capability: 'image_generation',
+    })
+
+    const cached = await server.inject({
+      method: 'GET',
+      url: `/api/sandbox/credentials/profiles/${profileId}`,
+    })
+    expect(cached.json()).toMatchObject({
+      model_capabilities: {
+        'image-a': {
+          image_understanding: null,
+          image_generation: true,
+          image_edit: null,
+        },
+      },
     })
 
     const draftProbe = await server.inject({
@@ -230,19 +256,30 @@ describe('/api/sandbox/credentials/profiles', () => {
       capability: 'image_edit',
       supported: true,
     })
-    expect(endpointClient.probes.at(-1)).toMatchObject({
+    const draftProbeRecord = endpointClient.probes.at(-1)
+    expect(draftProbeRecord?.profile.id).toMatch(GENERATED_MODEL_PROFILE_ID_PATTERN)
+    expect(draftProbeRecord).toMatchObject({
       profile: {
-        id: 'draft',
         baseUrl: 'https://draft.example.com/v1',
         authToken: 'draft-secret',
       },
       modelId: 'edit-a',
       capability: 'image_edit',
     })
+    expect((await server.inject({
+      method: 'GET',
+      url: `/api/sandbox/credentials/profiles/${profileId}`,
+    })).json()).toMatchObject({
+      model_capabilities: {
+        'image-a': {
+          image_generation: true,
+        },
+      },
+    })
   })
 
   it('returns the upstream error when multimodal probing fails', async () => {
-    await createProfile(server, 'gateway')
+    const profileId = await createProfile(server, 'gateway')
     endpointClient.probeError = new ModelProfileError(
       'upstream-auth-failed',
       'authentication failed',
@@ -250,7 +287,7 @@ describe('/api/sandbox/credentials/profiles', () => {
 
     const probe = await server.inject({
       method: 'POST',
-      url: '/api/sandbox/credentials/profiles/gateway/capabilities/probe',
+      url: `/api/sandbox/credentials/profiles/${profileId}/capabilities/probe`,
       payload: {
         model_id: 'model-a',
         capability: 'image_understanding',
@@ -258,15 +295,19 @@ describe('/api/sandbox/credentials/profiles', () => {
     })
     expect(probe.statusCode).toBe(400)
     expect(probe.json()).toEqual({ detail: 'authentication failed' })
+    expect((await server.inject({
+      method: 'GET',
+      url: `/api/sandbox/credentials/profiles/${profileId}`,
+    })).json()).toMatchObject({ model_capabilities: {} })
   })
 
   it('requires a ready profile before changing the default and promotes on deletion', async () => {
-    await createProfile(server, 'first')
-    await createProfile(server, 'second', null)
+    const firstId = await createProfile(server, 'first')
+    const secondId = await createProfile(server, 'second', null)
 
     const notReady = await server.inject({
       method: 'PUT',
-      url: '/api/sandbox/credentials/profiles/second/default',
+      url: `/api/sandbox/credentials/profiles/${secondId}/default`,
       payload: {},
     })
     expect(notReady.statusCode).toBe(409)
@@ -274,25 +315,25 @@ describe('/api/sandbox/credentials/profiles', () => {
 
     await server.inject({
       method: 'PATCH',
-      url: '/api/sandbox/credentials/profiles/second',
+      url: `/api/sandbox/credentials/profiles/${secondId}`,
       payload: { default_model: 'model-b' },
     })
     const setDefault = await server.inject({
       method: 'PUT',
-      url: '/api/sandbox/credentials/profiles/second/default',
+      url: `/api/sandbox/credentials/profiles/${secondId}/default`,
     })
-    expect(setDefault.json()).toEqual({ default_profile_id: 'second' })
+    expect(setDefault.json()).toEqual({ default_profile_id: secondId })
 
     const deleted = await server.inject({
       method: 'DELETE',
-      url: '/api/sandbox/credentials/profiles/second',
+      url: `/api/sandbox/credentials/profiles/${secondId}`,
     })
     expect(deleted.statusCode).toBe(204)
     const listing = await server.inject({
       method: 'GET',
       url: '/api/sandbox/credentials/profiles',
     })
-    expect(listing.json()).toMatchObject({ default_profile_id: 'first' })
+    expect(listing.json()).toMatchObject({ default_profile_id: firstId })
   })
 })
 
@@ -321,10 +362,9 @@ class RecordingEndpointClient implements ModelEndpointClient {
   }
 }
 
-function profilePayload(id: string, defaultModel: string | null = 'model-a') {
+function profilePayload(label: string, defaultModel: string | null = 'model-a') {
   return {
-    id,
-    label: id,
+    label,
     base_url: 'https://api.example.com',
     auth_token: 'secret',
     default_model: defaultModel,
@@ -333,13 +373,26 @@ function profilePayload(id: string, defaultModel: string | null = 'model-a') {
 
 async function createProfile(
   server: FastifyInstance,
-  id: string,
+  label: string,
   defaultModel: string | null = 'model-a',
-): Promise<void> {
+): Promise<string> {
   const response = await server.inject({
     method: 'POST',
     url: '/api/sandbox/credentials/profiles',
-    payload: profilePayload(id, defaultModel),
+    payload: profilePayload(label, defaultModel),
   })
   expect(response.statusCode).toBe(201)
+  return generatedProfileId(response.json())
+}
+
+function generatedProfileId(body: unknown): string {
+  if (typeof body !== 'object' || body === null || !('id' in body)) {
+    throw new Error('Create response is missing id')
+  }
+  const { id } = body
+  if (typeof id !== 'string') {
+    throw new Error('Create response id must be a string')
+  }
+  expect(id).toMatch(GENERATED_MODEL_PROFILE_ID_PATTERN)
+  return id
 }

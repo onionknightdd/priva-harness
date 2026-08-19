@@ -102,8 +102,7 @@ export function ModelProfileEditor({
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
   const isTesting = testStatus === "testing"
   const canSubmit = Boolean(
-    draft.id.trim() &&
-      draft.label.trim() &&
+    draft.label.trim() &&
       draft.baseUrl.trim() &&
       (!isCreating || draft.authToken.trim())
   )
@@ -191,30 +190,6 @@ export function ModelProfileEditor({
                   onDraftChange("label", event.currentTarget.value)
                 }
               />
-            </Field>
-
-            <Field>
-              <FieldLabel htmlFor="model-profile-id">
-                {t("settings.models.profileId")}
-              </FieldLabel>
-              <Input
-                id="model-profile-id"
-                value={draft.id}
-                placeholder={t("settings.models.profileIdPlaceholder")}
-                pattern="[a-z0-9][a-z0-9._-]{0,62}"
-                maxLength={63}
-                required
-                disabled={!isCreating}
-                onChange={(event) =>
-                  onDraftChange(
-                    "id",
-                    event.currentTarget.value.toLocaleLowerCase()
-                  )
-                }
-              />
-              <FieldDescription className="text-xs">
-                {t("settings.models.profileIdDescription")}
-              </FieldDescription>
             </Field>
 
             <Field>
@@ -336,7 +311,7 @@ export function ModelProfileEditor({
               isCreating={isCreating}
               isConnectionVerified={isConnectionVerified}
               modelIds={modelIds}
-              selectedProfileId={profile?.id ?? null}
+              profile={profile}
               onDraftChange={(key, value) => onDraftChange(key, value)}
             />
           </FieldGroup>

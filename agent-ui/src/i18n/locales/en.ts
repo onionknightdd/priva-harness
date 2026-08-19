@@ -199,10 +199,6 @@ export const en = {
       noProfiles: "No model profiles yet.",
       profileName: "Name",
       profileNamePlaceholder: "OpenAI Main",
-      profileId: "Profile ID",
-      profileIdPlaceholder: "openai-main",
-      profileIdDescription:
-        "Lowercase letters, numbers, dots, underscores, and hyphens only. The ID cannot be changed after creation.",
       baseUrl: "Base URL",
       baseUrlPlaceholder: "https://api.openai.com/v1",
       authToken: "API key",

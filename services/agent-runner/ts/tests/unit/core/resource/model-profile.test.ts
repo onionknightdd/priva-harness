@@ -1,15 +1,50 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  allocateUniqueModelProfileId,
   createModelProfile,
   emptyModelProfileCollection,
+  generateModelProfileId,
+  GENERATED_MODEL_PROFILE_ID_PATTERN,
   MODEL_CONTEXT_1M,
+  parseModelProfileCollection,
   patchModelProfile,
   resolveModelProfile,
   splitModelContext,
 } from '../../../../src/core/resource/model-profile.js'
 
 describe('model profile domain', () => {
+  it('generates profile ids as model-{date}{7-hex}', () => {
+    expect(generateModelProfileId(
+      new Date(Date.UTC(2026, 7, 19)),
+      Uint8Array.from([0xab, 0xcd, 0xef, 0x10]),
+    )).toBe('model-20260819abcdef1')
+    expect(generateModelProfileId()).toMatch(GENERATED_MODEL_PROFILE_ID_PATTERN)
+    expect(allocateUniqueModelProfileId(new Set(['model-20260819abcdef1']))).toMatch(
+      GENERATED_MODEL_PROFILE_ID_PATTERN,
+    )
+  })
+
+  it('rejects stored capabilities that still use the removed image transport shape', () => {
+    const profile = createModelProfile({
+      id: 'gateway',
+      label: 'Gateway',
+      baseUrl: 'https://api.example.com',
+      authToken: 'secret',
+    })
+
+    expect(() => parseModelProfileCollection({
+      version: 1,
+      defaultProfileId: profile.id,
+      profiles: [{
+        ...profile,
+        modelCapabilities: {
+          'model-a': { image: true, imageReadTransport: 'chat_completions' },
+        },
+      }],
+    })).toThrow('Capabilities for model-a contains unsupported field: image')
+  })
+
   it('normalizes profile fields and rejects embedded URL credentials', () => {
     const profile = createModelProfile({
       id: ' Gateway ',

@@ -11,7 +11,11 @@ import { useTranslation } from "react-i18next"
 import { Spinner } from "@/components/ui/spinner"
 import { cn } from "@/lib/utils"
 
-import type { ModelCapability } from "./model-profile-api"
+import {
+  cachedModelCapability,
+  type ModelCapability,
+  type ModelProfileSummary,
+} from "./model-profile-api"
 import { ModelSelector } from "./model-selector"
 import type {
   ModelCapabilityProbeStatus,
@@ -56,7 +60,7 @@ export function MultimodalModelFields({
   isCreating,
   isConnectionVerified,
   modelIds,
-  selectedProfileId,
+  profile,
   onDraftChange,
 }: {
   busyAction: ModelSettingsBusyAction
@@ -64,7 +68,7 @@ export function MultimodalModelFields({
   isCreating: boolean
   isConnectionVerified: boolean
   modelIds: readonly string[]
-  selectedProfileId: string | null
+  profile: ModelProfileSummary | null
   onDraftChange: (key: MultimodalDraftKey, value: string | null) => void
 }) {
   const { t } = useTranslation()
@@ -91,7 +95,7 @@ export function MultimodalModelFields({
             isConnectionVerified={isConnectionVerified}
             label={t(field.labelKey)}
             modelIds={modelIds}
-            selectedProfileId={selectedProfileId}
+            profile={profile}
             onValueChange={(value) => onDraftChange(field.key, value)}
           />
         ))}
@@ -109,7 +113,7 @@ function CapabilityModelField({
   isConnectionVerified,
   label,
   modelIds,
-  selectedProfileId,
+  profile,
   onValueChange,
 }: {
   busyAction: ModelSettingsBusyAction
@@ -120,17 +124,28 @@ function CapabilityModelField({
   isConnectionVerified: boolean
   label: string
   modelIds: readonly string[]
-  selectedProfileId: string | null
+  profile: ModelProfileSummary | null
   onValueChange: (value: string | null) => void
 }) {
   const { t } = useTranslation()
   const modelId = draft[fieldKey]
+  const cacheValid =
+    profile !== null &&
+    draft.baseUrl.trim() === profile.baseUrl &&
+    draft.authToken.trim() === ""
   const probe = useModelCapabilityProbe({
+    cachedSupported: cachedModelCapability(
+      profile?.modelCapabilities,
+      modelId,
+      capability
+    ),
+    cacheValid,
     capability,
     draft,
     enabled: isConnectionVerified,
     isCreating,
-    selectedProfileId,
+    modelId,
+    selectedProfileId: profile?.id ?? null,
   })
   const inputId = `model-profile-${capability.replaceAll("_", "-")}`
 
@@ -154,10 +169,7 @@ function CapabilityModelField({
         modelIds={modelIds}
         placeholder={t("settings.models.selectCapabilityModel")}
         value={modelId}
-        onValueChange={(value) => {
-          onValueChange(value)
-          probe.probe(value)
-        }}
+        onValueChange={onValueChange}
       />
     </div>
   )

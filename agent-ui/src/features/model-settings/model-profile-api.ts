@@ -1,12 +1,9 @@
 const MODEL_PROFILE_API_PREFIX = "/api/sandbox/credentials/profiles"
 
 type ModelCapabilitiesResponse = {
-  image: boolean | null
-  image_read_transport:
-    | "chat_completions"
-    | "images_edits"
-    | "unsupported"
-    | null
+  image_understanding: boolean | null
+  image_generation: boolean | null
+  image_edit: boolean | null
 }
 
 type ModelProfileSummaryResponse = {
@@ -36,6 +33,12 @@ type ErrorResponse = {
   detail?: string
 }
 
+export type ModelCapabilities = {
+  imageUnderstanding: boolean | null
+  imageGeneration: boolean | null
+  imageEdit: boolean | null
+}
+
 export type ModelProfileSummary = {
   id: string
   label: string
@@ -44,6 +47,7 @@ export type ModelProfileSummary = {
   imageUnderstandingModel: string | null
   imageGenerationModel: string | null
   imageEditModel: string | null
+  modelCapabilities: Record<string, ModelCapabilities>
   authTokenSet: boolean
   modelCount: number | null
 }
@@ -54,7 +58,6 @@ export type ModelProfileCollection = {
 }
 
 export type ModelProfileCreateInput = {
-  id: string
   label: string
   baseUrl: string
   authToken: string
@@ -146,6 +149,16 @@ function toProfileSummary(
     imageUnderstandingModel: profile.image_understanding_model,
     imageGenerationModel: profile.image_generation_model,
     imageEditModel: profile.image_edit_model,
+    modelCapabilities: Object.fromEntries(
+      Object.entries(profile.model_capabilities).map(([modelId, capabilities]) => [
+        modelId,
+        {
+          imageUnderstanding: capabilities.image_understanding,
+          imageGeneration: capabilities.image_generation,
+          imageEdit: capabilities.image_edit,
+        },
+      ])
+    ),
     authTokenSet: profile.auth_token_set,
     modelCount: profile.model_count,
   }
@@ -153,7 +166,6 @@ function toProfileSummary(
 
 function toRequestBody(input: ModelProfileCreateInput) {
   return {
-    id: input.id,
     label: input.label,
     base_url: input.baseUrl,
     auth_token: input.authToken,
@@ -316,5 +328,30 @@ function toCapabilityProbeResult(
     modelId: response.model_id,
     capability: response.capability,
     supported: response.supported,
+  }
+}
+
+export function cachedModelCapability(
+  capabilities: Record<string, ModelCapabilities> | undefined,
+  modelId: string | null | undefined,
+  capability: ModelCapability
+): boolean | null {
+  const normalizedModelId = modelId?.trim() ?? ""
+  if (normalizedModelId === "" || capabilities === undefined) {
+    return null
+  }
+
+  const entry = capabilities[normalizedModelId]
+  if (entry === undefined) {
+    return null
+  }
+
+  switch (capability) {
+    case "image_understanding":
+      return entry.imageUnderstanding
+    case "image_generation":
+      return entry.imageGeneration
+    case "image_edit":
+      return entry.imageEdit
   }
 }

@@ -199,10 +199,6 @@ export const zhCN = {
       noProfiles: "还没有模型配置。",
       profileName: "名称",
       profileNamePlaceholder: "OpenAI Main",
-      profileId: "配置 ID",
-      profileIdPlaceholder: "openai-main",
-      profileIdDescription:
-        "仅支持小写字母、数字、点、下划线和连字符；创建后不可修改。",
       baseUrl: "Base URL",
       baseUrlPlaceholder: "https://api.openai.com/v1",
       authToken: "API Key",

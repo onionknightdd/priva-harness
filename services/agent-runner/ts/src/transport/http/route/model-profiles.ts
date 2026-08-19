@@ -29,7 +29,6 @@ interface ProfileIdParams {
 }
 
 interface ModelProfileCreateBody {
-  readonly id: string
   readonly label: string
   readonly base_url: string
   readonly auth_token: string
@@ -193,7 +192,6 @@ export const modelProfileRoutes: FastifyPluginCallback<ModelProfileRoutesOptions
 
 function fromCreateBody(body: ModelProfileCreateBody): ModelProfileCreateInput {
   return {
-    id: body.id,
     label: body.label,
     baseUrl: body.base_url,
     authToken: body.auth_token,
@@ -253,8 +251,9 @@ function toProfileResponse(profile: ModelProfile): Record<string, unknown> {
       Object.entries(profile.modelCapabilities).map(([modelId, capabilities]) => [
         modelId,
         {
-          image: capabilities.image,
-          image_read_transport: capabilities.imageReadTransport,
+          image_understanding: capabilities.imageUnderstanding,
+          image_generation: capabilities.imageGeneration,
+          image_edit: capabilities.imageEdit,
         },
       ]),
     ),
