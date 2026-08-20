@@ -18,8 +18,7 @@ export const zhCN = {
   },
   chat: {
     contentLabel: "会话",
-    emptyTitle: "我能帮你做什么？",
-    emptyDescription: "输入问题即可开始新对话。",
+    emptyTitle: "接下来做什么？",
     promptLabel: "消息",
     promptPlaceholder: "问任何问题…",
     send: "发送",
@@ -27,7 +26,9 @@ export const zhCN = {
     attachUnavailable: "附件功能尚未开放",
     scrollToLatest: "跳到最新消息",
     today: "今天",
-    mockAssistantReply: "这是本地预览回复，尚未接入实时流式输出。",
+    thinking: "正在思考…",
+    mockAssistantReply:
+      "好的。这是一条本地预览回复，我会用流式输出把内容逐字写出来，方便你检查滚动、光标和消息布局。实时模型接入后会换成真实回答。",
     testSessionTitle: "我要怎么设计 Agent Chat Workspace？",
   },
   fileBrowser: {
@@ -192,9 +193,9 @@ export const zhCN = {
     },
     user: {
       openMenu: "打开用户菜单",
-      guestName: "本地用户",
-      guestEmail: "未登录",
-      guestInitials: "本",
+      guestName: "admin",
+      guestEmail: "admin@localhost",
+      guestInitials: "A",
       settings: "设置",
       apiDocumentation: "API文档",
       about: "简介",
