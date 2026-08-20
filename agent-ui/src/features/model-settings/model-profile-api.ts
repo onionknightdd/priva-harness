@@ -176,9 +176,12 @@ function toRequestBody(input: ModelProfileCreateInput) {
   }
 }
 
-export async function listModelProfiles(): Promise<ModelProfileCollection> {
+export async function listModelProfiles(
+  signal?: AbortSignal
+): Promise<ModelProfileCollection> {
   const response = await requestJson<ModelProfileCollectionResponse>(
-    MODEL_PROFILE_API_PREFIX
+    MODEL_PROFILE_API_PREFIX,
+    signal ? { signal } : undefined
   )
 
   return {
@@ -187,9 +190,13 @@ export async function listModelProfiles(): Promise<ModelProfileCollection> {
   }
 }
 
-export async function listProfileModels(profileId: string): Promise<string[]> {
+export async function listProfileModels(
+  profileId: string,
+  signal?: AbortSignal
+): Promise<string[]> {
   const response = await requestJson<ModelListResponse>(
-    profileEndpoint(profileId, "/models")
+    profileEndpoint(profileId, "/models"),
+    signal ? { signal } : undefined
   )
 
   return response.models.map((model) => model.id)
@@ -239,6 +246,22 @@ export function setDefaultModelProfile(profileId: string) {
     profileEndpoint(profileId, "/default"),
     { method: "PUT" }
   )
+}
+
+export async function setProfileDefaultModel(
+  profileId: string,
+  defaultModel: string
+): Promise<ModelProfileSummary> {
+  const response = await requestJson<ModelProfileSummaryResponse>(
+    profileEndpoint(profileId),
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ default_model: defaultModel }),
+    }
+  )
+
+  return toProfileSummary(response)
 }
 
 export function deleteModelProfile(profileId: string) {
