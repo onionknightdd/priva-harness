@@ -67,7 +67,7 @@ export function AgentMessageComposer({
             rows={1}
             value={draft}
             placeholder={t("agentMessage.promptPlaceholder")}
-            className="max-h-60 min-h-12 field-sizing-content px-2.5 pt-2.5 pb-0"
+            className="max-h-60 min-h-12 field-sizing-content px-3.5 pt-3.5 pb-0"
             onChange={(event) => onDraftChange(event.currentTarget.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
