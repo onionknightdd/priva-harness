@@ -15,7 +15,7 @@ const composerTransition = {
   mass: 0.75,
 } as const
 
-const composerWidthClassName = "w-full max-w-[calc(48rem+20px)]"
+const composerWidthClassName = "w-full max-w-[calc(48rem+40px)]"
 
 export function AgentMessage({
   draft,
