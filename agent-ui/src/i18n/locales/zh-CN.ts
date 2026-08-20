@@ -16,8 +16,8 @@ export const zhCN = {
     dataAndUsage: "数据与用量",
     fileBrowser: "文件浏览器",
   },
-  chat: {
-    contentLabel: "会话",
+  agentMessage: {
+    contentLabel: "Agent Message",
     emptyTitle: "接下来做什么？",
     promptLabel: "消息",
     promptPlaceholder: "问任何问题…",
@@ -29,7 +29,7 @@ export const zhCN = {
     thinking: "正在思考…",
     mockAssistantReply:
       "好的。这是一条本地预览回复，我会用流式输出把内容逐字写出来，方便你检查滚动、光标和消息布局。实时模型接入后会换成真实回答。",
-    testSessionTitle: "我要怎么设计 Agent Chat Workspace？",
+    testSessionTitle: "我要怎么设计 Agent Message？",
   },
   fileBrowser: {
     searchLabel: "搜索文件和文件夹",
@@ -142,7 +142,7 @@ export const zhCN = {
       project: "项目",
     },
     navigation: {
-      newChat: "新建会话",
+      newAgentMessage: "新建 Agent Message",
       automation: "自动化",
       plugins: "插件/自定义",
       agentSkill: "Agent Skill",
@@ -273,13 +273,13 @@ export const zhCN = {
         "这会删除该配置及其保存的凭证，且无法撤销。",
     },
   },
-  canvas: {
-    label: "Canvas",
-    description: "显示 Canvas 面板。",
-    open: "打开 Canvas",
-    close: "关闭 Canvas",
-    resize: "调整 Canvas 宽度",
-    backToHome: "返回 Canvas",
+  workspace: {
+    label: "Workspace",
+    description: "显示 Workspace 面板。",
+    open: "打开 Workspace",
+    close: "关闭 Workspace",
+    resize: "调整 Workspace 宽度",
+    backToHome: "返回 Workspace",
     home: {
       tasksAndActivity: "任务和活动",
       files: "文件",

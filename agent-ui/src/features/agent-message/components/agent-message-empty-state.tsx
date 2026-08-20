@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next"
 
 import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 
-export function ChatEmptyState() {
+export function AgentMessageEmptyState() {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
 
@@ -22,7 +22,7 @@ export function ChatEmptyState() {
           >
             <SparklesIcon />
           </motion.span>
-          {t("chat.emptyTitle")}
+          {t("agentMessage.emptyTitle")}
         </EmptyTitle>
       </EmptyHeader>
     </Empty>

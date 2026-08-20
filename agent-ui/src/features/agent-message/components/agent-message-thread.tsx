@@ -11,10 +11,14 @@ import {
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller"
 
-import type { ChatMessage as ChatMessageModel } from "../chat-data"
-import { ChatMessage } from "./chat-message"
+import type { AgentThreadMessage } from "../agent-message-data"
+import { AgentMessageItem } from "./agent-message-item"
 
-export function ChatThread({ messages }: { messages: ChatMessageModel[] }) {
+export function AgentMessageThread({
+  messages,
+}: {
+  messages: AgentThreadMessage[]
+}) {
   const { t } = useTranslation()
 
   return (
@@ -22,9 +26,9 @@ export function ChatThread({ messages }: { messages: ChatMessageModel[] }) {
       <MessageScroller>
         <MessageScrollerViewport>
           <MessageScrollerContent className="mx-auto w-full max-w-3xl gap-6 px-1 py-6">
-            <MessageScrollerItem messageId="chat-today-marker">
+            <MessageScrollerItem messageId="agent-message-today-marker">
               <Marker variant="separator">
-                <MarkerContent>{t("chat.today")}</MarkerContent>
+                <MarkerContent>{t("agentMessage.today")}</MarkerContent>
               </Marker>
             </MessageScrollerItem>
             {messages.map((message) => (
@@ -33,14 +37,14 @@ export function ChatThread({ messages }: { messages: ChatMessageModel[] }) {
                 messageId={message.id}
                 scrollAnchor={message.role === "user"}
               >
-                <ChatMessage message={message} />
+                <AgentMessageItem message={message} />
               </MessageScrollerItem>
             ))}
           </MessageScrollerContent>
         </MessageScrollerViewport>
         <MessageScrollerButton>
           <ArrowDownIcon />
-          <span className="sr-only">{t("chat.scrollToLatest")}</span>
+          <span className="sr-only">{t("agentMessage.scrollToLatest")}</span>
         </MessageScrollerButton>
       </MessageScroller>
     </MessageScrollerProvider>

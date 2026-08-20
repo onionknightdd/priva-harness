@@ -16,8 +16,8 @@ export const en = {
     dataAndUsage: "Data and Usage",
     fileBrowser: "File Browser",
   },
-  chat: {
-    contentLabel: "Conversation",
+  agentMessage: {
+    contentLabel: "Agent Message",
     emptyTitle: "What's next?",
     promptLabel: "Message",
     promptPlaceholder: "Ask anything...",
@@ -29,7 +29,7 @@ export const en = {
     thinking: "Thinking…",
     mockAssistantReply:
       "Sure. This is a local preview reply. I'll stream it in so you can check scrolling, the caret, and message layout. A live model will replace this mock once streaming is connected.",
-    testSessionTitle: "How should I design the agent chat workspace?",
+    testSessionTitle: "How should I design Agent Message?",
   },
   fileBrowser: {
     searchLabel: "Search files and folders",
@@ -142,7 +142,7 @@ export const en = {
       project: "Project",
     },
     navigation: {
-      newChat: "New Chat",
+      newAgentMessage: "New Agent Message",
       automation: "Automation",
       plugins: "Plugins / Customize",
       agentSkill: "Agent Skill",
@@ -277,13 +277,13 @@ export const en = {
         "This removes the profile and its saved credential. This action cannot be undone.",
     },
   },
-  canvas: {
-    label: "Canvas",
-    description: "Displays the Canvas panel.",
-    open: "Open Canvas",
-    close: "Close Canvas",
-    resize: "Resize Canvas",
-    backToHome: "Back to Canvas",
+  workspace: {
+    label: "Workspace",
+    description: "Displays the Workspace panel.",
+    open: "Open Workspace",
+    close: "Close Workspace",
+    resize: "Resize Workspace",
+    backToHome: "Back to Workspace",
     home: {
       tasksAndActivity: "Tasks & Activity",
       files: "Files",

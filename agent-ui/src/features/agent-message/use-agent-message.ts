@@ -1,7 +1,10 @@
 import * as React from "react"
 import { useTranslation } from "react-i18next"
 
-import { createChatMessage, type ChatMessage } from "./chat-data"
+import {
+  createAgentThreadMessage,
+  type AgentThreadMessage,
+} from "./agent-message-data"
 import { isAbortError, streamText } from "./stream-text"
 
 type ActiveStream = {
@@ -10,10 +13,10 @@ type ActiveStream = {
   text: string
 }
 
-export function useChatWorkspace() {
+export function useAgentMessage() {
   const { t } = useTranslation()
   const [draft, setDraft] = React.useState("")
-  const [messages, setMessages] = React.useState<ChatMessage[]>([])
+  const [messages, setMessages] = React.useState<AgentThreadMessage[]>([])
   const activeStreamRef = React.useRef<ActiveStream | null>(null)
 
   React.useEffect(() => {
@@ -32,9 +35,13 @@ export function useChatWorkspace() {
     const previousStream = activeStreamRef.current
     previousStream?.controller.abort()
 
-    const userMessage = createChatMessage("user", content)
-    const assistantMessage = createChatMessage("assistant", "", "streaming")
-    const reply = t("chat.mockAssistantReply")
+    const userMessage = createAgentThreadMessage("user", content)
+    const assistantMessage = createAgentThreadMessage(
+      "assistant",
+      "",
+      "streaming"
+    )
+    const reply = t("agentMessage.mockAssistantReply")
     const controller = new AbortController()
 
     activeStreamRef.current = {

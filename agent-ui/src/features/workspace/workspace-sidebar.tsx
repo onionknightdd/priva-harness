@@ -8,26 +8,26 @@ import {
   SidebarContent,
 } from "@/components/ui/sidebar"
 
-import { CanvasHome } from "./canvas-home"
-import { CanvasToggle } from "./canvas-toggle"
-import { CanvasFileView } from "./views/canvas-file-view"
+import { WorkspaceHome } from "./workspace-home"
+import { WorkspaceToggle } from "./workspace-toggle"
+import { WorkspaceFileView } from "./views/workspace-file-view"
 
-export function CanvasSidebar() {
+export function WorkspaceSidebar() {
   const { t } = useTranslation()
   const [activeView, setActiveView] = React.useState<"files" | "home">("home")
 
   return (
     <Sidebar
-      id="canvas-sidebar"
+      id="workspace-sidebar"
       side="right"
       role="complementary"
-      aria-label={t("canvas.label")}
+      aria-label={t("workspace.label")}
       resizable
-      resizeLabel={t("canvas.resize")}
-      mobileTitle={t("canvas.label")}
-      mobileDescription={t("canvas.description")}
+      resizeLabel={t("workspace.resize")}
+      mobileTitle={t("workspace.label")}
+      mobileDescription={t("workspace.description")}
     >
-      <CanvasToggle className="absolute top-1 right-4 z-20 md:hidden" />
+      <WorkspaceToggle className="absolute top-1 right-4 z-20 md:hidden" />
       <SidebarContent
         className={
           activeView === "home"
@@ -36,9 +36,9 @@ export function CanvasSidebar() {
         }
       >
         {activeView === "files" ? (
-          <CanvasFileView onBack={() => setActiveView("home")} />
+          <WorkspaceFileView onBack={() => setActiveView("home")} />
         ) : (
-          <CanvasHome
+          <WorkspaceHome
             onAction={(actionId) => {
               if (actionId === "files") {
                 setActiveView("files")

@@ -5,16 +5,16 @@ import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import {
   RichFilePreview,
-  canvasReadmePreview,
+  workspaceReadmePreview,
 } from "@/features/files"
 
-export function CanvasFileView({ onBack }: { onBack: () => void }) {
+export function WorkspaceFileView({ onBack }: { onBack: () => void }) {
   const { t } = useTranslation()
   const [openedFiles, setOpenedFiles] = React.useState([
-    canvasReadmePreview,
+    workspaceReadmePreview,
   ])
   const [activeFileId, setActiveFileId] = React.useState<string | null>(
-    canvasReadmePreview.id
+    workspaceReadmePreview.id
   )
 
   const handleFileClose = (fileId: string) => {
@@ -47,7 +47,7 @@ export function CanvasFileView({ onBack }: { onBack: () => void }) {
           onClick={onBack}
         >
           <ArrowLeftIcon aria-hidden="true" />
-          <span className="truncate">{t("canvas.backToHome")}</span>
+          <span className="truncate">{t("workspace.backToHome")}</span>
         </Button>
       </div>
       <RichFilePreview

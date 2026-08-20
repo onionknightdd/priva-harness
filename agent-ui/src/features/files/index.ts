@@ -3,5 +3,5 @@ export type {
   FileRenderKind,
   PreviewFile,
 } from "./model/file.types"
-export { RichFilePreview, canvasReadmePreview } from "./preview"
+export { RichFilePreview, workspaceReadmePreview } from "./preview"
 export type { PreviewSelection } from "./selection"
