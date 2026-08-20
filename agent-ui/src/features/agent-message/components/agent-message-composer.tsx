@@ -67,7 +67,7 @@ export function AgentMessageComposer({
             rows={1}
             value={draft}
             placeholder={t("agentMessage.promptPlaceholder")}
-            className="max-h-60 min-h-12 field-sizing-content"
+            className="max-h-60 min-h-12 field-sizing-content px-2.5 pt-2.5 pb-0"
             onChange={(event) => onDraftChange(event.currentTarget.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
@@ -76,11 +76,15 @@ export function AgentMessageComposer({
               }
             }}
           />
-          <InputGroupAddon align="block-end" className="justify-between">
+          <InputGroupAddon
+            align="block-end"
+            className="justify-between px-2.5 pt-2.5 pb-2.5"
+          >
             <Tooltip>
               <TooltipTrigger render={<span className="inline-flex" />}>
                 <InputGroupButton
                   disabled
+                  size="icon-xs"
                   className="rounded-full"
                   aria-label={attachLabel}
                 >
