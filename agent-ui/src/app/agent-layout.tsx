@@ -113,10 +113,12 @@ export function AgentLayout({
             </h1>
           )}
         </div>
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-full h-6 bg-linear-to-b from-background to-transparent"
-        />
+        {isFileBrowser ? null : (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-full h-6 bg-linear-to-b from-background to-transparent"
+          />
+        )}
       </header>
       {isFileBrowser ? (
         <React.Suspense fallback={<AgentLayoutFallback />}>
