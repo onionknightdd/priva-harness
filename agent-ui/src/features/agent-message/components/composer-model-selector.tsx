@@ -18,11 +18,11 @@ import { cn } from "@/lib/utils"
 import {
   listModelProfiles,
   listProfileModels,
+  setDefaultModelProfile,
+  setProfileDefaultModel,
   type ModelProfileCollection,
   type ModelProfileSummary,
 } from "@/features/model-settings/model-profile-api"
-
-const COMPOSER_MODEL_STORAGE_KEY = "agent-ui-composer-model"
 
 type ComposerModelSelection = {
   profileId: string
@@ -30,9 +30,17 @@ type ComposerModelSelection = {
   modelId: string
 }
 
-type StoredComposerModel = {
-  profileId: string
-  modelId: string
+type ProfileModelsEntry = {
+  status: "idle" | "loading" | "ready" | "error"
+  models: string[]
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === "AbortError"
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback
 }
 
 function knownProfileModelIds(profile: ModelProfileSummary): string[] {
@@ -56,145 +64,64 @@ function knownProfileModelIds(profile: ModelProfileSummary): string[] {
   return [...modelIds]
 }
 
-function readStoredComposerModel(): StoredComposerModel | null {
-  try {
-    const raw = window.localStorage.getItem(COMPOSER_MODEL_STORAGE_KEY)
-    if (!raw) {
-      return null
-    }
-
-    const parsed = JSON.parse(raw) as Partial<StoredComposerModel>
-    if (
-      typeof parsed.profileId !== "string" ||
-      typeof parsed.modelId !== "string"
-    ) {
-      return null
-    }
-
-    const profileId = parsed.profileId.trim()
-    const modelId = parsed.modelId.trim()
-    if (!profileId || !modelId) {
-      return null
-    }
-
-    return { profileId, modelId }
-  } catch {
-    return null
-  }
-}
-
-function storeComposerModel(selection: StoredComposerModel) {
-  try {
-    window.localStorage.setItem(
-      COMPOSER_MODEL_STORAGE_KEY,
-      JSON.stringify(selection)
-    )
-  } catch (error) {
-    if (
-      !(error instanceof DOMException) ||
-      (error.name !== "SecurityError" && error.name !== "QuotaExceededError")
-    ) {
-      throw error
-    }
-  }
-}
-
-function resolveComposerModelSelection(
-  collection: ModelProfileCollection,
-  stored: StoredComposerModel | null
-): ComposerModelSelection | null {
-  if (collection.profiles.length === 0) {
-    return null
-  }
-
-  const storedProfile = stored
-    ? collection.profiles.find((profile) => profile.id === stored.profileId)
-    : undefined
-
-  if (storedProfile && stored) {
-    return {
-      profileId: storedProfile.id,
-      profileLabel: storedProfile.label,
-      modelId: stored.modelId,
-    }
-  }
-
-  const profile =
+function defaultProfileFromCollection(collection: ModelProfileCollection) {
+  return (
     collection.profiles.find(
-      (item) => item.id === collection.defaultProfileId
+      (profile) => profile.id === collection.defaultProfileId
     ) ?? collection.profiles[0]
+  )
+}
 
+function selectionFromProfile(
+  profile: ModelProfileSummary | undefined
+): ComposerModelSelection | null {
   if (!profile) {
     return null
   }
 
-  const modelId =
-    profile.defaultModel?.trim() || knownProfileModelIds(profile)[0] || ""
-
   return {
     profileId: profile.id,
     profileLabel: profile.label,
-    modelId,
+    modelId: profile.defaultModel?.trim() ?? "",
   }
 }
 
 function ProfileModelSubmenu({
   profile,
+  modelsEntry,
   selectedProfileId,
   selectedModelId,
+  disabled,
+  onOpen,
   onSelect,
 }: {
   profile: ModelProfileSummary
+  modelsEntry: ProfileModelsEntry | undefined
   selectedProfileId: string | null
   selectedModelId: string | null
+  disabled: boolean
+  onOpen: () => void
   onSelect: (selection: ComposerModelSelection) => void
 }) {
   const { t } = useTranslation()
-  const [models, setModels] = React.useState(() => knownProfileModelIds(profile))
-  const [status, setStatus] = React.useState<
-    "idle" | "loading" | "ready" | "error"
-  >("idle")
-  const statusRef = React.useRef(status)
-  statusRef.current = status
-
-  const visibleModels = React.useMemo(() => {
-    if (
-      selectedProfileId === profile.id &&
-      selectedModelId &&
-      !models.includes(selectedModelId)
-    ) {
-      return [selectedModelId, ...models]
-    }
-
-    return models
-  }, [models, profile.id, selectedModelId, selectedProfileId])
-
-  const loadModels = React.useCallback(async () => {
-    if (statusRef.current === "ready" || statusRef.current === "loading") {
-      return
-    }
-
-    setStatus("loading")
-
-    try {
-      const listed = await listProfileModels(profile.id)
-      setModels(listed)
-      setStatus("ready")
-    } catch {
-      setModels(knownProfileModelIds(profile))
-      setStatus("error")
-    }
-  }, [profile])
+  const models = modelsEntry?.models ?? knownProfileModelIds(profile)
+  const status = modelsEntry?.status ?? "idle"
+  const visibleModels =
+    selectedProfileId === profile.id &&
+    selectedModelId &&
+    !models.includes(selectedModelId)
+      ? [selectedModelId, ...models]
+      : models
 
   return (
     <DropdownMenuSub
       onOpenChange={(open) => {
         if (open) {
-          void loadModels()
+          onOpen()
         }
       }}
     >
-      <DropdownMenuSubTrigger className="gap-2">
+      <DropdownMenuSubTrigger className="gap-2" disabled={disabled}>
         <span className="min-w-0 truncate">{profile.label}</span>
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent
@@ -211,6 +138,7 @@ function ProfileModelSubmenu({
               <DropdownMenuItem
                 key={modelId}
                 className="pr-8"
+                disabled={disabled}
                 onClick={() =>
                   onSelect({
                     profileId: profile.id,
@@ -242,72 +170,164 @@ export function ComposerModelSelector() {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
   const [profiles, setProfiles] = React.useState<ModelProfileSummary[]>([])
+  const [defaultProfileId, setDefaultProfileId] = React.useState<string | null>(
+    null
+  )
   const [selection, setSelection] =
     React.useState<ComposerModelSelection | null>(null)
   const [profilesStatus, setProfilesStatus] = React.useState<
     "loading" | "ready" | "error"
   >("loading")
+  const [modelsByProfileId, setModelsByProfileId] = React.useState<
+    Record<string, ProfileModelsEntry>
+  >({})
+  const [saving, setSaving] = React.useState(false)
+  const [saveError, setSaveError] = React.useState<string | null>(null)
+  const savingRef = React.useRef(false)
+  const modelsByProfileIdRef = React.useRef(modelsByProfileId)
+  modelsByProfileIdRef.current = modelsByProfileId
+
+  const ensureProfileModels = React.useCallback(
+    async (profile: ModelProfileSummary, signal?: AbortSignal) => {
+      const current = modelsByProfileIdRef.current[profile.id]
+      if (current?.status === "ready" || current?.status === "loading") {
+        return
+      }
+
+      const loadingEntry: ProfileModelsEntry = {
+        status: "loading",
+        models: current?.models ?? knownProfileModelIds(profile),
+      }
+      modelsByProfileIdRef.current = {
+        ...modelsByProfileIdRef.current,
+        [profile.id]: loadingEntry,
+      }
+      setModelsByProfileId(modelsByProfileIdRef.current)
+
+      try {
+        const models = await listProfileModels(profile.id, signal)
+        if (signal?.aborted) {
+          return
+        }
+
+        const readyEntry: ProfileModelsEntry = { status: "ready", models }
+        modelsByProfileIdRef.current = {
+          ...modelsByProfileIdRef.current,
+          [profile.id]: readyEntry,
+        }
+        setModelsByProfileId(modelsByProfileIdRef.current)
+      } catch (error) {
+        if (signal?.aborted || isAbortError(error)) {
+          return
+        }
+
+        const errorEntry: ProfileModelsEntry = {
+          status: "error",
+          models: knownProfileModelIds(profile),
+        }
+        modelsByProfileIdRef.current = {
+          ...modelsByProfileIdRef.current,
+          [profile.id]: errorEntry,
+        }
+        setModelsByProfileId(modelsByProfileIdRef.current)
+      }
+    },
+    []
+  )
 
   React.useEffect(() => {
-    let cancelled = false
+    const controller = new AbortController()
 
     void (async () => {
       try {
-        const collection = await listModelProfiles()
-        if (cancelled) {
+        const collection = await listModelProfiles(controller.signal)
+        if (controller.signal.aborted) {
           return
         }
 
-        const nextSelection = resolveComposerModelSelection(
-          collection,
-          readStoredComposerModel()
-        )
+        const defaultProfile = defaultProfileFromCollection(collection)
         setProfiles(collection.profiles)
-        setSelection(nextSelection)
+        setDefaultProfileId(collection.defaultProfileId)
+        setSelection(selectionFromProfile(defaultProfile))
         setProfilesStatus("ready")
 
-        if (nextSelection?.modelId) {
-          storeComposerModel(nextSelection)
+        if (defaultProfile) {
+          await ensureProfileModels(defaultProfile, controller.signal)
+        }
+      } catch (error) {
+        if (controller.signal.aborted || isAbortError(error)) {
           return
         }
 
-        if (!nextSelection) {
-          return
-        }
-
-        try {
-          const models = await listProfileModels(nextSelection.profileId)
-          if (cancelled || models.length === 0) {
-            return
-          }
-
-          const resolved = {
-            ...nextSelection,
-            modelId: models[0],
-          }
-          setSelection(resolved)
-          storeComposerModel(resolved)
-        } catch {
-          // Keep the profile name visible when the model list is unavailable.
-        }
-      } catch {
-        if (!cancelled) {
-          setProfiles([])
-          setSelection(null)
-          setProfilesStatus("error")
-        }
+        setProfiles([])
+        setDefaultProfileId(null)
+        setSelection(null)
+        setProfilesStatus("error")
       }
     })()
 
     return () => {
-      cancelled = true
+      controller.abort()
     }
-  }, [])
+  }, [ensureProfileModels])
 
-  const selectModel = React.useCallback((next: ComposerModelSelection) => {
-    setSelection(next)
-    storeComposerModel(next)
-  }, [])
+  const selectModel = React.useCallback(
+    (next: ComposerModelSelection) => {
+      if (savingRef.current) {
+        return
+      }
+
+      const profile = profiles.find((item) => item.id === next.profileId)
+      if (!profile) {
+        return
+      }
+
+      if (
+        selection?.profileId === next.profileId &&
+        selection.modelId === next.modelId
+      ) {
+        return
+      }
+
+      const previousSelection = selection
+      const previousDefaultProfileId = defaultProfileId
+      savingRef.current = true
+      setSelection(next)
+      setSaveError(null)
+      setSaving(true)
+
+      void (async () => {
+        try {
+          if (profile.defaultModel !== next.modelId) {
+            const updated = await setProfileDefaultModel(
+              profile.id,
+              next.modelId
+            )
+            setProfiles((current) =>
+              current.map((item) =>
+                item.id === updated.id ? updated : item
+              )
+            )
+          }
+
+          if (defaultProfileId !== profile.id) {
+            const result = await setDefaultModelProfile(profile.id)
+            setDefaultProfileId(result.default_profile_id)
+          }
+        } catch (error) {
+          setSelection(previousSelection)
+          setDefaultProfileId(previousDefaultProfileId)
+          setSaveError(
+            getErrorMessage(error, t("agentMessage.saveModelFailed"))
+          )
+        } finally {
+          savingRef.current = false
+          setSaving(false)
+        }
+      })()
+    },
+    [defaultProfileId, profiles, selection, t]
+  )
 
   const selectionKey = selection
     ? `${selection.profileId}:${selection.modelId}`
@@ -325,7 +345,7 @@ export function ComposerModelSelector() {
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label={triggerLabel}
-        title={triggerLabel}
+        title={saveError ?? triggerLabel}
         render={
           <InputGroupButton
             type="button"
@@ -379,8 +399,13 @@ export function ComposerModelSelector() {
               <ProfileModelSubmenu
                 key={profile.id}
                 profile={profile}
+                modelsEntry={modelsByProfileId[profile.id]}
                 selectedProfileId={selection?.profileId ?? null}
                 selectedModelId={selection?.modelId || null}
+                disabled={saving}
+                onOpen={() => {
+                  void ensureProfileModels(profile)
+                }}
                 onSelect={selectModel}
               />
             ))}
