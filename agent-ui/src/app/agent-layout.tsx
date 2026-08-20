@@ -7,6 +7,7 @@ import {
   isSidebarContentView,
   type AppView,
 } from "@/lib/app-view"
+import { cn } from "@/lib/utils"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -76,7 +77,12 @@ export function AgentLayout({
 
   return (
     <WorkspaceShell workspaceEnabled={workspaceEnabled}>
-      <header className="relative z-20 flex h-10 shrink-0 items-center gap-2">
+      <header
+        className={cn(
+          "relative z-20 flex shrink-0 items-center gap-2",
+          isFileBrowser ? "h-10" : "h-[30px]"
+        )}
+      >
         <div className="flex min-w-0 flex-1 items-center gap-2 px-4">
           <div className="flex items-center gap-2 md:hidden">
             <MobileSidebarLogoTrigger
