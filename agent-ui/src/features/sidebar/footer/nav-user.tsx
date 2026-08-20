@@ -42,8 +42,8 @@ function UserAvatar({
   label: string
 }) {
   return (
-    <Avatar className={cn("size-8 rounded-lg after:rounded-lg", className)}>
-      <AvatarFallback className="rounded-lg">{label}</AvatarFallback>
+    <Avatar className={cn("size-8", className)}>
+      <AvatarFallback>{label}</AvatarFallback>
     </Avatar>
   )
 }

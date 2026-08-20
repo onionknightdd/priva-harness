@@ -18,8 +18,7 @@ export const en = {
   },
   chat: {
     contentLabel: "Conversation",
-    emptyTitle: "How can I help?",
-    emptyDescription: "Ask anything to start a new conversation.",
+    emptyTitle: "What's next?",
     promptLabel: "Message",
     promptPlaceholder: "Ask anything...",
     send: "Send",
@@ -27,8 +26,9 @@ export const en = {
     attachUnavailable: "Attachments are not available yet",
     scrollToLatest: "Scroll to latest",
     today: "Today",
+    thinking: "Thinking…",
     mockAssistantReply:
-      "This is a local preview reply. Streaming is not connected yet.",
+      "Sure. This is a local preview reply. I'll stream it in so you can check scrolling, the caret, and message layout. A live model will replace this mock once streaming is connected.",
     testSessionTitle: "How should I design the agent chat workspace?",
   },
   fileBrowser: {
@@ -195,9 +195,9 @@ export const en = {
     },
     user: {
       openMenu: "Open user menu",
-      guestName: "Local user",
-      guestEmail: "Not signed in",
-      guestInitials: "LU",
+      guestName: "admin",
+      guestEmail: "admin@localhost",
+      guestInitials: "A",
       settings: "Settings",
       apiDocumentation: "API Documentation",
       about: "About",

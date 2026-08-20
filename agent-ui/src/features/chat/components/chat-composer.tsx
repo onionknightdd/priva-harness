@@ -52,7 +52,7 @@ export function ChatComposer({
           {t("chat.promptLabel")}
         </FieldLabel>
         <InputGroup
-          className="h-auto"
+          className="h-auto rounded-3xl"
           onClick={(event) => {
             if ((event.target as HTMLElement).closest("button")) {
               return
@@ -81,6 +81,7 @@ export function ChatComposer({
               <TooltipTrigger render={<span className="inline-flex" />}>
                 <InputGroupButton
                   disabled
+                  className="rounded-full"
                   aria-label={attachLabel}
                 >
                   <PlusIcon />
@@ -92,6 +93,7 @@ export function ChatComposer({
               type="submit"
               variant="default"
               size="icon-xs"
+              className="rounded-full"
               disabled={!canSubmit}
               aria-label={t("chat.send")}
             >
