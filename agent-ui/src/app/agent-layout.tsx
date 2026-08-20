@@ -79,8 +79,8 @@ export function AgentLayout({
     <WorkspaceShell workspaceEnabled={workspaceEnabled}>
       <header
         className={cn(
-          "relative z-20 flex h-10 shrink-0 items-center gap-2",
-          !isFileBrowser && "mr-2.5"
+          "relative z-20 flex shrink-0 items-center gap-2",
+          isFileBrowser ? "h-10" : "h-[30px]"
         )}
       >
         <div className="flex min-w-0 flex-1 items-center gap-2 px-4">
