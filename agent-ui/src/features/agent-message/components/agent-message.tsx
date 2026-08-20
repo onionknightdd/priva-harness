@@ -1,6 +1,8 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
+import { cn } from "@/lib/utils"
+
 import type { AgentThreadMessage } from "../agent-message-data"
 import { AgentMessageComposer } from "./agent-message-composer"
 import { AgentMessageEmptyState } from "./agent-message-empty-state"
@@ -12,6 +14,8 @@ const composerTransition = {
   damping: 34,
   mass: 0.75,
 } as const
+
+const composerWidthClassName = "w-full max-w-[calc(48rem+20px)]"
 
 export function AgentMessage({
   draft,
@@ -34,7 +38,7 @@ export function AgentMessage({
   const composer = (
     <motion.div
       layoutId={shouldReduceMotion ? undefined : "agent-message-composer"}
-      className="w-full max-w-3xl"
+      className={composerWidthClassName}
       transition={transition}
     >
       <AgentMessageComposer
@@ -77,7 +81,12 @@ export function AgentMessage({
             <div className="min-h-0 flex-1">
               <AgentMessageThread messages={messages} />
             </div>
-            <div className="mx-auto flex w-full max-w-3xl justify-center pt-3">
+            <div
+              className={cn(
+                "mx-auto flex justify-center pt-3",
+                composerWidthClassName
+              )}
+            >
               {composer}
             </div>
           </motion.div>
