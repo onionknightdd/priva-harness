@@ -98,7 +98,7 @@ describe('model profile domain', () => {
     })
   })
 
-  it('preserves model colons and normalizes the 1m context suffix', () => {
+  it('splits on the first colon and requires a known profile id', () => {
     const profile = createModelProfile({
       id: 'gateway',
       label: 'Gateway',
@@ -112,9 +112,9 @@ describe('model profile domain', () => {
       profiles: [profile],
     }
 
-    const unqualified = resolveModelProfile('ollama:llama3:8b', collection)
+    const unqualified = resolveModelProfile('llama3', collection)
     expect(unqualified.profile.id).toBe('gateway')
-    expect(unqualified.modelId).toBe('ollama:llama3:8b')
+    expect(unqualified.modelId).toBe('llama3')
 
     const qualified = resolveModelProfile('gateway:ollama:llama3:8b[1M]', collection)
     expect(qualified.model).toBe('ollama:llama3:8b[1m]')
@@ -124,5 +124,25 @@ describe('model profile domain', () => {
       modelId: 'ollama:llama3:8b',
       context: MODEL_CONTEXT_1M,
     })
+
+    expect(() => resolveModelProfile('ollama:llama3:8b', collection)).toThrow('profile_not_found')
+    expect(() => resolveModelProfile('gateway:', collection)).toThrow('invalid_model_reference')
+  })
+
+  it('resolves a qualified profile without a default profile', () => {
+    const profile = createModelProfile({
+      id: 'gateway',
+      label: 'Gateway',
+      baseUrl: 'https://api.example.com',
+      authToken: 'secret',
+    })
+    const collection = {
+      ...emptyModelProfileCollection(),
+      defaultProfileId: null,
+      profiles: [profile],
+    }
+
+    expect(resolveModelProfile('gateway:model-a', collection).modelId).toBe('model-a')
+    expect(() => resolveModelProfile('model-a', collection)).toThrow('default_profile_missing')
   })
 })

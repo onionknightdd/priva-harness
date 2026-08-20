@@ -13,6 +13,7 @@ export class FakeAgentProvider implements AgentProvider {
   readonly id: ProviderId
   readonly events: readonly AgentEvent[]
   readonly released: string[] = []
+  readonly specs: ProviderRunSpec[] = []
 
   constructor(id: ProviderId, events: readonly AgentEvent[]) {
     this.id = id
@@ -20,7 +21,7 @@ export class FakeAgentProvider implements AgentProvider {
   }
 
   openSession(target: SessionTarget, spec: ProviderRunSpec): Promise<AgentRuntime> {
-    void spec
+    this.specs.push(spec)
     if (target.kind !== 'new') {
       return Promise.reject(new Error('Fake provider only supports new sessions'))
     }

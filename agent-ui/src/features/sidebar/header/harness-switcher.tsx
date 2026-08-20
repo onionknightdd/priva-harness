@@ -31,8 +31,8 @@ import {
 } from "@/components/ui/sidebar"
 
 import { HarnessBrandLogo } from "./harness-brand-logo"
+import { useHarness } from "./harness-context"
 import {
-  DEFAULT_HARNESS_ID,
   getHarnessOption,
   harnessOptions,
   isSelectableHarnessId,
@@ -88,8 +88,10 @@ function HarnessOptionList({
 
   return (
     <div ref={listRef}>
-      <DropdownMenuGroup className="flex flex-col gap-1">
-        <DropdownMenuLabel>{t("sidebar.harness.select")}</DropdownMenuLabel>
+      <DropdownMenuGroup className="flex flex-col gap-2">
+        <DropdownMenuLabel className="text-[11px] font-normal">
+          {t("sidebar.harness.select")}
+        </DropdownMenuLabel>
         {harnessOptions.map((option) => {
           const isActive = option.id === activeHarnessId
 
@@ -99,7 +101,7 @@ function HarnessOptionList({
               data-harness-option
               disabled={option.disabled}
               className="p-0 [&_[data-slot=item-description]]:text-muted-foreground focus:[&_[data-slot=item-description]]:text-muted-foreground"
-              onSelect={() => {
+              onClick={() => {
                 if (isSelectableHarnessId(option.id)) {
                   onSelect(option.id)
                 }
@@ -108,27 +110,30 @@ function HarnessOptionList({
               <Item
                 size="xs"
                 variant={isActive ? "muted" : "default"}
-                className="w-full flex-nowrap p-2.5"
+                className="w-full flex-nowrap items-center p-2"
               >
-                <ItemMedia>
+                <ItemMedia className="self-center translate-y-0">
                   <HarnessBrandLogo harnessId={option.id} />
                 </ItemMedia>
-                <ItemContent className="min-w-0">
-                  <ItemTitle>
+                <ItemContent className="min-w-0 gap-0.5">
+                  <ItemTitle className="text-xs">
                     <span className="truncate">{t(option.nameKey)}</span>
                     {option.disabled ? (
-                      <Badge variant="secondary">
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 text-[10px]"
+                      >
                         {t("sidebar.harness.comingSoon")}
                       </Badge>
                     ) : null}
                   </ItemTitle>
-                  <ItemDescription className="whitespace-normal">
+                  <ItemDescription className="text-[11px] leading-snug whitespace-normal">
                     {t(option.descriptionKey)}
                   </ItemDescription>
                 </ItemContent>
                 {isActive ? (
                   <ItemActions>
-                    <CheckIcon />
+                    <CheckIcon className="size-3.5" />
                   </ItemActions>
                 ) : null}
               </Item>
@@ -144,8 +149,8 @@ export function HarnessSwitcher() {
   const logoRef = React.useRef<HTMLDivElement>(null)
   const { isMobile, setOpen, state } = useSidebar()
   const { t } = useTranslation()
-  const [activeHarnessId, setActiveHarnessId] =
-    React.useState<HarnessId>(DEFAULT_HARNESS_ID)
+  const { harnessId: activeHarnessId, setHarnessId: setActiveHarnessId } =
+    useHarness()
   const [harnessMenuOpen, setHarnessMenuOpen] = React.useState(false)
   const activeHarness = getHarnessOption(activeHarnessId)
   const isCollapsed = !isMobile && state === "collapsed"
@@ -221,11 +226,11 @@ export function HarnessSwitcher() {
               >
                 <HarnessBrandLogo harnessId={activeHarness.id} />
               </div>
-              <div className="grid flex-1 text-left text-sm leading-tight">
+              <div className="grid flex-1 text-left text-xs leading-tight">
                 <span className="truncate font-medium">
                   {t(activeHarness.nameKey)}
                 </span>
-                <span className="truncate text-xs text-muted-foreground">
+                <span className="truncate text-[11px] text-muted-foreground">
                   {t("sidebar.harness.label")}
                 </span>
               </div>

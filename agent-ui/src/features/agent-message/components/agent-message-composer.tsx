@@ -19,17 +19,22 @@ import { ComposerModelSelector } from "./composer-model-selector"
 
 export function AgentMessageComposer({
   draft,
+  canSubmit,
+  modelReady,
   onDraftChange,
+  onModelReferenceChange,
   onSubmit,
 }: {
   draft: string
+  canSubmit: boolean
+  modelReady: boolean
   onDraftChange: (draft: string) => void
+  onModelReferenceChange: (model: string | null) => void
   onSubmit: () => void
 }) {
   const { t } = useTranslation()
   const textareaRef = React.useRef<HTMLTextAreaElement>(null)
   const promptId = React.useId()
-  const canSubmit = draft.trim().length > 0
   const attachLabel = t("agentMessage.attach")
   const attachUnavailable = t("agentMessage.attachUnavailable")
 
@@ -56,7 +61,13 @@ export function AgentMessageComposer({
         <InputGroup
           className="h-auto rounded-3xl"
           onClick={(event) => {
-            if ((event.target as HTMLElement).closest("button")) {
+            const target = event.target
+            if (
+              !(target instanceof HTMLElement) ||
+              target.closest(
+                "button, a, [role='menuitem'], [data-slot^='dropdown-menu']"
+              )
+            ) {
               return
             }
 
@@ -96,7 +107,15 @@ export function AgentMessageComposer({
               <TooltipContent>{attachUnavailable}</TooltipContent>
             </Tooltip>
             <div className="flex min-w-0 items-center gap-1">
-              <ComposerModelSelector />
+              <div
+                className="min-w-0 text-xs font-normal"
+                onClick={(event) => event.stopPropagation()}
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                <ComposerModelSelector
+                  onModelReferenceChange={onModelReferenceChange}
+                />
+              </div>
               <InputGroupButton
                 type="submit"
                 variant="default"
@@ -104,6 +123,11 @@ export function AgentMessageComposer({
                 className="rounded-full"
                 disabled={!canSubmit}
                 aria-label={t("agentMessage.send")}
+                title={
+                  modelReady
+                    ? t("agentMessage.send")
+                    : t("agentMessage.modelRequired")
+                }
               >
                 <ArrowUpIcon />
               </InputGroupButton>

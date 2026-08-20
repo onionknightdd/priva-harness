@@ -10,6 +10,8 @@ import { JsonModelProfileStore } from './infrastructure/model-profile/json-model
 import { claudeGlobalDir } from './provider/claude/claude-paths.js'
 import { ClaudeProvider } from './provider/claude/claude-provider.js'
 import { piGlobalDir } from './provider/pi/pi-paths.js'
+import { PiProvider } from './provider/pi/pi-provider.js'
+import { CodingAgentSessionFactory } from './provider/pi/pi-session-factory.js'
 import {
   createRuntimeConfig,
   resolveRuntimeHome,
@@ -41,7 +43,10 @@ export async function startServer(): Promise<void> {
     new CompatibleModelEndpointClient(),
   )
   const agentHarness = new AgentHarness({
-    provider: new ClaudeProvider({ globalConfigDir: claudeConfigDir }),
+    providers: {
+      claude: new ClaudeProvider({ globalConfigDir: claudeConfigDir }),
+      pi: new PiProvider(new CodingAgentSessionFactory(piConfigDir)),
+    },
     cwd: initialDirectory,
   })
   const server = buildHttpServer({

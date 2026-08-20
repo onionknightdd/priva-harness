@@ -8,7 +8,10 @@ export function AgentMessagePage() {
     <AgentMessage
       draft={agentMessage.draft}
       messages={agentMessage.messages}
+      canSubmit={agentMessage.canSubmit}
+      modelReady={agentMessage.modelReady}
       onDraftChange={agentMessage.setDraft}
+      onModelReferenceChange={agentMessage.setModelReference}
       onSubmit={agentMessage.submit}
     />
   )

@@ -2,6 +2,10 @@ export const harnessIds = ["bambuddy", "claude", "deepseek"] as const
 
 export type HarnessId = (typeof harnessIds)[number]
 
+export const RUN_HARNESS_IDS = ["bambuddy", "claude"] as const
+
+export type RunHarnessId = (typeof RUN_HARNESS_IDS)[number]
+
 export type HarnessOption = {
   id: HarnessId
   nameKey: string
@@ -40,4 +44,12 @@ export function isSelectableHarnessId(value: string): value is HarnessId {
   return harnessOptions.some(
     (option) => option.id === value && !option.disabled
   )
+}
+
+export function toRunHarnessId(id: HarnessId): RunHarnessId | null {
+  if (id === "claude" || id === "bambuddy") {
+    return id
+  }
+
+  return null
 }

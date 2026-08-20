@@ -1,6 +1,7 @@
 import type {
   AgentProvider,
   AgentRuntime,
+  ProviderId,
   ProviderRunSpec,
   TurnContext,
 } from '../core/contract/agent-provider.js'
@@ -9,24 +10,28 @@ import { isRunTerminalEvent } from '../core/event/agent-event.js'
 import type { UserTurn } from '../core/run/user-turn.js'
 
 export interface AgentHarnessOptions {
-  readonly provider: AgentProvider
+  readonly providers: Readonly<Record<ProviderId, AgentProvider>>
   readonly cwd: string
 }
 
 export class AgentHarness {
   constructor(private readonly options: AgentHarnessOptions) {}
 
-  async *run(turn: UserTurn, context: TurnContext): AsyncIterable<AgentEvent> {
+  async *run(
+    turn: UserTurn,
+    context: TurnContext,
+    spec: ProviderRunSpec,
+  ): AsyncIterable<AgentEvent> {
     yield { type: 'run', event: 'started' }
 
-    const spec: ProviderRunSpec = { cwd: this.options.cwd }
-    const runtime = await this.options.provider.openSession(
-      { kind: 'new', provider: this.options.provider.id },
+    const provider = this.options.providers[spec.provider]
+    const runtime = await provider.openSession(
+      { kind: 'new', provider: spec.provider },
       spec,
     )
 
     try {
-      yield* this.forward(runtime, turn, context)
+      yield* this.forward(runtime, turn, context, spec.provider)
     } finally {
       await runtime.release('dispose')
     }
@@ -36,6 +41,7 @@ export class AgentHarness {
     runtime: AgentRuntime,
     turn: UserTurn,
     context: TurnContext,
+    providerId: ProviderId,
   ): AsyncIterable<AgentEvent> {
     let finished = false
     try {
@@ -49,7 +55,7 @@ export class AgentHarness {
           type: 'run',
           event: 'failed',
           message: errorMessage(error),
-          harnessProvider: this.options.provider.id,
+          harnessProvider: providerId,
         }
       }
     }

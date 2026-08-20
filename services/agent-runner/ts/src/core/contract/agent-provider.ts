@@ -14,6 +14,10 @@ export type SessionTarget =
 
 export interface ProviderRunSpec {
   readonly cwd: string
+  readonly provider: ProviderId
+  readonly model: string
+  readonly baseUrl: string
+  readonly authToken: string
 }
 
 export interface TurnContext {

@@ -2,6 +2,7 @@ import * as React from "react"
 
 import { AgentLayout } from "@/app/agent-layout"
 import { AppSidebar } from "@/features/sidebar"
+import { HarnessProvider } from "@/features/sidebar/header/harness-context"
 import { UploadQueueProvider } from "@/features/uploads"
 import type { AppView } from "@/lib/app-view"
 import { SidebarProvider } from "@/components/ui/sidebar"
@@ -17,17 +18,19 @@ function AgentHarness() {
   }, [])
 
   return (
-    <SidebarProvider className="h-svh min-h-0 overflow-hidden">
-      <AppSidebar
-        activeView={activeView}
-        onNewAgentMessage={startNewAgentMessage}
-        onViewChange={setActiveView}
-      />
-      <AgentLayout
-        activeView={activeView}
-        agentMessageSessionKey={agentMessageSessionKey}
-      />
-    </SidebarProvider>
+    <HarnessProvider>
+      <SidebarProvider className="h-svh min-h-0 overflow-hidden">
+        <AppSidebar
+          activeView={activeView}
+          onNewAgentMessage={startNewAgentMessage}
+          onViewChange={setActiveView}
+        />
+        <AgentLayout
+          activeView={activeView}
+          agentMessageSessionKey={agentMessageSessionKey}
+        />
+      </SidebarProvider>
+    </HarnessProvider>
   )
 }
 

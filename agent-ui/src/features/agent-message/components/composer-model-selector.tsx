@@ -1,14 +1,21 @@
 import * as React from "react"
-import { CheckIcon, ChevronDownIcon } from "lucide-react"
+import { CheckIcon, ChevronDownIcon, SearchIcon } from "lucide-react"
+import gsap from "gsap"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
+import { OverflowMarquee } from "@/components/motion/overflow-marquee"
+import { Input } from "@/components/ui/input"
 import { InputGroupButton } from "@/components/ui/input-group"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -23,6 +30,14 @@ import {
   type ModelProfileCollection,
   type ModelProfileSummary,
 } from "@/features/model-settings/model-profile-api"
+import { groupModelIds, type ModelIdGroup } from "@/features/model-settings/model-provider"
+import { ProviderIcon } from "@/features/model-settings/provider-icon"
+
+const COMPOSER_MENU_WIDTH_CLASS = "w-56 min-w-56 max-w-56 text-xs"
+const COMPOSER_TEXT_CLASS = "text-xs font-normal"
+const EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const
+
+type ComposerEffort = (typeof EFFORT_LEVELS)[number]
 
 type ComposerModelSelection = {
   profileId: string
@@ -82,8 +97,59 @@ function selectionFromProfile(
   return {
     profileId: profile.id,
     profileLabel: profile.label,
-    modelId: profile.defaultModel?.trim() ?? "",
+    modelId:
+      profile.defaultModel?.trim() ||
+      knownProfileModelIds(profile)[0] ||
+      "",
   }
+}
+
+function stopComposerFocus(event: React.SyntheticEvent) {
+  event.stopPropagation()
+}
+
+function filterModelGroups(
+  groups: ModelIdGroup[],
+  query: string
+): ModelIdGroup[] {
+  const normalizedQuery = query.trim().toLocaleLowerCase()
+
+  if (!normalizedQuery) {
+    return groups
+  }
+
+  return groups.flatMap((group) => {
+    const groupMatches = group.label
+      .toLocaleLowerCase()
+      .includes(normalizedQuery)
+    const items = groupMatches
+      ? group.items
+      : group.items.filter((modelId) =>
+          modelId.toLocaleLowerCase().includes(normalizedQuery)
+        )
+
+    return items.length > 0 ? [{ ...group, items }] : []
+  })
+}
+
+function HoverMarquee({
+  active,
+  children,
+  className,
+}: {
+  active: boolean
+  children: string
+  className?: string
+}) {
+  return (
+    <OverflowMarquee
+      active={active}
+      playback="once"
+      className={cn("min-w-0", className)}
+    >
+      {children}
+    </OverflowMarquee>
+  )
 }
 
 function ProfileModelSubmenu({
@@ -104,6 +170,14 @@ function ProfileModelSubmenu({
   onSelect: (selection: ComposerModelSelection) => void
 }) {
   const { t } = useTranslation()
+  const inputRef = React.useRef<HTMLInputElement>(null)
+  const resultsRef = React.useRef<HTMLDivElement>(null)
+  const [query, setQuery] = React.useState("")
+  const [submenuOpen, setSubmenuOpen] = React.useState(false)
+  const [profileMarquee, setProfileMarquee] = React.useState(false)
+  const [modelMarqueeId, setModelMarqueeId] = React.useState<string | null>(
+    null
+  )
   const models = modelsEntry?.models ?? knownProfileModelIds(profile)
   const status = modelsEntry?.status ?? "idle"
   const visibleModels =
@@ -112,50 +186,195 @@ function ProfileModelSubmenu({
     !models.includes(selectedModelId)
       ? [selectedModelId, ...models]
       : models
+  const groups = filterModelGroups(groupModelIds(visibleModels), query)
+  const normalizedQuery = query.trim()
+  const resultsKey = groups
+    .map((group) => `${group.value}:${group.items.join("\0")}`)
+    .join("|")
+
+  React.useEffect(() => {
+    if (!submenuOpen) {
+      return
+    }
+
+    const animationFrame = window.requestAnimationFrame(() => {
+      inputRef.current?.focus()
+    })
+
+    return () => window.cancelAnimationFrame(animationFrame)
+  }, [submenuOpen])
+
+  React.useLayoutEffect(() => {
+    const results = resultsRef.current
+
+    if (
+      !results ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return
+    }
+
+    const items = results.querySelectorAll<HTMLElement>(
+      "[data-model-menu-result]"
+    )
+
+    if (items.length === 0) {
+      return
+    }
+
+    const context = gsap.context(() => {
+      gsap.fromTo(
+        items,
+        { opacity: 0, y: 3 },
+        {
+          opacity: 1,
+          y: 0,
+          duration: 0.16,
+          stagger: 0.015,
+          ease: "power1.out",
+          clearProps: "opacity,transform",
+        }
+      )
+    }, results)
+
+    return () => context.revert()
+  }, [resultsKey])
 
   return (
     <DropdownMenuSub
       onOpenChange={(open) => {
+        setSubmenuOpen(open)
         if (open) {
           onOpen()
+          return
         }
+        setQuery("")
+        setModelMarqueeId(null)
       }}
     >
-      <DropdownMenuSubTrigger className="gap-2" disabled={disabled}>
-        <span className="min-w-0 truncate">{profile.label}</span>
+      <DropdownMenuSubTrigger
+        className={cn(
+          "min-w-0 gap-2 [&_svg:not([class*='size-'])]:size-3",
+          COMPOSER_TEXT_CLASS
+        )}
+        closeDelay={120}
+        disabled={disabled}
+        label={profile.label}
+        openOnHover
+        onPointerEnter={() => setProfileMarquee(true)}
+        onPointerLeave={() => setProfileMarquee(false)}
+        onFocus={() => setProfileMarquee(true)}
+        onBlur={() => setProfileMarquee(false)}
+      >
+        <HoverMarquee active={profileMarquee} className="flex-1">
+          {profile.label}
+        </HoverMarquee>
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent
         align="start"
         side="right"
-        className="w-auto min-w-44 max-w-72"
+        className={cn(
+          COMPOSER_MENU_WIDTH_CLASS,
+          "flex max-h-72 flex-col overflow-hidden p-0!"
+        )}
+        onClick={stopComposerFocus}
+        onPointerDown={stopComposerFocus}
       >
         {visibleModels.length > 0 ? (
-          visibleModels.map((modelId) => {
-            const isSelected =
-              selectedProfileId === profile.id && selectedModelId === modelId
+          <>
+            <div className="shrink-0 border-b p-1.5">
+              <div className="relative">
+                <SearchIcon
+                  aria-hidden="true"
+                  className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+                />
+                <Input
+                  ref={inputRef}
+                  value={query}
+                  aria-label={t("agentMessage.modelSearchLabel")}
+                  placeholder={t("agentMessage.modelSearchPlaceholder")}
+                  className="h-8 border-0 bg-muted/60 pl-8 text-xs shadow-none md:text-xs focus-visible:ring-0"
+                  onChange={(event) => setQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Escape") {
+                      event.stopPropagation()
+                    }
+                  }}
+                />
+              </div>
+            </div>
+            <div
+              ref={resultsRef}
+              className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1 [scrollbar-gutter:stable]"
+            >
+              {groups.length > 0 ? (
+                groups.map((group, index) => (
+                  <DropdownMenuGroup key={group.value}>
+                    {index > 0 ? <DropdownMenuSeparator /> : null}
+                    <DropdownMenuLabel
+                      className={cn(
+                        "flex items-center gap-2 text-foreground",
+                        COMPOSER_TEXT_CLASS
+                      )}
+                    >
+                      <ProviderIcon providerId={group.providerId} />
+                      <span className="truncate">{group.label}</span>
+                    </DropdownMenuLabel>
+                    {group.items.map((modelId) => {
+                      const isSelected =
+                        selectedProfileId === profile.id &&
+                        selectedModelId === modelId
 
-            return (
-              <DropdownMenuItem
-                key={modelId}
-                className="pr-8"
-                disabled={disabled}
-                onClick={() =>
-                  onSelect({
-                    profileId: profile.id,
-                    profileLabel: profile.label,
-                    modelId,
-                  })
-                }
-              >
-                <span className="min-w-0 truncate">{modelId}</span>
-                {isSelected ? (
-                  <CheckIcon className="absolute right-2" />
-                ) : null}
-              </DropdownMenuItem>
-            )
-          })
+                      return (
+                        <DropdownMenuItem
+                          key={modelId}
+                          data-model-menu-result
+                          className={cn(
+                            "min-w-0 pr-8",
+                            COMPOSER_TEXT_CLASS
+                          )}
+                          closeOnClick
+                          disabled={disabled}
+                          onPointerEnter={() => setModelMarqueeId(modelId)}
+                          onPointerLeave={() => setModelMarqueeId(null)}
+                          onFocus={() => setModelMarqueeId(modelId)}
+                          onBlur={() => setModelMarqueeId(null)}
+                          onClick={() =>
+                            onSelect({
+                              profileId: profile.id,
+                              profileLabel: profile.label,
+                              modelId,
+                            })
+                          }
+                        >
+                          <HoverMarquee
+                            active={modelMarqueeId === modelId}
+                            className="flex-1"
+                          >
+                            {modelId}
+                          </HoverMarquee>
+                          {isSelected ? (
+                            <CheckIcon className="absolute right-2 size-3.5" />
+                          ) : null}
+                        </DropdownMenuItem>
+                      )
+                    })}
+                  </DropdownMenuGroup>
+                ))
+              ) : (
+                <div
+                  role="status"
+                  className="flex min-h-24 items-center justify-center px-4 text-center text-xs text-muted-foreground"
+                >
+                  {t("agentMessage.noModelResults", {
+                    query: normalizedQuery,
+                  })}
+                </div>
+              )}
+            </div>
+          </>
         ) : (
-          <DropdownMenuItem disabled>
+          <DropdownMenuItem disabled className={COMPOSER_TEXT_CLASS}>
             {status === "loading"
               ? t("common.loading")
               : t("agentMessage.noModels")}
@@ -166,7 +385,76 @@ function ProfileModelSubmenu({
   )
 }
 
-export function ComposerModelSelector() {
+function EffortSubmenu({
+  effort,
+  onEffortChange,
+}: {
+  effort: ComposerEffort
+  onEffortChange: (effort: ComposerEffort) => void
+}) {
+  const { t } = useTranslation()
+  const [effortMarquee, setEffortMarquee] = React.useState(false)
+
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger
+        className={cn(
+          "min-w-0 gap-2 [&_svg:not([class*='size-'])]:size-3",
+          COMPOSER_TEXT_CLASS
+        )}
+        closeDelay={120}
+        label={t("agentMessage.effortMenuLabel")}
+        openOnHover
+        onPointerEnter={() => setEffortMarquee(true)}
+        onPointerLeave={() => setEffortMarquee(false)}
+        onFocus={() => setEffortMarquee(true)}
+        onBlur={() => setEffortMarquee(false)}
+      >
+        <HoverMarquee active={effortMarquee} className="flex-1">
+          {t("agentMessage.effortMenuLabel")}
+        </HoverMarquee>
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent
+        align="start"
+        side="right"
+        className={COMPOSER_MENU_WIDTH_CLASS}
+        onClick={stopComposerFocus}
+        onPointerDown={stopComposerFocus}
+      >
+        <DropdownMenuRadioGroup
+          value={effort}
+          onValueChange={(value) => {
+            if (
+              typeof value === "string" &&
+              EFFORT_LEVELS.includes(value as ComposerEffort)
+            ) {
+              onEffortChange(value as ComposerEffort)
+            }
+          }}
+        >
+          {EFFORT_LEVELS.map((level) => (
+            <DropdownMenuRadioItem
+              key={level}
+              className={cn(
+                COMPOSER_TEXT_CLASS,
+                "[&_svg:not([class*='size-'])]:size-3.5"
+              )}
+              value={level}
+            >
+              {level}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  )
+}
+
+export function ComposerModelSelector({
+  onModelReferenceChange,
+}: {
+  onModelReferenceChange?: (model: string | null) => void
+}) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
   const [profiles, setProfiles] = React.useState<ModelProfileSummary[]>([])
@@ -175,6 +463,8 @@ export function ComposerModelSelector() {
   )
   const [selection, setSelection] =
     React.useState<ComposerModelSelection | null>(null)
+  const [effort, setEffort] = React.useState<ComposerEffort>("medium")
+  const [triggerMarquee, setTriggerMarquee] = React.useState(false)
   const [profilesStatus, setProfilesStatus] = React.useState<
     "loading" | "ready" | "error"
   >("loading")
@@ -329,6 +619,29 @@ export function ComposerModelSelector() {
     [defaultProfileId, profiles, selection, t]
   )
 
+  React.useEffect(() => {
+    if (!selection || selection.modelId.trim() !== "") {
+      return
+    }
+
+    const firstModel = modelsByProfileId[selection.profileId]?.models.find(
+      (modelId) => modelId.trim() !== ""
+    )
+    if (!firstModel) {
+      return
+    }
+
+    setSelection({ ...selection, modelId: firstModel })
+  }, [modelsByProfileId, selection])
+
+  React.useEffect(() => {
+    const profileId = selection?.profileId.trim() ?? ""
+    const modelId = selection?.modelId.trim() ?? ""
+    onModelReferenceChange?.(
+      profileId && modelId ? `${profileId}:${modelId}` : null
+    )
+  }, [onModelReferenceChange, selection])
+
   const selectionKey = selection
     ? `${selection.profileId}:${selection.modelId}`
     : "empty"
@@ -337,12 +650,15 @@ export function ComposerModelSelector() {
       ? t("agentMessage.modelSelectorAria", {
           profile: selection.profileLabel,
           model: selection.modelId,
+          effort,
         })
-      : selection.profileLabel
+      : `${selection.profileLabel}, ${t("agentMessage.effortAria", {
+          level: effort,
+        })}`
     : t("agentMessage.selectModel")
 
   return (
-    <DropdownMenu>
+    <DropdownMenu modal>
       <DropdownMenuTrigger
         aria-label={triggerLabel}
         title={saveError ?? triggerLabel}
@@ -351,14 +667,24 @@ export function ComposerModelSelector() {
             type="button"
             variant="ghost"
             size="xs"
-            className="max-w-52 cursor-pointer border-0 bg-transparent px-1.5 shadow-none hover:bg-muted/40 dark:bg-transparent dark:hover:bg-muted/30"
+            className={cn(
+              "max-w-64 min-w-0 cursor-pointer border-0 bg-transparent px-1.5 shadow-none hover:bg-muted/40 dark:bg-transparent dark:hover:bg-muted/30",
+              COMPOSER_TEXT_CLASS
+            )}
+            onPointerEnter={() => setTriggerMarquee(true)}
+            onPointerLeave={() => setTriggerMarquee(false)}
+            onFocus={() => setTriggerMarquee(true)}
+            onBlur={() => setTriggerMarquee(false)}
           />
         }
       >
         <AnimatePresence mode="wait" initial={false}>
           <motion.span
             key={selectionKey}
-            className="flex min-w-0 items-center gap-1.5"
+            className={cn(
+              "flex min-w-0 items-center gap-1",
+              COMPOSER_TEXT_CLASS
+            )}
             initial={shouldReduceMotion ? false : { opacity: 0, y: 3 }}
             animate={{ opacity: 1, y: 0 }}
             exit={shouldReduceMotion ? undefined : { opacity: 0, y: -3 }}
@@ -366,15 +692,64 @@ export function ComposerModelSelector() {
           >
             {selection ? (
               <>
-                <span className="max-w-20 shrink-0 truncate text-muted-foreground">
+                <HoverMarquee
+                  active={triggerMarquee}
+                  className={cn("max-w-16 shrink", COMPOSER_TEXT_CLASS)}
+                >
                   {selection.profileLabel}
-                </span>
+                </HoverMarquee>
                 {selection.modelId ? (
-                  <span className="min-w-0 truncate">{selection.modelId}</span>
+                  <>
+                    <span
+                      aria-hidden="true"
+                      className="shrink-0 text-muted-foreground"
+                    >
+                      ·
+                    </span>
+                    <span className="flex min-w-0 flex-1">
+                      <HoverMarquee
+                        active={triggerMarquee}
+                        className={cn(
+                          "w-[calc(100%-10px)]",
+                          COMPOSER_TEXT_CLASS
+                        )}
+                      >
+                        {selection.modelId}
+                      </HoverMarquee>
+                    </span>
+                  </>
                 ) : null}
+                <span
+                  className={cn(
+                    "relative inline-grid shrink-0 justify-items-start overflow-hidden text-muted-foreground",
+                    COMPOSER_TEXT_CLASS
+                  )}
+                >
+                  <AnimatePresence mode="wait" initial={false}>
+                    <motion.span
+                      key={effort}
+                      className="col-start-1 row-start-1"
+                      initial={
+                        shouldReduceMotion ? false : { opacity: 0, y: 4 }
+                      }
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={
+                        shouldReduceMotion
+                          ? undefined
+                          : { opacity: 0, y: -4 }
+                      }
+                      transition={{
+                        duration: shouldReduceMotion ? 0 : 0.16,
+                        ease: [0.22, 1, 0.36, 1],
+                      }}
+                    >
+                      {effort}
+                    </motion.span>
+                  </AnimatePresence>
+                </span>
               </>
             ) : (
-              <span className="truncate text-muted-foreground">
+              <span className={cn("truncate text-muted-foreground", COMPOSER_TEXT_CLASS)}>
                 {t("agentMessage.selectModel")}
               </span>
             )}
@@ -391,10 +766,15 @@ export function ComposerModelSelector() {
         align="end"
         side="top"
         sideOffset={6}
-        className="w-auto min-w-44"
+        className={COMPOSER_MENU_WIDTH_CLASS}
+        onClick={stopComposerFocus}
+        onPointerDown={stopComposerFocus}
       >
         {profiles.length > 0 ? (
           <DropdownMenuGroup>
+            <DropdownMenuLabel className={COMPOSER_TEXT_CLASS}>
+              {t("agentMessage.profileMenuLabel")}
+            </DropdownMenuLabel>
             {profiles.map((profile) => (
               <ProfileModelSubmenu
                 key={profile.id}
@@ -411,7 +791,7 @@ export function ComposerModelSelector() {
             ))}
           </DropdownMenuGroup>
         ) : (
-          <DropdownMenuItem disabled>
+          <DropdownMenuItem disabled className={COMPOSER_TEXT_CLASS}>
             {profilesStatus === "loading"
               ? t("common.loading")
               : profilesStatus === "error"
@@ -419,6 +799,8 @@ export function ComposerModelSelector() {
                 : t("agentMessage.noProfiles")}
           </DropdownMenuItem>
         )}
+        <DropdownMenuSeparator />
+        <EffortSubmenu effort={effort} onEffortChange={setEffort} />
       </DropdownMenuContent>
     </DropdownMenu>
   )

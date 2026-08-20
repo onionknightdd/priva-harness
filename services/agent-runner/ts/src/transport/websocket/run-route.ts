@@ -3,7 +3,14 @@ import { randomUUID } from 'node:crypto'
 import type { FastifyPluginCallback } from 'fastify'
 import type { WebSocket } from 'ws'
 
+import type { ProviderRunSpec } from '../../core/contract/agent-provider.js'
+import {
+  providerIdForHarness,
+  rewriteProviderBaseUrl,
+  type RunHarnessId,
+} from '../../core/resource/run-harness.js'
 import type { AgentHarness } from '../../harness/agent-harness.js'
+import type { ModelProfileService } from '../../harness/config/model-profile-service.js'
 import { parseInitFrame, type ErrorFrame } from './schema/run-frames.js'
 import { encodeServerFrame } from './wire-event-mapper.js'
 
@@ -11,16 +18,21 @@ export const RUN_WEBSOCKET_PATH = '/api/sandbox/agent/ws/run'
 
 export interface RunRouteOptions {
   readonly harness: AgentHarness
+  readonly modelProfileService: ModelProfileService
+  readonly cwd: string
 }
 
 export const runWebsocketRoutes: FastifyPluginCallback<RunRouteOptions> = (fastify, options, done) => {
   fastify.get(RUN_WEBSOCKET_PATH, { websocket: true }, (socket) => {
-    void handleRunSocket(socket, options.harness)
+    void handleRunSocket(socket, options)
   })
   done()
 }
 
-async function handleRunSocket(socket: WebSocket, harness: AgentHarness): Promise<void> {
+async function handleRunSocket(
+  socket: WebSocket,
+  options: RunRouteOptions,
+): Promise<void> {
   const abort = new AbortController()
   const onClose = (): void => abort.abort()
   socket.once('close', onClose)
@@ -45,8 +57,21 @@ async function handleRunSocket(socket: WebSocket, harness: AgentHarness): Promis
       return
     }
 
+    let spec: ProviderRunSpec
+    try {
+      spec = await buildRunSpec(options, init.frame.model, init.frame.harness)
+    } catch (error) {
+      sendError(socket, error instanceof Error ? error.message : String(error))
+      socket.close()
+      return
+    }
+
     const runId = randomUUID()
-    for await (const event of harness.run({ text: init.frame.text }, { signal: abort.signal })) {
+    for await (const event of options.harness.run(
+      { text: init.frame.text },
+      { signal: abort.signal },
+      spec,
+    )) {
       if (isAborted(abort.signal) || !socketOpen(socket)) break
       socket.send(encodeServerFrame(event, runId))
     }
@@ -59,6 +84,21 @@ async function handleRunSocket(socket: WebSocket, harness: AgentHarness): Promis
   } finally {
     socket.off('close', onClose)
     abort.abort()
+  }
+}
+
+async function buildRunSpec(
+  options: RunRouteOptions,
+  modelReference: string,
+  harness: RunHarnessId,
+): Promise<ProviderRunSpec> {
+  const resolved = await options.modelProfileService.resolve(modelReference)
+  return {
+    cwd: options.cwd,
+    provider: providerIdForHarness(harness),
+    model: resolved.model,
+    baseUrl: rewriteProviderBaseUrl(resolved.profile.baseUrl, harness),
+    authToken: resolved.profile.authToken,
   }
 }
 

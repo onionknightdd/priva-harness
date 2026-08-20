@@ -1,4 +1,4 @@
-import claudeIcon from "@lobehub/icons-static-svg/icons/claude-color.svg"
+import claudeCodeIcon from "@lobehub/icons-static-svg/icons/claudecode-color.svg"
 import deepseekIcon from "@lobehub/icons-static-svg/icons/deepseek-color.svg"
 
 import { cn } from "@/lib/utils"
@@ -48,7 +48,7 @@ function BambuddyMark({ className }: { className?: string }) {
 }
 
 const brandImages: Partial<Record<HarnessId, string>> = {
-  claude: claudeIcon,
+  claude: claudeCodeIcon,
   deepseek: deepseekIcon,
 }
 

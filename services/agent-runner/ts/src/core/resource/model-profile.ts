@@ -306,32 +306,36 @@ export function resolveModelProfile(
   collection: ModelProfileCollection,
 ): ResolvedModelProfile {
   const profilesById = new Map(collection.profiles.map((profile) => [profile.id, profile]))
-  const defaultProfile = collection.defaultProfileId === null
-    ? undefined
-    : profilesById.get(collection.defaultProfileId)
-  if (defaultProfile === undefined) {
-    throw new ModelProfileError('default-profile-missing', 'default_profile_missing')
+  const normalizedReference = reference?.trim() ?? ''
+  if (normalizedReference === '') {
+    throw new ModelProfileError('invalid-model-reference', 'invalid_model_reference')
   }
 
-  const normalizedReference = reference?.trim() ?? ''
-  let profile = defaultProfile
-  let selectedModel: string | null = normalizedReference || profile.defaultModel
-
   const separator = normalizedReference.indexOf(':')
-  if (separator >= 0) {
+  let profile: ModelProfile
+  let selectedModel: string
+
+  if (separator < 0) {
+    profile = requireDefaultProfile(collection, profilesById)
+    selectedModel = normalizedReference
+  } else {
     const prefix = normalizedReference.slice(0, separator)
-    const qualifiedProfile = profilesById.get(prefix)
-    if (qualifiedProfile !== undefined) {
-      profile = qualifiedProfile
-      const remainder = normalizedReference.slice(separator + 1)
-      selectedModel = remainder || profile.defaultModel
-      if (selectedModel === null || selectedModel === '') {
-        throw new ModelProfileError(
-          'invalid-model-reference',
-          'invalid_model_reference',
-        )
-      }
+    const remainder = normalizedReference.slice(separator + 1)
+    if (prefix === '' || remainder.trim() === '') {
+      throw new ModelProfileError('invalid-model-reference', 'invalid_model_reference')
     }
+    let profileId: string
+    try {
+      profileId = normalizeModelProfileId(prefix)
+    } catch {
+      throw new ModelProfileError('profile-not-found', 'profile_not_found')
+    }
+    const qualifiedProfile = profilesById.get(profileId)
+    if (qualifiedProfile === undefined) {
+      throw new ModelProfileError('profile-not-found', 'profile_not_found')
+    }
+    profile = qualifiedProfile
+    selectedModel = remainder
   }
 
   const { modelId, context } = splitModelContext(selectedModel)
@@ -344,6 +348,19 @@ export function resolveModelProfile(
     modelId,
     capabilities: { context },
   }
+}
+
+function requireDefaultProfile(
+  collection: ModelProfileCollection,
+  profilesById: ReadonlyMap<string, ModelProfile>,
+): ModelProfile {
+  const defaultProfile = collection.defaultProfileId === null
+    ? undefined
+    : profilesById.get(collection.defaultProfileId)
+  if (defaultProfile === undefined) {
+    throw new ModelProfileError('default-profile-missing', 'default_profile_missing')
+  }
+  return defaultProfile
 }
 
 export function parseModelProfileCollection(value: unknown): ModelProfileCollection {

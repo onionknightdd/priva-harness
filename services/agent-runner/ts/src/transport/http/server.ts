@@ -69,7 +69,11 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
   void server.register(modelProfileRoutes, { service: options.modelProfileService })
   if (options.agentHarness !== undefined) {
     void server.register(websocket)
-    void server.register(runWebsocketRoutes, { harness: options.agentHarness })
+    void server.register(runWebsocketRoutes, {
+      harness: options.agentHarness,
+      modelProfileService: options.modelProfileService,
+      cwd: options.userFileSystem.initialDirectory,
+    })
   }
 
   return server

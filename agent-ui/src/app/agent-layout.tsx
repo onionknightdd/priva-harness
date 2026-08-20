@@ -80,7 +80,7 @@ export function AgentLayout({
       <header
         className={cn(
           "relative z-20 flex shrink-0 items-center gap-2",
-          isFileBrowser ? "h-10" : "h-[30px]"
+          isFileBrowser ? "h-10" : "h-[35px] pt-[5px]"
         )}
       >
         <div className="flex min-w-0 flex-1 items-center gap-2 px-4">

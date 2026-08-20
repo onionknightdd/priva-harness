@@ -20,12 +20,18 @@ const composerWidthClassName = "w-full max-w-[calc(48rem+40px)]"
 export function AgentMessage({
   draft,
   messages,
+  canSubmit,
+  modelReady,
   onDraftChange,
+  onModelReferenceChange,
   onSubmit,
 }: {
   draft: string
   messages: AgentThreadMessage[]
+  canSubmit: boolean
+  modelReady: boolean
   onDraftChange: (draft: string) => void
+  onModelReferenceChange: (model: string | null) => void
   onSubmit: () => void
 }) {
   const { t } = useTranslation()
@@ -43,7 +49,10 @@ export function AgentMessage({
     >
       <AgentMessageComposer
         draft={draft}
+        canSubmit={canSubmit}
+        modelReady={modelReady}
         onDraftChange={onDraftChange}
+        onModelReferenceChange={onModelReferenceChange}
         onSubmit={onSubmit}
       />
     </motion.div>

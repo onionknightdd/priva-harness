@@ -3,15 +3,32 @@ import { describe, expect, it } from 'vitest'
 import { parseInitFrame, toServerFrame } from '../../../../src/transport/websocket/schema/run-frames.js'
 
 describe('run frames', () => {
-  it('accepts a non-empty init text frame', () => {
-    expect(parseInitFrame({ type: 'init', text: 'hi' })).toEqual({
+  it('accepts init text, model, and harness', () => {
+    expect(parseInitFrame({
+      type: 'init',
+      text: 'hi',
+      model: 'gateway:llama3',
+      harness: 'bambuddy',
+    })).toEqual({
       ok: true,
-      frame: { type: 'init', text: 'hi' },
+      frame: {
+        type: 'init',
+        text: 'hi',
+        model: 'gateway:llama3',
+        harness: 'bambuddy',
+      },
     })
   })
 
-  it('rejects empty init text and non-init types', () => {
+  it('rejects empty init text, missing model, and unknown harness', () => {
     expect(parseInitFrame({ type: 'init', text: '  ' }).ok).toBe(false)
+    expect(parseInitFrame({ type: 'init', text: 'hi', harness: 'claude' }).ok).toBe(false)
+    expect(parseInitFrame({
+      type: 'init',
+      text: 'hi',
+      model: 'gateway:llama3',
+      harness: 'deepseek',
+    }).ok).toBe(false)
     expect(parseInitFrame({ type: 'abort' }).ok).toBe(false)
   })
 

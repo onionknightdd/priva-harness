@@ -1,21 +1,30 @@
 import * as React from "react"
 import { useTranslation } from "react-i18next"
 
+import { useHarness } from "@/features/sidebar/header/harness-context"
+
 import {
   createAgentThreadMessage,
   type AgentThreadMessage,
 } from "./agent-message-data"
-import { isAbortError, streamText } from "./stream-text"
+import { runAgentSession } from "./run-agent-session"
 
 type ActiveStream = {
   controller: AbortController
   messageId: string
-  text: string
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === "AbortError"
 }
 
 export function useAgentMessage() {
   const { t } = useTranslation()
+  const { runHarnessId } = useHarness()
   const [draft, setDraft] = React.useState("")
+  const [modelReference, setModelReference] = React.useState<string | null>(
+    null
+  )
   const [messages, setMessages] = React.useState<AgentThreadMessage[]>([])
   const activeStreamRef = React.useRef<ActiveStream | null>(null)
 
@@ -28,7 +37,7 @@ export function useAgentMessage() {
   const submit = React.useCallback(() => {
     const content = draft.trim()
 
-    if (!content) {
+    if (!content || !modelReference || !runHarnessId) {
       return
     }
 
@@ -41,23 +50,21 @@ export function useAgentMessage() {
       "",
       "streaming"
     )
-    const reply = t("agentMessage.mockAssistantReply")
     const controller = new AbortController()
 
     activeStreamRef.current = {
       controller,
       messageId: assistantMessage.id,
-      text: reply,
     }
 
     setDraft("")
     setMessages((currentMessages) => {
       const settledMessages = previousStream
         ? currentMessages.map((message) =>
-            message.id === previousStream.messageId
+            message.id === previousStream.messageId &&
+            message.status === "streaming"
               ? {
                   ...message,
-                  content: previousStream.text,
                   status: "complete" as const,
                 }
               : message
@@ -67,26 +74,41 @@ export function useAgentMessage() {
       return [...settledMessages, userMessage, assistantMessage]
     })
 
-    void streamText({
-      text: reply,
-      signal: controller.signal,
-      startDelayMs: 320,
-      onUpdate: (visibleText) => {
+    const updateAssistant = (contentText: string, status: "streaming" | "complete") => {
+      setMessages((currentMessages) =>
+        currentMessages.map((message) =>
+          message.id === assistantMessage.id
+            ? { ...message, content: contentText, status }
+            : message
+        )
+      )
+    }
+
+    void runAgentSession(
+      {
+        text: content,
+        model: modelReference,
+        harness: runHarnessId,
+      },
+      {
+        signal: controller.signal,
+        onText: (text) => {
+          if (activeStreamRef.current?.messageId !== assistantMessage.id) {
+            return
+          }
+          updateAssistant(text, "streaming")
+        },
+        onError: (message) => {
+          updateAssistant(message, "complete")
+        },
+      }
+    )
+      .then(() => {
         setMessages((currentMessages) =>
           currentMessages.map((message) =>
             message.id === assistantMessage.id &&
             message.status === "streaming"
-              ? { ...message, content: visibleText }
-              : message
-          )
-        )
-      },
-    })
-      .then(() => {
-        setMessages((currentMessages) =>
-          currentMessages.map((message) =>
-            message.id === assistantMessage.id
-              ? { ...message, content: reply, status: "complete" }
+              ? { ...message, status: "complete" }
               : message
           )
         )
@@ -96,16 +118,27 @@ export function useAgentMessage() {
         }
       })
       .catch((error: unknown) => {
-        if (!isAbortError(error)) {
-          throw error
+        if (isAbortError(error)) {
+          return
         }
+
+        updateAssistant(
+          error instanceof Error && error.message
+            ? error.message
+            : t("agentMessage.sendFailed"),
+          "complete"
+        )
       })
-  }, [draft, t])
+  }, [draft, modelReference, runHarnessId, t])
 
   return {
     draft,
     messages,
+    modelReference,
+    canSubmit: Boolean(draft.trim() && modelReference && runHarnessId),
+    modelReady: Boolean(modelReference && runHarnessId),
     setDraft,
+    setModelReference,
     submit,
   }
 }

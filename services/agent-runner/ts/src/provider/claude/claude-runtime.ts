@@ -29,7 +29,7 @@ export class ClaudeRuntime implements AgentRuntime {
     const mapper = new ClaudeEventMapper()
     const active = query({
       prompt: singleShotUserMessage(turn.text),
-      options: buildClaudeQueryOptions(this.spec, this.globalConfigDir),
+      options: resolveClaudeQueryOptions(this.spec, this.globalConfigDir),
     })
     this.query = active
 
@@ -62,31 +62,43 @@ export class ClaudeRuntime implements AgentRuntime {
   }
 }
 
-export function buildClaudeQueryOptions(
+export function resolveClaudeQueryOptions(
   spec: ProviderRunSpec,
   globalConfigDir: string,
 ): Options {
-  const model = process.env['ANTHROPIC_MODEL']
   return {
     cwd: spec.cwd,
+    model: spec.model,
     includePartialMessages: true,
     permissionMode: 'bypassPermissions',
     allowDangerouslySkipPermissions: true,
-    env: {
-      ...definedProcessEnv(),
-      CLAUDE_CONFIG_DIR: globalConfigDir,
-    },
-    ...(model === undefined || model === '' ? {} : { model }),
+    env: resolveClaudeProcessEnv(spec, globalConfigDir),
   }
 }
 
-function definedProcessEnv(): Record<string, string> {
+function resolveClaudeProcessEnv(
+  spec: ProviderRunSpec,
+  globalConfigDir: string,
+): Record<string, string> {
   const env: Record<string, string> = {}
   for (const [key, value] of Object.entries(process.env)) {
-    if (value !== undefined) env[key] = value
+    if (value === undefined || OMITTED_INHERITED_ENV.has(key)) continue
+    env[key] = value
   }
+  env['CLAUDE_CONFIG_DIR'] = globalConfigDir
+  env['ANTHROPIC_BASE_URL'] = spec.baseUrl
+  env['ANTHROPIC_API_KEY'] = spec.authToken
+  env['ANTHROPIC_AUTH_TOKEN'] = spec.authToken
   return env
 }
+
+const OMITTED_INHERITED_ENV = new Set([
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_AUTH_TOKEN',
+  'ANTHROPIC_BASE_URL',
+  'ANTHROPIC_MODEL',
+  'CLAUDE_CONFIG_DIR',
+])
 
 function sessionIdOf(message: SDKMessage): string | undefined {
   if (!('session_id' in message)) return undefined

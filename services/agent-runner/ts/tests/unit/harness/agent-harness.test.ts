@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { AgentEvent } from '../../../src/core/event/agent-event.js'
 import { AgentHarness } from '../../../src/harness/agent-harness.js'
 import { FakeAgentProvider } from '../../support/fake-agent-provider.js'
+import { testRunSpec } from '../../support/run-spec.js'
 
 describe('AgentHarness', () => {
   it('emits run.started, forwards provider events, and releases the runtime', async () => {
@@ -17,11 +18,18 @@ describe('AgentHarness', () => {
         durationMs: 1,
       },
     ])
-    const harness = new AgentHarness({ provider, cwd: '/tmp' })
+    const harness = new AgentHarness({
+      providers: {
+        claude: provider,
+        pi: new FakeAgentProvider('pi', []),
+      },
+      cwd: '/tmp',
+    })
     const events: AgentEvent[] = []
     for await (const event of harness.run(
       { text: 'hi' },
       { signal: new AbortController().signal },
+      testRunSpec({ cwd: '/tmp' }),
     )) {
       events.push(event)
     }

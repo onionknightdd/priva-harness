@@ -1,8 +1,14 @@
 import type { AgentEvent } from '../../../core/event/agent-event.js'
+import {
+  isRunHarnessId,
+  type RunHarnessId,
+} from '../../../core/resource/run-harness.js'
 
 export interface InitFrame {
   readonly type: 'init'
   readonly text: string
+  readonly model: string
+  readonly harness: RunHarnessId
 }
 
 export type ServerFrame = AgentEvent & { readonly runId: string }
@@ -27,7 +33,23 @@ export function parseInitFrame(raw: unknown): ParseInitResult {
   if (typeof text !== 'string' || text.trim() === '') {
     return { ok: false, message: 'Init text must be a non-empty string' }
   }
-  return { ok: true, frame: { type: 'init', text } }
+  const model = raw['model']
+  if (typeof model !== 'string' || model.trim() === '') {
+    return { ok: false, message: 'Init model must be a non-empty string' }
+  }
+  const harness = raw['harness']
+  if (!isRunHarnessId(harness)) {
+    return { ok: false, message: 'Init harness must be claude or bambuddy' }
+  }
+  return {
+    ok: true,
+    frame: {
+      type: 'init',
+      text,
+      model: model.trim(),
+      harness,
+    },
+  }
 }
 
 export function toServerFrame(event: AgentEvent, runId: string): ServerFrame {

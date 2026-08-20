@@ -15,10 +15,13 @@ import { createTestModelProfileService } from '../../../support/model-profile.js
 describe('WS /api/sandbox/agent/ws/run', () => {
   let testRoot: string
   let server: FastifyInstance
+  let modelReference: string
+  let claudeProvider: FakeAgentProvider
+  let piProvider: FakeAgentProvider
 
   beforeEach(async () => {
     testRoot = await mkdtemp(join(tmpdir(), 'priva-ws-run-test-'))
-    const provider = new FakeAgentProvider('claude', [
+    claudeProvider = new FakeAgentProvider('claude', [
       { type: 'assistant', event: 'text_delta', text: 'Hello' },
       { type: 'assistant', event: 'message', text: 'Hello' },
       {
@@ -31,10 +34,35 @@ describe('WS /api/sandbox/agent/ws/run', () => {
         usage: { input: 1, output: 1 },
       },
     ])
+    piProvider = new FakeAgentProvider('pi', [
+      { type: 'assistant', event: 'text_delta', text: 'Hi' },
+      {
+        type: 'run',
+        event: 'completed',
+        sessionId: 'pi-1',
+        harnessProvider: 'pi',
+        model: 'm',
+        durationMs: 3,
+      },
+    ])
+    const modelProfileService = createTestModelProfileService(join(testRoot, 'runtime'))
+    const profile = await modelProfileService.createProfile({
+      label: 'Gateway',
+      baseUrl: 'https://api.example.com/v1',
+      authToken: 'secret',
+      defaultModel: 'm',
+    })
+    modelReference = `${profile.id}:m`
     server = buildHttpServer({
       userFileSystem: new NodeUserFileSystem({ initialDirectory: testRoot }),
-      modelProfileService: createTestModelProfileService(join(testRoot, 'runtime')),
-      agentHarness: new AgentHarness({ provider, cwd: testRoot }),
+      modelProfileService,
+      agentHarness: new AgentHarness({
+        providers: {
+          claude: claudeProvider,
+          pi: piProvider,
+        },
+        cwd: testRoot,
+      }),
     })
     await server.ready()
   })
@@ -47,7 +75,12 @@ describe('WS /api/sandbox/agent/ws/run', () => {
   it('streams nested events then closes after the completed frame', async () => {
     const socket = await server.injectWS(RUN_WEBSOCKET_PATH)
     const frames = collectFrames(socket)
-    socket.send(JSON.stringify({ type: 'init', text: 'hi' }))
+    socket.send(JSON.stringify({
+      type: 'init',
+      text: 'hi',
+      model: modelReference,
+      harness: 'claude',
+    }))
     const received = await frames
 
     expect(received[0]).toMatchObject({ type: 'run', event: 'started' })
@@ -73,6 +106,50 @@ describe('WS /api/sandbox/agent/ws/run', () => {
     expect(await frames).toEqual([
       { type: 'error', message: 'Init text must be a non-empty string' },
     ])
+  })
+
+  it('returns an error frame when the profile cannot be resolved', async () => {
+    const socket = await server.injectWS(RUN_WEBSOCKET_PATH)
+    const frames = collectFrames(socket)
+    socket.send(JSON.stringify({
+      type: 'init',
+      text: 'hi',
+      model: 'missing:model-a',
+      harness: 'claude',
+    }))
+    expect(await frames).toEqual([
+      { type: 'error', message: 'profile_not_found' },
+    ])
+  })
+
+  it('routes bambuddy to Pi with a /v1 base URL', async () => {
+    const socket = await server.injectWS(RUN_WEBSOCKET_PATH)
+    const frames = collectFrames(socket)
+    socket.send(JSON.stringify({
+      type: 'init',
+      text: 'hi',
+      model: modelReference,
+      harness: 'bambuddy',
+    }))
+    const received = await frames
+
+    expect(claudeProvider.specs).toEqual([])
+    expect(piProvider.specs).toEqual([
+      expect.objectContaining({
+        provider: 'pi',
+        model: 'm',
+        baseUrl: 'https://api.example.com/v1',
+        authToken: 'secret',
+      }),
+    ])
+    expect(received).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'assistant', event: 'text_delta', text: 'Hi' }),
+      expect.objectContaining({
+        type: 'run',
+        event: 'completed',
+        harnessProvider: 'pi',
+      }),
+    ]))
   })
 })
 

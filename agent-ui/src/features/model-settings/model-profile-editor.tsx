@@ -119,7 +119,7 @@ export function ModelProfileEditor({
   return (
     <motion.div
       key={isCreating ? "new-profile" : profile?.id ?? "empty-profile"}
-      className="w-full min-w-0 max-w-2xl overflow-x-hidden pb-2"
+      className="w-full min-w-0 max-w-2xl pb-2"
       initial={
         shouldReduceMotion ? false : { opacity: 0.72, x: 8 }
       }
