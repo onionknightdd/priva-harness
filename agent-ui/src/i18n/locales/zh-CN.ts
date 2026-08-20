@@ -29,6 +29,7 @@ export const zhCN = {
     noProfiles: "暂无模型配置",
     noModels: "该配置下暂无模型",
     loadProfilesFailed: "无法加载模型配置",
+    saveModelFailed: "无法保存所选模型",
     scrollToLatest: "跳到最新消息",
     today: "今天",
     thinking: "正在思考…",

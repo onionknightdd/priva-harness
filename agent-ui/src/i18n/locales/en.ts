@@ -29,6 +29,7 @@ export const en = {
     noProfiles: "No model profiles",
     noModels: "No models in this profile",
     loadProfilesFailed: "Unable to load model profiles",
+    saveModelFailed: "Unable to save the selected model",
     scrollToLatest: "Scroll to latest",
     today: "Today",
     thinking: "Thinking…",
