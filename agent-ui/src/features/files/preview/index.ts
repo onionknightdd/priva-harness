@@ -1,5 +1,5 @@
 export { RichFilePreview } from "./rich-file-preview"
-export { canvasReadmePreview } from "./preview-examples"
+export { workspaceReadmePreview } from "./preview-examples"
 export type {
   FilePreviewMode,
   FileRenderKind,

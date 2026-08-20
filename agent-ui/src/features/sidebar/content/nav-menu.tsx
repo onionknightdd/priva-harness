@@ -29,12 +29,12 @@ import type {
 function NavMenuItem({
   item,
   activeView,
-  onNewChat,
+  onNewAgentMessage,
   onViewChange,
 }: {
   item: SidebarNavItem
   activeView: AppView
-  onNewChat?: () => void
+  onNewAgentMessage?: () => void
   onViewChange: (view: AppView) => void
 }) {
   const { t } = useTranslation()
@@ -79,8 +79,8 @@ function NavMenuItem({
   }
 
   const selectItem = () => {
-    if (item.action === "new-chat") {
-      onNewChat?.()
+    if (item.action === "new-agent-message") {
+      onNewAgentMessage?.()
       closeMobileSidebar()
       return
     }
@@ -160,12 +160,12 @@ function NavMenuItem({
 export function NavMenu({
   items,
   activeView,
-  onNewChat,
+  onNewAgentMessage,
   onViewChange,
 }: {
   items: SidebarNavItem[]
   activeView: AppView
-  onNewChat?: () => void
+  onNewAgentMessage?: () => void
   onViewChange: (view: AppView) => void
 }) {
   return (
@@ -176,7 +176,7 @@ export function NavMenu({
             key={item.titleKey}
             item={item}
             activeView={activeView}
-            onNewChat={onNewChat}
+            onNewAgentMessage={onNewAgentMessage}
             onViewChange={onViewChange}
           />
         ))}

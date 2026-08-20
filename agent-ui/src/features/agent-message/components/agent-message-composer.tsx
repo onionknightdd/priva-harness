@@ -15,7 +15,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 
-export function ChatComposer({
+export function AgentMessageComposer({
   draft,
   onDraftChange,
   onSubmit,
@@ -28,8 +28,8 @@ export function ChatComposer({
   const textareaRef = React.useRef<HTMLTextAreaElement>(null)
   const promptId = React.useId()
   const canSubmit = draft.trim().length > 0
-  const attachLabel = t("chat.attach")
-  const attachUnavailable = t("chat.attachUnavailable")
+  const attachLabel = t("agentMessage.attach")
+  const attachUnavailable = t("agentMessage.attachUnavailable")
 
   const submitDraft = () => {
     if (!canSubmit) {
@@ -49,7 +49,7 @@ export function ChatComposer({
     >
       <Field>
         <FieldLabel htmlFor={promptId} className="sr-only">
-          {t("chat.promptLabel")}
+          {t("agentMessage.promptLabel")}
         </FieldLabel>
         <InputGroup
           className="h-auto rounded-3xl"
@@ -66,7 +66,7 @@ export function ChatComposer({
             id={promptId}
             rows={1}
             value={draft}
-            placeholder={t("chat.promptPlaceholder")}
+            placeholder={t("agentMessage.promptPlaceholder")}
             className="max-h-60 min-h-12 field-sizing-content"
             onChange={(event) => onDraftChange(event.currentTarget.value)}
             onKeyDown={(event) => {
@@ -95,7 +95,7 @@ export function ChatComposer({
               size="icon-xs"
               className="rounded-full"
               disabled={!canSubmit}
-              aria-label={t("chat.send")}
+              aria-label={t("agentMessage.send")}
             >
               <ArrowUpIcon />
             </InputGroupButton>

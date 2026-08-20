@@ -2,7 +2,7 @@ import * as React from "react"
 import { GalleryVerticalEndIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
-import { CanvasShell } from "@/features/canvas"
+import { WorkspaceShell } from "@/features/workspace"
 import {
   isSidebarContentView,
   type AppView,
@@ -19,10 +19,10 @@ import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useSidebar } from "@/components/ui/sidebar"
 
-const ChatPage = React.lazy(async () => {
-  const module = await import("@/features/chat")
+const AgentMessagePage = React.lazy(async () => {
+  const module = await import("@/features/agent-message")
 
-  return { default: module.ChatPage }
+  return { default: module.AgentMessagePage }
 })
 
 const FileBrowserPage = React.lazy(async () => {
@@ -47,7 +47,7 @@ function MobileSidebarLogoTrigger({ onOpen }: { onOpen: () => void }) {
   )
 }
 
-function WorkspacePageFallback() {
+function AgentLayoutFallback() {
   const { t } = useTranslation()
 
   return (
@@ -62,20 +62,20 @@ function WorkspacePageFallback() {
   )
 }
 
-export function AgentWorkspace({
+export function AgentLayout({
   activeView,
-  chatSessionKey,
+  agentMessageSessionKey,
 }: {
   activeView: AppView
-  chatSessionKey: number
+  agentMessageSessionKey: number
 }) {
   const { setOpenMobile } = useSidebar()
   const { t } = useTranslation()
   const isFileBrowser = activeView === "file-browser"
-  const canvasEnabled = !isSidebarContentView(activeView)
+  const workspaceEnabled = !isSidebarContentView(activeView)
 
   return (
-    <CanvasShell canvasEnabled={canvasEnabled}>
+    <WorkspaceShell workspaceEnabled={workspaceEnabled}>
       <header className="relative z-20 flex h-10 shrink-0 items-center gap-2">
         <div className="flex min-w-0 flex-1 items-center gap-2 px-4">
           <div className="flex items-center gap-2 md:hidden">
@@ -103,7 +103,7 @@ export function AgentWorkspace({
             </Breadcrumb>
           ) : (
             <h1 className="min-w-0 flex-1 truncate text-sm font-medium">
-              {t("chat.testSessionTitle")}
+              {t("agentMessage.testSessionTitle")}
             </h1>
           )}
         </div>
@@ -113,14 +113,14 @@ export function AgentWorkspace({
         />
       </header>
       {isFileBrowser ? (
-        <React.Suspense fallback={<WorkspacePageFallback />}>
+        <React.Suspense fallback={<AgentLayoutFallback />}>
           <FileBrowserPage />
         </React.Suspense>
       ) : (
-        <React.Suspense fallback={<WorkspacePageFallback />}>
-          <ChatPage key={chatSessionKey} />
+        <React.Suspense fallback={<AgentLayoutFallback />}>
+          <AgentMessagePage key={agentMessageSessionKey} />
         </React.Suspense>
       )}
-    </CanvasShell>
+    </WorkspaceShell>
   )
 }

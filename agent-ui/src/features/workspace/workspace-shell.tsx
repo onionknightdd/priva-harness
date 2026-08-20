@@ -7,19 +7,19 @@ import {
   SidebarProvider,
 } from "@/components/ui/sidebar"
 
-import { CanvasSidebar } from "./canvas-sidebar"
-import { CanvasToggle } from "./canvas-toggle"
+import { WorkspaceSidebar } from "./workspace-sidebar"
+import { WorkspaceToggle } from "./workspace-toggle"
 
-const CANVAS_DEFAULT_WIDTH = 256
-const CANVAS_MAX_VIEWPORT_RATIO = 0.75
-const CANVAS_MIN_WORKSPACE_RATIO = 0.2
+const WORKSPACE_DEFAULT_WIDTH = 256
+const WORKSPACE_MAX_VIEWPORT_RATIO = 0.75
+const WORKSPACE_MIN_CONTENT_RATIO = 0.2
 
-type CanvasLayout = {
+type WorkspaceLayout = {
   viewportWidth: number
   leftSidebarBoundary: number
 }
 
-function getInitialCanvasLayout(): CanvasLayout {
+function getInitialWorkspaceLayout(): WorkspaceLayout {
   return {
     viewportWidth:
       typeof window === "undefined" ? 0 : window.innerWidth,
@@ -27,18 +27,18 @@ function getInitialCanvasLayout(): CanvasLayout {
   }
 }
 
-export function CanvasShell({
+export function WorkspaceShell({
   children,
-  canvasEnabled = true,
+  workspaceEnabled = true,
 }: {
   children: React.ReactNode
-  canvasEnabled?: boolean
+  workspaceEnabled?: boolean
 }) {
   const shellRef = React.useRef<HTMLDivElement>(null)
-  const [layout, setLayout] = React.useState(getInitialCanvasLayout)
+  const [layout, setLayout] = React.useState(getInitialWorkspaceLayout)
 
   React.useLayoutEffect(() => {
-    if (!canvasEnabled) {
+    if (!workspaceEnabled) {
       return
     }
 
@@ -76,16 +76,16 @@ export function CanvasShell({
       resizeObserver.disconnect()
       window.removeEventListener("resize", updateLayout)
     }
-  }, [canvasEnabled])
+  }, [workspaceEnabled])
 
-  const canvasMaxWidth = Math.max(
+  const workspaceMaxWidth = Math.max(
     0,
     Math.floor(
       Math.min(
-        layout.viewportWidth * CANVAS_MAX_VIEWPORT_RATIO,
+        layout.viewportWidth * WORKSPACE_MAX_VIEWPORT_RATIO,
         layout.viewportWidth -
           layout.leftSidebarBoundary -
-          layout.viewportWidth * CANVAS_MIN_WORKSPACE_RATIO
+          layout.viewportWidth * WORKSPACE_MIN_CONTENT_RATIO
       )
     )
   )
@@ -95,21 +95,21 @@ export function CanvasShell({
       ref={shellRef}
       className="h-full min-h-0 overflow-hidden"
       keyboardShortcut={false}
-      defaultWidth={CANVAS_DEFAULT_WIDTH}
-      maxWidth={canvasMaxWidth}
-      widthCookieName="canvas_width"
-      stateCookieName="canvas_state"
+      defaultWidth={WORKSPACE_DEFAULT_WIDTH}
+      maxWidth={workspaceMaxWidth}
+      widthCookieName="workspace_width"
+      stateCookieName="workspace_state"
     >
       <SidebarInset className="min-h-0 overflow-hidden">
         {children}
       </SidebarInset>
-      {canvasEnabled && (
+      {workspaceEnabled && (
         <>
-          <CanvasToggle
+          <WorkspaceToggle
             hideWhenMobileOpen
             className="fixed top-1 right-4 z-40"
           />
-          <CanvasSidebar />
+          <WorkspaceSidebar />
         </>
       )}
     </SidebarProvider>

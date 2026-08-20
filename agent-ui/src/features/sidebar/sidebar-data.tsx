@@ -22,9 +22,9 @@ import type { SidebarData } from "./sidebar.types"
 export const sidebarData = {
   menu: [
     {
-      titleKey: "sidebar.navigation.newChat",
-      view: "workspace",
-      action: "new-chat",
+      titleKey: "sidebar.navigation.newAgentMessage",
+      view: "agent-message",
+      action: "new-agent-message",
       icon: PlusIcon,
     },
     {

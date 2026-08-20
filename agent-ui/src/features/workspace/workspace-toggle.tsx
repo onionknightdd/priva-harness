@@ -17,7 +17,7 @@ const fillTransition: Transition = {
   ease: [0.22, 1, 0.36, 1],
 }
 
-function CanvasStateIcon({ active }: { active: boolean }) {
+function WorkspaceStateIcon({ active }: { active: boolean }) {
   const shouldReduceMotion = useReducedMotion()
   const transition: Transition = shouldReduceMotion
     ? { duration: 0 }
@@ -53,7 +53,7 @@ function CanvasStateIcon({ active }: { active: boolean }) {
   )
 }
 
-export function CanvasToggle({
+export function WorkspaceToggle({
   className,
   hideWhenMobileOpen = false,
 }: {
@@ -63,7 +63,7 @@ export function CanvasToggle({
   const { isMobile, openMobile, state, toggleSidebar } = useSidebar()
   const { t } = useTranslation()
   const active = isMobile ? openMobile : state === "expanded"
-  const label = active ? t("canvas.close") : t("canvas.open")
+  const label = active ? t("workspace.close") : t("workspace.open")
 
   return (
     <Tooltip>
@@ -79,14 +79,14 @@ export function CanvasToggle({
               className
             )}
             aria-label={label}
-            aria-controls="canvas-sidebar"
+            aria-controls="workspace-sidebar"
             aria-expanded={active}
             aria-pressed={active}
             onClick={toggleSidebar}
           />
         }
       >
-        <CanvasStateIcon active={active} />
+        <WorkspaceStateIcon active={active} />
       </TooltipTrigger>
       <TooltipContent side="bottom" sideOffset={6}>
         {label}

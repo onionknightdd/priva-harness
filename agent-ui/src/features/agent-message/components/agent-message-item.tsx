@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { Bubble, BubbleContent } from "@/components/ui/bubble"
 import { Message, MessageContent } from "@/components/ui/message"
 
-import type { ChatMessage as ChatMessageModel } from "../chat-data"
+import type { AgentThreadMessage } from "../agent-message-data"
 
 function StreamingCaret() {
   return (
@@ -14,7 +14,11 @@ function StreamingCaret() {
   )
 }
 
-export function ChatMessage({ message }: { message: ChatMessageModel }) {
+export function AgentMessageItem({
+  message,
+}: {
+  message: AgentThreadMessage
+}) {
   const { t } = useTranslation()
   const align = message.role === "user" ? "end" : "start"
   const isStreaming = message.status === "streaming"
@@ -33,7 +37,7 @@ export function ChatMessage({ message }: { message: ChatMessageModel }) {
             aria-busy={isStreaming || undefined}
           >
             {isThinking ? (
-              <span className="shimmer">{t("chat.thinking")}</span>
+              <span className="shimmer">{t("agentMessage.thinking")}</span>
             ) : (
               <>
                 {message.content}
