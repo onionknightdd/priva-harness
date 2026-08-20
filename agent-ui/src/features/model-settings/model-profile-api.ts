@@ -187,6 +187,14 @@ export async function listModelProfiles(): Promise<ModelProfileCollection> {
   }
 }
 
+export async function listProfileModels(profileId: string): Promise<string[]> {
+  const response = await requestJson<ModelListResponse>(
+    profileEndpoint(profileId, "/models")
+  )
+
+  return response.models.map((model) => model.id)
+}
+
 export async function createModelProfile(input: ModelProfileCreateInput) {
   const response = await requestJson<ModelProfileSummaryResponse>(
     MODEL_PROFILE_API_PREFIX,

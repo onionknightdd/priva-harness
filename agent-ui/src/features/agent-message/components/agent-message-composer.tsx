@@ -15,6 +15,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 
+import { ComposerModelSelector } from "./composer-model-selector"
+
 export function AgentMessageComposer({
   draft,
   onDraftChange,
@@ -93,16 +95,19 @@ export function AgentMessageComposer({
               </TooltipTrigger>
               <TooltipContent>{attachUnavailable}</TooltipContent>
             </Tooltip>
-            <InputGroupButton
-              type="submit"
-              variant="default"
-              size="icon-xs"
-              className="rounded-full"
-              disabled={!canSubmit}
-              aria-label={t("agentMessage.send")}
-            >
-              <ArrowUpIcon />
-            </InputGroupButton>
+            <div className="flex min-w-0 items-center gap-1">
+              <ComposerModelSelector />
+              <InputGroupButton
+                type="submit"
+                variant="default"
+                size="icon-xs"
+                className="rounded-full"
+                disabled={!canSubmit}
+                aria-label={t("agentMessage.send")}
+              >
+                <ArrowUpIcon />
+              </InputGroupButton>
+            </div>
           </InputGroupAddon>
         </InputGroup>
       </Field>
