@@ -14,10 +14,21 @@ import "grapesjs/dist/css/grapes.min.css"
 import { cn } from "@/lib/utils"
 
 import {
-  serializeHtmlDocument,
-  splitHtmlDocument,
+  htmlDocumentRootCss,
+  readHtmlDocument,
+  serializeEditedHtmlDocument,
+  type HtmlDocumentParts,
 } from "../html-document"
 import { grapesjsI18n, type GrapesjsI18nConfig } from "./grapesjs-i18n"
+
+// GrapesJS paints a white iframe body before user CSS. That hides page
+// backgrounds from the loaded HTML. Keep the rest of the default frame chrome.
+const CANVAS_FRAME_STYLE = `
+  body { background-color: transparent }
+  * ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.1) }
+  * ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2) }
+  * ::-webkit-scrollbar { width: 10px }
+`
 
 function grapesPluginFromCjs<Options extends PluginOptions>(
   module: unknown
@@ -45,6 +56,73 @@ function htmlBlocksPlugin(editor: Editor) {
   blocksBasic(editor, { flexGrid: true })
 }
 
+function applyElementAttributes(
+  element: Element,
+  attributes: Record<string, string>
+) {
+  for (const [name, value] of Object.entries(attributes)) {
+    if (name === "class") {
+      for (const className of value.split(/\s+/).filter(Boolean)) {
+        element.classList.add(className)
+      }
+      continue
+    }
+
+    if (name === "style") {
+      const currentStyle = element.getAttribute("style")
+      element.setAttribute(
+        "style",
+        currentStyle ? `${currentStyle};${value}` : value
+      )
+      continue
+    }
+
+    if (!element.hasAttribute(name)) {
+      element.setAttribute(name, value)
+    }
+  }
+}
+
+function applyHtmlDocumentRoot(editor: Editor, document: HtmlDocumentParts) {
+  const wrapper = editor.getWrapper()
+
+  if (wrapper) {
+    const { class: bodyClass, ...bodyAttributes } = document.bodyAttributes
+
+    if (Object.keys(bodyAttributes).length > 0) {
+      wrapper.addAttributes(bodyAttributes)
+    }
+
+    if (bodyClass) {
+      wrapper.addClass(bodyClass)
+    }
+  }
+
+  if (document.css) {
+    editor.Css.addRules(document.css)
+  }
+
+  const rootCss = htmlDocumentRootCss(document)
+
+  if (rootCss) {
+    editor.Css.addRules(rootCss)
+  }
+
+  const canvasDocument = editor.Canvas.getDocument()
+  const canvasBody = editor.Canvas.getBody()
+
+  if (canvasDocument) {
+    applyElementAttributes(
+      canvasDocument.documentElement,
+      document.htmlAttributes
+    )
+  }
+
+  if (canvasBody) {
+    applyElementAttributes(canvasBody, document.bodyAttributes)
+  }
+}
+
 function HtmlVisualEditorSession({
   content,
   fileName,
@@ -59,7 +137,7 @@ function HtmlVisualEditorSession({
   const { t } = useTranslation()
   const acceptUpdatesRef = React.useRef(false)
   const onChangeRef = React.useRef(onChange)
-  const initialDocument = React.useRef(splitHtmlDocument(content)).current
+  const initialDocument = React.useRef(readHtmlDocument(content)).current
 
   onChangeRef.current = onChange
 
@@ -69,25 +147,38 @@ function HtmlVisualEditorSession({
         embedAsBase64: true,
         upload: false,
       },
+      canvas: {
+        frameStyle: CANVAS_FRAME_STYLE,
+      },
       colorPicker: {
         appendTo: document.body,
       },
       components: initialDocument.html,
       height: "100%",
       i18n: locale,
+      keepUnusedStyles: true,
       noticeOnUnload: false,
+      parser: {
+        optionsHtml: {
+          allowScripts: false,
+          detectDocument: true,
+        },
+      },
       storageManager: false,
-      style: initialDocument.css,
       width: "100%",
     }),
     [initialDocument, locale]
   )
 
-  const handleReady = React.useCallback((editor: Editor) => {
-    editor.UndoManager.clear()
-    editor.clearDirtyCount()
-    acceptUpdatesRef.current = true
-  }, [])
+  const handleReady = React.useCallback(
+    (editor: Editor) => {
+      applyHtmlDocumentRoot(editor, initialDocument)
+      editor.UndoManager.clear()
+      editor.clearDirtyCount()
+      acceptUpdatesRef.current = true
+    },
+    [initialDocument]
+  )
 
   const handleUpdate = React.useCallback((_: unknown, editor: Editor) => {
     if (!acceptUpdatesRef.current || editor.getDirtyCount() === 0) {
@@ -95,7 +186,10 @@ function HtmlVisualEditorSession({
     }
 
     onChangeRef.current(
-      serializeHtmlDocument(editor.getHtml(), editor.getCss() ?? "")
+      serializeEditedHtmlDocument(
+        editor.getHtml(),
+        editor.getCss({ keepUnusedStyles: true }) ?? ""
+      )
     )
   }, [])
 

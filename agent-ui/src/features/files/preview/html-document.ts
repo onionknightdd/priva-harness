@@ -1,42 +1,123 @@
-export type SplitHtmlDocument = {
+export type HtmlDocumentParts = {
+  bodyAttributes: Record<string, string>
   css: string
   html: string
+  htmlAttributes: Record<string, string>
 }
 
-export function splitHtmlDocument(content: string): SplitHtmlDocument {
-  const trimmed = content.trim()
+const DOCUMENT_ROOT_PATTERN = /<!doctype|<html[\s>]|<body[\s>]/i
 
-  if (!trimmed) {
-    return { css: "", html: "" }
-  }
-
-  const parsed = new DOMParser().parseFromString(trimmed, "text/html")
+export function readHtmlDocument(content: string): HtmlDocumentParts {
+  const parsed = new DOMParser().parseFromString(content.trim(), "text/html")
   const css = Array.from(parsed.querySelectorAll("style"))
     .map((style) => style.textContent ?? "")
     .join("\n")
     .trim()
-  const body = parsed.body.cloneNode(true) as HTMLElement
-  body.querySelectorAll("style").forEach((style) => style.remove())
 
   return {
+    bodyAttributes: namedElementAttributes(parsed.body),
     css,
-    html: body.innerHTML.trim(),
+    html: serializeDocument(parsed),
+    htmlAttributes: namedElementAttributes(parsed.documentElement),
   }
 }
 
-export function serializeHtmlDocument(html: string, css: string) {
-  const styleBlock = css.trim()
-    ? `  <style>\n${css.trim()}\n  </style>\n`
-    : ""
+export function htmlDocumentRootCss(document: HtmlDocumentParts) {
+  const rules: string[] = []
+  const htmlStyle = document.htmlAttributes.style
 
-  return `<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8">
-${styleBlock}</head>
-<body>
-${html}
-</body>
-</html>
-`
+  if (htmlStyle) {
+    rules.push(`html { ${htmlStyle} }`)
+  }
+
+  const bodyDeclarations = bodyStyleDeclarations(document.bodyAttributes)
+
+  if (bodyDeclarations.length > 0) {
+    rules.push(`body { ${bodyDeclarations.join("; ")} }`)
+  }
+
+  return rules.join("\n")
+}
+
+export function serializeEditedHtmlDocument(html: string, css: string) {
+  const parsed = new DOMParser().parseFromString(
+    toParsableHtmlDocument(html),
+    "text/html"
+  )
+  const trimmedCss = css.trim()
+
+  parsed.querySelectorAll("style").forEach((style) => style.remove())
+
+  if (trimmedCss) {
+    const style = parsed.createElement("style")
+    style.textContent = `\n${trimmedCss}\n`
+    parsed.head.append(style)
+  }
+
+  if (!parsed.querySelector("meta[charset]")) {
+    const charset = parsed.createElement("meta")
+    charset.setAttribute("charset", "utf-8")
+    parsed.head.prepend(charset)
+  }
+
+  return serializeDocument(parsed)
+}
+
+function toParsableHtmlDocument(html: string) {
+  const trimmed = html.trim()
+
+  if (!trimmed) {
+    return "<!DOCTYPE html><html><head></head><body></body></html>"
+  }
+
+  if (DOCUMENT_ROOT_PATTERN.test(trimmed)) {
+    return trimmed
+  }
+
+  return `<!DOCTYPE html><html><head></head><body>${trimmed}</body></html>`
+}
+
+function serializeDocument(doc: Document) {
+  const name = doc.doctype?.name ?? "html"
+  return `<!DOCTYPE ${name}>\n${doc.documentElement.outerHTML}\n`
+}
+
+function namedElementAttributes(element: Element) {
+  const attributes: Record<string, string> = {}
+
+  for (const attribute of element.attributes) {
+    if (attribute.name.startsWith("data-gjs-")) {
+      continue
+    }
+
+    attributes[attribute.name] = attribute.value
+  }
+
+  return attributes
+}
+
+function bodyStyleDeclarations(attributes: Record<string, string>) {
+  const declarations: string[] = []
+  const inlineStyle = attributes.style ?? ""
+
+  if (inlineStyle) {
+    declarations.push(inlineStyle)
+  }
+
+  if (
+    attributes.bgcolor &&
+    !/background(?:-color)?\s*:/i.test(inlineStyle)
+  ) {
+    declarations.push(`background-color: ${attributes.bgcolor}`)
+  }
+
+  if (
+    attributes.background &&
+    !/background(?:-image)?\s*:/i.test(inlineStyle)
+  ) {
+    const backgroundUrl = attributes.background.replaceAll('"', "%22")
+    declarations.push(`background-image: url("${backgroundUrl}")`)
+  }
+
+  return declarations
 }
