@@ -334,7 +334,8 @@ export const MessageResponse = memo(
         "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
         className
       )}
-      plugins={streamdownPlugins}
+      // @streamdown/code types Shiki 3; this app already uses Shiki 4.
+      plugins={streamdownPlugins as MessageResponseProps["plugins"]}
       {...props}
     />
   ),
