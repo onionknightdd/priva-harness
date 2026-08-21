@@ -1,7 +1,12 @@
 import * as React from "react"
 import GjsEditor from "@grapesjs/react"
-import grapesjs, { type Editor, type EditorConfig } from "grapesjs"
-import blocksBasic from "grapesjs-blocks-basic"
+import grapesjs, {
+  type Editor,
+  type EditorConfig,
+  type Plugin,
+  type PluginOptions,
+} from "grapesjs"
+import blocksBasicModule from "grapesjs-blocks-basic"
 import { useTranslation } from "react-i18next"
 
 import "grapesjs/dist/css/grapes.min.css"
@@ -13,6 +18,28 @@ import {
   splitHtmlDocument,
 } from "../html-document"
 import { grapesjsI18n, type GrapesjsI18nConfig } from "./grapesjs-i18n"
+
+function grapesPluginFromCjs<Options extends PluginOptions>(
+  module: unknown
+): Plugin<Options> {
+  let current = module
+
+  // grapesjs-blocks-basic ships a UMD CJS build whose `module.exports` is
+  // `{ default: plugin }`, so Vite's default import is an object, not a function.
+  while (current && typeof current === "object" && "default" in current) {
+    current = (current as { default: unknown }).default
+  }
+
+  if (typeof current !== "function") {
+    throw new Error("grapesjs-blocks-basic did not export a plugin function")
+  }
+
+  return current as Plugin<Options>
+}
+
+const blocksBasic = grapesPluginFromCjs<{ flexGrid?: boolean }>(
+  blocksBasicModule
+)
 
 function htmlBlocksPlugin(editor: Editor) {
   blocksBasic(editor, { flexGrid: true })
