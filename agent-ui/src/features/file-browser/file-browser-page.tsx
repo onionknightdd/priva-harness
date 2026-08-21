@@ -2,7 +2,8 @@ import * as React from "react"
 import gsap from "gsap"
 import { useTranslation } from "react-i18next"
 
-import { RichFilePreview } from "@/features/files"
+import { RichFilePreview, type PreviewFile } from "@/features/files"
+import { saveEditedHtmlFile } from "@/features/files/preview/save-edited-html-file"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { startFileDownload } from "@/lib/api/sandbox-files"
 
@@ -13,7 +14,10 @@ import {
   DeletePathDialog,
 } from "./components/file-operation-dialogs"
 import { FileTreePane } from "./components/file-tree-pane"
-import type { FileBrowserItem } from "./file-browser-data"
+import {
+  getFileBrowserParentPath,
+  type FileBrowserItem,
+} from "./file-browser-data"
 import { useFileBrowser } from "./use-file-browser"
 import { useTreePanelVisibility } from "./use-tree-panel-visibility"
 
@@ -165,6 +169,45 @@ export function FileBrowserPage() {
     }
   }
 
+  const handleSaveHtml = async (file: PreviewFile) => {
+    if (file.content === undefined) {
+      throw new Error("Edited HTML content is not available")
+    }
+
+    const directory =
+      getFileBrowserParentPath(file.path) ?? browser.rootPath
+
+    if (!directory) {
+      throw new Error("Edited HTML files need a workspace directory")
+    }
+
+    const uploaded = await saveEditedHtmlFile({
+      content: file.content,
+      directory,
+      mediaType: file.mediaType,
+      originalName: file.name,
+    })
+
+    await Promise.all([
+      browser.refreshDirectory(directory).catch(() => undefined),
+      // Keep the current editor mounted; the saved copy opens as a background tab.
+      browser.openFile(
+        {
+          path: uploaded.path,
+          name: uploaded.name,
+          type: "file",
+          size: uploaded.size,
+          modifiedAt: Date.now(),
+          permissions: null,
+          parentPath: directory,
+        },
+        false
+      ),
+    ])
+
+    return { fileName: uploaded.name }
+  }
+
   const treePane = (
     <FileTreePane
       initialError={browser.initialError}
@@ -190,6 +233,7 @@ export function FileBrowserPage() {
       onActiveFileChange={browser.setActiveFile}
       onCloseAll={browser.closeAllFiles}
       onDownload={(file) => startFileDownload(file.path, file.name)}
+      onSaveHtml={handleSaveHtml}
       onFileClose={browser.closeFile}
       onExpandedChange={(expanded) =>
         handleTreeVisibilityChange(!expanded)

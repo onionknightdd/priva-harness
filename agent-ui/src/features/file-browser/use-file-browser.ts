@@ -123,9 +123,15 @@ export function useFileBrowser() {
     void loadInitialDirectory()
   }, [loadInitialDirectory])
 
-  const openFile = React.useCallback((item: FileBrowserItem) => {
-    setSelectedItemPath(item.path)
-    setActiveFileId(item.path)
+  const openFile = React.useCallback((
+    item: FileBrowserItem,
+    activate = true
+  ) => {
+    if (activate) {
+      setSelectedItemPath(item.path)
+      setActiveFileId(item.path)
+    }
+
     setOpenedFiles((currentFiles) => {
       const existingFile = currentFiles.find((file) => file.id === item.path)
       if (existingFile?.status !== "error") {
@@ -388,6 +394,8 @@ export function useFileBrowser() {
     model,
     navigateBreadcrumb,
     openedFiles,
+    openFile,
+    refreshDirectory,
     refreshLoadedDirectories,
     rootPath,
     selectItem,
