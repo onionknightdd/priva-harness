@@ -41,6 +41,7 @@ export const en = {
     scrollToLatest: "Scroll to latest",
     today: "Today",
     thinking: "Thinking…",
+    errorLabel: "Error",
     mockAssistantReply:
       "Sure. This is a local preview reply. I'll stream it in so you can check scrolling, the caret, and message layout. A live model will replace this mock once streaming is connected.",
     testSessionTitle: "How should I design Agent Message?",

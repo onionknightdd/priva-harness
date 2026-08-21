@@ -41,6 +41,7 @@ export const zhCN = {
     scrollToLatest: "跳到最新消息",
     today: "今天",
     thinking: "正在思考…",
+    errorLabel: "错误信息",
     mockAssistantReply:
       "好的。这是一条本地预览回复，我会用流式输出把内容逐字写出来，方便你检查滚动、光标和消息布局。实时模型接入后会换成真实回答。",
     testSessionTitle: "我要怎么设计 Agent Message？",

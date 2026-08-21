@@ -1,6 +1,6 @@
 export type AgentMessageRole = "user" | "assistant"
 
-export type AgentMessageStatus = "streaming" | "complete"
+export type AgentMessageStatus = "streaming" | "complete" | "error"
 
 export type AgentThreadMessage = {
   id: string

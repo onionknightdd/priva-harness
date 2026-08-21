@@ -58,6 +58,54 @@ describe('PiEventMapper', () => {
       : -1).toBeGreaterThanOrEqual(20)
   })
 
+  it('does not treat user or tool-result message_end as assistant text', () => {
+    const mapper = new PiEventMapper({ sessionId: 'pi-sess', model: 'm' })
+
+    expect(mapper.push({
+      type: 'message_end',
+      message: { role: 'user', content: [{ type: 'text', text: 'hello' }] },
+    })).toEqual([])
+    expect(mapper.push({
+      type: 'message_end',
+      message: {
+        role: 'toolResult',
+        toolCallId: 'tc1',
+        toolName: 'bash',
+        content: [{ type: 'text', text: 'pong' }],
+      },
+    })).toEqual([])
+    expect(mapper.push({
+      type: 'message_end',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'Hi' }] },
+    })).toEqual([{ type: 'assistant', event: 'message', text: 'Hi' }])
+  })
+
+  it('maps agent_end with an assistant error to run.failed', () => {
+    const mapper = new PiEventMapper({ sessionId: 'pi-sess', model: 'm' })
+
+    expect(mapper.push({
+      type: 'agent_end',
+      messages: [
+        { role: 'user', content: [{ type: 'text', text: 'hello' }] },
+        {
+          role: 'assistant',
+          stopReason: 'error',
+          errorMessage: 'Responses API 404',
+          content: [{ type: 'text', text: '' }],
+        },
+      ],
+    })).toEqual([
+      expect.objectContaining({
+        type: 'run',
+        event: 'failed',
+        message: 'Responses API 404',
+        sessionId: 'pi-sess',
+        harnessProvider: 'pi',
+        model: 'm',
+      }),
+    ])
+  })
+
   it('defers tool.started until id is known and maps execution progress', () => {
     const mapper = new PiEventMapper({ sessionId: 'pi-sess', model: 'm' })
     const events = [

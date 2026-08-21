@@ -74,7 +74,10 @@ export function useAgentMessage() {
       return [...settledMessages, userMessage, assistantMessage]
     })
 
-    const updateAssistant = (contentText: string, status: "streaming" | "complete") => {
+    const updateAssistant = (
+      contentText: string,
+      status: "streaming" | "complete" | "error"
+    ) => {
       setMessages((currentMessages) =>
         currentMessages.map((message) =>
           message.id === assistantMessage.id
@@ -99,7 +102,7 @@ export function useAgentMessage() {
           updateAssistant(text, "streaming")
         },
         onError: (message) => {
-          updateAssistant(message, "complete")
+          updateAssistant(message, "error")
         },
       }
     )
@@ -126,7 +129,7 @@ export function useAgentMessage() {
           error instanceof Error && error.message
             ? error.message
             : t("agentMessage.sendFailed"),
-          "complete"
+          "error"
         )
       })
   }, [draft, modelReference, runHarnessId, t])

@@ -135,6 +135,13 @@ export class PiEventMapper {
 
   private mapMessageEnd(raw: unknown): AgentEvent[] {
     this.rememberModel(asRecord(raw))
+    const message = asRecord(raw)
+    // Pi emits message_end for the user prompt (and tool results) before any
+    // model tokens. Those must not become assistant.message or the UI echoes
+    // the user's text as the reply.
+    if (message === undefined || stringField(message, 'role') !== 'assistant') {
+      return []
+    }
     const text = assistantText(raw)
     return text === '' ? [] : [{ type: 'assistant', event: 'message', text }]
   }
@@ -182,6 +189,20 @@ export class PiEventMapper {
     const usage = usageFromMessages(messages)
     const durationMs = Math.max(0, Date.now() - this.startedAt)
     const model = this.model === '' ? this.options.model : this.model
+    const failure = assistantFailure(messages)
+    if (failure !== undefined) {
+      return {
+        type: 'run',
+        event: 'failed',
+        message: failure,
+        sessionId: this.options.sessionId,
+        harnessProvider: 'pi',
+        model,
+        durationMs,
+        ...(usage?.costUsd === undefined ? {} : { costUsd: usage.costUsd }),
+        ...(usage === undefined ? {} : { usage: usage.tokens }),
+      }
+    }
     return {
       type: 'run',
       event: 'completed',
@@ -280,6 +301,20 @@ function toolOutput(value: unknown): string {
   const output = detailRecord === undefined ? undefined : stringField(detailRecord, 'output')
   if (output !== undefined) return output
   return ''
+}
+
+function assistantFailure(messages: unknown): string | undefined {
+  if (!Array.isArray(messages)) return undefined
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = asRecord(messages[index])
+    if (message === undefined || stringField(message, 'role') !== 'assistant') continue
+    const stopReason = stringField(message, 'stopReason')
+    const errorMessage = stringField(message, 'errorMessage')
+    if (stopReason !== 'error' && stopReason !== 'aborted') return undefined
+    if (errorMessage !== undefined && errorMessage !== '') return errorMessage
+    return stopReason === 'aborted' ? 'aborted' : 'run failed'
+  }
+  return undefined
 }
 
 function usageFromMessages(messages: unknown): { tokens: TokenUsage; costUsd?: number } | undefined {
