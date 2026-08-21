@@ -65,7 +65,7 @@ function HtmlVisualEditorSession({
     }
 
     onChangeRef.current(
-      serializeHtmlDocument(editor.getHtml(), editor.getCss())
+      serializeHtmlDocument(editor.getHtml(), editor.getCss() ?? "")
     )
   }, [])
 
