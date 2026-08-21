@@ -193,21 +193,25 @@ function FilePreviewPanel({
     <TabsContent
       value={file.id}
       className={cn(
-        "min-h-0 flex-1 overscroll-contain",
+        "min-h-0 flex-1 overscroll-contain data-hidden:hidden",
+        !active && "hidden",
         usesInternalScroller ? "overflow-hidden" : "overflow-auto"
       )}
     >
       <div
         ref={contentRef}
-        className={cn("min-h-full", usesInternalScroller && "h-full")}
+        className={cn(
+          "relative min-h-full bg-card",
+          usesInternalScroller && "h-full"
+        )}
       >
         {file.status === "loading" ? (
           <PreviewRequestState loading />
         ) : file.status === "error" ? (
           <PreviewRequestState error={file.error} />
-        ) : mode === "source" && file.content !== undefined ? (
+        ) : !active ? null : mode === "source" && file.content !== undefined ? (
           <SourcePreview content={file.content} fileName={file.name} />
-        ) : mode === "edit" && active && file.content !== undefined ? (
+        ) : mode === "edit" && file.content !== undefined ? (
           <PreviewRendererBoundary key={`${file.id}:html-edit`}>
             <React.Suspense fallback={<PreviewRequestState loading />}>
               <HtmlVisualEditor

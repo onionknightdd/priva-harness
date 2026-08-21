@@ -114,6 +114,11 @@ export function FilePreviewToolbar({
     null
   )
   const saveAvailable = mode === "edit" && Boolean(onSave)
+  const saveLabel = saving
+    ? t("filePreview.saving")
+    : savedFileName
+      ? t("filePreview.saved", { fileName: savedFileName })
+      : t("filePreview.save")
   const expandLabel = expanded
     ? t("filePreview.restore")
     : t("filePreview.maximize")
@@ -453,38 +458,33 @@ export function FilePreviewToolbar({
                 }
                 transition={saveTransition}
               >
-                <Button
-                  type="button"
-                  variant="default"
-                  size="sm"
-                  className="font-normal"
-                  disabled={
-                    saving ||
-                    activeFile?.content === undefined ||
-                    activeFile.status === "loading"
-                  }
-                  aria-label={
-                    saving
-                      ? t("filePreview.saving")
-                      : savedFileName
-                        ? t("filePreview.saved", {
-                            fileName: savedFileName,
-                          })
-                        : t("filePreview.save")
-                  }
-                  onClick={(event) => void handleSave(event)}
-                >
-                  {saving ? (
-                    <Spinner className="size-3.5" aria-hidden="true" />
-                  ) : savedFileName ? (
-                    <CheckIcon data-icon="inline-start" aria-hidden="true" />
-                  ) : (
-                    <SaveIcon data-icon="inline-start" aria-hidden="true" />
-                  )}
-                  {saving
-                    ? t("filePreview.saving")
-                    : t("filePreview.save")}
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        disabled={
+                          saving ||
+                          activeFile?.content === undefined ||
+                          activeFile.status === "loading"
+                        }
+                        aria-label={saveLabel}
+                        onClick={(event) => void handleSave(event)}
+                      />
+                    }
+                  >
+                    {saving ? (
+                      <Spinner className="size-4" aria-hidden="true" />
+                    ) : savedFileName ? (
+                      <CheckIcon aria-hidden="true" />
+                    ) : (
+                      <SaveIcon aria-hidden="true" />
+                    )}
+                  </TooltipTrigger>
+                  <TooltipContent>{saveLabel}</TooltipContent>
+                </Tooltip>
               </motion.div>
             )}
           </AnimatePresence>
