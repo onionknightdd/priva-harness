@@ -69,6 +69,9 @@ function HtmlVisualEditorSession({
         embedAsBase64: true,
         upload: false,
       },
+      colorPicker: {
+        appendTo: document.body,
+      },
       components: initialDocument.html,
       height: "100%",
       i18n: locale,
