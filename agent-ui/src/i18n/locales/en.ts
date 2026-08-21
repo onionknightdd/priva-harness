@@ -42,6 +42,9 @@ export const en = {
     today: "Today",
     thinking: "Thinking…",
     errorLabel: "Error",
+    copy: "Copy",
+    copied: "Copied",
+    copyFailed: "Unable to copy",
     mockAssistantReply:
       "Sure. This is a local preview reply. I'll stream it in so you can check scrolling, the caret, and message layout. A live model will replace this mock once streaming is connected.",
     testSessionTitle: "How should I design Agent Message?",
