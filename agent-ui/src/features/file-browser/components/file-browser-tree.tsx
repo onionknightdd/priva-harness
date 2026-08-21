@@ -22,6 +22,7 @@ import {
   TreeItem,
   TreeItemLabel,
 } from "@/components/reui/tree"
+import { cn } from "@/lib/utils"
 
 import {
   FILE_BROWSER_ROOT_ID,
@@ -36,11 +37,36 @@ import { FileTypeIcon } from "./file-type-icon"
 
 const FILE_TREE_INDENT = 20
 const FILE_TREE_STICKY_ROW_HEIGHT = 32
+const FILE_TREE_PANEL_TRANSITION_MS = 200
 
 function resolveFileTreeHighlightElement(item: HTMLElement) {
   return item.querySelector<HTMLElement>(
     '[data-slot="tree-item-label"]'
   )
+}
+
+function useClipUntilOpenTransitionEnds(open: boolean) {
+  const [clipContents, setClipContents] = React.useState(!open)
+
+  React.useEffect(() => {
+    if (!open) {
+      setClipContents(true)
+      return
+    }
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setClipContents(false)
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setClipContents(false)
+    }, FILE_TREE_PANEL_TRANSITION_MS)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [open])
+
+  return clipContents
 }
 
 function FileBrowserTreeNode({
@@ -63,7 +89,14 @@ function FileBrowserTreeNode({
   const { i18n } = useTranslation()
   const data = item.getItemData()
   const isFolder = item.isFolder()
+  const children = item.getChildren()
+  const expanded = item.isExpanded()
   const loading = isFolder && loadingDirectories.has(data.path)
+  // First expand loads children asynchronously. Opening only after they exist
+  // lets the panel measure its real height instead of animating empty, then
+  // painting the loaded rows over sibling items.
+  const panelOpen = expanded && (children.length > 0 || !loading)
+  const clipPanelContents = useClipUntilOpenTransitionEnds(panelOpen)
   const stickySentinelRef = React.useRef<HTMLSpanElement>(null)
   const [nameMarqueeActive, setNameMarqueeActive] =
     React.useState(false)
@@ -184,7 +217,7 @@ function FileBrowserTreeNode({
       <TreeItemLabel className="relative z-[1] min-h-8 w-full min-w-0 max-w-full gap-1 bg-transparent! pe-5 hover:bg-transparent! in-data-[selected=true]:bg-accent! in-data-[stuck=true]:hover:bg-accent! in-data-popup-open:bg-accent!">
         <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
           {isFolder ? (
-            <FileTreeFolderIcon expanded={item.isExpanded()} />
+            <FileTreeFolderIcon expanded={expanded} />
           ) : (
             <FileTypeIcon name={data.name} path={data.path} />
           )}
@@ -232,7 +265,7 @@ function FileBrowserTreeNode({
 
   return (
     <Collapsible
-      open={item.isExpanded()}
+      open={panelOpen}
       role="none"
       className="flex w-full min-w-0 max-w-full flex-col"
     >
@@ -244,7 +277,12 @@ function FileBrowserTreeNode({
       {treeItem}
       <CollapsibleContent
         role="group"
-        className="h-[var(--collapsible-panel-height)] overflow-hidden transition-[height,opacity] duration-200 ease-out data-open:overflow-visible data-[ending-style]:h-0 data-[ending-style]:overflow-hidden data-[ending-style]:opacity-0 data-[starting-style]:h-0 data-[starting-style]:overflow-hidden data-[starting-style]:opacity-0 motion-reduce:transition-none"
+        className={cn(
+          "h-[var(--collapsible-panel-height)] overflow-hidden transition-[height] duration-200 ease-out starting:h-0 data-[ending-style]:h-0 data-[starting-style]:h-0 motion-reduce:transition-none",
+          // Sticky nested folders need overflow:visible once open. During the
+          // height animation it would paint children over still-collapsed rows.
+          panelOpen && !clipPanelContents && "overflow-visible"
+        )}
       >
         <div
           className="relative flex w-full min-w-0 max-w-full flex-col gap-0.5 pt-0.5 before:pointer-events-none before:absolute before:inset-y-0 before:start-[var(--file-tree-line-offset)] before:w-px before:bg-border"
@@ -254,7 +292,7 @@ function FileBrowserTreeNode({
             } as React.CSSProperties
           }
         >
-          {item.getChildren().map((child) => (
+          {children.map((child) => (
             <FileBrowserTreeNode
               key={child.getId()}
               item={child}
