@@ -147,6 +147,43 @@
   container-type: inline-size;
 }
 
+.file-html-visual-editor {
+  --gjs-main-color: var(--card);
+  --gjs-primary-color: var(--card);
+  --gjs-secondary-color: var(--foreground);
+  --gjs-tertiary-color: var(--accent-foreground);
+  --gjs-quaternary-color: var(--primary);
+  --gjs-font-color: var(--muted-foreground);
+  --gjs-font-color-active: var(--foreground);
+  --gjs-main-dark-color: color-mix(in oklch, var(--foreground) 12%, transparent);
+  --gjs-secondary-dark-color: color-mix(in oklch, var(--foreground) 8%, transparent);
+  --gjs-main-light-color: color-mix(in oklch, var(--foreground) 8%, transparent);
+  --gjs-secondary-light-color: color-mix(in oklch, var(--foreground) 70%, transparent);
+  --gjs-light-border: var(--border);
+  --gjs-arrow-color: var(--muted-foreground);
+  --gjs-main-font: var(--font-sans);
+  --gjs-font-size: 0.75rem;
+  --gjs-color-blue: var(--ring);
+  --gjs-color-highlight: var(--ring);
+}
+
+.file-html-visual-editor,
+.file-html-visual-editor .gjs-editor-wrapper,
+.file-html-visual-editor .gjs-editor {
+  height: 100%;
+  min-height: 0;
+}
+
+.file-html-visual-editor .gjs-cv-canvas {
+  background-color: var(--background);
+}
+
+@container file-preview (max-width: 720px) {
+  .file-html-visual-editor {
+    --gjs-left-width: 9.5rem;
+  }
+}
+
 @container file-preview (max-width: 520px) {
   .file-preview-toolbar {
     display: grid;

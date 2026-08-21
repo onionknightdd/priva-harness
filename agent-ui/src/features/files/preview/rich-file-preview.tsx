@@ -7,6 +7,7 @@ import {
   TabsContent,
 } from "@/components/assistant-ui/tabs"
 import {
+  canEditHtmlFile,
   canRenderFile,
   canShowFileSource,
   type FilePreviewMode,
@@ -18,6 +19,7 @@ import {
 } from "@/features/files/selection"
 import { cn } from "@/lib/utils"
 
+import { downloadTextFile } from "./download-text-file"
 import { FilePreviewToolbar } from "./file-preview-toolbar"
 import { PreviewRendererBoundary } from "./preview-renderer-boundary"
 import { PreviewRequestState } from "./preview-request-state"
@@ -48,6 +50,19 @@ const SpreadsheetRenderer = React.lazy(() =>
     default: module.SpreadsheetRenderer,
   }))
 )
+const HtmlVisualEditor = React.lazy(() =>
+  import("./renderers/html-visual-editor").then((module) => ({
+    default: module.HtmlVisualEditor,
+  }))
+)
+
+function withDraftContent(
+  file: PreviewFile,
+  drafts: Record<string, string>
+) {
+  const draft = drafts[file.id]
+  return draft === undefined ? file : { ...file, content: draft }
+}
 
 function getAvailableMode(
   file: PreviewFile | null,
@@ -59,6 +74,10 @@ function getAvailableMode(
 
   if (preferredMode === "render" && canRenderFile(file)) {
     return "render"
+  }
+
+  if (preferredMode === "edit" && canEditHtmlFile(file)) {
+    return "edit"
   }
 
   if (canShowFileSource(file)) {
@@ -121,23 +140,26 @@ function FilePreviewPanel({
   active,
   file,
   mode,
+  onHtmlChange,
 }: {
   active: boolean
   file: PreviewFile
   mode: FilePreviewMode | null
+  onHtmlChange: (content: string) => void
 }) {
   const contentRef = React.useRef<HTMLDivElement>(null)
   const usesInternalScroller =
     file.status !== "loading" &&
     file.status !== "error" &&
-    mode === "render" &&
-    [
-      "document",
-      "html",
-      "pdf",
-      "presentation",
-      "spreadsheet",
-    ].includes(file.renderKind ?? "")
+    (mode === "edit" ||
+      (mode === "render" &&
+        [
+          "document",
+          "html",
+          "pdf",
+          "presentation",
+          "spreadsheet",
+        ].includes(file.renderKind ?? "")))
 
   React.useLayoutEffect(() => {
     const content = contentRef.current
@@ -185,7 +207,17 @@ function FilePreviewPanel({
           <PreviewRequestState error={file.error} />
         ) : mode === "source" && file.content !== undefined ? (
           <SourcePreview content={file.content} fileName={file.name} />
-        ) : (
+        ) : mode === "edit" && active && file.content !== undefined ? (
+          <PreviewRendererBoundary key={`${file.id}:html-edit`}>
+            <React.Suspense fallback={<PreviewRequestState loading />}>
+              <HtmlVisualEditor
+                content={file.content}
+                fileName={file.name}
+                onChange={onHtmlChange}
+              />
+            </React.Suspense>
+          </PreviewRendererBoundary>
+        ) : mode === "edit" ? null : (
           <PreviewRendererBoundary
             key={`${file.id}:${file.renderSource ?? "inline"}`}
           >
@@ -229,16 +261,72 @@ export function RichFilePreview({
   const { t } = useTranslation()
   const [internalMode, setInternalMode] =
     React.useState<FilePreviewMode>("source")
+  const [drafts, setDrafts] = React.useState<Record<string, string>>(
+    {}
+  )
   const preferredMode = mode ?? internalMode
+  const previewFiles = files.map((file) => withDraftContent(file, drafts))
   const activeFile =
-    files.find((file) => file.id === activeFileId) ?? null
+    previewFiles.find((file) => file.id === activeFileId) ?? null
   const activeMode = getAvailableMode(activeFile, preferredMode)
   const sourceAvailable = canShowFileSource(activeFile)
   const renderAvailable = canRenderFile(activeFile)
+  const editAvailable = canEditHtmlFile(activeFile)
 
   const handleModeChange = (nextMode: FilePreviewMode) => {
     setInternalMode(nextMode)
     onModeChange?.(nextMode)
+  }
+
+  const handleHtmlChange = React.useCallback(
+    (fileId: string, content: string) => {
+      setDrafts((currentDrafts) =>
+        currentDrafts[fileId] === content
+          ? currentDrafts
+          : { ...currentDrafts, [fileId]: content }
+      )
+    },
+    []
+  )
+
+  const handleFileClose = (fileId: string) => {
+    setDrafts((currentDrafts) => {
+      if (!(fileId in currentDrafts)) {
+        return currentDrafts
+      }
+
+      const nextDrafts = { ...currentDrafts }
+      delete nextDrafts[fileId]
+      return nextDrafts
+    })
+    onFileClose(fileId)
+  }
+
+  const handleCloseAll = () => {
+    setDrafts({})
+    onCloseAll()
+  }
+
+  const handleDownload = (file: PreviewFile) => {
+    const draft = drafts[file.id]
+
+    if (draft !== undefined) {
+      downloadTextFile(file.name, draft, file.mediaType || "text/html")
+      return
+    }
+
+    if (onDownload) {
+      onDownload(file)
+      return
+    }
+
+    if (file.content !== undefined) {
+      downloadTextFile(
+        file.name,
+        file.content,
+        file.mediaType || "text/plain"
+      )
+    }
   }
 
   return (
@@ -265,25 +353,27 @@ export function RichFilePreview({
         >
           <FilePreviewToolbar
             activeFile={activeFile}
+            editAvailable={editAvailable}
             expanded={expanded}
-            files={files}
+            files={previewFiles}
             mode={activeMode}
-            onCloseAll={onCloseAll}
-            onFileClose={onFileClose}
-            onDownload={onDownload}
+            onCloseAll={handleCloseAll}
+            onFileClose={handleFileClose}
+            onDownload={handleDownload}
             onExpandedChange={onExpandedChange}
             onModeChange={handleModeChange}
             renderAvailable={renderAvailable}
             sourceAvailable={sourceAvailable}
           />
 
-          {files.length > 0 ? (
-            files.map((file) => (
+          {previewFiles.length > 0 ? (
+            previewFiles.map((file) => (
               <FilePreviewPanel
                 key={file.id}
                 active={file.id === activeFileId}
                 file={file}
                 mode={getAvailableMode(file, preferredMode)}
+                onHtmlChange={(content) => handleHtmlChange(file.id, content)}
               />
             ))
           ) : (
