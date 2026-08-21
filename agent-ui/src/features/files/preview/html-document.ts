@@ -45,7 +45,18 @@ export function htmlDocumentCanvasCss(document: HtmlDocumentParts) {
     .join("\n")
 }
 
-export function serializeEditedHtmlDocument(html: string, css: string) {
+export function mergeExportedCss(sourceCss: string, editorCss: string) {
+  return [sourceCss, editorCss]
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join("\n")
+}
+
+export function serializeEditedHtmlDocument(
+  html: string,
+  css: string,
+  root?: Pick<HtmlDocumentParts, "bodyAttributes" | "htmlAttributes">
+) {
   const parsed = new DOMParser().parseFromString(
     toParsableHtmlDocument(html),
     "text/html"
@@ -53,6 +64,11 @@ export function serializeEditedHtmlDocument(html: string, css: string) {
   const trimmedCss = css.trim()
 
   parsed.querySelectorAll("style").forEach((style) => style.remove())
+
+  if (root) {
+    applyExportAttributes(parsed.documentElement, root.htmlAttributes)
+    applyExportAttributes(parsed.body, root.bodyAttributes)
+  }
 
   if (trimmedCss) {
     const style = parsed.createElement("style")
@@ -65,6 +81,8 @@ export function serializeEditedHtmlDocument(html: string, css: string) {
     charset.setAttribute("charset", "utf-8")
     parsed.head.prepend(charset)
   }
+
+  stripEditorAttributes(parsed)
 
   return serializeDocument(parsed)
 }
@@ -100,6 +118,46 @@ function namedElementAttributes(element: Element) {
   }
 
   return attributes
+}
+
+function applyExportAttributes(
+  element: Element,
+  attributes: Record<string, string>
+) {
+  for (const [name, value] of Object.entries(attributes)) {
+    if (name === "class") {
+      const classes = new Set(
+        `${element.getAttribute("class") ?? ""} ${value}`
+          .split(/\s+/)
+          .filter(Boolean)
+      )
+      element.setAttribute("class", [...classes].join(" "))
+      continue
+    }
+
+    if (name === "style") {
+      const currentStyle = element.getAttribute("style")
+      element.setAttribute(
+        "style",
+        currentStyle ? `${value};${currentStyle}` : value
+      )
+      continue
+    }
+
+    if (!element.hasAttribute(name)) {
+      element.setAttribute(name, value)
+    }
+  }
+}
+
+function stripEditorAttributes(doc: Document) {
+  for (const element of doc.querySelectorAll("*")) {
+    for (const attribute of [...element.attributes]) {
+      if (attribute.name.startsWith("data-gjs-")) {
+        element.removeAttribute(attribute.name)
+      }
+    }
+  }
 }
 
 function bodyStyleDeclarations(attributes: Record<string, string>) {

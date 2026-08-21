@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils"
 
 import {
   htmlDocumentCanvasCss,
+  mergeExportedCss,
   readHtmlDocument,
   serializeEditedHtmlDocument,
   type HtmlDocumentParts,
@@ -330,11 +331,16 @@ function HtmlVisualEditorSession({
 
     onChangeRef.current(
       serializeEditedHtmlDocument(
-        editor.getHtml(),
-        editor.getCss({ keepUnusedStyles: true }) ?? ""
+        editor.getHtml({ asDocument: true }),
+        mergeExportedCss(
+          htmlDocumentCanvasCss(initialDocument),
+          editor.getCss({ keepUnusedStyles: true, avoidProtected: true }) ??
+            ""
+        ),
+        initialDocument
       )
     )
-  }, [])
+  }, [initialDocument])
 
   return (
     <div
