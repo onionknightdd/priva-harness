@@ -30,6 +30,13 @@ const CANVAS_FRAME_STYLE = `
   * ::-webkit-scrollbar { width: 10px }
 `
 
+const HTML_COLOR_PALETTE = [
+  ["#000000", "#444444", "#666666", "#999999", "#cccccc", "#ffffff"],
+  ["#ff0000", "#ff9900", "#ffff00", "#00ff00", "#00ffff", "#0000ff"],
+  ["#f44336", "#e91e63", "#9c27b0", "#3f51b5", "#2196f3", "#4caf50"],
+  ["#ffc107", "#ff9800", "#795548", "#607d8b", "#d278c9", "#3b97e3"],
+]
+
 function grapesPluginFromCjs<Options extends PluginOptions>(
   module: unknown
 ): Plugin<Options> {
@@ -152,6 +159,9 @@ function HtmlVisualEditorSession({
       },
       colorPicker: {
         appendTo: document.body,
+        palette: HTML_COLOR_PALETTE,
+        showPalette: true,
+        showAlpha: true,
       },
       components: initialDocument.html,
       height: "100%",
