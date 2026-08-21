@@ -39,6 +39,12 @@ export function htmlDocumentRootCss(document: HtmlDocumentParts) {
   return rules.join("\n")
 }
 
+export function htmlDocumentCanvasCss(document: HtmlDocumentParts) {
+  return [document.css, htmlDocumentRootCss(document)]
+    .filter(Boolean)
+    .join("\n")
+}
+
 export function serializeEditedHtmlDocument(html: string, css: string) {
   const parsed = new DOMParser().parseFromString(
     toParsableHtmlDocument(html),

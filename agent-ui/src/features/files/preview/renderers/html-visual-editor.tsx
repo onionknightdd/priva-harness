@@ -14,17 +14,25 @@ import "grapesjs/dist/css/grapes.min.css"
 import { cn } from "@/lib/utils"
 
 import {
-  htmlDocumentRootCss,
+  htmlDocumentCanvasCss,
   readHtmlDocument,
   serializeEditedHtmlDocument,
   type HtmlDocumentParts,
 } from "../html-document"
 import { grapesjsI18n, type GrapesjsI18nConfig } from "./grapesjs-i18n"
 
-// GrapesJS paints a white iframe body before user CSS. That hides page
-// backgrounds from the loaded HTML. Keep the rest of the default frame chrome.
+const SOURCE_STYLE_ATTR = "data-priva-source-css"
+
+// GrapesJS renders the page wrapper as a DIV inside the iframe body. Page
+// CSS targeting html/body must paint the iframe body, and the wrapper should
+// inherit that paint. Keep the rest of the default frame chrome.
 const CANVAS_FRAME_STYLE = `
-  body { background-color: transparent }
+  body { background-color: transparent; margin: 0; }
+  [data-gjs-type="wrapper"] {
+    background: inherit;
+    color: inherit;
+    min-height: 100vh;
+  }
   * ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.1) }
   * ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2) }
   * ::-webkit-scrollbar { width: 10px }
@@ -36,6 +44,13 @@ const HTML_COLOR_PALETTE = [
   ["#f44336", "#e91e63", "#9c27b0", "#3f51b5", "#2196f3", "#4caf50"],
   ["#ffc107", "#ff9800", "#795548", "#607d8b", "#d278c9", "#3b97e3"],
 ]
+
+const TRANSPARENT_COLORS = new Set([
+  "",
+  "transparent",
+  "rgba(0, 0, 0, 0)",
+  "rgba(0,0,0,0)",
+])
 
 function grapesPluginFromCjs<Options extends PluginOptions>(
   module: unknown
@@ -90,43 +105,150 @@ function applyElementAttributes(
   }
 }
 
-function applyHtmlDocumentRoot(editor: Editor, document: HtmlDocumentParts) {
+function isPaintedBackground(style: CSSStyleDeclaration) {
+  const image = style.backgroundImage
+  const color = style.backgroundColor
+  return (
+    (Boolean(image) && image !== "none") ||
+    (Boolean(color) && !TRANSPARENT_COLORS.has(color))
+  )
+}
+
+function collectMirroredRootCss(rules: CSSRuleList): string {
+  const chunks: string[] = []
+
+  for (const rule of rules) {
+    if (rule instanceof CSSStyleRule) {
+      const mirrored = rule.selectorText
+        .split(",")
+        .map((selector) => selector.trim())
+        .filter(
+          (selector) =>
+            /^(?:html|body)(?:$|[\s.#[:>+~])/.test(selector) ||
+            /(?:^|[\s>+~])(?:html|body)(?:$|[\s.#[:>+~])/.test(selector)
+        )
+        .map((selector) =>
+          selector
+            .replace(
+              /(^|[\s>+~])html(?=$|[\s.#[:>+~])/g,
+              '$1[data-gjs-type="wrapper"]'
+            )
+            .replace(
+              /(^|[\s>+~])body(?=$|[\s.#[:>+~])/g,
+              '$1[data-gjs-type="wrapper"]'
+            )
+        )
+
+      if (mirrored.length > 0) {
+        chunks.push(`${mirrored.join(", ")} { ${rule.style.cssText} }`)
+      }
+      continue
+    }
+
+    if (rule instanceof CSSMediaRule) {
+      const inner = collectMirroredRootCss(rule.cssRules)
+
+      if (inner) {
+        chunks.push(`@media ${rule.conditionText} {\n${inner}\n}`)
+      }
+    }
+  }
+
+  return chunks.join("\n")
+}
+
+function mirrorRootSelectorsOntoWrapper(css: string) {
+  if (!css.trim()) {
+    return ""
+  }
+
+  try {
+    const sheet = new CSSStyleSheet()
+    sheet.replaceSync(css)
+    return collectMirroredRootCss(sheet.cssRules)
+  } catch {
+    return ""
+  }
+}
+
+function canvasCssForDocument(document: HtmlDocumentParts) {
+  const cssText = htmlDocumentCanvasCss(document)
+  return [cssText, mirrorRootSelectorsOntoWrapper(cssText)]
+    .filter(Boolean)
+    .join("\n")
+}
+
+function copyRootPaintToWrapper(canvasDocument: Document) {
+  const wrapper = canvasDocument.querySelector<HTMLElement>(
+    '[data-gjs-type="wrapper"]'
+  )
+  const view = canvasDocument.defaultView
+
+  if (!wrapper || !view) {
+    return
+  }
+
+  const painted = [canvasDocument.body, canvasDocument.documentElement]
+    .map((element) => view.getComputedStyle(element))
+    .find(isPaintedBackground)
+
+  if (!painted) {
+    return
+  }
+
+  wrapper.style.background = painted.background
+  wrapper.style.backgroundColor = painted.backgroundColor
+  wrapper.style.backgroundImage = painted.backgroundImage
+  wrapper.style.backgroundSize = painted.backgroundSize
+  wrapper.style.backgroundPosition = painted.backgroundPosition
+  wrapper.style.backgroundRepeat = painted.backgroundRepeat
+  wrapper.style.backgroundAttachment = painted.backgroundAttachment
+  wrapper.style.color = painted.color
+}
+
+function paintCanvasIframe(editor: Editor, document: HtmlDocumentParts) {
+  const canvasDocument = editor.Canvas.getDocument()
+
+  if (!canvasDocument) {
+    return
+  }
+
+  canvasDocument
+    .querySelectorAll(`style[${SOURCE_STYLE_ATTR}]`)
+    .forEach((node) => node.remove())
+
+  const cssText = canvasCssForDocument(document)
+
+  if (cssText) {
+    const style = canvasDocument.createElement("style")
+    style.setAttribute(SOURCE_STYLE_ATTR, "")
+    style.textContent = cssText
+    canvasDocument.body.append(style)
+  }
+
+  applyElementAttributes(
+    canvasDocument.documentElement,
+    document.htmlAttributes
+  )
+  applyElementAttributes(canvasDocument.body, document.bodyAttributes)
+  copyRootPaintToWrapper(canvasDocument)
+}
+
+function syncWrapperFromDocument(editor: Editor, document: HtmlDocumentParts) {
   const wrapper = editor.getWrapper()
 
-  if (wrapper) {
-    const { class: bodyClass, ...bodyAttributes } = document.bodyAttributes
-
-    if (Object.keys(bodyAttributes).length > 0) {
-      wrapper.addAttributes(bodyAttributes)
-    }
-
-    if (bodyClass) {
-      wrapper.addClass(bodyClass)
-    }
+  if (!wrapper) {
+    return
   }
 
-  if (document.css) {
-    editor.Css.addRules(document.css)
+  const { class: bodyClass, ...bodyAttributes } = document.bodyAttributes
+
+  if (Object.keys(bodyAttributes).length > 0) {
+    wrapper.addAttributes(bodyAttributes)
   }
 
-  const rootCss = htmlDocumentRootCss(document)
-
-  if (rootCss) {
-    editor.Css.addRules(rootCss)
-  }
-
-  const canvasDocument = editor.Canvas.getDocument()
-  const canvasBody = editor.Canvas.getBody()
-
-  if (canvasDocument) {
-    applyElementAttributes(
-      canvasDocument.documentElement,
-      document.htmlAttributes
-    )
-  }
-
-  if (canvasBody) {
-    applyElementAttributes(canvasBody, document.bodyAttributes)
+  if (bodyClass) {
+    wrapper.addClass(bodyClass)
   }
 }
 
@@ -157,6 +279,7 @@ function HtmlVisualEditorSession({
       canvas: {
         frameStyle: CANVAS_FRAME_STYLE,
       },
+      canvasCss: canvasCssForDocument(initialDocument),
       colorPicker: {
         appendTo: document.body,
         palette: HTML_COLOR_PALETTE,
@@ -180,9 +303,19 @@ function HtmlVisualEditorSession({
     [initialDocument, locale]
   )
 
+  const handleEditor = React.useCallback(
+    (editor: Editor) => {
+      editor.on("canvas:frame:load:body", () => {
+        paintCanvasIframe(editor, initialDocument)
+      })
+    },
+    [initialDocument]
+  )
+
   const handleReady = React.useCallback(
     (editor: Editor) => {
-      applyHtmlDocumentRoot(editor, initialDocument)
+      syncWrapperFromDocument(editor, initialDocument)
+      paintCanvasIframe(editor, initialDocument)
       editor.UndoManager.clear()
       editor.clearDirtyCount()
       acceptUpdatesRef.current = true
@@ -214,6 +347,7 @@ function HtmlVisualEditorSession({
         grapesjs={grapesjs}
         options={options}
         plugins={[htmlBlocksPlugin]}
+        onEditor={handleEditor}
         onReady={handleReady}
         onUpdate={handleUpdate}
         aria-label={t("filePreview.htmlEditorTitle", { fileName })}
