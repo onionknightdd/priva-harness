@@ -63,6 +63,7 @@ export function FilePreviewToolbar({
   onModeChange,
   renderAvailable,
   sourceAvailable,
+  editAvailable,
 }: {
   activeFile: PreviewFile | null
   expanded: boolean
@@ -75,6 +76,7 @@ export function FilePreviewToolbar({
   onModeChange: (mode: FilePreviewMode) => void
   renderAvailable: boolean
   sourceAvailable: boolean
+  editAvailable: boolean
 }) {
   const { t } = useTranslation()
   const feedbackTimerRef = React.useRef<number | null>(null)
@@ -318,6 +320,19 @@ export function FilePreviewToolbar({
               className="px-2 text-xs font-normal"
             >
               {t("filePreview.preview")}
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="edit"
+              disabled={!editAvailable}
+              aria-label={t("filePreview.edit")}
+              title={
+                editAvailable
+                  ? t("filePreview.edit")
+                  : t("filePreview.editUnavailable")
+              }
+              className="px-2 text-xs font-normal"
+            >
+              {t("filePreview.edit")}
             </ToggleGroupItem>
           </ToggleGroup>
 

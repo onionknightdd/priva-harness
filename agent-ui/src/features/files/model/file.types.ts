@@ -1,4 +1,4 @@
-export type FilePreviewMode = "source" | "render"
+export type FilePreviewMode = "source" | "render" | "edit"
 
 export type FileRenderKind =
   | "document"
@@ -28,4 +28,13 @@ export function canShowFileSource(file: PreviewFile | null) {
 
 export function canRenderFile(file: PreviewFile | null) {
   return Boolean(file?.renderKind)
+}
+
+export function canEditHtmlFile(file: PreviewFile | null) {
+  return (
+    file?.renderKind === "html" &&
+    typeof file.content === "string" &&
+    file.status !== "loading" &&
+    file.status !== "error"
+  )
 }
