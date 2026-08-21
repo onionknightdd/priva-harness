@@ -48,6 +48,7 @@ export function useFileBrowser() {
   const directoryRequestsRef = React.useRef(
     new Map<string, Promise<FileSystemDirectory>>()
   )
+  const directoryGenerationRef = React.useRef(new Map<string, number>())
   const previewRequestsRef = React.useRef(new Map<string, Promise<void>>())
 
   const updateModel = React.useCallback(
@@ -62,15 +63,28 @@ export function useFileBrowser() {
   )
 
   const loadDirectory = React.useCallback(
-    (requestedPath?: string, attachedPath?: string) => {
+    (
+      requestedPath?: string,
+      attachedPath?: string,
+      options: { force?: boolean } = {}
+    ) => {
       const requestPath = requestedPath ?? INITIAL_DIRECTORY_REQUEST
       const modelPath = attachedPath ?? requestedPath ?? ""
       const requestKey = `${requestPath}\u0000${modelPath}`
-      const pendingRequest = directoryRequestsRef.current.get(requestKey)
 
-      if (pendingRequest) {
-        return pendingRequest
+      if (options.force) {
+        directoryGenerationRef.current.set(
+          requestKey,
+          (directoryGenerationRef.current.get(requestKey) ?? 0) + 1
+        )
+      } else {
+        const pendingRequest = directoryRequestsRef.current.get(requestKey)
+        if (pendingRequest) {
+          return pendingRequest
+        }
       }
+
+      const generation = directoryGenerationRef.current.get(requestKey) ?? 0
 
       setLoadingDirectories((currentPaths) => {
         const nextPaths = new Set(currentPaths)
@@ -80,6 +94,13 @@ export function useFileBrowser() {
 
       const request = listDirectory(requestedPath)
         .then((directory) => {
+          if (
+            (directoryGenerationRef.current.get(requestKey) ?? 0) !==
+            generation
+          ) {
+            return directory
+          }
+
           updateModel((currentModel) =>
             mergeDirectoryListing(
               currentModel,
@@ -90,6 +111,10 @@ export function useFileBrowser() {
           return directory
         })
         .finally(() => {
+          if (directoryRequestsRef.current.get(requestKey) !== request) {
+            return
+          }
+
           directoryRequestsRef.current.delete(requestKey)
           setLoadingDirectories((currentPaths) => {
             const nextPaths = new Set(currentPaths)
@@ -245,7 +270,7 @@ export function useFileBrowser() {
 
   const refreshDirectory = React.useCallback(
     async (path: string) => {
-      await loadDirectory(path, path)
+      await loadDirectory(path, path, { force: true })
     },
     [loadDirectory]
   )
@@ -256,7 +281,7 @@ export function useFileBrowser() {
     )
 
     await Promise.all(
-      loadedPaths.map((path) => loadDirectory(path, path))
+      loadedPaths.map((path) => loadDirectory(path, path, { force: true }))
     )
   }, [loadDirectory])
 

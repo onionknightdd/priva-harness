@@ -188,22 +188,16 @@ export function FileBrowserPage() {
       originalName: file.name,
     })
 
-    await Promise.all([
-      browser.refreshDirectory(directory).catch(() => undefined),
-      // Keep the current editor mounted; the saved copy opens as a background tab.
-      browser.openFile(
-        {
-          path: uploaded.path,
-          name: uploaded.name,
-          type: "file",
-          size: uploaded.size,
-          modifiedAt: Date.now(),
-          permissions: null,
-          parentPath: directory,
-        },
-        false
-      ),
-    ])
+    await browser.refreshDirectory(directory).catch(() => undefined)
+    await browser.openFile({
+      path: uploaded.path,
+      name: uploaded.name,
+      type: "file",
+      size: uploaded.size,
+      modifiedAt: Date.now(),
+      permissions: null,
+      parentPath: directory,
+    })
 
     return { fileName: uploaded.name }
   }
