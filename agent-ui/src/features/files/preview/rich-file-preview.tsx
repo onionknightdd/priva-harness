@@ -243,6 +243,7 @@ export function RichFilePreview({
   onDownload,
   onExpandedChange,
   onModeChange,
+  onSaveHtml,
   onSelectionChange,
 }: {
   activeFileId: string | null
@@ -256,6 +257,7 @@ export function RichFilePreview({
   onDownload?: (file: PreviewFile) => void
   onExpandedChange?: (expanded: boolean) => void
   onModeChange?: (mode: FilePreviewMode) => void
+  onSaveHtml?: (file: PreviewFile) => Promise<{ fileName: string }>
   onSelectionChange?: (selection: PreviewSelection | null) => void
 }) {
   const { t } = useTranslation()
@@ -362,6 +364,7 @@ export function RichFilePreview({
             onDownload={handleDownload}
             onExpandedChange={onExpandedChange}
             onModeChange={handleModeChange}
+            onSave={onSaveHtml}
             renderAvailable={renderAvailable}
             sourceAvailable={sourceAvailable}
           />
