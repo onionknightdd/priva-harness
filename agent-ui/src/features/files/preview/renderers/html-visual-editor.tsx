@@ -1,6 +1,11 @@
 import * as React from "react"
 import GjsEditor from "@grapesjs/react"
-import grapesjs, { type Editor, type EditorConfig, type Plugin } from "grapesjs"
+import grapesjs, {
+  type Editor,
+  type EditorConfig,
+  type Plugin,
+  type PluginOptions,
+} from "grapesjs"
 import blocksBasicModule from "grapesjs-blocks-basic"
 import { useTranslation } from "react-i18next"
 
@@ -14,7 +19,9 @@ import {
 } from "../html-document"
 import { grapesjsI18n, type GrapesjsI18nConfig } from "./grapesjs-i18n"
 
-function grapesPluginFromCjs<Options>(module: unknown): Plugin<Options> {
+function grapesPluginFromCjs<Options extends PluginOptions>(
+  module: unknown
+): Plugin<Options> {
   let current = module
 
   // grapesjs-blocks-basic ships a UMD CJS build whose `module.exports` is
