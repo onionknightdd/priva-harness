@@ -152,13 +152,13 @@
   --gjs-primary-color: var(--card);
   --gjs-secondary-color: var(--foreground);
   --gjs-tertiary-color: var(--accent-foreground);
-  --gjs-quaternary-color: var(--primary);
-  --gjs-font-color: var(--muted-foreground);
+  --gjs-quaternary-color: var(--ring);
+  --gjs-font-color: var(--foreground);
   --gjs-font-color-active: var(--foreground);
-  --gjs-main-dark-color: color-mix(in oklch, var(--foreground) 12%, transparent);
-  --gjs-secondary-dark-color: color-mix(in oklch, var(--foreground) 8%, transparent);
-  --gjs-main-light-color: color-mix(in oklch, var(--foreground) 8%, transparent);
-  --gjs-secondary-light-color: color-mix(in oklch, var(--foreground) 70%, transparent);
+  --gjs-main-dark-color: var(--muted);
+  --gjs-secondary-dark-color: var(--border);
+  --gjs-main-light-color: var(--border);
+  --gjs-secondary-light-color: var(--muted-foreground);
   --gjs-light-border: var(--border);
   --gjs-arrow-color: var(--muted-foreground);
   --gjs-main-font: var(--font-sans);
@@ -176,6 +176,37 @@
 
 .file-html-visual-editor .gjs-cv-canvas {
   background-color: var(--background);
+}
+
+/* Tailwind preflight sets `svg { display: block }` with no size. GrapesJS basic
+   blocks only ship viewBox SVGs, so the tiles collapse unless we size them. */
+.file-html-visual-editor .gjs-block {
+  background-color: var(--muted);
+  color: var(--foreground);
+}
+
+.file-html-visual-editor .gjs-block__media {
+  display: flex;
+  min-height: 3.25rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.file-html-visual-editor .gjs-block__media svg {
+  display: block;
+  width: 3.25rem;
+  height: 3.25rem;
+  flex-shrink: 0;
+  fill: currentColor;
+}
+
+.file-html-visual-editor .gjs-field {
+  min-height: 1.75rem;
+}
+
+.file-html-visual-editor .gjs-field-colorp,
+.file-html-visual-editor .gjs-field-color-picker {
+  min-height: 1.5rem;
 }
 
 @container file-preview (max-width: 720px) {
