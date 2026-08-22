@@ -256,19 +256,31 @@ const PROVIDER_RULES: readonly ProviderRule[] = [
   },
 ]
 
+function resolveModelProvider(modelId: string) {
+  const segments = modelId
+    .split("/")
+    .map((segment) => segment.trim().toLocaleLowerCase())
+    .filter(Boolean)
+  const firstSegment = segments[0] ?? modelId.trim().toLocaleLowerCase()
+  const lastSegment = segments.at(-1) ?? firstSegment
+  const provider =
+    findProviderByModelName(lastSegment) ??
+    findProviderByFirstSegment(firstSegment)
+
+  return { firstSegment, provider }
+}
+
+export function getModelProviderId(
+  modelId: string
+): KnownModelProviderId | null {
+  return resolveModelProvider(modelId).provider?.id ?? null
+}
+
 export function groupModelIds(modelIds: readonly string[]): ModelIdGroup[] {
   const groups = new Map<string, ModelIdGroup>()
 
   for (const modelId of modelIds) {
-    const segments = modelId
-      .split("/")
-      .map((segment) => segment.trim().toLocaleLowerCase())
-      .filter(Boolean)
-    const firstSegment = segments[0] ?? modelId.trim().toLocaleLowerCase()
-    const lastSegment = segments.at(-1) ?? firstSegment
-    const provider =
-      findProviderByModelName(lastSegment) ??
-      findProviderByFirstSegment(firstSegment)
+    const { firstSegment, provider } = resolveModelProvider(modelId)
     const value = provider?.id ?? `unknown:${firstSegment}`
     const existing = groups.get(value)
 

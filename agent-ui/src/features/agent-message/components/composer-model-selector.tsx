@@ -30,7 +30,11 @@ import {
   type ModelProfileCollection,
   type ModelProfileSummary,
 } from "@/features/model-settings/model-profile-api"
-import { groupModelIds, type ModelIdGroup } from "@/features/model-settings/model-provider"
+import {
+  getModelProviderId,
+  groupModelIds,
+  type ModelIdGroup,
+} from "@/features/model-settings/model-provider"
 import { ProviderIcon } from "@/features/model-settings/provider-icon"
 
 const COMPOSER_MENU_WIDTH_CLASS = "w-56 min-w-56 max-w-56 text-xs"
@@ -178,10 +182,11 @@ function ProfileModelSubmenu({
   const [modelMarqueeId, setModelMarqueeId] = React.useState<string | null>(
     null
   )
+  const isSelected = selectedProfileId === profile.id
   const models = modelsEntry?.models ?? knownProfileModelIds(profile)
   const status = modelsEntry?.status ?? "idle"
   const visibleModels =
-    selectedProfileId === profile.id &&
+    isSelected &&
     selectedModelId &&
     !models.includes(selectedModelId)
       ? [selectedModelId, ...models]
@@ -260,15 +265,19 @@ function ProfileModelSubmenu({
         closeDelay={120}
         disabled={disabled}
         label={profile.label}
+        aria-current={isSelected ? "true" : undefined}
         openOnHover
         onPointerEnter={() => setProfileMarquee(true)}
         onPointerLeave={() => setProfileMarquee(false)}
         onFocus={() => setProfileMarquee(true)}
         onBlur={() => setProfileMarquee(false)}
       >
-        <HoverMarquee active={profileMarquee} className="flex-1">
+        <HoverMarquee active={profileMarquee} className="min-w-0 flex-1">
           {profile.label}
         </HoverMarquee>
+        {isSelected ? (
+          <CheckIcon className="size-3.5 shrink-0" aria-hidden="true" />
+        ) : null}
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent
         align="start"
@@ -403,16 +412,24 @@ function EffortSubmenu({
           COMPOSER_TEXT_CLASS
         )}
         closeDelay={120}
-        label={t("agentMessage.effortMenuLabel")}
+        label={t("agentMessage.effortAria", { level: effort })}
         openOnHover
         onPointerEnter={() => setEffortMarquee(true)}
         onPointerLeave={() => setEffortMarquee(false)}
         onFocus={() => setEffortMarquee(true)}
         onBlur={() => setEffortMarquee(false)}
       >
-        <HoverMarquee active={effortMarquee} className="flex-1">
+        <HoverMarquee active={effortMarquee} className="min-w-0 flex-1">
           {t("agentMessage.effortMenuLabel")}
         </HoverMarquee>
+        <span
+          className={cn(
+            "shrink-0 text-muted-foreground",
+            COMPOSER_TEXT_CLASS
+          )}
+        >
+          {effort}
+        </span>
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent
         align="start"
@@ -690,63 +707,21 @@ export function ComposerModelSelector({
             exit={shouldReduceMotion ? undefined : { opacity: 0, y: -3 }}
             transition={{ duration: shouldReduceMotion ? 0 : 0.16 }}
           >
-            {selection ? (
+            {selection?.modelId ? (
               <>
+                <ProviderIcon
+                  className="size-3.5"
+                  providerId={getModelProviderId(selection.modelId)}
+                />
                 <HoverMarquee
                   active={triggerMarquee}
-                  className={cn("max-w-16 shrink", COMPOSER_TEXT_CLASS)}
-                >
-                  {selection.profileLabel}
-                </HoverMarquee>
-                {selection.modelId ? (
-                  <>
-                    <span
-                      aria-hidden="true"
-                      className="shrink-0 text-muted-foreground"
-                    >
-                      ·
-                    </span>
-                    <span className="flex min-w-0 flex-1">
-                      <HoverMarquee
-                        active={triggerMarquee}
-                        className={cn(
-                          "w-[calc(100%-10px)]",
-                          COMPOSER_TEXT_CLASS
-                        )}
-                      >
-                        {selection.modelId}
-                      </HoverMarquee>
-                    </span>
-                  </>
-                ) : null}
-                <span
                   className={cn(
-                    "relative inline-grid shrink-0 justify-items-start overflow-hidden text-muted-foreground",
+                    "min-w-0 flex-1",
                     COMPOSER_TEXT_CLASS
                   )}
                 >
-                  <AnimatePresence mode="wait" initial={false}>
-                    <motion.span
-                      key={effort}
-                      className="col-start-1 row-start-1"
-                      initial={
-                        shouldReduceMotion ? false : { opacity: 0, y: 4 }
-                      }
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={
-                        shouldReduceMotion
-                          ? undefined
-                          : { opacity: 0, y: -4 }
-                      }
-                      transition={{
-                        duration: shouldReduceMotion ? 0 : 0.16,
-                        ease: [0.22, 1, 0.36, 1],
-                      }}
-                    >
-                      {effort}
-                    </motion.span>
-                  </AnimatePresence>
-                </span>
+                  {selection.modelId}
+                </HoverMarquee>
               </>
             ) : (
               <span className={cn("truncate text-muted-foreground", COMPOSER_TEXT_CLASS)}>
