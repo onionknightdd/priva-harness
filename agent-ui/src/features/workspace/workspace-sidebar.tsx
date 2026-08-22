@@ -12,7 +12,15 @@ import { WorkspaceHome } from "./workspace-home"
 import { WorkspaceToggle } from "./workspace-toggle"
 import { WorkspaceFileView } from "./views/workspace-file-view"
 
-export function WorkspaceSidebar() {
+export function WorkspaceSidebar({
+  className,
+  resizable = true,
+  style,
+}: {
+  className?: string
+  resizable?: boolean
+  style?: React.CSSProperties
+}) {
   const { t } = useTranslation()
   const [activeView, setActiveView] = React.useState<"files" | "home">("home")
 
@@ -22,7 +30,9 @@ export function WorkspaceSidebar() {
       side="right"
       role="complementary"
       aria-label={t("workspace.label")}
-      resizable
+      className={className}
+      style={style}
+      resizable={resizable}
       resizeLabel={t("workspace.resize")}
       mobileTitle={t("workspace.label")}
       mobileDescription={t("workspace.description")}

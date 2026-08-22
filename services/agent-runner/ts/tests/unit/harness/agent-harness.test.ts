@@ -21,7 +21,7 @@ describe('AgentHarness', () => {
     const harness = new AgentHarness({
       providers: {
         claude: provider,
-        pi: new FakeAgentProvider('pi', []),
+        bambuddy: new FakeAgentProvider('bambuddy', []),
       },
       cwd: '/tmp',
     })

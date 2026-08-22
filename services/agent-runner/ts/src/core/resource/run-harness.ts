@@ -1,3 +1,5 @@
+import type { ProviderId } from '../contract/agent-provider.js'
+
 export const RUN_HARNESS_IDS = ['claude', 'bambuddy'] as const
 
 export type RunHarnessId = (typeof RUN_HARNESS_IDS)[number]
@@ -15,6 +17,6 @@ export function rewriteProviderBaseUrl(baseUrl: string, harness: RunHarnessId): 
   return hasV1 ? normalized : `${normalized}/v1`
 }
 
-export function providerIdForHarness(harness: RunHarnessId): 'claude' | 'pi' {
-  return harness === 'claude' ? 'claude' : 'pi'
+export function providerIdForHarness(harness: RunHarnessId): ProviderId {
+  return harness
 }

@@ -70,7 +70,7 @@ export function AppSidebar({
           onNewAgentMessage={onNewAgentMessage}
           onViewChange={onViewChange}
         />
-        <NavProjects projects={sidebarData.projects} />
+        <NavProjects />
       </SidebarContent>
       <SidebarFooter className="relative z-20 bg-sidebar">
         <div

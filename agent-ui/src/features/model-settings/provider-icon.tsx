@@ -28,8 +28,8 @@ import siliconflowIcon from "@lobehub/icons-static-svg/icons/siliconcloud-color.
 import tencentIcon from "@lobehub/icons-static-svg/icons/tencent-brand-color.svg"
 import togetherIcon from "@lobehub/icons-static-svg/icons/together-brand-color.svg"
 import xaiIcon from "@lobehub/icons-static-svg/icons/xai.svg"
+import zaiIcon from "@lobehub/icons-static-svg/icons/zai.svg"
 import zerooneIcon from "@lobehub/icons-static-svg/icons/zeroone-color.svg"
-import zhipuIcon from "@lobehub/icons-static-svg/icons/zhipu-color.svg"
 
 import { cn } from "@/lib/utils"
 
@@ -52,7 +52,7 @@ const providerIcons: Partial<
   nvidia: { src: nvidiaIcon },
   minimax: { src: minimaxIcon },
   kimi: { src: kimiIcon, monochrome: true },
-  "z-ai": { src: zhipuIcon },
+  "z-ai": { src: zaiIcon, monochrome: true },
   baidu: { src: baiduIcon },
   bytedance: { src: bytedanceIcon },
   tencent: { src: tencentIcon },

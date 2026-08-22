@@ -126,7 +126,7 @@ API：
 - 队列保持当前 32 条和 8 MiB 双重上限；取消后该输入不会送达模型。
 - `provider` 不支持对应行为时返回 `UnsupportedCapabilityError`，不得静默模拟。
 
-### MVP 5：profile、持久化 MCP 与双 `adapter`
+### MVP 5：profile、持久化 MCP 与双 provider 投影
 
 API：
 
@@ -151,7 +151,7 @@ API：
   `opus`、`sonnet`、`haiku`、`vision` 等特定 `harness` 的固定模型档位。需要模型角色
   映射的 `harness` 使用自己的通用 `modelBindings`，并由对应 `provider` 边界解释。
 - 建立规范化 `HarnessConfigStore`，作为持久化 MCP 配置的唯一事实来源。
-- 实现 `ConfigDistributor`、所有权清单、Claude MCP `adapter` 和 Pi MCP `adapter`。
+- 实现 `ConfigDistributor`；Claude 与 Pi 的 MCP 投影放在 `provider/<id>/config-adapter`。
 - 创建、更新和删除 MCP 后，对选定 `provider` 执行幂等 reconcile。
 - 每次运行只解析 MCP 选择；不得把单次运行选择写回持久化配置。
 
@@ -274,7 +274,7 @@ API：
 
 范围：
 
-- 将这些资源纳入规范化 `HarnessConfig`，再由 Claude 与 Pi `adapter` 投影。
+- 将这些资源纳入规范化 `HarnessConfig`，再由各 `provider/<id>/config-adapter` 投影。
 - `subagents/{name}/test/stream` 也必须调用同一个 `harness`，不能建立旁路运行实现。
 - 按 provider profile → MCP → runtime settings → skills → hooks →
   commands/memory/subagents 的顺序迁移和验收。
@@ -317,7 +317,7 @@ API：
 
 ## 1. 目标
 
-将当前 Claude Runner 已实现的产品级运行时能力抽取到与 `provider` 无关的 TypeScript `core` 和 `harness` 中，再将各个 Agent SDK 放到 `provider` 下。Pi 必须能够实现相同的契约，而无须导入或模拟 Claude 特有的类型、路径、会话记录或私有 API。`adapter` 负责把一份统一的 `harness` 配置投影为各个 `provider` 的原生配置格式和目录。HTTP、SSE 和 WebSocket 仍位于独立的 `transport` 边界。
+将当前 Claude Runner 已实现的产品级运行时能力抽取到与 `provider` 无关的 TypeScript `core` 和 `harness` 中，再将各个 Agent SDK 放到 `provider` 下。Pi 必须能够实现相同的契约，而无须导入或模拟 Claude 特有的类型、路径、会话记录或私有 API。每个 `provider/<id>/config-adapter` 把一份统一的 `HarnessConfig` 投影为该 runtime 的原生配置格式和目录。HTTP、SSE 和 WebSocket 仍位于独立的 `transport` 边界。
 
 迁移期间，TypeScript 实现与当前 Python 服务并存。在兼容性测试证明替代实现可行之前，现有 Python 文件仍作为生产实现。
 
@@ -363,6 +363,7 @@ API：
 - 中止正在执行的输入轮次；
 - 将 SDK 消息映射为规范化事件；
 - 将权限决策转换为 SDK 特有的结果；
+- 将规范化 `HarnessConfig` 投影为该 runtime 的持久化配置（MCP、skills 等）；
 - 列出、读取、删除、派生及回退 `provider` 会话；
 - 从 `provider` 错误中恢复，并判断会话是否可以恢复；
 - 根据已经解析的运行规格，编译临时且仅供单次运行使用的 SDK 选项。
@@ -381,9 +382,14 @@ API：
 - 检查点回退、孤立工具调用修复、合成记录清理，以及 Claude 特有的重试分类；
 - 工作流/子 Agent 会话记录重建和投递旁路记录。
 
-### 3.4 跨 `provider` 配置 `adapter`
+### 3.4 跨 `provider` 配置投影
 
-`adapter` 负责持久化资源的投影和分发。它接收一份规范化的 `HarnessConfig`，并对所有选中的目标执行协调：
+每个 `provider/<id>/config-adapter` 实现 `ProviderConfigAdapter`，把一份规范化
+`HarnessConfig` 落到该 runtime 的原生文件。`ConfigDistributor` 只循环已注册实例，
+不出现 provider 名字的分支。加一个 harness 时，落盘代码只新增 `provider/<id>/`，
+公共层只多一次注册。
+
+投影覆盖：
 
 - 持久化 MCP 服务定义；
 - 技能；
@@ -393,21 +399,20 @@ API：
 - 用户/项目记忆；
 - 持久化工具策略和 `provider` 支持的资源设置。
 
-Claude `adapter` 将这些资源落地为 Claude 原生文件，全局写入
-`$RUNTIME_HOME/harness/.claude`，项目写入 `<cwd>/.claude`。Pi `adapter` 将同一批规范化
-资源落地到产品化目录：全局 `$RUNTIME_HOME/harness/.bambuddy`，项目 `<cwd>/.bambuddy`。
-映射过程会识别能力差异：不支持的语义必须上报，不得静默丢弃。
+Claude 投影写入 `$RUNTIME_HOME/harness/.claude` 与 `<cwd>/.claude`。Pi 投影写入
+`$RUNTIME_HOME/harness/.bambuddy` 与 `<cwd>/.bambuddy`。不支持的语义必须写入
+`DistributionReport`，不得静默丢弃。
 
 ```text
 HarnessConfigStore（事实来源）
              │
              ▼
-     ConfigDistributor
-       ├── ClaudeConfigAdapter ──→ 受管理的 Claude 配置投影
-       └── PiConfigAdapter      ──→ 受管理的 Pi 配置投影
+     ConfigDistributor（只循环已注册实例）
+       ├── provider/claude/config-adapter ──→ .claude
+       └── provider/pi/config-adapter     ──→ .bambuddy
 ```
 
-会话目标、模型、凭证、权限模式、附件、选中的 MCP 子集，以及限定于单次运行的生成工具等每次运行值，不属于这个持久化 `adapter`。它们仍属于 `harness` 运行规格，由各个运行时 `provider` 负责编译。
+会话目标、模型、凭证、权限模式、附件、选中的 MCP 子集，以及限定于单次运行的生成工具等每次运行值，不属于持久化投影。它们仍属于 `harness` 运行规格，由各个运行时 `provider` 负责编译。
 
 ### 3.5 外围功能
 
@@ -479,6 +484,7 @@ services/agent-runner/
     │   │   │   └── input-builder.ts
     │   │   ├── permission/permission-broker.ts
     │   │   ├── config/
+    │   │   │   ├── config-distributor.ts
     │   │   │   ├── harness-config-service.ts
     │   │   │   └── model-profile-service.ts
     │   │   ├── session/
@@ -487,7 +493,7 @@ services/agent-runner/
     │   │   └── concurrency/
     │   │       ├── bounded-async-queue.ts
     │   │       └── replay-buffer.ts
-    │   ├── provider/                     # 仅包含 Agent SDK 集成
+    │   ├── provider/                     # SDK 运行时 + 该 runtime 的配置投影
     │   │   ├── claude/
     │   │   │   ├── index.ts
     │   │   │   ├── claude-provider.ts
@@ -496,6 +502,14 @@ services/agent-runner/
     │   │   │   ├── claude-options-compiler.ts
     │   │   │   ├── claude-permission-mapper.ts
     │   │   │   ├── private-api-bridge.ts
+    │   │   │   ├── config-adapter/
+    │   │   │   │   ├── claude-config-adapter.ts
+    │   │   │   │   ├── mcp.ts
+    │   │   │   │   ├── skills.ts
+    │   │   │   │   ├── commands.ts
+    │   │   │   │   ├── subagents.ts
+    │   │   │   │   ├── hooks.ts
+    │   │   │   │   └── memory.ts
     │   │   │   ├── runtime/
     │   │   │   │   ├── runtime-pool.ts
     │   │   │   │   ├── session-runtime.ts
@@ -509,38 +523,20 @@ services/agent-runner/
     │   │   │   │   ├── retry-classifier.ts
     │   │   │   │   └── delivery-log.ts
     │   │   │   └── compatibility/private-api-version.ts
-    │   │   └── pi/                       # 完成契约验证后
+    │   │   └── pi/
     │   │       ├── pi-provider.ts
     │   │       ├── pi-runtime.ts
     │   │       ├── pi-event-mapper.ts
     │   │       ├── pi-permission-mapper.ts
-    │   │       └── pi-session-store.ts
-    │   ├── adapter/                      # HarnessConfig -> provider 投影
-    │   │   ├── config-distributor.ts
-    │   │   ├── projection-planner.ts
-    │   │   ├── reconcile/
-    │   │   │   ├── projection-manifest.ts
-    │   │   │   ├── drift-detector.ts
-    │   │   │   └── atomic-writer.ts
-    │   │   ├── claude/
-    │   │   │   ├── claude-config-adapter.ts
-    │   │   │   ├── paths.ts
-    │   │   │   ├── mcp.ts
-    │   │   │   ├── skills.ts
-    │   │   │   ├── commands.ts
-    │   │   │   ├── subagents.ts
-    │   │   │   ├── hooks.ts
-    │   │   │   ├── memory.ts
-    │   │   │   └── legacy-claude-reader.ts
-    │   │   └── pi/
-    │   │       ├── pi-config-adapter.ts
-    │   │       ├── paths.ts
-    │   │       ├── mcp.ts
-    │   │       ├── skills.ts
-    │   │       ├── commands.ts
-    │   │       ├── agents.ts
-    │   │       ├── hooks.ts
-    │   │       └── memory.ts
+    │   │       ├── pi-session-store.ts
+    │   │       └── config-adapter/
+    │   │           ├── pi-config-adapter.ts
+    │   │           ├── mcp.ts
+    │   │           ├── skills.ts
+    │   │           ├── commands.ts
+    │   │           ├── agents.ts
+    │   │           ├── hooks.ts
+    │   │           └── memory.ts
     │   ├── transport/                    # 外部请求/事件协议
     │   │   ├── http/
     │   │   │   ├── server.ts
@@ -580,28 +576,25 @@ services/agent-runner/
 ```text
 transport ──→ harness ──→ core
 provider ─────────────────→ core
-adapter ──────────────────→ core
 infrastructure ───────────→ core
 runtime-config.ts ─────────→ main.ts
-main.ts ──→ harness + provider + adapter + transport + infrastructure
+main.ts ──→ harness + provider + transport + infrastructure
 ```
 
-运行时，`main.ts` 会将一个 `AgentProvider`、一组
-`ProviderConfigAdapter` 以及基础设施端口注入 `harness`。这属于运行时组装，
-而不是源码对具体实现的依赖。
+运行时，`main.ts` 会将 `AgentProvider` 与 `ProviderConfigAdapter` 实例注入
+`harness`。这属于运行时组装，而不是源码对具体实现的依赖。加一个 harness 时，
+只新增 `provider/<id>/` 并在 `main.ts` 注册，不改 `ConfigDistributor` 内部。
 
 - `core` 不引入任何框架、持久化库、传输层模式定义或 SDK。
-- `harness` 只依赖 `core`；具体的 `provider` 和 `adapter` 通过 `core` 契约传入。
-- `provider` 只包含 Agent SDK 集成。它不能引入 `harness` 或 `adapter`。
-- `adapter` 将规范化的 `harness` 资源映射为 `provider` 原生的持久化配置。它不执行
-  Agent，也不暴露 HTTP 接口。
+- `harness` 只依赖 `core`；具体的 `provider` 通过 `core` 契约传入。
+- `provider` 包含 Agent SDK 集成，以及该 runtime 的配置投影（`provider/<id>/config-adapter`）。
+  它不能引入 `harness` 或 `transport`。Claude 和 Pi 不能相互引入。
 - `transport` 将 HTTP、SSE、WebSocket 和调度器输入映射为 `harness` 调用。
 - `infrastructure` 实现存储、文件系统、data-spine、日志、指标和活动记录端口。
 - `runtime-config.ts` 固定并导出启动层共享的运行目录和配置文件路径；配置文件内容解析后
   也从同一对象进入组装根，不允许各模块自行推导路径。
-- `main.ts` 是组装根，也是唯一允许同时引入 `harness`、`provider`、`adapter`、
+- `main.ts` 是组装根，也是唯一允许同时引入 `harness`、`provider`、
   `transport` 和 `infrastructure` 具体实现的文件。
-- Claude 和 Pi 不能相互引入。
 
 使用 ESLint boundaries 或 dependency-cruiser 强制执行这些规则。
 
@@ -798,8 +791,8 @@ Claude 原始消息类型或 Pi 事件名称进行分支判断。
 | `mcp/config_manager.py` | 规范化 MCP 持久化，以及旧版 Claude 配置导入 |
 | `commands.py`、`skills.py`、`subagents.py`、`memory.py` | 规范化资源模型，以及 Claude 配置 `adapter` |
 | `hooks/config_manager.py` | 规范化钩子配置，以及 Claude 配置 `adapter` |
-| 持久化的 `.claude` 路径和格式 | `adapter/claude` 投影 |
-| 持久化的 Pi 路径和格式 | `adapter/pi` 投影到 `harness/.bambuddy` 与 `<cwd>/.bambuddy` |
+| 持久化的 `.claude` 路径和格式 | `provider/claude/config-adapter` 投影 |
+| 持久化的 Pi 路径和格式 | `provider/pi/config-adapter` 投影到 `harness/.bambuddy` 与 `<cwd>/.bambuddy` |
 | 运行作用域内生成的 MCP/工具 SDK 对象 | 运行时 `provider` 实现 |
 | `claude_sdk/client.py` | 删除；由 `core` 契约和 Claude `provider` 取代 |
 
@@ -840,7 +833,7 @@ Claude 原始消息类型或 Pi 事件名称进行分支判断。
 1. TypeScript 严格模式检查通过，公共契约中不含 `any`。
 2. `core` 和 `harness` 不包含 SDK 导入，也不包含 `provider` 文件系统名称。
 3. Claude SDK 导入只能存在于 `provider/claude` 下。
-4. `transport` 与 `adapter` 相互独立；配置 `adapter` 不暴露 HTTP/SSE/WS 关注点，运行时 `provider` 不写入持久化资源配置。
+4. `transport` 与配置投影相互独立；`provider/<id>/config-adapter` 不暴露 HTTP/SSE/WS 关注点，运行时 `provider` 不写入持久化资源配置。
 5. 同一份规范化持久 MCP 测试夹具能生成有效的 Claude 和 Pi 投影，并且第二次协调不产生任何变更。
 6. 删除该 MCP 时，只删除投影所有权清单所拥有的文件/条目；未托管的 `provider` 配置保持不变。
 7. 不支持的字段和 `provider` 的部分失败在分发报告中清晰可见。

@@ -14,6 +14,7 @@ import {
   BAMBUDDY_PI_PROVIDER_ID,
   buildBambuddyModelsConfig,
 } from './pi-models-config.js'
+import { piSessionBucketDir } from './pi-paths.js'
 import type { PiSessionFactory } from './pi-provider.js'
 import type { PiAgentSession } from './pi-runtime.js'
 import type { PiSessionEvent } from './pi-event-mapper.js'
@@ -33,6 +34,9 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
       { mode: 0o600 },
     )
 
+    const sessionDir = piSessionBucketDir(this.agentDir, spec.cwd)
+    await mkdir(sessionDir, { recursive: true, mode: 0o700 })
+
     try {
       const modelRuntime = await ModelRuntime.create({ authPath, modelsPath })
       await modelRuntime.setRuntimeApiKey(BAMBUDDY_PI_PROVIDER_ID, spec.authToken)
@@ -46,7 +50,7 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
         agentDir: this.agentDir,
         model,
         modelRuntime,
-        sessionManager: SessionManager.inMemory(),
+        sessionManager: SessionManager.create(spec.cwd, sessionDir),
         settingsManager: SettingsManager.inMemory(),
         thinkingLevel: 'off',
       })

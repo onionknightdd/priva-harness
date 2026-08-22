@@ -1,42 +1,42 @@
 "use client"
 
 import * as React from "react"
-import { FolderIcon } from "@animateicons/react/lucide"
-import {
-  ArchiveIcon,
-  FolderOpenIcon,
-  MoreHorizontalIcon,
-  PinIcon,
-  TagIcon,
-} from "lucide-react"
+import claudeIcon from "@lobehub/icons-static-svg/icons/claude-color.svg"
+import { ChevronRightIcon, FolderIcon, MoreHorizontalIcon, PlusIcon } from "lucide-react"
 import { motion, useReducedMotion, type Transition } from "motion/react"
 import { useTranslation } from "react-i18next"
 
 import {
   Collapsible,
   CollapsibleContent,
+  CollapsibleTrigger,
 } from "@/components/ui/collapsible"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   SidebarGroup,
   SidebarMenu,
-  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
   useSidebar,
 } from "@/components/ui/sidebar"
+import { useHarness } from "@/features/sidebar/header/harness-context"
+import type { SessionInfo } from "@/lib/api/sandbox-sessions"
 
-import type {
-  SidebarAnimatedIconHandle,
-  SidebarProject,
-} from "../sidebar.types"
 import { ProjectHeader } from "./project-header"
+import { ProjectSessionItem } from "./project-session-item"
+import { RowHoverAction, projectHoverActionsClassName } from "./row-hover-action"
+import {
+  collectKnownTags,
+  filterGroupSessions,
+  groupMatchesQuery,
+  projectDisplayName,
+  type KnownSessionTag,
+} from "./session-projects"
+import { useSessionProjects } from "./use-session-projects"
+
+const SESSION_PAGE_SIZE = 5
 
 const emptyStateTransition: Transition = {
   type: "spring",
@@ -44,104 +44,348 @@ const emptyStateTransition: Transition = {
   damping: 30,
 }
 
-function ProjectMenuItem({
-  item,
-  isMobile,
-  reduceMotion,
-}: {
-  item: SidebarProject
-  isMobile: boolean
-  reduceMotion: boolean
-}) {
-  const { t } = useTranslation()
-  const folderIconRef = React.useRef<SidebarAnimatedIconHandle>(null)
-  const iconAnimationHandlers = {
-    onMouseEnter: () => {
-      if (!reduceMotion) folderIconRef.current?.startAnimation()
-    },
-    onMouseLeave: () => folderIconRef.current?.stopAnimation(),
-    onFocus: () => {
-      if (!reduceMotion) folderIconRef.current?.startAnimation()
-    },
-    onBlur: () => folderIconRef.current?.stopAnimation(),
-  }
+function ProjectFolderIcon() {
+  const { runHarnessId } = useHarness()
+  const showClaudeMark = runHarnessId === "claude"
 
   return (
-    <SidebarMenuItem>
-      <SidebarMenuButton
-        render={<a href={item.url} />}
-        {...iconAnimationHandlers}
-      >
-        <FolderIcon
-          ref={folderIconRef}
-          size={16}
-          isAnimated={!reduceMotion}
-          className="size-4 shrink-0"
-          aria-hidden="true"
+    <span className="relative inline-flex size-4 shrink-0 items-center justify-center" aria-hidden="true">
+      <FolderIcon className="size-4" />
+      {showClaudeMark ? (
+        <img
+          src={claudeIcon}
+          alt=""
+          className="pointer-events-none absolute size-1.5 object-contain"
         />
-        <span>{item.name}</span>
-      </SidebarMenuButton>
-      <DropdownMenu>
-        <DropdownMenuTrigger
+      ) : null}
+    </span>
+  )
+}
+
+function ProjectMenuItem({
+  cwd,
+  name,
+  sessions,
+  hasMore,
+  open,
+  onOpenChange,
+  paginate,
+  isMobile,
+  reduceMotion,
+  untitled,
+  onLoadMore,
+  onArchive,
+  onDelete,
+  onRename,
+  onSaveTags,
+  knownTags,
+}: {
+  cwd: string
+  name: string
+  sessions: SessionInfo[]
+  hasMore: boolean
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  paginate: boolean
+  isMobile: boolean
+  reduceMotion: boolean
+  untitled: string
+  onLoadMore: (cwd: string) => Promise<void>
+  onArchive: (session: SessionInfo) => void
+  onDelete: (session: SessionInfo) => void
+  onRename: (session: SessionInfo, title: string) => Promise<void>
+  onSaveTags: (sessionId: string, tags: string[]) => Promise<void>
+  knownTags: KnownSessionTag[]
+}) {
+  const { t } = useTranslation()
+  const [visibleCount, setVisibleCount] = React.useState(SESSION_PAGE_SIZE)
+
+  React.useEffect(() => {
+    if (!open) {
+      setVisibleCount(SESSION_PAGE_SIZE)
+    }
+  }, [open])
+
+  const shownCount = paginate ? visibleCount : sessions.length
+  const visibleSessions = sessions.slice(0, shownCount)
+  const canShowMore = paginate && (sessions.length > shownCount || hasMore)
+
+  return (
+    <Collapsible
+      open={open}
+      onOpenChange={onOpenChange}
+      className="group/collapsible"
+      render={<SidebarMenuItem />}
+    >
+      <div className="relative flex min-w-0 items-center">
+        <CollapsibleTrigger
           render={
-            <SidebarMenuAction
-              showOnHover
-              className="aria-expanded:bg-muted"
+            <SidebarMenuButton
+              tooltip={cwd || name}
+              className="pr-12"
             />
           }
         >
-          <MoreHorizontalIcon />
-          <span className="sr-only">{t("common.more")}</span>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          className="w-fit"
-          side={isMobile ? "bottom" : "right"}
-          align={isMobile ? "end" : "start"}
-        >
-          <DropdownMenuItem>
-            <PinIcon />
-            <span>{t("sidebar.projects.pin")}</span>
-          </DropdownMenuItem>
-          <DropdownMenuItem>
-            <TagIcon />
-            <span>{t("sidebar.projects.tag")}</span>
-          </DropdownMenuItem>
-          <DropdownMenuItem>
-            <FolderOpenIcon />
-            <span>{t("sidebar.projects.revealInFiles")}</span>
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem>
-            <ArchiveIcon />
-            <span>{t("sidebar.projects.archive")}</span>
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+          <ProjectFolderIcon />
+          <span className="min-w-0 truncate">{name}</span>
+          <ChevronRightIcon
+            className="size-3.5 shrink-0 transition-transform duration-200 group-data-open/collapsible:rotate-90 motion-reduce:transition-none"
+            aria-hidden="true"
+          />
+        </CollapsibleTrigger>
+        <div className={projectHoverActionsClassName}>
+          <RowHoverAction
+            label={t("common.more")}
+            reduceMotion={reduceMotion}
+          >
+            <MoreHorizontalIcon className="size-3.5" aria-hidden="true" />
+          </RowHoverAction>
+          <RowHoverAction
+            label={t("sidebar.projects.createSession")}
+            reduceMotion={reduceMotion}
+          >
+            <PlusIcon className="size-3.5" aria-hidden="true" />
+          </RowHoverAction>
+        </div>
+      </div>
+      <CollapsibleContent className="overflow-hidden data-closed:hidden">
+        <SidebarMenuSub className="ml-3.5 mr-0 pr-0">
+          {visibleSessions.map((session) => (
+            <ProjectSessionItem
+              key={session.sessionId}
+              session={session}
+              isMobile={isMobile}
+              untitled={untitled}
+              onArchive={onArchive}
+              onDelete={onDelete}
+              onRename={onRename}
+              onSaveTags={onSaveTags}
+              knownTags={knownTags}
+            />
+          ))}
+          {sessions.length === 0 && (
+            <SidebarMenuSubItem>
+              <span className="flex h-7 items-center px-2 text-xs text-sidebar-foreground/60">
+                {t("sidebar.projects.noSessions")}
+              </span>
+            </SidebarMenuSubItem>
+          )}
+          {canShowMore && (
+            <SidebarMenuSubItem>
+              <button
+                type="button"
+                className="flex h-7 w-full items-center px-2 text-xs text-sidebar-foreground/50 transition-colors hover:text-sidebar-foreground"
+                onClick={() => {
+                  const nextCount = shownCount + SESSION_PAGE_SIZE
+                  if (nextCount > sessions.length && hasMore) {
+                    void onLoadMore(cwd).catch(() => undefined)
+                  }
+                  setVisibleCount(nextCount)
+                }}
+              >
+                {t("sidebar.projects.moreSessions")}
+              </button>
+            </SidebarMenuSubItem>
+          )}
+        </SidebarMenuSub>
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
+function StatusMessage({
+  children,
+  reduceMotion,
+}: {
+  children: React.ReactNode
+  reduceMotion: boolean
+}) {
+  return (
+    <SidebarMenuItem>
+      <motion.p
+        role="status"
+        className="flex h-8 items-center px-2 text-xs text-sidebar-foreground/60"
+        initial={reduceMotion ? false : { opacity: 0, y: -3 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={reduceMotion ? { duration: 0 } : emptyStateTransition}
+      >
+        {children}
+      </motion.p>
     </SidebarMenuItem>
   )
 }
 
-export function NavProjects({
-  projects,
-}: {
-  projects: SidebarProject[]
-}) {
+export function NavProjects() {
   const { isMobile } = useSidebar()
   const { t } = useTranslation()
+  const { runHarnessId } = useHarness()
   const [projectQuery, setProjectQuery] = React.useState("")
+  const [selectedTags, setSelectedTags] = React.useState<string[]>([])
   const [projectsOpen, setProjectsOpen] = React.useState(true)
+  const [collapsedCwds, setCollapsedCwds] = React.useState<Set<string>>(
+    () => new Set()
+  )
   const projectListId = React.useId()
   const shouldReduceMotion = Boolean(useReducedMotion())
+  const untitled = t("sidebar.projects.untitledSession")
+  const unknownProject = t("sidebar.projects.unknownProject")
+  const {
+    groups,
+    activeCwd,
+    status,
+    error,
+    refreshing,
+    refresh,
+    loadMore,
+    archive,
+    setTags,
+    rename,
+    remove,
+  } = useSessionProjects(runHarnessId)
+
+  React.useEffect(() => {
+    setCollapsedCwds(new Set())
+    setSelectedTags([])
+  }, [runHarnessId])
+
+  const displayGroups = React.useMemo(() => {
+    if (groups.length > 0) {
+      return groups
+    }
+
+    if (status === "ready" && activeCwd) {
+      return [
+        {
+          cwd: activeCwd,
+          pinned: false,
+          sessions: [],
+          hasMore: false,
+        },
+      ]
+    }
+
+    return groups
+  }, [activeCwd, groups, status])
+
   const normalizedQuery = projectQuery.trim().toLocaleLowerCase()
-  const filteredProjects = React.useMemo(
+  const hasSessionFilters =
+    normalizedQuery.length > 0 || selectedTags.length > 0
+  const filteredGroups = React.useMemo(
     () =>
-      normalizedQuery
-        ? projects.filter((project) =>
-            project.name.toLocaleLowerCase().includes(normalizedQuery)
+      displayGroups
+        .filter((group) =>
+          groupMatchesQuery(
+            group,
+            normalizedQuery,
+            untitled,
+            unknownProject,
+            selectedTags
           )
-        : projects,
-    [normalizedQuery, projects]
+        )
+        .map((group) => ({
+          ...group,
+          sessions: filterGroupSessions(
+            group,
+            normalizedQuery,
+            untitled,
+            unknownProject,
+            selectedTags
+          ),
+        })),
+    [displayGroups, normalizedQuery, selectedTags, untitled, unknownProject]
   )
+
+  const knownTags = React.useMemo(
+    () => collectKnownTags(displayGroups),
+    [displayGroups]
+  )
+
+  const allSessionsExpanded =
+    filteredGroups.length > 0 &&
+    filteredGroups.every((group) => !collapsedCwds.has(group.cwd))
+
+  const toggleAllSessions = () => {
+    setCollapsedCwds((current) => {
+      if (
+        filteredGroups.length > 0 &&
+        filteredGroups.every((group) => !current.has(group.cwd))
+      ) {
+        return new Set(filteredGroups.map((group) => group.cwd))
+      }
+
+      return new Set()
+    })
+  }
+
+  const setGroupOpen = (cwd: string, open: boolean) => {
+    setCollapsedCwds((current) => {
+      const next = new Set(current)
+      if (open) {
+        next.delete(cwd)
+      } else {
+        next.add(cwd)
+      }
+      return next
+    })
+  }
+
+  let listBody: React.ReactNode
+
+  if (status === "loading") {
+    listBody = Array.from({ length: 3 }, (_, index) => (
+      <SidebarMenuItem key={index}>
+        <Skeleton className="h-8 w-full" />
+      </SidebarMenuItem>
+    ))
+  } else if (status === "error") {
+    listBody = (
+      <StatusMessage reduceMotion={shouldReduceMotion}>
+        {error ?? t("sidebar.projects.loadFailed")}
+      </StatusMessage>
+    )
+  } else if (status === "unsupported") {
+    listBody = (
+      <StatusMessage reduceMotion={shouldReduceMotion}>
+        {t("sidebar.projects.unsupportedHarness")}
+      </StatusMessage>
+    )
+  } else if (filteredGroups.length === 0) {
+    listBody = (
+      <StatusMessage reduceMotion={shouldReduceMotion}>
+        {t(
+          groups.length === 0 && !hasSessionFilters
+            ? "sidebar.projects.empty"
+            : "sidebar.projects.noResults"
+        )}
+      </StatusMessage>
+    )
+  } else {
+    listBody = filteredGroups.map((group) => (
+      <ProjectMenuItem
+        key={group.cwd || "unknown"}
+        cwd={group.cwd}
+        name={projectDisplayName(group.cwd, unknownProject)}
+        sessions={group.sessions}
+        hasMore={group.hasMore && !hasSessionFilters}
+        open={!collapsedCwds.has(group.cwd)}
+        onOpenChange={(open) => setGroupOpen(group.cwd, open)}
+        paginate={!hasSessionFilters}
+        isMobile={isMobile}
+        reduceMotion={shouldReduceMotion}
+        untitled={untitled}
+        onLoadMore={loadMore}
+        onArchive={(session) => {
+          void archive(session.sessionId)
+        }}
+        onDelete={(session) => {
+          void remove(session.sessionId)
+        }}
+        onRename={(session, title) => rename(session.sessionId, title)}
+        onSaveTags={setTags}
+        knownTags={knownTags}
+      />
+    ))
+  }
 
   return (
     <SidebarGroup className="group-data-[collapsible=icon]:hidden">
@@ -153,54 +397,23 @@ export function NavProjects({
         <ProjectHeader
           query={projectQuery}
           onQueryChange={setProjectQuery}
+          selectedTags={selectedTags}
+          onSelectedTagsChange={setSelectedTags}
+          knownTags={knownTags}
           projectsOpen={projectsOpen}
           onProjectsOpenChange={setProjectsOpen}
           projectListId={projectListId}
+          allSessionsExpanded={allSessionsExpanded}
+          onToggleAllSessions={toggleAllSessions}
+          onRefresh={refresh}
+          refreshing={refreshing && status === "ready"}
         />
         <CollapsibleContent
           id={projectListId}
-          className="h-[var(--collapsible-panel-height)] overflow-hidden transition-[height,opacity] duration-200 ease-out data-[ending-style]:h-0 data-[ending-style]:opacity-0 data-[starting-style]:h-0 data-[starting-style]:opacity-0"
+          className="overflow-hidden data-closed:hidden"
         >
-          <SidebarMenu>
-            {filteredProjects.map((item) => (
-              <ProjectMenuItem
-                key={item.name}
-                item={item}
-                isMobile={isMobile}
-                reduceMotion={shouldReduceMotion}
-              />
-            ))}
-            {filteredProjects.length === 0 && (
-              <SidebarMenuItem>
-                <motion.p
-                  role="status"
-                  className="flex h-8 items-center px-2 text-xs text-sidebar-foreground/60"
-                  initial={
-                    shouldReduceMotion ? false : { opacity: 0, y: -3 }
-                  }
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={
-                    shouldReduceMotion
-                      ? { duration: 0 }
-                      : emptyStateTransition
-                  }
-                >
-                  {t(
-                    projects.length === 0 && !normalizedQuery
-                      ? "sidebar.projects.empty"
-                      : "sidebar.projects.noResults"
-                  )}
-                </motion.p>
-              </SidebarMenuItem>
-            )}
-            {projects.length > 0 && (
-              <SidebarMenuItem>
-                <SidebarMenuButton className="text-sidebar-foreground/70">
-                  <MoreHorizontalIcon className="text-sidebar-foreground/70" />
-                  <span>{t("common.more")}</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            )}
+          <SidebarMenu aria-busy={status === "loading" || refreshing}>
+            {listBody}
           </SidebarMenu>
         </CollapsibleContent>
       </Collapsible>

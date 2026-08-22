@@ -34,13 +34,13 @@ describe('WS /api/sandbox/agent/ws/run', () => {
         usage: { input: 1, output: 1 },
       },
     ])
-    piProvider = new FakeAgentProvider('pi', [
+    piProvider = new FakeAgentProvider('bambuddy', [
       { type: 'assistant', event: 'text_delta', text: 'Hi' },
       {
         type: 'run',
         event: 'completed',
         sessionId: 'pi-1',
-        harnessProvider: 'pi',
+        harnessProvider: 'bambuddy',
         model: 'm',
         durationMs: 3,
       },
@@ -59,7 +59,7 @@ describe('WS /api/sandbox/agent/ws/run', () => {
       agentHarness: new AgentHarness({
         providers: {
           claude: claudeProvider,
-          pi: piProvider,
+          bambuddy: piProvider,
         },
         cwd: testRoot,
       }),
@@ -136,7 +136,7 @@ describe('WS /api/sandbox/agent/ws/run', () => {
     expect(claudeProvider.specs).toEqual([])
     expect(piProvider.specs).toEqual([
       expect.objectContaining({
-        provider: 'pi',
+        provider: 'bambuddy',
         model: 'm',
         baseUrl: 'https://api.example.com/v1',
         authToken: 'secret',
@@ -147,7 +147,7 @@ describe('WS /api/sandbox/agent/ws/run', () => {
       expect.objectContaining({
         type: 'run',
         event: 'completed',
-        harnessProvider: 'pi',
+        harnessProvider: 'bambuddy',
       }),
     ]))
   })

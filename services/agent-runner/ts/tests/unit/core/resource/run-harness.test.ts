@@ -24,8 +24,8 @@ describe('rewriteProviderBaseUrl', () => {
     )
   })
 
-  it('maps bambuddy to the Pi provider', () => {
+  it('maps bambuddy harness to the bambuddy provider id', () => {
     expect(providerIdForHarness('claude')).toBe('claude')
-    expect(providerIdForHarness('bambuddy')).toBe('pi')
+    expect(providerIdForHarness('bambuddy')).toBe('bambuddy')
   })
 })

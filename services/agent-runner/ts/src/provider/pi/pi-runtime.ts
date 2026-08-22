@@ -25,7 +25,7 @@ export class PiRuntime implements AgentRuntime {
   }
 
   get session(): SessionRef {
-    return { provider: 'pi', id: this.agentSession.sessionId }
+    return { provider: 'bambuddy', id: this.agentSession.sessionId }
   }
 
   async *run(turn: UserTurn, context: TurnContext): AsyncIterable<AgentEvent> {
@@ -59,7 +59,7 @@ export class PiRuntime implements AgentRuntime {
             event: 'failed',
             message: error instanceof Error ? error.message : String(error),
             sessionId: this.agentSession.sessionId,
-            harnessProvider: 'pi',
+            harnessProvider: 'bambuddy',
             model: this.agentSession.modelId,
           })
         }

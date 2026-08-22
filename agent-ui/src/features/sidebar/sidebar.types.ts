@@ -38,12 +38,6 @@ export type SidebarNavItem = {
   items?: SidebarNavSubItem[]
 }
 
-export type SidebarProject = {
-  name: string
-  url: string
-}
-
 export type SidebarData = {
   menu: SidebarNavItem[]
-  projects: SidebarProject[]
 }

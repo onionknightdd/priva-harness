@@ -168,7 +168,7 @@ const PROVIDER_RULES: readonly ProviderRule[] = [
       { value: "glm", boundary: true },
       { value: "codegeex" },
     ],
-    firstSegmentAliases: ["z.ai", "zai", "zhipu", "zhipuai", "bigmodel"],
+    firstSegmentAliases: ["z.ai", "zai", "z-ai", "glm", "zhipu", "zhipuai", "bigmodel"],
   },
   {
     id: "baidu",

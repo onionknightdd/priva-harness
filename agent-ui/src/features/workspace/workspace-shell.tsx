@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/sidebar"
 
 import { WorkspaceSidebar } from "./workspace-sidebar"
-import { WorkspaceToggle } from "./workspace-toggle"
+import { WorkspacePanelButtons } from "./workspace-toggle"
 
 const WORKSPACE_DEFAULT_WIDTH = 256
 const WORKSPACE_MAX_VIEWPORT_RATIO = 0.75
@@ -17,6 +17,7 @@ const WORKSPACE_MIN_CONTENT_RATIO = 0.2
 type WorkspaceLayout = {
   viewportWidth: number
   leftSidebarBoundary: number
+  shellWidth: number
 }
 
 function getInitialWorkspaceLayout(): WorkspaceLayout {
@@ -24,6 +25,7 @@ function getInitialWorkspaceLayout(): WorkspaceLayout {
     viewportWidth:
       typeof window === "undefined" ? 0 : window.innerWidth,
     leftSidebarBoundary: 0,
+    shellWidth: 0,
   }
 }
 
@@ -36,6 +38,7 @@ export function WorkspaceShell({
 }) {
   const shellRef = React.useRef<HTMLDivElement>(null)
   const [layout, setLayout] = React.useState(getInitialWorkspaceLayout)
+  const [maximized, setMaximized] = React.useState(false)
 
   React.useLayoutEffect(() => {
     if (!workspaceEnabled) {
@@ -49,18 +52,18 @@ export function WorkspaceShell({
     }
 
     const updateLayout = () => {
+      const bounds = shell.getBoundingClientRect()
       const nextLayout = {
         viewportWidth: window.innerWidth,
-        leftSidebarBoundary: Math.max(
-          0,
-          Math.round(shell.getBoundingClientRect().left)
-        ),
+        leftSidebarBoundary: Math.max(0, Math.round(bounds.left)),
+        shellWidth: Math.max(0, Math.round(bounds.width)),
       }
 
       setLayout((currentLayout) =>
         currentLayout.viewportWidth === nextLayout.viewportWidth &&
         currentLayout.leftSidebarBoundary ===
-          nextLayout.leftSidebarBoundary
+          nextLayout.leftSidebarBoundary &&
+        currentLayout.shellWidth === nextLayout.shellWidth
           ? currentLayout
           : nextLayout
       )
@@ -78,6 +81,13 @@ export function WorkspaceShell({
     }
   }, [workspaceEnabled])
 
+  React.useEffect(() => {
+    if (!workspaceEnabled) {
+      setMaximized(false)
+    }
+  }, [workspaceEnabled])
+
+  const maximizedWidth = layout.shellWidth
   const workspaceMaxWidth = Math.max(
     0,
     Math.floor(
@@ -100,16 +110,24 @@ export function WorkspaceShell({
       widthCookieName="workspace_width"
       stateCookieName="workspace_state"
     >
-      <SidebarInset className="min-h-0 overflow-hidden">
+      <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
         {children}
       </SidebarInset>
       {workspaceEnabled && (
         <>
-          <WorkspaceToggle
-            hideWhenMobileOpen
-            className="fixed top-1 right-4 z-40"
+          <WorkspacePanelButtons
+            maximized={maximized}
+            onMaximizedChange={setMaximized}
           />
-          <WorkspaceSidebar />
+          <WorkspaceSidebar
+            resizable={!maximized}
+            className={maximized ? "z-30" : undefined}
+            style={
+              maximized && maximizedWidth > 0
+                ? { width: `${maximizedWidth}px` }
+                : undefined
+            }
+          />
         </>
       )}
     </SidebarProvider>

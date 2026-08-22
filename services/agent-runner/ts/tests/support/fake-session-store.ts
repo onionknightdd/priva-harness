@@ -1,0 +1,82 @@
+import type {
+  ProviderSessionStore,
+  SessionListQuery,
+  SessionMessagePage,
+} from '../../src/core/contract/provider-session-store.js'
+import type { SessionRef } from '../../src/core/contract/agent-provider.js'
+import {
+  pageSessionMessages,
+  SessionError,
+  type LastAssistantModel,
+  type ProviderSessionInfo,
+  type SessionMessage,
+} from '../../src/core/resource/session.js'
+
+export class FakeSessionStore implements ProviderSessionStore {
+  readonly records = new Map<string, ProviderSessionInfo>()
+  readonly messageLists = new Map<string, SessionMessage[]>()
+  readonly assistantModels = new Map<string, LastAssistantModel>()
+  readonly deleted: string[] = []
+  readonly renamed: { readonly id: string; readonly title: string }[] = []
+  readonly tagged: { readonly id: string; readonly tag: string | null }[] = []
+
+  seed(info: ProviderSessionInfo, messages: readonly SessionMessage[] = []): void {
+    this.records.set(info.ref.id, info)
+    this.messageLists.set(info.ref.id, [...messages])
+  }
+
+  setAssistantModel(id: string, model: LastAssistantModel): void {
+    this.assistantModels.set(id, model)
+  }
+
+  list(query: SessionListQuery): Promise<readonly ProviderSessionInfo[]> {
+    const sessions = [...this.records.values()].filter((info) => {
+      if (query.cwd === undefined) return true
+      return info.cwd === query.cwd
+    })
+    sessions.sort((left, right) => right.lastModified - left.lastModified)
+    return Promise.resolve(sessions)
+  }
+
+  read(ref: SessionRef): Promise<ProviderSessionInfo> {
+    const info = this.records.get(ref.id)
+    if (info?.ref.provider !== ref.provider) {
+      return Promise.reject(new SessionError('session-not-found', 'Session not found'))
+    }
+    return Promise.resolve(info)
+  }
+
+  lastAssistantModel(ref: SessionRef): Promise<LastAssistantModel | undefined> {
+    return this.read(ref).then(() => this.assistantModels.get(ref.id))
+  }
+
+  messages(ref: SessionRef, page?: SessionMessagePage): Promise<readonly SessionMessage[]> {
+    return this.read(ref).then(() => pageSessionMessages(this.messageLists.get(ref.id) ?? [], page))
+  }
+
+  delete(ref: SessionRef): Promise<void> {
+    return this.read(ref).then(() => {
+      this.records.delete(ref.id)
+      this.messageLists.delete(ref.id)
+      this.deleted.push(ref.id)
+    })
+  }
+
+  rename(ref: SessionRef, title: string): Promise<void> {
+    return this.read(ref).then((info) => {
+      this.records.set(ref.id, {
+        ...info,
+        customTitle: title,
+        summary: title,
+      })
+      this.renamed.push({ id: ref.id, title })
+    })
+  }
+
+  tag(ref: SessionRef, tag: string | null): Promise<void> {
+    return this.read(ref).then((info) => {
+      this.records.set(ref.id, { ...info, tag })
+      this.tagged.push({ id: ref.id, tag })
+    })
+  }
+}

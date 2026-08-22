@@ -30,6 +30,9 @@ import {
 } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
+import { SessionTagFilter } from "./session-tag-filter"
+import type { KnownSessionTag } from "./session-projects"
+
 const searchTransition: Transition = {
   type: "spring",
   stiffness: 420,
@@ -85,18 +88,32 @@ function ProjectHeaderAction({
 export function ProjectHeader({
   query,
   onQueryChange,
+  selectedTags = [],
+  onSelectedTagsChange,
+  knownTags = [],
   projectsOpen,
   onProjectsOpenChange,
   projectListId,
+  allSessionsExpanded,
+  onToggleAllSessions,
+  onRefresh,
+  refreshing = false,
 }: {
   query: string
   onQueryChange: (query: string) => void
+  selectedTags: string[]
+  onSelectedTagsChange: (tags: string[]) => void
+  knownTags: KnownSessionTag[]
   projectsOpen: boolean
   onProjectsOpenChange: (open: boolean) => void
   projectListId: string
+  allSessionsExpanded: boolean
+  onToggleAllSessions: () => void
+  onRefresh: () => void
+  refreshing?: boolean
 }) {
   const [isSearching, setIsSearching] = React.useState(false)
-  const [sessionsExpanded, setSessionsExpanded] = React.useState(false)
+  const [filterOpen, setFilterOpen] = React.useState(false)
   const [refreshAnimationKey, setRefreshAnimationKey] = React.useState(0)
   const [addAnimationKey, setAddAnimationKey] = React.useState(0)
   const inputRef = React.useRef<HTMLInputElement>(null)
@@ -108,6 +125,10 @@ export function ProjectHeader({
   const transition: Transition = shouldReduceMotion
     ? { duration: 0 }
     : searchTransition
+  const hasFilters = query.length > 0 || selectedTags.length > 0
+  const showSearch = isSearching || hasFilters || filterOpen
+  const filterOpenRef = React.useRef(filterOpen)
+  filterOpenRef.current = filterOpen
 
   React.useEffect(() => {
     if (isSearching) {
@@ -123,7 +144,9 @@ export function ProjectHeader({
 
   const closeSearch = (restoreFocus: boolean) => {
     restoreFocusRef.current = restoreFocus
+    setFilterOpen(false)
     onQueryChange("")
+    onSelectedTagsChange([])
     setIsSearching(false)
   }
 
@@ -135,7 +158,7 @@ export function ProjectHeader({
   const projectsToggleLabel = projectsOpen
     ? t("sidebar.projects.collapseProjects")
     : t("sidebar.projects.expandProjects")
-  const sessionsToggleLabel = sessionsExpanded
+  const sessionsToggleLabel = allSessionsExpanded
     ? t("sidebar.projects.collapseAllSessions")
     : t("sidebar.projects.expandAllSessions")
 
@@ -146,7 +169,7 @@ export function ProjectHeader({
       className="relative h-8 w-full"
     >
       <AnimatePresence initial={false} mode="popLayout">
-        {isSearching ? (
+        {showSearch ? (
           <motion.div
             key="input"
             layout
@@ -167,14 +190,21 @@ export function ProjectHeader({
               const nextTarget = event.relatedTarget
 
               if (
-                query ||
+                hasFilters ||
+                filterOpen ||
                 (nextTarget instanceof Node &&
                   event.currentTarget.contains(nextTarget))
               ) {
                 return
               }
 
-              closeSearch(false)
+              window.setTimeout(() => {
+                if (filterOpenRef.current) {
+                  return
+                }
+
+                closeSearch(false)
+              }, 0)
             }}
           >
             <motion.span
@@ -196,7 +226,15 @@ export function ProjectHeader({
               }}
               aria-label={t("sidebar.projects.search")}
               placeholder={t("sidebar.projects.searchPlaceholder")}
-              className="border-0 bg-sidebar-accent pr-8 pl-8 shadow-none focus-visible:border-0 focus-visible:ring-0 dark:bg-sidebar-accent"
+              className="border-0 bg-sidebar-accent pr-14 pl-8 shadow-none focus-visible:border-0 focus-visible:ring-0 dark:bg-sidebar-accent"
+            />
+            <SessionTagFilter
+              knownTags={knownTags}
+              selectedTags={selectedTags}
+              onSelectedTagsChange={onSelectedTagsChange}
+              open={filterOpen}
+              onOpenChange={setFilterOpen}
+              reduceMotion={shouldReduceMotion}
             />
             <ProjectHeaderAction
               label={t("sidebar.projects.clearSearch")}
@@ -257,12 +295,17 @@ export function ProjectHeader({
                 <ProjectHeaderAction
                   label={sessionsToggleLabel}
                   reduceMotion={shouldReduceMotion}
-                  aria-pressed={sessionsExpanded}
-                  onClick={() => setSessionsExpanded((expanded) => !expanded)}
+                  aria-pressed={allSessionsExpanded}
+                  onClick={() => {
+                    if (!allSessionsExpanded) {
+                      onProjectsOpenChange(true)
+                    }
+                    onToggleAllSessions()
+                  }}
                 >
                   <AnimatePresence initial={false} mode="wait">
                     <motion.span
-                      key={sessionsExpanded ? "collapse" : "expand"}
+                      key={allSessionsExpanded ? "collapse" : "expand"}
                       className="flex"
                       initial={
                         shouldReduceMotion
@@ -277,7 +320,7 @@ export function ProjectHeader({
                       }
                       transition={transition}
                     >
-                      {sessionsExpanded ? (
+                      {allSessionsExpanded ? (
                         <Minimize2Icon
                           className="size-3.5"
                           aria-hidden="true"
@@ -295,7 +338,11 @@ export function ProjectHeader({
                 <ProjectHeaderAction
                   label={t("sidebar.projects.refreshSessions")}
                   reduceMotion={shouldReduceMotion}
-                  onClick={() => setRefreshAnimationKey((key) => key + 1)}
+                  disabled={refreshing}
+                  onClick={() => {
+                    setRefreshAnimationKey((key) => key + 1)
+                    onRefresh()
+                  }}
                 >
                   <motion.span
                     key={refreshAnimationKey}

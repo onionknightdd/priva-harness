@@ -1,7 +1,8 @@
 import type { AgentEvent } from '../event/agent-event.js'
 import type { UserTurn } from '../run/user-turn.js'
+import type { ProviderSessionStore } from './provider-session-store.js'
 
-export type ProviderId = 'claude' | 'pi'
+export type ProviderId = 'claude' | 'bambuddy'
 
 export interface SessionRef {
   readonly provider: ProviderId
@@ -18,6 +19,8 @@ export interface ProviderRunSpec {
   readonly model: string
   readonly baseUrl: string
   readonly authToken: string
+  readonly profileId?: string
+  readonly modelContext?: '1m' | null
 }
 
 export interface TurnContext {
@@ -33,5 +36,6 @@ export interface AgentRuntime {
 
 export interface AgentProvider {
   readonly id: ProviderId
+  readonly sessions: ProviderSessionStore
   openSession(target: SessionTarget, spec: ProviderRunSpec): Promise<AgentRuntime>
 }

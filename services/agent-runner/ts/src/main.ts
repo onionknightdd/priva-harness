@@ -3,14 +3,22 @@ import { homedir } from 'node:os'
 import { pathToFileURL } from 'node:url'
 
 import { AgentHarness } from './harness/agent-harness.js'
+import { ConfigDistributor } from './harness/config/config-distributor.js'
 import { ModelProfileService } from './harness/config/model-profile-service.js'
+import { LiveRunRegistry } from './harness/run/live-run-registry.js'
+import { SessionService } from './harness/session/session-service.js'
+import { JsonSessionMetadataStore } from './infrastructure/session/json-session-metadata-store.js'
 import { NodeUserFileSystem } from './infrastructure/filesystem/node-user-file-system.js'
 import { CompatibleModelEndpointClient } from './infrastructure/model-profile/compatible-model-endpoint-client.js'
 import { JsonModelProfileStore } from './infrastructure/model-profile/json-model-profile-store.js'
 import { claudeGlobalDir } from './provider/claude/claude-paths.js'
+import { ClaudeConfigAdapter } from './provider/claude/config-adapter/claude-config-adapter.js'
 import { ClaudeProvider } from './provider/claude/claude-provider.js'
-import { piGlobalDir } from './provider/pi/pi-paths.js'
+import { ClaudeSessionStore } from './provider/claude/session/claude-session-store.js'
+import { piGlobalDir, piSessionsRoot } from './provider/pi/pi-paths.js'
+import { PiConfigAdapter } from './provider/pi/config-adapter/pi-config-adapter.js'
 import { PiProvider } from './provider/pi/pi-provider.js'
+import { PiSessionStore } from './provider/pi/pi-session-store.js'
 import { CodingAgentSessionFactory } from './provider/pi/pi-session-factory.js'
 import {
   createRuntimeConfig,
@@ -27,6 +35,7 @@ export async function startServer(): Promise<void> {
   )
   const claudeConfigDir = claudeGlobalDir(runtimeConfig.harnessHome)
   const piConfigDir = piGlobalDir(runtimeConfig.harnessHome)
+  process.env['CLAUDE_CONFIG_DIR'] = claudeConfigDir
   const initialDirectory = process.env['WORKSPACE_DIR'] ?? homedir()
   await Promise.all([
     mkdir(initialDirectory, { recursive: true }),
@@ -34,6 +43,7 @@ export async function startServer(): Promise<void> {
     mkdir(runtimeConfig.harnessHome, { recursive: true, mode: 0o700 }),
     mkdir(claudeConfigDir, { recursive: true, mode: 0o700 }),
     mkdir(piConfigDir, { recursive: true, mode: 0o700 }),
+    mkdir(piSessionsRoot(piConfigDir), { recursive: true, mode: 0o700 }),
   ])
   const fileSystem = new NodeUserFileSystem({
     initialDirectory,
@@ -42,17 +52,45 @@ export async function startServer(): Promise<void> {
     new JsonModelProfileStore({ runtimeHome: runtimeConfig.runtimeHome }),
     new CompatibleModelEndpointClient(),
   )
-  const agentHarness = new AgentHarness({
-    providers: {
-      claude: new ClaudeProvider({ globalConfigDir: claudeConfigDir }),
-      pi: new PiProvider(new CodingAgentSessionFactory(piConfigDir)),
-    },
-    cwd: initialDirectory,
+  const liveRuns = new LiveRunRegistry()
+  const sessionMetadata = new JsonSessionMetadataStore({
+    runtimeHome: runtimeConfig.runtimeHome,
   })
+  const claudeProvider = new ClaudeProvider({
+    globalConfigDir: claudeConfigDir,
+    sessions: new ClaudeSessionStore({ globalConfigDir: claudeConfigDir }),
+  })
+  const bambuddyProvider = new PiProvider(
+    new CodingAgentSessionFactory(piConfigDir),
+    new PiSessionStore({ agentDir: piConfigDir }),
+  )
+  const providers = {
+    claude: claudeProvider,
+    bambuddy: bambuddyProvider,
+  }
+  const sessionService = new SessionService({
+    providers,
+    metadata: sessionMetadata,
+    liveRuns,
+    modelProfiles: modelProfileService,
+    activeCwd: initialDirectory,
+  })
+  const agentHarness = new AgentHarness({
+    providers,
+    cwd: initialDirectory,
+    liveRuns,
+    sessions: sessionService,
+  })
+  const configDistributor = new ConfigDistributor([
+    new ClaudeConfigAdapter(),
+    new PiConfigAdapter(),
+  ])
   const server = buildHttpServer({
     userFileSystem: fileSystem,
     modelProfileService,
     agentHarness,
+    sessionService,
+    configDistributor,
     logger: true,
   })
   const port = parsePort(process.env['PORT'])

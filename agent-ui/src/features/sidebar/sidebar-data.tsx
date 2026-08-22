@@ -81,5 +81,4 @@ export const sidebarData = {
       ],
     },
   ],
-  projects: [],
 } satisfies SidebarData

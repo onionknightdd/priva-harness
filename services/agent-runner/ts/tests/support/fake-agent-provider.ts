@@ -8,16 +8,19 @@ import type {
 } from '../../src/core/contract/agent-provider.js'
 import type { AgentEvent } from '../../src/core/event/agent-event.js'
 import type { UserTurn } from '../../src/core/run/user-turn.js'
+import { FakeSessionStore } from './fake-session-store.js'
 
 export class FakeAgentProvider implements AgentProvider {
   readonly id: ProviderId
+  readonly sessions: FakeSessionStore
   readonly events: readonly AgentEvent[]
   readonly released: string[] = []
   readonly specs: ProviderRunSpec[] = []
 
-  constructor(id: ProviderId, events: readonly AgentEvent[]) {
+  constructor(id: ProviderId, events: readonly AgentEvent[], sessions = new FakeSessionStore()) {
     this.id = id
     this.events = events
+    this.sessions = sessions
   }
 
   openSession(target: SessionTarget, spec: ProviderRunSpec): Promise<AgentRuntime> {

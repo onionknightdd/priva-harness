@@ -71,6 +71,7 @@ async function handleRunSocket(
       { text: init.frame.text },
       { signal: abort.signal },
       spec,
+      { runId },
     )) {
       if (isAborted(abort.signal) || !socketOpen(socket)) break
       socket.send(encodeServerFrame(event, runId))
@@ -99,6 +100,8 @@ async function buildRunSpec(
     model: resolved.model,
     baseUrl: rewriteProviderBaseUrl(resolved.profile.baseUrl, harness),
     authToken: resolved.profile.authToken,
+    profileId: resolved.profile.id,
+    modelContext: resolved.capabilities.context,
   }
 }
 

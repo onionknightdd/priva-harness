@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto'
+
 import type {
   AgentProvider,
   AgentRuntime,
@@ -8,10 +10,18 @@ import type {
 import type { AgentEvent } from '../core/event/agent-event.js'
 import { isRunTerminalEvent } from '../core/event/agent-event.js'
 import type { UserTurn } from '../core/run/user-turn.js'
+import type { LiveRunRegistry } from './run/live-run-registry.js'
+import type { SessionService } from './session/session-service.js'
 
 export interface AgentHarnessOptions {
   readonly providers: Readonly<Record<ProviderId, AgentProvider>>
   readonly cwd: string
+  readonly liveRuns?: LiveRunRegistry
+  readonly sessions?: SessionService
+}
+
+export interface AgentRunOptions {
+  readonly runId?: string
 }
 
 export class AgentHarness {
@@ -21,7 +31,15 @@ export class AgentHarness {
     turn: UserTurn,
     context: TurnContext,
     spec: ProviderRunSpec,
+    runOptions?: AgentRunOptions,
   ): AsyncIterable<AgentEvent> {
+    const runId = runOptions?.runId ?? randomUUID()
+    this.options.liveRuns?.start({
+      runId,
+      provider: spec.provider,
+      cwd: spec.cwd,
+      runMode: 'agent',
+    })
     yield { type: 'run', event: 'started' }
 
     const provider = this.options.providers[spec.provider]
@@ -31,8 +49,9 @@ export class AgentHarness {
     )
 
     try {
-      yield* this.forward(runtime, turn, context, spec.provider)
+      yield* this.forward(runtime, turn, context, spec, runId)
     } finally {
+      this.options.liveRuns?.finish(runId)
       await runtime.release('dispose')
     }
   }
@@ -41,11 +60,16 @@ export class AgentHarness {
     runtime: AgentRuntime,
     turn: UserTurn,
     context: TurnContext,
-    providerId: ProviderId,
+    spec: ProviderRunSpec,
+    runId: string,
   ): AsyncIterable<AgentEvent> {
     let finished = false
     try {
       for await (const event of runtime.run(turn, context)) {
+        this.options.liveRuns?.attachSession(runId, runtime.session.id)
+        if (event.type === 'run' && event.event === 'completed') {
+          await this.recordCompleted(runtime.session, spec, event.model)
+        }
         yield event
         if (isRunTerminalEvent(event)) finished = true
       }
@@ -55,10 +79,23 @@ export class AgentHarness {
           type: 'run',
           event: 'failed',
           message: errorMessage(error),
-          harnessProvider: providerId,
+          harnessProvider: spec.provider,
         }
       }
     }
+  }
+
+  private async recordCompleted(
+    session: { provider: ProviderId; id: string },
+    spec: ProviderRunSpec,
+    modelId: string,
+  ): Promise<void> {
+    if (this.options.sessions === undefined || spec.profileId === undefined) return
+    await this.options.sessions.recordRunCompleted(session, {
+      profileId: spec.profileId,
+      modelId,
+      context: spec.modelContext ?? null,
+    })
   }
 }
 
