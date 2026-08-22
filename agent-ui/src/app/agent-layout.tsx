@@ -3,6 +3,7 @@ import { GalleryVerticalEndIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { WorkspaceShell } from "@/features/workspace"
+import { AgentChatHeader } from "@/features/agent-message/components/agent-chat-header"
 import {
   isSidebarContentView,
   type AppView,
@@ -108,9 +109,7 @@ export function AgentLayout({
               </BreadcrumbList>
             </Breadcrumb>
           ) : (
-            <h1 className="min-w-0 flex-1 truncate text-sm font-medium">
-              {t("agentMessage.testSessionTitle")}
-            </h1>
+            <AgentChatHeader />
           )}
         </div>
         {isFileBrowser ? null : (

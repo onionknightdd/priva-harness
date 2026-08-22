@@ -232,3 +232,37 @@ export function tagSession(
     body: JSON.stringify({ tags }),
   })
 }
+
+export type SessionTranscriptMessage = {
+  type: string
+  uuid: string
+  sessionId: string
+  message: unknown
+  parentToolUseId: string | null
+}
+
+export function listSessionMessages(
+  harness: AgentRunHarness,
+  sessionId: string,
+  signal?: AbortSignal
+) {
+  return requestJson<{
+    messages: Array<{
+      type: string
+      uuid: string
+      session_id: string
+      message: unknown
+      parent_tool_use_id: string | null
+    }>
+  }>(`${sessionPath(sessionId, "/messages")}?${harnessQuery(harness)}`, {
+    signal,
+  }).then((payload) => ({
+    messages: payload.messages.map((item) => ({
+      type: item.type,
+      uuid: item.uuid,
+      sessionId: item.session_id,
+      message: item.message,
+      parentToolUseId: item.parent_tool_use_id,
+    })),
+  }))
+}

@@ -21,6 +21,7 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from "@/components/ui/sidebar"
+import { useChatSession } from "@/features/chat-session"
 import { useHarness } from "@/features/sidebar/header/harness-context"
 import type { SessionInfo } from "@/lib/api/sandbox-sessions"
 
@@ -34,7 +35,6 @@ import {
   projectDisplayName,
   type KnownSessionTag,
 } from "./session-projects"
-import { useSessionProjects } from "./use-session-projects"
 
 const SESSION_PAGE_SIZE = 5
 
@@ -78,7 +78,9 @@ function ProjectMenuItem({
   onDelete,
   onRename,
   onSaveTags,
+  onSelect,
   knownTags,
+  activeSessionId,
 }: {
   cwd: string
   name: string
@@ -95,7 +97,9 @@ function ProjectMenuItem({
   onDelete: (session: SessionInfo) => void
   onRename: (session: SessionInfo, title: string) => Promise<void>
   onSaveTags: (sessionId: string, tags: string[]) => Promise<void>
+  onSelect: (session: SessionInfo) => void
   knownTags: KnownSessionTag[]
+  activeSessionId: string | null
 }) {
   const { t } = useTranslation()
   const [visibleCount, setVisibleCount] = React.useState(SESSION_PAGE_SIZE)
@@ -160,7 +164,9 @@ function ProjectMenuItem({
               onDelete={onDelete}
               onRename={onRename}
               onSaveTags={onSaveTags}
+              onSelect={onSelect}
               knownTags={knownTags}
+              isActive={session.sessionId === activeSessionId}
             />
           ))}
           {sessions.length === 0 && (
@@ -215,7 +221,11 @@ function StatusMessage({
   )
 }
 
-export function NavProjects() {
+export function NavProjects({
+  onSelectSession,
+}: {
+  onSelectSession: (session: SessionInfo) => void
+}) {
   const { isMobile } = useSidebar()
   const { t } = useTranslation()
   const { runHarnessId } = useHarness()
@@ -241,7 +251,8 @@ export function NavProjects() {
     setTags,
     rename,
     remove,
-  } = useSessionProjects(runHarnessId)
+    activeSession,
+  } = useChatSession()
 
   React.useEffect(() => {
     setCollapsedCwds(new Set())
@@ -382,7 +393,9 @@ export function NavProjects() {
         }}
         onRename={(session, title) => rename(session.sessionId, title)}
         onSaveTags={setTags}
+        onSelect={onSelectSession}
         knownTags={knownTags}
+        activeSessionId={activeSession?.sessionId ?? null}
       />
     ))
   }

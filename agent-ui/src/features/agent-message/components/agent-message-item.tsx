@@ -1,5 +1,6 @@
 import * as React from "react"
-import { CopyIcon, TriangleAlertIcon } from "lucide-react"
+import gsap from "gsap"
+import { CheckIcon, CopyIcon, SplitIcon, TriangleAlertIcon } from "lucide-react"
 import { motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
@@ -12,7 +13,28 @@ import {
 } from "@/components/ai-elements/message"
 import { writeClipboardText } from "@/lib/clipboard"
 
+import type { RelativeTimeLabel } from "@/lib/relative-time"
+
 import type { AgentThreadMessage } from "../agent-message-data"
+
+function animateControl(control: HTMLButtonElement) {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    return
+  }
+
+  const target = control.querySelector("svg") ?? control
+
+  gsap.fromTo(
+    target,
+    { scale: 0.78 },
+    {
+      scale: 1,
+      duration: 0.28,
+      ease: "back.out(2.5)",
+      clearProps: "transform",
+    }
+  )
+}
 
 function AgentMessageCopyAction({ text }: { text: string }) {
   const { t } = useTranslation()
@@ -39,8 +61,10 @@ function AgentMessageCopyAction({ text }: { text: string }) {
   return (
     <MessageAction
       tooltip={tooltip}
-      label={t("agentMessage.copy")}
-      onClick={() => {
+      label={tooltip}
+      onClick={(event) => {
+        animateControl(event.currentTarget)
+
         void writeClipboardText(text)
           .then(() => {
             setCopyState("copied")
@@ -60,15 +84,59 @@ function AgentMessageCopyAction({ text }: { text: string }) {
           })
       }}
     >
-      <CopyIcon />
+      {copyState === "copied" ? (
+        <CheckIcon className="size-3.5" aria-hidden="true" />
+      ) : (
+        <CopyIcon className="size-3.5" aria-hidden="true" />
+      )}
     </MessageAction>
+  )
+}
+
+function AgentMessageSplitAction() {
+  const { t } = useTranslation()
+  const label = t("agentMessage.forkChat")
+
+  return (
+    <MessageAction
+      tooltip={label}
+      label={label}
+      onClick={(event) => {
+        animateControl(event.currentTarget)
+      }}
+    >
+      <SplitIcon className="size-3.5" aria-hidden="true" />
+    </MessageAction>
+  )
+}
+
+function AgentMessageRelativeTime({
+  relativeTime,
+}: {
+  relativeTime: RelativeTimeLabel
+}) {
+  const shouldReduceMotion = Boolean(useReducedMotion())
+
+  return (
+    <motion.time
+      dateTime={relativeTime.dateTime}
+      title={relativeTime.absoluteLabel}
+      className="ml-1 px-1 text-sm leading-none text-muted-foreground/50"
+      initial={shouldReduceMotion ? false : { opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}
+    >
+      {relativeTime.label}
+    </motion.time>
   )
 }
 
 export function AgentMessageItem({
   message,
+  relativeTime,
 }: {
   message: AgentThreadMessage
+  relativeTime?: RelativeTimeLabel | null
 }) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
@@ -94,7 +162,7 @@ export function AgentMessageItem({
             {t("agentMessage.errorLabel")}
           </div>
           <MessageContent
-            className="bg-destructive/10 px-4 py-3 text-destructive"
+            className="rounded-xl bg-destructive/10 px-4 py-3 text-destructive"
             role="alert"
           >
             {message.content}
@@ -126,6 +194,10 @@ export function AgentMessageItem({
           {message.role === "assistant" && message.status === "complete" ? (
             <MessageActions>
               <AgentMessageCopyAction text={message.content} />
+              <AgentMessageSplitAction />
+              {relativeTime ? (
+                <AgentMessageRelativeTime relativeTime={relativeTime} />
+              ) : null}
             </MessageActions>
           ) : null}
         </>

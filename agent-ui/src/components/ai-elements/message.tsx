@@ -36,8 +36,8 @@ export type MessageProps = HTMLAttributes<HTMLDivElement> & {
 export const Message = ({ className, from, ...props }: MessageProps) => (
   <div
     className={cn(
-      "group flex w-full max-w-[95%] flex-col gap-2",
-      from === "user" ? "is-user ml-auto justify-end" : "is-assistant",
+      "group flex w-full max-w-full flex-col gap-2",
+      from === "user" ? "is-user ml-auto justify-end" : "is-assistant pl-1.5",
       className
     )}
     {...props}
@@ -71,7 +71,7 @@ export const MessageActions = ({
   children,
   ...props
 }: MessageActionsProps) => (
-  <div className={cn("flex items-center gap-1", className)} {...props}>
+  <div className={cn("flex items-center gap-1 group-[.is-assistant]:-ml-1.5", className)} {...props}>
     {children}
   </div>
 );
@@ -86,7 +86,7 @@ export const MessageAction = ({
   children,
   label,
   variant = "ghost",
-  size = "icon-sm",
+  size = "icon-xs",
   ...props
 }: MessageActionProps) => {
   const accessibleLabel = label || tooltip;

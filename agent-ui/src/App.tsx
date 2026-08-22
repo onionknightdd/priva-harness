@@ -1,6 +1,7 @@
 import * as React from "react"
 
 import { AgentLayout } from "@/app/agent-layout"
+import { ChatSessionProvider, useChatSession } from "@/features/chat-session"
 import { AppSidebar } from "@/features/sidebar"
 import { HarnessProvider } from "@/features/sidebar/header/harness-context"
 import { UploadQueueProvider } from "@/features/uploads"
@@ -11,26 +12,26 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 function AgentHarness() {
   const [activeView, setActiveView] = React.useState<AppView>("agent-message")
   const [agentMessageSessionKey, setAgentMessageSessionKey] = React.useState(0)
+  const { closeSession } = useChatSession()
 
   const startNewAgentMessage = React.useCallback(() => {
+    closeSession()
     setActiveView("agent-message")
     setAgentMessageSessionKey((currentKey) => currentKey + 1)
-  }, [])
+  }, [closeSession])
 
   return (
-    <HarnessProvider>
-      <SidebarProvider className="h-svh min-h-0 overflow-hidden">
-        <AppSidebar
-          activeView={activeView}
-          onNewAgentMessage={startNewAgentMessage}
-          onViewChange={setActiveView}
-        />
-        <AgentLayout
-          activeView={activeView}
-          agentMessageSessionKey={agentMessageSessionKey}
-        />
-      </SidebarProvider>
-    </HarnessProvider>
+    <SidebarProvider className="h-svh min-h-0 overflow-hidden">
+      <AppSidebar
+        activeView={activeView}
+        onNewAgentMessage={startNewAgentMessage}
+        onViewChange={setActiveView}
+      />
+      <AgentLayout
+        activeView={activeView}
+        agentMessageSessionKey={agentMessageSessionKey}
+      />
+    </SidebarProvider>
   )
 }
 
@@ -38,7 +39,11 @@ export default function App() {
   return (
     <TooltipProvider>
       <UploadQueueProvider>
-        <AgentHarness />
+        <HarnessProvider>
+          <ChatSessionProvider>
+            <AgentHarness />
+          </ChatSessionProvider>
+        </HarnessProvider>
       </UploadQueueProvider>
     </TooltipProvider>
   )

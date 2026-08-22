@@ -2,6 +2,7 @@ import * as React from "react"
 import { useTranslation } from "react-i18next"
 
 import { useHarness } from "@/features/sidebar/header/harness-context"
+import { useChatSession } from "@/features/chat-session"
 
 import {
   createAgentThreadMessage,
@@ -21,12 +22,27 @@ function isAbortError(error: unknown) {
 export function useAgentMessage() {
   const { t } = useTranslation()
   const { runHarnessId } = useHarness()
+  const { activeSession, threadMessages } = useChatSession()
+  const sessionId = activeSession?.sessionId
   const [draft, setDraft] = React.useState("")
   const [modelReference, setModelReference] = React.useState<string | null>(
     null
   )
   const [messages, setMessages] = React.useState<AgentThreadMessage[]>([])
   const activeStreamRef = React.useRef<ActiveStream | null>(null)
+
+  React.useEffect(() => {
+    if (!sessionId) {
+      return
+    }
+
+    setMessages(threadMessages)
+  }, [sessionId, threadMessages])
+
+  React.useEffect(() => {
+    activeStreamRef.current?.controller.abort()
+    activeStreamRef.current = null
+  }, [activeSession?.sessionId])
 
   React.useEffect(() => {
     return () => {

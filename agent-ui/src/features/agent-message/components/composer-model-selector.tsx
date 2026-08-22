@@ -36,6 +36,10 @@ import {
   type ModelIdGroup,
 } from "@/features/model-settings/model-provider"
 import { ProviderIcon } from "@/features/model-settings/provider-icon"
+import {
+  useWorkspaceTakesMajority,
+  workspaceDensityTransition,
+} from "@/features/workspace"
 
 const COMPOSER_MENU_WIDTH_CLASS = "w-56 min-w-56 max-w-56 text-xs"
 const COMPOSER_TEXT_CLASS = "text-xs font-normal"
@@ -134,6 +138,50 @@ function filterModelGroups(
 
     return items.length > 0 ? [{ ...group, items }] : []
   })
+}
+
+function CollapsingInline({
+  open,
+  measureKey,
+  children,
+}: {
+  open: boolean
+  measureKey: string
+  children: React.ReactNode
+}) {
+  const shouldReduceMotion = Boolean(useReducedMotion())
+  const measureRef = React.useRef<HTMLSpanElement>(null)
+  const [openWidth, setOpenWidth] = React.useState(0)
+
+  React.useLayoutEffect(() => {
+    const width = measureRef.current?.scrollWidth ?? 0
+
+    if (width > 0) {
+      setOpenWidth(width)
+    }
+  }, [measureKey, open])
+
+  return (
+    <motion.span
+      aria-hidden={!open}
+      className="inline-flex overflow-hidden align-middle"
+      initial={false}
+      animate={{
+        width: open ? openWidth || "auto" : 0,
+        opacity: open ? 1 : 0,
+      }}
+      transition={
+        shouldReduceMotion ? { duration: 0 } : workspaceDensityTransition
+      }
+    >
+      <span
+        ref={measureRef}
+        className="inline-flex items-center gap-1 pl-1 whitespace-nowrap"
+      >
+        {children}
+      </span>
+    </motion.span>
+  )
 }
 
 function HoverMarquee({
@@ -474,6 +522,7 @@ export function ComposerModelSelector({
 }) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
+  const iconOnly = useWorkspaceTakesMajority()
   const [profiles, setProfiles] = React.useState<ModelProfileSummary[]>([])
   const [defaultProfileId, setDefaultProfileId] = React.useState<string | null>(
     null
@@ -481,7 +530,6 @@ export function ComposerModelSelector({
   const [selection, setSelection] =
     React.useState<ComposerModelSelection | null>(null)
   const [effort, setEffort] = React.useState<ComposerEffort>("medium")
-  const [triggerMarquee, setTriggerMarquee] = React.useState(false)
   const [profilesStatus, setProfilesStatus] = React.useState<
     "loading" | "ready" | "error"
   >("loading")
@@ -688,10 +736,6 @@ export function ComposerModelSelector({
               "max-w-64 min-w-0 cursor-pointer border-0 bg-transparent px-1.5 shadow-none hover:bg-muted/40 dark:bg-transparent dark:hover:bg-muted/30",
               COMPOSER_TEXT_CLASS
             )}
-            onPointerEnter={() => setTriggerMarquee(true)}
-            onPointerLeave={() => setTriggerMarquee(false)}
-            onFocus={() => setTriggerMarquee(true)}
-            onBlur={() => setTriggerMarquee(false)}
           />
         }
       >
@@ -699,7 +743,7 @@ export function ComposerModelSelector({
           <motion.span
             key={selectionKey}
             className={cn(
-              "flex min-w-0 items-center gap-1",
+              "flex min-w-0 items-center",
               COMPOSER_TEXT_CLASS
             )}
             initial={shouldReduceMotion ? false : { opacity: 0, y: 3 }}
@@ -708,34 +752,39 @@ export function ComposerModelSelector({
             transition={{ duration: shouldReduceMotion ? 0 : 0.16 }}
           >
             {selection?.modelId ? (
-              <>
-                <ProviderIcon
-                  className="size-3.5"
-                  providerId={getModelProviderId(selection.modelId)}
-                />
-                <HoverMarquee
-                  active={triggerMarquee}
-                  className={cn(
-                    "min-w-0 flex-1",
-                    COMPOSER_TEXT_CLASS
-                  )}
-                >
-                  {selection.modelId}
-                </HoverMarquee>
-              </>
+              <ProviderIcon
+                className="size-3.5 shrink-0"
+                providerId={getModelProviderId(selection.modelId)}
+              />
+            ) : iconOnly ? (
+              <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
             ) : (
               <span className={cn("truncate text-muted-foreground", COMPOSER_TEXT_CLASS)}>
                 {t("agentMessage.selectModel")}
               </span>
             )}
+            {selection?.modelId ? (
+              <CollapsingInline open={!iconOnly} measureKey={selection.modelId}>
+                <span className={COMPOSER_TEXT_CLASS}>{selection.modelId}</span>
+                <ChevronDownIcon
+                  className={cn(
+                    "size-3 shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none",
+                    "group-data-[popup-open]/button:rotate-180"
+                  )}
+                />
+              </CollapsingInline>
+            ) : iconOnly ? null : (
+              <CollapsingInline open measureKey="select-model">
+                <ChevronDownIcon
+                  className={cn(
+                    "size-3 shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none",
+                    "group-data-[popup-open]/button:rotate-180"
+                  )}
+                />
+              </CollapsingInline>
+            )}
           </motion.span>
         </AnimatePresence>
-        <ChevronDownIcon
-          className={cn(
-            "size-3 shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none",
-            "group-data-[popup-open]/button:rotate-180"
-          )}
-        />
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"

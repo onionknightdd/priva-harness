@@ -45,7 +45,9 @@ export function ProjectSessionItem({
   onDelete,
   onRename,
   onSaveTags,
+  onSelect,
   knownTags,
+  isActive = false,
 }: {
   session: SessionInfo
   isMobile: boolean
@@ -54,7 +56,9 @@ export function ProjectSessionItem({
   onDelete: (session: SessionInfo) => void
   onRename: (session: SessionInfo, title: string) => Promise<void>
   onSaveTags: (sessionId: string, tags: string[]) => Promise<void>
+  onSelect: (session: SessionInfo) => void
   knownTags: KnownSessionTag[]
+  isActive?: boolean
 }) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
@@ -140,6 +144,8 @@ export function ProjectSessionItem({
           render={<button type="button" />}
           className="w-full pr-12 text-left"
           title={title}
+          isActive={isActive}
+          onClick={() => onSelect(session)}
           onDoubleClick={(event) => {
             event.preventDefault()
             event.stopPropagation()

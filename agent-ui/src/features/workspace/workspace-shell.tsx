@@ -7,6 +7,7 @@ import {
   SidebarProvider,
 } from "@/components/ui/sidebar"
 
+import { WorkspaceDensityBridge } from "./workspace-density"
 import { WorkspaceSidebar } from "./workspace-sidebar"
 import { WorkspacePanelButtons } from "./workspace-toggle"
 
@@ -110,26 +111,32 @@ export function WorkspaceShell({
       widthCookieName="workspace_width"
       stateCookieName="workspace_state"
     >
-      <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
-        {children}
-      </SidebarInset>
-      {workspaceEnabled && (
-        <>
-          <WorkspacePanelButtons
-            maximized={maximized}
-            onMaximizedChange={setMaximized}
-          />
-          <WorkspaceSidebar
-            resizable={!maximized}
-            className={maximized ? "z-30" : undefined}
-            style={
-              maximized && maximizedWidth > 0
-                ? { width: `${maximizedWidth}px` }
-                : undefined
-            }
-          />
-        </>
-      )}
+      <WorkspaceDensityBridge
+        maximized={maximized}
+        shellWidth={layout.shellWidth}
+        workspaceEnabled={workspaceEnabled}
+      >
+        <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
+          {children}
+        </SidebarInset>
+        {workspaceEnabled && (
+          <>
+            <WorkspacePanelButtons
+              maximized={maximized}
+              onMaximizedChange={setMaximized}
+            />
+            <WorkspaceSidebar
+              resizable={!maximized}
+              className={maximized ? "z-30" : undefined}
+              style={
+                maximized && maximizedWidth > 0
+                  ? { width: `${maximizedWidth}px` }
+                  : undefined
+              }
+            />
+          </>
+        )}
+      </WorkspaceDensityBridge>
     </SidebarProvider>
   )
 }
