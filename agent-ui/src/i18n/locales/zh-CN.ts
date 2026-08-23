@@ -353,13 +353,15 @@ export const zhCN = {
     resize: "调整 Workspace 宽度",
     expand: "展开 Workspace",
     restore: "恢复 Workspace",
-    backToHome: "返回 Workspace",
     home: {
       tasksAndActivity: "任务和活动",
       files: "文件",
       terminal: "终端",
       artifacts: "产出",
       unavailable: "{{action}}暂不可用",
+    },
+    tabs: {
+      listLabel: "Workspace 模块",
     },
   },
   language: {

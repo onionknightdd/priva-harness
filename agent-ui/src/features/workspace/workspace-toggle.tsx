@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Maximize2Icon, Minimize2Icon } from "lucide-react"
+import { MaximizeIcon, MinimizeIcon } from "lucide-react"
 import { AnimatePresence, motion, useReducedMotion, type Transition } from "motion/react"
 import { useTranslation } from "react-i18next"
 
@@ -165,9 +165,9 @@ export function WorkspaceExpandToggle({
           transition={shouldReduceMotion ? { duration: 0 } : iconTransition}
         >
           {maximized ? (
-            <Minimize2Icon className="size-4" aria-hidden="true" />
+            <MinimizeIcon className="size-4" aria-hidden="true" />
           ) : (
-            <Maximize2Icon className="size-4" aria-hidden="true" />
+            <MaximizeIcon className="size-4" aria-hidden="true" />
           )}
         </motion.span>
       </AnimatePresence>

@@ -8,8 +8,10 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { cn } from "@/lib/utils"
 
 export function FileBrowserWorkspace({
+  compact = false,
   filePreview,
   onResizeTree,
   panelTransitioning,
@@ -21,6 +23,7 @@ export function FileBrowserWorkspace({
   treePanelRef,
   treeVisible,
 }: {
+  compact?: boolean
   filePreview: React.ReactNode
   onResizeTree: (sizePercentage: number) => void
   panelTransitioning: boolean
@@ -72,7 +75,10 @@ export function FileBrowserWorkspace({
       ref={pageRef}
       data-file-browser-enter
       aria-label={t("fileBrowser.contentLabel")}
-      className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card text-card-foreground"
+      className={cn(
+        "flex min-h-0 flex-1 flex-col overflow-hidden border bg-card text-card-foreground",
+        compact ? "rounded-lg" : "rounded-xl"
+      )}
     >
       {isMobile ? (
         <div data-mobile-file-pane className="flex min-h-0 flex-1">

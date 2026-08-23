@@ -44,4 +44,11 @@ export default defineConfig({
       "@": path.resolve(import.meta.dirname, "./src"),
     },
   },
+  optimizeDeps: {
+    include: [
+      "@headless-tree/core",
+      "@headless-tree/react",
+      "react-resizable-panels",
+    ],
+  },
 })

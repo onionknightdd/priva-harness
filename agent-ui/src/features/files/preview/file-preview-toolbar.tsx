@@ -4,8 +4,8 @@ import {
   CheckIcon,
   CopyIcon,
   DownloadIcon,
-  Maximize2Icon,
-  Minimize2Icon,
+  MaximizeIcon,
+  MinimizeIcon,
   SaveIcon,
   XIcon,
 } from "lucide-react"
@@ -39,6 +39,7 @@ import type {
   PreviewFile,
 } from "@/features/files/model/file.types"
 import { writeClipboardText } from "@/lib/clipboard"
+import { cn } from "@/lib/utils"
 
 const saveButtonTransition: Transition = {
   type: "spring",
@@ -68,6 +69,7 @@ function animateControl(control: HTMLButtonElement) {
 
 export function FilePreviewToolbar({
   activeFile,
+  compact = false,
   expanded,
   files,
   mode,
@@ -82,6 +84,7 @@ export function FilePreviewToolbar({
   editAvailable,
 }: {
   activeFile: PreviewFile | null
+  compact?: boolean
   expanded: boolean
   files: PreviewFile[]
   mode: FilePreviewMode | null
@@ -241,14 +244,22 @@ export function FilePreviewToolbar({
   }
 
   return (
-    <div className="file-preview-toolbar flex h-11 shrink-0 items-center gap-2 border-b px-2 sm:px-3">
+    <div
+      className={cn(
+        "file-preview-toolbar flex shrink-0 items-center border-b",
+        compact ? "h-11 gap-1 px-1.5" : "h-11 gap-2 px-2 sm:px-3"
+      )}
+    >
       <div className="file-preview-toolbar__tabs min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {files.length > 0 ? (
           <TabsList
             aria-label={t("filePreview.openFiles")}
             variant="line"
             size="sm"
-            className="h-10 min-w-max border-0 pb-0"
+            className={cn(
+              "min-w-max border-0 pb-0",
+              compact ? "h-8" : "h-10"
+            )}
           >
             {files.map((file) => (
               <div
@@ -305,7 +316,12 @@ export function FilePreviewToolbar({
             ))}
           </TabsList>
         ) : (
-          <span className="px-2 text-xs text-muted-foreground">
+          <span
+            className={cn(
+              "text-xs text-muted-foreground",
+              compact ? "px-1" : "px-2"
+            )}
+          >
             {t("filePreview.noOpenFiles")}
           </span>
         )}
@@ -503,7 +519,7 @@ export function FilePreviewToolbar({
                   />
                 }
               >
-                {expanded ? <Minimize2Icon /> : <Maximize2Icon />}
+                {expanded ? <MinimizeIcon /> : <MaximizeIcon />}
               </TooltipTrigger>
               <TooltipContent>{expandLabel}</TooltipContent>
             </Tooltip>

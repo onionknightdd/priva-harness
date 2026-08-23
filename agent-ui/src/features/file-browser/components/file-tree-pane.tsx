@@ -11,6 +11,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { cn } from "@/lib/utils"
 
 import {
   countFileBrowserTreeItems,
@@ -20,6 +21,7 @@ import {
 import { FileBrowserTree } from "./file-browser-tree"
 
 export function FileTreePane({
+  compact = false,
   initialError,
   initialLoading,
   loadingDirectories,
@@ -33,6 +35,7 @@ export function FileTreePane({
   rootPath,
   selectedItemPath,
 }: {
+  compact?: boolean
   initialError: string | null
   initialLoading: boolean
   loadingDirectories: Set<string>
@@ -202,7 +205,12 @@ export function FileTreePane({
           />
         )}
       </div>
-      <div className="flex h-9 shrink-0 items-center border-t px-3 text-xs text-muted-foreground">
+      <div
+        className={cn(
+          "flex shrink-0 items-center border-t text-xs text-muted-foreground",
+          compact ? "h-7 px-2" : "h-9 px-3"
+        )}
+      >
         {t("fileBrowser.itemCount", { count: itemCount })}
       </div>
       <p className="sr-only" role="status" aria-live="polite">

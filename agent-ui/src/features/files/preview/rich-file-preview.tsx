@@ -238,6 +238,7 @@ function FilePreviewPanel({
 export function RichFilePreview({
   activeFileId,
   className,
+  compact = false,
   expanded = false,
   files,
   mode,
@@ -252,6 +253,7 @@ export function RichFilePreview({
 }: {
   activeFileId: string | null
   className?: string
+  compact?: boolean
   expanded?: boolean
   files: PreviewFile[]
   mode?: FilePreviewMode
@@ -359,6 +361,7 @@ export function RichFilePreview({
         >
           <FilePreviewToolbar
             activeFile={activeFile}
+            compact={compact}
             editAvailable={editAvailable}
             expanded={expanded}
             files={previewFiles}

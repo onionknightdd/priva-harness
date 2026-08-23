@@ -54,7 +54,7 @@ export function AgentMessageThread({
     <MessageScrollerProvider autoScroll>
       <MessageScroller>
         <MessageScrollerViewport>
-          <MessageScrollerContent className="mx-auto w-full max-w-3xl justify-end gap-6 pt-6">
+          <MessageScrollerContent className="mx-auto w-full max-w-3xl gap-6 pt-6">
             {messages.map((message, index) => (
               <MessageScrollerItem
                 key={message.id}

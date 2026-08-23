@@ -10,12 +10,14 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { cn } from "@/lib/utils"
 
 import type {
   FileBrowserBreadcrumbEntry,
   FileBrowserItem,
   FileBrowserModel,
 } from "../file-browser-data"
+
 import { FileGoToControl } from "./file-go-to-control"
 import { FilePathBreadcrumb } from "./file-path-breadcrumb"
 
@@ -50,6 +52,7 @@ function animateActionIcon(control: HTMLButtonElement) {
 
 export function FileAddressBar({
   breadcrumb,
+  compact = false,
   currentDirectory,
   model,
   onCreateFolder,
@@ -60,6 +63,7 @@ export function FileAddressBar({
   treeVisible,
 }: {
   breadcrumb: FileBrowserBreadcrumbEntry[]
+  compact?: boolean
   currentDirectory: string | null
   model: FileBrowserModel
   onCreateFolder: (directory: string) => void
@@ -105,7 +109,10 @@ export function FileAddressBar({
   return (
     <div
       data-file-browser-enter
-      className="flex h-10 shrink-0 items-center gap-1 px-1"
+      className={cn(
+        "flex shrink-0 items-center gap-0.5",
+        compact ? "h-8 px-0" : "h-10 gap-1 px-1"
+      )}
     >
       <Tooltip>
         <TooltipTrigger
@@ -126,7 +133,7 @@ export function FileAddressBar({
         </TooltipTrigger>
         <TooltipContent>{treeToggleLabel}</TooltipContent>
       </Tooltip>
-      <div className="relative h-8 min-w-0 flex-1">
+      <div className={cn("relative min-w-0 flex-1", compact ? "h-7" : "h-8")}>
         <motion.div
           layout
           className="absolute inset-0 flex min-w-0 items-center gap-0.5"
@@ -134,6 +141,7 @@ export function FileAddressBar({
         >
           <FilePathBreadcrumb
             breadcrumb={breadcrumb}
+            compact={compact}
             model={model}
             onNavigate={onNavigate}
           />

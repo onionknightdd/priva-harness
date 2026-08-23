@@ -6,6 +6,7 @@ import { RichFilePreview, type PreviewFile } from "@/features/files"
 import { saveEditedHtmlFile } from "@/features/files/preview/save-edited-html-file"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { startFileDownload } from "@/lib/api/sandbox-files"
+import { cn } from "@/lib/utils"
 
 import { FileAddressBar } from "./components/file-address-bar"
 import { FileBrowserWorkspace } from "./components/file-browser-workspace"
@@ -21,7 +22,13 @@ import {
 import { useFileBrowser } from "./use-file-browser"
 import { useTreePanelVisibility } from "./use-tree-panel-visibility"
 
-export function FileBrowserPage() {
+export function FileBrowserPage({
+  className,
+  compact = false,
+}: {
+  className?: string
+  compact?: boolean
+}) {
   const { t } = useTranslation()
   const browser = useFileBrowser()
   const isMobile = useIsMobile()
@@ -204,6 +211,7 @@ export function FileBrowserPage() {
 
   const treePane = (
     <FileTreePane
+      compact={compact}
       initialError={browser.initialError}
       initialLoading={browser.initialLoading}
       loadingDirectories={browser.loadingDirectories}
@@ -222,6 +230,7 @@ export function FileBrowserPage() {
   const filePreview = (
     <RichFilePreview
       activeFileId={browser.activeFileId}
+      compact={compact}
       expanded={!treeVisible}
       files={browser.openedFiles}
       onActiveFileChange={browser.setActiveFile}
@@ -238,10 +247,15 @@ export function FileBrowserPage() {
   return (
     <div
       ref={pageRef}
-      className="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden p-4 pt-0"
+      className={cn(
+        "flex min-h-0 flex-1 flex-col overflow-hidden p-4 pt-0",
+        compact ? "gap-0" : "gap-1",
+        className
+      )}
     >
       <FileAddressBar
         breadcrumb={browser.breadcrumb}
+        compact={compact}
         currentDirectory={browser.currentDirectory}
         model={browser.model}
         treeVisible={treeVisible}
@@ -253,6 +267,7 @@ export function FileBrowserPage() {
       />
 
       <FileBrowserWorkspace
+        compact={compact}
         filePreview={filePreview}
         onResizeTree={rememberTreeSize}
         panelTransitioning={panelTransitioning}

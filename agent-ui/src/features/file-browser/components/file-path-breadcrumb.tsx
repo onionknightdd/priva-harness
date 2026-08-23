@@ -14,6 +14,7 @@ import {
   DropdownMenu,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { cn } from "@/lib/utils"
 
 import {
   getFileBrowserChildFolders,
@@ -75,11 +76,13 @@ function CollapsedPathMenu({
 }
 
 function PathItem({
+  compact = false,
   current,
   entry,
   model,
   onNavigate,
 }: {
+  compact?: boolean
   current: boolean
   entry: FileBrowserBreadcrumbEntry
   model: FileBrowserModel
@@ -100,7 +103,10 @@ function PathItem({
         variant="ghost"
         size="xs"
         aria-current={current ? "location" : undefined}
-        className="max-w-12 min-w-0 rounded-r-none px-1.5 text-sm font-normal data-[current=true]:bg-muted data-[current=true]:text-foreground sm:max-w-36"
+        className={cn(
+          "max-w-12 min-w-0 rounded-r-none font-normal data-[current=true]:bg-muted data-[current=true]:text-foreground sm:max-w-36",
+          compact ? "px-0.5 text-xs" : "px-1.5 text-sm"
+        )}
         data-current={current || undefined}
         title={entry.path}
         onClick={() => onNavigate(entry.path, entry.type)}
@@ -118,7 +124,7 @@ function PathItem({
                 type="button"
                 variant="ghost"
                 size="icon-xs"
-                className="rounded-l-none"
+                className={cn("rounded-l-none", compact && "size-5")}
                 aria-label={t("fileBrowser.openDirectories", {
                   directory: entry.name,
                 })}
@@ -140,10 +146,12 @@ function PathItem({
 
 export function FilePathBreadcrumb({
   breadcrumb,
+  compact = false,
   model,
   onNavigate,
 }: {
   breadcrumb: FileBrowserBreadcrumbEntry[]
+  compact?: boolean
   model: FileBrowserModel
   onNavigate: (path: string, type: FileBrowserItem["type"]) => void
 }) {
@@ -152,13 +160,27 @@ export function FilePathBreadcrumb({
 
   return (
     <Breadcrumb className="min-w-0 shrink overflow-hidden">
-      <BreadcrumbList className="flex-nowrap gap-0 overflow-hidden text-sm sm:gap-0.5">
+      <BreadcrumbList
+        className={cn(
+          "flex-nowrap overflow-hidden",
+          compact ? "gap-0 text-xs sm:gap-0" : "gap-0 text-sm sm:gap-0.5"
+        )}
+      >
         {entries.map((entry, index) => (
           <React.Fragment
             key={entry.type === "item" ? entry.entry.path : "collapsed"}
           >
-            {index > 0 && <BreadcrumbSeparator className="shrink-0" />}
-            <BreadcrumbItem className="min-w-0 shrink-0">
+            {index > 0 && (
+              <BreadcrumbSeparator
+                className={cn(
+                  "shrink-0",
+                  compact && "mx-0 [&>svg]:size-3"
+                )}
+              />
+            )}
+            <BreadcrumbItem
+              className={cn("min-w-0 shrink-0", compact && "gap-0")}
+            >
               {entry.type === "collapsed" ? (
                 <CollapsedPathMenu
                   entries={entry.entries}
@@ -166,6 +188,7 @@ export function FilePathBreadcrumb({
                 />
               ) : (
                 <PathItem
+                  compact={compact}
                   entry={entry.entry}
                   current={entry.entry.path === currentPath}
                   model={model}

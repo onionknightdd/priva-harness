@@ -358,13 +358,15 @@ export const en = {
     resize: "Resize Workspace",
     expand: "Expand Workspace",
     restore: "Restore Workspace",
-    backToHome: "Back to Workspace",
     home: {
       tasksAndActivity: "Tasks & Activity",
       files: "Files",
       terminal: "Terminal",
       artifacts: "Artifacts",
       unavailable: "{{action}} is not available yet",
+    },
+    tabs: {
+      listLabel: "Workspace modules",
     },
   },
   language: {
