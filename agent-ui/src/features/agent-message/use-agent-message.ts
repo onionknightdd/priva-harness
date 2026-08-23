@@ -8,7 +8,10 @@ import {
   createAgentThreadMessage,
   type AgentThreadMessage,
 } from "./agent-message-data"
-import { runAgentSession } from "./run-agent-session"
+import {
+  runAgentSession,
+  type AgentRunEffort,
+} from "./run-agent-session"
 
 type ActiveStream = {
   controller: AbortController
@@ -22,22 +25,47 @@ function isAbortError(error: unknown) {
 export function useAgentMessage() {
   const { t } = useTranslation()
   const { runHarnessId } = useHarness()
-  const { activeSession, threadMessages } = useChatSession()
-  const sessionId = activeSession?.sessionId
+  const {
+    activeSession,
+    threadMessages,
+    messagesStatus,
+    transcriptEpoch,
+    runCwd,
+    runSessionId,
+    bindRunSession,
+  } = useChatSession()
   const [draft, setDraft] = React.useState("")
   const [modelReference, setModelReference] = React.useState<string | null>(
     null
   )
+  const [effort, setEffort] = React.useState<AgentRunEffort>("medium")
   const [messages, setMessages] = React.useState<AgentThreadMessage[]>([])
   const activeStreamRef = React.useRef<ActiveStream | null>(null)
+  const previousHarnessIdRef = React.useRef(runHarnessId)
 
   React.useEffect(() => {
-    if (!sessionId) {
+    if (previousHarnessIdRef.current === runHarnessId) {
+      return
+    }
+
+    previousHarnessIdRef.current = runHarnessId
+    activeStreamRef.current?.controller.abort()
+    activeStreamRef.current = null
+    setDraft("")
+  }, [runHarnessId])
+
+  React.useEffect(() => {
+    if (messagesStatus === "loading") {
+      setMessages([])
+      return
+    }
+
+    if (transcriptEpoch === 0) {
       return
     }
 
     setMessages(threadMessages)
-  }, [sessionId, threadMessages])
+  }, [messagesStatus, threadMessages, transcriptEpoch])
 
   React.useEffect(() => {
     activeStreamRef.current?.controller.abort()
@@ -52,8 +80,9 @@ export function useAgentMessage() {
 
   const submit = React.useCallback(() => {
     const content = draft.trim()
+    const cwd = runCwd.trim()
 
-    if (!content || !modelReference || !runHarnessId) {
+    if (!content || !modelReference || !runHarnessId || !cwd) {
       return
     }
 
@@ -67,6 +96,7 @@ export function useAgentMessage() {
       "streaming"
     )
     const controller = new AbortController()
+    const resumeSessionId = runHarnessId === "claude" ? runSessionId : null
 
     activeStreamRef.current = {
       controller,
@@ -108,6 +138,9 @@ export function useAgentMessage() {
         text: content,
         model: modelReference,
         harness: runHarnessId,
+        cwd,
+        effort,
+        ...(resumeSessionId ? { sessionId: resumeSessionId } : {}),
       },
       {
         signal: controller.signal,
@@ -119,6 +152,9 @@ export function useAgentMessage() {
         },
         onError: (message) => {
           updateAssistant(message, "error")
+        },
+        onSession: (sessionId) => {
+          bindRunSession(sessionId)
         },
       }
     )
@@ -148,16 +184,28 @@ export function useAgentMessage() {
           "error"
         )
       })
-  }, [draft, modelReference, runHarnessId, t])
+  }, [
+    bindRunSession,
+    draft,
+    effort,
+    modelReference,
+    runCwd,
+    runHarnessId,
+    runSessionId,
+    t,
+  ])
 
   return {
     draft,
     messages,
     modelReference,
-    canSubmit: Boolean(draft.trim() && modelReference && runHarnessId),
+    canSubmit: Boolean(
+      draft.trim() && modelReference && runHarnessId && runCwd.trim()
+    ),
     modelReady: Boolean(modelReference && runHarnessId),
     setDraft,
     setModelReference,
+    setEffort,
     submit,
   }
 }

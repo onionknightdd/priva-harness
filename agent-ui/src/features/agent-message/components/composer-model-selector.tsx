@@ -45,7 +45,7 @@ const COMPOSER_MENU_WIDTH_CLASS = "w-56 min-w-56 max-w-56 text-xs"
 const COMPOSER_TEXT_CLASS = "text-xs font-normal"
 const EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const
 
-type ComposerEffort = (typeof EFFORT_LEVELS)[number]
+export type ComposerEffort = (typeof EFFORT_LEVELS)[number]
 
 type ComposerModelSelection = {
   profileId: string
@@ -517,8 +517,10 @@ function EffortSubmenu({
 
 export function ComposerModelSelector({
   onModelReferenceChange,
+  onEffortChange,
 }: {
   onModelReferenceChange?: (model: string | null) => void
+  onEffortChange?: (effort: ComposerEffort) => void
 }) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
@@ -706,6 +708,10 @@ export function ComposerModelSelector({
       profileId && modelId ? `${profileId}:${modelId}` : null
     )
   }, [onModelReferenceChange, selection])
+
+  React.useEffect(() => {
+    onEffortChange?.(effort)
+  }, [effort, onEffortChange])
 
   const selectionKey = selection
     ? `${selection.profileId}:${selection.modelId}`

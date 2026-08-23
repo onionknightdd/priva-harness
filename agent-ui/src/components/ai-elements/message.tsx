@@ -29,6 +29,9 @@ import {
 } from "react";
 import { Streamdown } from "streamdown";
 
+import { streamdownLinkSafety } from "./streamdown-link-safety";
+import { streamdownMarkdownComponents } from "./streamdown-markdown-components";
+
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];
 };
@@ -337,6 +340,8 @@ export const MessageResponse = memo(
       // @streamdown/code types Shiki 3; this app already uses Shiki 4.
       plugins={streamdownPlugins as MessageResponseProps["plugins"]}
       {...props}
+      components={streamdownMarkdownComponents}
+      linkSafety={streamdownLinkSafety}
     />
   ),
   (prevProps, nextProps) =>

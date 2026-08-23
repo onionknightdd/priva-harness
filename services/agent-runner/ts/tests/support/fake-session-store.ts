@@ -19,6 +19,7 @@ export class FakeSessionStore implements ProviderSessionStore {
   readonly deleted: string[] = []
   readonly renamed: { readonly id: string; readonly title: string }[] = []
   readonly tagged: { readonly id: string; readonly tag: string | null }[] = []
+  readonly forked: { readonly sourceId: string; readonly title: string; readonly upToMessageId?: string }[] = []
 
   seed(info: ProviderSessionInfo, messages: readonly SessionMessage[] = []): void {
     this.records.set(info.ref.id, info)
@@ -77,6 +78,42 @@ export class FakeSessionStore implements ProviderSessionStore {
     return this.read(ref).then((info) => {
       this.records.set(ref.id, { ...info, tag })
       this.tagged.push({ id: ref.id, tag })
+    })
+  }
+
+  fork(
+    ref: SessionRef,
+    options: { title: string; upToMessageId?: string },
+  ): Promise<ProviderSessionInfo> {
+    if (ref.provider === 'bambuddy') {
+      return Promise.reject(new SessionError('invalid-request', 'Bambuddy does not support fork'))
+    }
+    return this.read(ref).then((info) => {
+      const sourceMessages = this.messageLists.get(ref.id) ?? []
+      let messages = [...sourceMessages]
+      if (options.upToMessageId !== undefined) {
+        const index = messages.findIndex((message) => message.uuid === options.upToMessageId)
+        if (index < 0) {
+          throw new SessionError('invalid-request', 'Fork point message not found')
+        }
+        messages = messages.slice(0, index + 1)
+      }
+      const id = `fork-${ref.id}-${this.records.size}`
+      const forked: ProviderSessionInfo = {
+        ...info,
+        ref: { provider: info.ref.provider, id },
+        customTitle: options.title,
+        summary: options.title,
+        lastModified: Date.now(),
+      }
+      this.records.set(id, forked)
+      this.messageLists.set(id, messages)
+      this.forked.push({
+        sourceId: ref.id,
+        title: options.title,
+        ...(options.upToMessageId === undefined ? {} : { upToMessageId: options.upToMessageId }),
+      })
+      return forked
     })
   }
 }

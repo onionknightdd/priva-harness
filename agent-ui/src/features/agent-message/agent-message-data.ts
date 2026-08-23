@@ -8,6 +8,7 @@ export type AgentThreadMessage = {
   content: string
   createdAt: string
   status: AgentMessageStatus
+  transcriptUuid?: string
 }
 
 export function createAgentThreadMessage(

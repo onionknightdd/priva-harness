@@ -212,24 +212,26 @@ export function AgentChatHeader() {
           />
         </motion.div>
       ) : (
-        <h1
-          className={cn(
-            "min-w-0 truncate text-sm font-medium",
-            activeSession && "cursor-text"
-          )}
-          title={title}
-          onDoubleClick={() => {
-            if (!activeSession) {
-              return
-            }
+        <div className="flex min-w-0 items-center gap-1.5">
+          <h1
+            className={cn(
+              "min-w-0 truncate text-sm font-medium",
+              activeSession && "cursor-text"
+            )}
+            title={title}
+            onDoubleClick={() => {
+              if (!activeSession) {
+                return
+              }
 
-            skipBlurCommitRef.current = false
-            setDraft(title)
-            setEditing(true)
-          }}
-        >
-          {title}
-        </h1>
+              skipBlurCommitRef.current = false
+              setDraft(title)
+              setEditing(true)
+            }}
+          >
+            {title}
+          </h1>
+        </div>
       )}
       {activeSession && !editing ? (
         <div className="flex shrink-0 items-center">

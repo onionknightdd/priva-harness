@@ -247,6 +247,23 @@ export const renameSessionSchema = {
   },
 } as const
 
+export const forkSessionSchema = {
+  params: sessionIdParams,
+  querystring: harnessQueryObject,
+  body: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['stem'],
+    properties: {
+      stem: { type: 'string' },
+      up_to_message_id: { type: 'string' },
+    },
+  },
+  response: {
+    200: sessionInfoSchema,
+  },
+} as const
+
 export const tagSessionSchema = {
   params: sessionIdParams,
   querystring: harnessQueryObject,

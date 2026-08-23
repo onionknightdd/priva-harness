@@ -12,19 +12,28 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 function AgentHarness() {
   const [activeView, setActiveView] = React.useState<AppView>("agent-message")
   const [agentMessageSessionKey, setAgentMessageSessionKey] = React.useState(0)
-  const { closeSession } = useChatSession()
-
+  const { startNewChat } = useChatSession()
   const startNewAgentMessage = React.useCallback(() => {
-    closeSession()
+    startNewChat()
     setActiveView("agent-message")
     setAgentMessageSessionKey((currentKey) => currentKey + 1)
-  }, [closeSession])
+  }, [startNewChat])
+
+  const startProjectChat = React.useCallback(
+    (cwd: string) => {
+      startNewChat(cwd)
+      setActiveView("agent-message")
+      setAgentMessageSessionKey((currentKey) => currentKey + 1)
+    },
+    [startNewChat]
+  )
 
   return (
     <SidebarProvider className="h-svh min-h-0 overflow-hidden">
       <AppSidebar
         activeView={activeView}
         onNewAgentMessage={startNewAgentMessage}
+        onCreateProjectSession={startProjectChat}
         onViewChange={setActiveView}
       />
       <AgentLayout

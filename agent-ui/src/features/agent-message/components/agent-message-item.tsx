@@ -11,6 +11,11 @@ import {
   MessageContent,
   MessageResponse,
 } from "@/components/ai-elements/message"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { writeClipboardText } from "@/lib/clipboard"
 
 import type { RelativeTimeLabel } from "@/lib/relative-time"
@@ -93,20 +98,48 @@ function AgentMessageCopyAction({ text }: { text: string }) {
   )
 }
 
-function AgentMessageSplitAction() {
+function AgentMessageSplitAction({
+  onFork,
+  disabledReason,
+}: {
+  onFork?: () => void
+  disabledReason?: string
+}) {
   const { t } = useTranslation()
-  const label = t("agentMessage.forkChat")
+  const enabled = onFork !== undefined
+  const label = enabled
+    ? t("agentMessage.forkChat")
+    : (disabledReason ?? t("agentMessage.forkChat"))
 
-  return (
+  const action = (
     <MessageAction
-      tooltip={label}
+      tooltip={enabled ? label : undefined}
       label={label}
+      disabled={!enabled}
       onClick={(event) => {
+        if (!enabled) {
+          return
+        }
+
         animateControl(event.currentTarget)
+        onFork?.()
       }}
     >
       <SplitIcon className="size-3.5" aria-hidden="true" />
     </MessageAction>
+  )
+
+  if (enabled) {
+    return action
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<span className="inline-flex" />}>
+        {action}
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -118,25 +151,35 @@ function AgentMessageRelativeTime({
   const shouldReduceMotion = Boolean(useReducedMotion())
 
   return (
-    <motion.time
-      dateTime={relativeTime.dateTime}
-      title={relativeTime.absoluteLabel}
-      className="ml-1 px-1 text-sm leading-none text-muted-foreground/50"
-      initial={shouldReduceMotion ? false : { opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}
-    >
-      {relativeTime.label}
-    </motion.time>
+    <Tooltip>
+      <TooltipTrigger render={<span className="inline-flex" />}>
+        <motion.time
+          dateTime={relativeTime.dateTime}
+          className="ml-1 px-1 text-sm leading-none text-muted-foreground/50"
+          initial={shouldReduceMotion ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}
+        >
+          {relativeTime.label}
+        </motion.time>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" sideOffset={6}>
+        {relativeTime.absoluteLabel}
+      </TooltipContent>
+    </Tooltip>
   )
 }
 
 export function AgentMessageItem({
   message,
   relativeTime,
+  onFork,
+  forkDisabledReason,
 }: {
   message: AgentThreadMessage
   relativeTime?: RelativeTimeLabel | null
+  onFork?: () => void
+  forkDisabledReason?: string
 }) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
@@ -194,7 +237,10 @@ export function AgentMessageItem({
           {message.role === "assistant" && message.status === "complete" ? (
             <MessageActions>
               <AgentMessageCopyAction text={message.content} />
-              <AgentMessageSplitAction />
+              <AgentMessageSplitAction
+                onFork={onFork}
+                disabledReason={forkDisabledReason}
+              />
               {relativeTime ? (
                 <AgentMessageRelativeTime relativeTime={relativeTime} />
               ) : null}

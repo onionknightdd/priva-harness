@@ -208,6 +208,44 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
     [harness, refresh]
   )
 
+  const prependSession = React.useCallback((session: SessionInfo) => {
+    const cwd = session.cwd ?? ""
+    setGroups((current) => {
+      const existingIndex = current.findIndex((group) => group.cwd === cwd)
+      if (existingIndex < 0) {
+        return [
+          {
+            cwd,
+            pinned: false,
+            hasMore: false,
+            sessions: [session],
+          },
+          ...current,
+        ]
+      }
+
+      return current.map((group, index) => {
+        if (index !== existingIndex) {
+          return group
+        }
+
+        if (group.sessions.some((item) => item.sessionId === session.sessionId)) {
+          return {
+            ...group,
+            sessions: group.sessions.map((item) =>
+              item.sessionId === session.sessionId ? session : item
+            ),
+          }
+        }
+
+        return {
+          ...group,
+          sessions: [session, ...group.sessions],
+        }
+      })
+    })
+  }, [])
+
   return {
     groups,
     activeCwd,
@@ -221,5 +259,6 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
     setTags,
     rename,
     remove,
+    prependSession,
   }
 }

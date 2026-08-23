@@ -11,6 +11,7 @@ import type {
 } from '../../../core/contract/provider-session-store.js'
 import {
   pageSessionMessages,
+  parseMessageTimestamp,
   SessionError,
   type LastAssistantModel,
   type ProviderSessionInfo,
@@ -30,6 +31,10 @@ export interface ClaudeSessionSdk {
   deleteSession(sessionId: string, options?: { dir?: string }): Promise<void>
   renameSession(sessionId: string, title: string, options?: { dir?: string }): Promise<void>
   tagSession(sessionId: string, tag: string | null, options?: { dir?: string }): Promise<void>
+  forkSession(
+    sessionId: string,
+    options?: { dir?: string; upToMessageId?: string; title?: string },
+  ): Promise<{ sessionId: string }>
 }
 
 export interface ClaudeSdkSessionInfo {
@@ -125,6 +130,29 @@ export class ClaudeSessionStore implements ProviderSessionStore {
     await this.sdk.tagSession(ref.id, tag, dirOptions(info.cwd))
   }
 
+  async fork(
+    ref: SessionRef,
+    options: { title: string; upToMessageId?: string },
+  ): Promise<ProviderSessionInfo> {
+    const info = await this.read(ref)
+    const result = await this.sdk.forkSession(ref.id, {
+      ...dirOptions(info.cwd),
+      title: options.title,
+      ...(options.upToMessageId === undefined ? {} : { upToMessageId: options.upToMessageId }),
+    })
+    const forked = await this.sdk.getSessionInfo(result.sessionId, dirOptions(info.cwd))
+    if (forked !== null && forked !== undefined) {
+      return this.toProviderInfo(forked)
+    }
+    return {
+      ...info,
+      ref: { provider: 'claude', id: result.sessionId },
+      customTitle: options.title,
+      summary: options.title,
+      lastModified: Date.now(),
+    }
+  }
+
   private toProviderInfo(info: ClaudeSdkSessionInfo): ProviderSessionInfo {
     return {
       ref: { provider: 'claude', id: info.sessionId },
@@ -212,6 +240,9 @@ const defaultClaudeSessionSdk: ClaudeSessionSdk = {
   async tagSession(sessionId, tag, options) {
     await callClaudeSdk('tagSession', sessionId, tag, ...optionalArg(options))
   },
+  async forkSession(sessionId, options) {
+    return await callClaudeSdk<{ sessionId: string }>('forkSession', sessionId, ...optionalArg(options))
+  },
 }
 
 function optionalArg<T>(value: T | undefined): [] | [T] {
@@ -244,6 +275,8 @@ export function mapClaudeMessage(raw: unknown, sessionId: string): SessionMessag
       ?? stringField(record, 'parentToolUseId')
       ?? null,
     metadata: metadataField(record['metadata']),
+    timestamp: parseMessageTimestamp(record['timestamp'])
+      ?? parseMessageTimestamp(asRecord(record['message'])['timestamp']),
   }
 }
 
@@ -290,7 +323,7 @@ function assistantModelFromUnknown(
   if (modelId === undefined || modelId.includes('<synthetic>')) return undefined
   return {
     modelId,
-    observedAt: timestampToMs(record['timestamp']) ?? fallbackObservedAt,
+    observedAt: parseMessageTimestamp(record['timestamp']) ?? fallbackObservedAt,
   }
 }
 
@@ -313,15 +346,6 @@ function toEpochMs(value: Date | number | string | undefined): number {
     if (!Number.isNaN(parsed)) return parsed
   }
   return 0
-}
-
-function timestampToMs(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  if (typeof value === 'string') {
-    const parsed = Date.parse(value)
-    if (!Number.isNaN(parsed)) return parsed
-  }
-  return null
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

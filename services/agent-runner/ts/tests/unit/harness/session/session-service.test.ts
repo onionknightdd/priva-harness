@@ -119,4 +119,38 @@ describe('SessionService last_response_model', () => {
     })
     expect(byId.get('shared-src')?.lastResponseModel).toBeNull()
   })
+
+  it('numbers fork titles from the current stem in the same cwd', async () => {
+    const runtimeHome = await mkdtemp(join(tmpdir(), 'priva-session-fork-'))
+    roots.push(runtimeHome)
+    const claude = new FakeAgentProvider('claude', [])
+    claude.sessions.seed({
+      ref: { provider: 'claude', id: 'orig' },
+      summary: '设计 API',
+      lastModified: 2,
+      fileSize: 1,
+      customTitle: '设计 API',
+      firstPrompt: 'hi',
+      gitBranch: null,
+      cwd: '/work',
+      tag: null,
+    })
+    const service = new SessionService({
+      providers: {
+        claude,
+        bambuddy: new FakeAgentProvider('bambuddy', []),
+      },
+      metadata: new MemorySessionMetadataRepository(),
+      liveRuns: new LiveRunRegistry(),
+      modelProfiles: createTestModelProfileService(runtimeHome),
+      activeCwd: '/work',
+    })
+
+    const first = await service.fork('claude', 'orig', { stem: '设计 API' })
+    expect(first.customTitle).toBe('设计 API (1)')
+    const nested = await service.fork('claude', first.sessionId, { stem: '设计 API (1)' })
+    expect(nested.customTitle).toBe('设计 API (1) (1)')
+    const second = await service.fork('claude', 'orig', { stem: '设计 API' })
+    expect(second.customTitle).toBe('设计 API (2)')
+  })
 })

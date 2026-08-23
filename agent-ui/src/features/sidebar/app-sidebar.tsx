@@ -23,11 +23,13 @@ import { sidebarData } from "./sidebar-data"
 export function AppSidebar({
   activeView,
   onNewAgentMessage,
+  onCreateProjectSession,
   onViewChange,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
   activeView: AppView
   onNewAgentMessage?: () => void
+  onCreateProjectSession?: (cwd: string) => void
   onViewChange: (view: AppView) => void
 }) {
   const footerFadeRef = React.useRef<HTMLDivElement>(null)
@@ -76,6 +78,10 @@ export function AppSidebar({
           onSelectSession={(session) => {
             onViewChange("agent-message")
             openSession(session)
+          }}
+          onCreateSession={(cwd) => {
+            onViewChange("agent-message")
+            onCreateProjectSession?.(cwd)
           }}
         />
       </SidebarContent>

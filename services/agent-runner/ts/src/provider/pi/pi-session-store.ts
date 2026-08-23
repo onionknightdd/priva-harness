@@ -12,6 +12,7 @@ import type {
 } from '../../core/contract/provider-session-store.js'
 import {
   pageSessionMessages,
+  parseMessageTimestamp,
   SessionError,
   type LastAssistantModel,
   type ProviderSessionInfo,
@@ -131,6 +132,15 @@ export class PiSessionStore implements ProviderSessionStore {
     return this.read(ref).then(() => undefined)
   }
 
+  fork(
+    _ref: SessionRef,
+    _options: { title: string; upToMessageId?: string },
+  ): Promise<ProviderSessionInfo> {
+    void _ref
+    void _options
+    return Promise.reject(new SessionError('invalid-request', 'Bambuddy does not support fork'))
+  }
+
   private async listAllSessions(): Promise<readonly PiListedSession[]> {
     const root = piSessionsRoot(this.agentDir)
     let entries: Dirent[]
@@ -209,6 +219,7 @@ export function messagesFromContextEntries(
         },
         parentToolUseId: null,
         metadata: null,
+        timestamp: null,
       })
       continue
     }
@@ -223,6 +234,7 @@ export function messagesFromContextEntries(
         },
         parentToolUseId: null,
         metadata: null,
+        timestamp: null,
       })
       continue
     }
@@ -240,6 +252,7 @@ export function messagesFromContextEntries(
         },
         parentToolUseId: null,
         metadata: null,
+        timestamp: null,
       })
     }
   }
@@ -262,6 +275,9 @@ export function mapPiAgentMessage(
       ? (typeof message.toolCallId === 'string' ? message.toolCallId : null)
       : null,
     metadata: null,
+    timestamp: parseMessageTimestamp(message['timestamp'])
+      ?? parseMessageTimestamp(message['createdAt'])
+      ?? parseMessageTimestamp(message['created_at']),
   }
 }
 

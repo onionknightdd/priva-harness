@@ -1,4 +1,5 @@
 import type { SessionTranscriptMessage } from "@/lib/api/sandbox-sessions"
+import { sessionTimestampToMs } from "@/lib/relative-time"
 
 import type { AgentThreadMessage } from "@/features/agent-message/agent-message-data"
 
@@ -72,6 +73,10 @@ export function threadMessagesFromTranscript(
       return []
     }
 
+    if (item.parentToolUseId) {
+      return []
+    }
+
     const content = textFromSessionMessage(item.message).trim()
     if (content === "") {
       return []
@@ -82,9 +87,23 @@ export function threadMessagesFromTranscript(
         id: item.uuid || crypto.randomUUID(),
         role: item.type,
         content,
-        createdAt: new Date().toISOString(),
+        createdAt: createdAtFromTranscript(item),
         status: "complete" as const,
+        ...(item.uuid ? { transcriptUuid: item.uuid } : {}),
       },
     ]
   })
+}
+
+function createdAtFromTranscript(item: SessionTranscriptMessage): string {
+  if (item.timestamp == null) {
+    return new Date().toISOString()
+  }
+
+  const fromMs = sessionTimestampToMs(item.timestamp)
+  if (fromMs === null) {
+    return new Date().toISOString()
+  }
+
+  return new Date(fromMs).toISOString()
 }

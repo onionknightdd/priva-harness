@@ -9,9 +9,18 @@ export interface SessionRef {
   readonly id: string
 }
 
+export const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'] as const
+
+export type EffortLevel = (typeof EFFORT_LEVELS)[number]
+
+export function isEffortLevel(value: unknown): value is EffortLevel {
+  return typeof value === 'string' && (EFFORT_LEVELS as readonly string[]).includes(value)
+}
+
 export type SessionTarget =
   | { kind: 'new'; provider: ProviderId }
   | { kind: 'resume'; session: SessionRef }
+  | { kind: 'fork'; source: SessionRef }
 
 export interface ProviderRunSpec {
   readonly cwd: string
@@ -21,6 +30,7 @@ export interface ProviderRunSpec {
   readonly authToken: string
   readonly profileId?: string
   readonly modelContext?: '1m' | null
+  readonly effort?: EffortLevel
 }
 
 export interface TurnContext {

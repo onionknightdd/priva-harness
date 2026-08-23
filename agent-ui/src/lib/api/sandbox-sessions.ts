@@ -239,6 +239,7 @@ export type SessionTranscriptMessage = {
   sessionId: string
   message: unknown
   parentToolUseId: string | null
+  timestamp: number | null
 }
 
 export function listSessionMessages(
@@ -253,6 +254,7 @@ export function listSessionMessages(
       session_id: string
       message: unknown
       parent_tool_use_id: string | null
+      timestamp?: number | null
     }>
   }>(`${sessionPath(sessionId, "/messages")}?${harnessQuery(harness)}`, {
     signal,
@@ -263,6 +265,27 @@ export function listSessionMessages(
       sessionId: item.session_id,
       message: item.message,
       parentToolUseId: item.parent_tool_use_id,
+      timestamp: item.timestamp ?? null,
     })),
   }))
+}
+
+export function forkSession(
+  harness: AgentRunHarness,
+  sessionId: string,
+  body: { stem: string; upToMessageId?: string }
+) {
+  return requestJson<SessionInfoResponse>(
+    `${sessionPath(sessionId, "/fork")}?${harnessQuery(harness)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        stem: body.stem,
+        ...(body.upToMessageId === undefined
+          ? {}
+          : { up_to_message_id: body.upToMessageId }),
+      }),
+    }
+  ).then(mapSession)
 }

@@ -3,8 +3,8 @@ import { ArrowUpIcon, PlusIcon } from "lucide-react"
 import { LayoutGroup, motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
-import { Field, FieldLabel } from "@/components/ui/field"
 import { cn } from "@/lib/utils"
+import { Field, FieldLabel } from "@/components/ui/field"
 import {
   InputGroupAddon,
   InputGroupButton,
@@ -16,7 +16,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 
-import { ComposerModelSelector } from "./composer-model-selector"
+import { ComposerModelSelector, type ComposerEffort } from "./composer-model-selector"
 
 export const composerDockTransition = {
   duration: 0.4,
@@ -53,12 +53,14 @@ function ComposerControls({
   sendLabel,
   modelRequired,
   onModelReferenceChange,
+  onEffortChange,
 }: {
   canSubmit: boolean
   modelReady: boolean
   sendLabel: string
   modelRequired: string
   onModelReferenceChange: (model: string | null) => void
+  onEffortChange: (effort: ComposerEffort) => void
 }) {
   return (
     <>
@@ -69,6 +71,7 @@ function ComposerControls({
       >
         <ComposerModelSelector
           onModelReferenceChange={onModelReferenceChange}
+          onEffortChange={onEffortChange}
         />
       </div>
       <InputGroupButton
@@ -93,6 +96,7 @@ export function AgentMessageComposer({
   modelReady,
   onDraftChange,
   onModelReferenceChange,
+  onEffortChange,
   onSubmit,
 }: {
   compact?: boolean
@@ -101,6 +105,7 @@ export function AgentMessageComposer({
   modelReady: boolean
   onDraftChange: (draft: string) => void
   onModelReferenceChange: (model: string | null) => void
+  onEffortChange: (effort: ComposerEffort) => void
   onSubmit: () => void
 }) {
   const { t } = useTranslation()
@@ -224,6 +229,7 @@ export function AgentMessageComposer({
                   sendLabel={t("agentMessage.send")}
                   modelRequired={t("agentMessage.modelRequired")}
                   onModelReferenceChange={onModelReferenceChange}
+                  onEffortChange={onEffortChange}
                 />
               </InputGroupAddon>
             </motion.div>

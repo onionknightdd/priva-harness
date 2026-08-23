@@ -7,6 +7,7 @@ import {
   addDirsSchema,
   archiveSessionSchema,
   deleteSessionSchema,
+  forkSessionSchema,
   listRunningSessionsSchema,
   listSessionsSchema,
   pinSessionSchema,
@@ -121,6 +122,7 @@ export const sessionRoutes: FastifyPluginCallback<SessionRoutesOptions> = (
           message: message.message,
           parent_tool_use_id: message.parentToolUseId,
           metadata: message.metadata,
+          timestamp: message.timestamp,
         })),
         add_dirs: result.addDirs,
         run_mode: result.runMode,
@@ -160,6 +162,27 @@ export const sessionRoutes: FastifyPluginCallback<SessionRoutesOptions> = (
       )
       return { status: 'ok' }
     },
+  )
+
+  fastify.post<{
+    Params: SessionParams
+    Querystring: HarnessQuery
+    Body: { stem: string; up_to_message_id?: string }
+  }>(
+    `${SESSION_ROUTE_PREFIX}/:session_id/fork`,
+    { schema: forkSessionSchema },
+    async (request) => toSessionInfoResponse(
+      await sessionService.fork(
+        request.query.harness,
+        request.params.session_id,
+        {
+          stem: request.body.stem,
+          ...(request.body.up_to_message_id === undefined
+            ? {}
+            : { upToMessageId: request.body.up_to_message_id }),
+        },
+      ),
+    ),
   )
 
   fastify.put<{

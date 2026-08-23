@@ -15,6 +15,7 @@ import {
 } from "./agent-message-composer"
 import { AgentMessageEmptyState } from "./agent-message-empty-state"
 import { AgentMessageThread } from "./agent-message-thread"
+import type { ComposerEffort } from "./composer-model-selector"
 import { SessionCwdBreadcrumb } from "./session-cwd-breadcrumb"
 
 const fadeTransition = {
@@ -31,6 +32,7 @@ export function AgentMessage({
   modelReady,
   onDraftChange,
   onModelReferenceChange,
+  onEffortChange,
   onSubmit,
 }: {
   draft: string
@@ -39,10 +41,11 @@ export function AgentMessage({
   modelReady: boolean
   onDraftChange: (draft: string) => void
   onModelReferenceChange: (model: string | null) => void
+  onEffortChange: (effort: ComposerEffort) => void
   onSubmit: () => void
 }) {
   const { t } = useTranslation()
-  const { activeSession } = useChatSession()
+  const { activeSession, forkError, runCwd } = useChatSession()
   const shouldReduceMotion = Boolean(useReducedMotion())
   const isEmpty = messages.length === 0 && activeSession === null
   const dockTransition = shouldReduceMotion
@@ -102,14 +105,24 @@ export function AgentMessage({
           modelReady={modelReady}
           onDraftChange={onDraftChange}
           onModelReferenceChange={onModelReferenceChange}
+          onEffortChange={onEffortChange}
           onSubmit={onSubmit}
         />
-        {activeSession?.cwd ? (
+        {runCwd ? (
           <SessionCwdBreadcrumb
-            key={activeSession.sessionId}
-            cwd={activeSession.cwd}
+            key={runCwd}
+            cwd={runCwd}
             className="mt-2"
           />
+        ) : null}
+        {forkError ? (
+          <p className="mt-2 text-xs text-destructive" role="alert">
+            {forkError === "needs_transcript"
+              ? t("agentMessage.forkNeedsTranscript")
+              : forkError === "failed"
+                ? t("agentMessage.forkFailed")
+                : forkError}
+          </p>
         ) : null}
       </div>
 

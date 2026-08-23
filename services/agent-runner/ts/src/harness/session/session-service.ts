@@ -20,6 +20,7 @@ import {
 } from '../../core/resource/session.js'
 import type { ModelProfileService } from '../config/model-profile-service.js'
 import type { LiveRunRecord, LiveRunRegistry } from '../run/live-run-registry.js'
+import { nextForkTitle, sessionStem } from './fork-session-title.js'
 
 export interface SessionServiceOptions {
   readonly providers: Readonly<Record<ProviderId, AgentProvider>>
@@ -214,6 +215,37 @@ export class SessionService {
     }
     const ref = this.ref(harness, sessionId)
     await this.provider(harness).sessions.rename(ref, trimmed)
+  }
+
+  async fork(
+    harness: ProviderId,
+    sessionId: string,
+    input: { readonly stem: string; readonly upToMessageId?: string },
+  ): Promise<SessionView> {
+    const stem = input.stem.trim()
+    if (stem === '') {
+      throw new SessionError('invalid-request', 'Fork title stem must be a non-empty string')
+    }
+    const upToMessageId = input.upToMessageId?.trim()
+    if (input.upToMessageId !== undefined && upToMessageId === '') {
+      throw new SessionError('invalid-request', 'up_to_message_id must be a non-empty string')
+    }
+    const ref = this.ref(harness, sessionId)
+    const provider = this.provider(harness)
+    const source = await provider.sessions.read(ref)
+    const listed = await provider.sessions.list(
+      source.cwd === null || source.cwd === '' ? {} : { cwd: source.cwd },
+    )
+    const title = nextForkTitle(stem, listed.map((session) => sessionStem(session)))
+    const forked = await provider.sessions.fork(ref, {
+      title,
+      ...(upToMessageId === undefined ? {} : { upToMessageId }),
+    })
+    const [view] = await this.toViews([forked])
+    if (view === undefined) {
+      throw new SessionError('io-failure', 'Forked session could not be read')
+    }
+    return view
   }
 
   async setTags(

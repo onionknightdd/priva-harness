@@ -80,6 +80,7 @@ describe('WS /api/sandbox/agent/ws/run', () => {
       text: 'hi',
       model: modelReference,
       harness: 'claude',
+      cwd: testRoot,
     }))
     const received = await frames
 
@@ -116,6 +117,7 @@ describe('WS /api/sandbox/agent/ws/run', () => {
       text: 'hi',
       model: 'missing:model-a',
       harness: 'claude',
+      cwd: testRoot,
     }))
     expect(await frames).toEqual([
       { type: 'error', message: 'profile_not_found' },
@@ -130,6 +132,7 @@ describe('WS /api/sandbox/agent/ws/run', () => {
       text: 'hi',
       model: modelReference,
       harness: 'bambuddy',
+      cwd: testRoot,
     }))
     const received = await frames
 
@@ -140,6 +143,7 @@ describe('WS /api/sandbox/agent/ws/run', () => {
         model: 'm',
         baseUrl: 'https://api.example.com/v1',
         authToken: 'secret',
+        cwd: testRoot,
       }),
     ])
     expect(received).toEqual(expect.arrayContaining([
@@ -150,6 +154,46 @@ describe('WS /api/sandbox/agent/ws/run', () => {
         harnessProvider: 'bambuddy',
       }),
     ]))
+  })
+
+  it('resumes a claude session and rejects bambuddy resume', async () => {
+    const resume = await server.injectWS(RUN_WEBSOCKET_PATH)
+    const resumeFrames = collectFrames(resume)
+    resume.send(JSON.stringify({
+      type: 'init',
+      text: 'again',
+      model: modelReference,
+      harness: 'claude',
+      cwd: '/work/repo',
+      sessionId: 'sess-1',
+      effort: 'low',
+    }))
+    await resumeFrames
+
+    expect(claudeProvider.targets).toEqual([
+      {
+        kind: 'resume',
+        session: { provider: 'claude', id: 'sess-1' },
+      },
+    ])
+    expect(claudeProvider.specs.at(-1)).toEqual(expect.objectContaining({
+      cwd: '/work/repo',
+      effort: 'low',
+    }))
+
+    const denied = await server.injectWS(RUN_WEBSOCKET_PATH)
+    const deniedFrames = collectFrames(denied)
+    denied.send(JSON.stringify({
+      type: 'init',
+      text: 'hi',
+      model: modelReference,
+      harness: 'bambuddy',
+      cwd: testRoot,
+      sessionId: 'pi-1',
+    }))
+    expect(await deniedFrames).toEqual([
+      { type: 'error', message: 'Bambuddy does not support resume or fork in this slice' },
+    ])
   })
 })
 

@@ -144,4 +144,36 @@ describe('ClaudeEventMapper', () => {
       durationMs: 9,
     }])
   })
+
+  it('drops subagent assistant and user text from the main transcript', () => {
+    const mapper = new ClaudeEventMapper()
+    const events = [
+      ...mapper.push({
+        type: 'assistant',
+        session_id: 'sess-1',
+        parent_tool_use_id: 'agent-1',
+        message: {
+          content: [{ type: 'text', text: 'subagent only' }],
+        },
+      }),
+      ...mapper.push({
+        type: 'user',
+        session_id: 'sess-1',
+        parent_tool_use_id: 'agent-1',
+        message: {
+          content: [{ type: 'tool_result', tool_use_id: 'call-1', content: 'ok' }],
+        },
+      }),
+      ...mapper.push({
+        type: 'assistant',
+        session_id: 'sess-1',
+        parent_tool_use_id: null,
+        message: {
+          content: [{ type: 'text', text: 'main' }],
+        },
+      }),
+    ]
+
+    expect(events).toEqual([{ type: 'assistant', event: 'message', text: 'main' }])
+  })
 })

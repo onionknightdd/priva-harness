@@ -11,6 +11,15 @@ export const en = {
     expandSidebar: "Expand Sidebar",
     collapseSidebar: "Collapse Sidebar",
     resizeSidebar: "Resize Sidebar",
+    openExternalLink: "Open external link?",
+    externalLinkWarning: "You're about to visit an external website.",
+    copyLink: "Copy link",
+    copyCode: "Copy code",
+    copied: "Copied",
+    copyFailed: "Unable to copy",
+    codeWriting: "Writing",
+    codeReady: "Ready",
+    openLink: "Open link",
   },
   breadcrumb: {
     dataAndUsage: "Data and Usage",
@@ -47,6 +56,12 @@ export const en = {
     copySessionId: "Copy session id",
     sessionCwd: "Working directory",
     forkChat: "Fork chat",
+    forkUnsupported: "Fork is only available for Claude Agent SDK",
+    forkNeedsSession: "Fork is available after this chat has a session",
+    forkNeedsTranscript:
+      "This turn is not saved yet, so it cannot be forked from the middle.",
+    forkFailed: "Unable to fork this chat",
+    forking: "Forking…",
     justNow: "just now",
     mockAssistantReply:
       "Sure. This is a local preview reply. I'll stream it in so you can check scrolling, the caret, and message layout. A live model will replace this mock once streaming is connected.",

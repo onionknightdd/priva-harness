@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   fallbackTagColorIndex,
   normalizeSessionTags,
+  parseMessageTimestamp,
   resolveListedResponseModel,
   SessionError,
   uniqueProfileIdByModel,
@@ -64,6 +65,15 @@ describe('session helpers', () => {
     expect(fallbackTagColorIndex('Alpha')).toBe(fallbackTagColorIndex('alpha'))
     expect(fallbackTagColorIndex('Alpha')).toBeGreaterThanOrEqual(0)
     expect(fallbackTagColorIndex('Alpha')).toBeLessThan(300)
+  })
+
+  it('parses Claude JSONL timestamps and unix seconds into epoch ms', () => {
+    expect(parseMessageTimestamp('2026-01-02T00:00:00.000Z')).toBe(
+      Date.parse('2026-01-02T00:00:00.000Z'),
+    )
+    expect(parseMessageTimestamp(1_767_312_000)).toBe(1_767_312_000_000)
+    expect(parseMessageTimestamp(1_767_312_000_000)).toBe(1_767_312_000_000)
+    expect(parseMessageTimestamp('nope')).toBeNull()
   })
 })
 

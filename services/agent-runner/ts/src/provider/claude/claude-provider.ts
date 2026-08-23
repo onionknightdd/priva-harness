@@ -24,9 +24,14 @@ export class ClaudeProvider implements AgentProvider {
   }
 
   openSession(target: SessionTarget, spec: ProviderRunSpec): Promise<AgentRuntime> {
-    if (target.kind !== 'new') {
-      return Promise.reject(new Error('Claude provider only supports new sessions in this slice'))
+    if (target.kind === 'resume' && target.session.provider !== 'claude') {
+      return Promise.reject(new Error('Claude provider cannot resume a non-claude session'))
     }
-    return Promise.resolve(new ClaudeRuntime(spec, this.options.globalConfigDir))
+    if (target.kind === 'fork' && target.source.provider !== 'claude') {
+      return Promise.reject(new Error('Claude provider cannot fork a non-claude session'))
+    }
+    return Promise.resolve(
+      new ClaudeRuntime(spec, target, this.options.globalConfigDir),
+    )
   }
 }

@@ -29,14 +29,26 @@ describe('ClaudeSessionStore', () => {
     expect(sdk.listSubagents.mock.calls).toHaveLength(1)
   })
 
-  it('renames, tags, and deletes through the SDK', async () => {
+  it('renames, tags, deletes, and forks through the SDK', async () => {
     const sdk = fakeClaudeSdk()
     const store = new ClaudeSessionStore({ globalConfigDir: '/tmp/claude', sdk })
     await store.rename({ provider: 'claude', id: 'sess-1' }, 'Title')
     await store.tag({ provider: 'claude', id: 'sess-1' }, 'work')
+    const forked = await store.fork(
+      { provider: 'claude', id: 'sess-1' },
+      { title: 'Named (1)', upToMessageId: 'a1' },
+    )
     await store.delete({ provider: 'claude', id: 'sess-1' })
     expect(sdk.renameSession.mock.calls).toEqual([['sess-1', 'Title', { dir: '/work' }]])
     expect(sdk.tagSession.mock.calls).toEqual([['sess-1', 'work', { dir: '/work' }]])
+    expect(sdk.forkSession.mock.calls).toEqual([[
+      'sess-1',
+      { dir: '/work', title: 'Named (1)', upToMessageId: 'a1' },
+    ]])
+    expect(forked).toEqual(expect.objectContaining({
+      ref: { provider: 'claude', id: 'fork-1' },
+      customTitle: 'Named (1)',
+    }))
     expect(sdk.deleteSession.mock.calls).toEqual([['sess-1', { dir: '/work' }]])
   })
 
@@ -52,6 +64,15 @@ describe('ClaudeSessionStore', () => {
       role: 'assistant',
       content: [{ type: 'tool_use', id: 't1' }],
     })
+    expect(mapped.parentToolUseId).toBeNull()
+    expect(mapped.timestamp).toBeNull()
+
+    expect(mapClaudeMessage({
+      type: 'assistant',
+      uuid: 'a2',
+      timestamp: '2026-01-02T00:00:00.000Z',
+      message: { role: 'assistant', content: 'ok' },
+    }, 'sess-1').timestamp).toBe(Date.parse('2026-01-02T00:00:00.000Z'))
 
     expect(lastAssistantFromTranscriptLines([
       JSON.stringify({
@@ -82,6 +103,7 @@ function fakeClaudeSdk(): ClaudeSessionSdk & {
   renameSession: ReturnType<typeof vi.fn>
   tagSession: ReturnType<typeof vi.fn>
   deleteSession: ReturnType<typeof vi.fn>
+  forkSession: ReturnType<typeof vi.fn>
 } {
   const info = {
     sessionId: 'sess-1',
@@ -94,9 +116,17 @@ function fakeClaudeSdk(): ClaudeSessionSdk & {
     cwd: '/work',
     tag: 'sdk',
   }
+  const forked = {
+    ...info,
+    sessionId: 'fork-1',
+    customTitle: 'Named (1)',
+    summary: 'Named (1)',
+  }
   return {
     listSessions: vi.fn(() => Promise.resolve([info])),
-    getSessionInfo: vi.fn(() => Promise.resolve(info)),
+    getSessionInfo: vi.fn((sessionId: string) => Promise.resolve(
+      sessionId === 'fork-1' ? forked : info,
+    )),
     getSessionMessages: vi.fn(() => Promise.resolve([
       { type: 'user', uuid: 'u1', session_id: 'sess-1', message: { role: 'user' } },
       { type: 'assistant', uuid: 'a1', session_id: 'sess-1', message: { role: 'assistant' } },
@@ -108,5 +138,6 @@ function fakeClaudeSdk(): ClaudeSessionSdk & {
     deleteSession: vi.fn(() => Promise.resolve()),
     renameSession: vi.fn(() => Promise.resolve()),
     tagSession: vi.fn(() => Promise.resolve()),
+    forkSession: vi.fn(() => Promise.resolve({ sessionId: 'fork-1' })),
   }
 }

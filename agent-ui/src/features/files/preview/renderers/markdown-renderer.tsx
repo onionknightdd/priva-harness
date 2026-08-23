@@ -5,6 +5,9 @@ import { math } from "@streamdown/math"
 import { mermaid } from "@streamdown/mermaid"
 import { Streamdown } from "streamdown"
 
+import { streamdownLinkSafety } from "@/components/ai-elements/streamdown-link-safety"
+import { streamdownMarkdownComponents } from "@/components/ai-elements/streamdown-markdown-components"
+
 const markdownPlugins = { cjk, code, math, mermaid }
 
 export function MarkdownRenderer({ content }: { content: string }) {
@@ -14,6 +17,8 @@ export function MarkdownRenderer({ content }: { content: string }) {
         className="size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
         // @streamdown/code types Shiki 3; this app already uses Shiki 4.
         plugins={markdownPlugins as ComponentProps<typeof Streamdown>["plugins"]}
+        components={streamdownMarkdownComponents}
+        linkSafety={streamdownLinkSafety}
       >
         {content}
       </Streamdown>

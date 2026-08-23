@@ -7,11 +7,15 @@ import type { ProviderRunSpec } from '../../core/contract/agent-provider.js'
 import {
   providerIdForHarness,
   rewriteProviderBaseUrl,
-  type RunHarnessId,
 } from '../../core/resource/run-harness.js'
 import type { AgentHarness } from '../../harness/agent-harness.js'
 import type { ModelProfileService } from '../../harness/config/model-profile-service.js'
-import { parseInitFrame, type ErrorFrame } from './schema/run-frames.js'
+import {
+  parseInitFrame,
+  sessionTargetFromInit,
+  type ErrorFrame,
+  type InitFrame,
+} from './schema/run-frames.js'
 import { encodeServerFrame } from './wire-event-mapper.js'
 
 export const RUN_WEBSOCKET_PATH = '/api/sandbox/agent/ws/run'
@@ -59,7 +63,7 @@ async function handleRunSocket(
 
     let spec: ProviderRunSpec
     try {
-      spec = await buildRunSpec(options, init.frame.model, init.frame.harness)
+      spec = await buildRunSpec(options, init.frame)
     } catch (error) {
       sendError(socket, error instanceof Error ? error.message : String(error))
       socket.close()
@@ -71,7 +75,7 @@ async function handleRunSocket(
       { text: init.frame.text },
       { signal: abort.signal },
       spec,
-      { runId },
+      { runId, session: sessionTargetFromInit(init.frame) },
     )) {
       if (isAborted(abort.signal) || !socketOpen(socket)) break
       socket.send(encodeServerFrame(event, runId))
@@ -90,18 +94,18 @@ async function handleRunSocket(
 
 async function buildRunSpec(
   options: RunRouteOptions,
-  modelReference: string,
-  harness: RunHarnessId,
+  frame: InitFrame,
 ): Promise<ProviderRunSpec> {
-  const resolved = await options.modelProfileService.resolve(modelReference)
+  const resolved = await options.modelProfileService.resolve(frame.model)
   return {
-    cwd: options.cwd,
-    provider: providerIdForHarness(harness),
+    cwd: frame.cwd,
+    provider: providerIdForHarness(frame.harness),
     model: resolved.model,
-    baseUrl: rewriteProviderBaseUrl(resolved.profile.baseUrl, harness),
+    baseUrl: rewriteProviderBaseUrl(resolved.profile.baseUrl, frame.harness),
     authToken: resolved.profile.authToken,
     profileId: resolved.profile.id,
     modelContext: resolved.capabilities.context,
+    ...(frame.effort === undefined ? {} : { effort: frame.effort }),
   }
 }
 

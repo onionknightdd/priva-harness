@@ -16,6 +16,7 @@ export class FakeAgentProvider implements AgentProvider {
   readonly events: readonly AgentEvent[]
   readonly released: string[] = []
   readonly specs: ProviderRunSpec[] = []
+  readonly targets: SessionTarget[] = []
 
   constructor(id: ProviderId, events: readonly AgentEvent[], sessions = new FakeSessionStore()) {
     this.id = id
@@ -24,19 +25,20 @@ export class FakeAgentProvider implements AgentProvider {
   }
 
   openSession(target: SessionTarget, spec: ProviderRunSpec): Promise<AgentRuntime> {
+    this.targets.push(target)
     this.specs.push(spec)
-    if (target.kind !== 'new') {
-      return Promise.reject(new Error('Fake provider only supports new sessions'))
-    }
-    return Promise.resolve(new FakeAgentRuntime(this))
+    return Promise.resolve(new FakeAgentRuntime(this, target))
   }
 }
 
 class FakeAgentRuntime implements AgentRuntime {
   readonly session
 
-  constructor(private readonly provider: FakeAgentProvider) {
-    this.session = { provider: provider.id, id: 'session-1' }
+  constructor(
+    private readonly provider: FakeAgentProvider,
+    target: SessionTarget,
+  ) {
+    this.session = { provider: provider.id, id: sessionIdFor(target) }
   }
 
   run(turn: UserTurn, context: TurnContext): AsyncIterable<AgentEvent> {
@@ -61,4 +63,10 @@ class FakeAgentRuntime implements AgentRuntime {
     this.provider.released.push('dispose')
     return Promise.resolve()
   }
+}
+
+function sessionIdFor(target: SessionTarget): string {
+  if (target.kind === 'resume') return target.session.id
+  if (target.kind === 'fork') return `fork-${target.source.id}`
+  return 'session-1'
 }

@@ -2,16 +2,23 @@ const RUN_WEBSOCKET_PATH = "/api/sandbox/agent/ws/run"
 
 export type AgentRunHarness = "claude" | "bambuddy"
 
+export type AgentRunEffort = "low" | "medium" | "high" | "xhigh" | "max"
+
 export type AgentRunInit = {
   text: string
   model: string
   harness: AgentRunHarness
+  cwd: string
+  effort?: AgentRunEffort
+  sessionId?: string
+  fork?: boolean
 }
 
 type AgentRunHandlers = {
   signal: AbortSignal
   onText: (text: string) => void
   onError: (message: string) => void
+  onSession?: (sessionId: string) => void
 }
 
 type ServerFrame = {
@@ -19,6 +26,7 @@ type ServerFrame = {
   event?: string
   text?: string
   message?: string
+  sessionId?: string
 }
 
 export function runAgentSession(
@@ -30,6 +38,7 @@ export function runAgentSession(
     let assembled = ""
     let settled = false
     let failedMessage: string | null = null
+    let boundSessionId: string | null = null
 
     const finish = (error: Error | null) => {
       if (settled) {
@@ -39,6 +48,9 @@ export function runAgentSession(
       handlers.signal.removeEventListener("abort", onAbort)
       if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
         socket.close()
+      }
+      if (boundSessionId) {
+        handlers.onSession?.(boundSessionId)
       }
       if (error) {
         reject(error)
@@ -60,6 +72,10 @@ export function runAgentSession(
           text: init.text,
           model: init.model,
           harness: init.harness,
+          cwd: init.cwd,
+          ...(init.effort === undefined ? {} : { effort: init.effort }),
+          ...(init.sessionId === undefined ? {} : { sessionId: init.sessionId }),
+          ...(init.fork === true ? { fork: true } : {}),
         })
       )
     })
@@ -78,6 +94,14 @@ export function runAgentSession(
         failedMessage = frame.message?.trim() || "Agent run failed"
         socket.close()
         return
+      }
+
+      if (
+        frame.type === "run" &&
+        (frame.event === "completed" || frame.event === "failed") &&
+        frame.sessionId
+      ) {
+        boundSessionId = frame.sessionId
       }
 
       if (frame.type === "assistant" && frame.event === "text_delta" && frame.text) {

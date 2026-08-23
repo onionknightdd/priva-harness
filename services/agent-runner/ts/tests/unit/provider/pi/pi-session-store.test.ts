@@ -66,6 +66,17 @@ describe('PiSessionStore', () => {
     await expect(unlink(jsonlPath)).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
+  it('rejects fork', async () => {
+    const store = new PiSessionStore({
+      agentDir,
+      sessionManager: fakeManager(listed(jsonlPath), fakeOpenedSession().opened),
+    })
+    await expect(store.fork({ provider: 'bambuddy', id: 'bb-1' }, { title: 'BB (1)' })).rejects.toMatchObject({
+      kind: 'invalid-request',
+      message: 'Bambuddy does not support fork',
+    })
+  })
+
   it('still lists a planted jsonl after the ephemeral runs directory is removed', async () => {
     await mkdir(join(agentDir, 'runs', 'ephemeral'), { recursive: true })
     await rm(join(agentDir, 'runs'), { recursive: true, force: true })

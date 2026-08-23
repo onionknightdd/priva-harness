@@ -4,6 +4,7 @@ export interface ClaudeSdkMessage {
   readonly type: string
   readonly subtype?: string
   readonly session_id?: string
+  readonly parent_tool_use_id?: string | null
   readonly event?: unknown
   readonly message?: unknown
   readonly duration_ms?: number
@@ -28,6 +29,10 @@ export class ClaudeEventMapper {
 
   push(message: ClaudeSdkMessage): AgentEvent[] {
     this.rememberSession(message)
+
+    if (isSubagentMessage(message) && (message.type === 'assistant' || message.type === 'user')) {
+      return []
+    }
 
     switch (message.type) {
       case 'stream_event':
@@ -207,6 +212,10 @@ export class ClaudeEventMapper {
 }
 
 type JsonRecord = Record<string, unknown>
+
+function isSubagentMessage(message: ClaudeSdkMessage): boolean {
+  return typeof message.parent_tool_use_id === 'string' && message.parent_tool_use_id !== ''
+}
 
 function isRecord(value: unknown): value is JsonRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value)

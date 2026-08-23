@@ -5,6 +5,7 @@ import type {
   AgentRuntime,
   ProviderId,
   ProviderRunSpec,
+  SessionTarget,
   TurnContext,
 } from '../core/contract/agent-provider.js'
 import type { AgentEvent } from '../core/event/agent-event.js'
@@ -22,6 +23,7 @@ export interface AgentHarnessOptions {
 
 export interface AgentRunOptions {
   readonly runId?: string
+  readonly session?: SessionTarget
 }
 
 export class AgentHarness {
@@ -44,7 +46,7 @@ export class AgentHarness {
 
     const provider = this.options.providers[spec.provider]
     const runtime = await provider.openSession(
-      { kind: 'new', provider: spec.provider },
+      runOptions?.session ?? { kind: 'new', provider: spec.provider },
       spec,
     )
 
@@ -80,6 +82,7 @@ export class AgentHarness {
           event: 'failed',
           message: errorMessage(error),
           harnessProvider: spec.provider,
+          ...(runtime.session.id === '' ? {} : { sessionId: runtime.session.id }),
         }
       }
     }

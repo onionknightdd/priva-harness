@@ -12,6 +12,7 @@ export function AgentMessagePage() {
       modelReady={agentMessage.modelReady}
       onDraftChange={agentMessage.setDraft}
       onModelReferenceChange={agentMessage.setModelReference}
+      onEffortChange={agentMessage.setEffort}
       onSubmit={agentMessage.submit}
     />
   )

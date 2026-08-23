@@ -305,6 +305,65 @@ describe('/api/sandbox/agent/sessions', () => {
     })
     expect(response.statusCode).toBe(400)
   })
+
+  it('forks a claude session with numbered titles and optional truncation', async () => {
+    const info = await claude.sessions.read({ provider: 'claude', id: 'claude-1' })
+    claude.sessions.seed(info, [
+      sessionMessage('user', 'u1', 'claude-1', 'first'),
+      sessionMessage('assistant', 'a1', 'claude-1', 'one'),
+      sessionMessage('user', 'u2', 'claude-1', 'second'),
+      sessionMessage('assistant', 'a2', 'claude-1', 'two'),
+    ])
+
+    const first = await server.inject({
+      method: 'POST',
+      url: '/api/sandbox/agent/sessions/claude-1/fork?harness=claude',
+      payload: { stem: 'Hello' },
+    })
+    expect(first.statusCode).toBe(200)
+    const firstBody = parseJson(first)
+    expect(firstBody).toMatchObject({
+      custom_title: 'Hello (1)',
+      cwd: testRoot,
+    })
+    expect(typeof firstBody['session_id']).toBe('string')
+    expect(firstBody['session_id']).not.toBe('claude-1')
+
+    const second = await server.inject({
+      method: 'POST',
+      url: '/api/sandbox/agent/sessions/claude-1/fork?harness=claude',
+      payload: { stem: 'Hello' },
+    })
+    expect(parseJson(second)).toMatchObject({ custom_title: 'Hello (2)' })
+
+    const truncated = await server.inject({
+      method: 'POST',
+      url: '/api/sandbox/agent/sessions/claude-1/fork?harness=claude',
+      payload: { stem: 'Hello', up_to_message_id: 'a1' },
+    })
+    expect(truncated.statusCode).toBe(200)
+    const truncatedBody = parseJson(truncated)
+    expect(truncatedBody).toMatchObject({ custom_title: 'Hello (3)' })
+
+    const messages = parseJson(await server.inject({
+      method: 'GET',
+      url: `/api/sandbox/agent/sessions/${String(truncatedBody['session_id'])}/messages?harness=claude`,
+    }))
+    expect((messages['messages'] as { uuid: string }[]).map((message) => message.uuid)).toEqual([
+      'u1',
+      'a1',
+    ])
+  })
+
+  it('rejects bambuddy fork', async () => {
+    const response = await server.inject({
+      method: 'POST',
+      url: '/api/sandbox/agent/sessions/bb-1/fork?harness=bambuddy',
+      payload: { stem: 'BB' },
+    })
+    expect(response.statusCode).toBe(400)
+    expect(parseJson(response)).toEqual({ detail: 'Bambuddy does not support fork' })
+  })
 })
 
 function seedClaude(store: FakeSessionStore, cwd: string): void {
@@ -351,6 +410,7 @@ function seedBambuddy(store: FakeSessionStore): void {
       message: { role: 'user', content: 'tool me' },
       parentToolUseId: null,
       metadata: null,
+      timestamp: null,
     },
     {
       type: 'assistant',
@@ -359,6 +419,7 @@ function seedBambuddy(store: FakeSessionStore): void {
       message: { role: 'assistant', content: [{ type: 'toolCall', id: 'call-1' }] },
       parentToolUseId: null,
       metadata: null,
+      timestamp: null,
     },
     {
       type: 'tool_result',
@@ -367,6 +428,7 @@ function seedBambuddy(store: FakeSessionStore): void {
       message: { role: 'toolResult', toolCallId: 'call-1', toolName: 'bash' },
       parentToolUseId: 'call-1',
       metadata: null,
+      timestamp: null,
     },
     {
       type: 'compaction',
@@ -375,10 +437,28 @@ function seedBambuddy(store: FakeSessionStore): void {
       message: { role: 'compactionSummary', summary: 'compacted' },
       parentToolUseId: null,
       metadata: null,
+      timestamp: null,
     },
   ])
 }
 
 function parseJson(response: { readonly body: string }): Record<string, unknown> {
   return JSON.parse(response.body) as Record<string, unknown>
+}
+
+function sessionMessage(
+  type: 'user' | 'assistant',
+  uuid: string,
+  sessionId: string,
+  content: string,
+) {
+  return {
+    type,
+    uuid,
+    sessionId,
+    message: { role: type, content },
+    parentToolUseId: null,
+    metadata: null,
+    timestamp: null,
+  }
 }

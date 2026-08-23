@@ -42,6 +42,20 @@ export interface SessionMessage {
   readonly message: unknown
   readonly parentToolUseId: string | null
   readonly metadata: Readonly<Record<string, unknown>> | null
+  readonly timestamp: number | null
+}
+
+export function parseMessageTimestamp(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    if (value > 1e12) return Math.trunc(value)
+    if (value > 1e9) return Math.trunc(value * 1000)
+    return null
+  }
+  if (typeof value === 'string' && value !== '') {
+    const parsed = Date.parse(value)
+    return Number.isNaN(parsed) ? null : parsed
+  }
+  return null
 }
 
 export interface ProviderSessionInfo {

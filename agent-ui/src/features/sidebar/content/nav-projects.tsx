@@ -79,6 +79,7 @@ function ProjectMenuItem({
   onRename,
   onSaveTags,
   onSelect,
+  onCreateSession,
   knownTags,
   activeSessionId,
 }: {
@@ -98,6 +99,7 @@ function ProjectMenuItem({
   onRename: (session: SessionInfo, title: string) => Promise<void>
   onSaveTags: (sessionId: string, tags: string[]) => Promise<void>
   onSelect: (session: SessionInfo) => void
+  onCreateSession: (cwd: string) => void
   knownTags: KnownSessionTag[]
   activeSessionId: string | null
 }) {
@@ -147,6 +149,7 @@ function ProjectMenuItem({
           <RowHoverAction
             label={t("sidebar.projects.createSession")}
             reduceMotion={reduceMotion}
+            onClick={() => onCreateSession(cwd)}
           >
             <PlusIcon className="size-3.5" aria-hidden="true" />
           </RowHoverAction>
@@ -223,8 +226,10 @@ function StatusMessage({
 
 export function NavProjects({
   onSelectSession,
+  onCreateSession,
 }: {
   onSelectSession: (session: SessionInfo) => void
+  onCreateSession: (cwd: string) => void
 }) {
   const { isMobile } = useSidebar()
   const { t } = useTranslation()
@@ -251,7 +256,7 @@ export function NavProjects({
     setTags,
     rename,
     remove,
-    activeSession,
+    highlightedSessionId,
   } = useChatSession()
 
   React.useEffect(() => {
@@ -394,8 +399,9 @@ export function NavProjects({
         onRename={(session, title) => rename(session.sessionId, title)}
         onSaveTags={setTags}
         onSelect={onSelectSession}
+        onCreateSession={onCreateSession}
         knownTags={knownTags}
-        activeSessionId={activeSession?.sessionId ?? null}
+        activeSessionId={highlightedSessionId}
       />
     ))
   }
