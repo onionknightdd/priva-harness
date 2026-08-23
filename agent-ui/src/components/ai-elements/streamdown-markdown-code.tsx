@@ -10,6 +10,7 @@ import {
 } from "streamdown"
 
 import { CodeBlock } from "@/components/agents/code-block"
+import { MermaidEdgeResize } from "@/components/ai-elements/mermaid-edge-resize"
 import { cn } from "@/lib/utils"
 
 function collectText(node: ReactNode): string {
@@ -88,9 +89,11 @@ export function StreamdownMarkdownCode({
 
   if (language === "mermaid") {
     return (
-      <Streamdown className="my-4" plugins={{ mermaid }}>
-        {`\`\`\`mermaid\n${code}\n\`\`\``}
-      </Streamdown>
+      <MermaidEdgeResize>
+        <Streamdown className="min-h-0 w-full" plugins={{ mermaid }}>
+          {`\`\`\`mermaid\n${code}\n\`\`\``}
+        </Streamdown>
+      </MermaidEdgeResize>
     )
   }
 

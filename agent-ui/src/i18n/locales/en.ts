@@ -11,6 +11,7 @@ export const en = {
     expandSidebar: "Expand Sidebar",
     collapseSidebar: "Collapse Sidebar",
     resizeSidebar: "Resize Sidebar",
+    resizeDiagram: "Resize diagram",
     openExternalLink: "Open external link?",
     externalLinkWarning: "You're about to visit an external website.",
     copyLink: "Copy link",

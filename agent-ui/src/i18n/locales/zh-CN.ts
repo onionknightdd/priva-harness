@@ -11,6 +11,7 @@ export const zhCN = {
     expandSidebar: "展开侧边栏",
     collapseSidebar: "收起侧边栏",
     resizeSidebar: "调整侧边栏宽度",
+    resizeDiagram: "调整图表大小",
     openExternalLink: "打开外部链接？",
     externalLinkWarning: "即将访问外部网站。",
     copyLink: "复制链接",
