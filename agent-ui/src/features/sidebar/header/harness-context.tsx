@@ -1,9 +1,9 @@
 import * as React from "react"
 
 import { getStrictContext } from "@/lib/get-strict-context"
-
+import { resolveHarnessId } from "@/features/settings/agent-preferences"
+import { useAgentPreferences } from "@/features/settings/agent-preferences-context"
 import {
-  DEFAULT_HARNESS_ID,
   toRunHarnessId,
   type HarnessId,
   type RunHarnessId,
@@ -19,8 +19,30 @@ const [HarnessContextProvider, useHarnessContext] =
   getStrictContext<HarnessContextValue>("Harness")
 
 export function HarnessProvider({ children }: { children: React.ReactNode }) {
-  const [harnessId, setHarnessId] =
-    React.useState<HarnessId>(DEFAULT_HARNESS_ID)
+  const { defaultHarness, lastHarnessId, setLastHarnessId } =
+    useAgentPreferences()
+  const [harnessId, setHarnessIdState] = React.useState<HarnessId>(() =>
+    resolveHarnessId(defaultHarness, lastHarnessId)
+  )
+
+  const setHarnessId = React.useCallback(
+    (id: HarnessId) => {
+      const runId = toRunHarnessId(id)
+      setHarnessIdState(id)
+      if (runId) {
+        setLastHarnessId(runId)
+      }
+    },
+    [setLastHarnessId]
+  )
+
+  React.useEffect(() => {
+    if (defaultHarness === "last-used") {
+      return
+    }
+
+    setHarnessIdState(defaultHarness)
+  }, [defaultHarness])
 
   const value = React.useMemo<HarnessContextValue>(
     () => ({
@@ -28,7 +50,7 @@ export function HarnessProvider({ children }: { children: React.ReactNode }) {
       runHarnessId: toRunHarnessId(harnessId),
       setHarnessId,
     }),
-    [harnessId]
+    [harnessId, setHarnessId]
   )
 
   return (

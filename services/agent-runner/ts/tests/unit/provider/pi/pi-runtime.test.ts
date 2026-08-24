@@ -68,6 +68,42 @@ describe('PiRuntime stream input', () => {
     expect(session.followUps).toEqual(['later'])
     await runtime.release('dispose')
   })
+
+  it('steers a live session when queue behavior is steer', async () => {
+    const session = new FakePiAgentSession()
+    session.streaming = true
+    const runtime = new PiRuntime(session, 'steer')
+
+    for await (const _event of runtime.run(
+      { text: 'nudge' },
+      { signal: new AbortController().signal },
+    )) {
+      void _event
+    }
+
+    expect(session.steers).toEqual(['nudge'])
+    expect(session.followUps).toEqual([])
+    expect(session.prompts).toEqual([])
+    await runtime.release('dispose')
+  })
+
+  it('aborts then prompts a live session when queue behavior is interrupt', async () => {
+    const session = new FakePiAgentSession()
+    session.streaming = true
+    const runtime = new PiRuntime(session, 'interrupt')
+
+    for await (const _event of runtime.run(
+      { text: 'cut in' },
+      { signal: new AbortController().signal },
+    )) {
+      void _event
+    }
+
+    expect(session.aborts).toBe(1)
+    expect(session.prompts).toEqual(['cut in'])
+    expect(session.followUps).toEqual([])
+    await runtime.release('dispose')
+  })
 })
 
 class FakePiAgentSession implements PiAgentSession {
@@ -79,6 +115,7 @@ class FakePiAgentSession implements PiAgentSession {
   readonly prompts: string[] = []
   readonly followUps: string[] = []
   readonly steers: string[] = []
+  aborts = 0
   private listener: ((event: PiSessionEvent) => void) | undefined
 
   get isStreaming(): boolean {
@@ -113,10 +150,15 @@ class FakePiAgentSession implements PiAgentSession {
 
   steer(text: string): Promise<void> {
     this.steers.push(text)
+    this.listener?.({
+      type: 'agent_end',
+      messages: [{ role: 'assistant', model: this.modelId, content: [{ type: 'text', text: 'ok' }] }],
+    })
     return Promise.resolve()
   }
 
   abort(): Promise<void> {
+    this.aborts += 1
     return Promise.resolve()
   }
 

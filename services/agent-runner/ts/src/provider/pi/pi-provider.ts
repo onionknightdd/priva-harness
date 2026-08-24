@@ -29,6 +29,9 @@ export class PiProvider implements AgentProvider {
     if (target.kind === 'fork') {
       throw new Error('Pi does not support fork')
     }
-    return new PiRuntime(await this.sessionFactory.open(spec, target))
+    return new PiRuntime(
+      await this.sessionFactory.open(spec, target),
+      spec.queueBehavior ?? 'follow-up',
+    )
   }
 }

@@ -2,6 +2,7 @@ import * as React from "react"
 
 import { AgentLayout } from "@/app/agent-layout"
 import { ChatSessionProvider, useChatSession } from "@/features/chat-session"
+import { AgentPreferencesProvider } from "@/features/settings"
 import { AppSidebar } from "@/features/sidebar"
 import { HarnessProvider } from "@/features/sidebar/header/harness-context"
 import { UploadQueueProvider } from "@/features/uploads"
@@ -48,11 +49,13 @@ export default function App() {
   return (
     <TooltipProvider>
       <UploadQueueProvider>
-        <HarnessProvider>
-          <ChatSessionProvider>
-            <AgentHarness />
-          </ChatSessionProvider>
-        </HarnessProvider>
+        <AgentPreferencesProvider>
+          <HarnessProvider>
+            <ChatSessionProvider>
+              <AgentHarness />
+            </ChatSessionProvider>
+          </HarnessProvider>
+        </AgentPreferencesProvider>
       </UploadQueueProvider>
     </TooltipProvider>
   )

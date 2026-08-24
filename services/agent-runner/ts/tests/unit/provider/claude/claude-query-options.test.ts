@@ -70,4 +70,12 @@ describe('resolveClaudeQueryOptions', () => {
     expect(forked.forkSession).toBe(true)
     expect(forked.sessionId).toBeUndefined()
   })
+
+  it('disables prompt suggestions when the run spec asks', () => {
+    const options = resolveClaudeQueryOptions(
+      { ...spec, promptSuggestions: false },
+      '/cfg',
+    )
+    expect(options.promptSuggestions).toBe(false)
+  })
 })

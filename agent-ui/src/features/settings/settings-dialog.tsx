@@ -4,6 +4,7 @@ import * as React from "react"
 import {
   ArchiveIcon,
   BotIcon,
+  BotMessageSquareIcon,
   BugIcon,
   MessageSquareIcon,
   SettingsIcon,
@@ -41,6 +42,8 @@ import {
 import { ModelSettingsView } from "@/features/model-settings"
 import { cn } from "@/lib/utils"
 
+import { AgentSettingsView } from "./agent-settings-view"
+
 const settingsNavigation = [
   {
     id: "account",
@@ -51,6 +54,11 @@ const settingsNavigation = [
     id: "llmProviders",
     titleKey: "settings.sections.llmProviders",
     icon: BotIcon,
+  },
+  {
+    id: "agent",
+    titleKey: "settings.sections.agent",
+    icon: BotMessageSquareIcon,
   },
   {
     id: "dm",
@@ -102,6 +110,7 @@ export function SettingsDialog({
     settingsNavigation[0]
   const activeSectionTitle = t(activeSection.titleKey)
   const isModelSection = activeSectionId === "llmProviders"
+  const isAgentSection = activeSectionId === "agent"
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -200,6 +209,8 @@ export function SettingsDialog({
               >
                 {isModelSection ? (
                   <ModelSettingsView />
+                ) : isAgentSection ? (
+                  <AgentSettingsView />
                 ) : (
                   <div className="flex max-w-lg flex-col gap-2 py-2">
                     <p className="text-sm font-medium">

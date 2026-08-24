@@ -1,5 +1,6 @@
 import type {
   AgentRuntime,
+  QueueBehavior,
   SessionRef,
   TurnContext,
 } from '../../core/contract/agent-provider.js'
@@ -27,7 +28,10 @@ export class PiRuntime implements AgentRuntime {
   private mapper: PiEventMapper | undefined
   private events: AsyncQueue<AgentEvent> | undefined
 
-  constructor(private readonly agentSession: PiAgentSession) {
+  constructor(
+    private readonly agentSession: PiAgentSession,
+    private readonly queueBehavior: QueueBehavior = 'follow-up',
+  ) {
     this.sessionHandle = agentSession
     this.unsubscribe = agentSession.subscribe((event) => {
       const mapper = this.mapper
@@ -105,7 +109,14 @@ export class PiRuntime implements AgentRuntime {
   }
 
   private send(text: string): Promise<void> {
-    if (this.agentSession.isStreaming) return this.agentSession.followUp(text)
-    return this.agentSession.prompt(text)
+    if (!this.agentSession.isStreaming) return this.agentSession.prompt(text)
+    if (this.queueBehavior === 'steer') return this.agentSession.steer(text)
+    if (this.queueBehavior === 'interrupt') return this.interruptThenPrompt(text)
+    return this.agentSession.followUp(text)
+  }
+
+  private async interruptThenPrompt(text: string): Promise<void> {
+    await this.agentSession.abort()
+    await this.agentSession.prompt(text)
   }
 }
