@@ -96,7 +96,7 @@ export function useAgentMessage() {
       "streaming"
     )
     const controller = new AbortController()
-    const resumeSessionId = runHarnessId === "claude" ? runSessionId : null
+    const resumeSessionId = runSessionId
 
     activeStreamRef.current = {
       controller,

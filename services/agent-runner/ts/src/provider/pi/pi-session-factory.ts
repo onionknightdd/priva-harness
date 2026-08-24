@@ -6,13 +6,13 @@ import { join } from 'node:path'
 import {
   createAgentSession,
   ModelRuntime,
-  SessionManager,
   SettingsManager,
 } from '@earendil-works/pi-coding-agent'
 
-import type { ProviderRunSpec } from '../../core/contract/agent-provider.js'
+import type { ProviderRunSpec, SessionTarget } from '../../core/contract/agent-provider.js'
 import { buildPiModelsConfig } from './pi-models-config.js'
 import { piSessionBucketDir } from './pi-paths.js'
+import { createPiSessionManager } from './pi-session-open.js'
 import type { PiSessionFactory } from './pi-provider.js'
 import type { PiAgentSession } from './pi-runtime.js'
 import type { PiSessionEvent } from './pi-event-mapper.js'
@@ -20,7 +20,7 @@ import type { PiSessionEvent } from './pi-event-mapper.js'
 export class CodingAgentSessionFactory implements PiSessionFactory {
   constructor(private readonly agentDir: string) {}
 
-  async open(spec: ProviderRunSpec): Promise<PiAgentSession> {
+  async open(spec: ProviderRunSpec, target: SessionTarget): Promise<PiAgentSession> {
     const providerId = spec.profileId ?? 'custom'
     const runDir = join(tmpdir(), 'pi-model-runtime', randomUUID())
     await mkdir(runDir, { recursive: true, mode: 0o700 })
@@ -51,7 +51,7 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
         agentDir: this.agentDir,
         model,
         modelRuntime,
-        sessionManager: SessionManager.create(spec.cwd, sessionDir),
+        sessionManager: await createPiSessionManager(this.agentDir, spec, target),
         settingsManager: SettingsManager.create(spec.cwd, this.agentDir),
         thinkingLevel: 'off',
       })

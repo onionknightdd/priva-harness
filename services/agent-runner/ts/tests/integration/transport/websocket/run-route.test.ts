@@ -156,7 +156,7 @@ describe('WS /api/sandbox/agent/ws/run', () => {
     ]))
   })
 
-  it('resumes a claude session and rejects pi resume', async () => {
+  it('resumes claude and pi sessions and rejects pi fork', async () => {
     const resume = await server.injectWS(RUN_WEBSOCKET_PATH)
     const resumeFrames = collectFrames(resume)
     resume.send(JSON.stringify({
@@ -181,6 +181,21 @@ describe('WS /api/sandbox/agent/ws/run', () => {
       effort: 'low',
     }))
 
+    const piResume = await server.injectWS(RUN_WEBSOCKET_PATH)
+    const piResumeFrames = collectFrames(piResume)
+    piResume.send(JSON.stringify({
+      type: 'init',
+      text: 'hi',
+      model: modelReference,
+      harness: 'pi',
+      cwd: testRoot,
+      sessionId: 'pi-1',
+    }))
+    await piResumeFrames
+    expect(piProvider.targets).toEqual([
+      { kind: 'resume', session: { provider: 'pi', id: 'pi-1' } },
+    ])
+
     const denied = await server.injectWS(RUN_WEBSOCKET_PATH)
     const deniedFrames = collectFrames(denied)
     denied.send(JSON.stringify({
@@ -190,9 +205,10 @@ describe('WS /api/sandbox/agent/ws/run', () => {
       harness: 'pi',
       cwd: testRoot,
       sessionId: 'pi-1',
+      fork: true,
     }))
     expect(await deniedFrames).toEqual([
-      { type: 'error', message: 'Pi does not support resume or fork in this slice' },
+      { type: 'error', message: 'Pi does not support fork' },
     ])
   })
 })
