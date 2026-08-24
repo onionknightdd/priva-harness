@@ -70,6 +70,7 @@ function useClipUntilOpenTransitionEnds(open: boolean) {
 }
 
 function FileBrowserTreeNode({
+  compact,
   item,
   level,
   loadingDirectories,
@@ -78,6 +79,7 @@ function FileBrowserTreeNode({
   onDownload,
   onUpload,
 }: {
+  compact: boolean
   item: ItemInstance<FileBrowserItem>
   level: number
   loadingDirectories: Set<string>
@@ -100,6 +102,25 @@ function FileBrowserTreeNode({
   const stickySentinelRef = React.useRef<HTMLSpanElement>(null)
   const [nameMarqueeActive, setNameMarqueeActive] =
     React.useState(false)
+  const modifiedDate =
+    compact || !data.modifiedAt
+      ? null
+      : new Date(data.modifiedAt * 1000)
+  const modifiedAt = modifiedDate
+    ? new Intl.DateTimeFormat(i18n.resolvedLanguage, {
+        day: "2-digit",
+        hour: "2-digit",
+        hour12: false,
+        minute: "2-digit",
+        month: "2-digit",
+      }).format(modifiedDate)
+    : ""
+  const fullModifiedAt = modifiedDate
+    ? new Intl.DateTimeFormat(i18n.resolvedLanguage, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(modifiedDate)
+    : undefined
   const size =
     data.type === "file" && data.size !== null
       ? formatFileSize(data.size, i18n.resolvedLanguage)
@@ -214,9 +235,24 @@ function FileBrowserTreeNode({
             <LoaderCircleIcon className="size-3 shrink-0 animate-spin text-muted-foreground motion-reduce:animate-none" />
           )}
         </span>
-        <span className="w-[clamp(2.25rem,15cqi,3rem)] shrink-0 overflow-hidden text-right text-[10px] leading-none whitespace-nowrap tabular-nums text-muted-foreground">
-          {size}
-        </span>
+        {compact ? (
+          <span className="w-[clamp(2.25rem,15cqi,3rem)] shrink-0 overflow-hidden text-right text-[10px] leading-none whitespace-nowrap tabular-nums text-muted-foreground">
+            {size}
+          </span>
+        ) : (
+          <span className="flex min-w-0 shrink-0 items-center gap-[clamp(0.25rem,2cqi,0.75rem)] overflow-hidden">
+            <span className="w-[clamp(2.25rem,15cqi,3rem)] shrink-0 overflow-hidden text-right text-[10px] leading-none whitespace-nowrap tabular-nums text-muted-foreground">
+              {size}
+            </span>
+            <time
+              dateTime={modifiedDate?.toISOString()}
+              title={fullModifiedAt}
+              className="w-[clamp(3rem,22cqi,4rem)] shrink-0 overflow-hidden text-right text-[10px] leading-none whitespace-nowrap tabular-nums text-muted-foreground"
+            >
+              {modifiedAt}
+            </time>
+          </span>
+        )}
       </TreeItemLabel>
     </TreeItem>
   )
@@ -268,6 +304,7 @@ function FileBrowserTreeNode({
           {children.map((child) => (
             <FileBrowserTreeNode
               key={child.getId()}
+              compact={compact}
               item={child}
               level={level + 1}
               loadingDirectories={loadingDirectories}
@@ -284,6 +321,7 @@ function FileBrowserTreeNode({
 }
 
 export function FileBrowserTree({
+  compact = false,
   loadingDirectories,
   model,
   onActionFeedback,
@@ -295,6 +333,7 @@ export function FileBrowserTree({
   rootPath,
   selectedItemPath,
 }: {
+  compact?: boolean
   loadingDirectories: Set<string>
   model: FileBrowserModel
   onActionFeedback: (message: string) => void
@@ -420,6 +459,7 @@ export function FileBrowserTree({
         {tree.getRootItem().getChildren().map((item) => (
           <FileBrowserTreeNode
             key={item.getId()}
+            compact={compact}
             item={item}
             level={0}
             loadingDirectories={loadingDirectories}
