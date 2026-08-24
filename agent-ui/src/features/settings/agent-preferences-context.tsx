@@ -48,27 +48,32 @@ export function AgentPreferencesProvider({
 
   React.useEffect(() => {
     const abort = new AbortController()
-    void getAgentProfile(abort.signal)
-      .then((profile) => {
+
+    const load = async () => {
+      try {
+        const profile = await readAgentProfile(abort.signal)
+        if (abort.signal.aborted) {
+          return
+        }
         committedQueueBehaviorRef.current = profile.queueBehavior
         setPreferences((current) => ({
           ...current,
           queueBehavior: profile.queueBehavior,
         }))
         setQueueBehaviorError(null)
-      })
-      .catch((error: unknown) => {
+      } catch (error: unknown) {
         if (abort.signal.aborted || isAbortError(error)) {
           return
         }
         setQueueBehaviorError("load")
-      })
-      .finally(() => {
+      } finally {
         if (!abort.signal.aborted) {
           setQueueBehaviorBusy(false)
         }
-      })
+      }
+    }
 
+    void load()
     return () => abort.abort()
   }, [])
 
@@ -141,5 +146,16 @@ export function useAgentPreferences() {
 }
 
 function isAbortError(error: unknown) {
-  return error instanceof DOMException && error.name === "AbortError"
+  return error instanceof Error && error.name === "AbortError"
+}
+
+async function readAgentProfile(signal: AbortSignal) {
+  try {
+    return await getAgentProfile(signal)
+  } catch (error: unknown) {
+    if (signal.aborted || isAbortError(error)) {
+      throw error
+    }
+    return await getAgentProfile(signal)
+  }
 }
