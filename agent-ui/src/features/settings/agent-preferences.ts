@@ -117,13 +117,11 @@ export function parseAgentPreferences(raw: unknown): AgentPreferences {
       ? raw["sessionModel"]
       : DEFAULT_AGENT_PREFERENCES.sessionModel,
     lastModelReference,
-    queueBehavior: isQueueBehavior(raw["queueBehavior"])
-      ? raw["queueBehavior"]
-      : DEFAULT_AGENT_PREFERENCES.queueBehavior,
     inputSuggestions:
       typeof raw["inputSuggestions"] === "boolean"
         ? raw["inputSuggestions"]
         : DEFAULT_AGENT_PREFERENCES.inputSuggestions,
+    queueBehavior: DEFAULT_AGENT_PREFERENCES.queueBehavior,
   }
 }
 
@@ -156,12 +154,22 @@ export function storeAgentPreferences(preferences: AgentPreferences) {
   try {
     window.localStorage.setItem(
       AGENT_PREFERENCES_STORAGE_KEY,
-      JSON.stringify(preferences)
+      JSON.stringify(toStoredAgentPreferences(preferences))
     )
   } catch (error) {
     if (!isUnavailableStorageError(error)) {
       throw error
     }
+  }
+}
+
+function toStoredAgentPreferences(preferences: AgentPreferences) {
+  return {
+    defaultHarness: preferences.defaultHarness,
+    lastHarnessId: preferences.lastHarnessId,
+    sessionModel: preferences.sessionModel,
+    lastModelReference: preferences.lastModelReference,
+    inputSuggestions: preferences.inputSuggestions,
   }
 }
 

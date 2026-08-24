@@ -13,7 +13,7 @@ import { buildHttpServer } from '../../../../src/transport/http/server.js'
 import { FakeAgentProvider } from '../../../support/fake-agent-provider.js'
 import type { FakeSessionStore } from '../../../support/fake-session-store.js'
 import { MemorySessionMetadataRepository } from '../../../support/memory-session-metadata.js'
-import { createTestModelProfileService } from '../../../support/model-profile.js'
+import { createTestAgentServices } from '../../../support/model-profile.js'
 
 describe('/api/sandbox/agent/sessions', () => {
   let testRoot: string
@@ -32,7 +32,7 @@ describe('/api/sandbox/agent/sessions', () => {
     pi = new FakeAgentProvider('pi', [])
     liveRuns = new LiveRunRegistry()
     metadata = new MemorySessionMetadataRepository()
-    const modelProfileService = createTestModelProfileService(join(testRoot, 'runtime'))
+    const { modelProfileService, agentProfileService } = createTestAgentServices(join(testRoot, 'runtime'))
     const profile = await modelProfileService.createProfile({
       label: 'Gateway',
       baseUrl: 'https://api.example.com/v1',
@@ -65,6 +65,7 @@ describe('/api/sandbox/agent/sessions', () => {
     server = buildHttpServer({
       userFileSystem: new NodeUserFileSystem({ initialDirectory: testRoot }),
       modelProfileService,
+      agentProfileService,
       agentHarness: new AgentHarness({
         providers,
         cwd: testRoot,

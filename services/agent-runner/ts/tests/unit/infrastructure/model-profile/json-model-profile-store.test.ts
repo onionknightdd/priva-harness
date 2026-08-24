@@ -10,26 +10,30 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import {
-  createModelProfile,
-  MODEL_PROFILE_STORE_VERSION,
-} from '../../../../src/core/resource/model-profile.js'
+import { createModelProfile } from '../../../../src/core/resource/model-profile.js'
+import { RUNTIME_SETTINGS_VERSION } from '../../../../src/core/resource/runtime-settings.js'
 import { JsonModelProfileStore } from '../../../../src/infrastructure/model-profile/json-model-profile-store.js'
+import { JsonRuntimeSettingsStore } from '../../../../src/infrastructure/settings/json-runtime-settings-store.js'
+import { createRuntimeConfig } from '../../../../src/runtime-config.js'
 
 describe('JsonModelProfileStore', () => {
   let runtimeHome: string
   let store: JsonModelProfileStore
+  let settings: JsonRuntimeSettingsStore
 
   beforeEach(async () => {
     runtimeHome = await mkdtemp(join(tmpdir(), 'priva-model-profile-store-test-'))
-    store = new JsonModelProfileStore({ runtimeHome })
+    settings = new JsonRuntimeSettingsStore({
+      filePath: createRuntimeConfig(runtimeHome).settingsFilePath,
+    })
+    store = new JsonModelProfileStore({ settings, runtimeHome })
   })
 
   afterEach(async () => {
     await rm(runtimeHome, { recursive: true, force: true })
   })
 
-  it('writes model-profiles.json atomically with private permissions', async () => {
+  it('writes modelProfiles into bambuddy.settings.json atomically with private permissions', async () => {
     const profile = profileNamed('default')
     await store.transact((collection) => ({
       collection: {
@@ -40,14 +44,55 @@ describe('JsonModelProfileStore', () => {
       result: undefined,
     }))
 
-    expect(store.filePath).toBe(join(runtimeHome, 'model-profiles.json'))
-    expect(JSON.parse(await readFile(store.filePath, 'utf8'))).toMatchObject({
-      version: MODEL_PROFILE_STORE_VERSION,
-      defaultProfileId: 'default',
-      profiles: [{ id: 'default', authToken: 'secret' }],
+    expect(store.filePath).toBe(join(runtimeHome, 'bambuddy.settings.json'))
+    expect(JSON.parse(await readFile(store.filePath, 'utf8'))).toEqual({
+      version: RUNTIME_SETTINGS_VERSION,
+      modelProfiles: {
+        defaultProfileId: 'default',
+        profiles: [expect.objectContaining({ id: 'default', authToken: 'secret' })],
+      },
+      agentProfile: { queueBehavior: 'follow-up' },
     })
     expect((await stat(runtimeHome)).mode & 0o777).toBe(0o700)
     expect((await stat(store.filePath)).mode & 0o777).toBe(0o600)
+  })
+
+  it('does not read leftover model-profiles.json', async () => {
+    const leftover = profileNamed('legacy')
+    await writeFile(join(runtimeHome, 'model-profiles.json'), JSON.stringify({
+      version: 1,
+      defaultProfileId: leftover.id,
+      profiles: [leftover],
+    }), { mode: 0o600 })
+
+    const collection = await store.read()
+    expect(collection.profiles).toEqual([])
+    expect(collection.defaultProfileId).toBeNull()
+  })
+
+  it('preserves agentProfile when updating model profiles', async () => {
+    await settings.transact((current) => ({
+      settings: {
+        ...current,
+        agentProfile: { queueBehavior: 'interrupt' },
+      },
+      result: undefined,
+    }))
+
+    const profile = profileNamed('gateway')
+    await store.transact((collection) => ({
+      collection: {
+        ...collection,
+        defaultProfileId: profile.id,
+        profiles: [profile],
+      },
+      result: undefined,
+    }))
+
+    expect(JSON.parse(await readFile(store.filePath, 'utf8'))).toMatchObject({
+      agentProfile: { queueBehavior: 'interrupt' },
+      modelProfiles: { defaultProfileId: 'gateway' },
+    })
   })
 
   it('serializes concurrent transactions without losing profiles', async () => {
@@ -97,9 +142,12 @@ describe('JsonModelProfileStore', () => {
   it('rejects removed harness-specific fields instead of migrating them', async () => {
     const profile = profileNamed('legacy')
     await writeFile(store.filePath, JSON.stringify({
-      version: MODEL_PROFILE_STORE_VERSION,
-      defaultProfileId: profile.id,
-      profiles: [{ ...profile, opusModel: 'claude-opus' }],
+      version: RUNTIME_SETTINGS_VERSION,
+      modelProfiles: {
+        defaultProfileId: profile.id,
+        profiles: [{ ...profile, opusModel: 'claude-opus' }],
+      },
+      agentProfile: { queueBehavior: 'follow-up' },
     }), { mode: 0o600 })
 
     await expect(store.read()).rejects.toMatchObject({ kind: 'store-corrupt' })

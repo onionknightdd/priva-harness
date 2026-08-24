@@ -7,6 +7,7 @@ import {
   Field,
   FieldContent,
   FieldDescription,
+  FieldError,
   FieldGroup,
   FieldLabel,
   FieldLegend,
@@ -58,12 +59,21 @@ export function AgentSettingsView() {
     defaultHarness,
     sessionModel,
     queueBehavior,
+    queueBehaviorBusy,
+    queueBehaviorError,
     inputSuggestions,
     setDefaultHarness,
     setSessionModel,
     setQueueBehavior,
     setInputSuggestions,
   } = useAgentPreferences()
+
+  const queueBehaviorErrorMessage =
+    queueBehaviorError === "load"
+      ? t("settings.agent.queueBehaviorLoadFailed")
+      : queueBehaviorError === "save"
+        ? t("settings.agent.queueBehaviorSaveFailed")
+        : null
 
   return (
     <motion.div
@@ -145,7 +155,10 @@ export function AgentSettingsView() {
             </ToggleGroup>
           </Field>
 
-          <Field>
+          <Field
+            data-invalid={queueBehaviorErrorMessage ? true : undefined}
+            data-disabled={queueBehaviorBusy ? true : undefined}
+          >
             <FieldContent>
               <FieldTitle id="agent-queue-behavior-label">
                 {t("settings.agent.queueBehavior")}
@@ -156,6 +169,8 @@ export function AgentSettingsView() {
             </FieldContent>
             <ToggleGroup
               aria-labelledby="agent-queue-behavior-label"
+              aria-invalid={queueBehaviorErrorMessage ? true : undefined}
+              disabled={queueBehaviorBusy}
               value={[queueBehavior]}
               onValueChange={(values) => {
                 const next = values[0]
@@ -173,12 +188,24 @@ export function AgentSettingsView() {
                 <ToggleGroupItem
                   key={value}
                   value={value}
+                  disabled={queueBehaviorBusy}
                   className="h-auto min-h-8 justify-start whitespace-normal px-3 py-2 text-left text-xs font-normal"
                 >
                   {t(queueBehaviorLabelKeys[value])}
                 </ToggleGroupItem>
               ))}
             </ToggleGroup>
+            {queueBehaviorErrorMessage ? (
+              <motion.div
+                initial={shouldReduceMotion ? false : { opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={
+                  shouldReduceMotion ? { duration: 0 } : panelItemTransition
+                }
+              >
+                <FieldError>{queueBehaviorErrorMessage}</FieldError>
+              </motion.div>
+            ) : null}
           </Field>
 
           <Field orientation="horizontal">

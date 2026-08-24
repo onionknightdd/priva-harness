@@ -34,7 +34,6 @@ describe('model profile domain', () => {
     })
 
     expect(() => parseModelProfileCollection({
-      version: 1,
       defaultProfileId: profile.id,
       profiles: [{
         ...profile,

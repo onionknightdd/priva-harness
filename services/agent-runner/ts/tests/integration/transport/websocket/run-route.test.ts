@@ -10,7 +10,7 @@ import { NodeUserFileSystem } from '../../../../src/infrastructure/filesystem/no
 import { buildHttpServer } from '../../../../src/transport/http/server.js'
 import { RUN_WEBSOCKET_PATH } from '../../../../src/transport/websocket/run-route.js'
 import { FakeAgentProvider } from '../../../support/fake-agent-provider.js'
-import { createTestModelProfileService } from '../../../support/model-profile.js'
+import { createTestAgentServices } from '../../../support/model-profile.js'
 
 describe('WS /api/sandbox/agent/ws/run', () => {
   let testRoot: string
@@ -18,6 +18,7 @@ describe('WS /api/sandbox/agent/ws/run', () => {
   let modelReference: string
   let claudeProvider: FakeAgentProvider
   let piProvider: FakeAgentProvider
+  let agentProfileService: ReturnType<typeof createTestAgentServices>['agentProfileService']
 
   beforeEach(async () => {
     testRoot = await mkdtemp(join(tmpdir(), 'priva-ws-run-test-'))
@@ -45,7 +46,9 @@ describe('WS /api/sandbox/agent/ws/run', () => {
         durationMs: 3,
       },
     ])
-    const modelProfileService = createTestModelProfileService(join(testRoot, 'runtime'))
+    const services = createTestAgentServices(join(testRoot, 'runtime'))
+    const { modelProfileService } = services
+    agentProfileService = services.agentProfileService
     const profile = await modelProfileService.createProfile({
       label: 'Gateway',
       baseUrl: 'https://api.example.com/v1',
@@ -56,6 +59,7 @@ describe('WS /api/sandbox/agent/ws/run', () => {
     server = buildHttpServer({
       userFileSystem: new NodeUserFileSystem({ initialDirectory: testRoot }),
       modelProfileService,
+      agentProfileService,
       agentHarness: new AgentHarness({
         providers: {
           claude: claudeProvider,
@@ -144,6 +148,7 @@ describe('WS /api/sandbox/agent/ws/run', () => {
         baseUrl: 'https://api.example.com/v1',
         authToken: 'secret',
         cwd: testRoot,
+        queueBehavior: 'follow-up',
       }),
     ])
     expect(received).toEqual(expect.arrayContaining([
@@ -210,6 +215,26 @@ describe('WS /api/sandbox/agent/ws/run', () => {
     expect(await deniedFrames).toEqual([
       { type: 'error', message: 'Pi does not support fork' },
     ])
+  })
+
+  it('applies queueBehavior from settings and ignores it on the init frame', async () => {
+    await agentProfileService.updateQueueBehavior('steer')
+
+    const socket = await server.injectWS(RUN_WEBSOCKET_PATH)
+    const frames = collectFrames(socket)
+    socket.send(JSON.stringify({
+      type: 'init',
+      text: 'hi',
+      model: modelReference,
+      harness: 'pi',
+      cwd: testRoot,
+      queueBehavior: 'interrupt',
+    }))
+    await frames
+
+    expect(piProvider.specs.at(-1)).toEqual(expect.objectContaining({
+      queueBehavior: 'steer',
+    }))
   })
 })
 

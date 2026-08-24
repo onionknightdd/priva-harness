@@ -112,7 +112,7 @@ describe('run frames', () => {
     expect(parseInitFrame({ type: 'abort' }).ok).toBe(false)
   })
 
-  it('accepts queueBehavior and promptSuggestions on init', () => {
+  it('accepts promptSuggestions on init and ignores queueBehavior', () => {
     expect(parseInitFrame({
       type: 'init',
       text: 'hi',
@@ -129,24 +129,12 @@ describe('run frames', () => {
         model: 'p:m',
         harness: 'pi',
         cwd: '/work',
-        queueBehavior: 'steer',
         promptSuggestions: false,
       },
     })
   })
 
-  it('rejects invalid queueBehavior and promptSuggestions', () => {
-    expect(parseInitFrame({
-      type: 'init',
-      text: 'hi',
-      model: 'p:m',
-      harness: 'pi',
-      cwd: '/work',
-      queueBehavior: 'later',
-    })).toMatchObject({
-      ok: false,
-      message: 'Init queueBehavior must be follow-up, steer, or interrupt',
-    })
+  it('rejects invalid promptSuggestions', () => {
     expect(parseInitFrame({
       type: 'init',
       text: 'hi',
