@@ -192,6 +192,7 @@ export function FileTreePane({
         ) : (
           <FileBrowserTree
             key={rootPath}
+            compact={compact}
             loadingDirectories={loadingDirectories}
             model={model}
             query={query}

@@ -146,7 +146,9 @@ export function FileAddressBar({
             onNavigate={onNavigate}
           />
 
-          <div aria-hidden="true" className="min-w-0 flex-1" />
+          {compact ? (
+            <div aria-hidden="true" className="min-w-0 flex-1" />
+          ) : null}
 
           <div className="flex shrink-0 items-center gap-0.5">
             <Tooltip>
@@ -194,6 +196,10 @@ export function FileAddressBar({
               <TooltipContent>{t("fileBrowser.upload")}</TooltipContent>
             </Tooltip>
           </div>
+
+          {compact ? null : (
+            <div aria-hidden="true" className="min-w-0 flex-1" />
+          )}
 
           <FileGoToControl onAnnounce={announce} onGoTo={onGoTo} />
         </motion.div>
