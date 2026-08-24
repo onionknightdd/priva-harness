@@ -75,6 +75,10 @@ class SdkPiAgentSession implements PiAgentSession {
     return this.session.sessionId
   }
 
+  get isStreaming(): boolean {
+    return this.session.isStreaming
+  }
+
   subscribe(listener: (event: PiSessionEvent) => void): () => void {
     return this.session.subscribe((event) => {
       listener(event)
@@ -83,6 +87,14 @@ class SdkPiAgentSession implements PiAgentSession {
 
   prompt(text: string): Promise<void> {
     return this.session.prompt(text)
+  }
+
+  followUp(text: string): Promise<void> {
+    return this.session.followUp(text)
+  }
+
+  steer(text: string): Promise<void> {
+    return this.session.steer(text)
   }
 
   abort(): Promise<void> {

@@ -1,4 +1,4 @@
-import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
+import type { SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { query, type Options, type Query } from '@anthropic-ai/claude-agent-sdk'
 
 import type {
@@ -9,9 +9,12 @@ import type {
   TurnContext,
 } from '../../core/contract/agent-provider.js'
 import type { AgentEvent } from '../../core/event/agent-event.js'
+import { isRunTerminalEvent } from '../../core/event/agent-event.js'
 import type { UserTurn } from '../../core/run/user-turn.js'
+import { AsyncQueue } from '../../core/stream/async-queue.js'
+import { PushableStream } from '../../core/stream/pushable-stream.js'
 import { ClaudeEventMapper } from './claude-event-mapper.js'
-import { singleShotUserMessage } from './single-shot-prompt.js'
+import { claudeUserMessage } from './claude-user-message.js'
 
 export const CLAUDE_DISALLOWED_TOOLS = [
   'NotebookEdit',
@@ -30,15 +33,29 @@ export const CLAUDE_DISALLOWED_TOOLS = [
   'ShowOnboardingRolePicker',
 ] as const
 
+export type ClaudeQuery = Pick<Query, 'interrupt' | 'close'> & AsyncIterable<SDKMessage>
+
+export type ClaudeQueryStart = (args: {
+  prompt: AsyncIterable<SDKUserMessage>
+  options: Options
+}) => ClaudeQuery
+
 export class ClaudeRuntime implements AgentRuntime {
-  private query: Query | undefined
+  private query: ClaudeQuery | undefined
+  private input: PushableStream<SDKUserMessage> | undefined
+  private events: AsyncQueue<AgentEvent> | undefined
+  private mapper: ClaudeEventMapper | undefined
+  private abortController: AbortController | undefined
   private sessionId = ''
+  private readonly startQuery: ClaudeQueryStart
 
   constructor(
     private readonly spec: ProviderRunSpec,
     private readonly target: SessionTarget,
     private readonly globalConfigDir: string,
+    startQuery?: ClaudeQueryStart,
   ) {
+    this.startQuery = startQuery ?? ((args) => query(args))
     this.sessionId = initialSessionId(target)
   }
 
@@ -47,10 +64,56 @@ export class ClaudeRuntime implements AgentRuntime {
   }
 
   async *run(turn: UserTurn, context: TurnContext): AsyncIterable<AgentEvent> {
-    const mapper = new ClaudeEventMapper()
-    const abortController = linkedAbortController(context.signal)
-    const active = query({
-      prompt: singleShotUserMessage(turn.text),
+    this.mapper = new ClaudeEventMapper()
+    this.events = new AsyncQueue<AgentEvent>()
+    this.ensureQuery()
+    this.input?.push(claudeUserMessage(turn.text))
+
+    const onAbort = (): void => {
+      void this.query?.interrupt()
+    }
+    if (context.signal.aborted) onAbort()
+    else context.signal.addEventListener('abort', onAbort, { once: true })
+
+    try {
+      for await (const event of this.events.iterate()) {
+        if (isRunTerminalEvent(event)) {
+          yield event
+          return
+        }
+        yield event
+      }
+    } finally {
+      context.signal.removeEventListener('abort', onAbort)
+    }
+  }
+
+  async abort(): Promise<void> {
+    await this.query?.interrupt()
+  }
+
+  release(retention: 'warm' | 'dispose'): Promise<void> {
+    void retention
+    this.input?.close()
+    this.query?.close()
+    this.abortController?.abort()
+    this.query = undefined
+    this.input = undefined
+    this.events?.close()
+    this.events = undefined
+    this.mapper = undefined
+    this.abortController = undefined
+    return Promise.resolve()
+  }
+
+  private ensureQuery(): void {
+    if (this.query !== undefined) return
+    const input = new PushableStream<SDKUserMessage>()
+    const abortController = new AbortController()
+    this.input = input
+    this.abortController = abortController
+    const active = this.startQuery({
+      prompt: input,
       options: resolveClaudeQueryOptions(
         this.spec,
         this.globalConfigDir,
@@ -59,34 +122,31 @@ export class ClaudeRuntime implements AgentRuntime {
       ),
     })
     this.query = active
+    void this.pump(active)
+  }
 
-    const onAbort = (): void => {
-      abortController.abort()
-      void active.interrupt()
-    }
-    if (context.signal.aborted) onAbort()
-    else context.signal.addEventListener('abort', onAbort, { once: true })
-
+  private async pump(active: ClaudeQuery): Promise<void> {
     try {
       for await (const message of active) {
         const sessionId = sessionIdOf(message)
         if (sessionId !== undefined) this.sessionId = sessionId
-        yield* mapper.push(message)
+        const mapper = this.mapper
+        const events = this.events
+        if (mapper === undefined || events === undefined) continue
+        for (const event of mapper.push(message)) events.push(event)
       }
+    } catch (error) {
+      this.events?.push({
+        type: 'run',
+        event: 'failed',
+        message: error instanceof Error ? error.message : String(error),
+        harnessProvider: 'claude',
+        ...(this.sessionId === '' ? {} : { sessionId: this.sessionId }),
+        model: this.spec.model,
+      })
     } finally {
-      context.signal.removeEventListener('abort', onAbort)
-      this.query = undefined
+      this.events?.close()
     }
-  }
-
-  async abort(): Promise<void> {
-    await this.query?.interrupt()
-  }
-
-  release(): Promise<void> {
-    this.query?.close()
-    this.query = undefined
-    return Promise.resolve()
   }
 }
 
@@ -165,12 +225,6 @@ function initialSessionId(target: SessionTarget): string {
   if (target.kind === 'resume') return target.session.id
   if (target.kind === 'fork') return target.source.id
   return ''
-}
-
-function linkedAbortController(signal: AbortSignal): AbortController {
-  const controller = new AbortController()
-  if (signal.aborted) controller.abort()
-  return controller
 }
 
 function sessionIdOf(message: SDKMessage): string | undefined {

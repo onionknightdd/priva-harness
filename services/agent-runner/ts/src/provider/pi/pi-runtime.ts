@@ -6,22 +6,35 @@ import type {
 import type { AgentEvent } from '../../core/event/agent-event.js'
 import { isRunTerminalEvent } from '../../core/event/agent-event.js'
 import type { UserTurn } from '../../core/run/user-turn.js'
+import { AsyncQueue } from '../../core/stream/async-queue.js'
 import { PiEventMapper, type PiSessionEvent } from './pi-event-mapper.js'
 
 export interface PiAgentSession {
   readonly sessionId: string
   readonly modelId: string
+  readonly isStreaming: boolean
   subscribe(listener: (event: PiSessionEvent) => void): () => void
   prompt(text: string): Promise<void>
+  followUp(text: string): Promise<void>
+  steer(text: string): Promise<void>
   abort(): Promise<void>
   dispose(): void
 }
 
 export class PiRuntime implements AgentRuntime {
   private sessionHandle: PiAgentSession | undefined
+  private readonly unsubscribe: () => void
+  private mapper: PiEventMapper | undefined
+  private events: AsyncQueue<AgentEvent> | undefined
 
   constructor(private readonly agentSession: PiAgentSession) {
     this.sessionHandle = agentSession
+    this.unsubscribe = agentSession.subscribe((event) => {
+      const mapper = this.mapper
+      const events = this.events
+      if (mapper === undefined || events === undefined) return
+      for (const mapped of mapper.push(event)) events.push(mapped)
+    })
   }
 
   get session(): SessionRef {
@@ -29,18 +42,12 @@ export class PiRuntime implements AgentRuntime {
   }
 
   async *run(turn: UserTurn, context: TurnContext): AsyncIterable<AgentEvent> {
-    const mapper = new PiEventMapper({
+    this.mapper = new PiEventMapper({
       sessionId: this.agentSession.sessionId,
       model: this.agentSession.modelId,
     })
-    const queue = new AsyncQueue<AgentEvent>()
+    this.events = new AsyncQueue<AgentEvent>()
     let finished = false
-    const unsubscribe = this.agentSession.subscribe((event) => {
-      for (const mapped of mapper.push(event)) {
-        if (isRunTerminalEvent(mapped)) finished = true
-        queue.push(mapped)
-      }
-    })
 
     const onAbort = (): void => {
       void this.agentSession.abort()
@@ -48,13 +55,11 @@ export class PiRuntime implements AgentRuntime {
     if (context.signal.aborted) onAbort()
     else context.signal.addEventListener('abort', onAbort, { once: true })
 
-    const prompt = this.agentSession.prompt(turn.text).then(
-      () => {
-        queue.close()
-      },
+    const sending = this.send(turn.text).then(
+      () => undefined,
       (error: unknown) => {
         if (!finished) {
-          queue.push({
+          this.events?.push({
             type: 'run',
             event: 'failed',
             message: error instanceof Error ? error.message : String(error),
@@ -63,19 +68,24 @@ export class PiRuntime implements AgentRuntime {
             model: this.agentSession.modelId,
           })
         }
-        queue.close()
+        this.events?.close()
       },
     )
 
     try {
-      for await (const event of queue.iterate()) {
-        if (isRunTerminalEvent(event)) finished = true
+      for await (const event of this.events.iterate()) {
+        if (isRunTerminalEvent(event)) {
+          finished = true
+          yield event
+          return
+        }
         yield event
       }
-      await prompt
+      await sending
     } finally {
       context.signal.removeEventListener('abort', onAbort)
-      unsubscribe()
+      this.events.close()
+      this.events = undefined
     }
   }
 
@@ -83,48 +93,19 @@ export class PiRuntime implements AgentRuntime {
     await this.sessionHandle?.abort()
   }
 
-  release(): Promise<void> {
+  release(retention: 'warm' | 'dispose'): Promise<void> {
+    void retention
+    this.unsubscribe()
     this.sessionHandle?.dispose()
     this.sessionHandle = undefined
+    this.events?.close()
+    this.events = undefined
+    this.mapper = undefined
     return Promise.resolve()
   }
-}
 
-class AsyncQueue<T> {
-  private readonly items: T[] = []
-  private readonly waiters: ((item: T | undefined) => void)[] = []
-  private closed = false
-
-  push(item: T): void {
-    if (this.closed) return
-    const waiter = this.waiters.shift()
-    if (waiter !== undefined) {
-      waiter(item)
-      return
-    }
-    this.items.push(item)
-  }
-
-  close(): void {
-    if (this.closed) return
-    this.closed = true
-    for (const waiter of this.waiters) waiter(undefined)
-    this.waiters.length = 0
-  }
-
-  async *iterate(): AsyncIterable<T> {
-    while (!this.closed || this.items.length > 0) {
-      const buffered = this.items.shift()
-      if (buffered !== undefined) {
-        yield buffered
-        continue
-      }
-      if (this.closed) break
-      const next = await new Promise<T | undefined>((resolve) => {
-        this.waiters.push(resolve)
-      })
-      if (next === undefined) break
-      yield next
-    }
+  private send(text: string): Promise<void> {
+    if (this.agentSession.isStreaming) return this.agentSession.followUp(text)
+    return this.agentSession.prompt(text)
   }
 }
