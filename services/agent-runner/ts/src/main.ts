@@ -36,6 +36,7 @@ export async function startServer(): Promise<void> {
   const claudeConfigDir = claudeGlobalDir(runtimeConfig.harnessHome)
   const piConfigDir = piGlobalDir(runtimeConfig.harnessHome)
   process.env['CLAUDE_CONFIG_DIR'] = claudeConfigDir
+  process.env['PI_CODING_AGENT_DIR'] = piConfigDir
   const initialDirectory = process.env['WORKSPACE_DIR'] ?? homedir()
   await Promise.all([
     mkdir(initialDirectory, { recursive: true }),
@@ -60,13 +61,13 @@ export async function startServer(): Promise<void> {
     globalConfigDir: claudeConfigDir,
     sessions: new ClaudeSessionStore({ globalConfigDir: claudeConfigDir }),
   })
-  const bambuddyProvider = new PiProvider(
+  const piProvider = new PiProvider(
     new CodingAgentSessionFactory(piConfigDir),
     new PiSessionStore({ agentDir: piConfigDir }),
   )
   const providers = {
     claude: claudeProvider,
-    bambuddy: bambuddyProvider,
+    pi: piProvider,
   }
   const sessionService = new SessionService({
     providers,

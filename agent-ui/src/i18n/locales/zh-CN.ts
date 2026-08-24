@@ -204,9 +204,9 @@ export const zhCN = {
       label: "Harness",
       select: "选择 Harness",
       comingSoon: "即将推出",
-      bambuddy: {
-        name: "Bambuddy",
-        description: "本地优先的 Agent 循环，内置技能、工具与项目配置。",
+      pi: {
+        name: "Pi",
+        description: "Pi 原生 Agent 循环，内置技能、工具与项目配置。",
       },
       claude: {
         name: "Claude Agent SDK",
@@ -239,7 +239,7 @@ export const zhCN = {
       delete: "删除",
       loadMore: "加载更多",
       loadFailed: "无法加载会话",
-      unsupportedHarness: "会话列表仅支持 Claude 和 Bambuddy",
+      unsupportedHarness: "会话列表仅支持 Claude 和 Pi",
       pin: "置顶",
       unpin: "取消置顶",
       tag: "Tag",

@@ -1,15 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  BAMBUDDY_PI_PROVIDER_ID,
-  buildBambuddyModelsConfig,
-} from '../../../../src/provider/pi/pi-models-config.js'
+import { buildPiModelsConfig } from '../../../../src/provider/pi/pi-models-config.js'
 
-describe('buildBambuddyModelsConfig', () => {
-  it('declares an isolated openai-responses provider for the branded Pi agentDir', () => {
-    expect(buildBambuddyModelsConfig('https://api.deepseek.com/v1', 'deepseek-v4-flash')).toEqual({
+describe('buildPiModelsConfig', () => {
+  it('maps a runner model profile into a native Pi custom provider', () => {
+    expect(
+      buildPiModelsConfig('https://api.deepseek.com/v1', 'deepseek-v4-flash', 'model-profile'),
+    ).toEqual({
       providers: {
-        [BAMBUDDY_PI_PROVIDER_ID]: {
+        'model-profile': {
           baseUrl: 'https://api.deepseek.com/v1',
           api: 'openai-responses',
           authHeader: true,

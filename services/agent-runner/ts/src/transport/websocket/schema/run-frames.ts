@@ -49,7 +49,7 @@ export function parseInitFrame(raw: unknown): ParseInitResult {
   }
   const harness = raw['harness']
   if (!isRunHarnessId(harness)) {
-    return { ok: false, message: 'Init harness must be claude or bambuddy' }
+    return { ok: false, message: 'Init harness must be claude or pi' }
   }
   const cwd = raw['cwd']
   if (typeof cwd !== 'string' || cwd.trim() === '') {
@@ -70,8 +70,8 @@ export function parseInitFrame(raw: unknown): ParseInitResult {
   if (fork === true && sessionId === undefined) {
     return { ok: false, message: 'Init fork requires sessionId' }
   }
-  if (harness === 'bambuddy' && (sessionId !== undefined || fork === true)) {
-    return { ok: false, message: 'Bambuddy does not support resume or fork in this slice' }
+  if (harness === 'pi' && (sessionId !== undefined || fork === true)) {
+    return { ok: false, message: 'Pi does not support resume or fork in this slice' }
   }
   return {
     ok: true,

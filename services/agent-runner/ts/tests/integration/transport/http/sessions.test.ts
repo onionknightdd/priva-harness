@@ -19,7 +19,7 @@ describe('/api/sandbox/agent/sessions', () => {
   let testRoot: string
   let server: FastifyInstance
   let claude: FakeAgentProvider
-  let bambuddy: FakeAgentProvider
+  let pi: FakeAgentProvider
   let liveRuns: LiveRunRegistry
   let metadata: MemorySessionMetadataRepository
   let extraDir: string
@@ -29,7 +29,7 @@ describe('/api/sandbox/agent/sessions', () => {
     await mkdir(join(testRoot, 'extra'))
     extraDir = await realpath(join(testRoot, 'extra'))
     claude = new FakeAgentProvider('claude', [])
-    bambuddy = new FakeAgentProvider('bambuddy', [])
+    pi = new FakeAgentProvider('pi', [])
     liveRuns = new LiveRunRegistry()
     metadata = new MemorySessionMetadataRepository()
     const modelProfileService = createTestModelProfileService(join(testRoot, 'runtime'))
@@ -40,7 +40,7 @@ describe('/api/sandbox/agent/sessions', () => {
       defaultModel: 'unique-model',
     })
     seedClaude(claude.sessions, testRoot)
-    seedBambuddy(bambuddy.sessions)
+    seedPi(pi.sessions)
     await metadata.upsert({ provider: 'claude', id: 'claude-1' }, {
       pinned: true,
       runMode: 'agent',
@@ -54,7 +54,7 @@ describe('/api/sandbox/agent/sessions', () => {
     await metadata.upsert({ provider: 'claude', id: 'claude-archived' }, {
       archived: true,
     })
-    const providers = { claude, bambuddy }
+    const providers = { claude, pi }
     const sessionService = new SessionService({
       providers,
       metadata,
@@ -168,10 +168,10 @@ describe('/api/sandbox/agent/sessions', () => {
     })
   })
 
-  it('returns resume-faithful bambuddy messages including tool_result and compaction', async () => {
+  it('returns resume-faithful pi messages including tool_result and compaction', async () => {
     const response = parseJson(await server.inject({
       method: 'GET',
-      url: '/api/sandbox/agent/sessions/bb-1/messages?harness=bambuddy',
+      url: '/api/sandbox/agent/sessions/bb-1/messages?harness=pi',
     }))
     expect(response).toMatchObject({
       add_dirs: [],
@@ -242,13 +242,13 @@ describe('/api/sandbox/agent/sessions', () => {
       beta: expect.any(Number) as number,
     }))
 
-    const bambuddyTagged = await server.inject({
+    const piTagged = await server.inject({
       method: 'PUT',
-      url: '/api/sandbox/agent/sessions/bb-1/tag?harness=bambuddy',
+      url: '/api/sandbox/agent/sessions/bb-1/tag?harness=pi',
       payload: { tag: 'solo' },
     })
-    expect(parseJson(bambuddyTagged)).toMatchObject({ status: 'ok', tags: ['solo'] })
-    expect(bambuddy.sessions.tagged).toEqual([{ id: 'bb-1', tag: 'solo' }])
+    expect(parseJson(piTagged)).toMatchObject({ status: 'ok', tags: ['solo'] })
+    expect(pi.sessions.tagged).toEqual([{ id: 'bb-1', tag: 'solo' }])
 
     const pinned = parseJson(await server.inject({
       method: 'PUT',
@@ -277,22 +277,22 @@ describe('/api/sandbox/agent/sessions', () => {
     })
     expect(missing.statusCode).toBe(404)
 
-    liveRuns.start({ runId: 'busy', provider: 'bambuddy', cwd: testRoot })
+    liveRuns.start({ runId: 'busy', provider: 'pi', cwd: testRoot })
     liveRuns.attachSession('busy', 'bb-1')
     const busy = await server.inject({
       method: 'DELETE',
-      url: '/api/sandbox/agent/sessions/bb-1?harness=bambuddy',
+      url: '/api/sandbox/agent/sessions/bb-1?harness=pi',
     })
     expect(busy.statusCode).toBe(409)
     liveRuns.finish('busy')
 
     const deleted = await server.inject({
       method: 'DELETE',
-      url: '/api/sandbox/agent/sessions/bb-1?harness=bambuddy',
+      url: '/api/sandbox/agent/sessions/bb-1?harness=pi',
     })
     expect(deleted.statusCode).toBe(200)
     expect(parseJson(deleted)).toEqual({ status: 'ok' })
-    expect(bambuddy.sessions.deleted).toEqual(['bb-1'])
+    expect(pi.sessions.deleted).toEqual(['bb-1'])
   })
 
   it('rejects a non-directory add_dirs path', async () => {
@@ -355,14 +355,14 @@ describe('/api/sandbox/agent/sessions', () => {
     ])
   })
 
-  it('rejects bambuddy fork', async () => {
+  it('rejects pi fork', async () => {
     const response = await server.inject({
       method: 'POST',
-      url: '/api/sandbox/agent/sessions/bb-1/fork?harness=bambuddy',
+      url: '/api/sandbox/agent/sessions/bb-1/fork?harness=pi',
       payload: { stem: 'BB' },
     })
     expect(response.statusCode).toBe(400)
-    expect(parseJson(response)).toEqual({ detail: 'Bambuddy does not support fork' })
+    expect(parseJson(response)).toEqual({ detail: 'Pi does not support fork' })
   })
 })
 
@@ -391,9 +391,9 @@ function seedClaude(store: FakeSessionStore, cwd: string): void {
   })
 }
 
-function seedBambuddy(store: FakeSessionStore): void {
+function seedPi(store: FakeSessionStore): void {
   store.seed({
-    ref: { provider: 'bambuddy', id: 'bb-1' },
+    ref: { provider: 'pi', id: 'bb-1' },
     summary: 'bb',
     lastModified: 50,
     fileSize: 8,

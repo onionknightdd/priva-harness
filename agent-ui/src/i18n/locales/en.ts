@@ -205,10 +205,10 @@ export const en = {
       label: "Harness",
       select: "Select harness",
       comingSoon: "Coming soon",
-      bambuddy: {
-        name: "Bambuddy",
+      pi: {
+        name: "Pi",
         description:
-          "Local-first agent loop with skills, tools, and project config.",
+          "Pi coding agent with native skills, tools, and project config.",
       },
       claude: {
         name: "Claude Agent SDK",
@@ -242,7 +242,7 @@ export const en = {
       delete: "Delete",
       loadMore: "Load more",
       loadFailed: "Unable to load sessions",
-      unsupportedHarness: "Sessions are available for Claude and Bambuddy",
+      unsupportedHarness: "Sessions are available for Claude and Pi",
       pin: "Pin",
       unpin: "Unpin",
       tag: "Tag",

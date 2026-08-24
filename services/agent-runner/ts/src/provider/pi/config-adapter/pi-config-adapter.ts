@@ -16,7 +16,7 @@ import { planPiMcp } from './mcp.js'
 import { planPiSkills } from './skills.js'
 
 export class PiConfigAdapter implements ProviderConfigAdapter {
-  readonly provider = 'bambuddy' as const
+  readonly provider = 'pi' as const
 
   plan(
     config: HarnessConfig,

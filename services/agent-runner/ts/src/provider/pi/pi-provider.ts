@@ -12,7 +12,7 @@ export interface PiSessionFactory {
 }
 
 export class PiProvider implements AgentProvider {
-  readonly id = 'bambuddy' as const
+  readonly id = 'pi' as const
   readonly sessions: ProviderSessionStore
 
   constructor(

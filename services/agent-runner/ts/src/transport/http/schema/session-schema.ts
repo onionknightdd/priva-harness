@@ -8,7 +8,7 @@ const nullableString = {
 
 const harnessQuery = {
   type: 'string',
-  enum: ['claude', 'bambuddy'],
+  enum: ['claude', 'pi'],
 } as const
 
 const lastResponseModelSchema = {

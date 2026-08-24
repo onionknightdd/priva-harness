@@ -8,7 +8,7 @@ describe('run frames', () => {
       type: 'init',
       text: 'hi',
       model: 'gateway:llama3',
-      harness: 'bambuddy',
+      harness: 'pi',
       cwd: '/work/repo',
     })).toEqual({
       ok: true,
@@ -16,7 +16,7 @@ describe('run frames', () => {
         type: 'init',
         text: 'hi',
         model: 'gateway:llama3',
-        harness: 'bambuddy',
+        harness: 'pi',
         cwd: '/work/repo',
       },
     })
@@ -85,12 +85,12 @@ describe('run frames', () => {
       type: 'init',
       text: 'hi',
       model: 'p:m',
-      harness: 'bambuddy',
+      harness: 'pi',
       cwd: '/work',
       sessionId: 'sess-1',
     })).toMatchObject({
       ok: false,
-      message: 'Bambuddy does not support resume or fork in this slice',
+      message: 'Pi does not support resume or fork in this slice',
     })
     expect(parseInitFrame({ type: 'abort' }).ok).toBe(false)
   })

@@ -1,6 +1,6 @@
 const SESSION_API_PREFIX = "/api/sandbox/agent/sessions"
 
-export type AgentRunHarness = "claude" | "bambuddy"
+export type AgentRunHarness = "claude" | "pi"
 
 export type SessionRunMode = "agent" | "code"
 

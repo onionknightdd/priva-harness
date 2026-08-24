@@ -36,7 +36,7 @@ describe('PiSessionStore', () => {
       sessionManager: fakeManager(listed(jsonlPath), opened),
     })
 
-    const messages = await store.messages({ provider: 'bambuddy', id: 'bb-1' })
+    const messages = await store.messages({ provider: 'pi', id: 'bb-1' })
     expect(messages.map((message) => message.type)).toEqual([
       'user',
       'assistant',
@@ -48,7 +48,7 @@ describe('PiSessionStore', () => {
       parentToolUseId: 'call-1',
     })
 
-    await store.tag({ provider: 'bambuddy', id: 'bb-1' }, 'work')
+    await store.tag({ provider: 'pi', id: 'bb-1' }, 'work')
     expect(appendSessionInfo).not.toHaveBeenCalled()
   })
 
@@ -59,10 +59,10 @@ describe('PiSessionStore', () => {
       sessionManager: fakeManager(listed(jsonlPath), opened),
     })
 
-    await store.rename({ provider: 'bambuddy', id: 'bb-1' }, 'Feature')
+    await store.rename({ provider: 'pi', id: 'bb-1' }, 'Feature')
     expect(appendSessionInfo).toHaveBeenCalledWith('Feature')
 
-    await store.delete({ provider: 'bambuddy', id: 'bb-1' })
+    await store.delete({ provider: 'pi', id: 'bb-1' })
     await expect(unlink(jsonlPath)).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
@@ -71,9 +71,9 @@ describe('PiSessionStore', () => {
       agentDir,
       sessionManager: fakeManager(listed(jsonlPath), fakeOpenedSession().opened),
     })
-    await expect(store.fork({ provider: 'bambuddy', id: 'bb-1' }, { title: 'BB (1)' })).rejects.toMatchObject({
+    await expect(store.fork({ provider: 'pi', id: 'bb-1' }, { title: 'BB (1)' })).rejects.toMatchObject({
       kind: 'invalid-request',
-      message: 'Bambuddy does not support fork',
+      message: 'Pi does not support fork',
     })
   })
 
@@ -87,7 +87,7 @@ describe('PiSessionStore', () => {
     const listedSessions = await store.list({})
     expect(listedSessions).toEqual([
       expect.objectContaining({
-        ref: { provider: 'bambuddy', id: 'bb-1' },
+        ref: { provider: 'pi', id: 'bb-1' },
         customTitle: 'Named',
         gitBranch: null,
       }),

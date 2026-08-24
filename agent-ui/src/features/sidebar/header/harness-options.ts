@@ -1,8 +1,8 @@
-export const harnessIds = ["bambuddy", "claude", "deepseek"] as const
+export const harnessIds = ["pi", "claude", "deepseek"] as const
 
 export type HarnessId = (typeof harnessIds)[number]
 
-export const RUN_HARNESS_IDS = ["bambuddy", "claude"] as const
+export const RUN_HARNESS_IDS = ["pi", "claude"] as const
 
 export type RunHarnessId = (typeof RUN_HARNESS_IDS)[number]
 
@@ -13,13 +13,13 @@ export type HarnessOption = {
   disabled: boolean
 }
 
-export const DEFAULT_HARNESS_ID: HarnessId = "bambuddy"
+export const DEFAULT_HARNESS_ID: HarnessId = "pi"
 
 export const harnessOptions = [
   {
-    id: "bambuddy",
-    nameKey: "sidebar.harness.bambuddy.name",
-    descriptionKey: "sidebar.harness.bambuddy.description",
+    id: "pi",
+    nameKey: "sidebar.harness.pi.name",
+    descriptionKey: "sidebar.harness.pi.description",
     disabled: false,
   },
   {
@@ -47,7 +47,7 @@ export function isSelectableHarnessId(value: string): value is HarnessId {
 }
 
 export function toRunHarnessId(id: HarnessId): RunHarnessId | null {
-  if (id === "claude" || id === "bambuddy") {
+  if (id === "claude" || id === "pi") {
     return id
   }
 

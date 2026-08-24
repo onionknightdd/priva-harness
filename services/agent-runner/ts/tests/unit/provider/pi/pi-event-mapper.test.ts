@@ -48,7 +48,7 @@ describe('PiEventMapper', () => {
       type: 'run',
       event: 'completed',
       sessionId: 'pi-sess',
-      harnessProvider: 'bambuddy',
+      harnessProvider: 'pi',
       model: 'deepseek-v4-flash',
       costUsd: 0.002,
       usage: { input: 10, output: 2, cacheRead: 1 },
@@ -100,7 +100,7 @@ describe('PiEventMapper', () => {
         event: 'failed',
         message: 'Responses API 404',
         sessionId: 'pi-sess',
-        harnessProvider: 'bambuddy',
+        harnessProvider: 'pi',
         model: 'm',
       }),
     ])
