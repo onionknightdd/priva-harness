@@ -177,6 +177,8 @@ export const en = {
     invalidJson: "The JSON content is invalid and cannot be rendered.",
   },
   sidebar: {
+    brand: "Agent workshop",
+    runtime: "Agent Runtime",
     modes: {
       label: "Sidebar mode",
       agent: "Agent",
@@ -203,7 +205,7 @@ export const en = {
     },
     harness: {
       label: "Harness",
-      select: "Select harness",
+      select: "Select agent runtime",
       comingSoon: "Coming soon",
       pi: {
         name: "Pi",

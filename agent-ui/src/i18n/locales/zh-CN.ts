@@ -176,6 +176,8 @@ export const zhCN = {
     invalidJson: "JSON 内容无效，无法渲染。",
   },
   sidebar: {
+    brand: "Agent workshop",
+    runtime: "Agent Runtime",
     modes: {
       label: "侧边栏模式",
       agent: "Agent",
@@ -202,7 +204,7 @@ export const zhCN = {
     },
     harness: {
       label: "Harness",
-      select: "选择 Harness",
+      select: "选择 Agent Runtime",
       comingSoon: "即将推出",
       pi: {
         name: "Pi",
