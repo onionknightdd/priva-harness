@@ -48,6 +48,27 @@ const saveButtonTransition: Transition = {
   mass: 0.75,
 }
 
+function scrollTabIntoView(
+  viewport: HTMLElement,
+  tab: HTMLElement,
+  reduceMotion: boolean
+) {
+  const viewportRect = viewport.getBoundingClientRect()
+  const tabRect = tab.getBoundingClientRect()
+  const startOverflow = tabRect.left - viewportRect.left
+  const endOverflow = tabRect.right - viewportRect.right
+  const behavior = reduceMotion ? "auto" : "smooth"
+
+  if (startOverflow < 0) {
+    viewport.scrollBy({ left: startOverflow - 8, behavior })
+    return
+  }
+
+  if (endOverflow > 0) {
+    viewport.scrollBy({ left: endOverflow + 8, behavior })
+  }
+}
+
 function animateControl(control: HTMLButtonElement) {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
     return
@@ -107,6 +128,7 @@ export function FilePreviewToolbar({
   const closeTweensRef = React.useRef(
     new Map<string, gsap.core.Tween>()
   )
+  const tabsViewportRef = React.useRef<HTMLDivElement>(null)
   const [announcement, setAnnouncement] = React.useState("")
   const [marqueeFileId, setMarqueeFileId] = React.useState<
     string | null
@@ -137,6 +159,25 @@ export function FilePreviewToolbar({
     },
     []
   )
+
+  React.useEffect(() => {
+    const viewport = tabsViewportRef.current
+    const activeFileId = activeFile?.id
+
+    if (!viewport || !activeFileId) {
+      return
+    }
+
+    const tab = viewport.querySelector<HTMLElement>(
+      `[data-file-preview-tab]:has([data-value="${CSS.escape(activeFileId)}"])`
+    )
+
+    if (!tab) {
+      return
+    }
+
+    scrollTabIntoView(viewport, tab, shouldReduceMotion)
+  }, [activeFile?.id, shouldReduceMotion])
 
   const announce = React.useCallback((message: string) => {
     setAnnouncement(message)
@@ -250,7 +291,10 @@ export function FilePreviewToolbar({
         compact ? "h-11 gap-1 px-1.5" : "h-11 gap-2 px-2 sm:px-3"
       )}
     >
-      <div className="file-preview-toolbar__tabs min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div
+        ref={tabsViewportRef}
+        className="file-preview-toolbar__tabs min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
         {files.length > 0 ? (
           <TabsList
             aria-label={t("filePreview.openFiles")}
