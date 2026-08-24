@@ -201,18 +201,25 @@ async function removeIfPresent(path: string): Promise<void> {
 
 function mapStoreError(error: unknown, operation: string): RuntimeSettingsError {
   if (error instanceof RuntimeSettingsError) return error
-  return new RuntimeSettingsError(
-    'io-failure',
-    `Could not ${operation} runtime settings`,
-    { cause: error },
-  )
+  if (isErrnoException(error)) {
+    return new RuntimeSettingsError(
+      'io-failure',
+      `Could not ${operation} runtime settings`,
+      { cause: error },
+    )
+  }
+  throw error
 }
 
-function hasErrorCode(error: unknown, code: string): boolean {
+function isErrnoException(error: unknown): error is { readonly code: string } {
   return typeof error === 'object'
     && error !== null
     && 'code' in error
-    && error.code === code
+    && typeof error.code === 'string'
+}
+
+function hasErrorCode(error: unknown, code: string): boolean {
+  return isErrnoException(error) && error.code === code
 }
 
 async function delay(milliseconds: number): Promise<void> {

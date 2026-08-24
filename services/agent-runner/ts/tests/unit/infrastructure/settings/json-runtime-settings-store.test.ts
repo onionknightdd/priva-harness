@@ -117,4 +117,14 @@ describe('JsonRuntimeSettingsStore', () => {
     await expect(store.read()).rejects.toBeInstanceOf(RuntimeSettingsError)
     await expect(store.read()).rejects.toMatchObject({ kind: 'invalid-queue-behavior' })
   })
+
+  it('rethrows application errors from transact instead of wrapping them as I/O failures', async () => {
+    class DomainError extends Error {
+      readonly kind = 'profile-not-ready'
+    }
+
+    await expect(store.transact(() => {
+      throw new DomainError('profile_not_ready')
+    })).rejects.toBeInstanceOf(DomainError)
+  })
 })
