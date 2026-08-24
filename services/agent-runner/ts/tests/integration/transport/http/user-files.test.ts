@@ -16,7 +16,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { NodeUserFileSystem } from '../../../../src/infrastructure/filesystem/node-user-file-system.js'
 import { buildHttpServer } from '../../../../src/transport/http/server.js'
-import { createTestModelProfileService } from '../../../support/model-profile.js'
+import { createTestAgentServices } from '../../../support/model-profile.js'
 
 describe('/api/sandbox/files', () => {
   let testRoot: string
@@ -31,13 +31,15 @@ describe('/api/sandbox/files', () => {
     staging = join(testRoot, 'staging')
     await Promise.all([mkdir(workspace), mkdir(staging)])
     canonicalWorkspace = await realpath(workspace)
+    const services = createTestAgentServices(join(testRoot, 'runtime'))
     server = buildHttpServer({
       userFileSystem: new NodeUserFileSystem({
         initialDirectory: workspace,
         temporaryDirectory: staging,
         maxUploadBytes: 16,
       }),
-      modelProfileService: createTestModelProfileService(join(testRoot, 'runtime')),
+      modelProfileService: services.modelProfileService,
+      agentProfileService: services.agentProfileService,
     })
     await server.ready()
   })

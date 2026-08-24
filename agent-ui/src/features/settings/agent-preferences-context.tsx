@@ -4,6 +4,10 @@ import { getStrictContext } from "@/lib/get-strict-context"
 import type { RunHarnessId } from "@/features/sidebar/header/harness-options"
 
 import {
+  getAgentProfile,
+  updateAgentProfileQueueBehavior,
+} from "./agent-profile-api"
+import {
   readStoredAgentPreferences,
   storeAgentPreferences,
   type AgentPreferences,
@@ -12,7 +16,11 @@ import {
   type SessionModelPreference,
 } from "./agent-preferences"
 
+export type QueueBehaviorSyncError = "load" | "save"
+
 type AgentPreferencesContextValue = AgentPreferences & {
+  queueBehaviorBusy: boolean
+  queueBehaviorError: QueueBehaviorSyncError | null
   setDefaultHarness: (value: DefaultHarnessPreference) => void
   setLastHarnessId: (value: RunHarnessId) => void
   setSessionModel: (value: SessionModelPreference) => void
@@ -32,30 +40,98 @@ export function AgentPreferencesProvider({
   const [preferences, setPreferences] = React.useState<AgentPreferences>(
     readStoredAgentPreferences
   )
+  const [queueBehaviorBusy, setQueueBehaviorBusy] = React.useState(true)
+  const [queueBehaviorError, setQueueBehaviorError] =
+    React.useState<QueueBehaviorSyncError | null>(null)
+  const committedQueueBehaviorRef = React.useRef(preferences.queueBehavior)
+  const saveGenerationRef = React.useRef(0)
 
-  const update = React.useCallback(
-    (patch: Partial<AgentPreferences>) => {
-      setPreferences((current) => {
-        const next = { ...current, ...patch }
-        storeAgentPreferences(next)
-        return next
+  React.useEffect(() => {
+    const abort = new AbortController()
+
+    const load = async () => {
+      try {
+        const profile = await readAgentProfile(abort.signal)
+        if (abort.signal.aborted) {
+          return
+        }
+        committedQueueBehaviorRef.current = profile.queueBehavior
+        setPreferences((current) => ({
+          ...current,
+          queueBehavior: profile.queueBehavior,
+        }))
+        setQueueBehaviorError(null)
+      } catch (error: unknown) {
+        if (abort.signal.aborted || isAbortError(error)) {
+          return
+        }
+        setQueueBehaviorError("load")
+      } finally {
+        if (!abort.signal.aborted) {
+          setQueueBehaviorBusy(false)
+        }
+      }
+    }
+
+    void load()
+    return () => abort.abort()
+  }, [])
+
+  const update = React.useCallback((patch: Partial<AgentPreferences>) => {
+    setPreferences((current) => {
+      const next = { ...current, ...patch }
+      storeAgentPreferences(next)
+      return next
+    })
+  }, [])
+
+  const setQueueBehavior = React.useCallback((queueBehavior: QueueBehavior) => {
+    const generation = ++saveGenerationRef.current
+    setPreferences((current) => ({ ...current, queueBehavior }))
+    setQueueBehaviorBusy(true)
+    setQueueBehaviorError(null)
+    void updateAgentProfileQueueBehavior(queueBehavior)
+      .then((saved) => {
+        if (generation !== saveGenerationRef.current) {
+          return
+        }
+        committedQueueBehaviorRef.current = saved.queueBehavior
+        setPreferences((current) => ({
+          ...current,
+          queueBehavior: saved.queueBehavior,
+        }))
       })
-    },
-    []
-  )
+      .catch(() => {
+        if (generation !== saveGenerationRef.current) {
+          return
+        }
+        setPreferences((current) => ({
+          ...current,
+          queueBehavior: committedQueueBehaviorRef.current,
+        }))
+        setQueueBehaviorError("save")
+      })
+      .finally(() => {
+        if (generation === saveGenerationRef.current) {
+          setQueueBehaviorBusy(false)
+        }
+      })
+  }, [])
 
   const value = React.useMemo<AgentPreferencesContextValue>(
     () => ({
       ...preferences,
+      queueBehaviorBusy,
+      queueBehaviorError,
       setDefaultHarness: (defaultHarness) => update({ defaultHarness }),
       setLastHarnessId: (lastHarnessId) => update({ lastHarnessId }),
       setSessionModel: (sessionModel) => update({ sessionModel }),
       setLastModelReference: (lastModelReference) =>
         update({ lastModelReference }),
-      setQueueBehavior: (queueBehavior) => update({ queueBehavior }),
+      setQueueBehavior,
       setInputSuggestions: (inputSuggestions) => update({ inputSuggestions }),
     }),
-    [preferences, update]
+    [preferences, queueBehaviorBusy, queueBehaviorError, setQueueBehavior, update]
   )
 
   return (
@@ -67,4 +143,19 @@ export function AgentPreferencesProvider({
 
 export function useAgentPreferences() {
   return useAgentPreferencesContext()
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof Error && error.name === "AbortError"
+}
+
+async function readAgentProfile(signal: AbortSignal) {
+  try {
+    return await getAgentProfile(signal)
+  } catch (error: unknown) {
+    if (signal.aborted || isAbortError(error)) {
+      throw error
+    }
+    return await getAgentProfile(signal)
+  }
 }

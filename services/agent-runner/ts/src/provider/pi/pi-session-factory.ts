@@ -28,7 +28,7 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
     const modelsPath = join(runDir, 'models.json')
     await writeFile(authPath, '{}\n', { mode: 0o600 })
     // Overlay the runner model profile as a native Pi custom provider for this
-    // turn only. agentDir keeps Pi's own files; credentials stay in model-profiles.json.
+    // turn only. agentDir keeps Pi's own files; credentials stay in bambuddy.settings.json.
     await writeFile(
       modelsPath,
       `${JSON.stringify(buildPiModelsConfig(spec.baseUrl, spec.model, providerId), null, 2)}\n`,

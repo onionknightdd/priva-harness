@@ -317,6 +317,8 @@ export const en = {
       queueBehaviorFollowUp: "Wait for the last result",
       queueBehaviorSteer: "Wait until the latest tool ends",
       queueBehaviorInterrupt: "Interrupt the reply to send",
+      queueBehaviorLoadFailed: "Could not load queue behavior from the runner.",
+      queueBehaviorSaveFailed: "Could not save queue behavior.",
       inputSuggestions: "Input suggestions",
       inputSuggestionsDescription:
         "Allow Claude Code to suggest follow-up prompts.",

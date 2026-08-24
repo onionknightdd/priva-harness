@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path'
 export const RUNTIME_HOME_ENV = 'RUNTIME_HOME_DIR'
 
 const RUNTIME_HOME_DIRECTORY = '.bambuddy'
-const SETTINGS_FILE_NAME = 'bambuddy.settings.yml'
+const SETTINGS_FILE_NAME = 'bambuddy.settings.json'
 const HARNESS_DIRECTORY = 'harness'
 
 export interface RuntimeConfig {

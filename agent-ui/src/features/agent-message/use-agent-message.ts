@@ -195,7 +195,6 @@ export function useAgentMessage() {
             harness: runHarnessId,
             cwd,
             effort,
-            queueBehavior: sendQueueBehavior,
             promptSuggestions: inputSuggestions,
             ...(resumeSessionId ? { sessionId: resumeSessionId } : {}),
           },

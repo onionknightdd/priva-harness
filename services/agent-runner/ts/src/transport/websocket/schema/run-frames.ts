@@ -1,9 +1,7 @@
 import type { AgentEvent } from '../../../core/event/agent-event.js'
 import {
   isEffortLevel,
-  isQueueBehavior,
   type EffortLevel,
-  type QueueBehavior,
   type SessionTarget,
 } from '../../../core/contract/agent-provider.js'
 import {
@@ -21,7 +19,6 @@ export interface InitFrame {
   readonly effort?: EffortLevel
   readonly sessionId?: string
   readonly fork?: boolean
-  readonly queueBehavior?: QueueBehavior
   readonly promptSuggestions?: boolean
 }
 
@@ -77,10 +74,6 @@ export function parseInitFrame(raw: unknown): ParseInitResult {
   if (harness === 'pi' && fork === true) {
     return { ok: false, message: 'Pi does not support fork' }
   }
-  const queueBehavior = raw['queueBehavior']
-  if (queueBehavior !== undefined && !isQueueBehavior(queueBehavior)) {
-    return { ok: false, message: 'Init queueBehavior must be follow-up, steer, or interrupt' }
-  }
   const promptSuggestions = raw['promptSuggestions']
   if (promptSuggestions !== undefined && typeof promptSuggestions !== 'boolean') {
     return { ok: false, message: 'Init promptSuggestions must be a boolean' }
@@ -96,7 +89,6 @@ export function parseInitFrame(raw: unknown): ParseInitResult {
       ...(effort === undefined ? {} : { effort }),
       ...(sessionId === undefined ? {} : { sessionId: sessionId.trim() }),
       ...(fork === true ? { fork: true } : {}),
-      ...(queueBehavior === undefined ? {} : { queueBehavior }),
       ...(promptSuggestions === undefined ? {} : { promptSuggestions }),
     },
   }
