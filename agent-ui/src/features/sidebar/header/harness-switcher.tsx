@@ -2,7 +2,8 @@
 
 import * as React from "react"
 import gsap from "gsap"
-import { CheckIcon } from "lucide-react"
+import { BotIcon, CheckIcon } from "lucide-react"
+import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
 import { Badge } from "@/components/ui/badge"
@@ -149,11 +150,13 @@ export function HarnessSwitcher() {
   const logoRef = React.useRef<HTMLDivElement>(null)
   const { isMobile, setOpen, state } = useSidebar()
   const { t } = useTranslation()
+  const reduceMotion = useReducedMotion() === true
   const { harnessId: activeHarnessId, setHarnessId: setActiveHarnessId } =
     useHarness()
   const [harnessMenuOpen, setHarnessMenuOpen] = React.useState(false)
   const activeHarness = getHarnessOption(activeHarnessId)
   const isCollapsed = !isMobile && state === "collapsed"
+  const runtimeName = t(activeHarness.nameKey)
 
   React.useEffect(() => {
     if (isCollapsed) {
@@ -186,7 +189,7 @@ export function HarnessSwitcher() {
     }, logo)
 
     return () => context.revert()
-  }, [activeHarnessId])
+  }, [])
 
   return (
     <div className="flex items-center gap-1">
@@ -211,27 +214,48 @@ export function HarnessSwitcher() {
               title={
                 isCollapsed
                   ? t("common.expandSidebar")
-                  : t("sidebar.harness.select")
+                  : `${t("sidebar.runtime")} : ${runtimeName}`
               }
               render={
                 <SidebarMenuButton
                   size="lg"
-                  className="data-open:bg-sidebar-accent data-open:text-sidebar-accent-foreground [&_svg]:size-6"
+                  className="h-auto min-h-12 data-open:bg-sidebar-accent data-open:text-sidebar-accent-foreground [&_[data-brand-logo]_svg]:size-6 [&_[data-runtime-logo]_img]:size-3.5 [&_[data-runtime-logo]_svg]:size-3.5"
                 />
               }
             >
               <div
                 ref={logoRef}
+                data-brand-logo
                 className="flex size-8 items-center justify-center"
               >
-                <HarnessBrandLogo harnessId={activeHarness.id} />
+                <BotIcon aria-hidden="true" />
               </div>
-              <div className="grid flex-1 text-left text-xs leading-tight">
+              <div className="grid min-w-0 flex-1 text-left text-xs leading-tight">
                 <span className="truncate font-medium">
-                  {t(activeHarness.nameKey)}
+                  {t("sidebar.brand")}
                 </span>
-                <span className="truncate text-[11px] text-muted-foreground">
-                  {t("sidebar.harness.label")}
+                <span className="flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground">
+                  <span className="shrink-0">{t("sidebar.runtime")}</span>
+                  <span className="shrink-0">:</span>
+                  <AnimatePresence initial={false} mode="wait">
+                    <motion.span
+                      key={activeHarnessId}
+                      data-runtime-logo
+                      className="inline-flex min-w-0 items-center gap-1"
+                      initial={
+                        reduceMotion ? false : { opacity: 0, y: 5 }
+                      }
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={reduceMotion ? undefined : { opacity: 0, y: -5 }}
+                      transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                    >
+                      <HarnessBrandLogo
+                        className="size-3.5 shrink-0"
+                        harnessId={activeHarness.id}
+                      />
+                      <span className="truncate">{runtimeName}</span>
+                    </motion.span>
+                  </AnimatePresence>
                 </span>
               </div>
             </DropdownMenuTrigger>
