@@ -12,9 +12,40 @@ import {
 } from "react";
 import { Tabs as TabsPrimitive } from "@base-ui/react/tabs";
 import { cva, type VariantProps } from "class-variance-authority";
+import { motion, useReducedMotion } from "motion/react";
 import { cn } from "@/lib/utils";
 
-type IndicatorStyle = { left: string; width: string };
+type IndicatorStyle = { left: number; width: number };
+
+const ZERO_INDICATOR: IndicatorStyle = { left: 0, width: 0 };
+
+const TAB_INDICATOR_TRANSITION = {
+  type: "spring",
+  stiffness: 500,
+  damping: 40,
+  mass: 0.8,
+} as const;
+
+function getIndicatorStyle(
+  list: HTMLElement,
+  target: HTMLElement | null | undefined,
+): IndicatorStyle {
+  if (!target) {
+    return ZERO_INDICATOR;
+  }
+
+  const listRect = list.getBoundingClientRect();
+  const targetRect = target.getBoundingClientRect();
+
+  return {
+    left: Math.round(targetRect.left - listRect.left + list.scrollLeft),
+    width: Math.round(targetRect.width),
+  };
+}
+
+function sameIndicatorStyle(a: IndicatorStyle, b: IndicatorStyle) {
+  return a.left === b.left && a.width === b.width;
+}
 
 type TabsListContextValue = {
   registerTrigger: (value: string, element: HTMLElement | null) => void;
@@ -61,7 +92,7 @@ const tabsListVariants = cva(
 );
 
 const tabsActiveIndicatorVariants = cva(
-  "pointer-events-none absolute transition-all duration-300 ease-out group-data-[resizing=true]/sidebar-wrapper:transition-none",
+  "pointer-events-none absolute",
   {
     variants: {
       variant: {
@@ -92,15 +123,10 @@ function TabsList({
 
   const triggerRefs = useRef<Map<string, HTMLElement>>(new Map());
   const listRef = useRef<HTMLDivElement>(null);
+  const shouldReduceMotion = Boolean(useReducedMotion());
   const [hoveredValue, setHoveredValue] = useState<string | null>(null);
-  const [activeStyle, setActiveStyle] = useState<IndicatorStyle>({
-    left: "0px",
-    width: "0px",
-  });
-  const [hoverStyle, setHoverStyle] = useState<IndicatorStyle>({
-    left: "0px",
-    width: "0px",
-  });
+  const [activeStyle, setActiveStyle] = useState<IndicatorStyle>(ZERO_INDICATOR);
+  const [hoverStyle, setHoverStyle] = useState<IndicatorStyle>(ZERO_INDICATOR);
 
   const registerTrigger = useCallback(
     (value: string, element: HTMLElement | null) => {
@@ -114,14 +140,19 @@ function TabsList({
   );
 
   useEffect(() => {
-    if (hoveredValue) {
-      const element = triggerRefs.current.get(hoveredValue);
-      if (element) {
-        setHoverStyle({
-          left: `${element.offsetLeft}px`,
-          width: `${element.offsetWidth}px`,
-        });
-      }
+    const listElement = listRef.current;
+
+    if (!hoveredValue || !listElement) {
+      return;
+    }
+
+    const element = triggerRefs.current.get(hoveredValue);
+
+    if (element) {
+      const nextStyle = getIndicatorStyle(listElement, element);
+      setHoverStyle((currentStyle) =>
+        sameIndicatorStyle(currentStyle, nextStyle) ? currentStyle : nextStyle,
+      );
     }
   }, [hoveredValue]);
 
@@ -133,25 +164,36 @@ function TabsList({
       const activeElement = listElement.querySelector(
         "[data-active]",
       ) as HTMLElement | null;
-      if (activeElement) {
-        setActiveStyle({
-          left: `${activeElement.offsetLeft}px`,
-          width: `${activeElement.offsetWidth}px`,
-        });
-      }
+      const nextStyle = getIndicatorStyle(listElement, activeElement);
+      setActiveStyle((currentStyle) =>
+        sameIndicatorStyle(currentStyle, nextStyle) ? currentStyle : nextStyle,
+      );
     };
 
-    const initialFrame = requestAnimationFrame(updateActiveFromDOM);
+    const resizeObserver = new ResizeObserver(updateActiveFromDOM);
+    const observeTargets = () => {
+      resizeObserver.disconnect();
+      resizeObserver.observe(listElement);
+      listElement
+        .querySelectorAll("[data-slot='tabs-trigger']")
+        .forEach((element) => resizeObserver.observe(element));
+    };
 
-    const mutationObserver = new MutationObserver(updateActiveFromDOM);
+    const initialFrame = requestAnimationFrame(() => {
+      observeTargets();
+      updateActiveFromDOM();
+    });
+
+    const mutationObserver = new MutationObserver(() => {
+      observeTargets();
+      updateActiveFromDOM();
+    });
     mutationObserver.observe(listElement, {
       attributes: true,
       attributeFilter: ["data-active"],
+      childList: true,
       subtree: true,
     });
-
-    const resizeObserver = new ResizeObserver(updateActiveFromDOM);
-    resizeObserver.observe(listElement);
 
     return () => {
       cancelAnimationFrame(initialFrame);
@@ -180,21 +222,29 @@ function TabsList({
       >
         {resolvedVariant === "ghost" &&
           hoveredValue !== null &&
-          hoverStyle.width !== "0px" && (
-            <div
+          hoverStyle.width !== 0 && (
+            <motion.div
               data-slot="tabs-hover-indicator"
-              className="bg-foreground/8 pointer-events-none absolute inset-y-1 rounded-md transition-all duration-300 ease-out group-data-[resizing=true]/sidebar-wrapper:transition-none"
-              style={hoverStyle}
+              className="bg-foreground/8 pointer-events-none absolute inset-y-1 rounded-md"
+              initial={false}
+              animate={{ left: hoverStyle.left, width: hoverStyle.width }}
+              transition={
+                shouldReduceMotion ? { duration: 0 } : TAB_INDICATOR_TRANSITION
+              }
             />
           )}
 
-        {activeStyle.width !== "0px" && (
-          <div
+        {activeStyle.width !== 0 && (
+          <motion.div
             data-slot="tabs-active-indicator"
             className={tabsActiveIndicatorVariants({
               variant: resolvedVariant,
             })}
-            style={activeStyle}
+            initial={false}
+            animate={{ left: activeStyle.left, width: activeStyle.width }}
+            transition={
+              shouldReduceMotion ? { duration: 0 } : TAB_INDICATOR_TRANSITION
+            }
           />
         )}
 
