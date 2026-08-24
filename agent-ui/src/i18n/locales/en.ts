@@ -178,7 +178,7 @@ export const en = {
   },
   sidebar: {
     brand: "Agent Workshop",
-    runtime: "Agent Runtime",
+    runtime: "Runtime",
     modes: {
       label: "Sidebar mode",
       agent: "Agent",
