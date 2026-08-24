@@ -56,6 +56,22 @@ describe('run frames', () => {
         source: { provider: 'claude', id: 'sess-1' },
       })
     }
+
+    const resumedPi = parseInitFrame({
+      type: 'init',
+      text: 'hi',
+      model: 'p:m',
+      harness: 'pi',
+      cwd: '/work/repo',
+      sessionId: 'pi-1',
+    })
+    expect(resumedPi.ok).toBe(true)
+    if (resumedPi.ok) {
+      expect(sessionTargetFromInit(resumedPi.frame)).toEqual({
+        kind: 'resume',
+        session: { provider: 'pi', id: 'pi-1' },
+      })
+    }
   })
 
   it('rejects empty init text, missing model, unknown harness, and invalid resume', () => {
@@ -88,9 +104,10 @@ describe('run frames', () => {
       harness: 'pi',
       cwd: '/work',
       sessionId: 'sess-1',
+      fork: true,
     })).toMatchObject({
       ok: false,
-      message: 'Pi does not support resume or fork in this slice',
+      message: 'Pi does not support fork',
     })
     expect(parseInitFrame({ type: 'abort' }).ok).toBe(false)
   })

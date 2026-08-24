@@ -70,8 +70,8 @@ export function parseInitFrame(raw: unknown): ParseInitResult {
   if (fork === true && sessionId === undefined) {
     return { ok: false, message: 'Init fork requires sessionId' }
   }
-  if (harness === 'pi' && (sessionId !== undefined || fork === true)) {
-    return { ok: false, message: 'Pi does not support resume or fork in this slice' }
+  if (harness === 'pi' && fork === true) {
+    return { ok: false, message: 'Pi does not support fork' }
   }
   return {
     ok: true,

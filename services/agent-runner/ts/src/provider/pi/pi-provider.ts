@@ -8,7 +8,7 @@ import type { ProviderSessionStore } from '../../core/contract/provider-session-
 import { PiRuntime, type PiAgentSession } from './pi-runtime.js'
 
 export interface PiSessionFactory {
-  open(spec: ProviderRunSpec): Promise<PiAgentSession>
+  open(spec: ProviderRunSpec, target: SessionTarget): Promise<PiAgentSession>
 }
 
 export class PiProvider implements AgentProvider {
@@ -23,9 +23,12 @@ export class PiProvider implements AgentProvider {
   }
 
   async openSession(target: SessionTarget, spec: ProviderRunSpec): Promise<AgentRuntime> {
-    if (target.kind !== 'new') {
-      throw new Error('Pi provider only supports new sessions in this slice')
+    if (target.kind === 'resume' && target.session.provider !== 'pi') {
+      throw new Error('Pi provider cannot resume a non-pi session')
     }
-    return new PiRuntime(await this.sessionFactory.open(spec))
+    if (target.kind === 'fork') {
+      throw new Error('Pi does not support fork')
+    }
+    return new PiRuntime(await this.sessionFactory.open(spec, target))
   }
 }
