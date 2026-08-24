@@ -176,7 +176,7 @@ export const zhCN = {
     invalidJson: "JSON 内容无效，无法渲染。",
   },
   sidebar: {
-    brand: "Agent workshop",
+    brand: "Agent Workshop",
     runtime: "Agent Runtime",
     modes: {
       label: "侧边栏模式",

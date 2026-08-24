@@ -231,7 +231,7 @@ export function HarnessSwitcher() {
                 <BotIcon aria-hidden="true" />
               </div>
               <div className="grid min-w-0 flex-1 text-left text-xs leading-tight">
-                <span className="truncate font-medium">
+                <span className="truncate text-sm font-bold">
                   {t("sidebar.brand")}
                 </span>
                 <span className="flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground">
