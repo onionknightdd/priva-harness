@@ -2,7 +2,7 @@ import type { AgentEvent } from '../event/agent-event.js'
 import type { UserTurn } from '../run/user-turn.js'
 import type { ProviderSessionStore } from './provider-session-store.js'
 
-export type ProviderId = 'claude' | 'bambuddy'
+export type ProviderId = 'claude' | 'pi'
 
 export interface SessionRef {
   readonly provider: ProviderId

@@ -141,7 +141,7 @@ dsh-jsonrpc-agent + cordis.yml     （子进程，stdout 纯 JSON-RPC）
 | abort | `query.interrupt()` | `session.abort()` | **协议没有 cancel，只能关进程** |
 | resume | 本切片不支持 | 同左 | SDK 可用同一 `sessionId` 再 prompt |
 | 工具 | Claude 自己的 | Pi 自己的 | **DSH 自己的 bash / editor / …** |
-| 配置目录 | `$RUNTIME_HOME/harness/.claude` | `.bambuddy` | 应隔离到 `$RUNTIME_HOME/harness/.dsh` |
+| 配置目录 | `$RUNTIME_HOME/harness/.claude` | `$RUNTIME_HOME/harness/.pi/agent` | 应隔离到 `$RUNTIME_HOME/harness/.dsh` |
 
 这符合基线文档的边界：`core` / `harness` 不 import SDK；DSH 类型只出现在 `provider/dsh`。
 
@@ -244,7 +244,7 @@ adapter/dsh  ──写出──►  $RUNTIME_HOME/harness/.dsh/cordis.yml
                       └── 产品自己的 tool 插件
 ```
 
-这和 Claude 吃 `.claude/`、Pi 吃 `.bambuddy/` 是同一类事：插件留在 provider 原生世界，不要穿到 `core`。
+这和 Claude 吃 `.claude/`、Pi 吃 `.pi/` 是同一类事：插件留在 provider 原生世界，不要穿到 `core`。
 
 能直接用的类别：
 
@@ -280,7 +280,7 @@ HarnessConfigStore（MCP / skills / hooks / memory）
         │
  ConfigDistributor
    ├── ClaudeConfigAdapter → .claude/
-   ├── PiConfigAdapter     → .bambuddy/
+   ├── PiConfigAdapter     → .pi/
    └── DshConfigAdapter    → cordis patch / 插件行   ← 还没写，位置就是这里
 ```
 

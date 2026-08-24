@@ -85,8 +85,8 @@ export class FakeSessionStore implements ProviderSessionStore {
     ref: SessionRef,
     options: { title: string; upToMessageId?: string },
   ): Promise<ProviderSessionInfo> {
-    if (ref.provider === 'bambuddy') {
-      return Promise.reject(new SessionError('invalid-request', 'Bambuddy does not support fork'))
+    if (ref.provider === 'pi') {
+      return Promise.reject(new SessionError('invalid-request', 'Pi does not support fork'))
     }
     return this.read(ref).then((info) => {
       const sourceMessages = this.messageLists.get(ref.id) ?? []

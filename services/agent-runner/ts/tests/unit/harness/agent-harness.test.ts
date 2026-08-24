@@ -21,7 +21,7 @@ describe('AgentHarness', () => {
     const harness = new AgentHarness({
       providers: {
         claude: provider,
-        bambuddy: new FakeAgentProvider('bambuddy', []),
+        pi: new FakeAgentProvider('pi', []),
       },
       cwd: '/tmp',
     })
@@ -55,7 +55,7 @@ describe('AgentHarness', () => {
     const harness = new AgentHarness({
       providers: {
         claude: provider,
-        bambuddy: new FakeAgentProvider('bambuddy', []),
+        pi: new FakeAgentProvider('pi', []),
       },
       cwd: '/tmp',
     })

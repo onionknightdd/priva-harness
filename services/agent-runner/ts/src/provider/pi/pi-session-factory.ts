@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import {
@@ -10,10 +11,7 @@ import {
 } from '@earendil-works/pi-coding-agent'
 
 import type { ProviderRunSpec } from '../../core/contract/agent-provider.js'
-import {
-  BAMBUDDY_PI_PROVIDER_ID,
-  buildBambuddyModelsConfig,
-} from './pi-models-config.js'
+import { buildPiModelsConfig } from './pi-models-config.js'
 import { piSessionBucketDir } from './pi-paths.js'
 import type { PiSessionFactory } from './pi-provider.js'
 import type { PiAgentSession } from './pi-runtime.js'
@@ -23,14 +21,17 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
   constructor(private readonly agentDir: string) {}
 
   async open(spec: ProviderRunSpec): Promise<PiAgentSession> {
-    const runDir = join(this.agentDir, 'runs', randomUUID())
+    const providerId = spec.profileId ?? 'custom'
+    const runDir = join(tmpdir(), 'pi-model-runtime', randomUUID())
     await mkdir(runDir, { recursive: true, mode: 0o700 })
     const authPath = join(runDir, 'auth.json')
     const modelsPath = join(runDir, 'models.json')
     await writeFile(authPath, '{}\n', { mode: 0o600 })
+    // Overlay the runner model profile as a native Pi custom provider for this
+    // turn only. agentDir keeps Pi's own files; credentials stay in model-profiles.json.
     await writeFile(
       modelsPath,
-      `${JSON.stringify(buildBambuddyModelsConfig(spec.baseUrl, spec.model), null, 2)}\n`,
+      `${JSON.stringify(buildPiModelsConfig(spec.baseUrl, spec.model, providerId), null, 2)}\n`,
       { mode: 0o600 },
     )
 
@@ -39,8 +40,8 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
 
     try {
       const modelRuntime = await ModelRuntime.create({ authPath, modelsPath })
-      await modelRuntime.setRuntimeApiKey(BAMBUDDY_PI_PROVIDER_ID, spec.authToken)
-      const model = modelRuntime.getModel(BAMBUDDY_PI_PROVIDER_ID, spec.model)
+      await modelRuntime.setRuntimeApiKey(providerId, spec.authToken)
+      const model = modelRuntime.getModel(providerId, spec.model)
       if (model === undefined) {
         throw new Error(`Unknown model ${spec.model}`)
       }
@@ -51,7 +52,7 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
         model,
         modelRuntime,
         sessionManager: SessionManager.create(spec.cwd, sessionDir),
-        settingsManager: SettingsManager.inMemory(),
+        settingsManager: SettingsManager.create(spec.cwd, this.agentDir),
         thinkingLevel: 'off',
       })
 

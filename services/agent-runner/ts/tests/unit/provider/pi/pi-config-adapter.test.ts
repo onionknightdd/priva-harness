@@ -11,9 +11,9 @@ describe('PiConfigAdapter', () => {
     const plan = await adapter.plan(emptyHarnessConfig(), context)
     const result = await adapter.apply(plan)
 
-    expect(plan).toEqual({ provider: 'bambuddy', ops: [], unsupported: [] })
+    expect(plan).toEqual({ provider: 'pi', ops: [], unsupported: [] })
     expect(result).toEqual({
-      provider: 'bambuddy',
+      provider: 'pi',
       applied: 0,
       skipped: 0,
       unsupported: [],

@@ -9,25 +9,25 @@ const context = { harnessHome: '/tmp/harness', cwd: '/work' }
 describe('ConfigDistributor', () => {
   it('reconciles every registered adapter without branching on provider id', async () => {
     const claude = new FakeConfigAdapter('claude')
-    const bambuddy = new FakeConfigAdapter('bambuddy')
-    const distributor = new ConfigDistributor([claude, bambuddy])
+    const pi = new FakeConfigAdapter('pi')
+    const distributor = new ConfigDistributor([claude, pi])
 
     const report = await distributor.reconcile(emptyHarnessConfig(), context)
 
-    expect(report.results.map((result) => result.provider)).toEqual(['claude', 'bambuddy'])
+    expect(report.results.map((result) => result.provider)).toEqual(['claude', 'pi'])
     expect(claude.applied).toHaveLength(1)
-    expect(bambuddy.applied).toHaveLength(1)
+    expect(pi.applied).toHaveLength(1)
   })
 
   it('limits reconcile to requested targets', async () => {
     const claude = new FakeConfigAdapter('claude')
-    const bambuddy = new FakeConfigAdapter('bambuddy')
-    const distributor = new ConfigDistributor([claude, bambuddy])
+    const pi = new FakeConfigAdapter('pi')
+    const distributor = new ConfigDistributor([claude, pi])
 
-    const report = await distributor.reconcile(emptyHarnessConfig(), context, ['bambuddy'])
+    const report = await distributor.reconcile(emptyHarnessConfig(), context, ['pi'])
 
     expect(report.results).toEqual([
-      { provider: 'bambuddy', applied: 0, skipped: 0, unsupported: [] },
+      { provider: 'pi', applied: 0, skipped: 0, unsupported: [] },
     ])
     expect(claude.applied).toHaveLength(0)
   })
@@ -35,8 +35,8 @@ describe('ConfigDistributor', () => {
   it('records a provider failure without stopping other adapters', async () => {
     const claude = new FakeConfigAdapter('claude')
     claude.failApply = true
-    const bambuddy = new FakeConfigAdapter('bambuddy')
-    const distributor = new ConfigDistributor([claude, bambuddy])
+    const pi = new FakeConfigAdapter('pi')
+    const distributor = new ConfigDistributor([claude, pi])
 
     const report = await distributor.reconcile(emptyHarnessConfig(), context)
 
@@ -47,7 +47,7 @@ describe('ConfigDistributor', () => {
       unsupported: [],
       failed: 'claude apply failed',
     })
-    expect(report.results[1]?.provider).toBe('bambuddy')
-    expect(bambuddy.applied).toHaveLength(1)
+    expect(report.results[1]?.provider).toBe('pi')
+    expect(pi.applied).toHaveLength(1)
   })
 })

@@ -15,17 +15,17 @@ describe('rewriteProviderBaseUrl', () => {
     )
   })
 
-  it('adds /v1 for Bambuddy when it is missing', () => {
-    expect(rewriteProviderBaseUrl('https://api.deepseek.com', 'bambuddy')).toBe(
+  it('adds /v1 for Pi when it is missing', () => {
+    expect(rewriteProviderBaseUrl('https://api.deepseek.com', 'pi')).toBe(
       'https://api.deepseek.com/v1',
     )
-    expect(rewriteProviderBaseUrl('https://api.deepseek.com/v1/', 'bambuddy')).toBe(
+    expect(rewriteProviderBaseUrl('https://api.deepseek.com/v1/', 'pi')).toBe(
       'https://api.deepseek.com/v1',
     )
   })
 
-  it('maps bambuddy harness to the bambuddy provider id', () => {
+  it('maps pi harness to the pi provider id', () => {
     expect(providerIdForHarness('claude')).toBe('claude')
-    expect(providerIdForHarness('bambuddy')).toBe('bambuddy')
+    expect(providerIdForHarness('pi')).toBe('pi')
   })
 })

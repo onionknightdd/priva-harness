@@ -138,7 +138,7 @@ export class PiSessionStore implements ProviderSessionStore {
   ): Promise<ProviderSessionInfo> {
     void _ref
     void _options
-    return Promise.reject(new SessionError('invalid-request', 'Bambuddy does not support fork'))
+    return Promise.reject(new SessionError('invalid-request', 'Pi does not support fork'))
   }
 
   private async listAllSessions(): Promise<readonly PiListedSession[]> {
@@ -159,7 +159,7 @@ export class PiSessionStore implements ProviderSessionStore {
   }
 
   private async resolve(ref: SessionRef): Promise<PiListedSession> {
-    if (ref.provider !== 'bambuddy') {
+    if (ref.provider !== 'pi') {
       throw new SessionError('session-not-found', 'Session not found')
     }
     const listed = await this.listAllSessions()
@@ -180,7 +180,7 @@ export class PiSessionStore implements ProviderSessionStore {
     const name = info.name === undefined || info.name === '' ? null : info.name
     const firstPrompt = info.firstMessage === '' ? null : info.firstMessage
     return {
-      ref: { provider: 'bambuddy', id: info.id },
+      ref: { provider: 'pi', id: info.id },
       summary: name ?? firstPrompt ?? '',
       lastModified: info.modified.getTime(),
       fileSize,

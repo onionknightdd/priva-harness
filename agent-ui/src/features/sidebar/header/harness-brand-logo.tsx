@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils"
 
 import type { HarnessId } from "./harness-options"
 
-function BambuddyMark({ className }: { className?: string }) {
+function PiMark({ className }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -14,33 +14,21 @@ function BambuddyMark({ className }: { className?: string }) {
       className={cn("size-6", className)}
     >
       <path
-        d="M8 3.5v5M8 10.5v5M8 17.5v3"
+        d="M5 7.5h14"
         stroke="currentColor"
         strokeWidth="1.85"
         strokeLinecap="round"
       />
       <path
-        d="M6.15 8.5h3.7M6.15 15.5h3.7"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
-      <path
-        d="M16 5.5v5M16 12.5v5M16 19.5v1"
+        d="M9 7.5v11"
         stroke="currentColor"
         strokeWidth="1.85"
         strokeLinecap="round"
       />
       <path
-        d="M14.15 10.5h3.7M14.15 17.5h3.7"
+        d="M15 7.5v8.2c0 1.7.9 2.8 2.4 2.8"
         stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
-      <path
-        d="M16 5.5c2.35-1.7 3.85-.35 3.15 2.05"
-        stroke="currentColor"
-        strokeWidth="1.6"
+        strokeWidth="1.85"
         strokeLinecap="round"
       />
     </svg>
@@ -59,8 +47,8 @@ export function HarnessBrandLogo({
   className?: string
   harnessId: HarnessId
 }) {
-  if (harnessId === "bambuddy") {
-    return <BambuddyMark className={className} />
+  if (harnessId === "pi") {
+    return <PiMark className={className} />
   }
 
   const src = brandImages[harnessId]

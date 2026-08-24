@@ -136,7 +136,7 @@ export function parseSessionRefKey(key: string): SessionRef | undefined {
   if (separator <= 0 || separator === key.length - 1) return undefined
   const provider = key.slice(0, separator)
   const id = key.slice(separator + 1)
-  if (provider !== 'claude' && provider !== 'bambuddy') return undefined
+  if (provider !== 'claude' && provider !== 'pi') return undefined
   if (id === '') return undefined
   return { provider, id }
 }

@@ -34,13 +34,13 @@ describe('WS /api/sandbox/agent/ws/run', () => {
         usage: { input: 1, output: 1 },
       },
     ])
-    piProvider = new FakeAgentProvider('bambuddy', [
+    piProvider = new FakeAgentProvider('pi', [
       { type: 'assistant', event: 'text_delta', text: 'Hi' },
       {
         type: 'run',
         event: 'completed',
         sessionId: 'pi-1',
-        harnessProvider: 'bambuddy',
+        harnessProvider: 'pi',
         model: 'm',
         durationMs: 3,
       },
@@ -59,7 +59,7 @@ describe('WS /api/sandbox/agent/ws/run', () => {
       agentHarness: new AgentHarness({
         providers: {
           claude: claudeProvider,
-          bambuddy: piProvider,
+          pi: piProvider,
         },
         cwd: testRoot,
       }),
@@ -124,14 +124,14 @@ describe('WS /api/sandbox/agent/ws/run', () => {
     ])
   })
 
-  it('routes bambuddy to Pi with a /v1 base URL', async () => {
+  it('routes pi to the Pi provider with a /v1 base URL', async () => {
     const socket = await server.injectWS(RUN_WEBSOCKET_PATH)
     const frames = collectFrames(socket)
     socket.send(JSON.stringify({
       type: 'init',
       text: 'hi',
       model: modelReference,
-      harness: 'bambuddy',
+      harness: 'pi',
       cwd: testRoot,
     }))
     const received = await frames
@@ -139,7 +139,7 @@ describe('WS /api/sandbox/agent/ws/run', () => {
     expect(claudeProvider.specs).toEqual([])
     expect(piProvider.specs).toEqual([
       expect.objectContaining({
-        provider: 'bambuddy',
+        provider: 'pi',
         model: 'm',
         baseUrl: 'https://api.example.com/v1',
         authToken: 'secret',
@@ -151,12 +151,12 @@ describe('WS /api/sandbox/agent/ws/run', () => {
       expect.objectContaining({
         type: 'run',
         event: 'completed',
-        harnessProvider: 'bambuddy',
+        harnessProvider: 'pi',
       }),
     ]))
   })
 
-  it('resumes a claude session and rejects bambuddy resume', async () => {
+  it('resumes a claude session and rejects pi resume', async () => {
     const resume = await server.injectWS(RUN_WEBSOCKET_PATH)
     const resumeFrames = collectFrames(resume)
     resume.send(JSON.stringify({
@@ -187,12 +187,12 @@ describe('WS /api/sandbox/agent/ws/run', () => {
       type: 'init',
       text: 'hi',
       model: modelReference,
-      harness: 'bambuddy',
+      harness: 'pi',
       cwd: testRoot,
       sessionId: 'pi-1',
     }))
     expect(await deniedFrames).toEqual([
-      { type: 'error', message: 'Bambuddy does not support resume or fork in this slice' },
+      { type: 'error', message: 'Pi does not support resume or fork in this slice' },
     ])
   })
 })

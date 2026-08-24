@@ -93,7 +93,7 @@ describe('SessionService last_response_model', () => {
     const service = new SessionService({
       providers: {
         claude,
-        bambuddy: new FakeAgentProvider('bambuddy', []),
+        pi: new FakeAgentProvider('pi', []),
       },
       metadata,
       liveRuns: new LiveRunRegistry(),
@@ -138,7 +138,7 @@ describe('SessionService last_response_model', () => {
     const service = new SessionService({
       providers: {
         claude,
-        bambuddy: new FakeAgentProvider('bambuddy', []),
+        pi: new FakeAgentProvider('pi', []),
       },
       metadata: new MemorySessionMetadataRepository(),
       liveRuns: new LiveRunRegistry(),

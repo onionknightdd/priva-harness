@@ -1,9 +1,7 @@
-export const BAMBUDDY_PI_PROVIDER_ID = 'bambuddy'
-
-export function buildBambuddyModelsConfig(baseUrl: string, modelId: string) {
+export function buildPiModelsConfig(baseUrl: string, modelId: string, providerId: string) {
   return {
     providers: {
-      [BAMBUDDY_PI_PROVIDER_ID]: {
+      [providerId]: {
         baseUrl,
         api: 'openai-responses',
         authHeader: true,

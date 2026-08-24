@@ -1,6 +1,6 @@
 const RUN_WEBSOCKET_PATH = "/api/sandbox/agent/ws/run"
 
-export type AgentRunHarness = "claude" | "bambuddy"
+export type AgentRunHarness = "claude" | "pi"
 
 export type AgentRunEffort = "low" | "medium" | "high" | "xhigh" | "max"
 
