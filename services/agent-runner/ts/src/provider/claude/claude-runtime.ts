@@ -166,7 +166,7 @@ export function resolveClaudeQueryOptions(
     forwardSubagentText: true,
     includePartialMessages: true,
     permissionMode: 'bypassPermissions',
-    promptSuggestions: true,
+    promptSuggestions: spec.promptSuggestions !== false,
     systemPrompt: { type: 'preset', preset: 'claude_code' },
     env: resolveClaudeProcessEnv(spec, globalConfigDir),
     ...(abortController === undefined ? {} : { abortController }),

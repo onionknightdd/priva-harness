@@ -17,6 +17,14 @@ export function isEffortLevel(value: unknown): value is EffortLevel {
   return typeof value === 'string' && (EFFORT_LEVELS as readonly string[]).includes(value)
 }
 
+export const QUEUE_BEHAVIORS = ['follow-up', 'steer', 'interrupt'] as const
+
+export type QueueBehavior = (typeof QUEUE_BEHAVIORS)[number]
+
+export function isQueueBehavior(value: unknown): value is QueueBehavior {
+  return typeof value === 'string' && (QUEUE_BEHAVIORS as readonly string[]).includes(value)
+}
+
 export type SessionTarget =
   | { kind: 'new'; provider: ProviderId }
   | { kind: 'resume'; session: SessionRef }
@@ -31,6 +39,8 @@ export interface ProviderRunSpec {
   readonly profileId?: string
   readonly modelContext?: '1m' | null
   readonly effort?: EffortLevel
+  readonly queueBehavior?: QueueBehavior
+  readonly promptSuggestions?: boolean
 }
 
 export interface TurnContext {

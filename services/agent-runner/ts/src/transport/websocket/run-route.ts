@@ -106,6 +106,10 @@ async function buildRunSpec(
     profileId: resolved.profile.id,
     modelContext: resolved.capabilities.context,
     ...(frame.effort === undefined ? {} : { effort: frame.effort }),
+    ...(frame.queueBehavior === undefined ? {} : { queueBehavior: frame.queueBehavior }),
+    ...(frame.promptSuggestions === undefined
+      ? {}
+      : { promptSuggestions: frame.promptSuggestions }),
   }
 }
 

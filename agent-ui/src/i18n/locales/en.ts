@@ -284,9 +284,11 @@ export const en = {
   settings: {
     title: "Settings",
     description: "Manage your account and application preferences.",
+    sectionMenu: "Choose a settings section",
     sections: {
       account: "Account",
       llmProviders: "Models",
+      agent: "Agent",
       dm: "DM",
       personalization: "Personalization",
       advanced: "Advanced",
@@ -295,7 +297,30 @@ export const en = {
     },
     unavailableTitle: "This section is not available yet",
     unavailableDescription:
-      "Only model profiles can be configured right now. Other settings will land here as those features are built.",
+      "Model profiles and agent session preferences can be configured now. Other settings will land here as those features are built.",
+    agent: {
+      sessionGroup: "Session",
+      defaultHarness: "Default harness",
+      defaultHarnessDescription:
+        "Used when you open the app. Last used restores the runtime you switched to last.",
+      defaultHarnessPi: "Pi",
+      defaultHarnessClaude: "Claude code",
+      defaultHarnessLastUsed: "Last used",
+      sessionModel: "Session default model",
+      sessionModelDescription:
+        "Profile default follows and updates the profile’s default model. Last used restores the model from your previous turn without changing the profile.",
+      sessionModelProfileDefault: "Profile default",
+      sessionModelLastUsed: "Last used",
+      queueBehavior: "Queued messages while the agent is running",
+      queueBehaviorDescription:
+        "Choose when a new message is sent if the agent is still running.",
+      queueBehaviorFollowUp: "Wait for the last result",
+      queueBehaviorSteer: "Wait until the latest tool ends",
+      queueBehaviorInterrupt: "Interrupt the reply to send",
+      inputSuggestions: "Input suggestions",
+      inputSuggestionsDescription:
+        "Allow Claude Code to suggest follow-up prompts.",
+    },
     models: {
       profiles: "Profiles",
       profileListLabel: "Model profiles",

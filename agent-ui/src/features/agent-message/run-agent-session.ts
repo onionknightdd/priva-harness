@@ -12,6 +12,8 @@ export type AgentRunInit = {
   effort?: AgentRunEffort
   sessionId?: string
   fork?: boolean
+  queueBehavior?: "follow-up" | "steer" | "interrupt"
+  promptSuggestions?: boolean
 }
 
 type AgentRunHandlers = {
@@ -19,6 +21,8 @@ type AgentRunHandlers = {
   onText: (text: string) => void
   onError: (message: string) => void
   onSession?: (sessionId: string) => void
+  onToolStarted?: (id: string) => void
+  onToolCompleted?: (id: string) => void
 }
 
 type ServerFrame = {
@@ -27,6 +31,7 @@ type ServerFrame = {
   text?: string
   message?: string
   sessionId?: string
+  id?: string
 }
 
 export function runAgentSession(
@@ -76,6 +81,12 @@ export function runAgentSession(
           ...(init.effort === undefined ? {} : { effort: init.effort }),
           ...(init.sessionId === undefined ? {} : { sessionId: init.sessionId }),
           ...(init.fork === true ? { fork: true } : {}),
+          ...(init.queueBehavior === undefined
+            ? {}
+            : { queueBehavior: init.queueBehavior }),
+          ...(init.promptSuggestions === undefined
+            ? {}
+            : { promptSuggestions: init.promptSuggestions }),
         })
       )
     })
@@ -102,6 +113,16 @@ export function runAgentSession(
         frame.sessionId
       ) {
         boundSessionId = frame.sessionId
+      }
+
+      if (frame.type === "tool" && frame.event === "started" && frame.id) {
+        handlers.onToolStarted?.(frame.id)
+        return
+      }
+
+      if (frame.type === "tool" && frame.event === "completed" && frame.id) {
+        handlers.onToolCompleted?.(frame.id)
+        return
       }
 
       if (frame.type === "assistant" && frame.event === "text_delta" && frame.text) {

@@ -281,9 +281,11 @@ export const zhCN = {
   settings: {
     title: "设置",
     description: "管理你的账户和应用偏好设置。",
+    sectionMenu: "选择设置分区",
     sections: {
       account: "账户",
       llmProviders: "模型",
+      agent: "Agent",
       dm: "DM",
       personalization: "个性化配置",
       advanced: "高级",
@@ -292,7 +294,30 @@ export const zhCN = {
     },
     unavailableTitle: "该分区尚未提供",
     unavailableDescription:
-      "目前只能配置模型。其他设置会随对应功能一起出现在这里。",
+      "目前可以配置模型和 Agent 会话偏好。其他设置会随对应功能一起出现在这里。",
+    agent: {
+      sessionGroup: "会话",
+      defaultHarness: "默认 harness",
+      defaultHarnessDescription:
+        "打开应用时使用。上次使用会恢复你最近切换的运行时。",
+      defaultHarnessPi: "Pi",
+      defaultHarnessClaude: "Claude code",
+      defaultHarnessLastUsed: "上次使用",
+      sessionModel: "会话默认模型",
+      sessionModelDescription:
+        "配置默认会跟随并写回当前配置的默认模型。上次使用会恢复上一轮的模型，且不改动配置。",
+      sessionModelProfileDefault: "配置默认",
+      sessionModelLastUsed: "上次使用",
+      queueBehavior: "Agent 运行时的队列消息行为",
+      queueBehaviorDescription:
+        "Agent 仍在运行时，选择何时发送新消息。",
+      queueBehaviorFollowUp: "等待最后结果再发送",
+      queueBehaviorSteer: "等待最近一次工具结束",
+      queueBehaviorInterrupt: "中断回复即可发送",
+      inputSuggestions: "输入建议",
+      inputSuggestionsDescription:
+        "允许 Claude Code 给出后续输入建议。",
+    },
     models: {
       profiles: "配置",
       profileListLabel: "模型配置",

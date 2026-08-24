@@ -1,8 +1,10 @@
 import * as React from "react"
 import { useTranslation } from "react-i18next"
 
-import { useHarness } from "@/features/sidebar/header/harness-context"
+import { useAgentPreferences } from "@/features/settings/agent-preferences-context"
+import type { QueueBehavior } from "@/features/settings/agent-preferences"
 import { useChatSession } from "@/features/chat-session"
+import { useHarness } from "@/features/sidebar/header/harness-context"
 
 import {
   createAgentThreadMessage,
@@ -16,6 +18,9 @@ import {
 type ActiveStream = {
   controller: AbortController
   messageId: string
+  finished: Promise<void>
+  inFlightTools: Set<string>
+  waitForToolsIdle: () => Promise<void>
 }
 
 function isAbortError(error: unknown) {
@@ -25,6 +30,11 @@ function isAbortError(error: unknown) {
 export function useAgentMessage() {
   const { t } = useTranslation()
   const { runHarnessId } = useHarness()
+  const {
+    queueBehavior,
+    inputSuggestions,
+    setLastModelReference,
+  } = useAgentPreferences()
   const {
     activeSession,
     threadMessages,
@@ -41,7 +51,15 @@ export function useAgentMessage() {
   const [effort, setEffort] = React.useState<AgentRunEffort>("medium")
   const [messages, setMessages] = React.useState<AgentThreadMessage[]>([])
   const activeStreamRef = React.useRef<ActiveStream | null>(null)
+  const submitChainRef = React.useRef(Promise.resolve())
+  const submitGenerationRef = React.useRef(0)
   const previousHarnessIdRef = React.useRef(runHarnessId)
+
+  const bumpSubmitGeneration = React.useCallback(() => {
+    submitGenerationRef.current += 1
+    activeStreamRef.current?.controller.abort()
+    activeStreamRef.current = null
+  }, [])
 
   React.useEffect(() => {
     if (previousHarnessIdRef.current === runHarnessId) {
@@ -49,10 +67,9 @@ export function useAgentMessage() {
     }
 
     previousHarnessIdRef.current = runHarnessId
-    activeStreamRef.current?.controller.abort()
-    activeStreamRef.current = null
+    bumpSubmitGeneration()
     setDraft("")
-  }, [runHarnessId])
+  }, [bumpSubmitGeneration, runHarnessId])
 
   React.useEffect(() => {
     if (messagesStatus === "loading") {
@@ -68,12 +85,12 @@ export function useAgentMessage() {
   }, [messagesStatus, threadMessages, transcriptEpoch])
 
   React.useEffect(() => {
-    activeStreamRef.current?.controller.abort()
-    activeStreamRef.current = null
-  }, [activeSession?.sessionId])
+    bumpSubmitGeneration()
+  }, [activeSession?.sessionId, bumpSubmitGeneration])
 
   React.useEffect(() => {
     return () => {
+      submitGenerationRef.current += 1
       activeStreamRef.current?.controller.abort()
     }
   }, [])
@@ -81,13 +98,11 @@ export function useAgentMessage() {
   const submit = React.useCallback(() => {
     const content = draft.trim()
     const cwd = runCwd.trim()
+    const sendQueueBehavior = queueBehavior
 
     if (!content || !modelReference || !runHarnessId || !cwd) {
       return
     }
-
-    const previousStream = activeStreamRef.current
-    previousStream?.controller.abort()
 
     const userMessage = createAgentThreadMessage("user", content)
     const assistantMessage = createAgentThreadMessage(
@@ -95,29 +110,27 @@ export function useAgentMessage() {
       "",
       "streaming"
     )
-    const controller = new AbortController()
+    const generation = submitGenerationRef.current
     const resumeSessionId = runSessionId
+    const previousStream = activeStreamRef.current
 
-    activeStreamRef.current = {
-      controller,
-      messageId: assistantMessage.id,
-    }
-
+    setLastModelReference(modelReference)
     setDraft("")
     setMessages((currentMessages) => {
-      const settledMessages = previousStream
-        ? currentMessages.map((message) =>
-            message.id === previousStream.messageId &&
-            message.status === "streaming"
-              ? {
-                  ...message,
-                  status: "complete" as const,
-                }
-              : message
-          )
-        : currentMessages
+      const settlePrevious =
+        sendQueueBehavior === "interrupt" && previousStream
+          ? currentMessages.map((message) =>
+              message.id === previousStream.messageId &&
+              message.status === "streaming"
+                ? {
+                    ...message,
+                    status: "complete" as const,
+                  }
+                : message
+            )
+          : currentMessages
 
-      return [...settledMessages, userMessage, assistantMessage]
+      return [...settlePrevious, userMessage, assistantMessage]
     })
 
     const updateAssistant = (
@@ -133,65 +146,125 @@ export function useAgentMessage() {
       )
     }
 
-    void runAgentSession(
-      {
-        text: content,
-        model: modelReference,
-        harness: runHarnessId,
-        cwd,
-        effort,
-        ...(resumeSessionId ? { sessionId: resumeSessionId } : {}),
-      },
-      {
-        signal: controller.signal,
-        onText: (text) => {
-          if (activeStreamRef.current?.messageId !== assistantMessage.id) {
-            return
-          }
-          updateAssistant(text, "streaming")
-        },
-        onError: (message) => {
-          updateAssistant(message, "error")
-        },
-        onSession: (sessionId) => {
-          bindRunSession(sessionId)
-        },
-      }
-    )
-      .then(() => {
-        setMessages((currentMessages) =>
-          currentMessages.map((message) =>
-            message.id === assistantMessage.id &&
-            message.status === "streaming"
-              ? { ...message, status: "complete" }
-              : message
-          )
-        )
-
-        if (activeStreamRef.current?.messageId === assistantMessage.id) {
-          activeStreamRef.current = null
-        }
-      })
-      .catch((error: unknown) => {
-        if (isAbortError(error)) {
+    submitChainRef.current = submitChainRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        if (generation !== submitGenerationRef.current) {
+          updateAssistant("", "complete")
           return
         }
 
-        updateAssistant(
-          error instanceof Error && error.message
-            ? error.message
-            : t("agentMessage.sendFailed"),
-          "error"
+        await waitToSend(activeStreamRef.current, sendQueueBehavior)
+
+        if (generation !== submitGenerationRef.current) {
+          updateAssistant("", "complete")
+          return
+        }
+
+        const controller = new AbortController()
+        const inFlightTools = new Set<string>()
+        const toolIdleWaiters: Array<() => void> = []
+        const notifyToolsIdle = () => {
+          if (inFlightTools.size > 0) {
+            return
+          }
+          for (const waiter of toolIdleWaiters.splice(0)) {
+            waiter()
+          }
+        }
+
+        const stream: ActiveStream = {
+          controller,
+          messageId: assistantMessage.id,
+          inFlightTools,
+          waitForToolsIdle: () => {
+            if (inFlightTools.size === 0) {
+              return Promise.resolve()
+            }
+            return new Promise<void>((resolve) => {
+              toolIdleWaiters.push(resolve)
+            })
+          },
+          finished: Promise.resolve(),
+        }
+
+        stream.finished = runAgentSession(
+          {
+            text: content,
+            model: modelReference,
+            harness: runHarnessId,
+            cwd,
+            effort,
+            queueBehavior: sendQueueBehavior,
+            promptSuggestions: inputSuggestions,
+            ...(resumeSessionId ? { sessionId: resumeSessionId } : {}),
+          },
+          {
+            signal: controller.signal,
+            onText: (text) => {
+              if (activeStreamRef.current?.messageId !== assistantMessage.id) {
+                return
+              }
+              updateAssistant(text, "streaming")
+            },
+            onToolStarted: (id) => {
+              inFlightTools.add(id)
+            },
+            onToolCompleted: (id) => {
+              inFlightTools.delete(id)
+              notifyToolsIdle()
+            },
+            onError: (message) => {
+              updateAssistant(message, "error")
+            },
+            onSession: (sessionId) => {
+              bindRunSession(sessionId)
+            },
+          }
         )
+          .then(() => {
+            setMessages((currentMessages) =>
+              currentMessages.map((message) =>
+                message.id === assistantMessage.id &&
+                message.status === "streaming"
+                  ? { ...message, status: "complete" }
+                  : message
+              )
+            )
+          })
+          .catch((error: unknown) => {
+            if (isAbortError(error)) {
+              return
+            }
+
+            updateAssistant(
+              error instanceof Error && error.message
+                ? error.message
+                : t("agentMessage.sendFailed"),
+              "error"
+            )
+          })
+          .finally(() => {
+            inFlightTools.clear()
+            notifyToolsIdle()
+            if (activeStreamRef.current?.messageId === assistantMessage.id) {
+              activeStreamRef.current = null
+            }
+          })
+
+        activeStreamRef.current = stream
       })
   }, [
     bindRunSession,
     draft,
     effort,
+    inputSuggestions,
     modelReference,
+    queueBehavior,
     runCwd,
     runHarnessId,
     runSessionId,
+    setLastModelReference,
     t,
   ])
 
@@ -208,4 +281,25 @@ export function useAgentMessage() {
     setEffort,
     submit,
   }
+}
+
+async function waitToSend(
+  previousStream: ActiveStream | null,
+  queueBehavior: QueueBehavior
+) {
+  if (!previousStream) {
+    return
+  }
+
+  if (queueBehavior === "follow-up") {
+    await previousStream.finished
+    return
+  }
+
+  if (queueBehavior === "steer") {
+    await previousStream.waitForToolsIdle()
+  }
+
+  previousStream.controller.abort()
+  await previousStream.finished
 }

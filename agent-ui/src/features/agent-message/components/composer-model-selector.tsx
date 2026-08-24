@@ -30,6 +30,8 @@ import {
   type ModelProfileCollection,
   type ModelProfileSummary,
 } from "@/features/model-settings/model-profile-api"
+import { useAgentPreferences } from "@/features/settings/agent-preferences-context"
+import { parseComposerModelReference } from "@/features/settings/agent-preferences"
 import {
   getModelProviderId,
   groupModelIds,
@@ -109,6 +111,27 @@ function selectionFromProfile(
       profile.defaultModel?.trim() ||
       knownProfileModelIds(profile)[0] ||
       "",
+  }
+}
+
+function selectionFromLastUsed(
+  profiles: ModelProfileSummary[],
+  lastModelReference: string | null
+): ComposerModelSelection | null {
+  const parsed = parseComposerModelReference(lastModelReference)
+  if (!parsed) {
+    return null
+  }
+
+  const profile = profiles.find((item) => item.id === parsed.profileId)
+  if (!profile) {
+    return null
+  }
+
+  return {
+    profileId: profile.id,
+    profileLabel: profile.label,
+    modelId: parsed.modelId,
   }
 }
 
@@ -525,6 +548,10 @@ export function ComposerModelSelector({
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
   const iconOnly = useWorkspaceTakesMajority()
+  const { sessionModel, lastModelReference, setLastModelReference } =
+    useAgentPreferences()
+  const lastModelReferenceRef = React.useRef(lastModelReference)
+  lastModelReferenceRef.current = lastModelReference
   const [profiles, setProfiles] = React.useState<ModelProfileSummary[]>([])
   const [defaultProfileId, setDefaultProfileId] = React.useState<string | null>(
     null
@@ -605,7 +632,6 @@ export function ComposerModelSelector({
         const defaultProfile = defaultProfileFromCollection(collection)
         setProfiles(collection.profiles)
         setDefaultProfileId(collection.defaultProfileId)
-        setSelection(selectionFromProfile(defaultProfile))
         setProfilesStatus("ready")
 
         if (defaultProfile) {
@@ -628,6 +654,46 @@ export function ComposerModelSelector({
     }
   }, [ensureProfileModels])
 
+  React.useEffect(() => {
+    if (profilesStatus !== "ready") {
+      return
+    }
+
+    if (sessionModel === "last-used") {
+      const restored = selectionFromLastUsed(
+        profiles,
+        lastModelReferenceRef.current
+      )
+      setSelection(
+        restored ??
+          selectionFromProfile(
+            profiles.find((profile) => profile.id === defaultProfileId) ??
+              profiles[0]
+          )
+      )
+      const profileToLoad = restored
+        ? profiles.find((profile) => profile.id === restored.profileId)
+        : undefined
+      if (profileToLoad) {
+        void ensureProfileModels(profileToLoad)
+      }
+      return
+    }
+
+    setSelection(
+      selectionFromProfile(
+        profiles.find((profile) => profile.id === defaultProfileId) ??
+          profiles[0]
+      )
+    )
+  }, [
+    defaultProfileId,
+    ensureProfileModels,
+    profiles,
+    profilesStatus,
+    sessionModel,
+  ])
+
   const selectModel = React.useCallback(
     (next: ComposerModelSelection) => {
       if (savingRef.current) {
@@ -648,6 +714,14 @@ export function ComposerModelSelector({
 
       const previousSelection = selection
       const previousDefaultProfileId = defaultProfileId
+      setLastModelReference(`${next.profileId}:${next.modelId}`)
+
+      if (sessionModel === "last-used") {
+        setSelection(next)
+        setSaveError(null)
+        return
+      }
+
       savingRef.current = true
       setSelection(next)
       setSaveError(null)
@@ -683,7 +757,7 @@ export function ComposerModelSelector({
         }
       })()
     },
-    [defaultProfileId, profiles, selection, t]
+    [defaultProfileId, profiles, selection, sessionModel, setLastModelReference, t]
   )
 
   React.useEffect(() => {

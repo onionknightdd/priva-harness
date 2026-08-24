@@ -112,6 +112,54 @@ describe('run frames', () => {
     expect(parseInitFrame({ type: 'abort' }).ok).toBe(false)
   })
 
+  it('accepts queueBehavior and promptSuggestions on init', () => {
+    expect(parseInitFrame({
+      type: 'init',
+      text: 'hi',
+      model: 'p:m',
+      harness: 'pi',
+      cwd: '/work',
+      queueBehavior: 'steer',
+      promptSuggestions: false,
+    })).toEqual({
+      ok: true,
+      frame: {
+        type: 'init',
+        text: 'hi',
+        model: 'p:m',
+        harness: 'pi',
+        cwd: '/work',
+        queueBehavior: 'steer',
+        promptSuggestions: false,
+      },
+    })
+  })
+
+  it('rejects invalid queueBehavior and promptSuggestions', () => {
+    expect(parseInitFrame({
+      type: 'init',
+      text: 'hi',
+      model: 'p:m',
+      harness: 'pi',
+      cwd: '/work',
+      queueBehavior: 'later',
+    })).toMatchObject({
+      ok: false,
+      message: 'Init queueBehavior must be follow-up, steer, or interrupt',
+    })
+    expect(parseInitFrame({
+      type: 'init',
+      text: 'hi',
+      model: 'p:m',
+      harness: 'claude',
+      cwd: '/work',
+      promptSuggestions: 'yes',
+    })).toMatchObject({
+      ok: false,
+      message: 'Init promptSuggestions must be a boolean',
+    })
+  })
+
   it('stamps runId onto an AgentEvent without adding seq', () => {
     expect(toServerFrame({ type: 'run', event: 'started' }, 'run-1')).toEqual({
       type: 'run',
