@@ -177,7 +177,7 @@ export const en = {
     invalidJson: "The JSON content is invalid and cannot be rendered.",
   },
   sidebar: {
-    brand: "Agent workshop",
+    brand: "Agent Workshop",
     runtime: "Agent Runtime",
     modes: {
       label: "Sidebar mode",
