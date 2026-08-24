@@ -12,7 +12,6 @@ export type AgentRunInit = {
   effort?: AgentRunEffort
   sessionId?: string
   fork?: boolean
-  queueBehavior?: "follow-up" | "steer" | "interrupt"
   promptSuggestions?: boolean
 }
 
@@ -81,9 +80,6 @@ export function runAgentSession(
           ...(init.effort === undefined ? {} : { effort: init.effort }),
           ...(init.sessionId === undefined ? {} : { sessionId: init.sessionId }),
           ...(init.fork === true ? { fork: true } : {}),
-          ...(init.queueBehavior === undefined
-            ? {}
-            : { queueBehavior: init.queueBehavior }),
           ...(init.promptSuggestions === undefined
             ? {}
             : { promptSuggestions: init.promptSuggestions }),

@@ -189,7 +189,7 @@ release → shutdown + EOF/SIGTERM/SIGKILL
 
 **没有中途 cancel。** 放弃一轮 = 关 runtime。WS 断开时现在 Claude 是 `interrupt()`；DSH 会丢掉整段 session 进程。要真正 abort，得接受「杀进程 ≈ abort」。
 
-**凭证和 Model Profile。** `initialize` 只要 DSH 的 `provider` + `model`（常见 `deepseek-official` + 模型名）。密钥走子进程 env（如 `DEEPSEEK_API_KEY`），不是 runner 的 `model-profiles.json`。要把现有 Profile 接进去，需要把 `authToken` / `baseUrl` 打进 DSH env 或 `cordis.yml`，或给 DSH 挂自定义 LLM adapter。`initialize` 的 fallback **只自动挂 DeepSeek adapter**；其它未注册 route 会初始化失败。
+**凭证和 Model Profile。** `initialize` 只要 DSH 的 `provider` + `model`（常见 `deepseek-official` + 模型名）。密钥走子进程 env（如 `DEEPSEEK_API_KEY`），不是 runner 的 `bambuddy.settings.json` `modelProfiles`。要把现有 Profile 接进去，需要把 `authToken` / `baseUrl` 打进 DSH env 或 `cordis.yml`，或给 DSH 挂自定义 LLM adapter。`initialize` 的 fallback **只自动挂 DeepSeek adapter**；其它未注册 route 会初始化失败。
 
 **发布形态脆。** TS 必须自备 `dsh-jsonrpc-agent` + 一份干净 `cordis.yml`（stdout 不能有 logger）。Headless profile 不能当 SDK 用。DSH 还在 developer preview，mapper 会跟 `SessionEvent` 一起破。
 

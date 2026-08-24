@@ -132,6 +132,7 @@ API：
 
 - `/api/sandbox/credentials/profiles` 下的 CRUD、默认 profile、模型列表、连接测试和图片
   能力探测。
+- `/api/sandbox/agent/profile` 读取和更新 `agentProfile`（当前为 `queue_behavior`）。
 - `/api/sandbox/resource/mcp` 下的列表、读取、创建、更新和删除。
 - `/ws/run` 的 `mcp_servers = auto | disable | string[]`。
 
@@ -141,14 +142,19 @@ API：
   `core` 事件或日志。
 - 启动层从统一的 `runtimeConfig` 导出产品运行根（默认 `~/.bambuddy`，`main.ts`
   可用环境变量 `RUNTIME_HOME_DIR` 覆盖）和配置文件路径
-  `$RUNTIME_HOME/bambuddy.settings.yml`；配置文件内容与 YAML 解析契约留到后续实现。
+  `$RUNTIME_HOME/bambuddy.settings.json`。该文件是 runtime 设置的唯一事实来源，包含独立的
+  `modelProfiles` 与 `agentProfile` 块；不读取 `bambuddy.settings.yml` 或
+  `model-profiles.json`。
 - Claude 全局配置目录为 `$RUNTIME_HOME/harness/.claude`，项目配置为 `<cwd>/.claude`。
 - Pi 全局配置目录为 `$RUNTIME_HOME/harness/.pi/agent`（仅把原生 `~/.pi/agent` 的根路径改到 runtime home），
   项目配置为 `<cwd>/.pi`。不读取用户主目录下的 `~/.pi/agent`。模型、凭证只存在于
-  `$RUNTIME_HOME/model-profiles.json`，运行时映射进 Pi SDK；不对 Pi 的目录名、
+  `$RUNTIME_HOME/bambuddy.settings.json` 的 `modelProfiles` 块，运行时映射进 Pi SDK；不对 Pi 的目录名、
   provider id 或 models.json 做产品化改写。
-- profile 以 `$RUNTIME_HOME/model-profiles.json` 为唯一事实来源；文件读改写和图片能力
+- profile 以 `bambuddy.settings.json` 的 `modelProfiles` 为唯一事实来源；文件读改写和图片能力
   缓存更新使用非阻塞异步 I/O、跨进程锁与原子替换。
+- `agentProfile.queueBehavior` 由设置文件决定，不由 WebSocket init / 运行接口传入。前端 Settings
+  通过 `GET`/`PATCH /api/sandbox/agent/profile` 读写；每次 run 由后台读取当前文件值写入
+  `ProviderRunSpec.queueBehavior`。
 - model profile 只保存模型端点、凭证、通用默认模型和按模型缓存的能力，不包含
   `opus`、`sonnet`、`haiku`、`vision` 等特定 `harness` 的固定模型档位。需要模型角色
   映射的 `harness` 使用自己的通用 `modelBindings`，并由对应 `provider` 边界解释。
@@ -156,6 +162,20 @@ API：
 - 实现 `ConfigDistributor`；Claude 与 Pi 的 MCP 投影放在 `provider/<id>/config-adapter`。
 - 创建、更新和删除 MCP 后，对选定 `provider` 执行幂等 reconcile。
 - 每次运行只解析 MCP 选择；不得把单次运行选择写回持久化配置。
+
+```text
+Settings UI
+  GET/PATCH /api/sandbox/agent/profile
+                 │
+                 ▼
+$RUNTIME_HOME/bambuddy.settings.json
+  ├── modelProfiles     端点 / 凭证 / 默认模型 / 能力
+  └── agentProfile      queueBehavior = follow-up | steer | interrupt
+                 │
+                 ├── ModelProfileResolver ──► ProviderRunSpec.model / auth
+                 └── run-route 读 agentProfile ──► ProviderRunSpec.queueBehavior
+                                                   （init 帧不携带该字段）
+```
 
 ```text
 ModelProfile（端点 / 凭证 / 默认模型 / 能力）
@@ -172,8 +192,9 @@ Harness 运行配置（可选 modelBindings: Record<string, string>）
 
 ```text
 $RUNTIME_HOME = ~/.bambuddy            产品根（RUNTIME_HOME_DIR 可覆盖）
-├── bambuddy.settings.yml
-├── model-profiles.json
+├── bambuddy.settings.json
+│     ├── modelProfiles
+│     └── agentProfile
 └── harness/
     ├── .claude/                       Claude 全局
     └── .pi/agent/                     Pi 全局（原生 ~/.pi/agent，仅改根路径）
@@ -457,7 +478,8 @@ services/agent-runner/
     │   │   ├── permission/permission.ts
     │   │   ├── resource/
     │   │   │   ├── resource.ts
-    │   │   │   └── model-profile.ts
+    │   │   │   ├── model-profile.ts
+    │   │   │   └── runtime-settings.ts
     │   │   ├── config/
     │   │   │   ├── harness-config.ts
     │   │   │   ├── projection-plan.ts
@@ -473,6 +495,7 @@ services/agent-runner/
     │   │       ├── provider-config-adapter.ts
     │   │       ├── resource-resolver.ts
     │   │       ├── model-profile.ts
+    │   │       ├── runtime-settings.ts
     │   │       ├── audit-sink.ts
     │   │       └── activity-lease.ts
     │   ├── harness/                      # provider 中立的运行时引擎
@@ -488,6 +511,7 @@ services/agent-runner/
     │   │   ├── config/
     │   │   │   ├── config-distributor.ts
     │   │   │   ├── harness-config-service.ts
+    │   │   │   ├── agent-profile-service.ts
     │   │   │   └── model-profile-service.ts
     │   │   ├── session/
     │   │   │   ├── session-service.ts
@@ -543,8 +567,10 @@ services/agent-runner/
     │   │   ├── http/
     │   │   │   ├── server.ts
     │   │   │   ├── schema/
+    │   │   │   │   ├── agent-profile-schema.ts
     │   │   │   │   └── model-profile-schema.ts
     │   │   │   └── route/
+    │   │   │       ├── agent-profile.ts
     │   │   │       └── model-profiles.ts
     │   │   ├── sse/
     │   │   ├── websocket/
@@ -557,6 +583,8 @@ services/agent-runner/
     │       ├── model-profile/
     │       │   ├── json-model-profile-store.ts
     │       │   └── compatible-model-endpoint-client.ts
+    │       ├── settings/
+    │       │   └── json-runtime-settings-store.ts
     │       ├── observability/
     │       └── activity/
     └── tests/

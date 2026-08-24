@@ -10,13 +10,19 @@ import {
   ModelProfileError,
   type ModelProfileErrorKind,
 } from '../../core/resource/model-profile.js'
+import {
+  RuntimeSettingsError,
+  type RuntimeSettingsErrorKind,
+} from '../../core/resource/runtime-settings.js'
 import { SessionError, type SessionErrorKind } from '../../core/resource/session.js'
 import { UserFileError, type UserFileErrorKind } from '../../core/resource/user-file.js'
 import type { AgentHarness } from '../../harness/agent-harness.js'
+import type { AgentProfileService } from '../../harness/config/agent-profile-service.js'
 import type { ConfigDistributor } from '../../harness/config/config-distributor.js'
 import type { ModelProfileService } from '../../harness/config/model-profile-service.js'
 import type { SessionService } from '../../harness/session/session-service.js'
 import { runWebsocketRoutes } from '../websocket/run-route.js'
+import { agentProfileRoutes } from './route/agent-profile.js'
 import { modelProfileRoutes } from './route/model-profiles.js'
 import { sessionRoutes } from './route/sessions.js'
 import { userFileRoutes } from './route/user-files.js'
@@ -24,6 +30,7 @@ import { userFileRoutes } from './route/user-files.js'
 export interface BuildHttpServerOptions {
   readonly userFileSystem: UserFileSystem
   readonly modelProfileService: ModelProfileService
+  readonly agentProfileService: AgentProfileService
   readonly agentHarness?: AgentHarness
   readonly sessionService?: SessionService
   readonly configDistributor?: ConfigDistributor
@@ -45,6 +52,17 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
     if (error instanceof ModelProfileError) {
       const status = statusForModelProfileError(error.kind)
       if (status >= 500) request.log.error({ err: error }, 'Model profile request failed')
+      void reply.code(status).send({
+        detail: status === 500
+          ? 'Internal server error'
+          : error.message,
+      })
+      return
+    }
+
+    if (error instanceof RuntimeSettingsError) {
+      const status = statusForRuntimeSettingsError(error.kind)
+      if (status >= 500) request.log.error({ err: error }, 'Runtime settings request failed')
       void reply.code(status).send({
         detail: status === 500
           ? 'Internal server error'
@@ -78,6 +96,7 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
   })
   void server.register(userFileRoutes, { fileSystem: options.userFileSystem })
   void server.register(modelProfileRoutes, { service: options.modelProfileService })
+  void server.register(agentProfileRoutes, { service: options.agentProfileService })
   if (options.sessionService !== undefined) {
     void server.register(sessionRoutes, { sessionService: options.sessionService })
   }
@@ -86,6 +105,7 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
     void server.register(runWebsocketRoutes, {
       harness: options.agentHarness,
       modelProfileService: options.modelProfileService,
+      agentProfileService: options.agentProfileService,
       cwd: options.userFileSystem.initialDirectory,
     })
   }
@@ -118,6 +138,15 @@ function statusForUserFileError(kind: UserFileErrorKind): number {
     case 'io-failure':
     case 'not-directory':
       return 400
+  }
+}
+
+function statusForRuntimeSettingsError(kind: RuntimeSettingsErrorKind): number {
+  switch (kind) {
+    case 'invalid-queue-behavior': return 422
+    case 'io-failure':
+    case 'store-corrupt':
+      return 500
   }
 }
 

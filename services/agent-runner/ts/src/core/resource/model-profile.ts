@@ -365,9 +365,10 @@ function requireDefaultProfile(
 
 export function parseModelProfileCollection(value: unknown): ModelProfileCollection {
   if (!isRecord(value)) throw corruptStore('Profile store must contain an object')
-  if (value['version'] !== MODEL_PROFILE_STORE_VERSION) {
-    throw corruptStore(`Unsupported profile store version: ${String(value['version'])}`)
-  }
+  assertOnlyStoredKeys(value, [
+    'defaultProfileId',
+    'profiles',
+  ], 'Profile store')
   if (!Array.isArray(value['profiles'])) {
     throw corruptStore('Profile store profiles must be an array')
   }

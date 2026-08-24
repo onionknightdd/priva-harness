@@ -314,6 +314,8 @@ export const zhCN = {
       queueBehaviorFollowUp: "等待最后结果再发送",
       queueBehaviorSteer: "等待最近一次工具结束",
       queueBehaviorInterrupt: "中断回复即可发送",
+      queueBehaviorLoadFailed: "无法从后台加载队列消息行为。",
+      queueBehaviorSaveFailed: "无法保存队列消息行为。",
       inputSuggestions: "输入建议",
       inputSuggestionsDescription:
         "允许 Claude Code 给出后续输入建议。",

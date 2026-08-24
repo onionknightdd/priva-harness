@@ -9,6 +9,7 @@ import {
   rewriteProviderBaseUrl,
 } from '../../core/resource/run-harness.js'
 import type { AgentHarness } from '../../harness/agent-harness.js'
+import type { AgentProfileService } from '../../harness/config/agent-profile-service.js'
 import type { ModelProfileService } from '../../harness/config/model-profile-service.js'
 import {
   parseInitFrame,
@@ -23,6 +24,7 @@ export const RUN_WEBSOCKET_PATH = '/api/sandbox/agent/ws/run'
 export interface RunRouteOptions {
   readonly harness: AgentHarness
   readonly modelProfileService: ModelProfileService
+  readonly agentProfileService: AgentProfileService
   readonly cwd: string
 }
 
@@ -97,6 +99,7 @@ async function buildRunSpec(
   frame: InitFrame,
 ): Promise<ProviderRunSpec> {
   const resolved = await options.modelProfileService.resolve(frame.model)
+  const agentProfile = await options.agentProfileService.read()
   return {
     cwd: frame.cwd,
     provider: providerIdForHarness(frame.harness),
@@ -105,8 +108,8 @@ async function buildRunSpec(
     authToken: resolved.profile.authToken,
     profileId: resolved.profile.id,
     modelContext: resolved.capabilities.context,
+    queueBehavior: agentProfile.queueBehavior,
     ...(frame.effort === undefined ? {} : { effort: frame.effort }),
-    ...(frame.queueBehavior === undefined ? {} : { queueBehavior: frame.queueBehavior }),
     ...(frame.promptSuggestions === undefined
       ? {}
       : { promptSuggestions: frame.promptSuggestions }),

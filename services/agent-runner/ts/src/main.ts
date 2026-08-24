@@ -3,6 +3,7 @@ import { homedir } from 'node:os'
 import { pathToFileURL } from 'node:url'
 
 import { AgentHarness } from './harness/agent-harness.js'
+import { AgentProfileService } from './harness/config/agent-profile-service.js'
 import { ConfigDistributor } from './harness/config/config-distributor.js'
 import { ModelProfileService } from './harness/config/model-profile-service.js'
 import { LiveRunRegistry } from './harness/run/live-run-registry.js'
@@ -11,6 +12,7 @@ import { JsonSessionMetadataStore } from './infrastructure/session/json-session-
 import { NodeUserFileSystem } from './infrastructure/filesystem/node-user-file-system.js'
 import { CompatibleModelEndpointClient } from './infrastructure/model-profile/compatible-model-endpoint-client.js'
 import { JsonModelProfileStore } from './infrastructure/model-profile/json-model-profile-store.js'
+import { JsonRuntimeSettingsStore } from './infrastructure/settings/json-runtime-settings-store.js'
 import { claudeGlobalDir } from './provider/claude/claude-paths.js'
 import { ClaudeConfigAdapter } from './provider/claude/config-adapter/claude-config-adapter.js'
 import { ClaudeProvider } from './provider/claude/claude-provider.js'
@@ -49,10 +51,17 @@ export async function startServer(): Promise<void> {
   const fileSystem = new NodeUserFileSystem({
     initialDirectory,
   })
+  const runtimeSettings = new JsonRuntimeSettingsStore({
+    filePath: runtimeConfig.settingsFilePath,
+  })
   const modelProfileService = new ModelProfileService(
-    new JsonModelProfileStore({ runtimeHome: runtimeConfig.runtimeHome }),
+    new JsonModelProfileStore({
+      settings: runtimeSettings,
+      runtimeHome: runtimeConfig.runtimeHome,
+    }),
     new CompatibleModelEndpointClient(),
   )
+  const agentProfileService = new AgentProfileService(runtimeSettings)
   const liveRuns = new LiveRunRegistry()
   const sessionMetadata = new JsonSessionMetadataStore({
     runtimeHome: runtimeConfig.runtimeHome,
@@ -89,6 +98,7 @@ export async function startServer(): Promise<void> {
   const server = buildHttpServer({
     userFileSystem: fileSystem,
     modelProfileService,
+    agentProfileService,
     agentHarness,
     sessionService,
     configDistributor,

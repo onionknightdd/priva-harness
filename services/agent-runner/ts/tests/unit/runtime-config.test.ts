@@ -18,7 +18,7 @@ describe('runtimeConfig', () => {
     expect(defaultRuntimeHome()).toBe(runtimeHome)
     expect(runtimeConfig).toEqual({
       runtimeHome,
-      settingsFilePath: join(runtimeHome, 'bambuddy.settings.yml'),
+      settingsFilePath: join(runtimeHome, 'bambuddy.settings.json'),
       harnessHome: join(runtimeHome, 'harness'),
     })
     expect(Object.isFrozen(runtimeConfig)).toBe(true)
@@ -36,7 +36,7 @@ describe('runtimeConfig', () => {
     const runtimeHome = '/tmp/bambuddy-home'
     expect(createRuntimeConfig(runtimeHome)).toEqual({
       runtimeHome: resolve(runtimeHome),
-      settingsFilePath: join(runtimeHome, 'bambuddy.settings.yml'),
+      settingsFilePath: join(runtimeHome, 'bambuddy.settings.json'),
       harnessHome: join(runtimeHome, 'harness'),
     })
   })

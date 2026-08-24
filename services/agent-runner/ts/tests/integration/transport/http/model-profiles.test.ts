@@ -14,7 +14,7 @@ import {
 } from '../../../../src/core/resource/model-profile.js'
 import { NodeUserFileSystem } from '../../../../src/infrastructure/filesystem/node-user-file-system.js'
 import { buildHttpServer } from '../../../../src/transport/http/server.js'
-import { createTestModelProfileService } from '../../../support/model-profile.js'
+import { createTestAgentServices } from '../../../support/model-profile.js'
 
 describe('/api/sandbox/credentials/profiles', () => {
   let testRoot: string
@@ -26,12 +26,14 @@ describe('/api/sandbox/credentials/profiles', () => {
     const workspace = join(testRoot, 'workspace')
     await mkdir(workspace)
     endpointClient = new RecordingEndpointClient()
+    const services = createTestAgentServices(
+      join(testRoot, 'runtime'),
+      endpointClient,
+    )
     server = buildHttpServer({
       userFileSystem: new NodeUserFileSystem({ initialDirectory: workspace }),
-      modelProfileService: createTestModelProfileService(
-        join(testRoot, 'runtime'),
-        endpointClient,
-      ),
+      modelProfileService: services.modelProfileService,
+      agentProfileService: services.agentProfileService,
     })
     await server.ready()
   })
