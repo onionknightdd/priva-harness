@@ -284,6 +284,7 @@ export const en = {
   settings: {
     title: "Settings",
     description: "Manage your account and application preferences.",
+    sectionMenu: "Choose a settings section",
     sections: {
       account: "Account",
       llmProviders: "Models",

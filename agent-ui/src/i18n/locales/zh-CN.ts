@@ -281,6 +281,7 @@ export const zhCN = {
   settings: {
     title: "设置",
     description: "管理你的账户和应用偏好设置。",
+    sectionMenu: "选择设置分区",
     sections: {
       account: "账户",
       llmProviders: "模型",

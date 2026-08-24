@@ -6,6 +6,8 @@ import {
   BotIcon,
   BotMessageSquareIcon,
   BugIcon,
+  CheckIcon,
+  ChevronDownIcon,
   MessageSquareIcon,
   SettingsIcon,
   SlidersHorizontalIcon,
@@ -28,6 +30,13 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Separator } from "@/components/ui/separator"
 import {
   Sidebar,
@@ -173,15 +182,56 @@ export function SettingsDialog({
                       </BreadcrumbLink>
                     </BreadcrumbItem>
                     <BreadcrumbSeparator className="hidden md:block" />
-                    <BreadcrumbItem>
-                      <BreadcrumbPage id="settings-active-section">
-                        {activeSectionTitle}
-                      </BreadcrumbPage>
+                    <BreadcrumbItem className="hidden md:block">
+                      <BreadcrumbPage>{activeSectionTitle}</BreadcrumbPage>
+                    </BreadcrumbItem>
+                    <BreadcrumbItem className="md:hidden">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          aria-label={t("settings.sectionMenu")}
+                          aria-current="page"
+                          render={
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="-ml-2 gap-1 px-2"
+                            />
+                          }
+                        >
+                          {activeSectionTitle}
+                          <ChevronDownIcon className="size-3.5" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="min-w-44">
+                          {settingsNavigation.map((item) => {
+                            const Icon = item.icon
+                            const isActive = item.id === activeSectionId
+
+                            return (
+                              <DropdownMenuItem
+                                key={item.id}
+                                className="gap-2 text-sm"
+                                onClick={() => setActiveSectionId(item.id)}
+                              >
+                                <Icon className="size-3.5" aria-hidden="true" />
+                                <span className="flex-1">{t(item.titleKey)}</span>
+                                {isActive ? (
+                                  <CheckIcon className="size-3.5" />
+                                ) : null}
+                              </DropdownMenuItem>
+                            )
+                          })}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </BreadcrumbItem>
                   </BreadcrumbList>
                 </Breadcrumb>
               </div>
             </header>
+
+            <h2 id="settings-active-section" className="sr-only">
+              {activeSectionTitle}
+            </h2>
 
             <section
               className={cn(
