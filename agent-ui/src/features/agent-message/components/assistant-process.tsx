@@ -12,6 +12,10 @@ import { motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
 import {
+  FileDiff,
+  type FileDiffLine,
+} from "@/components/agents/file-diff"
+import {
   ToolResult,
   ToolResultOutput,
   type ToolResultStatus,
@@ -436,63 +440,36 @@ function WriteToolItem({
     stringInput(input, "contents", { allowBlank: true })
   const output = block.tool?.output?.trim() ?? ""
   const status = toolResultStatus(block.tool)
-  const shouldReduceMotion = Boolean(useReducedMotion())
-  const inputStreaming =
-    status === "running" &&
-    output === "" &&
-    (jsonInputOpen(block.tool?.inputRaw) || content === undefined)
-  const awaitingOutput =
-    status === "running" && !inputStreaming
-  const diff =
+  const lines =
     content === undefined
-      ? looksLikeDiff(output)
-        ? output
-        : ""
-      : toAddedDiff(content)
-  const plainOutput = diff === "" ? output : ""
-  const copyText = [filePath, content ?? output].filter(Boolean).join("\n")
-  const showOutput =
-    Boolean(diff || plainOutput) || (awaitingOutput && !shouldReduceMotion)
-  const body = showOutput ? (
-    <div className="flex flex-col gap-2">
-      {diff ? (
-        <ToolResultOutput className="min-w-0 leading-none" language="diff">
-          {diff}
-        </ToolResultOutput>
-      ) : null}
-      {plainOutput ? (
-        <pre className="m-0 whitespace-pre-wrap break-words font-mono text-xs leading-none text-muted-foreground">
-          {plainOutput}
-        </pre>
-      ) : null}
-      {awaitingOutput && !shouldReduceMotion ? (
-        <CommandCaret className="bg-muted-foreground" />
-      ) : null}
-    </div>
-  ) : null
+      ? fileDiffLinesFromUnified(output)
+      : fileDiffLinesFromContent(content)
+  const copyText = content ?? output
+  const running = status === "running"
 
   return (
-    <div className="w-full min-w-0 px-0 py-0">
-      <ToolResult
-        tool="Write"
-        title={filePath ?? (inputStreaming ? "" : block.name)}
-        kind="custom"
-        icon={<FilePenLineIcon className="size-[1em]" />}
-        status={status}
-        copyText={copyText || undefined}
-        onCopy={
-          copyText
-            ? () => {
-                void writeClipboardText(copyText)
-              }
-            : undefined
-        }
-        defaultOpen={status === "running"}
-        collapseOnComplete
-      >
-        {body}
-      </ToolResult>
-    </div>
+    <FileDiff
+      file={filePath ?? (running ? "" : block.name)}
+      lines={lines}
+      status={running ? "streaming" : "complete"}
+      language={languageFromPath(filePath)}
+      icon={
+        <FilePenLineIcon
+          aria-hidden="true"
+          className="size-4 shrink-0 text-muted-foreground/70"
+        />
+      }
+      copyText={copyText || undefined}
+      onCopy={
+        copyText
+          ? () => {
+              void writeClipboardText(copyText)
+            }
+          : undefined
+      }
+      defaultOpen={running}
+      collapseOnComplete
+    />
   )
 }
 
@@ -715,8 +692,90 @@ function isWriteTool(name: string): boolean {
   return name.trim().toLowerCase() === "write"
 }
 
-function toAddedDiff(content: string): string {
-  return content.split("\n").map((line) => `+${line}`).join("\n")
+function fileDiffLinesFromContent(content: string): FileDiffLine[] {
+  return content.split("\n").map((line, index) => ({
+    id: `n${String(index)}`,
+    type: "added" as const,
+    newLine: index + 1,
+    content: line,
+  }))
+}
+
+function fileDiffLinesFromUnified(patch: string): FileDiffLine[] {
+  if (!looksLikeDiff(patch)) {
+    return []
+  }
+  const lines: FileDiffLine[] = []
+  let oldLine = 0
+  let newLine = 0
+  let index = 0
+  for (const raw of patch.split("\n")) {
+    if (raw.startsWith("@@")) {
+      const hunk = /@@ -(\d+)(?:,\d+)? \+(\d+)/.exec(raw)
+      if (hunk?.[1] !== undefined && hunk[2] !== undefined) {
+        oldLine = Number(hunk[1])
+        newLine = Number(hunk[2])
+      }
+      continue
+    }
+    if (
+      raw.startsWith("diff ") ||
+      raw.startsWith("index ") ||
+      raw.startsWith("---") ||
+      raw.startsWith("+++")
+    ) {
+      continue
+    }
+    const id = `p${String(index)}`
+    index += 1
+    if (raw.startsWith("+")) {
+      lines.push({
+        id,
+        type: "added",
+        newLine,
+        content: raw.slice(1),
+      })
+      newLine += 1
+      continue
+    }
+    if (raw.startsWith("-")) {
+      lines.push({
+        id,
+        type: "removed",
+        oldLine,
+        content: raw.slice(1),
+      })
+      oldLine += 1
+      continue
+    }
+    const text = raw.startsWith(" ") ? raw.slice(1) : raw
+    lines.push({
+      id,
+      type: "context",
+      oldLine,
+      newLine,
+      content: text,
+    })
+    oldLine += 1
+    newLine += 1
+  }
+  return lines
+}
+
+function languageFromPath(path: string | undefined): string {
+  if (path === undefined || path.trim() === "") {
+    return "text"
+  }
+  const ext = path.split(".").pop()?.toLowerCase()
+  if (ext === undefined || ext === path.toLowerCase()) {
+    return "text"
+  }
+  if (ext === "ts") return "typescript"
+  if (ext === "js") return "javascript"
+  if (ext === "md") return "markdown"
+  if (ext === "yml") return "yaml"
+  if (ext === "sh") return "bash"
+  return ext
 }
 
 function looksLikeDiff(text: string): boolean {
