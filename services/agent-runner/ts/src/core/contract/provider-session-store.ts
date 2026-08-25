@@ -4,6 +4,7 @@ import type {
   ProviderSessionInfo,
   SessionMessage,
 } from '../resource/session.js'
+import type { ThreadReplayItem } from '../resource/thread.js'
 
 export interface SessionListQuery {
   readonly cwd?: string
@@ -24,6 +25,7 @@ export interface ProviderSessionStore {
   read(ref: SessionRef): Promise<ProviderSessionInfo>
   lastAssistantModel(ref: SessionRef): Promise<LastAssistantModel | undefined>
   messages(ref: SessionRef, page?: SessionMessagePage): Promise<readonly SessionMessage[]>
+  replay(ref: SessionRef, page?: SessionMessagePage): Promise<readonly ThreadReplayItem[]>
   fork(ref: SessionRef, options: SessionForkOptions): Promise<ProviderSessionInfo>
   delete(ref: SessionRef): Promise<void>
   rename(ref: SessionRef, title: string): Promise<void>

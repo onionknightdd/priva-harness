@@ -18,6 +18,8 @@ import {
   type SessionMessage,
   type SessionMessageType,
 } from '../../../core/resource/session.js'
+import type { ThreadReplayItem } from '../../../core/resource/thread.js'
+import { replayClaudeSessionMessages } from './claude-thread-replay.js'
 
 export interface ClaudeSessionSdk {
   listSessions(options?: { dir?: string }): Promise<readonly ClaudeSdkSessionInfo[]>
@@ -113,6 +115,11 @@ export class ClaudeSessionStore implements ProviderSessionStore {
       }
     }
     return pageSessionMessages(mapped, page)
+  }
+
+  async replay(ref: SessionRef, page?: SessionMessagePage): Promise<readonly ThreadReplayItem[]> {
+    const messages = await this.messages(ref, page)
+    return replayClaudeSessionMessages(messages)
   }
 
   async delete(ref: SessionRef): Promise<void> {

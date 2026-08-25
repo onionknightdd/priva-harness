@@ -7,11 +7,11 @@ import { useHarness } from "@/features/sidebar/header/harness-context"
 import { useSessionProjects } from "@/features/sidebar/content/use-session-projects"
 import {
   forkSession,
-  listSessionMessages,
+  listSessionThread,
   type SessionInfo,
 } from "@/lib/api/sandbox-sessions"
 
-import { threadMessagesFromTranscript } from "./session-thread-messages"
+import { threadMessagesFromApi } from "./session-thread-messages"
 
 type ForkFromInput = {
   message: AgentThreadMessage
@@ -175,7 +175,7 @@ export function ChatSessionProvider({
     setThreadMessages([])
     setMessagesStatus("loading")
 
-    void listSessionMessages(
+    void listSessionThread(
       runHarnessId,
       activeSession.sessionId,
       controller.signal
@@ -185,7 +185,7 @@ export function ChatSessionProvider({
           return
         }
 
-        setThreadMessages(threadMessagesFromTranscript(payload.messages))
+        setThreadMessages(threadMessagesFromApi(payload.messages))
         setMessagesStatus("ready")
         bumpTranscript()
       })
@@ -249,11 +249,11 @@ export function ChatSessionProvider({
         if (!isLast) {
           upToMessageId = input.message.transcriptUuid
           if (!upToMessageId) {
-            const payload = await listSessionMessages(
+            const payload = await listSessionThread(
               runHarnessId,
               runSessionId
             )
-            const transcript = threadMessagesFromTranscript(payload.messages)
+            const transcript = threadMessagesFromApi(payload.messages)
             const transcriptAssistants = transcript.filter(
               (message) => message.role === "assistant"
             )
