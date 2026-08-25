@@ -447,10 +447,13 @@ function WriteToolItem({
     stringInput(input, "contents", { allowBlank: true })
   const output = block.tool?.output?.trim() ?? ""
   const status = toolResultStatus(block.tool)
+  const fromPatch = fileDiffLinesFromUnified(output)
   const lines =
-    content === undefined
-      ? fileDiffLinesFromUnified(output)
-      : fileDiffLinesFromContent(content)
+    fromPatch.length > 0
+      ? fromPatch
+      : content === undefined
+        ? []
+        : fileDiffLinesFromContent(content)
   const copyText = content ?? output
   const running = status === "running"
 

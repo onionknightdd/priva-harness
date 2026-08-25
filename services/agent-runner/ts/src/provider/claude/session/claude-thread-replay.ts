@@ -92,13 +92,17 @@ function toClaudeSdkMessage(message: SessionMessage): ClaudeSdkMessage | undefin
   }
 
   const type = message.type === 'tool_result' ? 'user' : message.type
+  const payload = withAssistantId(normalizePayload(message), message.uuid)
+  const inner = asRecord(payload)
+  const toolUseResult = inner?.['tool_use_result'] ?? inner?.['toolUseResult']
   return {
     type,
     session_id: message.sessionId,
     ...(message.parentToolUseId === null || message.parentToolUseId === ''
       ? {}
       : { parent_tool_use_id: message.parentToolUseId }),
-    message: withAssistantId(normalizePayload(message), message.uuid),
+    message: payload,
+    ...(toolUseResult === undefined ? {} : { tool_use_result: toolUseResult }),
   }
 }
 

@@ -69,4 +69,43 @@ describe('replayPiSessionMessages', () => {
       tool: { status: 'completed', ok: true, output: 'ok' },
     })
   })
+
+  it('replays edit details.patch as the tool output', () => {
+    const messages: SessionMessage[] = [
+      {
+        type: 'assistant',
+        uuid: 'e1',
+        sessionId: 'bb-1',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'toolCall', id: 'edit-1', name: 'edit', arguments: { path: 'a.ts' } }],
+        },
+        parentToolUseId: null,
+        metadata: null,
+        timestamp: null,
+      },
+      {
+        type: 'tool_result',
+        uuid: 'e2',
+        sessionId: 'bb-1',
+        message: {
+          role: 'toolResult',
+          toolCallId: 'edit-1',
+          toolName: 'edit',
+          content: [{ type: 'text', text: 'edited' }],
+          details: { patch: '@@ -9,1 +9,1 @@\n-a\n+b' },
+        },
+        parentToolUseId: 'edit-1',
+        metadata: null,
+        timestamp: null,
+      },
+    ]
+    const thread = foldThread(replayPiSessionMessages(messages))
+    const tool = thread[0]?.blocks?.find((block) => block.type === 'tool_use')
+    expect(tool).toMatchObject({
+      id: 'edit-1',
+      name: 'edit',
+      tool: { status: 'completed', ok: true, output: '@@ -9,1 +9,1 @@\n-a\n+b' },
+    })
+  })
 })

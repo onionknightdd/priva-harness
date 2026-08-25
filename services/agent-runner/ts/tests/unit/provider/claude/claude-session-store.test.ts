@@ -52,6 +52,28 @@ describe('ClaudeSessionStore', () => {
     expect(sdk.deleteSession.mock.calls).toEqual([['sess-1', { dir: '/work' }]])
   })
 
+  it('copies JSONL-root tool_use_result onto the inner message for replay', () => {
+    const mapped = mapClaudeMessage({
+      type: 'user',
+      uuid: 't1',
+      session_id: 'sess-1',
+      message: {
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: 'edit_1', content: '     12\tkeep' }],
+      },
+      tool_use_result: {
+        structuredPatch: [{ oldStart: 12, oldLines: 1, newStart: 12, newLines: 1, lines: [' keep'] }],
+      },
+    }, 'sess-1')
+    expect(mapped.message).toEqual({
+      role: 'user',
+      content: [{ type: 'tool_result', tool_use_id: 'edit_1', content: '     12\tkeep' }],
+      tool_use_result: {
+        structuredPatch: [{ oldStart: 12, oldLines: 1, newStart: 12, newLines: 1, lines: [' keep'] }],
+      },
+    })
+  })
+
   it('keeps native Claude message payloads and skips synthetic transcript models', () => {
     const mapped = mapClaudeMessage({
       type: 'assistant',

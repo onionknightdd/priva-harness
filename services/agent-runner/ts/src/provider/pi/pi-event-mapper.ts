@@ -12,6 +12,8 @@ import {
   type JsonRecord,
 } from '../../core/event/json-record.js'
 
+import { patchFromToolDetails } from '../../core/event/tool-patch.js'
+
 export interface PiSessionEvent {
   readonly type: string
   readonly assistantMessageEvent?: unknown
@@ -463,6 +465,8 @@ function toolOutput(value: unknown): string {
     if (value === undefined || value === null) return ''
     return JSON.stringify(value)
   }
+  const patch = patchFromToolDetails(record)
+  if (patch !== '') return patch
   const content = record['content']
   if (typeof content === 'string') return content
   if (Array.isArray(content)) {

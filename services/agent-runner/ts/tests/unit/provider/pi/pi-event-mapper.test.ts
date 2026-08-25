@@ -166,6 +166,54 @@ describe('PiEventMapper', () => {
     ]))
   })
 
+  it('maps edit details.patch onto tool.completed output', () => {
+    const mapper = new PiEventMapper({ sessionId: 'pi-sess', model: 'm' })
+    const events = mapper.push({
+      type: 'tool_execution_end',
+      toolCallId: 'edit1',
+      toolName: 'edit',
+      isError: false,
+      result: {
+        content: [{ type: 'text', text: 'edited src/a.ts' }],
+        details: {
+          diff: 'pretty tui view',
+          patch: '@@ -5,1 +5,1 @@\n-const a = 1\n+const a = 2',
+        },
+      },
+    })
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: 'tool.completed',
+        id: 'edit1',
+        name: 'edit',
+        ok: true,
+        output: '@@ -5,1 +5,1 @@\n-const a = 1\n+const a = 2',
+      }),
+    ])
+  })
+
+  it('keeps bash details.output instead of looking for a patch', () => {
+    const mapper = new PiEventMapper({ sessionId: 'pi-sess', model: 'm' })
+    const events = mapper.push({
+      type: 'tool_execution_end',
+      toolCallId: 'bash1',
+      toolName: 'bash',
+      isError: false,
+      result: {
+        content: [{ type: 'text', text: 'ping\n' }],
+        details: { output: 'ping\n' },
+      },
+    })
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: 'tool.completed',
+        id: 'bash1',
+        name: 'bash',
+        output: 'ping\n',
+      }),
+    ])
+  })
+
   it('maps image deltas onto assistant.image_delta rather than text', () => {
     const mapper = new PiEventMapper({ sessionId: 'pi-sess', model: 'm' })
     const events = mapper.push({

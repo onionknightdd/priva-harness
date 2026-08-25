@@ -307,6 +307,101 @@ describe('ClaudeEventMapper', () => {
     ]))
   })
 
+  it('maps Edit tool_use_result.structuredPatch onto unified hunk output', () => {
+    const mapper = new ClaudeEventMapper()
+    mapper.push({
+      type: 'assistant',
+      message: {
+        id: 'msg_edit',
+        content: [{
+          type: 'tool_use',
+          id: 'edit_1',
+          name: 'Edit',
+          input: { file_path: 'a.ts', old_string: 'const a = 1', new_string: 'const a = 2' },
+        }],
+      },
+    })
+    const events = mapper.push({
+      type: 'user',
+      tool_use_result: {
+        filePath: 'a.ts',
+        oldString: 'const a = 1',
+        newString: 'const a = 2',
+        originalFile: null,
+        structuredPatch: [{
+          oldStart: 12,
+          oldLines: 3,
+          newStart: 12,
+          newLines: 3,
+          lines: [' keep', '-const a = 1', '+const a = 2'],
+        }],
+        userModified: false,
+        replaceAll: false,
+      },
+      message: {
+        content: [{
+          type: 'tool_result',
+          tool_use_id: 'edit_1',
+          content: '     12\tkeep\n     13\tconst a = 2',
+        }],
+      },
+    })
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'tool.completed',
+        id: 'edit_1',
+        name: 'edit',
+        ok: true,
+        output: [
+          '@@ -12,3 +12,3 @@',
+          ' keep',
+          '-const a = 1',
+          '+const a = 2',
+        ].join('\n'),
+      }),
+    ]))
+  })
+
+  it('maps Write gitDiff.patch when structuredPatch is empty', () => {
+    const mapper = new ClaudeEventMapper()
+    mapper.push({
+      type: 'assistant',
+      message: {
+        id: 'msg_write',
+        content: [{ type: 'tool_use', id: 'write_1', name: 'Write', input: { file_path: 'z.txt' } }],
+      },
+    })
+    const events = mapper.push({
+      type: 'user',
+      tool_use_result: {
+        type: 'create',
+        filePath: 'z.txt',
+        content: 'hello',
+        structuredPatch: [],
+        originalFile: null,
+        gitDiff: {
+          filename: 'z.txt',
+          status: 'added',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+          patch: '--- /dev/null\n+++ b/z.txt\n@@ -0,0 +1,1 @@\n+hello',
+        },
+      },
+      message: {
+        content: [{ type: 'tool_result', tool_use_id: 'write_1', content: 'Wrote z.txt' }],
+      },
+    })
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'tool.completed',
+        id: 'write_1',
+        name: 'write',
+        output: '--- /dev/null\n+++ b/z.txt\n@@ -0,0 +1,1 @@\n+hello',
+      }),
+    ]))
+  })
+
   it('maps an error result onto run.failed and keeps session stats', () => {
     const mapper = new ClaudeEventMapper()
     const events = mapper.push({

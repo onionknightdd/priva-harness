@@ -256,6 +256,41 @@ describe('replayClaudeSessionMessages', () => {
       durationMs: 4_000,
     })
   })
+
+  it('replays Edit structuredPatch as unified hunk output with file line numbers', () => {
+    const messages: SessionMessage[] = [
+      session('assistant', 'a1', {
+        role: 'assistant',
+        id: 'a1',
+        content: [{
+          type: 'tool_use',
+          id: 'edit-1',
+          name: 'Edit',
+          input: { file_path: 'a.ts', old_string: 'a', new_string: 'b' },
+        }],
+      }),
+      session('user', 't1', {
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: 'edit-1', content: '     12\tkeep' }],
+        tool_use_result: {
+          structuredPatch: [{
+            oldStart: 12,
+            oldLines: 1,
+            newStart: 12,
+            newLines: 1,
+            lines: [' keep'],
+          }],
+        },
+      }),
+    ]
+    const thread = foldThread(replayClaudeSessionMessages(messages))
+    const tool = thread[0]?.blocks?.find((block) => block.type === 'tool_use')
+    expect(tool).toMatchObject({
+      id: 'edit-1',
+      name: 'edit',
+      tool: { status: 'completed', ok: true, output: '@@ -12,1 +12,1 @@\n keep' },
+    })
+  })
 })
 
 function session(

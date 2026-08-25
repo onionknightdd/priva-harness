@@ -13,6 +13,7 @@ import {
   type JsonRecord,
 } from '../../core/event/json-record.js'
 import { isAgentName, isTerminalStatus, isWorkflowName } from '../../core/event/tool-names.js'
+import { unifiedDiffFromStructuredPatch } from '../../core/event/tool-patch.js'
 
 export interface ClaudeSdkMessage {
   readonly type: string
@@ -21,6 +22,7 @@ export interface ClaudeSdkMessage {
   readonly parent_tool_use_id?: string | null
   readonly event?: unknown
   readonly message?: unknown
+  readonly tool_use_result?: unknown
   readonly duration_ms?: number
   readonly total_cost_usd?: number
   readonly usage?: unknown
@@ -56,7 +58,7 @@ export class ClaudeEventMapper {
       case 'assistant':
         return this.mapAssistant(message.message, channel)
       case 'user':
-        return this.mapUser(message.message, channel)
+        return this.mapUser(message, channel)
       case 'system':
         this.rememberModel(message)
         return this.mapSystem(message)
@@ -288,10 +290,12 @@ export class ClaudeEventMapper {
     return events
   }
 
-  private mapUser(raw: unknown, channel: EventChannel): AgentEvent[] {
-    const message = asRecord(raw)
-    if (message === undefined) return []
-    const blocks = contentBlocks(message['content'])
+  private mapUser(message: ClaudeSdkMessage, channel: EventChannel): AgentEvent[] {
+    const raw = message.message
+    const envelope = asRecord(message) ?? {}
+    const inner = asRecord(raw)
+    if (inner === undefined) return []
+    const blocks = contentBlocks(inner['content'])
     const hasToolResult = blocks.some((block) => stringField(block, 'type') === 'tool_result')
     if (channel.parentToolUseId !== undefined && !hasToolResult) {
       return this.deliveryEvents(blocks, channel)
@@ -303,7 +307,7 @@ export class ClaudeEventMapper {
       const id = stringField(block, 'tool_use_id') ?? stringField(block, 'id')
       if (id === undefined) continue
       const name = this.tools.get(id) ?? 'unknown'
-      const output = toolOutput(block['content'])
+      const output = claudeToolOutput(block, envelope, inner)
       const launch = parseAgentLaunch(block, output)
       if (launch?.agentId !== undefined) {
         this.agentIdByParent.set(id, launch.agentId)
@@ -611,6 +615,26 @@ function toolOutput(content: unknown): string {
   }
   if (content === undefined || content === null) return ''
   return JSON.stringify(content)
+}
+
+function claudeToolOutput(
+  block: JsonRecord,
+  envelope: JsonRecord,
+  inner: JsonRecord,
+): string {
+  const result =
+    asRecord(block['toolUseResult']) ??
+    asRecord(block['tool_use_result']) ??
+    asRecord(envelope['tool_use_result']) ??
+    asRecord(envelope['toolUseResult']) ??
+    asRecord(inner['tool_use_result']) ??
+    asRecord(inner['toolUseResult'])
+  const fromHunks = unifiedDiffFromStructuredPatch(result)
+  if (fromHunks !== '') return fromHunks
+  const gitDiff = result === undefined ? undefined : asRecord(result['gitDiff'])
+  const gitPatch = gitDiff === undefined ? undefined : stringField(gitDiff, 'patch')
+  if (gitPatch !== undefined && gitPatch !== '') return gitPatch
+  return toolOutput(block['content'])
 }
 
 function mapUsage(usage: unknown): TokenUsage | undefined {

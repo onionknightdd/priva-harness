@@ -1,4 +1,5 @@
 import { asRecord, isRecord, stringField } from '../../core/event/json-record.js'
+import { patchFromToolDetails } from '../../core/event/tool-patch.js'
 import type { AgentEvent, ContentBlock } from '../../core/event/agent-event.js'
 import type { SessionMessage } from '../../core/resource/session.js'
 import type { ThreadReplayItem } from '../../core/resource/thread.js'
@@ -178,6 +179,8 @@ function imageFrom(block: Record<string, unknown>): {
 }
 
 function toolOutput(record: Record<string, unknown>): string {
+  const patch = patchFromToolDetails(record)
+  if (patch !== '') return patch
   const content = record['content']
   if (typeof content === 'string') return content
   if (Array.isArray(content)) {

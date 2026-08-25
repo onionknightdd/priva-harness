@@ -104,6 +104,8 @@ export function fileDiffLinesFromUnified(patch: string): FileDiffLine[] {
       continue
     }
     if (
+      raw === "" ||
+      raw.startsWith("\\") ||
       raw.startsWith("diff ") ||
       raw.startsWith("index ") ||
       raw.startsWith("---") ||
@@ -152,17 +154,15 @@ export function fileDiffLinesFromEdit(
   newText: string | undefined,
   output: string,
 ): FileDiffLine[] {
-  if (oldText === undefined && newText === undefined) {
-    const unified = fileDiffLinesFromUnified(output)
-    if (unified.length > 0) {
-      return unified
-    }
-    return fileDiffLinesFromCatN(output)
+  const unified = fileDiffLinesFromUnified(output)
+  if (unified.length > 0) {
+    return unified
   }
-  return withFileLineNumbers(
-    fileDiffLinesFromReplacement(oldText, newText),
-    output
-  )
+  if (oldText !== undefined || newText !== undefined) {
+    // Snippet-relative 1, 2, 3 are not file line numbers.
+    return stripLineNumbers(fileDiffLinesFromReplacement(oldText, newText))
+  }
+  return fileDiffLinesFromCatN(output)
 }
 
 export function fileDiffCopyText(lines: FileDiffLine[]): string {
@@ -213,87 +213,10 @@ function fileDiffLinesFromCatN(output: string): FileDiffLine[] {
   }))
 }
 
-function withFileLineNumbers(
-  lines: FileDiffLine[],
-  output: string
-): FileDiffLine[] {
-  const numbered = parseCatNLines(output)
-  if (numbered.length === 0 || lines.length === 0) {
-    return lines
-  }
-  const texts = numbered.map((line) => line.text)
-  const newSide = numberedSide(lines, "newLine")
-  const aligned =
-    alignLineNumbers(numbered, texts, newSide) ??
-    alignLineNumbers(numbered, texts, numberedSide(lines, "oldLine"))
-  if (aligned === undefined) {
-    return lines
-  }
-  return shiftLineNumbers(lines, aligned)
-}
-
-function numberedSide(
-  lines: FileDiffLine[],
-  key: "oldLine" | "newLine"
-): Array<{ rel: number; content: string }> {
-  return lines
-    .filter((line) => typeof line[key] === "number")
-    .sort((left, right) => (left[key] ?? 0) - (right[key] ?? 0))
-    .map((line) => ({
-      rel: line[key] ?? 0,
-      content: line.content,
-    }))
-}
-
-function alignLineNumbers(
-  numbered: Array<{ n: number; text: string }>,
-  haystack: string[],
-  side: Array<{ rel: number; content: string }>
-): number | undefined {
-  if (side.length === 0 || numbered.length === 0) {
-    return undefined
-  }
-  const needle = side.map((line) => line.content)
-  const inSnippet = indexOfSequence(haystack, needle)
-  if (inSnippet !== undefined) {
-    const fileLine = numbered[inSnippet]
-    const first = side[0]
-    if (fileLine === undefined || first === undefined) {
-      return undefined
-    }
-    return fileLine.n - first.rel
-  }
-  const inSide = indexOfSequence(needle, haystack)
-  if (inSide !== undefined) {
-    const fileLine = numbered[0]
-    const matched = side[inSide]
-    if (fileLine === undefined || matched === undefined) {
-      return undefined
-    }
-    return fileLine.n - matched.rel
-  }
-  return undefined
-}
-
-function indexOfSequence(haystack: string[], needle: string[]): number | undefined {
-  if (needle.length === 0 || needle.length > haystack.length) {
-    return undefined
-  }
-  for (let i = 0; i <= haystack.length - needle.length; i += 1) {
-    if (needle.every((line, offset) => haystack[i + offset] === line)) {
-      return i
-    }
-  }
-  return undefined
-}
-
-function shiftLineNumbers(lines: FileDiffLine[], delta: number): FileDiffLine[] {
-  if (delta === 0) {
-    return lines
-  }
+function stripLineNumbers(lines: FileDiffLine[]): FileDiffLine[] {
   return lines.map((line) => ({
-    ...line,
-    oldLine: line.oldLine === undefined ? undefined : line.oldLine + delta,
-    newLine: line.newLine === undefined ? undefined : line.newLine + delta,
+    id: line.id,
+    type: line.type,
+    content: line.content,
   }))
 }
