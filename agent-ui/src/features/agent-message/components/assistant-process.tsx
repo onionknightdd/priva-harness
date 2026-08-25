@@ -22,10 +22,15 @@ import {
   ItemActions,
   ItemContent,
   ItemGroup,
-  ItemMedia,
-  ItemSeparator,
   ItemTitle,
 } from "@/components/ui/item"
+import {
+  Timeline,
+  TimelineContent,
+  TimelineIndicator,
+  TimelineItem,
+  TimelineSeparator,
+} from "@/components/reui/timeline"
 import { cn } from "@/lib/utils"
 
 import type {
@@ -268,7 +273,7 @@ function NestedAgentItem({ agent }: { agent: NestedAgent }) {
             </p>
           ) : null}
           {agent.inbox.length > 0 ? (
-            <ProcessItemGroup className="py-0">
+            <ItemGroup className="gap-1 text-muted-foreground">
               {agent.inbox.map((item, index) => (
                 <Item key={`${item.source}-${index}`} size="xs">
                   <ItemContent>
@@ -283,7 +288,7 @@ function NestedAgentItem({ agent }: { agent: NestedAgent }) {
                   </ItemContent>
                 </Item>
               ))}
-            </ProcessItemGroup>
+            </ItemGroup>
           ) : null}
           {tools.length > 0 ? (
             <ProcessItemGroup className="py-0">
@@ -316,6 +321,8 @@ function WorkflowItem({ workflow }: { workflow: WorkflowCard }) {
   )
 }
 
+const ProcessStepContext = React.createContext(1)
+
 function ProcessItemGroup({
   className,
   children,
@@ -326,19 +333,23 @@ function ProcessItemGroup({
   const items = React.Children.toArray(children)
 
   return (
-    <ItemGroup className={cn("gap-0 py-1 text-muted-foreground", className)}>
-      {items.map((child, index) => {
-        const key = React.isValidElement(child) && child.key != null
-          ? String(child.key)
-          : String(index)
-        return (
-          <React.Fragment key={key}>
-            {index > 0 ? <ItemSeparator className="my-0" /> : null}
-            {child}
-          </React.Fragment>
-        )
-      })}
-    </ItemGroup>
+    <Timeline
+      defaultValue={0}
+      className={cn("py-1 text-muted-foreground", className)}
+    >
+      {items.map((child, index) => (
+        <ProcessStepContext.Provider
+          key={
+            React.isValidElement(child) && child.key != null
+              ? String(child.key)
+              : String(index)
+          }
+          value={index + 1}
+        >
+          {child}
+        </ProcessStepContext.Provider>
+      ))}
+    </Timeline>
   )
 }
 
@@ -359,16 +370,12 @@ function ProcessRow({
   defaultOpen?: boolean
   children?: React.ReactNode
 }) {
+  const step = React.useContext(ProcessStepContext)
   const hasBody = Boolean(children)
   const showActions = Boolean(badge || meta || hasBody)
 
   const header = (
     <>
-      {Icon ? (
-        <ItemMedia variant="icon">
-          <Icon />
-        </ItemMedia>
-      ) : null}
       <ItemContent>
         <ItemTitle>{title}</ItemTitle>
       </ItemContent>
@@ -386,27 +393,48 @@ function ProcessRow({
     </>
   )
 
+  const rail = (
+    <>
+      <TimelineSeparator className="bg-border" />
+      <TimelineIndicator className="flex items-center justify-center border-border bg-background [&_svg:not([class*='size-'])]:size-2.5">
+        {Icon ? <Icon /> : null}
+      </TimelineIndicator>
+    </>
+  )
+
   if (!hasBody) {
     return (
-      <Item size="sm" className="bg-transparent hover:bg-transparent">
-        {header}
-      </Item>
+      <TimelineItem
+        step={step}
+        className="group-data-[orientation=vertical]/timeline:not-last:pb-2"
+      >
+        {rail}
+        <Item size="sm" className="bg-transparent px-0 py-1.5 hover:bg-transparent">
+          {header}
+        </Item>
+      </TimelineItem>
     )
   }
 
   return (
-    <Collapsible className="group/process-item" defaultOpen={defaultOpen}>
-      <Item
-        size="sm"
-        className="w-full cursor-pointer bg-transparent text-left hover:bg-transparent aria-expanded:bg-transparent"
-        render={<CollapsibleTrigger />}
-      >
-        {header}
-      </Item>
-      <CollapsibleContent className={PANEL_CLASS}>
-        <div className={Icon ? "px-3 pb-2 pl-9" : "px-3 pb-2"}>{children}</div>
-      </CollapsibleContent>
-    </Collapsible>
+    <TimelineItem
+      step={step}
+      className="group-data-[orientation=vertical]/timeline:not-last:pb-2"
+    >
+      {rail}
+      <Collapsible className="group/process-item" defaultOpen={defaultOpen}>
+        <Item
+          size="sm"
+          className="w-full cursor-pointer bg-transparent px-0 py-1.5 text-left hover:bg-transparent aria-expanded:bg-transparent"
+          render={<CollapsibleTrigger />}
+        >
+          {header}
+        </Item>
+        <CollapsibleContent className={PANEL_CLASS}>
+          <TimelineContent className="pb-2">{children}</TimelineContent>
+        </CollapsibleContent>
+      </Collapsible>
+    </TimelineItem>
   )
 }
 
