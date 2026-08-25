@@ -112,7 +112,24 @@ export function answerTextBlock(
         block.type === "text" && block.text.trim() !== ""
     )
     .sort((left, right) => left.index - right.index)
-  return texts.at(-1)
+  const last = texts.at(-1)
+  if (last === undefined) {
+    return undefined
+  }
+  const hasLater = blocks.some(
+    (block) => block.index > last.index && blockHasVisibleContent(block)
+  )
+  if (hasLater) {
+    return undefined
+  }
+  return last
+}
+
+function blockHasVisibleContent(block: StreamBlock): boolean {
+  if (block.type === "thinking" || block.type === "text") {
+    return block.text.trim() !== ""
+  }
+  return block.type === "tool_use" || block.type === "image"
 }
 
 export function textFromBlocks(blocks: readonly StreamBlock[]): string {

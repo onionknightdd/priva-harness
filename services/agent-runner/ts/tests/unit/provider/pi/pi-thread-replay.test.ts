@@ -58,7 +58,10 @@ describe('replayPiSessionMessages', () => {
 
     const thread = foldThread(replayPiSessionMessages(messages))
     expect(thread.map((message) => message.role)).toEqual(['user', 'assistant'])
-    expect(thread[1]?.content).toBe('running')
+    expect(thread[1]?.content).toBe('')
+    expect(
+      thread[1]?.blocks?.find((block) => block.type === 'text' && block.text === 'running'),
+    ).toBeDefined()
     const tool = thread[1]?.blocks?.find((block) => block.type === 'tool_use')
     expect(tool).toMatchObject({
       id: 'call-1',

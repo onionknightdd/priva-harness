@@ -234,57 +234,60 @@ function syncTools(blocks: readonly ThreadBlock[], event: AgentEvent): ThreadBlo
 }
 
 // Claude JSONL often stores one content block per assistant line, then a new
-// message id after each tool_result. Accumulate by blockId, skip empty thinking,
-// and reindex when snapshot indices collide so later text stays after earlier tools.
+// message id after each tool_result. Keep earlier messages as a prefix, place
+// this snapshot's blocks after it in snapshot order, and keep a single thinking row.
 function mergeSnapshot(
   existing: readonly ThreadBlock[],
   snapshot: readonly ThreadBlock[],
 ): ThreadBlock[] {
-  const merged: ThreadBlock[] = [...existing]
-
+  const existingThinking = existing.find(
+    (block): block is Extract<ThreadBlock, { type: 'thinking' }> => block.type === 'thinking',
+  )
+  const incoming: ThreadBlock[] = []
   for (const block of snapshot) {
-    if (block.type === 'thinking' && block.text.trim() === '') continue
-    if (block.type === 'text' && block.text === '' && !hasBlockId(merged, block.blockId)) continue
-
-    if (block.type === 'tool_use') {
-      const previousIndex = merged.findIndex(
-        (item) => item.type === 'tool_use' && item.id === block.id,
-      )
-      const previous = previousIndex >= 0 ? merged[previousIndex] : undefined
-      if (previous?.type === 'tool_use') {
-        merged[previousIndex] = {
-          ...block,
-          index: previous.index,
-          ...(previous.tool === undefined ? {} : { tool: previous.tool }),
-          ...(block.input === undefined && previous.input !== undefined
-            ? { input: previous.input }
-            : {}),
-        }
-        continue
-      }
-      merged.push(withMergedIndex(merged, block))
+    if (block.type === 'thinking') {
+      if (block.text.trim() === '') continue
+      if (existingThinking !== undefined && existingThinking.text.trim() !== '') continue
+      incoming.push(block)
       continue
     }
-
-    const previousIndex = merged.findIndex((item) => item.blockId === block.blockId)
-    const previous = previousIndex >= 0 ? merged[previousIndex] : undefined
-    if (previous !== undefined) {
-      if (block.type === 'text' && block.text === '' && previous.type === 'text') continue
-      merged[previousIndex] =
-        block.type === 'thinking' && previous.type === 'thinking'
-          ? { ...withThinkingTimes(block, previous), index: previous.index }
-          : { ...block, index: previous.index }
-      continue
-    }
-
-    merged.push(withMergedIndex(merged, block))
+    if (block.type === 'text' && block.text === '') continue
+    incoming.push(block)
   }
 
-  return merged.sort((left, right) => left.index - right.index)
+  const incomingIds = new Set(incoming.map(snapshotIdentity))
+  const prefix = existing.filter((block) => !incomingIds.has(snapshotIdentity(block)))
+  let nextIndex = prefix.length === 0 ? 0 : Math.max(...prefix.map((block) => block.index)) + 1
+  const suffix = incoming.map((block) => {
+    const previous = existing.find((item) => snapshotIdentity(item) === snapshotIdentity(block))
+    const merged = previous === undefined ? block : mergeSnapshotBlock(previous, block)
+    const indexed = { ...merged, index: nextIndex }
+    nextIndex += 1
+    return indexed
+  })
+  return [...prefix, ...suffix]
 }
 
-function hasBlockId(blocks: readonly ThreadBlock[], blockId: string): boolean {
-  return blocks.some((block) => block.blockId === blockId)
+function snapshotIdentity(block: ThreadBlock): string {
+  if (block.type === 'tool_use') return `tool:${block.id}`
+  if (block.type === 'thinking') return 'thinking'
+  return `block:${block.blockId}`
+}
+
+function mergeSnapshotBlock(previous: ThreadBlock, incoming: ThreadBlock): ThreadBlock {
+  if (previous.type === 'tool_use' && incoming.type === 'tool_use') {
+    return {
+      ...incoming,
+      ...(previous.tool === undefined ? {} : { tool: previous.tool }),
+      ...(incoming.input === undefined && previous.input !== undefined
+        ? { input: previous.input }
+        : {}),
+    }
+  }
+  if (previous.type === 'thinking' && incoming.type === 'thinking') {
+    return withThinkingTimes(incoming, previous)
+  }
+  return incoming
 }
 
 function withMergedIndex(existing: readonly ThreadBlock[], block: ThreadBlock): ThreadBlock {

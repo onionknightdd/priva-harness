@@ -39,7 +39,7 @@ export type ToolResultKind = "terminal" | "request" | "custom";
 export interface ToolResultProps {
   tool: ReactNode;
   title: ReactNode;
-  children: ReactNode;
+  children?: ReactNode;
   status?: ToolResultStatus;
   kind?: ToolResultKind;
   meta?: ReactNode;
@@ -145,7 +145,7 @@ export function ToolResultOutput({
       code={children}
       language={language}
       className={cn(
-        "whitespace-pre-wrap break-words text-foreground/80",
+        "whitespace-pre-wrap break-words leading-none text-foreground/80",
         className,
       )}
     />
@@ -255,7 +255,7 @@ export function ToolResult({
         aria-expanded={currentOpen}
         aria-controls={contentId}
         onClick={() => setOpen(!currentOpen)}
-        className="group flex min-h-9 w-full items-center gap-2 rounded-md py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        className="group flex min-h-0 w-full items-center gap-2 rounded-md py-0.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       >
         <span
           aria-hidden="true"
@@ -264,23 +264,23 @@ export function ToolResult({
           {icon ?? <KindIcon kind={kind} />}
         </span>
         <span className="flex min-w-0 flex-1 items-baseline gap-2">
-          <span className="min-w-0 truncate font-medium text-foreground/90">
+          <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
+            <ActionSwapRollText value={toolKey}>
+              {tool}
+            </ActionSwapRollText>
+          </span>
+          <span className="min-w-0 truncate font-medium text-muted-foreground">
             <ActionSwapRollText value={titleKey}>
               {title}
             </ActionSwapRollText>
           </span>
           {meta ? (
-            <span className="shrink-0 text-xs text-muted-foreground/60">
+            <span className="shrink-0 text-xs text-muted-foreground/80">
               <ActionSwapRollText value={metaKey}>
                 {meta}
               </ActionSwapRollText>
             </span>
           ) : null}
-          <span className="min-w-0 truncate font-mono text-[11px] text-muted-foreground/55">
-            <ActionSwapRollText value={toolKey}>
-              {tool}
-            </ActionSwapRollText>
-          </span>
         </span>
         <span
           className={cn(

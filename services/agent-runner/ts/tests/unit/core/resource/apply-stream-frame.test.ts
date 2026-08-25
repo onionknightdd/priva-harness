@@ -112,7 +112,7 @@ describe('applyStreamFrame', () => {
         },
       ],
     })
-    expect(message.content).toBe('第一次完成。现在执行第二次：')
+    expect(message.content).toBe('')
 
     message = applyStreamFrame(message, {
       type: 'assistant.message',
@@ -135,6 +135,65 @@ describe('applyStreamFrame', () => {
     ])
     expect(toolIds(message.blocks)).toEqual(['bash-1', 'bash-2'])
     expect(message.content).toBe('已完成 3 次 bash 工具调用')
+  })
+
+  it('keeps snapshot text before a tool that already started', () => {
+    let message = emptyAssistantMessage('a1', '2024-01-01T00:00:00.000Z')
+    message = applyStreamFrame(message, {
+      type: 'tool.started',
+      messageId: 'a1',
+      blockId: 'bash-1',
+      index: 0,
+      id: 'bash-1',
+      name: 'bash',
+    })
+    message = applyStreamFrame(message, {
+      type: 'assistant.message',
+      messageId: 'a1',
+      blocks: [
+        { type: 'text', blockId: 'a1:0', index: 0, text: '先执行第一次：' },
+        { type: 'tool_use', blockId: 'bash-1', index: 1, id: 'bash-1', name: 'bash' },
+      ],
+    })
+
+    expect(message.blocks?.map((block) => block.type)).toEqual(['text', 'tool_use'])
+    expect(texts(message.blocks)).toEqual(['先执行第一次：'])
+    expect(message.content).toBe('')
+  })
+
+  it('does not insert a second thinking row from a later snapshot', () => {
+    let message = emptyAssistantMessage('a1', '2024-01-01T00:00:00.000Z')
+    message = applyStreamFrame(message, {
+      type: 'assistant.message',
+      messageId: 'a1',
+      blocks: [
+        { type: 'thinking', blockId: 'a1:0', index: 0, text: 'plan the bash calls' },
+        { type: 'text', blockId: 'a1:1', index: 1, text: '第一次：' },
+        { type: 'tool_use', blockId: 'bash-1', index: 2, id: 'bash-1', name: 'bash' },
+      ],
+    })
+    message = applyStreamFrame(message, {
+      type: 'assistant.message',
+      messageId: 'a2',
+      blocks: [
+        { type: 'thinking', blockId: 'a2:0', index: 0, text: 'plan the bash calls' },
+        { type: 'text', blockId: 'a2:1', index: 1, text: '第二次：' },
+        { type: 'tool_use', blockId: 'bash-2', index: 2, id: 'bash-2', name: 'bash' },
+      ],
+    })
+
+    expect(message.blocks?.map((block) => block.type)).toEqual([
+      'thinking',
+      'text',
+      'tool_use',
+      'text',
+      'tool_use',
+    ])
+    expect(
+      message.blocks
+        ?.filter((block): block is Extract<ThreadBlock, { type: 'thinking' }> => block.type === 'thinking')
+        .map((block) => block.text),
+    ).toEqual(['plan the bash calls'])
   })
 })
 

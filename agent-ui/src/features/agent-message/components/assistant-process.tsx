@@ -153,8 +153,8 @@ export function AssistantProcess({
 
 function TextItem({ text }: { text: string }) {
   return (
-    <div className="w-full min-w-0 py-0.5 text-sm text-foreground">
-      <MessageResponse className="text-foreground" mode="static">
+    <div className="w-full min-w-0 px-0 py-0.5 text-sm text-foreground">
+      <MessageResponse className="text-foreground [&_p]:my-0" mode="static">
         {text}
       </MessageResponse>
     </div>
@@ -190,7 +190,7 @@ function ThinkingItem({
             t("agentMessage.thoughtDone")
           )}
           {elapsed ? (
-            <span className="font-normal tabular-nums text-muted-foreground">
+            <span className="font-normal tabular-nums">
               {elapsed}
             </span>
           ) : null}
@@ -198,7 +198,7 @@ function ThinkingItem({
       }
       defaultOpen={defaultOpen}
     >
-      <p className="whitespace-pre-wrap text-sm text-muted-foreground">{text}</p>
+      <p className="whitespace-pre-wrap text-sm">{text}</p>
     </ProcessRow>
   )
 }
@@ -284,26 +284,41 @@ function BashToolItem({
   const description = stringInput(input, "description")
   const output = block.tool?.output?.trim() ?? ""
   const status = toolResultStatus(block.tool)
-  const body = [command ? `$ ${command}` : "", output].filter(Boolean).join("\n\n")
+  const copyText = [command, output].filter(Boolean).join("\n")
+  const body =
+    command || output ? (
+      <div className="flex flex-col gap-0.5">
+        {command ? (
+          <ToolResultOutput className="leading-none" language="bash">
+            {command}
+          </ToolResultOutput>
+        ) : null}
+        {output ? (
+          <pre className="m-0 whitespace-pre-wrap break-words font-mono text-xs leading-none text-muted-foreground">
+            {output}
+          </pre>
+        ) : null}
+      </div>
+    ) : null
 
   return (
-    <div className="w-full min-w-0 py-0.5 text-foreground">
+    <div className="w-full min-w-0 px-0 py-0.5">
       <ToolResult
         tool="bash"
         title={description ?? command ?? block.name}
         kind="terminal"
         status={status}
-        copyText={body || undefined}
+        copyText={copyText || undefined}
         onCopy={
-          body
+          copyText
             ? () => {
-                void writeClipboardText(body)
+                void writeClipboardText(copyText)
               }
             : undefined
         }
         defaultOpen={status === "running"}
       >
-        <ToolResultOutput language="bash">{body}</ToolResultOutput>
+        {body}
       </ToolResult>
     </div>
   )
@@ -404,7 +419,7 @@ function ProcessItemGroup({
   return (
     <ItemGroup
       className={cn(
-        "gap-0.5 py-0 text-muted-foreground has-data-[size=sm]:gap-0.5 has-data-[size=xs]:gap-0.5",
+        "gap-0.5 py-0 text-muted-foreground/80 has-data-[size=sm]:gap-0.5 has-data-[size=xs]:gap-0.5",
         className
       )}
     >
@@ -456,7 +471,7 @@ function ProcessRow({
     return (
       <Item
         size="sm"
-        className="w-fit max-w-full bg-transparent py-0.5 hover:bg-transparent"
+        className="w-fit max-w-full bg-transparent px-0 py-0.5 hover:bg-transparent"
       >
         {header}
       </Item>
@@ -467,13 +482,13 @@ function ProcessRow({
     <Collapsible className="group/process-item" defaultOpen={defaultOpen}>
       <Item
         size="sm"
-        className="w-fit max-w-full cursor-pointer bg-transparent py-0.5 text-left hover:bg-transparent aria-expanded:bg-transparent"
+        className="w-fit max-w-full cursor-pointer bg-transparent px-0 py-0.5 text-left hover:bg-transparent aria-expanded:bg-transparent"
         render={<CollapsibleTrigger />}
       >
         {header}
       </Item>
       <CollapsibleContent className={PANEL_CLASS}>
-        <div className={Icon ? "px-3 pb-2 pl-9" : "px-3 pb-2"}>{children}</div>
+        <div className={Icon ? "pb-2 pl-6" : "pb-2"}>{children}</div>
       </CollapsibleContent>
     </Collapsible>
   )
