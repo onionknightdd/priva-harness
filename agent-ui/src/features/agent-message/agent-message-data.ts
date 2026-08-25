@@ -16,6 +16,8 @@ export type StreamBlock =
       blockId: string
       index: number
       text: string
+      startedAt?: number
+      durationMs?: number
     }
   | {
       type: "image"

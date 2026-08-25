@@ -6,6 +6,7 @@ import {
   type ToolCard,
   type WorkflowCard,
 } from "./agent-message-data"
+import { frameAtMs, stampMessageThinkingTimes } from "./thinking-time"
 
 const STREAM_PROTOCOL_VERSION = 1
 
@@ -41,6 +42,7 @@ export type StreamFrame = {
   summary?: string
   prompt?: string
   result?: string
+  ts?: number
 }
 
 export function parseStreamFrame(raw: unknown): StreamFrame | undefined {
@@ -61,12 +63,20 @@ export function applyStreamFrame(
   message: AgentThreadMessage,
   frame: StreamFrame
 ): AgentThreadMessage {
+  const next = applyStreamContent(message, frame)
+  return stampMessageThinkingTimes(message, next, frame, frameAtMs(frame))
+}
+
+function applyStreamContent(
+  message: AgentThreadMessage,
+  frame: StreamFrame
+): AgentThreadMessage {
   if (frame.type === "error" || frame.type === "run.failed") {
     const errorText = frame.message?.trim() || message.content
     return { ...message, content: errorText, status: "error" }
   }
-  if (frame.type === "run.aborted") {
-    return { ...message, status: "complete" }
+  if (frame.type === "run.aborted" || frame.type === "run.completed") {
+    return { ...message, status: frame.type === "run.aborted" ? "complete" : message.status }
   }
 
   if (frame.type?.startsWith("workflow.")) {
@@ -341,7 +351,14 @@ function snapshotBlocks(raw: unknown): StreamBlock[] {
       return
     }
     if (type === "thinking") {
-      blocks.push({ type: "thinking", blockId, index: blockIndex, text: String(block.text ?? "") })
+      blocks.push({
+        type: "thinking",
+        blockId,
+        index: blockIndex,
+        text: String(block.text ?? ""),
+        ...optionalTime(block.startedAt, "startedAt"),
+        ...optionalTime(block.durationMs, "durationMs"),
+      })
       return
     }
     if (type === "image") {
@@ -405,7 +422,14 @@ function mergeSnapshot(existing: StreamBlock[], snapshot: StreamBlock[]): Stream
       continue
     }
     if (block.type === "thinking") {
-      snapshotThinking.push(block)
+      const previous = existing.find(
+        (item): item is Extract<StreamBlock, { type: "thinking" }> =>
+          item.type === "thinking" && item.blockId === block.blockId
+      ) ?? existing.find(
+        (item): item is Extract<StreamBlock, { type: "thinking" }> =>
+          item.type === "thinking" && item.index === block.index
+      )
+      snapshotThinking.push(withThinkingTimes(block, previous))
       continue
     }
     if (block.type === "image") {
@@ -435,6 +459,34 @@ function mergeSnapshot(existing: StreamBlock[], snapshot: StreamBlock[]): Stream
     ...keep("unknown", snapshotUnknown),
     ...snapshotTools,
   ].sort((left, right) => left.index - right.index)
+}
+
+function withThinkingTimes(
+  block: Extract<StreamBlock, { type: "thinking" }>,
+  previous: Extract<StreamBlock, { type: "thinking" }> | undefined
+): StreamBlock {
+  if (previous === undefined) {
+    return block
+  }
+  return {
+    ...block,
+    ...(block.startedAt === undefined && previous.startedAt !== undefined
+      ? { startedAt: previous.startedAt }
+      : {}),
+    ...(block.durationMs === undefined && previous.durationMs !== undefined
+      ? { durationMs: previous.durationMs }
+      : {}),
+  }
+}
+
+function optionalTime(
+  value: unknown,
+  key: "startedAt" | "durationMs"
+): { startedAt: number } | { durationMs: number } | Record<string, never> {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return {}
+  }
+  return { [key]: value } as { startedAt: number } | { durationMs: number }
 }
 
 function upsertBlock(blocks: StreamBlock[], next: StreamBlock): StreamBlock[] {

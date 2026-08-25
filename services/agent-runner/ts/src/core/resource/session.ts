@@ -14,6 +14,7 @@ export type SessionMessageType =
   | 'assistant'
   | 'system'
   | 'tool_result'
+  | 'stream_event'
   | 'bash_execution'
   | 'custom'
   | 'compaction'

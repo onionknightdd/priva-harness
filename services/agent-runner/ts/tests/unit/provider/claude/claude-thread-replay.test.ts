@@ -95,6 +95,58 @@ describe('replayClaudeSessionMessages', () => {
     const nestedBash = nestedBlocks.find((block) => block.type === 'tool_use' && block.id === 'nested-bash')
     expect(nestedBash?.type === 'tool_use' ? nestedBash.tool?.output : undefined).toBe('/tmp\n')
   })
+
+  it('stamps thinking duration when stream_event timestamps differ', () => {
+    const start = 1_700_000_000_000
+    const messages: SessionMessage[] = [
+      session('user', 'u1', { role: 'user', content: 'think' }, null, start),
+      session(
+        'stream_event',
+        's1',
+        {
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'thinking_delta', thinking: 'hmm' },
+        },
+        null,
+        start + 1_000,
+      ),
+      session(
+        'stream_event',
+        's2',
+        {
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'thinking_delta', thinking: ' more' },
+        },
+        null,
+        start + 4_000,
+      ),
+      session(
+        'assistant',
+        'a1',
+        {
+          role: 'assistant',
+          id: 'a1',
+          content: [
+            { type: 'thinking', thinking: 'hmm more' },
+            { type: 'text', text: 'done' },
+          ],
+        },
+        null,
+        start + 5_000,
+      ),
+    ]
+
+    const thread = foldThread(replayClaudeSessionMessages(messages))
+    const thinking = thread[1]?.blocks?.find((block) => block.type === 'thinking')
+    expect(thinking).toMatchObject({
+      type: 'thinking',
+      text: 'hmm more',
+      startedAt: start + 1_000,
+      durationMs: 4_000,
+    })
+  })
 })
 
 function session(
@@ -102,6 +154,7 @@ function session(
   uuid: string,
   message: unknown,
   parentToolUseId: string | null = null,
+  timestamp = 1_700_000_000_000,
 ): SessionMessage {
   return {
     type,
@@ -110,6 +163,6 @@ function session(
     message,
     parentToolUseId,
     metadata: null,
-    timestamp: 1_700_000_000_000,
+    timestamp,
   }
 }

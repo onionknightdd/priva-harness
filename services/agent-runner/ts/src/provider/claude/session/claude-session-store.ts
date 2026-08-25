@@ -337,6 +337,7 @@ function assistantModelFromUnknown(
 function claudeMessageType(value: unknown): SessionMessageType {
   if (value === 'assistant' || value === 'system' || value === 'user') return value
   if (value === 'tool_result') return 'tool_result'
+  if (value === 'stream_event') return 'stream_event'
   return 'user'
 }
 
