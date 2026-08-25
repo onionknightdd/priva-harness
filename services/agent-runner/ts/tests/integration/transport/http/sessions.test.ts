@@ -201,6 +201,53 @@ describe('/api/sandbox/agent/sessions', () => {
     })
   })
 
+  it('returns an aggregated thread matching the live assistant turn model', async () => {
+    const piThread = parseJson(await server.inject({
+      method: 'GET',
+      url: '/api/sandbox/agent/sessions/bb-1/thread?harness=pi',
+    }))
+    expect(piThread).toMatchObject({
+      add_dirs: [],
+      run_mode: 'code',
+      live_run_id: null,
+      messages: [
+        expect.objectContaining({
+          role: 'user',
+          content: 'tool me',
+          transcript_uuid: 'e1',
+        }),
+        expect.objectContaining({
+          role: 'assistant',
+          content: '',
+          transcript_uuid: 'e2',
+          blocks: [
+            expect.objectContaining({
+              type: 'tool_use',
+              id: 'call-1',
+              tool: expect.objectContaining({ status: 'completed' }) as unknown,
+            }),
+          ],
+        }),
+      ],
+    })
+
+    claude.sessions.seed(
+      await claude.sessions.read({ provider: 'claude', id: 'claude-1' }),
+      [
+        sessionMessage('user', 'u1', 'claude-1', 'hello'),
+        sessionMessage('assistant', 'a1', 'claude-1', 'hi'),
+      ],
+    )
+    const thread = parseJson(await server.inject({
+      method: 'GET',
+      url: '/api/sandbox/agent/sessions/claude-1/thread?harness=claude',
+    }))
+    expect(thread['messages']).toEqual([
+      expect.objectContaining({ role: 'user', content: 'hello', transcript_uuid: 'u1' }),
+      expect.objectContaining({ role: 'assistant', content: 'hi', transcript_uuid: 'a1' }),
+    ])
+  })
+
   it('returns a stored recap without generating one', async () => {
     const empty = parseJson(await server.inject({
       method: 'GET',

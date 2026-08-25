@@ -1,6 +1,16 @@
 import * as React from "react"
 import gsap from "gsap"
-import { CheckIcon, ChevronDownIcon, CopyIcon, SplitIcon, TriangleAlertIcon } from "lucide-react"
+import {
+  BotIcon,
+  BrainIcon,
+  CheckIcon,
+  CopyIcon,
+  ImageIcon,
+  SplitIcon,
+  TriangleAlertIcon,
+  WorkflowIcon,
+  WrenchIcon,
+} from "lucide-react"
 import { motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
@@ -11,19 +21,21 @@ import {
   MessageContent,
   MessageResponse,
 } from "@/components/ai-elements/message"
-import { Badge } from "@/components/ui/badge"
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible"
+  ChainOfThought,
+  ChainOfThoughtContent,
+  ChainOfThoughtHeader,
+  ChainOfThoughtImage,
+  ChainOfThoughtSearchResult,
+  ChainOfThoughtSearchResults,
+  ChainOfThoughtStep,
+} from "@/components/ai-elements/chain-of-thought"
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { writeClipboardText } from "@/lib/clipboard"
-import { cn } from "@/lib/utils"
 
 import type { RelativeTimeLabel } from "@/lib/relative-time"
 
@@ -31,6 +43,7 @@ import type {
   AgentThreadMessage,
   NestedAgent,
   StreamBlock,
+  ToolCard,
   WorkflowCard,
 } from "../agent-message-data"
 
@@ -197,11 +210,10 @@ export function AgentMessageItem({
   const shouldReduceMotion = Boolean(useReducedMotion())
   const isStreaming = message.status === "streaming"
   const isError = message.status === "error"
-  const thinking = (message.blocks ?? []).find((block) => block.type === "thinking")
-  const isThinking =
+  const showPlaceholder =
     isStreaming &&
     message.content.length === 0 &&
-    (thinking === undefined || thinking.text.length === 0)
+    !assistantHasProcess(message)
 
   return (
     <Message from={message.role}>
@@ -236,7 +248,7 @@ export function AgentMessageItem({
               message.role === "user" ? "whitespace-pre-wrap" : undefined
             }
           >
-            {isThinking ? (
+            {showPlaceholder ? (
               <span className="shimmer">{t("agentMessage.thinking")}</span>
             ) : message.role === "assistant" ? (
               <AssistantStreamBody message={message} isStreaming={isStreaming} />
@@ -271,24 +283,97 @@ function AssistantStreamBody({
 }) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
+  const [open, setOpen] = React.useState(isStreaming)
   const blocks = [...(message.blocks ?? [])].sort((left, right) => left.index - right.index)
   const thinking = blocks.find((block) => block.type === "thinking")
   const text = message.content
   const images = blocks.filter((block) => block.type === "image")
   const tools = blocks.filter((block) => block.type === "tool_use")
+  const nestedAgents = message.nestedAgents ?? []
+  const workflows = message.workflows ?? []
+  const hasProcess =
+    (thinking !== undefined && thinking.text.trim() !== "") ||
+    images.length > 0 ||
+    tools.length > 0 ||
+    nestedAgents.length > 0 ||
+    workflows.length > 0
+  const stepCount =
+    (thinking !== undefined && thinking.text.trim() !== "" ? 1 : 0) +
+    images.length +
+    tools.length +
+    nestedAgents.length +
+    workflows.length
+
+  React.useEffect(() => {
+    setOpen(isStreaming)
+  }, [isStreaming])
 
   return (
     <div className="flex flex-col gap-3">
-      {thinking && thinking.text.trim() !== "" ? (
-        <Collapsible className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
-          <CollapsibleTrigger className="flex w-full items-center justify-between text-xs text-muted-foreground">
-            {t("agentMessage.thinking")}
-            <ChevronDownIcon className="size-3.5" />
-          </CollapsibleTrigger>
-          <CollapsibleContent className="pt-2 whitespace-pre-wrap text-sm text-muted-foreground">
-            {thinking.text}
-          </CollapsibleContent>
-        </Collapsible>
+      {hasProcess ? (
+        <motion.div
+          initial={shouldReduceMotion ? false : { opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}
+        >
+          <ChainOfThought open={open} onOpenChange={setOpen}>
+            <ChainOfThoughtHeader>
+              {isStreaming
+                ? t("agentMessage.thinking")
+                : stepCount > 1
+                  ? t("agentMessage.chainOfThoughtSteps", { count: stepCount })
+                  : t("agentMessage.chainOfThought")}
+            </ChainOfThoughtHeader>
+            <ChainOfThoughtContent>
+              {thinking && thinking.text.trim() !== "" ? (
+                <ChainOfThoughtStep
+                  icon={BrainIcon}
+                  label={t("agentMessage.thinking")}
+                  status={isStreaming && text.trim() === "" ? "active" : "complete"}
+                >
+                  <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+                    {thinking.text}
+                  </p>
+                </ChainOfThoughtStep>
+              ) : null}
+              {images.map((image) => {
+                const src =
+                  image.url ??
+                  (image.b64 === undefined
+                    ? undefined
+                    : `data:${image.mime ?? "image/png"};base64,${image.b64}`)
+                if (src === undefined) {
+                  return null
+                }
+                return (
+                  <ChainOfThoughtStep
+                    key={image.blockId}
+                    icon={ImageIcon}
+                    label={image.alt || t("agentMessage.generatedImage")}
+                    status="complete"
+                  >
+                    <ChainOfThoughtImage caption={image.alt}>
+                      <img
+                        alt={image.alt ?? ""}
+                        src={src}
+                        className="max-h-72 max-w-full"
+                      />
+                    </ChainOfThoughtImage>
+                  </ChainOfThoughtStep>
+                )
+              })}
+              {tools.map((tool) => (
+                <ToolStep key={tool.id} block={tool} />
+              ))}
+              {nestedAgents.map((agent) => (
+                <NestedAgentStep key={agent.parentToolUseId} agent={agent} />
+              ))}
+              {workflows.map((workflow) => (
+                <WorkflowStep key={workflow.workflowToolUseId} workflow={workflow} />
+              ))}
+            </ChainOfThoughtContent>
+          </ChainOfThought>
+        </motion.div>
       ) : null}
       {text.trim() !== "" ? (
         <MessageResponse
@@ -299,115 +384,118 @@ function AssistantStreamBody({
           {text}
         </MessageResponse>
       ) : null}
-      {images.map((image) => {
-        const src =
-          image.url ??
-          (image.b64 === undefined
-            ? undefined
-            : `data:${image.mime ?? "image/png"};base64,${image.b64}`)
-        if (src === undefined) {
-          return null
-        }
-        return (
-          <img
-            key={image.blockId}
-            alt={image.alt ?? ""}
-            src={src}
-            className="max-h-72 max-w-full rounded-lg border border-border/60"
-          />
-        )
-      })}
-      {tools.map((tool) => (
-        <ToolBlockCard key={tool.id} block={tool} />
-      ))}
-      {(message.nestedAgents ?? []).map((agent) => (
-        <NestedAgentCard key={agent.parentToolUseId} agent={agent} />
-      ))}
-      {(message.workflows ?? []).map((workflow) => (
-        <WorkflowBlockCard key={workflow.workflowToolUseId} workflow={workflow} />
-      ))}
     </div>
   )
 }
 
-function ToolBlockCard({ block }: { block: Extract<StreamBlock, { type: "tool_use" }> }) {
+function assistantHasProcess(message: AgentThreadMessage): boolean {
+  if ((message.nestedAgents?.length ?? 0) > 0) {
+    return true
+  }
+  if ((message.workflows?.length ?? 0) > 0) {
+    return true
+  }
+  return (message.blocks ?? []).some((block) => {
+    if (block.type === "tool_use" || block.type === "image") {
+      return true
+    }
+    return block.type === "thinking" && block.text.trim() !== ""
+  })
+}
+
+function toolStepStatus(tool: ToolCard | undefined): "active" | "complete" {
+  if (tool?.launchStatus === "async_launched") {
+    return "active"
+  }
+  if (tool?.status === "completed") {
+    return "complete"
+  }
+  return "active"
+}
+
+function ToolStep({ block }: { block: Extract<StreamBlock, { type: "tool_use" }> }) {
   const { t } = useTranslation()
-  const status = block.tool?.launchStatus === "async_launched"
-    ? t("agentMessage.asyncLaunched")
-    : block.tool?.status === "completed"
-      ? block.tool.ok === false
-        ? t("agentMessage.toolFailed")
-        : t("agentMessage.toolCompleted")
-      : t("agentMessage.toolRunning")
+  const tool = block.tool
+  const description =
+    tool?.launchStatus === "async_launched"
+      ? t("agentMessage.runInBackground")
+      : tool?.status === "completed"
+        ? tool.ok === false
+          ? t("agentMessage.toolFailed")
+          : t("agentMessage.toolCompleted")
+        : t("agentMessage.toolRunning")
 
   return (
-    <div className="rounded-lg border border-border/60 bg-background px-3 py-2">
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-xs">{block.name}</span>
-        <Badge variant="outline">{status}</Badge>
-      </div>
-      {block.tool?.output ? (
-        <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap text-xs text-muted-foreground">
-          {block.tool.output}
+    <ChainOfThoughtStep
+      icon={WrenchIcon}
+      label={block.name}
+      description={description}
+      status={toolStepStatus(tool)}
+    >
+      {tool?.output ? (
+        <pre className="max-h-40 overflow-auto whitespace-pre-wrap text-xs text-muted-foreground">
+          {tool.output}
         </pre>
       ) : null}
-    </div>
+    </ChainOfThoughtStep>
   )
 }
 
-function NestedAgentCard({ agent }: { agent: NestedAgent }) {
+function NestedAgentStep({ agent }: { agent: NestedAgent }) {
   const { t } = useTranslation()
   const text = agent.blocks
     .filter((block) => block.type === "text")
     .sort((left, right) => left.index - right.index)
     .map((block) => block.text)
     .join("")
+  const tools = agent.blocks.filter((block) => block.type === "tool_use")
+  const background = agent.status === "running"
 
   return (
-    <Collapsible
-      defaultOpen={agent.status === "running"}
-      className={cn(
-        "rounded-lg border border-border/60 bg-muted/20 px-3 py-2",
-        "motion-safe:transition-colors"
-      )}
+    <ChainOfThoughtStep
+      icon={BotIcon}
+      label={t("agentMessage.nestedAgent")}
+      description={
+        background
+          ? t("agentMessage.runInBackground")
+          : (agent.name ?? agent.agentId ?? agent.parentToolUseId)
+      }
+      status={background ? "active" : "complete"}
     >
-      <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 text-sm">
-        <span>{t("agentMessage.nestedAgent")}</span>
-        <span className="flex items-center gap-2">
-          <Badge variant="secondary">{agent.name ?? agent.agentId ?? agent.parentToolUseId}</Badge>
-          <ChevronDownIcon className="size-3.5" />
-        </span>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="mt-2 flex flex-col gap-2 text-sm">
-        {text ? <p className="whitespace-pre-wrap">{text}</p> : null}
-        {agent.inbox.map((item, index) => (
-          <p key={`${item.source}-${index}`} className="text-muted-foreground">
-            {item.source === "coordinator"
-              ? t("agentMessage.coordinatorMessage")
-              : t("agentMessage.peerMessage")}
-            {": "}
-            {item.body}
-          </p>
-        ))}
-      </CollapsibleContent>
-    </Collapsible>
+      {text ? <p className="whitespace-pre-wrap">{text}</p> : null}
+      {agent.inbox.length > 0 ? (
+        <ChainOfThoughtSearchResults>
+          {agent.inbox.map((item, index) => (
+            <ChainOfThoughtSearchResult key={`${item.source}-${index}`}>
+              {item.source === "coordinator"
+                ? t("agentMessage.coordinatorMessage")
+                : t("agentMessage.peerMessage")}
+              {": "}
+              {item.body}
+            </ChainOfThoughtSearchResult>
+          ))}
+        </ChainOfThoughtSearchResults>
+      ) : null}
+      {tools.map((tool) => (
+        <ToolStep key={tool.id} block={tool} />
+      ))}
+    </ChainOfThoughtStep>
   )
 }
 
-function WorkflowBlockCard({ workflow }: { workflow: WorkflowCard }) {
+function WorkflowStep({ workflow }: { workflow: WorkflowCard }) {
   const { t } = useTranslation()
+  const running =
+    workflow.status !== "completed" &&
+    workflow.status !== "complete" &&
+    workflow.status !== "failed" &&
+    workflow.status !== "error"
   return (
-    <Collapsible className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
-      <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 text-sm">
-        <span>{t("agentMessage.workflow")}</span>
-        <span className="flex items-center gap-2">
-          <Badge variant="outline">{workflow.name ?? workflow.status}</Badge>
-          <ChevronDownIcon className="size-3.5" />
-        </span>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="mt-2 text-sm text-muted-foreground">
-        {workflow.summary ?? workflow.status}
-      </CollapsibleContent>
-    </Collapsible>
+    <ChainOfThoughtStep
+      icon={WorkflowIcon}
+      label={workflow.name ?? t("agentMessage.workflow")}
+      description={workflow.summary ?? workflow.status}
+      status={running ? "active" : "complete"}
+    />
   )
 }

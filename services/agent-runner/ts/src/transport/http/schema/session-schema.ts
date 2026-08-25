@@ -207,6 +207,8 @@ export const sessionMessagesSchema = {
   },
 } as const
 
+export const sessionThreadSchema = sessionMessagesSchema
+
 export const sessionRecapSchema = {
   params: sessionIdParams,
   querystring: harnessQueryObject,

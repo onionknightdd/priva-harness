@@ -63,6 +63,7 @@ API：
 - `/ws/run` 的 `session_id` 恢复语义。
 - `GET /api/sandbox/agent/sessions`。
 - `GET /api/sandbox/agent/sessions/{session_id}/messages`。
+- `GET /api/sandbox/agent/sessions/{session_id}/thread`（把 provider transcript 折叠成与 live stream 相同的 assistant 回合快照；`/messages` 仍返回 provider 原生记录）。
 
 范围：
 

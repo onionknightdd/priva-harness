@@ -11,6 +11,9 @@ import {
   type ProviderSessionInfo,
   type SessionMessage,
 } from '../../src/core/resource/session.js'
+import type { ThreadReplayItem } from '../../src/core/resource/thread.js'
+import { replayClaudeSessionMessages } from '../../src/provider/claude/session/claude-thread-replay.js'
+import { replayPiSessionMessages } from '../../src/provider/pi/pi-thread-replay.js'
 
 export class FakeSessionStore implements ProviderSessionStore {
   readonly records = new Map<string, ProviderSessionInfo>()
@@ -53,6 +56,14 @@ export class FakeSessionStore implements ProviderSessionStore {
 
   messages(ref: SessionRef, page?: SessionMessagePage): Promise<readonly SessionMessage[]> {
     return this.read(ref).then(() => pageSessionMessages(this.messageLists.get(ref.id) ?? [], page))
+  }
+
+  replay(ref: SessionRef, page?: SessionMessagePage): Promise<readonly ThreadReplayItem[]> {
+    return this.messages(ref, page).then((messages) =>
+      ref.provider === 'pi'
+        ? replayPiSessionMessages(messages)
+        : replayClaudeSessionMessages(messages),
+    )
   }
 
   delete(ref: SessionRef): Promise<void> {

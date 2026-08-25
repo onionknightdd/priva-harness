@@ -76,21 +76,27 @@ export function applyStreamFrame(
     }
   }
 
+  const withUuid =
+    frame.type === "assistant.message" &&
+    frame.messageId &&
+    !frame.parentToolUseId
+      ? { ...message, transcriptUuid: frame.messageId }
+      : message
+
   if (frame.parentToolUseId) {
-    const nestedAgents = applyNested(message.nestedAgents ?? [], frame)
+    const nestedAgents = applyNested(withUuid.nestedAgents ?? [], frame)
     return {
-      ...message,
+      ...withUuid,
       nestedAgents,
-      blocks: syncTools(message.blocks ?? [], frame),
-      content: textFromBlocks(syncTools(message.blocks ?? [], frame)),
+      content: textFromBlocks(withUuid.blocks ?? []),
     }
   }
 
-  const blocks = applyMainBlocks(message.blocks ?? [], frame)
+  const blocks = applyMainBlocks(withUuid.blocks ?? [], frame)
   return {
-    ...message,
+    ...withUuid,
     blocks,
-    nestedAgents: applyNested(message.nestedAgents ?? [], frame),
+    nestedAgents: applyNested(withUuid.nestedAgents ?? [], frame),
     content: textFromBlocks(blocks),
   }
 }
@@ -114,7 +120,7 @@ function applyMainBlocks(blocks: StreamBlock[], frame: StreamFrame): StreamBlock
         ...(frame.alt === undefined ? {} : { alt: frame.alt }),
       })
     case "assistant.message":
-      return snapshotBlocks(frame.blocks)
+      return mergeSnapshot(blocks, snapshotBlocks(frame.blocks))
     case "tool.started":
     case "tool.updated":
     case "tool.running":
@@ -364,6 +370,71 @@ function snapshotBlocks(raw: unknown): StreamBlock[] {
     blocks.push({ type: "unknown", blockId, index: blockIndex, kind: String(type ?? "unknown") })
   })
   return blocks
+}
+
+function mergeSnapshot(existing: StreamBlock[], snapshot: StreamBlock[]): StreamBlock[] {
+  const tools = new Map<string, Extract<StreamBlock, { type: "tool_use" }>>()
+  for (const block of existing) {
+    if (block.type === "tool_use") {
+      tools.set(block.id, block)
+    }
+  }
+
+  const snapshotTools: StreamBlock[] = []
+  const snapshotText: StreamBlock[] = []
+  const snapshotThinking: StreamBlock[] = []
+  const snapshotImages: StreamBlock[] = []
+  const snapshotUnknown: StreamBlock[] = []
+  const seen = new Set<string>()
+
+  for (const block of snapshot) {
+    if (block.type === "tool_use") {
+      const previous = tools.get(block.id)
+      snapshotTools.push(
+        previous === undefined
+          ? block
+          : {
+              ...block,
+              ...(previous.tool === undefined ? {} : { tool: previous.tool }),
+              ...(block.input === undefined && previous.input !== undefined
+                ? { input: previous.input }
+                : {}),
+            }
+      )
+      seen.add(block.id)
+      continue
+    }
+    if (block.type === "thinking") {
+      snapshotThinking.push(block)
+      continue
+    }
+    if (block.type === "image") {
+      snapshotImages.push(block)
+      continue
+    }
+    if (block.type === "unknown") {
+      snapshotUnknown.push(block)
+      continue
+    }
+    snapshotText.push(block)
+  }
+
+  for (const [id, block] of tools) {
+    if (!seen.has(id)) {
+      snapshotTools.push(block)
+    }
+  }
+
+  const keep = (type: StreamBlock["type"], incoming: StreamBlock[]) =>
+    incoming.length > 0 ? incoming : existing.filter((block) => block.type === type)
+
+  return [
+    ...keep("thinking", snapshotThinking),
+    ...keep("text", snapshotText),
+    ...keep("image", snapshotImages),
+    ...keep("unknown", snapshotUnknown),
+    ...snapshotTools,
+  ].sort((left, right) => left.index - right.index)
 }
 
 function upsertBlock(blocks: StreamBlock[], next: StreamBlock): StreamBlock[] {

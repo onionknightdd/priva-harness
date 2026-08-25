@@ -19,6 +19,8 @@ import {
   type SessionMessage,
   type SessionMessageType,
 } from '../../core/resource/session.js'
+import type { ThreadReplayItem } from '../../core/resource/thread.js'
+import { replayPiSessionMessages } from './pi-thread-replay.js'
 import { piSessionBucketDir, piSessionsRoot } from './pi-paths.js'
 
 export interface PiListedSession {
@@ -108,6 +110,11 @@ export class PiSessionStore implements ProviderSessionStore {
       messagesFromContextEntries(opened.buildContextEntries(), listed.id),
       page,
     )
+  }
+
+  async replay(ref: SessionRef, page?: SessionMessagePage): Promise<readonly ThreadReplayItem[]> {
+    const messages = await this.messages(ref, page)
+    return replayPiSessionMessages(messages)
   }
 
   async delete(ref: SessionRef): Promise<void> {

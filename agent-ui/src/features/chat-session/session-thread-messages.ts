@@ -1,170 +1,182 @@
-import type { SessionTranscriptMessage } from "@/lib/api/sandbox-sessions"
-import { sessionTimestampToMs } from "@/lib/relative-time"
+import type { AgentThreadMessage, NestedAgent, StreamBlock, ToolCard, WorkflowCard } from "@/features/agent-message/agent-message-data"
 
-import type {
-  AgentThreadMessage,
-  NestedAgent,
-  StreamBlock,
-} from "@/features/agent-message/agent-message-data"
-import { textFromBlocks } from "@/features/agent-message/agent-message-data"
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null
+type ThreadApiMessage = {
+  id: string
+  role: "user" | "assistant"
+  content: string
+  createdAt: string
+  status: "streaming" | "complete" | "error"
+  transcriptUuid?: string
+  blocks?: unknown
+  nestedAgents?: unknown
+  workflows?: unknown
 }
 
-function blocksFromContent(content: unknown): StreamBlock[] {
-  if (typeof content === "string") {
-    return content === ""
-      ? []
-      : [{ type: "text", blockId: "0", index: 0, text: content }]
-  }
-  if (!Array.isArray(content)) {
+export function threadMessagesFromApi(
+  messages: readonly ThreadApiMessage[]
+): AgentThreadMessage[] {
+  return messages.map((item) => ({
+    id: item.id,
+    role: item.role,
+    content: item.content,
+    createdAt: item.createdAt,
+    status: item.status,
+    ...(item.transcriptUuid ? { transcriptUuid: item.transcriptUuid } : {}),
+    ...(item.role === "assistant"
+      ? {
+          blocks: snapshotBlocks(item.blocks),
+          nestedAgents: snapshotNested(item.nestedAgents),
+          workflows: snapshotWorkflows(item.workflows),
+        }
+      : {}),
+  }))
+}
+
+function snapshotBlocks(raw: unknown): StreamBlock[] {
+  if (!Array.isArray(raw)) {
     return []
   }
   const blocks: StreamBlock[] = []
-  content.forEach((part, index) => {
-    if (typeof part === "string") {
-      blocks.push({ type: "text", blockId: String(index), index, text: part })
+  raw.forEach((item, index) => {
+    if (typeof item !== "object" || item === null) {
       return
     }
-    if (!isRecord(part)) {
-      return
-    }
-    const type = part.type
-    if (type === "text" || typeof part.text === "string") {
-      const text = typeof part.text === "string" ? part.text : String(part.content ?? "")
-      if (text.trim() === "") {
-        return
-      }
-      blocks.push({ type: "text", blockId: String(index), index, text })
+    const block = item as Record<string, unknown>
+    const type = block.type
+    const blockId = typeof block.blockId === "string" ? block.blockId : String(index)
+    const blockIndex = typeof block.index === "number" ? block.index : index
+    if (type === "text") {
+      blocks.push({ type: "text", blockId, index: blockIndex, text: String(block.text ?? "") })
       return
     }
     if (type === "thinking") {
       blocks.push({
         type: "thinking",
-        blockId: String(index),
-        index,
-        text: String(part.thinking ?? part.text ?? ""),
+        blockId,
+        index: blockIndex,
+        text: String(block.text ?? ""),
       })
       return
     }
-    if (type === "image" || type === "image_url") {
+    if (type === "image") {
       blocks.push({
         type: "image",
-        blockId: String(index),
-        index,
-        ...(typeof part.url === "string" ? { url: part.url } : {}),
-        ...(typeof part.alt === "string" ? { alt: part.alt } : {}),
+        blockId,
+        index: blockIndex,
+        ...(typeof block.mime === "string" ? { mime: block.mime } : {}),
+        ...(typeof block.url === "string" ? { url: block.url } : {}),
+        ...(typeof block.b64 === "string" ? { b64: block.b64 } : {}),
+        ...(typeof block.alt === "string" ? { alt: block.alt } : {}),
       })
       return
     }
     if (type === "tool_use") {
-      const id = String(part.id ?? index)
+      const id = String(block.id ?? blockId)
+      const tool = asToolCard(block.tool, id, String(block.name ?? "unknown"))
       blocks.push({
         type: "tool_use",
-        blockId: id,
-        index,
+        blockId,
+        index: blockIndex,
         id,
-        name: String(part.name ?? "unknown"),
-        ...(part.input === undefined ? {} : { input: part.input }),
+        name: String(block.name ?? "unknown"),
+        ...(block.input === undefined ? {} : { input: block.input }),
+        ...(tool === undefined ? {} : { tool }),
       })
+      return
     }
+    blocks.push({ type: "unknown", blockId, index: blockIndex, kind: String(type ?? "unknown") })
   })
   return blocks
 }
 
-function isToolResultMessage(message: unknown): boolean {
-  if (!isRecord(message)) {
-    return false
+function asToolCard(raw: unknown, id: string, fallbackName: string): ToolCard | undefined {
+  if (typeof raw !== "object" || raw === null) {
+    return undefined
   }
-  const content = message.content
-  if (!Array.isArray(content)) {
-    return false
+  const record = raw as Record<string, unknown>
+  const status: ToolCard["status"] =
+    record.status === "completed" || record.status === "running" || record.status === "started"
+      ? record.status
+      : "started"
+  return {
+    id: typeof record.id === "string" ? record.id : id,
+    name: typeof record.name === "string" ? record.name : fallbackName,
+    status,
+    ...(record.input === undefined ? {} : { input: record.input }),
+    ...(typeof record.ok === "boolean" ? { ok: record.ok } : {}),
+    ...(typeof record.output === "string" ? { output: record.output } : {}),
+    ...(typeof record.launchStatus === "string" ? { launchStatus: record.launchStatus } : {}),
+    ...(typeof record.agentId === "string" ? { agentId: record.agentId } : {}),
   }
-  return content.some((part) => isRecord(part) && part.type === "tool_result")
 }
 
-export function threadMessagesFromTranscript(
-  messages: readonly SessionTranscriptMessage[]
-): AgentThreadMessage[] {
-  const nestedByParent = new Map<string, NestedAgent>()
-  const mains: AgentThreadMessage[] = []
-
-  for (const item of messages) {
-    if (item.type !== "user" && item.type !== "assistant") {
-      continue
-    }
-
-    if (item.parentToolUseId) {
-      if (item.type === "user" && isToolResultMessage(item.message)) {
-        continue
-      }
-      if (item.type === "user") {
-        continue
-      }
-      const blocks = blocksFromContent(isRecord(item.message) ? item.message.content : item.message)
-      const existing = nestedByParent.get(item.parentToolUseId)
-      if (existing === undefined) {
-        nestedByParent.set(item.parentToolUseId, {
-          parentToolUseId: item.parentToolUseId,
-          status: "completed",
-          blocks,
-          inbox: [],
-        })
-      } else {
-        nestedByParent.set(item.parentToolUseId, {
-          ...existing,
-          blocks: [...existing.blocks, ...blocks],
-        })
-      }
-      continue
-    }
-
-    if (item.type === "user" && isToolResultMessage(item.message)) {
-      continue
-    }
-
-    const blocks = blocksFromContent(isRecord(item.message) ? item.message.content : item.message)
-    const content = textFromBlocks(blocks).trim()
-    if (content === "" && !blocks.some((block) => block.type === "tool_use" || block.type === "image")) {
-      continue
-    }
-
-    mains.push({
-      id: item.uuid || crypto.randomUUID(),
-      role: item.type,
-      content,
-      createdAt: createdAtFromTranscript(item),
-      status: "complete",
-      ...(item.uuid ? { transcriptUuid: item.uuid } : {}),
-      ...(item.type === "assistant" ? { blocks } : {}),
-    })
+function snapshotNested(raw: unknown): NestedAgent[] {
+  if (!Array.isArray(raw)) {
+    return []
   }
-
-  return mains.map((message) => {
-    if (message.role !== "assistant" || message.blocks === undefined) {
-      return message
+  return raw.flatMap((item) => {
+    if (typeof item !== "object" || item === null) {
+      return []
     }
-    const nestedAgents = message.blocks.flatMap((block) => {
-      if (block.type !== "tool_use") {
-        return []
-      }
-      const nested = nestedByParent.get(block.id)
-      return nested === undefined ? [] : [nested]
-    })
-    return nestedAgents.length === 0 ? message : { ...message, nestedAgents }
+    const record = item as Record<string, unknown>
+    const parentToolUseId =
+      typeof record.parentToolUseId === "string" ? record.parentToolUseId : ""
+    if (parentToolUseId === "") {
+      return []
+    }
+    const inbox = Array.isArray(record.inbox)
+      ? record.inbox.flatMap((entry) => {
+          if (typeof entry !== "object" || entry === null) {
+            return []
+          }
+          const message = entry as Record<string, unknown>
+          const body = typeof message.body === "string" ? message.body : ""
+          if (body === "") {
+            return []
+          }
+          return [
+            {
+              body,
+              source: message.source === "coordinator" ? "coordinator" as const : "peer" as const,
+              ...(typeof message.senderName === "string" ? { senderName: message.senderName } : {}),
+            },
+          ]
+        })
+      : []
+    return [
+      {
+        parentToolUseId,
+        status: record.status === "completed" ? "completed" as const : "running" as const,
+        blocks: snapshotBlocks(record.blocks),
+        inbox,
+        ...(typeof record.agentId === "string" ? { agentId: record.agentId } : {}),
+        ...(typeof record.name === "string" ? { name: record.name } : {}),
+      },
+    ]
   })
 }
 
-function createdAtFromTranscript(item: SessionTranscriptMessage): string {
-  if (item.timestamp == null) {
-    return new Date().toISOString()
+function snapshotWorkflows(raw: unknown): WorkflowCard[] {
+  if (!Array.isArray(raw)) {
+    return []
   }
-
-  const fromMs = sessionTimestampToMs(item.timestamp)
-  if (fromMs === null) {
-    return new Date().toISOString()
-  }
-
-  return new Date(fromMs).toISOString()
+  return raw.flatMap((item) => {
+    if (typeof item !== "object" || item === null) {
+      return []
+    }
+    const record = item as Record<string, unknown>
+    const workflowToolUseId =
+      typeof record.workflowToolUseId === "string" ? record.workflowToolUseId : ""
+    if (workflowToolUseId === "") {
+      return []
+    }
+    return [
+      {
+        workflowToolUseId,
+        status: typeof record.status === "string" ? record.status : "running",
+        ...(typeof record.name === "string" ? { name: record.name } : {}),
+        ...(typeof record.summary === "string" ? { summary: record.summary } : {}),
+      },
+    ]
+  })
 }

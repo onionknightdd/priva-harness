@@ -18,6 +18,8 @@ import {
   type SessionMetadataRecord,
   type SessionResponseModel,
 } from '../../core/resource/session.js'
+import { foldThread } from '../../core/resource/fold-thread.js'
+import type { ThreadMessage } from '../../core/resource/thread.js'
 import type { ModelProfileService } from '../config/model-profile-service.js'
 import type { LiveRunRecord, LiveRunRegistry } from '../run/live-run-registry.js'
 import { nextForkTitle, sessionStem } from './fork-session-title.js'
@@ -103,6 +105,13 @@ export interface SessionMessagesView {
   readonly liveFirstSeq: 0
 }
 
+export interface SessionThreadView {
+  readonly messages: readonly ThreadMessage[]
+  readonly addDirs: readonly string[]
+  readonly runMode: RunMode
+  readonly liveRunId: string | null
+}
+
 export interface RecordRunCompletedInput {
   readonly profileId: string
   readonly modelId: string
@@ -184,6 +193,26 @@ export class SessionService {
       liveRunId: live?.runId ?? null,
       liveSeq: 0,
       liveFirstSeq: 0,
+    }
+  }
+
+  async thread(
+    harness: ProviderId,
+    sessionId: string,
+    page?: { readonly limit?: number; readonly offset?: number },
+  ): Promise<SessionThreadView> {
+    const ref = this.ref(harness, sessionId)
+    const provider = this.provider(harness)
+    const [items, metadata, live] = await Promise.all([
+      provider.sessions.replay(ref, page),
+      this.options.metadata.get(ref),
+      Promise.resolve(this.options.liveRuns.liveForSession(ref)),
+    ])
+    return {
+      messages: foldThread(items),
+      addDirs: metadata.addDirs,
+      runMode: metadata.runMode ?? 'code',
+      liveRunId: live?.runId ?? null,
     }
   }
 

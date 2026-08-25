@@ -3,6 +3,7 @@ import type { FastifyPluginCallback } from 'fastify'
 import type { ProviderId } from '../../../core/contract/agent-provider.js'
 import { SessionError } from '../../../core/resource/session.js'
 import type { SessionService, SessionView } from '../../../harness/session/session-service.js'
+import type { ThreadMessage } from '../../../core/resource/thread.js'
 import {
   addDirsSchema,
   archiveSessionSchema,
@@ -14,6 +15,7 @@ import {
   renameSessionSchema,
   sessionMessagesSchema,
   sessionRecapSchema,
+  sessionThreadSchema,
   tagSessionSchema,
 } from '../schema/session-schema.js'
 
@@ -129,6 +131,29 @@ export const sessionRoutes: FastifyPluginCallback<SessionRoutesOptions> = (
         live_run_id: result.liveRunId,
         live_seq: result.liveSeq,
         live_first_seq: result.liveFirstSeq,
+      }
+    },
+  )
+
+  fastify.get<{ Params: SessionParams; Querystring: HarnessQuery }>(
+    `${SESSION_ROUTE_PREFIX}/:session_id/thread`,
+    { schema: sessionThreadSchema },
+    async (request) => {
+      const limit = parseOptionalInt(request.query.limit)
+      const offset = parseOptionalInt(request.query.offset)
+      const result = await sessionService.thread(
+        request.query.harness,
+        request.params.session_id,
+        {
+          ...(limit === undefined ? {} : { limit }),
+          ...(offset === undefined ? {} : { offset }),
+        },
+      )
+      return {
+        messages: result.messages.map(toThreadMessageResponse),
+        add_dirs: result.addDirs,
+        run_mode: result.runMode,
+        live_run_id: result.liveRunId,
       }
     },
   )
@@ -259,6 +284,44 @@ export const sessionRoutes: FastifyPluginCallback<SessionRoutesOptions> = (
   )
 
   done()
+}
+
+function toThreadMessageResponse(message: ThreadMessage): Record<string, unknown> {
+  return {
+    id: message.id,
+    role: message.role,
+    content: message.content,
+    created_at: message.createdAt,
+    status: message.status,
+    transcript_uuid: message.transcriptUuid ?? null,
+    ...(message.blocks === undefined ? {} : { blocks: message.blocks }),
+    ...(message.nestedAgents === undefined
+      ? {}
+      : {
+          nested_agents: message.nestedAgents.map((agent) => ({
+            parent_tool_use_id: agent.parentToolUseId,
+            ...(agent.agentId === undefined ? {} : { agent_id: agent.agentId }),
+            ...(agent.name === undefined ? {} : { name: agent.name }),
+            status: agent.status,
+            blocks: agent.blocks,
+            inbox: agent.inbox.map((item) => ({
+              body: item.body,
+              source: item.source,
+              ...(item.senderName === undefined ? {} : { sender_name: item.senderName }),
+            })),
+          })),
+        }),
+    ...(message.workflows === undefined
+      ? {}
+      : {
+          workflows: message.workflows.map((workflow) => ({
+            workflow_tool_use_id: workflow.workflowToolUseId,
+            ...(workflow.name === undefined ? {} : { name: workflow.name }),
+            status: workflow.status,
+            ...(workflow.summary === undefined ? {} : { summary: workflow.summary }),
+          })),
+        }),
+  }
 }
 
 export function toSessionInfoResponse(session: SessionView): Record<string, unknown> {
