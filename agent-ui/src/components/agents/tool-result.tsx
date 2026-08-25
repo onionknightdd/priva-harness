@@ -301,48 +301,50 @@ export function ToolResult({
         </motion.span>
       </button>
 
-      <AgentDisclosure
-        id={contentId}
-        role="region"
-        aria-labelledby={triggerId}
-        open={currentOpen}
-      >
-        <div className="pt-1.5 pl-[calc(1em+0.25rem)]">
-          <div className="overflow-hidden rounded-xl bg-muted/80">
-          <div
-            ref={viewportRef}
-            role="log"
-            aria-live="polite"
-            className="overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
-            style={{ maxHeight }}
-          >
-            <div className={cn("p-3", contentClassName)}>{children}</div>
-          </div>
-
-            {canCopy || onRetry ? (
-              <div className="flex items-center gap-0.5 px-2 pb-1.5">
-              {canCopy ? (
-                <ToolResultAction
-                  label={copied ? "Copied" : "Copy result"}
-                  onClick={handleCopy}
-                >
-                  {copied ? (
-                    <Check className="size-3.5" />
-                  ) : (
-                    <Copy className="size-3.5" />
-                  )}
-                </ToolResultAction>
-              ) : null}
-              {onRetry ? (
-                <ToolResultAction label="Run again" onClick={onRetry}>
-                  <RotateCcw className="size-3.5" />
-                </ToolResultAction>
-              ) : null}
+      {children ? (
+        <AgentDisclosure
+          id={contentId}
+          role="region"
+          aria-labelledby={triggerId}
+          open={currentOpen}
+        >
+          <div className="pt-1.5 pl-[calc(1em+0.25rem)]">
+            <div className="overflow-hidden rounded-xl bg-muted/80">
+              <div
+                ref={viewportRef}
+                role="log"
+                aria-live="polite"
+                className="overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+                style={{ maxHeight }}
+              >
+                <div className={cn("p-3", contentClassName)}>{children}</div>
               </div>
-            ) : null}
+
+              {canCopy || onRetry ? (
+                <div className="flex items-center gap-0.5 px-2 pb-1.5">
+                  {canCopy ? (
+                    <ToolResultAction
+                      label={copied ? "Copied" : "Copy result"}
+                      onClick={handleCopy}
+                    >
+                      {copied ? (
+                        <Check className="size-3.5" />
+                      ) : (
+                        <Copy className="size-3.5" />
+                      )}
+                    </ToolResultAction>
+                  ) : null}
+                  {onRetry ? (
+                    <ToolResultAction label="Run again" onClick={onRetry}>
+                      <RotateCcw className="size-3.5" />
+                    </ToolResultAction>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
           </div>
-        </div>
-      </AgentDisclosure>
+        </AgentDisclosure>
+      ) : null}
     </div>
   );
 }

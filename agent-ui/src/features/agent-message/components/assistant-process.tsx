@@ -129,14 +129,17 @@ export function AssistantProcess({
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 justify-start px-0 text-muted-foreground has-data-[icon=inline-end]:pr-0 hover:bg-transparent hover:text-foreground aria-expanded:bg-transparent aria-expanded:text-muted-foreground aria-expanded:hover:text-foreground dark:hover:bg-transparent"
+              className={cn(
+                "h-7 justify-start px-0 text-muted-foreground has-data-[icon=inline-end]:pr-0 hover:bg-transparent hover:text-foreground aria-expanded:bg-transparent aria-expanded:text-muted-foreground aria-expanded:hover:text-foreground dark:hover:bg-transparent",
+                !isStreaming && "text-base"
+              )}
             />
           }
         >
           {isStreaming ? (
             <span className="shimmer">{t("agentMessage.thinking")}</span>
           ) : (
-            t("agentMessage.chainOfThought")
+            <span className="text-base">{t("agentMessage.chainOfThought")}</span>
           )}
           <ChevronDownIcon
             data-icon="inline-end"
@@ -279,38 +282,33 @@ function BashToolItem({
 }: {
   block: Extract<StreamBlock, { type: "tool_use" }>
 }) {
-  const input = block.tool?.input ?? block.input
+  const input = usefulToolInput(block.tool?.input) ?? usefulToolInput(block.input)
   const command = stringInput(input, "command")
   const description = stringInput(input, "description")
   const output = block.tool?.output?.trim() ?? ""
   const status = toolResultStatus(block.tool)
+  const inputStreaming =
+    status === "running" &&
+    output === "" &&
+    (jsonInputOpen(block.tool?.inputRaw) || command === undefined)
   const copyText = [command, output].filter(Boolean).join("\n")
-  const body =
-    command || output ? (
-      <div className="flex flex-col gap-2">
-        {command ? (
-          <div className="flex items-start">
-            <span className="shrink-0 select-none whitespace-pre font-mono text-xs leading-none">
-              {"$ "}
-            </span>
-            <ToolResultOutput className="min-w-0 flex-1 leading-none" language="bash">
-              {command}
-            </ToolResultOutput>
-          </div>
-        ) : null}
-        {output ? (
-          <pre className="m-0 whitespace-pre-wrap break-words font-mono text-xs leading-none text-muted-foreground">
-            {output}
-          </pre>
-        ) : null}
-      </div>
-    ) : null
+  const showPrompt = inputStreaming || Boolean(command || output)
+  const body = showPrompt ? (
+    <div className="flex flex-col gap-2">
+      <BashCommandLine command={command ?? ""} streaming={inputStreaming} />
+      {output ? (
+        <pre className="m-0 whitespace-pre-wrap break-words font-mono text-xs leading-none text-muted-foreground">
+          {output}
+        </pre>
+      ) : null}
+    </div>
+  ) : null
 
   return (
     <div className="w-full min-w-0 px-0 py-0">
       <ToolResult
         tool="bash"
-        title={description ?? command ?? block.name}
+        title={description ?? (inputStreaming ? "" : command) ?? ""}
         kind="terminal"
         status={status}
         copyText={copyText || undefined}
@@ -327,6 +325,86 @@ function BashToolItem({
       </ToolResult>
     </div>
   )
+}
+
+function BashCommandLine({
+  command,
+  streaming,
+}: {
+  command: string
+  streaming: boolean
+}) {
+  const { text, caret } = useTypedCommand(command, streaming)
+  return (
+    <div className="flex items-start">
+      <span className="shrink-0 select-none whitespace-pre font-mono text-xs leading-none">
+        {"$ "}
+      </span>
+      {caret ? (
+        <span className="min-w-0 flex-1 whitespace-pre-wrap break-words font-mono text-xs leading-none text-foreground/80">
+          {text}
+          <CommandCaret />
+        </span>
+      ) : text ? (
+        <ToolResultOutput className="min-w-0 flex-1 leading-none" language="bash">
+          {text}
+        </ToolResultOutput>
+      ) : null}
+    </div>
+  )
+}
+
+function CommandCaret() {
+  return (
+    <motion.span
+      aria-hidden="true"
+      className="ml-px inline-block h-[0.9em] w-[0.45ch] translate-y-[0.12em] bg-foreground/80"
+      animate={{ opacity: [1, 1, 0, 0] }}
+      transition={{
+        duration: 1,
+        repeat: Infinity,
+        ease: "linear",
+        times: [0, 0.45, 0.55, 1],
+      }}
+    />
+  )
+}
+
+function useTypedCommand(target: string, streaming: boolean): {
+  text: string
+  caret: boolean
+} {
+  const shouldReduceMotion = Boolean(useReducedMotion())
+  const [shown, setShown] = React.useState(() =>
+    shouldReduceMotion || !streaming ? target : ""
+  )
+
+  React.useEffect(() => {
+    if (shouldReduceMotion) {
+      setShown(target)
+      return
+    }
+    if (shown === target) {
+      return
+    }
+    if (!target.startsWith(shown)) {
+      setShown(target)
+      return
+    }
+    const remaining = target.length - shown.length
+    const step = remaining > 32 ? Math.min(8, Math.ceil(remaining / 8)) : 1
+    const id = window.setTimeout(() => {
+      setShown(target.slice(0, shown.length + step))
+    }, 16)
+    return () => {
+      window.clearTimeout(id)
+    }
+  }, [shouldReduceMotion, shown, target])
+
+  if (shouldReduceMotion) {
+    return { text: target, caret: false }
+  }
+  return { text: shown, caret: streaming || shown !== target }
 }
 
 function NestedAgentItem({ agent }: { agent: NestedAgent }) {
@@ -542,6 +620,31 @@ function formatElapsedMs(ms: number): string {
 function isBashTool(name: string): boolean {
   const id = name.trim().toLowerCase()
   return id === "bash" || id === "shell"
+}
+
+function jsonInputOpen(raw: string | undefined): boolean {
+  if (raw === undefined || raw.trim() === "") {
+    return false
+  }
+  try {
+    JSON.parse(raw)
+    return false
+  } catch {
+    return true
+  }
+}
+
+function usefulToolInput(input: unknown): unknown {
+  if (input === undefined || input === null) {
+    return undefined
+  }
+  if (typeof input !== "object") {
+    return input
+  }
+  if (Array.isArray(input)) {
+    return input.length > 0 ? input : undefined
+  }
+  return Object.keys(input).length > 0 ? input : undefined
 }
 
 function stringInput(input: unknown, key: string): string | undefined {

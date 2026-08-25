@@ -76,6 +76,8 @@ function applyMainBlocks(blocks: readonly ThreadBlock[], event: AgentEvent): Thr
       })
     case 'assistant.message':
       return mergeSnapshot(blocks, threadBlocksFromContent(event.blocks))
+    case 'tool.input_delta':
+      return applyToolInputDelta(blocks, event)
     case 'tool.started':
     case 'tool.updated':
     case 'tool.running':
@@ -213,12 +215,15 @@ function syncTools(blocks: readonly ThreadBlock[], event: AgentEvent): ThreadBlo
 
   const launchStatus = statusOf(event)
   const toolAgentId = agentIdOf(event)
-  const nextInput = input ?? base.tool?.input ?? base.input
+  const nextInput = mergeToolInput(base.tool?.input ?? base.input, input)
   const tool: ThreadToolCard = {
     id,
     name: nameOf(event) ?? base.tool?.name ?? base.name,
     status,
     ...(nextInput === undefined ? {} : { input: nextInput }),
+    ...(isUsefulInput(input) || base.tool?.inputRaw === undefined
+      ? {}
+      : { inputRaw: base.tool.inputRaw }),
     ...(event.type === 'tool.completed'
       ? { ok: event.ok, output: event.output }
       : {}),
@@ -226,7 +231,12 @@ function syncTools(blocks: readonly ThreadBlock[], event: AgentEvent): ThreadBlo
     ...(toolAgentId === undefined ? {} : { agentId: toolAgentId }),
   }
 
-  const nextBlock: ThreadBlock = { ...base, name: tool.name, tool }
+  const nextBlock: ThreadBlock = {
+    ...base,
+    name: tool.name,
+    tool,
+    ...(nextInput === undefined ? {} : { input: nextInput }),
+  }
   if (existingIndex < 0) return [...blocks, withMergedIndex(blocks, nextBlock)]
   const next = [...blocks]
   next[existingIndex] = nextBlock
@@ -276,18 +286,111 @@ function snapshotIdentity(block: ThreadBlock): string {
 
 function mergeSnapshotBlock(previous: ThreadBlock, incoming: ThreadBlock): ThreadBlock {
   if (previous.type === 'tool_use' && incoming.type === 'tool_use') {
+    const input = mergeToolInput(
+      previous.tool?.input ?? previous.input,
+      incoming.input ?? incoming.tool?.input,
+    )
+    const tool =
+      previous.tool === undefined
+        ? incoming.tool
+        : {
+            ...previous.tool,
+            ...(incoming.tool ?? {}),
+            ...(input === undefined ? {} : { input }),
+          }
     return {
       ...incoming,
-      ...(previous.tool === undefined ? {} : { tool: previous.tool }),
-      ...(incoming.input === undefined && previous.input !== undefined
-        ? { input: previous.input }
-        : {}),
+      ...(tool === undefined ? {} : { tool }),
+      ...(input === undefined ? {} : { input }),
     }
   }
   if (previous.type === 'thinking' && incoming.type === 'thinking') {
     return withThinkingTimes(incoming, previous)
   }
   return incoming
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isUsefulInput(input: unknown): boolean {
+  if (input === undefined || input === null) return false
+  if (Array.isArray(input)) return input.length > 0
+  if (isPlainObject(input)) return Object.keys(input).length > 0
+  return true
+}
+
+function mergeToolInput(previous: unknown, incoming: unknown): unknown {
+  if (!isUsefulInput(incoming)) {
+    return isUsefulInput(previous) ? previous : (incoming ?? previous)
+  }
+  if (isPlainObject(previous) && isPlainObject(incoming)) {
+    return { ...previous, ...incoming }
+  }
+  return incoming
+}
+
+function extractJsonStringField(raw: string, field: string): string | undefined {
+  const match = new RegExp(`"${field}"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)`).exec(raw)
+  if (match?.[1] === undefined || match[1] === '') return undefined
+  try {
+    return JSON.parse(`"${match[1]}"`) as string
+  } catch {
+    return match[1]
+  }
+}
+
+function extractPartialToolInput(raw: string): Record<string, unknown> | undefined {
+  const command = extractJsonStringField(raw, 'command')
+  const description = extractJsonStringField(raw, 'description')
+  const input: Record<string, unknown> = {}
+  if (command !== undefined) input['command'] = command
+  if (description !== undefined) input['description'] = description
+  return isUsefulInput(input) ? input : undefined
+}
+
+function parseToolInputJson(raw: string): unknown {
+  const trimmed = raw.trim()
+  if (trimmed === '') return undefined
+  try {
+    return JSON.parse(trimmed) as unknown
+  } catch {
+    return extractPartialToolInput(trimmed)
+  }
+}
+
+function applyToolInputDelta(blocks: readonly ThreadBlock[], event: AgentEvent): ThreadBlock[] {
+  if (event.type !== 'tool.input_delta') return [...blocks]
+  if (event.chunk === '') return [...blocks]
+  const index = blocks.findIndex(
+    (block) =>
+      block.type === 'tool_use' &&
+      (block.id === event.id || block.blockId === event.blockId),
+  )
+  if (index < 0) return [...blocks]
+  const current = blocks[index]
+  if (current?.type !== 'tool_use') return [...blocks]
+  const nextRaw = `${current.tool?.inputRaw ?? ''}${event.chunk}`
+  const nextInput = mergeToolInput(
+    current.tool?.input ?? current.input,
+    parseToolInputJson(nextRaw),
+  )
+  const tool: ThreadToolCard = {
+    id: current.id,
+    name: current.tool?.name ?? current.name,
+    status: current.tool?.status ?? 'started',
+    ...current.tool,
+    ...(nextInput === undefined ? {} : { input: nextInput }),
+    inputRaw: nextRaw,
+  }
+  const next = [...blocks]
+  next[index] = {
+    ...current,
+    tool,
+    ...(nextInput === undefined ? {} : { input: nextInput }),
+  }
+  return next
 }
 
 function withMergedIndex(existing: readonly ThreadBlock[], block: ThreadBlock): ThreadBlock {

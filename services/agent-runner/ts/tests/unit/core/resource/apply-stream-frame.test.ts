@@ -195,6 +195,107 @@ describe('applyStreamFrame', () => {
         .map((block) => block.text),
     ).toEqual(['plan the bash calls'])
   })
+
+  it('replaces empty tool.started input when tool.updated has the command', () => {
+    let message = emptyAssistantMessage('a1', '2024-01-01T00:00:00.000Z')
+    message = applyStreamFrame(message, {
+      type: 'tool.started',
+      messageId: 'a1',
+      blockId: 'bash-1',
+      index: 0,
+      id: 'bash-1',
+      name: 'bash',
+      input: {},
+    })
+    message = applyStreamFrame(message, {
+      type: 'tool.updated',
+      messageId: 'a1',
+      blockId: 'bash-1',
+      index: 0,
+      id: 'bash-1',
+      name: 'bash',
+      input: { command: 'sleep 5', description: 'Wait 5 seconds' },
+    })
+
+    expect(toolInput(message.blocks, 'bash-1')).toEqual({
+      command: 'sleep 5',
+      description: 'Wait 5 seconds',
+    })
+  })
+
+  it('parses bash command from tool.input_delta chunks while streaming', () => {
+    let message = emptyAssistantMessage('a1', '2024-01-01T00:00:00.000Z')
+    message = applyStreamFrame(message, {
+      type: 'tool.started',
+      messageId: 'a1',
+      blockId: 'bash-1',
+      index: 0,
+      id: 'bash-1',
+      name: 'bash',
+      input: {},
+    })
+    message = applyStreamFrame(message, {
+      type: 'tool.input_delta',
+      messageId: 'a1',
+      blockId: 'bash-1',
+      index: 0,
+      id: 'bash-1',
+      chunk: '{"command":',
+    })
+    expect(toolInput(message.blocks, 'bash-1')).toEqual({})
+
+    message = applyStreamFrame(message, {
+      type: 'tool.input_delta',
+      messageId: 'a1',
+      blockId: 'bash-1',
+      index: 0,
+      id: 'bash-1',
+      chunk: '"sleep 5"',
+    })
+    expect(toolInput(message.blocks, 'bash-1')).toEqual({ command: 'sleep 5' })
+
+    message = applyStreamFrame(message, {
+      type: 'tool.input_delta',
+      messageId: 'a1',
+      blockId: 'bash-1',
+      index: 0,
+      id: 'bash-1',
+      chunk: '}',
+    })
+    expect(toolInput(message.blocks, 'bash-1')).toEqual({ command: 'sleep 5' })
+  })
+
+  it('exposes a partial bash command before the JSON string closes', () => {
+    let message = emptyAssistantMessage('a1', '2024-01-01T00:00:00.000Z')
+    message = applyStreamFrame(message, {
+      type: 'tool.started',
+      messageId: 'a1',
+      blockId: 'bash-1',
+      index: 0,
+      id: 'bash-1',
+      name: 'bash',
+      input: {},
+    })
+    message = applyStreamFrame(message, {
+      type: 'tool.input_delta',
+      messageId: 'a1',
+      blockId: 'bash-1',
+      index: 0,
+      id: 'bash-1',
+      chunk: '{"command":"sl',
+    })
+    expect(toolInput(message.blocks, 'bash-1')).toEqual({ command: 'sl' })
+
+    message = applyStreamFrame(message, {
+      type: 'tool.input_delta',
+      messageId: 'a1',
+      blockId: 'bash-1',
+      index: 0,
+      id: 'bash-1',
+      chunk: 'eep 5"}',
+    })
+    expect(toolInput(message.blocks, 'bash-1')).toEqual({ command: 'sleep 5' })
+  })
 })
 
 function toolIds(blocks: readonly ThreadBlock[] | undefined): string[] {
@@ -207,4 +308,15 @@ function texts(blocks: readonly ThreadBlock[] | undefined): string[] {
   return (blocks ?? [])
     .filter((block): block is Extract<ThreadBlock, { type: 'text' }> => block.type === 'text')
     .map((block) => block.text)
+}
+
+function toolInput(
+  blocks: readonly ThreadBlock[] | undefined,
+  id: string,
+): unknown {
+  const block = (blocks ?? []).find(
+    (item): item is Extract<ThreadBlock, { type: 'tool_use' }> =>
+      item.type === 'tool_use' && item.id === id,
+  )
+  return block?.tool?.input ?? block?.input
 }

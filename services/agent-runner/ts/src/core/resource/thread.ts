@@ -51,6 +51,7 @@ export interface ThreadToolCard {
   readonly output?: string
   readonly launchStatus?: string
   readonly agentId?: string
+  readonly inputRaw?: string
 }
 
 export interface ThreadInboxMessage {

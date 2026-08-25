@@ -53,6 +53,7 @@ export type ToolCard = {
   output?: string
   launchStatus?: string
   agentId?: string
+  inputRaw?: string
 }
 
 export type NestedInboxMessage = {
