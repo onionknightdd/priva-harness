@@ -72,8 +72,13 @@ export function AssistantProcess({
         }}
       >
         <CollapsibleTrigger
-          render={<Button variant="ghost" size="sm" />}
-          className="text-muted-foreground"
+          render={
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 justify-start px-0 text-muted-foreground has-data-[icon=inline-end]:pr-0 hover:bg-transparent hover:text-foreground"
+            />
+          }
         >
           {isStreaming ? (
             <span className="shimmer">{t("agentMessage.thinking")}</span>
@@ -82,7 +87,7 @@ export function AssistantProcess({
           )}
           <ChevronDownIcon
             data-icon="inline-end"
-            className="transition-transform duration-200 group-data-open/process:rotate-180 motion-reduce:transition-none"
+            className="opacity-0 transition-[opacity,transform] duration-200 group-hover/button:opacity-100 group-focus-visible/button:opacity-100 group-data-open/process:rotate-180 motion-reduce:transition-none"
           />
         </CollapsibleTrigger>
         <CollapsibleContent className={PANEL_CLASS}>
@@ -320,7 +325,7 @@ function ProcessRow({
         <ItemActions>
           {badge ? <Badge variant={badgeVariant}>{badge}</Badge> : null}
           {hasBody ? (
-            <ChevronDownIcon className="size-3.5 transition-transform duration-200 group-data-open/process-item:rotate-180 motion-reduce:transition-none" />
+            <ChevronDownIcon className="size-3.5 opacity-0 transition-[opacity,transform] duration-200 group-hover/item:opacity-100 group-focus-visible/item:opacity-100 group-data-open/process-item:rotate-180 motion-reduce:transition-none" />
           ) : null}
         </ItemActions>
       ) : null}
