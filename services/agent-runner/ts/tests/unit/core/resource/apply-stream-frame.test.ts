@@ -334,6 +334,46 @@ describe('applyStreamFrame', () => {
       content: 'export const n = 1\n',
     })
   })
+
+  it('exposes a partial Edit path and replacement from tool.input_delta', () => {
+    let message = emptyAssistantMessage('a1', '2024-01-01T00:00:00.000Z')
+    message = applyStreamFrame(message, {
+      type: 'tool.started',
+      messageId: 'a1',
+      blockId: 'edit-1',
+      index: 0,
+      id: 'edit-1',
+      name: 'Edit',
+      input: {},
+    })
+    message = applyStreamFrame(message, {
+      type: 'tool.input_delta',
+      messageId: 'a1',
+      blockId: 'edit-1',
+      index: 0,
+      id: 'edit-1',
+      chunk: '{"file_path":"src/app.ts","old_string":"const a = 1","new_string":"const a',
+    })
+    expect(toolInput(message.blocks, 'edit-1')).toEqual({
+      file_path: 'src/app.ts',
+      old_string: 'const a = 1',
+      new_string: 'const a',
+    })
+
+    message = applyStreamFrame(message, {
+      type: 'tool.input_delta',
+      messageId: 'a1',
+      blockId: 'edit-1',
+      index: 0,
+      id: 'edit-1',
+      chunk: ' = 2"}',
+    })
+    expect(toolInput(message.blocks, 'edit-1')).toEqual({
+      file_path: 'src/app.ts',
+      old_string: 'const a = 1',
+      new_string: 'const a = 2',
+    })
+  })
 })
 
 function toolIds(blocks: readonly ThreadBlock[] | undefined): string[] {

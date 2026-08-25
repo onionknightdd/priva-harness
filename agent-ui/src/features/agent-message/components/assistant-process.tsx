@@ -2,6 +2,7 @@ import * as React from "react"
 import {
   BotIcon,
   ChevronDownIcon,
+  FileDiffIcon,
   FilePenLineIcon,
   ImageIcon,
   WorkflowIcon,
@@ -251,6 +252,9 @@ function ToolItem({
   if (isWriteTool(block.name)) {
     return <WriteToolItem block={block} />
   }
+  if (isEditTool(block.name)) {
+    return <EditToolItem block={block} />
+  }
   return <GenericToolItem block={block} />
 }
 
@@ -456,6 +460,52 @@ function WriteToolItem({
       language={languageFromPath(filePath)}
       icon={
         <FilePenLineIcon
+          aria-hidden="true"
+          className="size-[1em] shrink-0 text-muted-foreground/70"
+        />
+      }
+      copyText={copyText || undefined}
+      onCopy={
+        copyText
+          ? () => {
+              void writeClipboardText(copyText)
+            }
+          : undefined
+      }
+      defaultOpen={running}
+      collapseOnComplete
+    />
+  )
+}
+
+function EditToolItem({
+  block,
+}: {
+  block: Extract<StreamBlock, { type: "tool_use" }>
+}) {
+  const input = usefulToolInput(block.tool?.input) ?? usefulToolInput(block.input)
+  const filePath =
+    stringInput(input, "file_path") ?? stringInput(input, "path")
+  const oldString = stringInput(input, "old_string", { allowBlank: true })
+  const newString = stringInput(input, "new_string", { allowBlank: true })
+  const output = block.tool?.output?.trim() ?? ""
+  const status = toolResultStatus(block.tool)
+  const lines =
+    oldString === undefined && newString === undefined
+      ? fileDiffLinesFromUnified(output)
+      : fileDiffLinesFromReplacement(oldString, newString)
+  const copyText = fileDiffCopyText(lines) || output
+  const running = status === "running"
+
+  return (
+    <FileDiff
+      tool="Edit"
+      file={fileNameFromPath(filePath)}
+      lines={lines}
+      status={running ? "streaming" : "complete"}
+      language={languageFromPath(filePath)}
+      icon={
+        <FileDiffIcon
           aria-hidden="true"
           className="size-[1em] shrink-0 text-muted-foreground/70"
         />
@@ -691,6 +741,97 @@ function isBashTool(name: string): boolean {
 
 function isWriteTool(name: string): boolean {
   return name.trim().toLowerCase() === "write"
+}
+
+function isEditTool(name: string): boolean {
+  return name.trim().toLowerCase() === "edit"
+}
+
+function fileDiffLinesFromReplacement(
+  oldText: string | undefined,
+  newText: string | undefined,
+): FileDiffLine[] {
+  const oldLines = oldText === undefined ? [] : oldText.split("\n")
+  const newLines = newText === undefined ? [] : newText.split("\n")
+  let prefix = 0
+  const prefixLimit = Math.min(oldLines.length, newLines.length)
+  while (prefix < prefixLimit && oldLines[prefix] === newLines[prefix]) {
+    prefix += 1
+  }
+  let suffix = 0
+  while (
+    suffix < oldLines.length - prefix &&
+    suffix < newLines.length - prefix &&
+    oldLines[oldLines.length - 1 - suffix] ===
+      newLines[newLines.length - 1 - suffix]
+  ) {
+    suffix += 1
+  }
+
+  const lines: FileDiffLine[] = []
+  let oldLine = 1
+  let newLine = 1
+  let index = 0
+
+  const push = (
+    type: NonNullable<FileDiffLine["type"]>,
+    content: string,
+    numbers: Pick<FileDiffLine, "oldLine" | "newLine">
+  ) => {
+    lines.push({
+      id: `e${String(index)}`,
+      type,
+      content,
+      ...numbers,
+    })
+    index += 1
+  }
+
+  for (let i = 0; i < prefix; i += 1) {
+    const content = oldLines[i]
+    if (content === undefined) {
+      continue
+    }
+    push("context", content, { oldLine, newLine })
+    oldLine += 1
+    newLine += 1
+  }
+  for (let i = prefix; i < oldLines.length - suffix; i += 1) {
+    const content = oldLines[i]
+    if (content === undefined) {
+      continue
+    }
+    push("removed", content, { oldLine })
+    oldLine += 1
+  }
+  for (let i = prefix; i < newLines.length - suffix; i += 1) {
+    const content = newLines[i]
+    if (content === undefined) {
+      continue
+    }
+    push("added", content, { newLine })
+    newLine += 1
+  }
+  for (let i = oldLines.length - suffix; i < oldLines.length; i += 1) {
+    const content = oldLines[i]
+    if (content === undefined) {
+      continue
+    }
+    push("context", content, { oldLine, newLine })
+    oldLine += 1
+    newLine += 1
+  }
+  return lines
+}
+
+function fileDiffCopyText(lines: FileDiffLine[]): string {
+  return lines
+    .map((line) => {
+      const mark =
+        line.type === "added" ? "+" : line.type === "removed" ? "-" : " "
+      return `${mark}${line.content}`
+    })
+    .join("\n")
 }
 
 function fileDiffLinesFromContent(content: string): FileDiffLine[] {

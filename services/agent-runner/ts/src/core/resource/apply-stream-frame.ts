@@ -350,6 +350,8 @@ function extractPartialToolInput(raw: string): Record<string, unknown> | undefin
     'path',
     'content',
     'contents',
+    'old_string',
+    'new_string',
   ] as const) {
     const value = extractJsonStringField(raw, field)
     if (value !== undefined) input[field] = value
