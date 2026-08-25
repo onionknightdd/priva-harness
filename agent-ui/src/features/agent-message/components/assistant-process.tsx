@@ -158,19 +158,13 @@ function ThinkingItem({
   return (
     <ProcessRow
       title={
-        <>
-          {running ? (
-            <span className="shimmer">{t("agentMessage.thoughtRunning")}</span>
-          ) : (
-            t("agentMessage.thoughtDone")
-          )}
-          {elapsed ? (
-            <span className="font-normal tabular-nums text-muted-foreground">
-              {elapsed}
-            </span>
-          ) : null}
-        </>
+        running ? (
+          <span className="shimmer">{t("agentMessage.thoughtRunning")}</span>
+        ) : (
+          t("agentMessage.thoughtDone")
+        )
       }
+      meta={elapsed}
       defaultOpen={defaultOpen}
     >
       <p className="whitespace-pre-wrap text-sm text-muted-foreground">{text}</p>
@@ -342,6 +336,7 @@ function ProcessRow({
   title,
   badge,
   badgeVariant = "outline",
+  meta,
   defaultOpen = false,
   children,
 }: {
@@ -349,11 +344,12 @@ function ProcessRow({
   title: React.ReactNode
   badge?: React.ReactNode
   badgeVariant?: "secondary" | "outline" | "destructive"
+  meta?: React.ReactNode
   defaultOpen?: boolean
   children?: React.ReactNode
 }) {
   const hasBody = Boolean(children)
-  const showActions = Boolean(badge || hasBody)
+  const showActions = Boolean(badge || meta || hasBody)
 
   const header = (
     <>
@@ -362,11 +358,14 @@ function ProcessRow({
           <Icon />
         </ItemMedia>
       ) : null}
-      <ItemContent>
+      <ItemContent className="flex-none">
         <ItemTitle>{title}</ItemTitle>
       </ItemContent>
       {showActions ? (
-        <ItemActions>
+        <ItemActions className="justify-start">
+          {meta ? (
+            <span className="text-sm tabular-nums text-muted-foreground">{meta}</span>
+          ) : null}
           {badge ? <Badge variant={badgeVariant}>{badge}</Badge> : null}
           {hasBody ? (
             <ChevronDownIcon className="size-3.5 opacity-0 transition-[opacity,transform] duration-200 group-hover/item:opacity-100 group-focus-visible/item:opacity-100 group-data-open/process-item:rotate-180 motion-reduce:transition-none" />
@@ -378,7 +377,10 @@ function ProcessRow({
 
   if (!hasBody) {
     return (
-      <Item size="sm" className="bg-transparent hover:bg-transparent">
+      <Item
+        size="sm"
+        className="w-fit max-w-full bg-transparent hover:bg-transparent"
+      >
         {header}
       </Item>
     )
@@ -388,7 +390,7 @@ function ProcessRow({
     <Collapsible className="group/process-item" defaultOpen={defaultOpen}>
       <Item
         size="sm"
-        className="w-full cursor-pointer bg-transparent text-left hover:bg-transparent aria-expanded:bg-transparent"
+        className="w-fit max-w-full cursor-pointer bg-transparent text-left hover:bg-transparent aria-expanded:bg-transparent"
         render={<CollapsibleTrigger />}
       >
         {header}
