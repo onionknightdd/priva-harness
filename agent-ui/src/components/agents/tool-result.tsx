@@ -48,6 +48,7 @@ export interface ToolResultProps {
   defaultOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
   collapseOnComplete?: boolean;
+  collapseDelayMs?: number;
   maxHeight?: number;
   copyText?: string;
   onCopy?: () => void | Promise<void>;
@@ -164,6 +165,7 @@ export function ToolResult({
   defaultOpen = true,
   onOpenChange,
   collapseOnComplete = true,
+  collapseDelayMs = 720,
   maxHeight = 220,
   copyText,
   onCopy,
@@ -200,15 +202,28 @@ export function ToolResult({
     if (previousStatus.current !== "running" && status === "running") {
       setOpen(true);
     }
+    let closeTimer: number | undefined;
     if (
       previousStatus.current === "running" &&
       status !== "running" &&
       collapseOnComplete
     ) {
-      setOpen(false);
+      const delay = reduce ? 0 : collapseDelayMs;
+      if (delay <= 0) {
+        setOpen(false);
+      } else {
+        closeTimer = window.setTimeout(() => {
+          setOpen(false);
+        }, delay);
+      }
     }
     previousStatus.current = status;
-  }, [collapseOnComplete, setOpen, status]);
+    return () => {
+      if (closeTimer !== undefined) {
+        window.clearTimeout(closeTimer);
+      }
+    };
+  }, [collapseDelayMs, collapseOnComplete, reduce, setOpen, status]);
 
   useEffect(
     () => () => {

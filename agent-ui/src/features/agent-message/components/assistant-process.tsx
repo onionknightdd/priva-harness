@@ -287,18 +287,30 @@ function BashToolItem({
   const description = stringInput(input, "description")
   const output = block.tool?.output?.trim() ?? ""
   const status = toolResultStatus(block.tool)
+  const shouldReduceMotion = Boolean(useReducedMotion())
   const inputStreaming =
     status === "running" &&
     output === "" &&
     (jsonInputOpen(block.tool?.inputRaw) || command === undefined)
+  const { text: typedCommand, caret: commandCaret } = useTypedCommand(
+    command ?? "",
+    inputStreaming
+  )
+  const awaitingOutput =
+    status === "running" && !inputStreaming && !commandCaret
   const copyText = [command, output].filter(Boolean).join("\n")
-  const showPrompt = inputStreaming || Boolean(command || output)
+  const showPrompt =
+    inputStreaming || Boolean(command || output) || awaitingOutput
+  const showOutput = Boolean(output) || (awaitingOutput && !shouldReduceMotion)
   const body = showPrompt ? (
     <div className="flex flex-col gap-2">
-      <BashCommandLine command={command ?? ""} streaming={inputStreaming} />
-      {output ? (
+      <BashCommandLine text={typedCommand} caret={commandCaret} />
+      {showOutput ? (
         <pre className="m-0 whitespace-pre-wrap break-words font-mono text-xs leading-none text-muted-foreground">
           {output}
+          {awaitingOutput && !shouldReduceMotion ? (
+            <CommandCaret className="bg-muted-foreground" />
+          ) : null}
         </pre>
       ) : null}
     </div>
@@ -320,6 +332,7 @@ function BashToolItem({
             : undefined
         }
         defaultOpen={status === "running"}
+        collapseOnComplete
       >
         {body}
       </ToolResult>
@@ -328,13 +341,12 @@ function BashToolItem({
 }
 
 function BashCommandLine({
-  command,
-  streaming,
+  text,
+  caret,
 }: {
-  command: string
-  streaming: boolean
+  text: string
+  caret: boolean
 }) {
-  const { text, caret } = useTypedCommand(command, streaming)
   return (
     <div className="flex items-start">
       <span className="shrink-0 select-none whitespace-pre font-mono text-xs leading-none">
@@ -354,11 +366,14 @@ function BashCommandLine({
   )
 }
 
-function CommandCaret() {
+function CommandCaret({ className }: { className?: string }) {
   return (
     <motion.span
       aria-hidden="true"
-      className="ml-px inline-block h-[0.9em] w-[0.45ch] translate-y-[0.12em] bg-foreground/80"
+      className={cn(
+        "ml-px inline-block h-[0.9em] w-[0.45ch] translate-y-[0.12em] bg-foreground/80",
+        className
+      )}
       animate={{ opacity: [1, 1, 0, 0] }}
       transition={{
         duration: 1,
