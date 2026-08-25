@@ -57,6 +57,32 @@ export interface FileDiffProps {
   className?: string;
 }
 
+function maxLineNumberDigits(
+  lines: FileDiffLine[],
+  key: "oldLine" | "newLine",
+): number {
+  let max = 0;
+  for (const line of lines) {
+    const value = line[key];
+    if (typeof value === "number") {
+      max = Math.max(max, String(value).length);
+    }
+  }
+  return max;
+}
+
+function lineNumberGridTemplate(oldDigits: number, newDigits: number): string {
+  const columns: string[] = [];
+  if (oldDigits > 0) {
+    columns.push(`calc(${String(oldDigits)}ch + 0.75rem)`);
+  }
+  if (newDigits > 0) {
+    columns.push(`calc(${String(newDigits)}ch + 0.75rem)`);
+  }
+  columns.push("1rem", "minmax(0,1fr)");
+  return columns.join(" ");
+}
+
 function ChangeCount({ value, type }: { value: number; type: "added" | "removed" }) {
   if (!value) return null;
   return (
@@ -107,6 +133,9 @@ export function FileDiff({
   const canCopy = Boolean(copyText || onCopy);
   const code = lines.map((line) => line.content).join("\n");
   const tokens = useAgentCodeTokens(code, language);
+  const oldDigits = maxLineNumberDigits(lines, "oldLine");
+  const newDigits = maxLineNumberDigits(lines, "newLine");
+  const gridTemplateColumns = lineNumberGridTemplate(oldDigits, newDigits);
 
   const setOpen = useCallback(
     (next: boolean) => {
@@ -254,17 +283,22 @@ export function FileDiff({
                     <div
                       key={line.id}
                       className={cn(
-                        "grid grid-cols-[2.25rem_2.25rem_1rem_minmax(0,1fr)]",
+                        "grid",
                         type === "added" && "bg-emerald-500/[0.07]",
                         type === "removed" && "bg-rose-500/[0.07]",
                       )}
+                      style={{ gridTemplateColumns }}
                     >
-                      <span className="select-none pr-2 text-right tabular-nums text-muted-foreground/40">
-                        {line.oldLine}
-                      </span>
-                      <span className="select-none pr-2 text-right tabular-nums text-muted-foreground/40">
-                        {line.newLine}
-                      </span>
+                      {oldDigits > 0 ? (
+                        <span className="select-none px-1.5 text-right tabular-nums text-muted-foreground/40">
+                          {line.oldLine}
+                        </span>
+                      ) : null}
+                      {newDigits > 0 ? (
+                        <span className="select-none px-1.5 text-right tabular-nums text-muted-foreground/40">
+                          {line.newLine}
+                        </span>
+                      ) : null}
                       <span
                         className={cn(
                           "select-none text-center text-muted-foreground/45",
