@@ -255,7 +255,7 @@ export function ToolResult({
         aria-expanded={currentOpen}
         aria-controls={contentId}
         onClick={() => setOpen(!currentOpen)}
-        className="group flex min-h-0 w-full items-center gap-1 rounded-md py-0.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        className="group/item flex w-fit max-w-full min-h-0 items-center gap-1 rounded-md py-0.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       >
         <span
           aria-hidden="true"
@@ -263,8 +263,8 @@ export function ToolResult({
         >
           {icon ?? <KindIcon kind={kind} />}
         </span>
-        <span className="flex min-w-0 flex-1 items-baseline gap-2">
-          <span className="shrink-0 font-bold text-muted-foreground">
+        <span className="flex min-w-0 flex-none items-baseline gap-2">
+          <span className="shrink-0 font-medium text-muted-foreground">
             <ActionSwapRollText value={toolKey}>
               {tool}
             </ActionSwapRollText>
@@ -295,7 +295,7 @@ export function ToolResult({
           aria-hidden="true"
           animate={{ rotate: currentOpen ? 180 : 0 }}
           transition={reduce ? { duration: 0 } : SPRING_SWAP}
-          className="shrink-0 text-muted-foreground/50 transition-colors group-hover:text-muted-foreground"
+          className="shrink-0 text-muted-foreground opacity-0 transition-[opacity,transform] duration-200 group-hover/item:opacity-100 group-focus-visible/item:opacity-100 motion-reduce:transition-none"
         >
           <ChevronDown className="size-3.5" />
         </motion.span>
@@ -307,7 +307,7 @@ export function ToolResult({
         aria-labelledby={triggerId}
         open={currentOpen}
       >
-        <div className="pl-6 pt-1.5">
+        <div className="pt-1.5 pl-[calc(1em+0.25rem)]">
           <div className="overflow-hidden rounded-xl bg-muted/80">
           <div
             ref={viewportRef}

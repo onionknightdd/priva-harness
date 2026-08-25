@@ -289,9 +289,14 @@ function BashToolItem({
     command || output ? (
       <div className="flex flex-col gap-2">
         {command ? (
-          <ToolResultOutput className="leading-none" language="bash">
-            {command}
-          </ToolResultOutput>
+          <div className="flex items-start">
+            <span className="shrink-0 select-none font-mono text-xs leading-none">
+              {"$ "}
+            </span>
+            <ToolResultOutput className="min-w-0 flex-1 leading-none" language="bash">
+              {command}
+            </ToolResultOutput>
+          </div>
         ) : null}
         {output ? (
           <pre className="m-0 whitespace-pre-wrap break-words font-mono text-xs leading-none text-muted-foreground">
