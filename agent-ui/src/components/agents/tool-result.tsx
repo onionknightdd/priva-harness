@@ -274,23 +274,23 @@ export function ToolResult({
       >
         <span
           aria-hidden="true"
-          className="grid size-[1em] shrink-0 place-items-center text-muted-foreground"
+          className="grid size-[1em] shrink-0 place-items-center text-muted-foreground/70"
         >
           {icon ?? <KindIcon kind={kind} />}
         </span>
         <span className="flex min-w-0 flex-none items-baseline gap-2">
-          <span className="shrink-0 font-medium text-muted-foreground">
+          <span className="shrink-0 font-medium text-muted-foreground/70">
             <ActionSwapRollText value={toolKey}>
               {tool}
             </ActionSwapRollText>
           </span>
-          <span className="min-w-0 truncate font-medium text-muted-foreground">
+          <span className="min-w-0 truncate font-medium text-muted-foreground/70">
             <ActionSwapRollText value={titleKey}>
               {title}
             </ActionSwapRollText>
           </span>
           {meta ? (
-            <span className="shrink-0 text-xs text-muted-foreground/80">
+            <span className="shrink-0 text-xs text-muted-foreground/60">
               <ActionSwapRollText value={metaKey}>
                 {meta}
               </ActionSwapRollText>
@@ -310,7 +310,7 @@ export function ToolResult({
           aria-hidden="true"
           animate={{ rotate: currentOpen ? 180 : 0 }}
           transition={reduce ? { duration: 0 } : SPRING_SWAP}
-          className="shrink-0 text-muted-foreground opacity-0 transition-[opacity,transform] duration-200 group-hover/item:opacity-100 group-focus-visible/item:opacity-100 motion-reduce:transition-none"
+          className="shrink-0 text-muted-foreground/70 opacity-0 transition-[opacity,transform] duration-200 group-hover/item:opacity-100 group-focus-visible/item:opacity-100 motion-reduce:transition-none"
         >
           <ChevronDown className="size-3.5" />
         </motion.span>

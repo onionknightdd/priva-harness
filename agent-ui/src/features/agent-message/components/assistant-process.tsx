@@ -129,17 +129,14 @@ export function AssistantProcess({
             <Button
               variant="ghost"
               size="sm"
-              className={cn(
-                "h-7 justify-start px-0 text-muted-foreground has-data-[icon=inline-end]:pr-0 hover:bg-transparent hover:text-foreground aria-expanded:bg-transparent aria-expanded:text-muted-foreground aria-expanded:hover:text-foreground dark:hover:bg-transparent",
-                !isStreaming && "text-base"
-              )}
+              className="h-7 justify-start px-0 text-base font-medium text-muted-foreground has-data-[icon=inline-end]:pr-0 hover:bg-transparent hover:text-muted-foreground focus:bg-transparent focus:text-muted-foreground active:translate-y-0 active:bg-transparent active:text-muted-foreground aria-expanded:bg-transparent aria-expanded:text-muted-foreground aria-expanded:hover:bg-transparent aria-expanded:hover:text-muted-foreground dark:hover:bg-transparent dark:hover:text-muted-foreground dark:aria-expanded:bg-transparent"
             />
           }
         >
           {isStreaming ? (
             <span className="shimmer">{t("agentMessage.thinking")}</span>
           ) : (
-            <span className="text-base">{t("agentMessage.chainOfThought")}</span>
+            t("agentMessage.chainOfThought")
           )}
           <ChevronDownIcon
             data-icon="inline-end"
@@ -517,7 +514,7 @@ function ProcessItemGroup({
   return (
     <ItemGroup
       className={cn(
-        "gap-0.5 py-0 text-muted-foreground/80 has-data-[size=sm]:gap-0.5 has-data-[size=xs]:gap-0.5",
+        "gap-0.5 py-0 text-muted-foreground/70 has-data-[size=sm]:gap-0.5 has-data-[size=xs]:gap-0.5",
         className
       )}
     >
