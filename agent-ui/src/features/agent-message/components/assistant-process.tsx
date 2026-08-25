@@ -287,7 +287,7 @@ function BashToolItem({
   const copyText = [command, output].filter(Boolean).join("\n")
   const body =
     command || output ? (
-      <div className="flex flex-col gap-0.5">
+      <div className="flex flex-col gap-2">
         {command ? (
           <ToolResultOutput className="leading-none" language="bash">
             {command}
@@ -302,7 +302,7 @@ function BashToolItem({
     ) : null
 
   return (
-    <div className="w-full min-w-0 px-0 py-0.5">
+    <div className="w-full min-w-0 px-0 py-0">
       <ToolResult
         tool="bash"
         title={description ?? command ?? block.name}

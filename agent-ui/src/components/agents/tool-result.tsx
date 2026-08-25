@@ -89,9 +89,9 @@ function getStatusClass(status: ToolResultStatus) {
 }
 
 function KindIcon({ kind }: { kind: ToolResultKind }) {
-  if (kind === "terminal") return <SquareTerminal className="size-4" />;
-  if (kind === "request") return <Braces className="size-4" />;
-  return <Wrench className="size-4" />;
+  if (kind === "terminal") return <SquareTerminal className="size-[1em]" />;
+  if (kind === "request") return <Braces className="size-[1em]" />;
+  return <Wrench className="size-[1em]" />;
 }
 
 function StatusIcon({
@@ -255,16 +255,16 @@ export function ToolResult({
         aria-expanded={currentOpen}
         aria-controls={contentId}
         onClick={() => setOpen(!currentOpen)}
-        className="group flex min-h-0 w-full items-center gap-2 rounded-md py-0.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        className="group flex min-h-0 w-full items-center gap-1 rounded-md py-0.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       >
         <span
           aria-hidden="true"
-          className="grid size-4 shrink-0 place-items-center text-muted-foreground"
+          className="grid size-[1em] shrink-0 place-items-center text-muted-foreground"
         >
           {icon ?? <KindIcon kind={kind} />}
         </span>
         <span className="flex min-w-0 flex-1 items-baseline gap-2">
-          <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
+          <span className="shrink-0 font-bold text-muted-foreground">
             <ActionSwapRollText value={toolKey}>
               {tool}
             </ActionSwapRollText>
@@ -283,13 +283,13 @@ export function ToolResult({
           ) : null}
         </span>
         <span
+          aria-label={statusLabel}
           className={cn(
-            "inline-flex shrink-0 items-center gap-1 text-[11px] font-medium",
+            "inline-flex shrink-0 items-center",
             getStatusClass(status),
           )}
         >
           <StatusIcon status={status} reduce={reduce} />
-          <ActionSwapRollText value={status}>{statusLabel}</ActionSwapRollText>
         </span>
         <motion.span
           aria-hidden="true"
@@ -338,11 +338,6 @@ export function ToolResult({
                   <RotateCcw className="size-3.5" />
                 </ToolResultAction>
               ) : null}
-              <span className="ml-auto text-[11px] text-muted-foreground/55">
-                <ActionSwapRollText value={status}>
-                  {statusLabel}
-                </ActionSwapRollText>
-              </span>
               </div>
             ) : null}
           </div>
