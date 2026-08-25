@@ -269,7 +269,7 @@ export function FileDiff({
         aria-labelledby={triggerId}
         open={currentOpen}
       >
-        <div className="pt-1.5 pl-[calc(1em+0.25rem)]">
+        <div className="pt-[10px] pl-[calc(1em+0.25rem)]">
           <div className="overflow-hidden rounded-xl bg-muted/80">
             <div
               ref={viewportRef}
