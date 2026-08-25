@@ -76,7 +76,7 @@ export function AssistantProcess({
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 justify-start px-0 text-muted-foreground has-data-[icon=inline-end]:pr-0 hover:bg-transparent hover:text-foreground"
+              className="h-7 justify-start px-0 text-muted-foreground has-data-[icon=inline-end]:pr-0 hover:bg-transparent hover:text-foreground aria-expanded:bg-transparent aria-expanded:text-muted-foreground aria-expanded:hover:text-foreground dark:hover:bg-transparent"
             />
           }
         >
@@ -91,7 +91,7 @@ export function AssistantProcess({
           />
         </CollapsibleTrigger>
         <CollapsibleContent className={PANEL_CLASS}>
-          <ItemGroup className="gap-1 py-1">
+          <ItemGroup className="gap-1 py-1 text-muted-foreground">
             {blocks.map((block) => {
               if (block.type === "thinking" && block.text.trim() !== "") {
                 return (
@@ -248,7 +248,7 @@ function NestedAgentItem({ agent }: { agent: NestedAgent }) {
             </p>
           ) : null}
           {agent.inbox.length > 0 ? (
-            <ItemGroup className="gap-1">
+            <ItemGroup className="gap-1 text-muted-foreground">
               {agent.inbox.map((item, index) => (
                 <Item key={`${item.source}-${index}`} size="xs">
                   <ItemContent>
@@ -266,7 +266,7 @@ function NestedAgentItem({ agent }: { agent: NestedAgent }) {
             </ItemGroup>
           ) : null}
           {tools.length > 0 ? (
-            <ItemGroup className="gap-1">
+            <ItemGroup className="gap-1 text-muted-foreground">
               {tools.map((block) => (
                 <ToolItem key={block.id} block={block} />
               ))}
@@ -333,14 +333,18 @@ function ProcessRow({
   )
 
   if (!hasBody) {
-    return <Item size="sm">{header}</Item>
+    return (
+      <Item size="sm" className="bg-transparent hover:bg-transparent">
+        {header}
+      </Item>
+    )
   }
 
   return (
     <Collapsible className="group/process-item" defaultOpen={defaultOpen}>
       <Item
         size="sm"
-        className="w-full cursor-pointer text-left"
+        className="w-full cursor-pointer bg-transparent text-left hover:bg-transparent aria-expanded:bg-transparent"
         render={<CollapsibleTrigger />}
       >
         {header}
