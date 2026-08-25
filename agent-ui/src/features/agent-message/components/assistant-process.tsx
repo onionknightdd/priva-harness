@@ -2,8 +2,8 @@ import * as React from "react"
 import {
   BotIcon,
   ChevronDownIcon,
-  FileDiffIcon,
   FilePenLineIcon,
+  FilePlusCornerIcon,
   ImageIcon,
   WorkflowIcon,
   WrenchIcon,
@@ -12,10 +12,7 @@ import {
 import { motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
-import {
-  FileDiff,
-  type FileDiffLine,
-} from "@/components/agents/file-diff"
+import { FileDiff } from "@/components/agents/file-diff"
 import {
   ToolResult,
   ToolResultOutput,
@@ -48,6 +45,12 @@ import {
   type ToolCard,
   type WorkflowCard,
 } from "../agent-message-data"
+import {
+  fileDiffCopyText,
+  fileDiffLinesFromContent,
+  fileDiffLinesFromEdit,
+  fileDiffLinesFromUnified,
+} from "../file-diff-lines"
 
 const PANEL_CLASS =
   "h-[var(--collapsible-panel-height)] overflow-hidden transition-[height,opacity] duration-200 ease-out data-[ending-style]:h-0 data-[ending-style]:opacity-0 data-[starting-style]:h-0 data-[starting-style]:opacity-0 motion-reduce:transition-none"
@@ -459,7 +462,7 @@ function WriteToolItem({
       status={running ? "streaming" : "complete"}
       language={languageFromPath(filePath)}
       icon={
-        <FilePenLineIcon
+        <FilePlusCornerIcon
           aria-hidden="true"
           className="size-[1em] shrink-0 text-muted-foreground/70"
         />
@@ -490,10 +493,7 @@ function EditToolItem({
   const newString = stringInput(input, "new_string", { allowBlank: true })
   const output = block.tool?.output?.trim() ?? ""
   const status = toolResultStatus(block.tool)
-  const lines =
-    oldString === undefined && newString === undefined
-      ? fileDiffLinesFromUnified(output)
-      : fileDiffLinesFromReplacement(oldString, newString)
+  const lines = fileDiffLinesFromEdit(oldString, newString, output)
   const copyText = fileDiffCopyText(lines) || output
   const running = status === "running"
 
@@ -505,7 +505,7 @@ function EditToolItem({
       status={running ? "streaming" : "complete"}
       language={languageFromPath(filePath)}
       icon={
-        <FileDiffIcon
+        <FilePenLineIcon
           aria-hidden="true"
           className="size-[1em] shrink-0 text-muted-foreground/70"
         />
@@ -747,163 +747,6 @@ function isEditTool(name: string): boolean {
   return name.trim().toLowerCase() === "edit"
 }
 
-function fileDiffLinesFromReplacement(
-  oldText: string | undefined,
-  newText: string | undefined,
-): FileDiffLine[] {
-  const oldLines = oldText === undefined ? [] : oldText.split("\n")
-  const newLines = newText === undefined ? [] : newText.split("\n")
-  let prefix = 0
-  const prefixLimit = Math.min(oldLines.length, newLines.length)
-  while (prefix < prefixLimit && oldLines[prefix] === newLines[prefix]) {
-    prefix += 1
-  }
-  let suffix = 0
-  while (
-    suffix < oldLines.length - prefix &&
-    suffix < newLines.length - prefix &&
-    oldLines[oldLines.length - 1 - suffix] ===
-      newLines[newLines.length - 1 - suffix]
-  ) {
-    suffix += 1
-  }
-
-  const lines: FileDiffLine[] = []
-  let oldLine = 1
-  let newLine = 1
-  let index = 0
-
-  const push = (
-    type: NonNullable<FileDiffLine["type"]>,
-    content: string,
-    numbers: Pick<FileDiffLine, "oldLine" | "newLine">
-  ) => {
-    lines.push({
-      id: `e${String(index)}`,
-      type,
-      content,
-      ...numbers,
-    })
-    index += 1
-  }
-
-  for (let i = 0; i < prefix; i += 1) {
-    const content = oldLines[i]
-    if (content === undefined) {
-      continue
-    }
-    push("context", content, { oldLine, newLine })
-    oldLine += 1
-    newLine += 1
-  }
-  for (let i = prefix; i < oldLines.length - suffix; i += 1) {
-    const content = oldLines[i]
-    if (content === undefined) {
-      continue
-    }
-    push("removed", content, { oldLine })
-    oldLine += 1
-  }
-  for (let i = prefix; i < newLines.length - suffix; i += 1) {
-    const content = newLines[i]
-    if (content === undefined) {
-      continue
-    }
-    push("added", content, { newLine })
-    newLine += 1
-  }
-  for (let i = oldLines.length - suffix; i < oldLines.length; i += 1) {
-    const content = oldLines[i]
-    if (content === undefined) {
-      continue
-    }
-    push("context", content, { oldLine, newLine })
-    oldLine += 1
-    newLine += 1
-  }
-  return lines
-}
-
-function fileDiffCopyText(lines: FileDiffLine[]): string {
-  return lines
-    .map((line) => {
-      const mark =
-        line.type === "added" ? "+" : line.type === "removed" ? "-" : " "
-      return `${mark}${line.content}`
-    })
-    .join("\n")
-}
-
-function fileDiffLinesFromContent(content: string): FileDiffLine[] {
-  return content.split("\n").map((line, index) => ({
-    id: `n${String(index)}`,
-    type: "added" as const,
-    newLine: index + 1,
-    content: line,
-  }))
-}
-
-function fileDiffLinesFromUnified(patch: string): FileDiffLine[] {
-  if (!looksLikeDiff(patch)) {
-    return []
-  }
-  const lines: FileDiffLine[] = []
-  let oldLine = 0
-  let newLine = 0
-  let index = 0
-  for (const raw of patch.split("\n")) {
-    if (raw.startsWith("@@")) {
-      const hunk = /@@ -(\d+)(?:,\d+)? \+(\d+)/.exec(raw)
-      if (hunk?.[1] !== undefined && hunk[2] !== undefined) {
-        oldLine = Number(hunk[1])
-        newLine = Number(hunk[2])
-      }
-      continue
-    }
-    if (
-      raw.startsWith("diff ") ||
-      raw.startsWith("index ") ||
-      raw.startsWith("---") ||
-      raw.startsWith("+++")
-    ) {
-      continue
-    }
-    const id = `p${String(index)}`
-    index += 1
-    if (raw.startsWith("+")) {
-      lines.push({
-        id,
-        type: "added",
-        newLine,
-        content: raw.slice(1),
-      })
-      newLine += 1
-      continue
-    }
-    if (raw.startsWith("-")) {
-      lines.push({
-        id,
-        type: "removed",
-        oldLine,
-        content: raw.slice(1),
-      })
-      oldLine += 1
-      continue
-    }
-    const text = raw.startsWith(" ") ? raw.slice(1) : raw
-    lines.push({
-      id,
-      type: "context",
-      oldLine,
-      newLine,
-      content: text,
-    })
-    oldLine += 1
-    newLine += 1
-  }
-  return lines
-}
-
 function fileNameFromPath(path: string | undefined): string {
   if (path === undefined || path.trim() === "") {
     return ""
@@ -927,10 +770,6 @@ function languageFromPath(path: string | undefined): string {
   if (ext === "yml") return "yaml"
   if (ext === "sh") return "bash"
   return ext
-}
-
-function looksLikeDiff(text: string): boolean {
-  return /^(?:diff --git |--- |\+\+\+ |@@ )/m.test(text)
 }
 
 function jsonInputOpen(raw: string | undefined): boolean {

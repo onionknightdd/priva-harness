@@ -57,13 +57,20 @@ export interface FileDiffProps {
   className?: string;
 }
 
-function maxLineNumberDigits(
-  lines: FileDiffLine[],
-  key: "oldLine" | "newLine",
-): number {
+function displayLineNumber(line: FileDiffLine): number | undefined {
+  if (line.type === "removed") {
+    return line.oldLine;
+  }
+  if (line.type === "added") {
+    return line.newLine;
+  }
+  return line.newLine ?? line.oldLine;
+}
+
+function maxDisplayLineDigits(lines: FileDiffLine[]): number {
   let max = 0;
   for (const line of lines) {
-    const value = line[key];
+    const value = displayLineNumber(line);
     if (typeof value === "number") {
       max = Math.max(max, String(value).length);
     }
@@ -71,13 +78,10 @@ function maxLineNumberDigits(
   return max;
 }
 
-function lineNumberGridTemplate(oldDigits: number, newDigits: number): string {
+function lineNumberGridTemplate(digits: number): string {
   const columns: string[] = [];
-  if (oldDigits > 0) {
-    columns.push(`calc(${String(oldDigits)}ch + 0.75rem)`);
-  }
-  if (newDigits > 0) {
-    columns.push(`calc(${String(newDigits)}ch + 0.75rem)`);
+  if (digits > 0) {
+    columns.push(`calc(${String(digits)}ch + 0.75rem)`);
   }
   columns.push("1rem", "minmax(0,1fr)");
   return columns.join(" ");
@@ -133,9 +137,8 @@ export function FileDiff({
   const canCopy = Boolean(copyText || onCopy);
   const code = lines.map((line) => line.content).join("\n");
   const tokens = useAgentCodeTokens(code, language);
-  const oldDigits = maxLineNumberDigits(lines, "oldLine");
-  const newDigits = maxLineNumberDigits(lines, "newLine");
-  const gridTemplateColumns = lineNumberGridTemplate(oldDigits, newDigits);
+  const lineDigits = maxDisplayLineDigits(lines);
+  const gridTemplateColumns = lineNumberGridTemplate(lineDigits);
 
   const setOpen = useCallback(
     (next: boolean) => {
@@ -272,7 +275,7 @@ export function FileDiff({
               ref={viewportRef}
               data-slot="file-diff-viewport"
               aria-live="polite"
-              className="scrollbar-hide overflow-auto"
+              className="scrollbar-hide overflow-auto pl-[4px]"
               style={{ maxHeight }}
             >
               <div className="font-mono text-xs leading-5">
@@ -289,14 +292,9 @@ export function FileDiff({
                       )}
                       style={{ gridTemplateColumns }}
                     >
-                      {oldDigits > 0 ? (
+                      {lineDigits > 0 ? (
                         <span className="select-none px-1.5 text-right tabular-nums text-muted-foreground/40">
-                          {line.oldLine}
-                        </span>
-                      ) : null}
-                      {newDigits > 0 ? (
-                        <span className="select-none px-1.5 text-right tabular-nums text-muted-foreground/40">
-                          {line.newLine}
+                          {displayLineNumber(line)}
                         </span>
                       ) : null}
                       <span
