@@ -29,7 +29,6 @@ import {
   TimelineContent,
   TimelineIndicator,
   TimelineItem,
-  TimelineSeparator,
 } from "@/components/reui/timeline"
 import { cn } from "@/lib/utils"
 
@@ -394,12 +393,9 @@ function ProcessRow({
   )
 
   const rail = (
-    <>
-      <TimelineSeparator className="bg-border" />
-      <TimelineIndicator className="flex items-center justify-center border-border bg-background [&_svg:not([class*='size-'])]:size-2.5">
-        {Icon ? <Icon /> : null}
-      </TimelineIndicator>
-    </>
+    <TimelineIndicator className="flex items-center justify-center border-border bg-background [&_svg:not([class*='size-'])]:size-2.5">
+      {Icon ? <Icon /> : null}
+    </TimelineIndicator>
   )
 
   if (!hasBody) {
