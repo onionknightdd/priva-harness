@@ -1,5 +1,10 @@
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
 import { describe, expect, it, vi } from 'vitest'
 
+import { foldThread } from '../../../../src/core/resource/fold-thread.js'
 import {
   ClaudeSessionStore,
   lastAssistantFromTranscriptLines,
@@ -116,6 +121,146 @@ describe('ClaudeSessionStore', () => {
       modelId: 'claude-real',
       observedAt: Date.parse('2026-01-02T00:00:00.000Z'),
     })
+  })
+
+  it('hydrates SDK-stripped Edit toolUseResult from the jsonl transcript', async () => {
+    const configDir = await mkdtemp(join(tmpdir(), 'priva-claude-transcript-'))
+    try {
+      const project = join(configDir, 'projects', '-work')
+      await mkdir(project, { recursive: true })
+      await writeFile(join(project, 'sess-1.jsonl'), [
+        JSON.stringify({
+          type: 'assistant',
+          uuid: 'a1',
+          message: {
+            role: 'assistant',
+            content: [{
+              type: 'tool_use',
+              id: 'edit-1',
+              name: 'Edit',
+              input: { file_path: '/Users/derekdeng/random_note.md', old_string: 'a', new_string: '测试\n' },
+            }],
+          },
+        }),
+        JSON.stringify({
+          type: 'user',
+          uuid: 't1',
+          message: {
+            role: 'user',
+            content: [{
+              type: 'tool_result',
+              tool_use_id: 'edit-1',
+              content: 'The file has been updated successfully. (file state is current in your context — no need to Read it back)',
+            }],
+          },
+          toolUseResult: {
+            structuredPatch: [{
+              oldStart: 4,
+              oldLines: 8,
+              newStart: 4,
+              newLines: 7,
+              lines: [
+                ' ',
+                ' ## 今日要点',
+                ' ',
+                '-- 完成文件写入测试',
+                '-- 保持简单直接',
+                '+测试',
+                ' ',
+                ' ## 随手记',
+                ' xxxx',
+              ],
+            }],
+          },
+        }),
+        JSON.stringify({
+          type: 'user',
+          uuid: 'bash-t',
+          message: {
+            role: 'user',
+            content: [{ type: 'tool_result', tool_use_id: 'bash-1', content: 'ok\n' }],
+          },
+          toolUseResult: { stdout: 'ok\n', stderr: '', interrupted: false },
+        }),
+      ].join('\n'))
+
+      const sdk = fakeClaudeSdk()
+      sdk.listSubagents = vi.fn(() => Promise.resolve([]))
+      sdk.getSessionMessages = vi.fn(() => Promise.resolve([
+        {
+          type: 'assistant',
+          uuid: 'a1',
+          session_id: 'sess-1',
+          message: {
+            role: 'assistant',
+            content: [
+              {
+                type: 'tool_use',
+                id: 'edit-1',
+                name: 'Edit',
+                input: { file_path: '/Users/derekdeng/random_note.md', old_string: 'a', new_string: '测试\n' },
+              },
+              {
+                type: 'tool_use',
+                id: 'bash-1',
+                name: 'Bash',
+                input: { command: 'pwd' },
+              },
+            ],
+          },
+        },
+        {
+          type: 'user',
+          uuid: 't1',
+          session_id: 'sess-1',
+          message: {
+            role: 'user',
+            content: [{
+              type: 'tool_result',
+              tool_use_id: 'edit-1',
+              content: 'The file has been updated successfully. (file state is current in your context — no need to Read it back)',
+            }],
+          },
+        },
+        {
+          type: 'user',
+          uuid: 'bash-t',
+          session_id: 'sess-1',
+          message: {
+            role: 'user',
+            content: [{ type: 'tool_result', tool_use_id: 'bash-1', content: 'ok\n' }],
+          },
+        },
+      ]))
+
+      const store = new ClaudeSessionStore({ globalConfigDir: configDir, sdk })
+      const hydrated = await store.messages({ provider: 'claude', id: 'sess-1' })
+      expect(hydrated.find((message) => message.uuid === 't1')?.message).toMatchObject({
+        tool_use_result: {
+          structuredPatch: [expect.objectContaining({ oldStart: 4, newStart: 4 })],
+        },
+      })
+
+      const thread = foldThread(await store.replay({ provider: 'claude', id: 'sess-1' }))
+      const edit = thread[0]?.blocks?.find((block) => block.type === 'tool_use' && block.id === 'edit-1')
+      const bash = thread[0]?.blocks?.find((block) => block.type === 'tool_use' && block.id === 'bash-1')
+      expect(edit?.type).toBe('tool_use')
+      if (edit?.type !== 'tool_use') {
+        throw new Error('expected Edit tool_use block')
+      }
+      expect(edit.tool).toMatchObject({
+        status: 'completed',
+        ok: true,
+      })
+      expect(edit.tool?.output).toMatch(/^@@ -4,8 \+4,7 @@/)
+      expect(edit.tool?.output).toContain('+测试')
+      expect(bash).toMatchObject({
+        name: 'bash',
+        tool: { status: 'completed', ok: true, output: 'ok\n' },
+      })
+    } finally {
+      await rm(configDir, { recursive: true, force: true })
+    }
   })
 })
 

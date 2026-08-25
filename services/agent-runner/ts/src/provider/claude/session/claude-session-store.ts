@@ -19,6 +19,11 @@ import {
   type SessionMessageType,
 } from '../../../core/resource/session.js'
 import type { ThreadReplayItem } from '../../../core/resource/thread.js'
+import {
+  attachTranscriptToolUseResult,
+  EMPTY_TOOL_USE_RESULTS,
+  toolUseResultsFromTranscriptLines,
+} from './claude-transcript.js'
 import { replayClaudeSessionMessages } from './claude-thread-replay.js'
 
 export interface ClaudeSessionSdk {
@@ -60,16 +65,17 @@ export interface ClaudeSessionStoreOptions {
   readonly sdk?: ClaudeSessionSdk
 }
 
-interface TranscriptModelCache {
+interface TranscriptFileCache {
   readonly mtimeMs: number
   readonly size: number
-  readonly value: LastAssistantModel | undefined
+  readonly lastAssistant: LastAssistantModel | undefined
+  readonly toolUseResults: ReadonlyMap<string, unknown>
 }
 
 export class ClaudeSessionStore implements ProviderSessionStore {
   private readonly sdk: ClaudeSessionSdk
   private readonly globalConfigDir: string
-  private readonly transcriptCache = new Map<string, TranscriptModelCache>()
+  private readonly transcriptCache = new Map<string, TranscriptFileCache>()
 
   constructor(options: ClaudeSessionStoreOptions) {
     this.globalConfigDir = options.globalConfigDir
@@ -106,12 +112,13 @@ export class ClaudeSessionStore implements ProviderSessionStore {
     const info = await this.read(ref)
     const options = dirOptions(info.cwd)
     const listed = await this.sdk.getSessionMessages(ref.id, options)
-    const mapped = listed.map((message) => mapClaudeMessage(message, ref.id))
+    const toolUseResults = await this.toolUseResultsFromTranscript(ref.id, info.cwd)
+    const mapped = listed.map((message) => this.mapHydratedMessage(message, ref.id, toolUseResults))
     if (page?.limit === undefined) {
       const subagents = await this.sdk.listSubagents(ref.id, options)
       for (const subagent of subagents) {
         const extra = await this.sdk.getSubagentMessages(ref.id, subagent.agentId, options)
-        mapped.push(...extra.map((message) => mapClaudeMessage(message, ref.id)))
+        mapped.push(...extra.map((message) => this.mapHydratedMessage(message, ref.id, toolUseResults)))
       }
     }
     return pageSessionMessages(mapped, page)
@@ -201,16 +208,43 @@ export class ClaudeSessionStore implements ProviderSessionStore {
     return undefined
   }
 
+  private mapHydratedMessage(
+    raw: unknown,
+    sessionId: string,
+    toolUseResults: ReadonlyMap<string, unknown>,
+  ): SessionMessage {
+    return mapClaudeMessage(attachTranscriptToolUseResult(raw, toolUseResults), sessionId)
+  }
+
+  private async toolUseResultsFromTranscript(
+    sessionId: string,
+    cwd: string | null,
+  ): Promise<ReadonlyMap<string, unknown>> {
+    const transcriptPath = await this.findTranscriptPath(sessionId, cwd)
+    if (transcriptPath === undefined) return EMPTY_TOOL_USE_RESULTS
+    return (await this.loadTranscript(transcriptPath)).toolUseResults
+  }
+
   private async lastAssistantFromTranscript(path: string): Promise<LastAssistantModel | undefined> {
+    return (await this.loadTranscript(path)).lastAssistant
+  }
+
+  private async loadTranscript(path: string): Promise<TranscriptFileCache> {
     const stats = await stat(path)
     const cached = this.transcriptCache.get(path)
     if (cached?.mtimeMs === stats.mtimeMs && cached.size === stats.size) {
-      return cached.value
+      return cached
     }
     const content = await readFile(path, 'utf8')
-    const value = lastAssistantFromTranscriptLines(content.split('\n'), stats.mtimeMs)
-    this.transcriptCache.set(path, { mtimeMs: stats.mtimeMs, size: stats.size, value })
-    return value
+    const lines = content.split('\n')
+    const loaded: TranscriptFileCache = {
+      mtimeMs: stats.mtimeMs,
+      size: stats.size,
+      lastAssistant: lastAssistantFromTranscriptLines(lines, stats.mtimeMs),
+      toolUseResults: toolUseResultsFromTranscriptLines(lines),
+    }
+    this.transcriptCache.set(path, loaded)
+    return loaded
   }
 }
 
