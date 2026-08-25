@@ -246,9 +246,6 @@ export function listSessionThread(
       created_at: string
       status: "streaming" | "complete" | "error"
       transcript_uuid: string | null
-      blocks?: unknown
-      nested_agents?: unknown
-      workflows?: unknown
     }>
     add_dirs: string[]
     run_mode: SessionRunMode
@@ -266,99 +263,8 @@ export function listSessionThread(
       createdAt: item.created_at,
       status: item.status,
       ...(item.transcript_uuid ? { transcriptUuid: item.transcript_uuid } : {}),
-      ...(item.blocks === undefined ? {} : { blocks: item.blocks }),
-      ...(item.nested_agents === undefined
-        ? {}
-        : { nestedAgents: mapNestedAgents(item.nested_agents) }),
-      ...(item.workflows === undefined
-        ? {}
-        : { workflows: mapWorkflows(item.workflows) }),
     })),
   }))
-}
-
-function mapNestedAgents(raw: unknown) {
-  if (!Array.isArray(raw)) {
-    return []
-  }
-  return raw.flatMap((item) => {
-    if (typeof item !== "object" || item === null) {
-      return []
-    }
-    const record = item as Record<string, unknown>
-    const parentToolUseId =
-      typeof record.parent_tool_use_id === "string"
-        ? record.parent_tool_use_id
-        : typeof record.parentToolUseId === "string"
-          ? record.parentToolUseId
-          : ""
-    if (parentToolUseId === "") {
-      return []
-    }
-    return [
-      {
-        parentToolUseId,
-        status: record.status === "completed" ? "completed" as const : "running" as const,
-        blocks: Array.isArray(record.blocks) ? record.blocks : [],
-        inbox: Array.isArray(record.inbox) ? record.inbox.map(mapInbox) : [],
-        ...(typeof record.agent_id === "string"
-          ? { agentId: record.agent_id }
-          : typeof record.agentId === "string"
-            ? { agentId: record.agentId }
-            : {}),
-        ...(typeof record.name === "string" ? { name: record.name } : {}),
-      },
-    ]
-  })
-}
-
-function mapInbox(raw: unknown) {
-  if (typeof raw !== "object" || raw === null) {
-    return { body: "", source: "peer" as const }
-  }
-  const record = raw as Record<string, unknown>
-  const body = typeof record.body === "string" ? record.body : ""
-  const source = record.source === "coordinator" ? "coordinator" as const : "peer" as const
-  const senderName =
-    typeof record.sender_name === "string"
-      ? record.sender_name
-      : typeof record.senderName === "string"
-        ? record.senderName
-        : undefined
-  return {
-    body,
-    source,
-    ...(senderName === undefined ? {} : { senderName }),
-  }
-}
-
-function mapWorkflows(raw: unknown) {
-  if (!Array.isArray(raw)) {
-    return []
-  }
-  return raw.flatMap((item) => {
-    if (typeof item !== "object" || item === null) {
-      return []
-    }
-    const record = item as Record<string, unknown>
-    const workflowToolUseId =
-      typeof record.workflow_tool_use_id === "string"
-        ? record.workflow_tool_use_id
-        : typeof record.workflowToolUseId === "string"
-          ? record.workflowToolUseId
-          : ""
-    if (workflowToolUseId === "") {
-      return []
-    }
-    return [
-      {
-        workflowToolUseId,
-        status: typeof record.status === "string" ? record.status : "running",
-        ...(typeof record.name === "string" ? { name: record.name } : {}),
-        ...(typeof record.summary === "string" ? { summary: record.summary } : {}),
-      },
-    ]
-  })
 }
 
 export function forkSession(
