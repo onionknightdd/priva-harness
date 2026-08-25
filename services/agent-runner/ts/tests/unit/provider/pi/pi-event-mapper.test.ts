@@ -214,6 +214,61 @@ describe('PiEventMapper', () => {
     ])
   })
 
+  it('maps Read text content onto a $read envelope', () => {
+    const mapper = new PiEventMapper({ sessionId: 'pi-sess', model: 'm' })
+    const events = mapper.push({
+      type: 'tool_execution_end',
+      toolCallId: 'read1',
+      toolName: 'read',
+      isError: false,
+      result: { content: [{ type: 'text', text: 'const a = 1' }] },
+    })
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: 'tool.completed',
+        id: 'read1',
+        name: 'read',
+        output: JSON.stringify({ $read: 'text', content: 'const a = 1', startLine: 1 }),
+      }),
+    ])
+  })
+
+  it('maps Read image content onto a $read envelope', () => {
+    const mapper = new PiEventMapper({ sessionId: 'pi-sess', model: 'm' })
+    const events = mapper.push({
+      type: 'tool_execution_end',
+      toolCallId: 'readimg',
+      toolName: 'read',
+      isError: false,
+      result: { content: [{ type: 'image', data: 'abc', mimeType: 'image/png' }] },
+    })
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: 'tool.completed',
+        id: 'readimg',
+        name: 'read',
+        output: JSON.stringify({ $read: 'image', mime: 'image/png', b64: 'abc' }),
+      }),
+    ])
+  })
+
+  it('does not encode Read progress chunks as $read JSON', () => {
+    const mapper = new PiEventMapper({ sessionId: 'pi-sess', model: 'm' })
+    const events = mapper.push({
+      type: 'tool_execution_update',
+      toolCallId: 'read1',
+      toolName: 'read',
+      partialResult: { content: [{ type: 'text', text: 'const a = 1' }] },
+    })
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: 'tool.progress',
+        id: 'read1',
+        chunk: 'const a = 1',
+      }),
+    ])
+  })
+
   it('maps image deltas onto assistant.image_delta rather than text', () => {
     const mapper = new PiEventMapper({ sessionId: 'pi-sess', model: 'm' })
     const events = mapper.push({

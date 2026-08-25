@@ -12,8 +12,9 @@ import {
   stringField,
   type JsonRecord,
 } from '../../core/event/json-record.js'
-import { isAgentName, isTerminalStatus, isWorkflowName } from '../../core/event/tool-names.js'
+import { isAgentName, isReadToolName, isTerminalStatus, isWorkflowName } from '../../core/event/tool-names.js'
 import { unifiedDiffFromStructuredPatch } from '../../core/event/tool-patch.js'
+import { encodeReadView } from '../../core/event/tool-read.js'
 
 export interface ClaudeSdkMessage {
   readonly type: string
@@ -307,7 +308,7 @@ export class ClaudeEventMapper {
       const id = stringField(block, 'tool_use_id') ?? stringField(block, 'id')
       if (id === undefined) continue
       const name = this.tools.get(id) ?? 'unknown'
-      const output = claudeToolOutput(block, envelope, inner)
+      const output = claudeToolOutput(block, envelope, inner, name)
       const launch = parseAgentLaunch(block, output)
       if (launch?.agentId !== undefined) {
         this.agentIdByParent.set(id, launch.agentId)
@@ -621,14 +622,22 @@ function claudeToolOutput(
   block: JsonRecord,
   envelope: JsonRecord,
   inner: JsonRecord,
+  name: string,
 ): string {
-  const result =
-    asRecord(block['toolUseResult']) ??
-    asRecord(block['tool_use_result']) ??
-    asRecord(envelope['tool_use_result']) ??
-    asRecord(envelope['toolUseResult']) ??
-    asRecord(inner['tool_use_result']) ??
-    asRecord(inner['toolUseResult'])
+  const rawResult =
+    block['toolUseResult'] ??
+    block['tool_use_result'] ??
+    envelope['tool_use_result'] ??
+    envelope['toolUseResult'] ??
+    inner['tool_use_result'] ??
+    inner['toolUseResult']
+  if (isReadToolName(name)) {
+    const encoded = encodeReadView(rawResult)
+    if (encoded !== '') return encoded
+    const fromContent = encodeReadView(block['content'])
+    if (fromContent !== '') return fromContent
+  }
+  const result = asRecord(rawResult)
   const fromHunks = unifiedDiffFromStructuredPatch(result)
   if (fromHunks !== '') return fromHunks
   const gitDiff = result === undefined ? undefined : asRecord(result['gitDiff'])

@@ -108,4 +108,46 @@ describe('replayPiSessionMessages', () => {
       tool: { status: 'completed', ok: true, output: '@@ -9,1 +9,1 @@\n-a\n+b' },
     })
   })
+
+  it('replays Read image content as a $read envelope', () => {
+    const messages: SessionMessage[] = [
+      {
+        type: 'assistant',
+        uuid: 'r1',
+        sessionId: 'bb-1',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'toolCall', id: 'read-1', name: 'read', arguments: { path: 'shot.png' } }],
+        },
+        parentToolUseId: null,
+        metadata: null,
+        timestamp: null,
+      },
+      {
+        type: 'tool_result',
+        uuid: 'r2',
+        sessionId: 'bb-1',
+        message: {
+          role: 'toolResult',
+          toolCallId: 'read-1',
+          toolName: 'read',
+          content: [{ type: 'image', data: 'abc', mimeType: 'image/png' }],
+        },
+        parentToolUseId: 'read-1',
+        metadata: null,
+        timestamp: null,
+      },
+    ]
+    const thread = foldThread(replayPiSessionMessages(messages))
+    const tool = thread[0]?.blocks?.find((block) => block.type === 'tool_use')
+    expect(tool).toMatchObject({
+      id: 'read-1',
+      name: 'read',
+      tool: {
+        status: 'completed',
+        ok: true,
+        output: JSON.stringify({ $read: 'image', mime: 'image/png', b64: 'abc' }),
+      },
+    })
+  })
 })

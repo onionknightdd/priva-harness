@@ -19,6 +19,10 @@ export function isWorkflowName(name: string): boolean {
   return name.trim().toLowerCase() === 'workflow'
 }
 
+export function isReadToolName(name: string): boolean {
+  return name.trim().toLowerCase() === 'read'
+}
+
 export function isTerminalStatus(status: string): boolean {
   return TERMINAL_STATUSES.has(status.trim().toLowerCase())
 }

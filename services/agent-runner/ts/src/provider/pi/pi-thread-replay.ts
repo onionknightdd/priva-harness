@@ -1,5 +1,7 @@
 import { asRecord, isRecord, stringField } from '../../core/event/json-record.js'
+import { isReadToolName } from '../../core/event/tool-names.js'
 import { patchFromToolDetails } from '../../core/event/tool-patch.js'
+import { encodeReadView } from '../../core/event/tool-read.js'
 import type { AgentEvent, ContentBlock } from '../../core/event/agent-event.js'
 import type { SessionMessage } from '../../core/resource/session.js'
 import type { ThreadReplayItem } from '../../core/resource/thread.js'
@@ -56,7 +58,7 @@ export function replayPiSessionMessages(messages: readonly SessionMessage[]): Th
           id,
           name,
           ok: inner['isError'] !== true && inner['is_error'] !== true,
-          output: toolOutput(inner),
+          output: completedToolOutput(name, inner),
           messageId: message.uuid,
           blockId: id,
         },
@@ -176,6 +178,14 @@ function imageFrom(block: Record<string, unknown>): {
     ...(b64 === undefined ? {} : { b64 }),
     ...(alt === undefined ? {} : { alt }),
   }
+}
+
+function completedToolOutput(name: string, record: Record<string, unknown>): string {
+  if (isReadToolName(name)) {
+    const encoded = encodeReadView(record)
+    if (encoded !== '') return encoded
+  }
+  return toolOutput(record)
 }
 
 function toolOutput(record: Record<string, unknown>): string {

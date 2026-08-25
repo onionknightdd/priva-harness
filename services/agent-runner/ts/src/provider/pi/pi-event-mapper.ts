@@ -12,7 +12,9 @@ import {
   type JsonRecord,
 } from '../../core/event/json-record.js'
 
+import { isReadToolName } from '../../core/event/tool-names.js'
 import { patchFromToolDetails } from '../../core/event/tool-patch.js'
+import { encodeReadView } from '../../core/event/tool-read.js'
 
 export interface PiSessionEvent {
   readonly type: string
@@ -285,7 +287,7 @@ export class PiEventMapper {
         id,
         name,
         ok: event.isError !== true,
-        output: toolOutput(event.result),
+        output: completedToolOutput(name, event.result),
         ...(this.lastMessageId === undefined ? {} : { messageId: this.lastMessageId }),
         blockId: id,
         ...(index === undefined ? {} : { index }),
@@ -455,6 +457,14 @@ function contentBlocksFromMessage(message: JsonRecord, messageId: string): Conte
 
 function normalizeToolName(name: string): string {
   return name.toLowerCase()
+}
+
+function completedToolOutput(name: string, value: unknown): string {
+  if (isReadToolName(name)) {
+    const encoded = encodeReadView(value)
+    if (encoded !== '') return encoded
+  }
+  return toolOutput(value)
 }
 
 function toolOutput(value: unknown): string {

@@ -291,6 +291,46 @@ describe('replayClaudeSessionMessages', () => {
       tool: { status: 'completed', ok: true, output: '@@ -12,1 +12,1 @@\n keep' },
     })
   })
+
+  it('replays Read FileReadOutput text as a $read envelope', () => {
+    const messages: SessionMessage[] = [
+      session('assistant', 'a1', {
+        role: 'assistant',
+        id: 'a1',
+        content: [{
+          type: 'tool_use',
+          id: 'read-1',
+          name: 'Read',
+          input: { file_path: 'a.ts' },
+        }],
+      }),
+      session('user', 't1', {
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: 'read-1', content: '    12\tconst a = 1' }],
+        tool_use_result: {
+          type: 'text',
+          file: {
+            filePath: 'a.ts',
+            content: 'const a = 1',
+            numLines: 1,
+            startLine: 12,
+            totalLines: 40,
+          },
+        },
+      }),
+    ]
+    const thread = foldThread(replayClaudeSessionMessages(messages))
+    const tool = thread[0]?.blocks?.find((block) => block.type === 'tool_use')
+    expect(tool).toMatchObject({
+      id: 'read-1',
+      name: 'read',
+      tool: {
+        status: 'completed',
+        ok: true,
+        output: JSON.stringify({ $read: 'text', content: 'const a = 1', startLine: 12 }),
+      },
+    })
+  })
 })
 
 function session(

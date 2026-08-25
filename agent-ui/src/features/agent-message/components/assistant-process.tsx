@@ -13,6 +13,7 @@ import { motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
 import { FileDiff } from "@/components/agents/file-diff"
+import { FileRead } from "@/components/agents/file-read"
 import {
   ToolResult,
   ToolResultOutput,
@@ -51,6 +52,7 @@ import {
   fileDiffLinesFromEdit,
   fileDiffLinesFromUnified,
 } from "../file-diff-lines"
+import { parseFileReadOutput, isImageFilePath } from "../file-read-view"
 
 const PANEL_CLASS =
   "h-[var(--collapsible-panel-height)] overflow-hidden transition-[height,opacity] duration-200 ease-out data-[ending-style]:h-0 data-[ending-style]:opacity-0 data-[starting-style]:h-0 data-[starting-style]:opacity-0 motion-reduce:transition-none"
@@ -257,6 +259,9 @@ function ToolItem({
   }
   if (isEditTool(block.name)) {
     return <EditToolItem block={block} />
+  }
+  if (isReadTool(block.name)) {
+    return <ReadToolItem block={block} />
   }
   return <GenericToolItem block={block} />
 }
@@ -527,6 +532,34 @@ function EditToolItem({
   )
 }
 
+function ReadToolItem({
+  block,
+}: {
+  block: Extract<StreamBlock, { type: "tool_use" }>
+}) {
+  const input = usefulToolInput(block.tool?.input) ?? usefulToolInput(block.input)
+  const filePath =
+    stringInput(input, "file_path") ?? stringInput(input, "path")
+  const status = toolResultStatus(block.tool)
+  const running = status === "running"
+  const view = running
+    ? undefined
+    : parseFileReadOutput(block.tool?.output)
+
+  return (
+    <FileRead
+      tool="Read"
+      file={fileNameFromPath(filePath)}
+      imageHint={isImageFilePath(filePath)}
+      view={view}
+      status={running ? "streaming" : "complete"}
+      language={languageFromPath(filePath)}
+      defaultOpen={running}
+      collapseOnComplete
+    />
+  )
+}
+
 function NestedAgentItem({ agent }: { agent: NestedAgent }) {
   const { t } = useTranslation()
   const running = agent.status === "running"
@@ -750,6 +783,10 @@ function isEditTool(name: string): boolean {
   return name.trim().toLowerCase() === "edit"
 }
 
+function isReadTool(name: string): boolean {
+  return name.trim().toLowerCase() === "read"
+}
+
 function fileNameFromPath(path: string | undefined): string {
   if (path === undefined || path.trim() === "") {
     return ""
@@ -772,6 +809,7 @@ function languageFromPath(path: string | undefined): string {
   if (ext === "md") return "markdown"
   if (ext === "yml") return "yaml"
   if (ext === "sh") return "bash"
+  if (ext === "ipynb") return "json"
   return ext
 }
 

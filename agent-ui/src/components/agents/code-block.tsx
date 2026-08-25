@@ -30,7 +30,9 @@ export interface CodeBlockProps {
   language?: AgentCodeLanguage
   filename?: ReactNode
   status?: CodeBlockStatus
+  showHeader?: boolean
   showLineNumbers?: boolean
+  startLine?: number
   highlightLines?: number[]
   maxHeight?: number
   wrap?: boolean
@@ -44,7 +46,9 @@ export function CodeBlock({
   language = "text",
   filename,
   status = "complete",
+  showHeader = true,
   showLineNumbers = true,
+  startLine = 1,
   highlightLines = [],
   maxHeight = 280,
   wrap = false,
@@ -69,7 +73,12 @@ export function CodeBlock({
     offset += content.length + 1
     return line
   })
+  const lastLine = startLine + Math.max(lines.length, 1) - 1
+  const lineDigits = showLineNumbers
+    ? String(Math.max(startLine, lastLine, 1)).length
+    : 0
   const copyLabel = copied ? t("common.copied") : t("common.copyCode")
+  const showCopy = copyable || Boolean(onCopy)
 
   useEffect(
     () => () => {
@@ -125,6 +134,22 @@ export function CodeBlock({
     }
   }, [code, onCopy])
 
+  const copyButton = showCopy ? (
+    <motion.button
+      type="button"
+      aria-label={copyLabel}
+      title={copyLabel}
+      onClick={() => {
+        void handleCopy()
+      }}
+      whileTap={reduce ? undefined : { scale: 0.9 }}
+      transition={SPRING_PRESS}
+      className="grid size-7 shrink-0 place-items-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-background/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+    </motion.button>
+  ) : null
+
   return (
     <div
       data-state={status}
@@ -134,96 +159,99 @@ export function CodeBlock({
         className
       )}
     >
-      <div className="flex h-10 items-center gap-2.5 px-3">
-        <FileCode2
-          aria-hidden="true"
-          className="size-3.5 shrink-0 text-muted-foreground/70"
-        />
-        {filename ? (
-          <span className="min-w-0 truncate font-mono text-xs text-foreground/80">
-            {filename}
+      {showHeader ? (
+        <div className="flex h-10 items-center gap-2.5 px-3">
+          <FileCode2
+            aria-hidden="true"
+            className="size-3.5 shrink-0 text-muted-foreground/70"
+          />
+          {filename ? (
+            <span className="min-w-0 truncate font-mono text-xs text-foreground/80">
+              {filename}
+            </span>
+          ) : null}
+          <span className="text-[10px] font-medium tracking-wide text-muted-foreground/55 uppercase">
+            {language}
           </span>
-        ) : null}
-        <span className="text-[10px] font-medium tracking-wide text-muted-foreground/55 uppercase">
-          {language}
-        </span>
-        <span
-          className={cn(
-            "ml-auto inline-flex shrink-0 items-center gap-1 text-[10px] font-medium",
-            streaming
-              ? "text-blue-600 dark:text-blue-400"
-              : "text-emerald-600 dark:text-emerald-400"
-          )}
-        >
-          {streaming ? (
-            <LoaderCircle className={cn("size-3", !reduce && "animate-spin")} />
-          ) : (
-            <Check className="size-3" />
-          )}
-          {streaming ? t("common.codeWriting") : t("common.codeReady")}
-        </span>
-        {copyable || onCopy ? (
-          <motion.button
-            type="button"
-            aria-label={copyLabel}
-            title={copyLabel}
-            onClick={() => {
-              void handleCopy()
-            }}
-            whileTap={reduce ? undefined : { scale: 0.9 }}
-            transition={SPRING_PRESS}
-            className="grid size-7 shrink-0 place-items-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-background/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            {copied ? (
-              <Check className="size-3.5" />
-            ) : (
-              <Copy className="size-3.5" />
+          <span
+            className={cn(
+              "ml-auto inline-flex shrink-0 items-center gap-1 text-[10px] font-medium",
+              streaming
+                ? "text-blue-600 dark:text-blue-400"
+                : "text-emerald-600 dark:text-emerald-400"
             )}
-          </motion.button>
-        ) : null}
-      </div>
+          >
+            {streaming ? (
+              <LoaderCircle className={cn("size-3", !reduce && "animate-spin")} />
+            ) : (
+              <Check className="size-3" />
+            )}
+            {streaming ? t("common.codeWriting") : t("common.codeReady")}
+          </span>
+          {copyButton}
+        </div>
+      ) : null}
 
-      <div
-        ref={viewportRef}
-        role={streaming ? "log" : undefined}
-        aria-live={streaming ? "polite" : undefined}
-        className="overflow-auto border-t border-foreground/[0.06] py-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
-        style={{ maxHeight }}
-      >
-        <pre className="m-0 min-w-max font-mono text-xs leading-5 text-foreground/85">
-          <code>
-            {lines.map((line, index) => {
-              const lineNumber = index + 1
-              return (
-                <span
-                  key={line.offset}
-                  className={cn(
-                    "grid min-h-5",
-                    showLineNumbers
-                      ? "grid-cols-[2.75rem_minmax(0,1fr)]"
-                      : "grid-cols-1",
-                    highlighted.has(lineNumber) && "bg-blue-500/[0.07]"
-                  )}
-                >
-                  {showLineNumbers ? (
-                    <span className="select-none pr-3 text-right tabular-nums text-muted-foreground/35">
-                      {lineNumber}
-                    </span>
-                  ) : null}
-                  <AgentCodeLine
-                    code={line.content}
-                    tokens={tokens?.[index]}
+      <div className="relative">
+        <div
+          ref={viewportRef}
+          role={streaming ? "log" : undefined}
+          aria-live={streaming ? "polite" : undefined}
+          className={cn(
+            "overflow-auto py-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
+            showHeader && "border-t border-foreground/[0.06]"
+          )}
+          style={{ maxHeight }}
+        >
+          <pre className="m-0 min-w-max font-mono text-xs leading-5 text-foreground/85">
+            <code>
+              {lines.map((line, index) => {
+                const lineNumber = startLine + index
+                return (
+                  <span
+                    key={line.offset}
                     className={cn(
-                      "pr-4",
-                      showLineNumbers ? "pl-1" : "pl-4",
-                      wrap ? "whitespace-pre-wrap break-words" : "whitespace-pre"
+                      "grid min-h-5",
+                      showLineNumbers
+                        ? undefined
+                        : "grid-cols-1",
+                      highlighted.has(index + 1) && "bg-blue-500/[0.07]"
                     )}
-                  />
-                </span>
-              )
-            })}
-          </code>
-        </pre>
+                    style={
+                      showLineNumbers
+                        ? {
+                            gridTemplateColumns: `calc(${String(lineDigits)}ch + 0.75rem) minmax(0,1fr)`,
+                          }
+                        : undefined
+                    }
+                  >
+                    {showLineNumbers ? (
+                      <span className="select-none px-1.5 text-right tabular-nums text-muted-foreground/35">
+                        {lineNumber}
+                      </span>
+                    ) : null}
+                    <AgentCodeLine
+                      code={line.content}
+                      tokens={tokens?.[index]}
+                      className={cn(
+                        "pr-4",
+                        showLineNumbers ? "pl-1" : "pl-4",
+                        wrap
+                          ? "whitespace-pre-wrap break-words"
+                          : "whitespace-pre"
+                      )}
+                    />
+                  </span>
+                )
+              })}
+            </code>
+          </pre>
+        </div>
+        {!showHeader ? (
+          <div className="pointer-events-none absolute top-1.5 right-1.5">
+            <span className="pointer-events-auto">{copyButton}</span>
+          </div>
+        ) : null}
       </div>
     </div>
   )

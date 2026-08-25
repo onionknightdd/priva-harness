@@ -402,6 +402,75 @@ describe('ClaudeEventMapper', () => {
     ]))
   })
 
+  it('maps Read tool_use_result text onto a $read envelope', () => {
+    const mapper = new ClaudeEventMapper()
+    mapper.push({
+      type: 'assistant',
+      message: {
+        id: 'msg_read',
+        content: [{ type: 'tool_use', id: 'read_1', name: 'Read', input: { file_path: 'a.ts' } }],
+      },
+    })
+    const events = mapper.push({
+      type: 'user',
+      tool_use_result: {
+        type: 'text',
+        file: {
+          filePath: 'a.ts',
+          content: 'const a = 1',
+          numLines: 1,
+          startLine: 12,
+          totalLines: 40,
+        },
+      },
+      message: {
+        content: [{
+          type: 'tool_result',
+          tool_use_id: 'read_1',
+          content: '    12\tconst a = 1',
+        }],
+      },
+    })
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'tool.completed',
+        id: 'read_1',
+        name: 'read',
+        ok: true,
+        output: JSON.stringify({ $read: 'text', content: 'const a = 1', startLine: 12 }),
+      }),
+    ]))
+  })
+
+  it('maps Read tool_use_result image onto a $read envelope', () => {
+    const mapper = new ClaudeEventMapper()
+    mapper.push({
+      type: 'assistant',
+      message: {
+        id: 'msg_read_img',
+        content: [{ type: 'tool_use', id: 'read_img', name: 'Read', input: { file_path: 'shot.png' } }],
+      },
+    })
+    const events = mapper.push({
+      type: 'user',
+      tool_use_result: {
+        type: 'image',
+        file: { base64: 'abc', type: 'image/png', originalSize: 12 },
+      },
+      message: {
+        content: [{ type: 'tool_result', tool_use_id: 'read_img', content: [] }],
+      },
+    })
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'tool.completed',
+        id: 'read_img',
+        name: 'read',
+        output: JSON.stringify({ $read: 'image', mime: 'image/png', b64: 'abc' }),
+      }),
+    ]))
+  })
+
   it('maps an error result onto run.failed and keeps session stats', () => {
     const mapper = new ClaudeEventMapper()
     const events = mapper.push({
