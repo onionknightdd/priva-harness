@@ -17,6 +17,7 @@ describe('ClaudeEventMapper', () => {
         session_id: 'sess-1',
         event: {
           type: 'content_block_delta',
+          index: 0,
           delta: { type: 'text_delta', text: 'Hello' },
         },
       }),
@@ -24,6 +25,7 @@ describe('ClaudeEventMapper', () => {
         type: 'assistant',
         session_id: 'sess-1',
         message: {
+          id: 'msg_1',
           model: 'deepseek-v4-flash[1m]',
           content: [{ type: 'text', text: 'Hello' }],
         },
@@ -38,23 +40,27 @@ describe('ClaudeEventMapper', () => {
       }),
     ]
 
-    expect(events).toEqual([
-      { type: 'assistant', event: 'text_delta', text: 'Hello' },
-      { type: 'assistant', event: 'message', text: 'Hello' },
-      {
-        type: 'run',
-        event: 'completed',
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'assistant.block_start', kind: 'text', index: 0 }),
+      expect.objectContaining({ type: 'assistant.delta', text: 'Hello', index: 0 }),
+      expect.objectContaining({
+        type: 'assistant.message',
+        messageId: 'msg_1',
+        blocks: [expect.objectContaining({ type: 'text', text: 'Hello', index: 0 })],
+      }),
+      expect.objectContaining({
+        type: 'run.completed',
         sessionId: 'sess-1',
-        harnessProvider: 'claude',
         model: 'deepseek-v4-flash[1m]',
         durationMs: 42,
         costUsd: 0.01,
         usage: { input: 12, output: 4, cacheRead: 3 },
-      },
-    ])
+      }),
+    ]))
+    expect(events.some((event) => 'harnessProvider' in event)).toBe(false)
   })
 
-  it('maps bash then write tool lifecycle without duplicating started', () => {
+  it('maps bash then write without duplicating tool.started', () => {
     const mapper = new ClaudeEventMapper()
     const events = [
       ...mapper.push({
@@ -76,6 +82,7 @@ describe('ClaudeEventMapper', () => {
       ...mapper.push({
         type: 'assistant',
         message: {
+          id: 'msg_tools',
           content: [{
             type: 'tool_use',
             id: 'call_1',
@@ -114,38 +121,45 @@ describe('ClaudeEventMapper', () => {
       }),
     ]
 
-    expect(events).toEqual([
-      { type: 'tool', event: 'started', id: 'call_1', name: 'bash', input: {} },
-      { type: 'tool', event: 'input_delta', id: 'call_1', chunk: '{"command":"echo ping"}' },
-      { type: 'tool', event: 'completed', id: 'call_1', name: 'bash', ok: true, output: 'ping' },
-      { type: 'tool', event: 'started', id: 'call_2', name: 'write' },
-      { type: 'tool', event: 'completed', id: 'call_2', name: 'write', ok: true, output: 'Wrote z.txt' },
+    const started = events.filter((event) => event.type === 'tool.started')
+    expect(started).toEqual([
+      expect.objectContaining({ id: 'call_1', name: 'bash' }),
+      expect.objectContaining({ id: 'call_2', name: 'write' }),
     ])
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'tool.input_delta', id: 'call_1', chunk: '{"command":"echo ping"}' }),
+      expect.objectContaining({ type: 'tool.completed', id: 'call_1', name: 'bash', ok: true, output: 'ping' }),
+      expect.objectContaining({ type: 'tool.completed', id: 'call_2', name: 'write', ok: true, output: 'Wrote z.txt' }),
+    ]))
   })
 
-  it('maps an error result onto run.failed and keeps session stats', () => {
+  it('maps parallel tools that share a message id across split assistant snapshots', () => {
     const mapper = new ClaudeEventMapper()
-    const events = mapper.push({
-      type: 'result',
-      subtype: 'error_during_execution',
-      session_id: 'sess-err',
-      is_error: true,
-      duration_ms: 9,
-      errors: ['boom'],
-    })
-
-    expect(events).toEqual([{
-      type: 'run',
-      event: 'failed',
-      message: 'boom',
-      sessionId: 'sess-err',
-      harnessProvider: 'claude',
-      model: 'unknown',
-      durationMs: 9,
-    }])
+    const events = [
+      ...mapper.push({
+        type: 'assistant',
+        message: {
+          id: 'msg_parallel',
+          content: [{ type: 'tool_use', id: 'a', name: 'Bash', input: { command: 'echo a' } }],
+        },
+      }),
+      ...mapper.push({
+        type: 'assistant',
+        message: {
+          id: 'msg_parallel',
+          content: [{ type: 'tool_use', id: 'b', name: 'Bash', input: { command: 'echo b' } }],
+        },
+      }),
+    ]
+    const snapshot = events.filter((event) => event.type === 'assistant.message').at(-1)
+    expect(snapshot).toMatchObject({ type: 'assistant.message', messageId: 'msg_parallel' })
+    if (snapshot?.type === 'assistant.message') {
+      expect(snapshot.blocks.map((block) => block.type)).toEqual(['tool_use', 'tool_use'])
+      expect(snapshot.blocks.map((block) => ('id' in block ? block.id : ''))).toEqual(['a', 'b'])
+    }
   })
 
-  it('drops subagent assistant and user text from the main transcript', () => {
+  it('keeps subagent assistant and user events on the parent channel', () => {
     const mapper = new ClaudeEventMapper()
     const events = [
       ...mapper.push({
@@ -153,6 +167,7 @@ describe('ClaudeEventMapper', () => {
         session_id: 'sess-1',
         parent_tool_use_id: 'agent-1',
         message: {
+          id: 'msg_sub',
           content: [{ type: 'text', text: 'subagent only' }],
         },
       }),
@@ -169,11 +184,107 @@ describe('ClaudeEventMapper', () => {
         session_id: 'sess-1',
         parent_tool_use_id: null,
         message: {
+          id: 'msg_main',
           content: [{ type: 'text', text: 'main' }],
         },
       }),
     ]
 
-    expect(events).toEqual([{ type: 'assistant', event: 'message', text: 'main' }])
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'assistant.message',
+        messageId: 'msg_sub',
+        parentToolUseId: 'agent-1',
+      }),
+      expect.objectContaining({
+        type: 'tool.completed',
+        id: 'call-1',
+        parentToolUseId: 'agent-1',
+        ok: true,
+        output: 'ok',
+      }),
+      expect.objectContaining({
+        type: 'assistant.message',
+        messageId: 'msg_main',
+      }),
+    ]))
+    const main = events.find((event) => event.type === 'assistant.message' && event.messageId === 'msg_main')
+    expect(main).not.toHaveProperty('parentToolUseId')
+  })
+
+  it('routes workflow task_* separately from Agent/Task sidechains', () => {
+    const mapper = new ClaudeEventMapper()
+    const workflow = mapper.push({
+      type: 'system',
+      subtype: 'task_started',
+      workflow_name: 'ship',
+      tool_use_id: 'wf-1',
+      task_id: 't1',
+    } as Parameters<ClaudeEventMapper['push']>[0])
+    const agent = mapper.push({
+      type: 'system',
+      subtype: 'task_started',
+      subagent_type: 'Explore',
+      agent_id: 'ag-1',
+      tool_name: 'Agent',
+    } as Parameters<ClaudeEventMapper['push']>[0])
+    expect(workflow).toEqual([
+      expect.objectContaining({ type: 'workflow.started', workflowToolUseId: 'wf-1', name: 'ship' }),
+    ])
+    expect(agent).toEqual([
+      expect.objectContaining({ type: 'agent.started', agentId: 'ag-1', name: 'Explore' }),
+    ])
+  })
+
+  it('marks Agent/Task first completion as async_launched when the result says so', () => {
+    const mapper = new ClaudeEventMapper()
+    mapper.push({
+      type: 'assistant',
+      message: {
+        id: 'msg_agent',
+        content: [{ type: 'tool_use', id: 'agent-call', name: 'Agent', input: { prompt: 'go' } }],
+      },
+    })
+    const events = mapper.push({
+      type: 'user',
+      message: {
+        content: [{
+          type: 'tool_result',
+          tool_use_id: 'agent-call',
+          content: '{"status":"async_launched","agentId":"ag-9"}',
+          toolUseResult: { status: 'async_launched', agentId: 'ag-9' },
+        }],
+      },
+    })
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'tool.completed',
+        id: 'agent-call',
+        name: 'agent',
+        ok: true,
+        status: 'async_launched',
+        agentId: 'ag-9',
+      }),
+    ]))
+  })
+
+  it('maps an error result onto run.failed and keeps session stats', () => {
+    const mapper = new ClaudeEventMapper()
+    const events = mapper.push({
+      type: 'result',
+      subtype: 'error_during_execution',
+      session_id: 'sess-err',
+      is_error: true,
+      duration_ms: 9,
+      errors: ['boom'],
+    })
+
+    expect(events).toEqual([{
+      type: 'run.failed',
+      message: 'boom',
+      sessionId: 'sess-err',
+      model: 'unknown',
+      durationMs: 9,
+    }])
   })
 })

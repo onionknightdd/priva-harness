@@ -1,3 +1,5 @@
+import { parseStreamFrame, type StreamFrame } from "./run-stream-reducer"
+
 const RUN_WEBSOCKET_PATH = "/api/sandbox/agent/ws/run"
 
 export type AgentRunHarness = "claude" | "pi"
@@ -17,20 +19,11 @@ export type AgentRunInit = {
 
 type AgentRunHandlers = {
   signal: AbortSignal
-  onText: (text: string) => void
+  onFrame: (frame: StreamFrame) => void
   onError: (message: string) => void
   onSession?: (sessionId: string) => void
   onToolStarted?: (id: string) => void
   onToolCompleted?: (id: string) => void
-}
-
-type ServerFrame = {
-  type?: string
-  event?: string
-  text?: string
-  message?: string
-  sessionId?: string
-  id?: string
 }
 
 export function runAgentSession(
@@ -39,7 +32,6 @@ export function runAgentSession(
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const socket = new WebSocket(runWebsocketUrl())
-    let assembled = ""
     let settled = false
     let failedMessage: string | null = null
     let boundSessionId: string | null = null
@@ -88,52 +80,41 @@ export function runAgentSession(
     })
 
     socket.addEventListener("message", (event) => {
-      let frame: ServerFrame
+      let parsed: unknown
       try {
-        frame = JSON.parse(String(event.data)) as ServerFrame
+        parsed = JSON.parse(String(event.data)) as unknown
       } catch {
         failedMessage = "Invalid agent frame"
         socket.close()
         return
       }
 
-      if (frame.type === "error") {
-        failedMessage = frame.message?.trim() || "Agent run failed"
-        socket.close()
+      const frame = parseStreamFrame(parsed)
+      if (frame === undefined) {
         return
       }
 
+      handlers.onFrame(frame)
+
       if (
-        frame.type === "run" &&
-        (frame.event === "completed" || frame.event === "failed") &&
-        frame.sessionId
+        typeof frame.sessionId === "string" &&
+        frame.sessionId !== "" &&
+        (frame.type === "run.completed" ||
+          frame.type === "run.failed" ||
+          frame.type === "run.aborted")
       ) {
         boundSessionId = frame.sessionId
       }
 
-      if (frame.type === "tool" && frame.event === "started" && frame.id) {
+      if (frame.type === "tool.started" && frame.id) {
         handlers.onToolStarted?.(frame.id)
-        return
       }
 
-      if (frame.type === "tool" && frame.event === "completed" && frame.id) {
+      if (frame.type === "tool.completed" && frame.id && frame.status !== "async_launched") {
         handlers.onToolCompleted?.(frame.id)
-        return
       }
 
-      if (frame.type === "assistant" && frame.event === "text_delta" && frame.text) {
-        assembled += frame.text
-        handlers.onText(assembled)
-        return
-      }
-
-      if (frame.type === "assistant" && frame.event === "message" && frame.text) {
-        assembled = frame.text
-        handlers.onText(assembled)
-        return
-      }
-
-      if (frame.type === "run" && frame.event === "failed") {
+      if (frame.type === "error" || frame.type === "run.failed") {
         failedMessage = frame.message?.trim() || "Agent run failed"
       }
     })

@@ -1,6 +1,6 @@
 import * as React from "react"
 import gsap from "gsap"
-import { CheckIcon, CopyIcon, SplitIcon, TriangleAlertIcon } from "lucide-react"
+import { CheckIcon, ChevronDownIcon, CopyIcon, SplitIcon, TriangleAlertIcon } from "lucide-react"
 import { motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
@@ -11,16 +11,28 @@ import {
   MessageContent,
   MessageResponse,
 } from "@/components/ai-elements/message"
+import { Badge } from "@/components/ui/badge"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { writeClipboardText } from "@/lib/clipboard"
+import { cn } from "@/lib/utils"
 
 import type { RelativeTimeLabel } from "@/lib/relative-time"
 
-import type { AgentThreadMessage } from "../agent-message-data"
+import type {
+  AgentThreadMessage,
+  NestedAgent,
+  StreamBlock,
+  WorkflowCard,
+} from "../agent-message-data"
 
 function animateControl(control: HTMLButtonElement) {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -185,7 +197,11 @@ export function AgentMessageItem({
   const shouldReduceMotion = Boolean(useReducedMotion())
   const isStreaming = message.status === "streaming"
   const isError = message.status === "error"
-  const isThinking = isStreaming && message.content.length === 0
+  const thinking = (message.blocks ?? []).find((block) => block.type === "thinking")
+  const isThinking =
+    isStreaming &&
+    message.content.length === 0 &&
+    (thinking === undefined || thinking.text.length === 0)
 
   return (
     <Message from={message.role}>
@@ -223,13 +239,7 @@ export function AgentMessageItem({
             {isThinking ? (
               <span className="shimmer">{t("agentMessage.thinking")}</span>
             ) : message.role === "assistant" ? (
-              <MessageResponse
-                animated={isStreaming && !shouldReduceMotion}
-                isAnimating={isStreaming}
-                mode={isStreaming ? "streaming" : "static"}
-              >
-                {message.content}
-              </MessageResponse>
+              <AssistantStreamBody message={message} isStreaming={isStreaming} />
             ) : (
               message.content
             )}
@@ -249,5 +259,155 @@ export function AgentMessageItem({
         </>
       )}
     </Message>
+  )
+}
+
+function AssistantStreamBody({
+  message,
+  isStreaming,
+}: {
+  message: AgentThreadMessage
+  isStreaming: boolean
+}) {
+  const { t } = useTranslation()
+  const shouldReduceMotion = Boolean(useReducedMotion())
+  const blocks = [...(message.blocks ?? [])].sort((left, right) => left.index - right.index)
+  const thinking = blocks.find((block) => block.type === "thinking")
+  const text = message.content
+  const images = blocks.filter((block) => block.type === "image")
+  const tools = blocks.filter((block) => block.type === "tool_use")
+
+  return (
+    <div className="flex flex-col gap-3">
+      {thinking && thinking.text.trim() !== "" ? (
+        <Collapsible className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
+          <CollapsibleTrigger className="flex w-full items-center justify-between text-xs text-muted-foreground">
+            {t("agentMessage.thinking")}
+            <ChevronDownIcon className="size-3.5" />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-2 whitespace-pre-wrap text-sm text-muted-foreground">
+            {thinking.text}
+          </CollapsibleContent>
+        </Collapsible>
+      ) : null}
+      {text.trim() !== "" ? (
+        <MessageResponse
+          animated={isStreaming && !shouldReduceMotion}
+          isAnimating={isStreaming}
+          mode={isStreaming ? "streaming" : "static"}
+        >
+          {text}
+        </MessageResponse>
+      ) : null}
+      {images.map((image) => {
+        const src =
+          image.url ??
+          (image.b64 === undefined
+            ? undefined
+            : `data:${image.mime ?? "image/png"};base64,${image.b64}`)
+        if (src === undefined) {
+          return null
+        }
+        return (
+          <img
+            key={image.blockId}
+            alt={image.alt ?? ""}
+            src={src}
+            className="max-h-72 max-w-full rounded-lg border border-border/60"
+          />
+        )
+      })}
+      {tools.map((tool) => (
+        <ToolBlockCard key={tool.id} block={tool} />
+      ))}
+      {(message.nestedAgents ?? []).map((agent) => (
+        <NestedAgentCard key={agent.parentToolUseId} agent={agent} />
+      ))}
+      {(message.workflows ?? []).map((workflow) => (
+        <WorkflowBlockCard key={workflow.workflowToolUseId} workflow={workflow} />
+      ))}
+    </div>
+  )
+}
+
+function ToolBlockCard({ block }: { block: Extract<StreamBlock, { type: "tool_use" }> }) {
+  const { t } = useTranslation()
+  const status = block.tool?.launchStatus === "async_launched"
+    ? t("agentMessage.asyncLaunched")
+    : block.tool?.status === "completed"
+      ? block.tool.ok === false
+        ? t("agentMessage.toolFailed")
+        : t("agentMessage.toolCompleted")
+      : t("agentMessage.toolRunning")
+
+  return (
+    <div className="rounded-lg border border-border/60 bg-background px-3 py-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-mono text-xs">{block.name}</span>
+        <Badge variant="outline">{status}</Badge>
+      </div>
+      {block.tool?.output ? (
+        <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap text-xs text-muted-foreground">
+          {block.tool.output}
+        </pre>
+      ) : null}
+    </div>
+  )
+}
+
+function NestedAgentCard({ agent }: { agent: NestedAgent }) {
+  const { t } = useTranslation()
+  const text = agent.blocks
+    .filter((block) => block.type === "text")
+    .sort((left, right) => left.index - right.index)
+    .map((block) => block.text)
+    .join("")
+
+  return (
+    <Collapsible
+      defaultOpen={agent.status === "running"}
+      className={cn(
+        "rounded-lg border border-border/60 bg-muted/20 px-3 py-2",
+        "motion-safe:transition-colors"
+      )}
+    >
+      <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 text-sm">
+        <span>{t("agentMessage.nestedAgent")}</span>
+        <span className="flex items-center gap-2">
+          <Badge variant="secondary">{agent.name ?? agent.agentId ?? agent.parentToolUseId}</Badge>
+          <ChevronDownIcon className="size-3.5" />
+        </span>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-2 flex flex-col gap-2 text-sm">
+        {text ? <p className="whitespace-pre-wrap">{text}</p> : null}
+        {agent.inbox.map((item, index) => (
+          <p key={`${item.source}-${index}`} className="text-muted-foreground">
+            {item.source === "coordinator"
+              ? t("agentMessage.coordinatorMessage")
+              : t("agentMessage.peerMessage")}
+            {": "}
+            {item.body}
+          </p>
+        ))}
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
+function WorkflowBlockCard({ workflow }: { workflow: WorkflowCard }) {
+  const { t } = useTranslation()
+  return (
+    <Collapsible className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+      <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 text-sm">
+        <span>{t("agentMessage.workflow")}</span>
+        <span className="flex items-center gap-2">
+          <Badge variant="outline">{workflow.name ?? workflow.status}</Badge>
+          <ChevronDownIcon className="size-3.5" />
+        </span>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-2 text-sm text-muted-foreground">
+        {workflow.summary ?? workflow.status}
+      </CollapsibleContent>
+    </Collapsible>
   )
 }

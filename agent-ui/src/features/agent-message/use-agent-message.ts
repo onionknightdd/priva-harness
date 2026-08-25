@@ -14,6 +14,7 @@ import {
   runAgentSession,
   type AgentRunEffort,
 } from "./run-agent-session"
+import { applyStreamFrame } from "./run-stream-reducer"
 
 type ActiveStream = {
   controller: AbortController
@@ -200,11 +201,17 @@ export function useAgentMessage() {
           },
           {
             signal: controller.signal,
-            onText: (text) => {
+            onFrame: (frame) => {
               if (activeStreamRef.current?.messageId !== assistantMessage.id) {
                 return
               }
-              updateAssistant(text, "streaming")
+              setMessages((currentMessages) =>
+                currentMessages.map((message) =>
+                  message.id === assistantMessage.id
+                    ? applyStreamFrame(message, frame)
+                    : message
+                )
+              )
             },
             onToolStarted: (id) => {
               inFlightTools.add(id)

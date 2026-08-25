@@ -9,7 +9,6 @@ import type {
   TurnContext,
 } from '../../core/contract/agent-provider.js'
 import type { AgentEvent } from '../../core/event/agent-event.js'
-import { isRunTerminalEvent } from '../../core/event/agent-event.js'
 import type { UserTurn } from '../../core/run/user-turn.js'
 import { AsyncQueue } from '../../core/stream/async-queue.js'
 import { PushableStream } from '../../core/stream/pushable-stream.js'
@@ -76,13 +75,7 @@ export class ClaudeRuntime implements AgentRuntime {
     else context.signal.addEventListener('abort', onAbort, { once: true })
 
     try {
-      for await (const event of this.events.iterate()) {
-        if (isRunTerminalEvent(event)) {
-          yield event
-          return
-        }
-        yield event
-      }
+      yield* this.events.iterate()
     } finally {
       context.signal.removeEventListener('abort', onAbort)
     }
@@ -137,10 +130,8 @@ export class ClaudeRuntime implements AgentRuntime {
       }
     } catch (error) {
       this.events?.push({
-        type: 'run',
-        event: 'failed',
+        type: 'run.failed',
         message: error instanceof Error ? error.message : String(error),
-        harnessProvider: 'claude',
         ...(this.sessionId === '' ? {} : { sessionId: this.sessionId }),
         model: this.spec.model,
       })

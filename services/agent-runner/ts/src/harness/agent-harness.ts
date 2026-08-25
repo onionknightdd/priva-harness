@@ -8,9 +8,11 @@ import type {
   SessionTarget,
   TurnContext,
 } from '../core/contract/agent-provider.js'
-import type { AgentEvent } from '../core/event/agent-event.js'
-import { isRunTerminalEvent } from '../core/event/agent-event.js'
+import type { StreamFrame } from '../core/event/agent-event.js'
+import { isRunResultEvent } from '../core/event/agent-event.js'
 import type { UserTurn } from '../core/run/user-turn.js'
+import { consumeRunEvents } from './run/consume-run-events.js'
+import { EnvelopeStamper } from './run/envelope-stamper.js'
 import type { LiveRunRegistry } from './run/live-run-registry.js'
 import type { SessionService } from './session/session-service.js'
 
@@ -34,15 +36,16 @@ export class AgentHarness {
     context: TurnContext,
     spec: ProviderRunSpec,
     runOptions?: AgentRunOptions,
-  ): AsyncIterable<AgentEvent> {
+  ): AsyncIterable<StreamFrame> {
     const runId = runOptions?.runId ?? randomUUID()
+    const stamper = new EnvelopeStamper(runId, spec.provider)
     this.options.liveRuns?.start({
       runId,
       provider: spec.provider,
       cwd: spec.cwd,
       runMode: 'agent',
     })
-    yield { type: 'run', event: 'started' }
+    yield stamper.stamp({ type: 'run.started', model: spec.model })
 
     const provider = this.options.providers[spec.provider]
     const runtime = await provider.openSession(
@@ -51,7 +54,7 @@ export class AgentHarness {
     )
 
     try {
-      yield* this.forward(runtime, turn, context, spec, runId)
+      yield* this.forward(runtime, turn, context, spec, runId, stamper)
     } finally {
       this.options.liveRuns?.finish(runId)
       await runtime.release('dispose')
@@ -64,26 +67,28 @@ export class AgentHarness {
     context: TurnContext,
     spec: ProviderRunSpec,
     runId: string,
-  ): AsyncIterable<AgentEvent> {
+    stamper: EnvelopeStamper,
+  ): AsyncIterable<StreamFrame> {
     let finished = false
     try {
-      for await (const event of runtime.run(turn, context)) {
+      for await (const event of consumeRunEvents(runtime.run(turn, context), {
+        signal: context.signal,
+      })) {
         this.options.liveRuns?.attachSession(runId, runtime.session.id)
-        if (event.type === 'run' && event.event === 'completed') {
+        if (event.type === 'run.completed') {
           await this.recordCompleted(runtime.session, spec, event.model)
         }
-        yield event
-        if (isRunTerminalEvent(event)) finished = true
+        yield stamper.stamp(event)
+        if (isRunResultEvent(event)) finished = true
       }
     } catch (error) {
       if (!finished) {
-        yield {
-          type: 'run',
-          event: 'failed',
+        yield stamper.stamp({
+          type: 'run.failed',
           message: errorMessage(error),
-          harnessProvider: spec.provider,
           ...(runtime.session.id === '' ? {} : { sessionId: runtime.session.id }),
-        }
+          model: spec.model,
+        })
       }
     }
   }

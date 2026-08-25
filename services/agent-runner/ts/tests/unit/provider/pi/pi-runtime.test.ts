@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { AgentEvent } from '../../../../src/core/event/agent-event.js'
+import { consumeRunEvents } from '../../../../src/harness/run/consume-run-events.js'
 import { PiRuntime, type PiAgentSession } from '../../../../src/provider/pi/pi-runtime.js'
 import type { PiSessionEvent } from '../../../../src/provider/pi/pi-event-mapper.js'
 
@@ -10,10 +11,10 @@ describe('PiRuntime stream input', () => {
     const runtime = new PiRuntime(session)
 
     const events: AgentEvent[] = []
-    for await (const event of runtime.run(
+    for await (const event of consumeRunEvents(runtime.run(
       { text: 'hello' },
       { signal: new AbortController().signal },
-    )) {
+    ))) {
       events.push(event)
     }
 
@@ -22,25 +23,23 @@ describe('PiRuntime stream input', () => {
     expect(session.unsubscribed).toBe(0)
     expect(events).toEqual([
       expect.objectContaining({
-        type: 'run',
-        event: 'completed',
+        type: 'run.completed',
         sessionId: 'pi-1',
       }),
     ])
 
     const second: AgentEvent[] = []
-    for await (const event of runtime.run(
+    for await (const event of consumeRunEvents(runtime.run(
       { text: 'again' },
       { signal: new AbortController().signal },
-    )) {
+    ))) {
       second.push(event)
     }
     expect(session.prompts).toEqual(['hello', 'again'])
     expect(session.unsubscribed).toBe(0)
     expect(second).toEqual([
       expect.objectContaining({
-        type: 'run',
-        event: 'completed',
+        type: 'run.completed',
         sessionId: 'pi-1',
       }),
     ])
@@ -56,10 +55,10 @@ describe('PiRuntime stream input', () => {
     const runtime = new PiRuntime(session)
 
     const later: AgentEvent[] = []
-    for await (const event of runtime.run(
+    for await (const event of consumeRunEvents(runtime.run(
       { text: 'later' },
       { signal: new AbortController().signal },
-    )) {
+    ))) {
       later.push(event)
     }
     expect(later.length).toBeGreaterThan(0)
@@ -74,10 +73,10 @@ describe('PiRuntime stream input', () => {
     session.streaming = true
     const runtime = new PiRuntime(session, 'steer')
 
-    for await (const _event of runtime.run(
+    for await (const _event of consumeRunEvents(runtime.run(
       { text: 'nudge' },
       { signal: new AbortController().signal },
-    )) {
+    ))) {
       void _event
     }
 
@@ -92,10 +91,10 @@ describe('PiRuntime stream input', () => {
     session.streaming = true
     const runtime = new PiRuntime(session, 'interrupt')
 
-    for await (const _event of runtime.run(
+    for await (const _event of consumeRunEvents(runtime.run(
       { text: 'cut in' },
       { signal: new AbortController().signal },
-    )) {
+    ))) {
       void _event
     }
 

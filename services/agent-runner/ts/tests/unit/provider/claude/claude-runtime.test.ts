@@ -2,6 +2,7 @@ import type { SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { describe, expect, it } from 'vitest'
 
 import type { AgentEvent } from '../../../../src/core/event/agent-event.js'
+import { consumeRunEvents } from '../../../../src/harness/run/consume-run-events.js'
 import {
   ClaudeRuntime,
   type ClaudeQuery,
@@ -29,8 +30,7 @@ describe('ClaudeRuntime stream input', () => {
     ))
     expect(first).toEqual([
       expect.objectContaining({
-        type: 'run',
-        event: 'completed',
+        type: 'run.completed',
         sessionId: 'sess-stream',
       }),
     ])
@@ -45,8 +45,7 @@ describe('ClaudeRuntime stream input', () => {
     ))
     expect(second).toEqual([
       expect.objectContaining({
-        type: 'run',
-        event: 'completed',
+        type: 'run.completed',
         sessionId: 'sess-stream',
       }),
     ])
@@ -62,7 +61,7 @@ describe('ClaudeRuntime stream input', () => {
 
 async function collect(events: AsyncIterable<AgentEvent>): Promise<AgentEvent[]> {
   const collected: AgentEvent[] = []
-  for await (const event of events) collected.push(event)
+  for await (const event of consumeRunEvents(events)) collected.push(event)
   return collected
 }
 

@@ -1,97 +1,158 @@
 import type { SessionTranscriptMessage } from "@/lib/api/sandbox-sessions"
 import { sessionTimestampToMs } from "@/lib/relative-time"
 
-import type { AgentThreadMessage } from "@/features/agent-message/agent-message-data"
+import type {
+  AgentThreadMessage,
+  NestedAgent,
+  StreamBlock,
+} from "@/features/agent-message/agent-message-data"
+import { textFromBlocks } from "@/features/agent-message/agent-message-data"
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null
 }
 
-function textFromContent(content: unknown): string {
+function blocksFromContent(content: unknown): StreamBlock[] {
   if (typeof content === "string") {
-    return content
+    return content === ""
+      ? []
+      : [{ type: "text", blockId: "0", index: 0, text: content }]
   }
-
   if (!Array.isArray(content)) {
-    return ""
+    return []
   }
-
-  return content
-    .map((part) => {
-      if (typeof part === "string") {
-        return part
+  const blocks: StreamBlock[] = []
+  content.forEach((part, index) => {
+    if (typeof part === "string") {
+      blocks.push({ type: "text", blockId: String(index), index, text: part })
+      return
+    }
+    if (!isRecord(part)) {
+      return
+    }
+    const type = part.type
+    if (type === "text" || typeof part.text === "string") {
+      const text = typeof part.text === "string" ? part.text : String(part.content ?? "")
+      if (text.trim() === "") {
+        return
       }
-
-      if (!isRecord(part)) {
-        return ""
-      }
-
-      if (typeof part.text === "string") {
-        return part.text
-      }
-
-      if (typeof part.content === "string") {
-        return part.content
-      }
-
-      return ""
-    })
-    .filter((part) => part.trim() !== "")
-    .join("\n")
+      blocks.push({ type: "text", blockId: String(index), index, text })
+      return
+    }
+    if (type === "thinking") {
+      blocks.push({
+        type: "thinking",
+        blockId: String(index),
+        index,
+        text: String(part.thinking ?? part.text ?? ""),
+      })
+      return
+    }
+    if (type === "image" || type === "image_url") {
+      blocks.push({
+        type: "image",
+        blockId: String(index),
+        index,
+        ...(typeof part.url === "string" ? { url: part.url } : {}),
+        ...(typeof part.alt === "string" ? { alt: part.alt } : {}),
+      })
+      return
+    }
+    if (type === "tool_use") {
+      const id = String(part.id ?? index)
+      blocks.push({
+        type: "tool_use",
+        blockId: id,
+        index,
+        id,
+        name: String(part.name ?? "unknown"),
+        ...(part.input === undefined ? {} : { input: part.input }),
+      })
+    }
+  })
+  return blocks
 }
 
-function textFromSessionMessage(message: unknown): string {
-  if (typeof message === "string") {
-    return message
-  }
-
+function isToolResultMessage(message: unknown): boolean {
   if (!isRecord(message)) {
-    return ""
+    return false
   }
-
-  const fromContent = textFromContent(message.content)
-  if (fromContent.trim() !== "") {
-    return fromContent
+  const content = message.content
+  if (!Array.isArray(content)) {
+    return false
   }
-
-  if (typeof message.text === "string") {
-    return message.text
-  }
-
-  if (typeof message.summary === "string") {
-    return message.summary
-  }
-
-  return ""
+  return content.some((part) => isRecord(part) && part.type === "tool_result")
 }
 
 export function threadMessagesFromTranscript(
   messages: readonly SessionTranscriptMessage[]
 ): AgentThreadMessage[] {
-  return messages.flatMap((item) => {
+  const nestedByParent = new Map<string, NestedAgent>()
+  const mains: AgentThreadMessage[] = []
+
+  for (const item of messages) {
     if (item.type !== "user" && item.type !== "assistant") {
-      return []
+      continue
     }
 
     if (item.parentToolUseId) {
-      return []
+      if (item.type === "user" && isToolResultMessage(item.message)) {
+        continue
+      }
+      if (item.type === "user") {
+        continue
+      }
+      const blocks = blocksFromContent(isRecord(item.message) ? item.message.content : item.message)
+      const existing = nestedByParent.get(item.parentToolUseId)
+      if (existing === undefined) {
+        nestedByParent.set(item.parentToolUseId, {
+          parentToolUseId: item.parentToolUseId,
+          status: "completed",
+          blocks,
+          inbox: [],
+        })
+      } else {
+        nestedByParent.set(item.parentToolUseId, {
+          ...existing,
+          blocks: [...existing.blocks, ...blocks],
+        })
+      }
+      continue
     }
 
-    const content = textFromSessionMessage(item.message).trim()
-    if (content === "") {
-      return []
+    if (item.type === "user" && isToolResultMessage(item.message)) {
+      continue
     }
 
-    return [
-      {
-        id: item.uuid || crypto.randomUUID(),
-        role: item.type,
-        content,
-        createdAt: createdAtFromTranscript(item),
-        status: "complete" as const,
-        ...(item.uuid ? { transcriptUuid: item.uuid } : {}),
-      },
-    ]
+    const blocks = blocksFromContent(isRecord(item.message) ? item.message.content : item.message)
+    const content = textFromBlocks(blocks).trim()
+    if (content === "" && !blocks.some((block) => block.type === "tool_use" || block.type === "image")) {
+      continue
+    }
+
+    mains.push({
+      id: item.uuid || crypto.randomUUID(),
+      role: item.type,
+      content,
+      createdAt: createdAtFromTranscript(item),
+      status: "complete",
+      ...(item.uuid ? { transcriptUuid: item.uuid } : {}),
+      ...(item.type === "assistant" ? { blocks } : {}),
+    })
+  }
+
+  return mains.map((message) => {
+    if (message.role !== "assistant" || message.blocks === undefined) {
+      return message
+    }
+    const nestedAgents = message.blocks.flatMap((block) => {
+      if (block.type !== "tool_use") {
+        return []
+      }
+      const nested = nestedByParent.get(block.id)
+      return nested === undefined ? [] : [nested]
+    })
+    return nestedAgents.length === 0 ? message : { ...message, nestedAgents }
   })
 }
 

@@ -5,7 +5,7 @@ import type {
   TurnContext,
 } from '../../core/contract/agent-provider.js'
 import type { AgentEvent } from '../../core/event/agent-event.js'
-import { isRunTerminalEvent } from '../../core/event/agent-event.js'
+import { isRunResultEvent } from '../../core/event/agent-event.js'
 import type { UserTurn } from '../../core/run/user-turn.js'
 import { AsyncQueue } from '../../core/stream/async-queue.js'
 import { PiEventMapper, type PiSessionEvent } from './pi-event-mapper.js'
@@ -64,11 +64,9 @@ export class PiRuntime implements AgentRuntime {
       (error: unknown) => {
         if (!finished) {
           this.events?.push({
-            type: 'run',
-            event: 'failed',
+            type: 'run.failed',
             message: error instanceof Error ? error.message : String(error),
             sessionId: this.agentSession.sessionId,
-            harnessProvider: 'pi',
             model: this.agentSession.modelId,
           })
         }
@@ -78,11 +76,7 @@ export class PiRuntime implements AgentRuntime {
 
     try {
       for await (const event of this.events.iterate()) {
-        if (isRunTerminalEvent(event)) {
-          finished = true
-          yield event
-          return
-        }
+        if (isRunResultEvent(event)) finished = true
         yield event
       }
       await sending

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { parseInitFrame, sessionTargetFromInit, toServerFrame } from '../../../../src/transport/websocket/schema/run-frames.js'
+import { STREAM_PROTOCOL_VERSION } from '../../../../src/core/event/agent-event.js'
+import { encodeEvent } from '../../../../src/core/event/encode-event.js'
+import { EnvelopeStamper } from '../../../../src/harness/run/envelope-stamper.js'
+import { parseInitFrame, sessionTargetFromInit } from '../../../../src/transport/websocket/schema/run-frames.js'
 
 describe('run frames', () => {
   it('accepts init text, model, harness, and cwd', () => {
@@ -148,12 +151,17 @@ describe('run frames', () => {
     })
   })
 
-  it('stamps runId onto an AgentEvent without adding seq', () => {
-    expect(toServerFrame({ type: 'run', event: 'started' }, 'run-1')).toEqual({
-      type: 'run',
-      event: 'started',
+  it('encodes the same JSON payload the websocket sends', () => {
+    const stamper = new EnvelopeStamper('run-1', 'claude', () => 1)
+    const frame = stamper.stamp({ type: 'run.started', model: 'm' })
+    expect(JSON.parse(encodeEvent(frame))).toEqual({
+      type: 'run.started',
+      model: 'm',
+      v: STREAM_PROTOCOL_VERSION,
       runId: 'run-1',
+      seq: 1,
+      ts: 1,
+      harness: 'claude',
     })
-    expect(toServerFrame({ type: 'run', event: 'started' }, 'run-1')).not.toHaveProperty('seq')
   })
 })

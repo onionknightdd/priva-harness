@@ -11,13 +11,13 @@ import {
 import type { AgentHarness } from '../../harness/agent-harness.js'
 import type { AgentProfileService } from '../../harness/config/agent-profile-service.js'
 import type { ModelProfileService } from '../../harness/config/model-profile-service.js'
+import { encodeEvent } from '../../core/event/encode-event.js'
+import { EnvelopeStamper } from '../../harness/run/envelope-stamper.js'
 import {
   parseInitFrame,
   sessionTargetFromInit,
-  type ErrorFrame,
   type InitFrame,
 } from './schema/run-frames.js'
-import { encodeServerFrame } from './wire-event-mapper.js'
 
 export const RUN_WEBSOCKET_PATH = '/api/sandbox/agent/ws/run'
 
@@ -44,6 +44,9 @@ async function handleRunSocket(
   socket.once('close', onClose)
 
   try {
+    const runId = randomUUID()
+    let harnessName = 'unknown'
+
     const raw = await readFirstMessage(socket)
     if (isAborted(abort.signal)) return
 
@@ -51,28 +54,28 @@ async function handleRunSocket(
     try {
       parsed = JSON.parse(raw) as unknown
     } catch {
-      sendError(socket, 'Init frame must be JSON')
+      sendError(socket, 'Init frame must be JSON', runId, harnessName)
       socket.close()
       return
     }
 
     const init = parseInitFrame(parsed)
     if (!init.ok) {
-      sendError(socket, init.message)
+      sendError(socket, init.message, runId, harnessName)
       socket.close()
       return
     }
+    harnessName = init.frame.harness
 
     let spec: ProviderRunSpec
     try {
       spec = await buildRunSpec(options, init.frame)
     } catch (error) {
-      sendError(socket, error instanceof Error ? error.message : String(error))
+      sendError(socket, error instanceof Error ? error.message : String(error), runId, harnessName)
       socket.close()
       return
     }
 
-    const runId = randomUUID()
     for await (const event of options.harness.run(
       { text: init.frame.text },
       { signal: abort.signal },
@@ -80,12 +83,12 @@ async function handleRunSocket(
       { runId, session: sessionTargetFromInit(init.frame) },
     )) {
       if (isAborted(abort.signal) || !socketOpen(socket)) break
-      socket.send(encodeServerFrame(event, runId))
+      socket.send(encodeEvent(event))
     }
     if (socketOpen(socket)) socket.close()
   } catch (error) {
     if (!isAborted(abort.signal) && socketOpen(socket)) {
-      sendError(socket, error instanceof Error ? error.message : String(error))
+      sendError(socket, error instanceof Error ? error.message : String(error), randomUUID(), 'unknown')
       socket.close()
     }
   } finally {
@@ -141,10 +144,10 @@ function readFirstMessage(socket: WebSocket): Promise<string> {
   })
 }
 
-function sendError(socket: WebSocket, message: string): void {
+function sendError(socket: WebSocket, message: string, runId: string, harness: string): void {
   if (!socketOpen(socket)) return
-  const frame: ErrorFrame = { type: 'error', message }
-  socket.send(JSON.stringify(frame))
+  const stamper = new EnvelopeStamper(runId, harness)
+  socket.send(encodeEvent(stamper.stamp({ type: 'error', message })))
 }
 
 function socketOpen(socket: WebSocket): boolean {

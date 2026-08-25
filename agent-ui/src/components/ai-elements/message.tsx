@@ -74,7 +74,7 @@ export const MessageActions = ({
   children,
   ...props
 }: MessageActionsProps) => (
-  <div className={cn("flex items-center gap-1 group-[.is-assistant]:-ml-1.5", className)} {...props}>
+  <div className={cn("flex items-center gap-1 text-muted-foreground/70 group-[.is-assistant]:-ml-1.5", className)} {...props}>
     {children}
   </div>
 );
@@ -90,16 +90,27 @@ export const MessageAction = ({
   label,
   variant = "ghost",
   size = "icon-xs",
+  className,
   ...props
 }: MessageActionProps) => {
   const accessibleLabel = label || tooltip;
+  const actionClassName = cn(
+    "text-muted-foreground/70 hover:text-muted-foreground",
+    className
+  );
 
   if (tooltip) {
     return (
       <Tooltip>
         <TooltipTrigger
           render={
-            <Button size={size} type="button" variant={variant} {...props} />
+            <Button
+              size={size}
+              type="button"
+              variant={variant}
+              className={actionClassName}
+              {...props}
+            />
           }
         >
           {children}
@@ -111,7 +122,13 @@ export const MessageAction = ({
   }
 
   return (
-    <Button size={size} type="button" variant={variant} {...props}>
+    <Button
+      size={size}
+      type="button"
+      variant={variant}
+      className={actionClassName}
+      {...props}
+    >
       {children}
       {accessibleLabel ? (
         <span className="sr-only">{accessibleLabel}</span>

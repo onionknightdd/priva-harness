@@ -23,25 +23,37 @@ describe('WS /api/sandbox/agent/ws/run', () => {
   beforeEach(async () => {
     testRoot = await mkdtemp(join(tmpdir(), 'priva-ws-run-test-'))
     claudeProvider = new FakeAgentProvider('claude', [
-      { type: 'assistant', event: 'text_delta', text: 'Hello' },
-      { type: 'assistant', event: 'message', text: 'Hello' },
       {
-        type: 'run',
-        event: 'completed',
+        type: 'assistant.delta',
+        messageId: 'msg_1',
+        blockId: 'msg_1:0',
+        index: 0,
+        text: 'Hello',
+      },
+      {
+        type: 'assistant.message',
+        messageId: 'msg_1',
+        blocks: [{ type: 'text', blockId: 'msg_1:0', index: 0, text: 'Hello' }],
+      },
+      {
+        type: 'run.completed',
         sessionId: 'sess-1',
-        harnessProvider: 'claude',
         model: 'm',
         durationMs: 5,
         usage: { input: 1, output: 1 },
       },
     ])
     piProvider = new FakeAgentProvider('pi', [
-      { type: 'assistant', event: 'text_delta', text: 'Hi' },
       {
-        type: 'run',
-        event: 'completed',
+        type: 'assistant.delta',
+        messageId: 'msg_1',
+        blockId: 'msg_1:0',
+        index: 0,
+        text: 'Hi',
+      },
+      {
+        type: 'run.completed',
         sessionId: 'pi-1',
-        harnessProvider: 'pi',
         model: 'm',
         durationMs: 3,
       },
@@ -88,16 +100,14 @@ describe('WS /api/sandbox/agent/ws/run', () => {
     }))
     const received = await frames
 
-    expect(received[0]).toMatchObject({ type: 'run', event: 'started' })
+    expect(received[0]).toMatchObject({ type: 'run.started', v: 1, seq: 1, harness: 'claude' })
     expect(received[0]).toHaveProperty('runId')
-    expect(received[0]).not.toHaveProperty('seq')
+    expect(received[0]).toHaveProperty('seq')
     expect(received).toEqual(expect.arrayContaining([
-      expect.objectContaining({ type: 'assistant', event: 'text_delta', text: 'Hello' }),
+      expect.objectContaining({ type: 'assistant.delta', text: 'Hello' }),
       expect.objectContaining({
-        type: 'run',
-        event: 'completed',
+        type: 'run.completed',
         sessionId: 'sess-1',
-        harnessProvider: 'claude',
         model: 'm',
         durationMs: 5,
       }),
@@ -109,7 +119,13 @@ describe('WS /api/sandbox/agent/ws/run', () => {
     const frames = collectFrames(socket)
     socket.send(JSON.stringify({ type: 'init', text: '' }))
     expect(await frames).toEqual([
-      { type: 'error', message: 'Init text must be a non-empty string' },
+      expect.objectContaining({
+        type: 'error',
+        message: 'Init text must be a non-empty string',
+        v: 1,
+        seq: 1,
+        harness: 'unknown',
+      }),
     ])
   })
 
@@ -124,7 +140,13 @@ describe('WS /api/sandbox/agent/ws/run', () => {
       cwd: testRoot,
     }))
     expect(await frames).toEqual([
-      { type: 'error', message: 'profile_not_found' },
+      expect.objectContaining({
+        type: 'error',
+        message: 'profile_not_found',
+        v: 1,
+        seq: 1,
+        harness: 'claude',
+      }),
     ])
   })
 
@@ -152,11 +174,10 @@ describe('WS /api/sandbox/agent/ws/run', () => {
       }),
     ])
     expect(received).toEqual(expect.arrayContaining([
-      expect.objectContaining({ type: 'assistant', event: 'text_delta', text: 'Hi' }),
+      expect.objectContaining({ type: 'assistant.delta', text: 'Hi' }),
       expect.objectContaining({
-        type: 'run',
-        event: 'completed',
-        harnessProvider: 'pi',
+        type: 'run.completed',
+        harness: 'pi',
       }),
     ]))
   })
@@ -213,7 +234,12 @@ describe('WS /api/sandbox/agent/ws/run', () => {
       fork: true,
     }))
     expect(await deniedFrames).toEqual([
-      { type: 'error', message: 'Pi does not support fork' },
+      expect.objectContaining({
+        type: 'error',
+        message: 'Pi does not support fork',
+        v: 1,
+        seq: 1,
+      }),
     ])
   })
 

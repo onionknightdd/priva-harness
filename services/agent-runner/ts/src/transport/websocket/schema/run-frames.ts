@@ -1,4 +1,4 @@
-import type { AgentEvent } from '../../../core/event/agent-event.js'
+import type { StreamFrame } from '../../../core/event/agent-event.js'
 import {
   isEffortLevel,
   type EffortLevel,
@@ -22,12 +22,7 @@ export interface InitFrame {
   readonly promptSuggestions?: boolean
 }
 
-export type ServerFrame = AgentEvent & { readonly runId: string }
-
-export interface ErrorFrame {
-  readonly type: 'error'
-  readonly message: string
-}
+export type ServerFrame = StreamFrame
 
 export type ParseInitResult =
   | { readonly ok: true; readonly frame: InitFrame }
@@ -103,10 +98,6 @@ export function sessionTargetFromInit(frame: InitFrame): SessionTarget {
     return { kind: 'resume', session: { provider, id: frame.sessionId } }
   }
   return { kind: 'new', provider }
-}
-
-export function toServerFrame(event: AgentEvent, runId: string): ServerFrame {
-  return { ...event, runId }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

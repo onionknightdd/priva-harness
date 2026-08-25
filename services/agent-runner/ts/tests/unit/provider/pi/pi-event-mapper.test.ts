@@ -38,24 +38,23 @@ describe('PiEventMapper', () => {
       }),
     ]
 
-    expect(events.slice(0, 3)).toEqual([
-      { type: 'assistant', event: 'thinking_delta', text: 'hmm' },
-      { type: 'assistant', event: 'text_delta', text: 'Hi' },
-      { type: 'assistant', event: 'message', text: 'Hi' },
-    ])
-    const completed = events[3]
+    expect(events.slice(0, 5)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'assistant.thinking_delta', text: 'hmm' }),
+      expect.objectContaining({ type: 'assistant.delta', text: 'Hi' }),
+      expect.objectContaining({
+        type: 'assistant.message',
+        blocks: [expect.objectContaining({ type: 'text', text: 'Hi' })],
+      }),
+    ]))
+    const completed = events.at(-1)
     expect(completed).toMatchObject({
-      type: 'run',
-      event: 'completed',
+      type: 'run.completed',
       sessionId: 'pi-sess',
-      harnessProvider: 'pi',
       model: 'deepseek-v4-flash',
       costUsd: 0.002,
       usage: { input: 10, output: 2, cacheRead: 1 },
     })
-    expect(completed?.type === 'run' && completed.event === 'completed'
-      ? completed.durationMs
-      : -1).toBeGreaterThanOrEqual(20)
+    expect(completed?.type === 'run.completed' ? completed.durationMs : -1).toBeGreaterThanOrEqual(20)
   })
 
   it('does not treat user or tool-result message_end as assistant text', () => {
@@ -77,7 +76,12 @@ describe('PiEventMapper', () => {
     expect(mapper.push({
       type: 'message_end',
       message: { role: 'assistant', content: [{ type: 'text', text: 'Hi' }] },
-    })).toEqual([{ type: 'assistant', event: 'message', text: 'Hi' }])
+    })).toEqual([
+      expect.objectContaining({
+        type: 'assistant.message',
+        blocks: [expect.objectContaining({ type: 'text', text: 'Hi' })],
+      }),
+    ])
   })
 
   it('maps agent_end with an assistant error to run.failed', () => {
@@ -96,11 +100,9 @@ describe('PiEventMapper', () => {
       ],
     })).toEqual([
       expect.objectContaining({
-        type: 'run',
-        event: 'failed',
+        type: 'run.failed',
         message: 'Responses API 404',
         sessionId: 'pi-sess',
-        harnessProvider: 'pi',
         model: 'm',
       }),
     ])
@@ -153,12 +155,32 @@ describe('PiEventMapper', () => {
       }),
     ]
 
-    expect(events).toEqual([
-      { type: 'tool', event: 'started', id: 'tc1', name: 'bash' },
-      { type: 'tool', event: 'input_delta', id: 'tc1', chunk: '{"command":' },
-      { type: 'tool', event: 'running', id: 'tc1' },
-      { type: 'tool', event: 'progress', id: 'tc1', channel: 'stdout', chunk: 'ping\n' },
-      { type: 'tool', event: 'completed', id: 'tc1', name: 'bash', ok: true, output: 'ping\n' },
-    ])
+    expect(events[0]).toMatchObject({ type: 'assistant.block_start', kind: 'tool_use', index: 0 })
+    expect(events.some((event) => event.type === 'tool.started' && events.indexOf(event) === 0)).toBe(false)
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'tool.started', id: 'tc1', name: 'bash' }),
+      expect.objectContaining({ type: 'tool.input_delta', id: 'tc1', chunk: '{"command":' }),
+      expect.objectContaining({ type: 'tool.running', id: 'tc1' }),
+      expect.objectContaining({ type: 'tool.progress', id: 'tc1', channel: 'stdout', chunk: 'ping\n' }),
+      expect.objectContaining({ type: 'tool.completed', id: 'tc1', name: 'bash', ok: true, output: 'ping\n' }),
+    ]))
+  })
+
+  it('maps image deltas onto assistant.image_delta rather than text', () => {
+    const mapper = new PiEventMapper({ sessionId: 'pi-sess', model: 'm' })
+    const events = mapper.push({
+      type: 'message_update',
+      assistantMessageEvent: {
+        type: 'image_delta',
+        contentIndex: 1,
+        b64: 'abc',
+        mime: 'image/png',
+      },
+    })
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'assistant.block_start', kind: 'image', index: 1 }),
+      expect.objectContaining({ type: 'assistant.image_delta', b64: 'abc', mime: 'image/png' }),
+    ]))
+    expect(events.some((event) => event.type === 'assistant.delta')).toBe(false)
   })
 })
