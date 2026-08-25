@@ -342,11 +342,18 @@ function extractJsonStringField(raw: string, field: string): string | undefined 
 }
 
 function extractPartialToolInput(raw: string): Record<string, unknown> | undefined {
-  const command = extractJsonStringField(raw, 'command')
-  const description = extractJsonStringField(raw, 'description')
   const input: Record<string, unknown> = {}
-  if (command !== undefined) input['command'] = command
-  if (description !== undefined) input['description'] = description
+  for (const field of [
+    'command',
+    'description',
+    'file_path',
+    'path',
+    'content',
+    'contents',
+  ] as const) {
+    const value = extractJsonStringField(raw, field)
+    if (value !== undefined) input[field] = value
+  }
   return isUsefulInput(input) ? input : undefined
 }
 

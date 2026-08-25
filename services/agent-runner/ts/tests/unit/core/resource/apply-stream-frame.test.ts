@@ -296,6 +296,44 @@ describe('applyStreamFrame', () => {
     })
     expect(toolInput(message.blocks, 'bash-1')).toEqual({ command: 'sleep 5' })
   })
+
+  it('exposes a partial Write path and content from tool.input_delta', () => {
+    let message = emptyAssistantMessage('a1', '2024-01-01T00:00:00.000Z')
+    message = applyStreamFrame(message, {
+      type: 'tool.started',
+      messageId: 'a1',
+      blockId: 'write-1',
+      index: 0,
+      id: 'write-1',
+      name: 'Write',
+      input: {},
+    })
+    message = applyStreamFrame(message, {
+      type: 'tool.input_delta',
+      messageId: 'a1',
+      blockId: 'write-1',
+      index: 0,
+      id: 'write-1',
+      chunk: '{"file_path":"src/app.ts","content":"expor',
+    })
+    expect(toolInput(message.blocks, 'write-1')).toEqual({
+      file_path: 'src/app.ts',
+      content: 'expor',
+    })
+
+    message = applyStreamFrame(message, {
+      type: 'tool.input_delta',
+      messageId: 'a1',
+      blockId: 'write-1',
+      index: 0,
+      id: 'write-1',
+      chunk: 't const n = 1\\n"}',
+    })
+    expect(toolInput(message.blocks, 'write-1')).toEqual({
+      file_path: 'src/app.ts',
+      content: 'export const n = 1\n',
+    })
+  })
 })
 
 function toolIds(blocks: readonly ThreadBlock[] | undefined): string[] {

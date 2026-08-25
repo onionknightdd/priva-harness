@@ -2,6 +2,7 @@ import * as React from "react"
 import {
   BotIcon,
   ChevronDownIcon,
+  FilePenLineIcon,
   ImageIcon,
   WorkflowIcon,
   WrenchIcon,
@@ -243,6 +244,9 @@ function ToolItem({
   if (isBashTool(block.name)) {
     return <BashToolItem block={block} />
   }
+  if (isWriteTool(block.name)) {
+    return <WriteToolItem block={block} />
+  }
   return <GenericToolItem block={block} />
 }
 
@@ -417,6 +421,79 @@ function useTypedCommand(target: string, streaming: boolean): {
     return { text: target, caret: false }
   }
   return { text: shown, caret: streaming || shown !== target }
+}
+
+function WriteToolItem({
+  block,
+}: {
+  block: Extract<StreamBlock, { type: "tool_use" }>
+}) {
+  const input = usefulToolInput(block.tool?.input) ?? usefulToolInput(block.input)
+  const filePath =
+    stringInput(input, "file_path") ?? stringInput(input, "path")
+  const content =
+    stringInput(input, "content", { allowBlank: true }) ??
+    stringInput(input, "contents", { allowBlank: true })
+  const output = block.tool?.output?.trim() ?? ""
+  const status = toolResultStatus(block.tool)
+  const shouldReduceMotion = Boolean(useReducedMotion())
+  const inputStreaming =
+    status === "running" &&
+    output === "" &&
+    (jsonInputOpen(block.tool?.inputRaw) || content === undefined)
+  const awaitingOutput =
+    status === "running" && !inputStreaming
+  const diff =
+    content === undefined
+      ? looksLikeDiff(output)
+        ? output
+        : ""
+      : toAddedDiff(content)
+  const plainOutput = diff === "" ? output : ""
+  const copyText = [filePath, content ?? output].filter(Boolean).join("\n")
+  const showOutput =
+    Boolean(diff || plainOutput) || (awaitingOutput && !shouldReduceMotion)
+  const body = showOutput ? (
+    <div className="flex flex-col gap-2">
+      {diff ? (
+        <ToolResultOutput className="min-w-0 leading-none" language="diff">
+          {diff}
+        </ToolResultOutput>
+      ) : null}
+      {plainOutput ? (
+        <pre className="m-0 whitespace-pre-wrap break-words font-mono text-xs leading-none text-muted-foreground">
+          {plainOutput}
+        </pre>
+      ) : null}
+      {awaitingOutput && !shouldReduceMotion ? (
+        <CommandCaret className="bg-muted-foreground" />
+      ) : null}
+    </div>
+  ) : null
+
+  return (
+    <div className="w-full min-w-0 px-0 py-0">
+      <ToolResult
+        tool="Write"
+        title={filePath ?? (inputStreaming ? "" : block.name)}
+        kind="custom"
+        icon={<FilePenLineIcon className="size-[1em]" />}
+        status={status}
+        copyText={copyText || undefined}
+        onCopy={
+          copyText
+            ? () => {
+                void writeClipboardText(copyText)
+              }
+            : undefined
+        }
+        defaultOpen={status === "running"}
+        collapseOnComplete
+      >
+        {body}
+      </ToolResult>
+    </div>
+  )
 }
 
 function NestedAgentItem({ agent }: { agent: NestedAgent }) {
@@ -634,6 +711,18 @@ function isBashTool(name: string): boolean {
   return id === "bash" || id === "shell"
 }
 
+function isWriteTool(name: string): boolean {
+  return name.trim().toLowerCase() === "write"
+}
+
+function toAddedDiff(content: string): string {
+  return content.split("\n").map((line) => `+${line}`).join("\n")
+}
+
+function looksLikeDiff(text: string): boolean {
+  return /^(?:diff --git |--- |\+\+\+ |@@ )/m.test(text)
+}
+
 function jsonInputOpen(raw: string | undefined): boolean {
   if (raw === undefined || raw.trim() === "") {
     return false
@@ -659,12 +748,22 @@ function usefulToolInput(input: unknown): unknown {
   return Object.keys(input).length > 0 ? input : undefined
 }
 
-function stringInput(input: unknown, key: string): string | undefined {
+function stringInput(
+  input: unknown,
+  key: string,
+  options?: { allowBlank?: boolean }
+): string | undefined {
   if (typeof input !== "object" || input === null) {
     return undefined
   }
   const value = (input as Record<string, unknown>)[key]
-  return typeof value === "string" && value.trim() !== "" ? value : undefined
+  if (typeof value !== "string") {
+    return undefined
+  }
+  if (!options?.allowBlank && value.trim() === "") {
+    return undefined
+  }
+  return value
 }
 
 function toolResultStatus(tool: ToolCard | undefined): ToolResultStatus {
