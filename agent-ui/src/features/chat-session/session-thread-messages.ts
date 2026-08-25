@@ -55,6 +55,12 @@ function snapshotBlocks(raw: unknown): StreamBlock[] {
         blockId,
         index: blockIndex,
         text: String(block.text ?? ""),
+        ...(typeof block.startedAt === "number" && Number.isFinite(block.startedAt)
+          ? { startedAt: block.startedAt }
+          : {}),
+        ...(typeof block.durationMs === "number" && Number.isFinite(block.durationMs)
+          ? { durationMs: block.durationMs }
+          : {}),
       })
       return
     }

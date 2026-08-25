@@ -15,6 +15,7 @@ import {
   type AgentRunEffort,
 } from "./run-agent-session"
 import { applyStreamFrame } from "./run-stream-reducer"
+import { freezeMessageThinking } from "./thinking-time"
 
 type ActiveStream = {
   controller: AbortController
@@ -124,7 +125,7 @@ export function useAgentMessage() {
               message.id === previousStream.messageId &&
               message.status === "streaming"
                 ? {
-                    ...message,
+                    ...freezeMessageThinking(message, Date.now()),
                     status: "complete" as const,
                   }
                 : message
@@ -233,7 +234,10 @@ export function useAgentMessage() {
               currentMessages.map((message) =>
                 message.id === assistantMessage.id &&
                 message.status === "streaming"
-                  ? { ...message, status: "complete" }
+                  ? {
+                      ...freezeMessageThinking(message, Date.now()),
+                      status: "complete",
+                    }
                   : message
               )
             )

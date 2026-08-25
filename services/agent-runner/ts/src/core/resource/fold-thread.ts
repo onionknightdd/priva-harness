@@ -1,5 +1,6 @@
 import type { AgentEvent } from '../event/agent-event.js'
 import { applyStreamFrame, emptyAssistantMessage } from './apply-stream-frame.js'
+import { freezeMessageThinking, stampMessageThinkingTimes } from './thinking-time.js'
 import {
   threadHasVisibleContent,
   type ThreadMessage,
@@ -21,15 +22,21 @@ const PASS_THROUGH_TYPES = new Set<AgentEvent['type']>([
 export function foldThread(items: readonly ThreadReplayItem[]): ThreadMessage[] {
   const messages: ThreadMessage[] = []
   let current: ThreadMessage | undefined
+  let lastAtMs: number | undefined
 
   const finishAssistant = () => {
     if (current === undefined) return
+    const frozen = freezeMessageThinking(
+      current,
+      lastAtMs ?? Date.parse(current.createdAt),
+    )
     const completed: ThreadMessage = {
-      ...current,
-      status: current.status === 'error' ? 'error' : 'complete',
+      ...frozen,
+      status: frozen.status === 'error' ? 'error' : 'complete',
     }
     if (threadHasVisibleContent(completed)) messages.push(completed)
     current = undefined
+    lastAtMs = undefined
   }
 
   for (const item of items) {
@@ -50,14 +57,20 @@ export function foldThread(items: readonly ThreadReplayItem[]): ThreadMessage[] 
     if (PASS_THROUGH_TYPES.has(item.event.type)) continue
 
     const parentId = parentToolUseIdOf(item.event)
+    const atMs = atMsOf(item.createdAt)
+    if (atMs !== undefined) lastAtMs = atMs
     if (parentId !== undefined) {
       const target = findAssistantForParent(messages, current, parentId)
       if (target !== undefined) {
         const updated = applyStreamFrame(target, item.event)
+        const stamped =
+          atMs === undefined
+            ? updated
+            : stampMessageThinkingTimes(target, updated, item.event, atMs)
         if (current?.id === target.id) {
-          current = updated
+          current = stamped
         } else {
-          replaceMessage(messages, updated)
+          replaceMessage(messages, stamped)
         }
         continue
       }
@@ -67,7 +80,11 @@ export function foldThread(items: readonly ThreadReplayItem[]): ThreadMessage[] 
       assistantIdOf(item.event),
       item.createdAt ?? createdAtNow(),
     )
+    const previous = current
     current = applyStreamFrame(current, item.event)
+    if (atMs !== undefined) {
+      current = stampMessageThinkingTimes(previous, current, item.event, atMs)
+    }
   }
 
   finishAssistant()
@@ -116,4 +133,11 @@ function assistantIdOf(event: AgentEvent): string {
 
 function createdAtNow(): string {
   return new Date(0).toISOString()
+}
+
+function atMsOf(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined
+  const parsed = Date.parse(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) return undefined
+  return parsed
 }

@@ -267,7 +267,14 @@ function mergeSnapshot(
       continue
     }
     if (block.type === 'thinking') {
-      snapshotThinking.push(block)
+      const previous = existing.find(
+        (item): item is Extract<ThreadBlock, { type: 'thinking' }> =>
+          item.type === 'thinking' && item.blockId === block.blockId,
+      ) ?? existing.find(
+        (item): item is Extract<ThreadBlock, { type: 'thinking' }> =>
+          item.type === 'thinking' && item.index === block.index,
+      )
+      snapshotThinking.push(withThinkingTimes(block, previous))
       continue
     }
     if (block.type === 'image') {
@@ -331,6 +338,22 @@ function placeholderBlock(event: Extract<AgentEvent, { type: 'assistant.block_st
     }
   }
   return { type: 'text', blockId: event.blockId, index, text: '' }
+}
+
+function withThinkingTimes(
+  block: Extract<ThreadBlock, { type: 'thinking' }>,
+  previous: Extract<ThreadBlock, { type: 'thinking' }> | undefined,
+): ThreadBlock {
+  if (previous === undefined) return block
+  return {
+    ...block,
+    ...(block.startedAt === undefined && previous.startedAt !== undefined
+      ? { startedAt: previous.startedAt }
+      : {}),
+    ...(block.durationMs === undefined && previous.durationMs !== undefined
+      ? { durationMs: previous.durationMs }
+      : {}),
+  }
 }
 
 function upsertBlock(blocks: readonly ThreadBlock[], next: ThreadBlock): ThreadBlock[] {

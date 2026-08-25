@@ -14,6 +14,8 @@ export type ThreadBlock =
       readonly blockId: string
       readonly index: number
       readonly text: string
+      readonly startedAt?: number
+      readonly durationMs?: number
     }
   | {
       readonly type: 'image'

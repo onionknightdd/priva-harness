@@ -70,6 +70,18 @@ function toClaudeSdkMessage(message: SessionMessage): ClaudeSdkMessage | undefin
     return undefined
   }
 
+  if (message.type === 'stream_event') {
+    const inner = asRecord(message.message) ?? {}
+    return {
+      type: 'stream_event',
+      session_id: message.sessionId,
+      event: inner['event'] ?? inner,
+      ...(message.parentToolUseId === null || message.parentToolUseId === ''
+        ? {}
+        : { parent_tool_use_id: message.parentToolUseId }),
+    }
+  }
+
   if (message.type === 'system') {
     const raw = asRecord(message.message) ?? {}
     return {

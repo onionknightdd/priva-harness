@@ -1,7 +1,6 @@
 import * as React from "react"
 import {
   BotIcon,
-  BrainIcon,
   ChevronDownIcon,
   ImageIcon,
   WorkflowIcon,
@@ -24,8 +23,10 @@ import {
   ItemContent,
   ItemGroup,
   ItemMedia,
+  ItemSeparator,
   ItemTitle,
 } from "@/components/ui/item"
+import { cn } from "@/lib/utils"
 
 import type {
   AgentThreadMessage,
@@ -55,6 +56,44 @@ export function AssistantProcess({
   React.useEffect(() => {
     setOpen(isStreaming)
   }, [isStreaming])
+
+  const rows: React.ReactNode[] = []
+  for (const block of blocks) {
+    if (block.type === "thinking" && block.text.trim() !== "") {
+      rows.push(
+        <ThinkingItem
+          key={block.blockId}
+          text={block.text}
+          startedAt={block.startedAt}
+          durationMs={block.durationMs}
+          running={isStreaming && block.durationMs === undefined}
+          defaultOpen={isStreaming}
+        />
+      )
+      continue
+    }
+    if (block.type === "image") {
+      rows.push(
+        <ImageItem
+          key={block.blockId}
+          block={block}
+          defaultOpen={isStreaming}
+        />
+      )
+      continue
+    }
+    if (block.type === "tool_use") {
+      rows.push(<ToolItem key={block.id} block={block} />)
+    }
+  }
+  for (const agent of message.nestedAgents ?? []) {
+    rows.push(<NestedAgentItem key={agent.parentToolUseId} agent={agent} />)
+  }
+  for (const workflow of message.workflows ?? []) {
+    rows.push(
+      <WorkflowItem key={workflow.workflowToolUseId} workflow={workflow} />
+    )
+  }
 
   return (
     <motion.div
@@ -91,41 +130,7 @@ export function AssistantProcess({
           />
         </CollapsibleTrigger>
         <CollapsibleContent className={PANEL_CLASS}>
-          <ItemGroup className="gap-1 py-1 text-muted-foreground">
-            {blocks.map((block) => {
-              if (block.type === "thinking" && block.text.trim() !== "") {
-                return (
-                  <ThinkingItem
-                    key={block.blockId}
-                    text={block.text}
-                    defaultOpen={isStreaming}
-                  />
-                )
-              }
-              if (block.type === "image") {
-                return (
-                  <ImageItem
-                    key={block.blockId}
-                    block={block}
-                    defaultOpen={isStreaming}
-                  />
-                )
-              }
-              if (block.type === "tool_use") {
-                return <ToolItem key={block.id} block={block} />
-              }
-              return null
-            })}
-            {(message.nestedAgents ?? []).map((agent) => (
-              <NestedAgentItem key={agent.parentToolUseId} agent={agent} />
-            ))}
-            {(message.workflows ?? []).map((workflow) => (
-              <WorkflowItem
-                key={workflow.workflowToolUseId}
-                workflow={workflow}
-              />
-            ))}
-          </ItemGroup>
+          <ProcessItemGroup>{rows}</ProcessItemGroup>
         </CollapsibleContent>
       </Collapsible>
     </motion.div>
@@ -134,16 +139,31 @@ export function AssistantProcess({
 
 function ThinkingItem({
   text,
+  startedAt,
+  durationMs,
+  running,
   defaultOpen,
 }: {
   text: string
+  startedAt?: number
+  durationMs?: number
+  running: boolean
   defaultOpen: boolean
 }) {
   const { t } = useTranslation()
+  const liveMs = useLiveElapsedMs(startedAt, running)
+  const elapsedMs =
+    durationMs !== undefined && durationMs > 0 ? durationMs : liveMs
   return (
     <ProcessRow
-      icon={BrainIcon}
-      title={t("agentMessage.thought")}
+      title={
+        running ? (
+          <span className="shimmer">{t("agentMessage.thoughtRunning")}</span>
+        ) : (
+          t("agentMessage.thoughtDone")
+        )
+      }
+      meta={elapsedMs === undefined ? undefined : formatElapsedMs(elapsedMs)}
       defaultOpen={defaultOpen}
     >
       <p className="whitespace-pre-wrap text-sm text-muted-foreground">{text}</p>
@@ -248,7 +268,7 @@ function NestedAgentItem({ agent }: { agent: NestedAgent }) {
             </p>
           ) : null}
           {agent.inbox.length > 0 ? (
-            <ItemGroup className="gap-1 text-muted-foreground">
+            <ProcessItemGroup className="py-0">
               {agent.inbox.map((item, index) => (
                 <Item key={`${item.source}-${index}`} size="xs">
                   <ItemContent>
@@ -263,14 +283,14 @@ function NestedAgentItem({ agent }: { agent: NestedAgent }) {
                   </ItemContent>
                 </Item>
               ))}
-            </ItemGroup>
+            </ProcessItemGroup>
           ) : null}
           {tools.length > 0 ? (
-            <ItemGroup className="gap-1 text-muted-foreground">
+            <ProcessItemGroup className="py-0">
               {tools.map((block) => (
                 <ToolItem key={block.id} block={block} />
               ))}
-            </ItemGroup>
+            </ProcessItemGroup>
           ) : null}
         </div>
       ) : null}
@@ -296,33 +316,67 @@ function WorkflowItem({ workflow }: { workflow: WorkflowCard }) {
   )
 }
 
+function ProcessItemGroup({
+  className,
+  children,
+}: {
+  className?: string
+  children: React.ReactNode
+}) {
+  const items = React.Children.toArray(children)
+
+  return (
+    <ItemGroup className={cn("gap-0 py-1 text-muted-foreground", className)}>
+      {items.map((child, index) => {
+        const key = React.isValidElement(child) && child.key != null
+          ? String(child.key)
+          : String(index)
+        return (
+          <React.Fragment key={key}>
+            {index > 0 ? <ItemSeparator className="my-0" /> : null}
+            {child}
+          </React.Fragment>
+        )
+      })}
+    </ItemGroup>
+  )
+}
+
 function ProcessRow({
   icon: Icon,
   title,
   badge,
   badgeVariant = "outline",
+  meta,
   defaultOpen = false,
   children,
 }: {
-  icon: LucideIcon
+  icon?: LucideIcon
   title: React.ReactNode
   badge?: React.ReactNode
   badgeVariant?: "secondary" | "outline" | "destructive"
+  meta?: React.ReactNode
   defaultOpen?: boolean
   children?: React.ReactNode
 }) {
   const hasBody = Boolean(children)
+  const showActions = Boolean(badge || meta || hasBody)
 
   const header = (
     <>
-      <ItemMedia variant="icon">
-        <Icon />
-      </ItemMedia>
+      {Icon ? (
+        <ItemMedia variant="icon">
+          <Icon />
+        </ItemMedia>
+      ) : null}
       <ItemContent>
         <ItemTitle>{title}</ItemTitle>
       </ItemContent>
-      {badge || hasBody ? (
+      {showActions ? (
         <ItemActions>
+          {meta ? (
+            <span className="text-xs tabular-nums text-muted-foreground">{meta}</span>
+          ) : null}
           {badge ? <Badge variant={badgeVariant}>{badge}</Badge> : null}
           {hasBody ? (
             <ChevronDownIcon className="size-3.5 opacity-0 transition-[opacity,transform] duration-200 group-hover/item:opacity-100 group-focus-visible/item:opacity-100 group-data-open/process-item:rotate-180 motion-reduce:transition-none" />
@@ -350,10 +404,50 @@ function ProcessRow({
         {header}
       </Item>
       <CollapsibleContent className={PANEL_CLASS}>
-        <div className="px-3 pb-2 pl-9">{children}</div>
+        <div className={Icon ? "px-3 pb-2 pl-9" : "px-3 pb-2"}>{children}</div>
       </CollapsibleContent>
     </Collapsible>
   )
+}
+
+function useLiveElapsedMs(
+  startedAt: number | undefined,
+  running: boolean
+): number | undefined {
+  const shouldReduceMotion = Boolean(useReducedMotion())
+  const [now, setNow] = React.useState(() => Date.now())
+
+  React.useEffect(() => {
+    if (!running || startedAt === undefined) {
+      return
+    }
+    const intervalMs = shouldReduceMotion ? 1000 : 100
+    const id = window.setInterval(() => {
+      setNow(Date.now())
+    }, intervalMs)
+    return () => {
+      window.clearInterval(id)
+    }
+  }, [running, startedAt, shouldReduceMotion])
+
+  if (!running || startedAt === undefined) {
+    return undefined
+  }
+  return Math.max(0, now - startedAt)
+}
+
+function formatElapsedMs(ms: number): string {
+  const elapsed = Math.max(0, ms)
+  if (elapsed < 10_000) {
+    return `${(elapsed / 1000).toFixed(1)}s`
+  }
+  const totalSeconds = Math.round(elapsed / 1000)
+  if (totalSeconds < 60) {
+    return `${String(totalSeconds)}s`
+  }
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${String(minutes)}m ${String(seconds).padStart(2, "0")}s`
 }
 
 function isToolRunning(tool: ToolCard | undefined): boolean {
