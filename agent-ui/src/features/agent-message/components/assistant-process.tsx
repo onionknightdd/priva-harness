@@ -22,14 +22,9 @@ import {
   ItemActions,
   ItemContent,
   ItemGroup,
+  ItemMedia,
   ItemTitle,
 } from "@/components/ui/item"
-import {
-  Timeline,
-  TimelineContent,
-  TimelineIndicator,
-  TimelineItem,
-} from "@/components/reui/timeline"
 import { cn } from "@/lib/utils"
 
 import type {
@@ -158,16 +153,24 @@ function ThinkingItem({
   const liveMs = useLiveElapsedMs(startedAt, running)
   const elapsedMs =
     durationMs !== undefined && durationMs > 0 ? durationMs : liveMs
+  const elapsed =
+    elapsedMs === undefined ? undefined : formatElapsedMs(elapsedMs)
   return (
     <ProcessRow
       title={
-        running ? (
-          <span className="shimmer">{t("agentMessage.thoughtRunning")}</span>
-        ) : (
-          t("agentMessage.thoughtDone")
-        )
+        <>
+          {running ? (
+            <span className="shimmer">{t("agentMessage.thoughtRunning")}</span>
+          ) : (
+            t("agentMessage.thoughtDone")
+          )}
+          {elapsed ? (
+            <span className="font-normal tabular-nums text-muted-foreground">
+              {elapsed}
+            </span>
+          ) : null}
+        </>
       }
-      meta={elapsedMs === undefined ? undefined : formatElapsedMs(elapsedMs)}
       defaultOpen={defaultOpen}
     >
       <p className="whitespace-pre-wrap text-sm text-muted-foreground">{text}</p>
@@ -320,8 +323,6 @@ function WorkflowItem({ workflow }: { workflow: WorkflowCard }) {
   )
 }
 
-const ProcessStepContext = React.createContext(1)
-
 function ProcessItemGroup({
   className,
   children,
@@ -329,26 +330,10 @@ function ProcessItemGroup({
   className?: string
   children: React.ReactNode
 }) {
-  const items = React.Children.toArray(children)
-
   return (
-    <Timeline
-      defaultValue={0}
-      className={cn("py-1 text-muted-foreground", className)}
-    >
-      {items.map((child, index) => (
-        <ProcessStepContext.Provider
-          key={
-            React.isValidElement(child) && child.key != null
-              ? String(child.key)
-              : String(index)
-          }
-          value={index + 1}
-        >
-          {child}
-        </ProcessStepContext.Provider>
-      ))}
-    </Timeline>
+    <ItemGroup className={cn("gap-1 py-1 text-muted-foreground", className)}>
+      {children}
+    </ItemGroup>
   )
 }
 
@@ -357,7 +342,6 @@ function ProcessRow({
   title,
   badge,
   badgeVariant = "outline",
-  meta,
   defaultOpen = false,
   children,
 }: {
@@ -365,24 +349,24 @@ function ProcessRow({
   title: React.ReactNode
   badge?: React.ReactNode
   badgeVariant?: "secondary" | "outline" | "destructive"
-  meta?: React.ReactNode
   defaultOpen?: boolean
   children?: React.ReactNode
 }) {
-  const step = React.useContext(ProcessStepContext)
   const hasBody = Boolean(children)
-  const showActions = Boolean(badge || meta || hasBody)
+  const showActions = Boolean(badge || hasBody)
 
   const header = (
     <>
+      {Icon ? (
+        <ItemMedia variant="icon">
+          <Icon />
+        </ItemMedia>
+      ) : null}
       <ItemContent>
         <ItemTitle>{title}</ItemTitle>
       </ItemContent>
       {showActions ? (
         <ItemActions>
-          {meta ? (
-            <span className="text-xs tabular-nums text-muted-foreground">{meta}</span>
-          ) : null}
           {badge ? <Badge variant={badgeVariant}>{badge}</Badge> : null}
           {hasBody ? (
             <ChevronDownIcon className="size-3.5 opacity-0 transition-[opacity,transform] duration-200 group-hover/item:opacity-100 group-focus-visible/item:opacity-100 group-data-open/process-item:rotate-180 motion-reduce:transition-none" />
@@ -392,45 +376,27 @@ function ProcessRow({
     </>
   )
 
-  const rail = (
-    <TimelineIndicator className="flex items-center justify-center border-border bg-background [&_svg:not([class*='size-'])]:size-2.5">
-      {Icon ? <Icon /> : null}
-    </TimelineIndicator>
-  )
-
   if (!hasBody) {
     return (
-      <TimelineItem
-        step={step}
-        className="group-data-[orientation=vertical]/timeline:not-last:pb-2"
-      >
-        {rail}
-        <Item size="sm" className="bg-transparent px-0 py-1.5 hover:bg-transparent">
-          {header}
-        </Item>
-      </TimelineItem>
+      <Item size="sm" className="bg-transparent hover:bg-transparent">
+        {header}
+      </Item>
     )
   }
 
   return (
-    <TimelineItem
-      step={step}
-      className="group-data-[orientation=vertical]/timeline:not-last:pb-2"
-    >
-      {rail}
-      <Collapsible className="group/process-item" defaultOpen={defaultOpen}>
-        <Item
-          size="sm"
-          className="w-full cursor-pointer bg-transparent px-0 py-1.5 text-left hover:bg-transparent aria-expanded:bg-transparent"
-          render={<CollapsibleTrigger />}
-        >
-          {header}
-        </Item>
-        <CollapsibleContent className={PANEL_CLASS}>
-          <TimelineContent className="pb-2">{children}</TimelineContent>
-        </CollapsibleContent>
-      </Collapsible>
-    </TimelineItem>
+    <Collapsible className="group/process-item" defaultOpen={defaultOpen}>
+      <Item
+        size="sm"
+        className="w-full cursor-pointer bg-transparent text-left hover:bg-transparent aria-expanded:bg-transparent"
+        render={<CollapsibleTrigger />}
+      >
+        {header}
+      </Item>
+      <CollapsibleContent className={PANEL_CLASS}>
+        <div className={Icon ? "px-3 pb-2 pl-9" : "px-3 pb-2"}>{children}</div>
+      </CollapsibleContent>
+    </Collapsible>
   )
 }
 
