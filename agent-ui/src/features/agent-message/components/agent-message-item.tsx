@@ -25,7 +25,11 @@ import { writeClipboardText } from "@/lib/clipboard"
 
 import type { RelativeTimeLabel } from "@/lib/relative-time"
 
-import type { AgentThreadMessage } from "../agent-message-data"
+import {
+  assistantHasProcess,
+  type AgentThreadMessage,
+} from "../agent-message-data"
+import { AssistantProcess } from "./assistant-process"
 
 function animateControl(control: HTMLButtonElement) {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -190,7 +194,8 @@ export function AgentMessageItem({
   const shouldReduceMotion = Boolean(useReducedMotion())
   const isStreaming = message.status === "streaming"
   const isError = message.status === "error"
-  const showPlaceholder = isStreaming && message.content.length === 0
+  const showPlaceholder =
+    isStreaming && message.content.length === 0 && !assistantHasProcess(message)
 
   return (
     <Message from={message.role}>
@@ -260,17 +265,22 @@ function AssistantStreamBody({
 }) {
   const shouldReduceMotion = Boolean(useReducedMotion())
   const text = message.content
-  if (text.trim() === "") {
-    return null
-  }
+  const hasProcess = assistantHasProcess(message)
 
   return (
-    <MessageResponse
-      animated={isStreaming && !shouldReduceMotion}
-      isAnimating={isStreaming}
-      mode={isStreaming ? "streaming" : "static"}
-    >
-      {text}
-    </MessageResponse>
+    <div className="flex flex-col gap-3">
+      {hasProcess ? (
+        <AssistantProcess message={message} isStreaming={isStreaming} />
+      ) : null}
+      {text.trim() !== "" ? (
+        <MessageResponse
+          animated={isStreaming && !shouldReduceMotion}
+          isAnimating={isStreaming}
+          mode={isStreaming ? "streaming" : "static"}
+        >
+          {text}
+        </MessageResponse>
+      ) : null}
+    </div>
   )
 }

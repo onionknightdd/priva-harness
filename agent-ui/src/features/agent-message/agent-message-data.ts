@@ -108,3 +108,18 @@ export function textFromBlocks(blocks: readonly StreamBlock[]): string {
     .map((block) => block.text)
     .join("")
 }
+
+export function assistantHasProcess(message: AgentThreadMessage): boolean {
+  if ((message.nestedAgents?.length ?? 0) > 0) {
+    return true
+  }
+  if ((message.workflows?.length ?? 0) > 0) {
+    return true
+  }
+  return (message.blocks ?? []).some((block) => {
+    if (block.type === "tool_use" || block.type === "image") {
+      return true
+    }
+    return block.type === "thinking" && block.text.trim() !== ""
+  })
+}

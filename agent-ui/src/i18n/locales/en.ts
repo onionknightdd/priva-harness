@@ -50,6 +50,7 @@ export const en = {
     sendFailed: "Failed to send",
     scrollToLatest: "Scroll to latest",
     thinking: "Running…",
+    thought: "Thought",
     nestedAgent: "Nested agent",
     workflow: "Workflow",
     toolRunning: "Running",
