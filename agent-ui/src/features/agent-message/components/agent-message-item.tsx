@@ -9,7 +9,6 @@ import {
 import { motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
-import { AgentActivity } from "@/components/agents/agent-activity"
 import {
   Message,
   MessageAction,
@@ -27,11 +26,6 @@ import { writeClipboardText } from "@/lib/clipboard"
 import type { RelativeTimeLabel } from "@/lib/relative-time"
 
 import type { AgentThreadMessage } from "../agent-message-data"
-import {
-  assistantHasProcess,
-  assistantProcessCount,
-  buildAssistantActivityItems,
-} from "./assistant-activity-items"
 
 function animateControl(control: HTMLButtonElement) {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -196,10 +190,7 @@ export function AgentMessageItem({
   const shouldReduceMotion = Boolean(useReducedMotion())
   const isStreaming = message.status === "streaming"
   const isError = message.status === "error"
-  const showPlaceholder =
-    isStreaming &&
-    message.content.length === 0 &&
-    !assistantHasProcess(message)
+  const showPlaceholder = isStreaming && message.content.length === 0
 
   return (
     <Message from={message.role}>
@@ -267,44 +258,19 @@ function AssistantStreamBody({
   message: AgentThreadMessage
   isStreaming: boolean
 }) {
-  const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
   const text = message.content
-  const items = buildAssistantActivityItems(message, t)
-  const hasProcess = items.length > 0
-  const stepCount = assistantProcessCount(message)
+  if (text.trim() === "") {
+    return null
+  }
 
   return (
-    <div className="flex flex-col gap-3">
-      {hasProcess ? (
-        <motion.div
-          initial={shouldReduceMotion ? false : { opacity: 0, y: 4 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}
-        >
-          <AgentActivity
-            items={items}
-            status={isStreaming ? "working" : "complete"}
-            collapseOnComplete
-            defaultOpen={false}
-            activeLabel={t("agentMessage.thinking")}
-            summary={
-              stepCount > 1
-                ? t("agentMessage.chainOfThoughtSteps", { count: stepCount })
-                : t("agentMessage.chainOfThought")
-            }
-          />
-        </motion.div>
-      ) : null}
-      {text.trim() !== "" ? (
-        <MessageResponse
-          animated={isStreaming && !shouldReduceMotion}
-          isAnimating={isStreaming}
-          mode={isStreaming ? "streaming" : "static"}
-        >
-          {text}
-        </MessageResponse>
-      ) : null}
-    </div>
+    <MessageResponse
+      animated={isStreaming && !shouldReduceMotion}
+      isAnimating={isStreaming}
+      mode={isStreaming ? "streaming" : "static"}
+    >
+      {text}
+    </MessageResponse>
   )
 }
