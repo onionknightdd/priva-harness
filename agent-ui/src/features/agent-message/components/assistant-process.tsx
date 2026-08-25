@@ -290,7 +290,7 @@ function BashToolItem({
       <div className="flex flex-col gap-2">
         {command ? (
           <div className="flex items-start">
-            <span className="shrink-0 select-none font-mono text-xs leading-none">
+            <span className="shrink-0 select-none whitespace-pre font-mono text-xs leading-none">
               {"$ "}
             </span>
             <ToolResultOutput className="min-w-0 flex-1 leading-none" language="bash">
