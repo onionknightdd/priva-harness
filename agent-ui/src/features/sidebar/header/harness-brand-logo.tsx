@@ -30,7 +30,8 @@ export function HarnessBrandLogo({
       alt=""
       aria-hidden="true"
       className={cn(
-        "size-6 object-contain",
+        harnessId === "pi" ? "size-5" : "size-6",
+        "object-contain",
         icon.monochrome && "dark:invert",
         className
       )}

@@ -14,19 +14,20 @@ import {
   FieldSet,
   FieldTitle,
 } from "@/components/ui/field"
-import { Switch } from "@/components/ui/switch"
 import {
-  ToggleGroup,
-  ToggleGroupItem,
-} from "@/components/ui/toggle-group"
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 
 import {
   DEFAULT_HARNESS_PREFERENCES,
   QUEUE_BEHAVIORS,
   SESSION_MODEL_PREFERENCES,
-  isDefaultHarnessPreference,
-  isQueueBehavior,
-  isSessionModelPreference,
 } from "./agent-preferences"
 import { useAgentPreferences } from "./agent-preferences-context"
 
@@ -52,6 +53,62 @@ const queueBehaviorLabelKeys = {
   interrupt: "settings.agent.queueBehaviorInterrupt",
 } as const
 
+function SettingsSelect<Value extends string>({
+  labelledBy,
+  invalid,
+  disabled,
+  items,
+  value,
+  triggerClassName,
+  onValueChange,
+}: {
+  labelledBy: string
+  invalid?: boolean
+  disabled?: boolean
+  items: readonly { value: Value; label: string }[]
+  value: Value
+  triggerClassName?: string
+  onValueChange: (value: Value) => void
+}) {
+  return (
+    <Select
+      items={items}
+      value={value}
+      disabled={disabled}
+      onValueChange={(next) => {
+        if (next === null) {
+          return
+        }
+
+        onValueChange(next)
+      }}
+    >
+      <SelectTrigger
+        size="sm"
+        aria-labelledby={labelledBy}
+        aria-invalid={invalid}
+        disabled={disabled}
+        className={triggerClassName}
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent
+        align="end"
+        alignItemWithTrigger={false}
+        className="w-max min-w-(--anchor-width)"
+      >
+        <SelectGroup>
+          {items.map((item) => (
+            <SelectItem key={item.value} value={item.value}>
+              {item.label}
+            </SelectItem>
+          ))}
+        </SelectGroup>
+      </SelectContent>
+    </Select>
+  )
+}
+
 export function AgentSettingsView() {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
@@ -75,9 +132,22 @@ export function AgentSettingsView() {
         ? t("settings.agent.queueBehaviorSaveFailed")
         : null
 
+  const defaultHarnessItems = DEFAULT_HARNESS_PREFERENCES.map((value) => ({
+    value,
+    label: t(defaultHarnessLabelKeys[value]),
+  }))
+  const sessionModelItems = SESSION_MODEL_PREFERENCES.map((value) => ({
+    value,
+    label: t(sessionModelLabelKeys[value]),
+  }))
+  const queueBehaviorItems = QUEUE_BEHAVIORS.map((value) => ({
+    value,
+    label: t(queueBehaviorLabelKeys[value]),
+  }))
+
   return (
     <motion.div
-      className="max-w-lg py-1"
+      className="w-full min-w-0 py-1"
       initial={shouldReduceMotion ? false : { opacity: 0.7, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={shouldReduceMotion ? { duration: 0 } : panelItemTransition}
@@ -94,30 +164,13 @@ export function AgentSettingsView() {
                 {t("settings.agent.defaultHarnessDescription")}
               </FieldDescription>
             </FieldContent>
-            <ToggleGroup
-              aria-labelledby="agent-default-harness-label"
-              value={[defaultHarness]}
-              onValueChange={(values) => {
-                const next = values[0]
-                if (isDefaultHarnessPreference(next)) {
-                  setDefaultHarness(next)
-                }
-              }}
-              variant="outline"
-              size="sm"
-              spacing={0}
-              className="max-w-full flex-wrap"
-            >
-              {DEFAULT_HARNESS_PREFERENCES.map((value) => (
-                <ToggleGroupItem
-                  key={value}
-                  value={value}
-                  className="px-2.5 text-xs font-normal"
-                >
-                  {t(defaultHarnessLabelKeys[value])}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
+            <SettingsSelect
+              labelledBy="agent-default-harness-label"
+              items={defaultHarnessItems}
+              value={defaultHarness}
+              triggerClassName="w-full min-w-0 @md/field-group:w-44"
+              onValueChange={setDefaultHarness}
+            />
           </Field>
 
           <Field orientation="responsive">
@@ -129,33 +182,17 @@ export function AgentSettingsView() {
                 {t("settings.agent.sessionModelDescription")}
               </FieldDescription>
             </FieldContent>
-            <ToggleGroup
-              aria-labelledby="agent-session-model-label"
-              value={[sessionModel]}
-              onValueChange={(values) => {
-                const next = values[0]
-                if (isSessionModelPreference(next)) {
-                  setSessionModel(next)
-                }
-              }}
-              variant="outline"
-              size="sm"
-              spacing={0}
-              className="max-w-full flex-wrap"
-            >
-              {SESSION_MODEL_PREFERENCES.map((value) => (
-                <ToggleGroupItem
-                  key={value}
-                  value={value}
-                  className="px-2.5 text-xs font-normal"
-                >
-                  {t(sessionModelLabelKeys[value])}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
+            <SettingsSelect
+              labelledBy="agent-session-model-label"
+              items={sessionModelItems}
+              value={sessionModel}
+              triggerClassName="w-full min-w-0 @md/field-group:w-44"
+              onValueChange={setSessionModel}
+            />
           </Field>
 
           <Field
+            orientation="responsive"
             data-invalid={queueBehaviorErrorMessage ? true : undefined}
             data-disabled={queueBehaviorBusy ? true : undefined}
           >
@@ -166,46 +203,27 @@ export function AgentSettingsView() {
               <FieldDescription>
                 {t("settings.agent.queueBehaviorDescription")}
               </FieldDescription>
-            </FieldContent>
-            <ToggleGroup
-              aria-labelledby="agent-queue-behavior-label"
-              aria-invalid={queueBehaviorErrorMessage ? true : undefined}
-              disabled={queueBehaviorBusy}
-              value={[queueBehavior]}
-              onValueChange={(values) => {
-                const next = values[0]
-                if (isQueueBehavior(next)) {
-                  setQueueBehavior(next)
-                }
-              }}
-              variant="outline"
-              size="sm"
-              spacing={2}
-              orientation="vertical"
-              className="w-full max-w-md flex-col items-stretch"
-            >
-              {QUEUE_BEHAVIORS.map((value) => (
-                <ToggleGroupItem
-                  key={value}
-                  value={value}
-                  disabled={queueBehaviorBusy}
-                  className="h-auto min-h-8 justify-start whitespace-normal px-3 py-2 text-left text-xs font-normal"
+              {queueBehaviorErrorMessage ? (
+                <motion.div
+                  initial={shouldReduceMotion ? false : { opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={
+                    shouldReduceMotion ? { duration: 0 } : panelItemTransition
+                  }
                 >
-                  {t(queueBehaviorLabelKeys[value])}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-            {queueBehaviorErrorMessage ? (
-              <motion.div
-                initial={shouldReduceMotion ? false : { opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={
-                  shouldReduceMotion ? { duration: 0 } : panelItemTransition
-                }
-              >
-                <FieldError>{queueBehaviorErrorMessage}</FieldError>
-              </motion.div>
-            ) : null}
+                  <FieldError>{queueBehaviorErrorMessage}</FieldError>
+                </motion.div>
+              ) : null}
+            </FieldContent>
+            <SettingsSelect
+              labelledBy="agent-queue-behavior-label"
+              invalid={Boolean(queueBehaviorErrorMessage)}
+              disabled={queueBehaviorBusy}
+              items={queueBehaviorItems}
+              value={queueBehavior}
+              triggerClassName="w-full min-w-0 @md/field-group:w-44"
+              onValueChange={setQueueBehavior}
+            />
           </Field>
 
           <Field orientation="horizontal">

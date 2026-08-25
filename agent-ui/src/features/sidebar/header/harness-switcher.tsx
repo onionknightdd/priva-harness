@@ -219,7 +219,7 @@ export function HarnessSwitcher() {
               render={
                 <SidebarMenuButton
                   size="lg"
-                  className="h-auto min-h-12 data-open:bg-sidebar-accent data-open:text-sidebar-accent-foreground [&_[data-brand-logo]_svg]:size-6 [&_[data-runtime-logo]_img]:size-3.5 [&_[data-runtime-logo]_svg]:size-3.5"
+                  className="h-auto min-h-12 data-open:bg-sidebar-accent data-open:text-sidebar-accent-foreground [&_[data-brand-logo]_svg]:size-6 [&_[data-runtime-logo]_svg]:size-3.5"
                 />
               }
             >
@@ -250,7 +250,11 @@ export function HarnessSwitcher() {
                       transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
                     >
                       <HarnessBrandLogo
-                        className="size-3.5 shrink-0"
+                        className={
+                          activeHarness.id === "pi"
+                            ? "size-3 shrink-0"
+                            : "size-3.5 shrink-0"
+                        }
                         harnessId={activeHarness.id}
                       />
                       <span className="truncate">{runtimeName}</span>

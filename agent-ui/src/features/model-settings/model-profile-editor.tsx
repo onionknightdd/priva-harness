@@ -227,7 +227,7 @@ export function ModelProfileEditor({
                   onDraftChange("authToken", event.currentTarget.value)
                 }
               />
-              <FieldDescription className="text-xs">
+              <FieldDescription>
                 {t("settings.models.authTokenDescription")}
               </FieldDescription>
             </Field>
@@ -298,7 +298,7 @@ export function ModelProfileEditor({
                 placeholder={t("settings.models.defaultModelPlaceholder")}
                 onValueChange={(value) => onDraftChange("defaultModel", value)}
               />
-              <FieldDescription className="text-xs">
+              <FieldDescription>
                 {t("settings.models.defaultModelDescription")}
               </FieldDescription>
             </Field>

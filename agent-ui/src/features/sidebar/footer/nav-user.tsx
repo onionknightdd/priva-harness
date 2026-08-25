@@ -7,6 +7,7 @@ import {
   MessageSquareTextIcon,
   MonitorCogIcon,
   SettingsIcon,
+  UserRoundIcon,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
@@ -31,6 +32,11 @@ import { cn } from "@/lib/utils"
 import { LanguageToggle } from "./language-toggle"
 import { ThemeToggle } from "./theme-toggle"
 
+const ProfileDialog = React.lazy(async () => {
+  const module = await import("@/features/profile")
+  return { default: module.ProfileDialog }
+})
+
 const menuItemClassName =
   "gap-2 px-2 py-1.5 text-xs [&_svg]:text-muted-foreground"
 
@@ -52,6 +58,8 @@ export function NavUser() {
   const { isMobile } = useSidebar()
   const { t } = useTranslation()
   const [settingsOpen, setSettingsOpen] = React.useState(false)
+  const [profileOpen, setProfileOpen] = React.useState(false)
+  const [profileLoaded, setProfileLoaded] = React.useState(false)
   const name = t("sidebar.user.guestName")
   const email = t("sidebar.user.guestEmail")
   const initials = t("sidebar.user.guestInitials")
@@ -60,7 +68,15 @@ export function NavUser() {
     <>
       <SidebarMenu>
         <SidebarMenuItem className="flex items-center gap-0.5 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:justify-center">
-          <div className="flex min-w-0 flex-1 items-center gap-1.5 px-1 py-0.5 group-data-[collapsible=icon]:hidden">
+          <button
+            type="button"
+            className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none group-data-[collapsible=icon]:hidden"
+            aria-label={t("sidebar.user.openProfile")}
+            onClick={() => {
+              setProfileLoaded(true)
+              setProfileOpen(true)
+            }}
+          >
             <UserAvatar className="size-7" label={initials} />
             <div className="grid min-w-0 flex-1 text-left text-xs leading-tight">
               <span className="truncate font-medium">{name}</span>
@@ -68,7 +84,7 @@ export function NavUser() {
                 {email}
               </span>
             </div>
-          </div>
+          </button>
 
           <LanguageToggle className="ml-auto group-data-[collapsible=icon]:order-2 group-data-[collapsible=icon]:ml-0" />
 
@@ -112,6 +128,16 @@ export function NavUser() {
               <DropdownMenuGroup>
                 <DropdownMenuItem
                   className={menuItemClassName}
+                  onClick={() => {
+                    setProfileLoaded(true)
+                    setProfileOpen(true)
+                  }}
+                >
+                  <UserRoundIcon className="size-3.5" />
+                  {t("sidebar.user.profile")}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className={menuItemClassName}
                   onClick={() => setSettingsOpen(true)}
                 >
                   <SettingsIcon className="size-3.5" />
@@ -144,6 +170,11 @@ export function NavUser() {
           </DropdownMenu>
         </SidebarMenuItem>
       </SidebarMenu>
+      {profileLoaded ? (
+        <React.Suspense fallback={null}>
+          <ProfileDialog open={profileOpen} onOpenChange={setProfileOpen} />
+        </React.Suspense>
+      ) : null}
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </>
   )

@@ -49,6 +49,8 @@ export default defineConfig({
       "@headless-tree/core",
       "@headless-tree/react",
       "react-resizable-panels",
+      "recharts",
+      "react-is",
     ],
   },
 })
