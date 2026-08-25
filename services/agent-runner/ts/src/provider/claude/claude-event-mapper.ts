@@ -12,7 +12,9 @@ import {
   stringField,
   type JsonRecord,
 } from '../../core/event/json-record.js'
-import { isAgentName, isTerminalStatus, isWorkflowName } from '../../core/event/tool-names.js'
+import { isAgentName, isReadToolName, isTerminalStatus, isWorkflowName } from '../../core/event/tool-names.js'
+import { unifiedDiffFromStructuredPatch } from '../../core/event/tool-patch.js'
+import { encodeReadView } from '../../core/event/tool-read.js'
 
 export interface ClaudeSdkMessage {
   readonly type: string
@@ -21,6 +23,7 @@ export interface ClaudeSdkMessage {
   readonly parent_tool_use_id?: string | null
   readonly event?: unknown
   readonly message?: unknown
+  readonly tool_use_result?: unknown
   readonly duration_ms?: number
   readonly total_cost_usd?: number
   readonly usage?: unknown
@@ -56,7 +59,7 @@ export class ClaudeEventMapper {
       case 'assistant':
         return this.mapAssistant(message.message, channel)
       case 'user':
-        return this.mapUser(message.message, channel)
+        return this.mapUser(message, channel)
       case 'system':
         this.rememberModel(message)
         return this.mapSystem(message)
@@ -237,7 +240,9 @@ export class ClaudeEventMapper {
       if (id === undefined) continue
       const name = normalizeToolName(stringField(block, 'name') ?? this.tools.get(id) ?? 'unknown')
       this.tools.set(id, name)
-      const toolIndex = this.indexByToolId.get(id) ?? index
+      const toolIndex =
+        this.indexByToolId.get(id) ??
+        nextFreeToolIndex(this.blocksByMessage.get(messageId), index, id)
       this.indexByToolId.set(id, toolIndex)
       incoming.push({
         type: 'tool_use',
@@ -286,10 +291,12 @@ export class ClaudeEventMapper {
     return events
   }
 
-  private mapUser(raw: unknown, channel: EventChannel): AgentEvent[] {
-    const message = asRecord(raw)
-    if (message === undefined) return []
-    const blocks = contentBlocks(message['content'])
+  private mapUser(message: ClaudeSdkMessage, channel: EventChannel): AgentEvent[] {
+    const raw = message.message
+    const envelope = asRecord(message) ?? {}
+    const inner = asRecord(raw)
+    if (inner === undefined) return []
+    const blocks = contentBlocks(inner['content'])
     const hasToolResult = blocks.some((block) => stringField(block, 'type') === 'tool_result')
     if (channel.parentToolUseId !== undefined && !hasToolResult) {
       return this.deliveryEvents(blocks, channel)
@@ -301,7 +308,7 @@ export class ClaudeEventMapper {
       const id = stringField(block, 'tool_use_id') ?? stringField(block, 'id')
       if (id === undefined) continue
       const name = this.tools.get(id) ?? 'unknown'
-      const output = toolOutput(block['content'])
+      const output = claudeToolOutput(block, envelope, inner, name)
       const launch = parseAgentLaunch(block, output)
       if (launch?.agentId !== undefined) {
         this.agentIdByParent.set(id, launch.agentId)
@@ -526,11 +533,11 @@ export class ClaudeEventMapper {
       const toolIndex = block.type === 'tool_use' ? findToolIndex(existing, block.id) : undefined
       let index = toolIndex ?? block.index
       const occupant = existing.get(index)
-      if (occupant !== undefined && occupant.blockId !== block.blockId) {
+      if (occupant !== undefined && !sameMergeSlot(occupant, block)) {
         index = nextIndex
         nextIndex += 1
       }
-      existing.set(index, { ...block, index })
+      existing.set(index, withMergedAddress(messageId, block, index))
       if (index >= nextIndex) nextIndex = index + 1
     }
     this.blocksByMessage.set(messageId, existing)
@@ -609,6 +616,34 @@ function toolOutput(content: unknown): string {
   }
   if (content === undefined || content === null) return ''
   return JSON.stringify(content)
+}
+
+function claudeToolOutput(
+  block: JsonRecord,
+  envelope: JsonRecord,
+  inner: JsonRecord,
+  name: string,
+): string {
+  const rawResult =
+    block['toolUseResult'] ??
+    block['tool_use_result'] ??
+    envelope['tool_use_result'] ??
+    envelope['toolUseResult'] ??
+    inner['tool_use_result'] ??
+    inner['toolUseResult']
+  if (isReadToolName(name)) {
+    const encoded = encodeReadView(rawResult)
+    if (encoded !== '') return encoded
+    const fromContent = encodeReadView(block['content'])
+    if (fromContent !== '') return fromContent
+  }
+  const result = asRecord(rawResult)
+  const fromHunks = unifiedDiffFromStructuredPatch(result)
+  if (fromHunks !== '') return fromHunks
+  const gitDiff = result === undefined ? undefined : asRecord(result['gitDiff'])
+  const gitPatch = gitDiff === undefined ? undefined : stringField(gitDiff, 'patch')
+  if (gitPatch !== undefined && gitPatch !== '') return gitPatch
+  return toolOutput(block['content'])
 }
 
 function mapUsage(usage: unknown): TokenUsage | undefined {
@@ -761,4 +796,29 @@ function findToolIndex(blocks: Map<number, ContentBlock>, id: string): number | 
     if (block.type === 'tool_use' && block.id === id) return index
   }
   return undefined
+}
+
+function nextFreeToolIndex(
+  existing: Map<number, ContentBlock> | undefined,
+  requested: number,
+  toolId: string,
+): number {
+  if (existing === undefined) return requested
+  const occupant = existing.get(requested)
+  if (occupant === undefined) return requested
+  if (occupant.type === 'tool_use' && occupant.id === toolId) return requested
+  return maxIndex(existing) + 1
+}
+
+function sameMergeSlot(occupant: ContentBlock, incoming: ContentBlock): boolean {
+  if (occupant.type !== incoming.type) return false
+  if (occupant.type === 'tool_use' && incoming.type === 'tool_use') {
+    return occupant.id === incoming.id
+  }
+  return true
+}
+
+function withMergedAddress(messageId: string, block: ContentBlock, index: number): ContentBlock {
+  if (block.type === 'tool_use') return { ...block, index }
+  return { ...block, index, blockId: `${messageId}:${index}` }
 }

@@ -12,6 +12,10 @@ import {
   type JsonRecord,
 } from '../../core/event/json-record.js'
 
+import { isReadToolName } from '../../core/event/tool-names.js'
+import { patchFromToolDetails } from '../../core/event/tool-patch.js'
+import { encodeReadView } from '../../core/event/tool-read.js'
+
 export interface PiSessionEvent {
   readonly type: string
   readonly assistantMessageEvent?: unknown
@@ -211,7 +215,7 @@ export class PiEventMapper {
       return []
     }
     const messageId = this.ensureMessageId(stringField(message, 'id'))
-    const blocks = this.snapshotBlocks(message)
+    const blocks = this.snapshotBlocks(message, messageId)
     this.currentMessageId = undefined
     this.pendingByIndex.clear()
     this.startedBlocks.clear()
@@ -283,7 +287,7 @@ export class PiEventMapper {
         id,
         name,
         ok: event.isError !== true,
-        output: toolOutput(event.result),
+        output: completedToolOutput(name, event.result),
         ...(this.lastMessageId === undefined ? {} : { messageId: this.lastMessageId }),
         blockId: id,
         ...(index === undefined ? {} : { index }),
@@ -326,10 +330,10 @@ export class PiEventMapper {
     }
   }
 
-  private snapshotBlocks(message: JsonRecord): ContentBlock[] {
-    const fromContent = contentBlocksFromMessage(message)
-    if (fromContent.length > 0) return fromContent
-    return [...this.blocks.values()].sort((left, right) => left.index - right.index)
+  private snapshotBlocks(message: JsonRecord, messageId: string): ContentBlock[] {
+    const remembered = [...this.blocks.values()].sort((left, right) => left.index - right.index)
+    if (remembered.length > 0) return remembered
+    return contentBlocksFromMessage(message, messageId)
   }
 
   private rememberText(index: number, blockId: string, text: string): void {
@@ -394,9 +398,8 @@ function toolCallFrom(message: JsonRecord | undefined, index: number): JsonRecor
   return asRecord(content[index])
 }
 
-function contentBlocksFromMessage(message: JsonRecord): ContentBlock[] {
+function contentBlocksFromMessage(message: JsonRecord, messageId: string): ContentBlock[] {
   const content = message['content']
-  const messageId = stringField(message, 'id') ?? 'msg'
   if (typeof content === 'string') {
     return content === ''
       ? []
@@ -456,6 +459,14 @@ function normalizeToolName(name: string): string {
   return name.toLowerCase()
 }
 
+function completedToolOutput(name: string, value: unknown): string {
+  if (isReadToolName(name)) {
+    const encoded = encodeReadView(value)
+    if (encoded !== '') return encoded
+  }
+  return toolOutput(value)
+}
+
 function toolOutput(value: unknown): string {
   if (typeof value === 'string') return value
   const record = asRecord(value)
@@ -463,6 +474,8 @@ function toolOutput(value: unknown): string {
     if (value === undefined || value === null) return ''
     return JSON.stringify(value)
   }
+  const patch = patchFromToolDetails(record)
+  if (patch !== '') return patch
   const content = record['content']
   if (typeof content === 'string') return content
   if (Array.isArray(content)) {

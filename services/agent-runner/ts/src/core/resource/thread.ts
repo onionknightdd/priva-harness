@@ -51,6 +51,7 @@ export interface ThreadToolCard {
   readonly output?: string
   readonly launchStatus?: string
   readonly agentId?: string
+  readonly inputRaw?: string
 }
 
 export interface ThreadInboxMessage {
@@ -114,12 +115,31 @@ export function threadBlocksFromContent(blocks: readonly ContentBlock[]): Thread
   })
 }
 
-export function textFromThreadBlocks(blocks: readonly ThreadBlock[]): string {
-  return [...blocks]
-    .filter((block): block is Extract<ThreadBlock, { type: 'text' }> => block.type === 'text')
+export function answerTextBlock(
+  blocks: readonly ThreadBlock[],
+): Extract<ThreadBlock, { type: 'text' }> | undefined {
+  const texts = [...blocks]
+    .filter(
+      (block): block is Extract<ThreadBlock, { type: 'text' }> =>
+        block.type === 'text' && block.text.trim() !== '',
+    )
     .sort((left, right) => left.index - right.index)
-    .map((block) => block.text)
-    .join('')
+  const last = texts.at(-1)
+  if (last === undefined) return undefined
+  const hasLater = blocks.some(
+    (block) => block.index > last.index && blockHasVisibleContent(block),
+  )
+  if (hasLater) return undefined
+  return last
+}
+
+function blockHasVisibleContent(block: ThreadBlock): boolean {
+  if (block.type === 'thinking' || block.type === 'text') return block.text.trim() !== ''
+  return block.type === 'tool_use' || block.type === 'image'
+}
+
+export function textFromThreadBlocks(blocks: readonly ThreadBlock[]): string {
+  return answerTextBlock(blocks)?.text ?? ''
 }
 
 export function threadHasVisibleContent(message: ThreadMessage): boolean {
@@ -128,6 +148,10 @@ export function threadHasVisibleContent(message: ThreadMessage): boolean {
   if ((message.workflows?.length ?? 0) > 0) return true
   if ((message.nestedAgents?.length ?? 0) > 0) return true
   return (message.blocks ?? []).some(
-    (block) => block.type === 'tool_use' || block.type === 'image' || block.type === 'thinking',
+    (block) =>
+      block.type === 'tool_use' ||
+      block.type === 'image' ||
+      (block.type === 'thinking' && block.text.trim() !== '') ||
+      (block.type === 'text' && block.text.trim() !== ''),
   )
 }

@@ -76,6 +76,8 @@ function applyMainBlocks(blocks: readonly ThreadBlock[], event: AgentEvent): Thr
       })
     case 'assistant.message':
       return mergeSnapshot(blocks, threadBlocksFromContent(event.blocks))
+    case 'tool.input_delta':
+      return applyToolInputDelta(blocks, event)
     case 'tool.started':
     case 'tool.updated':
     case 'tool.running':
@@ -213,12 +215,15 @@ function syncTools(blocks: readonly ThreadBlock[], event: AgentEvent): ThreadBlo
 
   const launchStatus = statusOf(event)
   const toolAgentId = agentIdOf(event)
-  const nextInput = input ?? base.tool?.input ?? base.input
+  const nextInput = mergeToolInput(base.tool?.input ?? base.input, input)
   const tool: ThreadToolCard = {
     id,
     name: nameOf(event) ?? base.tool?.name ?? base.name,
     status,
     ...(nextInput === undefined ? {} : { input: nextInput }),
+    ...(isUsefulInput(input) || base.tool?.inputRaw === undefined
+      ? {}
+      : { inputRaw: base.tool.inputRaw }),
     ...(event.type === 'tool.completed'
       ? { ok: event.ok, output: event.output }
       : {}),
@@ -226,82 +231,192 @@ function syncTools(blocks: readonly ThreadBlock[], event: AgentEvent): ThreadBlo
     ...(toolAgentId === undefined ? {} : { agentId: toolAgentId }),
   }
 
-  const nextBlock: ThreadBlock = { ...base, name: tool.name, tool }
-  if (existingIndex < 0) return [...blocks, nextBlock]
+  const nextBlock: ThreadBlock = {
+    ...base,
+    name: tool.name,
+    tool,
+    ...(nextInput === undefined ? {} : { input: nextInput }),
+  }
+  if (existingIndex < 0) return [...blocks, withMergedIndex(blocks, nextBlock)]
   const next = [...blocks]
   next[existingIndex] = nextBlock
   return next
 }
 
+// Claude JSONL often stores one content block per assistant line, then a new
+// message id after each tool_result. Keep earlier messages as a prefix, place
+// this snapshot's blocks after it in snapshot order, and keep a single thinking row.
 function mergeSnapshot(
   existing: readonly ThreadBlock[],
   snapshot: readonly ThreadBlock[],
 ): ThreadBlock[] {
-  const tools = new Map<string, Extract<ThreadBlock, { type: 'tool_use' }>>()
-  for (const block of existing) {
-    if (block.type === 'tool_use') tools.set(block.id, block)
-  }
-
-  const snapshotTools: ThreadBlock[] = []
-  const snapshotText: ThreadBlock[] = []
-  const snapshotThinking: ThreadBlock[] = []
-  const snapshotImages: ThreadBlock[] = []
-  const snapshotUnknown: ThreadBlock[] = []
-  const seen = new Set<string>()
-
+  const existingThinking = existing.find(
+    (block): block is Extract<ThreadBlock, { type: 'thinking' }> => block.type === 'thinking',
+  )
+  const incoming: ThreadBlock[] = []
   for (const block of snapshot) {
-    if (block.type === 'tool_use') {
-      const previous = tools.get(block.id)
-      snapshotTools.push(
-        previous === undefined
-          ? block
-          : {
-              ...block,
-              ...(previous.tool === undefined ? {} : { tool: previous.tool }),
-              ...(block.input === undefined && previous.input !== undefined
-                ? { input: previous.input }
-                : {}),
-            },
-      )
-      seen.add(block.id)
-      continue
-    }
     if (block.type === 'thinking') {
-      const previous = existing.find(
-        (item): item is Extract<ThreadBlock, { type: 'thinking' }> =>
-          item.type === 'thinking' && item.blockId === block.blockId,
-      ) ?? existing.find(
-        (item): item is Extract<ThreadBlock, { type: 'thinking' }> =>
-          item.type === 'thinking' && item.index === block.index,
-      )
-      snapshotThinking.push(withThinkingTimes(block, previous))
+      if (block.text.trim() === '') continue
+      if (existingThinking !== undefined && existingThinking.text.trim() !== '') continue
+      incoming.push(block)
       continue
     }
-    if (block.type === 'image') {
-      snapshotImages.push(block)
-      continue
-    }
-    if (block.type === 'unknown') {
-      snapshotUnknown.push(block)
-      continue
-    }
-    snapshotText.push(block)
+    if (block.type === 'text' && block.text === '') continue
+    incoming.push(alignSnapshotText(existing, block))
   }
 
-  for (const [id, block] of tools) {
-    if (!seen.has(id)) snapshotTools.push(block)
+  const incomingIds = new Set(incoming.map(snapshotIdentity))
+  const prefix = existing.filter((block) => !incomingIds.has(snapshotIdentity(block)))
+  let nextIndex = prefix.length === 0 ? 0 : Math.max(...prefix.map((block) => block.index)) + 1
+  const suffix = incoming.map((block) => {
+    const previous = existing.find((item) => snapshotIdentity(item) === snapshotIdentity(block))
+    const merged = previous === undefined ? block : mergeSnapshotBlock(previous, block)
+    const indexed = { ...merged, index: nextIndex }
+    nextIndex += 1
+    return indexed
+  })
+  return [...prefix, ...suffix]
+}
+
+function snapshotIdentity(block: ThreadBlock): string {
+  if (block.type === 'tool_use') return `tool:${block.id}`
+  if (block.type === 'thinking') return 'thinking'
+  return `block:${block.blockId}`
+}
+
+function alignSnapshotText(existing: readonly ThreadBlock[], block: ThreadBlock): ThreadBlock {
+  if (block.type !== 'text' || block.text.trim() === '') return block
+  const match = existing.find(
+    (item) => item.type === 'text' && item.index === block.index && item.text === block.text,
+  )
+  if (match === undefined) return block
+  return { ...block, blockId: match.blockId }
+}
+
+function mergeSnapshotBlock(previous: ThreadBlock, incoming: ThreadBlock): ThreadBlock {
+  if (previous.type === 'tool_use' && incoming.type === 'tool_use') {
+    const input = mergeToolInput(
+      previous.tool?.input ?? previous.input,
+      incoming.input ?? incoming.tool?.input,
+    )
+    const tool =
+      previous.tool === undefined
+        ? incoming.tool
+        : {
+            ...previous.tool,
+            ...(incoming.tool ?? {}),
+            ...(input === undefined ? {} : { input }),
+          }
+    return {
+      ...incoming,
+      ...(tool === undefined ? {} : { tool }),
+      ...(input === undefined ? {} : { input }),
+    }
   }
+  if (previous.type === 'thinking' && incoming.type === 'thinking') {
+    return withThinkingTimes(incoming, previous)
+  }
+  return incoming
+}
 
-  const keep = (type: ThreadBlock['type'], incoming: readonly ThreadBlock[]) =>
-    incoming.length > 0 ? incoming : existing.filter((block) => block.type === type)
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
 
-  return [
-    ...keep('thinking', snapshotThinking),
-    ...keep('text', snapshotText),
-    ...keep('image', snapshotImages),
-    ...keep('unknown', snapshotUnknown),
-    ...snapshotTools,
-  ].sort((left, right) => left.index - right.index)
+function isUsefulInput(input: unknown): boolean {
+  if (input === undefined || input === null) return false
+  if (Array.isArray(input)) return input.length > 0
+  if (isPlainObject(input)) return Object.keys(input).length > 0
+  return true
+}
+
+function mergeToolInput(previous: unknown, incoming: unknown): unknown {
+  if (!isUsefulInput(incoming)) {
+    return isUsefulInput(previous) ? previous : (incoming ?? previous)
+  }
+  if (isPlainObject(previous) && isPlainObject(incoming)) {
+    return { ...previous, ...incoming }
+  }
+  return incoming
+}
+
+function extractJsonStringField(raw: string, field: string): string | undefined {
+  const match = new RegExp(`"${field}"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)`).exec(raw)
+  if (match?.[1] === undefined || match[1] === '') return undefined
+  try {
+    return JSON.parse(`"${match[1]}"`) as string
+  } catch {
+    return match[1]
+  }
+}
+
+function extractPartialToolInput(raw: string): Record<string, unknown> | undefined {
+  const input: Record<string, unknown> = {}
+  for (const field of [
+    'command',
+    'description',
+    'file_path',
+    'path',
+    'content',
+    'contents',
+    'old_string',
+    'new_string',
+  ] as const) {
+    const value = extractJsonStringField(raw, field)
+    if (value !== undefined) input[field] = value
+  }
+  return isUsefulInput(input) ? input : undefined
+}
+
+function parseToolInputJson(raw: string): unknown {
+  const trimmed = raw.trim()
+  if (trimmed === '') return undefined
+  try {
+    return JSON.parse(trimmed) as unknown
+  } catch {
+    return extractPartialToolInput(trimmed)
+  }
+}
+
+function applyToolInputDelta(blocks: readonly ThreadBlock[], event: AgentEvent): ThreadBlock[] {
+  if (event.type !== 'tool.input_delta') return [...blocks]
+  if (event.chunk === '') return [...blocks]
+  const index = blocks.findIndex(
+    (block) =>
+      block.type === 'tool_use' &&
+      (block.id === event.id || block.blockId === event.blockId),
+  )
+  if (index < 0) return [...blocks]
+  const current = blocks[index]
+  if (current?.type !== 'tool_use') return [...blocks]
+  const nextRaw = `${current.tool?.inputRaw ?? ''}${event.chunk}`
+  const nextInput = mergeToolInput(
+    current.tool?.input ?? current.input,
+    parseToolInputJson(nextRaw),
+  )
+  const tool: ThreadToolCard = {
+    id: current.id,
+    name: current.tool?.name ?? current.name,
+    status: current.tool?.status ?? 'started',
+    ...current.tool,
+    ...(nextInput === undefined ? {} : { input: nextInput }),
+    inputRaw: nextRaw,
+  }
+  const next = [...blocks]
+  next[index] = {
+    ...current,
+    tool,
+    ...(nextInput === undefined ? {} : { input: nextInput }),
+  }
+  return next
+}
+
+function withMergedIndex(existing: readonly ThreadBlock[], block: ThreadBlock): ThreadBlock {
+  const taken = existing.some((item) => item.index === block.index && item.blockId !== block.blockId)
+  if (!taken) return block
+  const nextIndex =
+    existing.length === 0 ? 0 : Math.max(...existing.map((item) => item.index)) + 1
+  return { ...block, index: nextIndex }
 }
 
 function appendText(
@@ -359,7 +474,7 @@ function withThinkingTimes(
 function upsertBlock(blocks: readonly ThreadBlock[], next: ThreadBlock): ThreadBlock[] {
   const index = blocks.findIndex((block) => block.blockId === next.blockId)
   if (index < 0) {
-    return [...blocks, next].sort((left, right) => left.index - right.index)
+    return [...blocks, withMergedIndex(blocks, next)].sort((left, right) => left.index - right.index)
   }
   const copy = [...blocks]
   copy[index] = next

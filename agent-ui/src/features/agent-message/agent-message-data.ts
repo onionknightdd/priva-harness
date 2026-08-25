@@ -53,6 +53,7 @@ export type ToolCard = {
   output?: string
   launchStatus?: string
   agentId?: string
+  inputRaw?: string
 }
 
 export type NestedInboxMessage = {
@@ -103,12 +104,60 @@ export function createAgentThreadMessage(
   }
 }
 
-export function textFromBlocks(blocks: readonly StreamBlock[]): string {
-  return [...blocks]
-    .filter((block): block is Extract<StreamBlock, { type: "text" }> => block.type === "text")
+export function answerTextBlock(
+  blocks: readonly StreamBlock[]
+): Extract<StreamBlock, { type: "text" }> | undefined {
+  const texts = [...blocks]
+    .filter(
+      (block): block is Extract<StreamBlock, { type: "text" }> =>
+        block.type === "text" && block.text.trim() !== ""
+    )
     .sort((left, right) => left.index - right.index)
-    .map((block) => block.text)
-    .join("")
+  const last = texts.at(-1)
+  if (last === undefined) {
+    return undefined
+  }
+  const hasLater = blocks.some(
+    (block) => block.index > last.index && blockHasVisibleContent(block)
+  )
+  if (hasLater) {
+    return undefined
+  }
+  return last
+}
+
+function blockHasVisibleContent(block: StreamBlock): boolean {
+  if (block.type === "thinking" || block.type === "text") {
+    return block.text.trim() !== ""
+  }
+  return block.type === "tool_use" || block.type === "image"
+}
+
+export function textFromBlocks(blocks: readonly StreamBlock[]): string {
+  return answerTextBlock(blocks)?.text ?? ""
+}
+
+export function isProcessBlock(
+  block: StreamBlock,
+  blocks: readonly StreamBlock[]
+): boolean {
+  if (block.type === "thinking") {
+    return block.text.trim() !== ""
+  }
+  if (block.type === "image" || block.type === "tool_use") {
+    return true
+  }
+  if (block.type !== "text" || block.text.trim() === "") {
+    return false
+  }
+  const answer = answerTextBlock(blocks)
+  if (answer === undefined) {
+    return true
+  }
+  if (answer.blockId === block.blockId) {
+    return false
+  }
+  return answer.text.trim() !== block.text.trim()
 }
 
 export function assistantHasProcess(message: AgentThreadMessage): boolean {
@@ -118,10 +167,6 @@ export function assistantHasProcess(message: AgentThreadMessage): boolean {
   if ((message.workflows?.length ?? 0) > 0) {
     return true
   }
-  return (message.blocks ?? []).some((block) => {
-    if (block.type === "tool_use" || block.type === "image") {
-      return true
-    }
-    return block.type === "thinking" && block.text.trim() !== ""
-  })
+  const blocks = message.blocks ?? []
+  return blocks.some((block) => isProcessBlock(block, blocks))
 }

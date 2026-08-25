@@ -2,6 +2,8 @@ import * as React from "react"
 import {
   BotIcon,
   ChevronDownIcon,
+  FilePenLineIcon,
+  FilePlusCornerIcon,
   ImageIcon,
   WorkflowIcon,
   WrenchIcon,
@@ -10,8 +12,17 @@ import {
 import { motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
+import { FileDiff } from "@/components/agents/file-diff"
+import { FileRead } from "@/components/agents/file-read"
+import {
+  ToolResult,
+  ToolResultOutput,
+  type ToolResultStatus,
+} from "@/components/agents/tool-result"
+import { MessageResponse } from "@/components/ai-elements/message"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { writeClipboardText } from "@/lib/clipboard"
 import {
   Collapsible,
   CollapsibleContent,
@@ -27,13 +38,21 @@ import {
 } from "@/components/ui/item"
 import { cn } from "@/lib/utils"
 
-import type {
-  AgentThreadMessage,
-  NestedAgent,
-  StreamBlock,
-  ToolCard,
-  WorkflowCard,
+import {
+  isProcessBlock,
+  type AgentThreadMessage,
+  type NestedAgent,
+  type StreamBlock,
+  type ToolCard,
+  type WorkflowCard,
 } from "../agent-message-data"
+import {
+  fileDiffCopyText,
+  fileDiffLinesFromContent,
+  fileDiffLinesFromEdit,
+  fileDiffLinesFromUnified,
+} from "../file-diff-lines"
+import { parseFileReadOutput, isImageFilePath } from "../file-read-view"
 
 const PANEL_CLASS =
   "h-[var(--collapsible-panel-height)] overflow-hidden transition-[height,opacity] duration-200 ease-out data-[ending-style]:h-0 data-[ending-style]:opacity-0 data-[starting-style]:h-0 data-[starting-style]:opacity-0 motion-reduce:transition-none"
@@ -58,7 +77,10 @@ export function AssistantProcess({
 
   const rows: React.ReactNode[] = []
   for (const block of blocks) {
-    if (block.type === "thinking" && block.text.trim() !== "") {
+    if (!isProcessBlock(block, blocks)) {
+      continue
+    }
+    if (block.type === "thinking") {
       rows.push(
         <ThinkingItem
           key={block.blockId}
@@ -69,6 +91,10 @@ export function AssistantProcess({
           defaultOpen={isStreaming}
         />
       )
+      continue
+    }
+    if (block.type === "text") {
+      rows.push(<TextItem key={block.blockId} text={block.text} />)
       continue
     }
     if (block.type === "image") {
@@ -114,7 +140,7 @@ export function AssistantProcess({
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 justify-start px-0 text-muted-foreground has-data-[icon=inline-end]:pr-0 hover:bg-transparent hover:text-foreground aria-expanded:bg-transparent aria-expanded:text-muted-foreground aria-expanded:hover:text-foreground dark:hover:bg-transparent"
+              className="h-7 justify-start px-0 text-base font-medium text-muted-foreground has-data-[icon=inline-end]:pr-0 hover:bg-transparent hover:text-muted-foreground focus:bg-transparent focus:text-muted-foreground active:translate-y-0 active:bg-transparent active:text-muted-foreground aria-expanded:bg-transparent aria-expanded:text-muted-foreground aria-expanded:hover:bg-transparent aria-expanded:hover:text-muted-foreground dark:hover:bg-transparent dark:hover:text-muted-foreground dark:aria-expanded:bg-transparent"
             />
           }
         >
@@ -133,6 +159,16 @@ export function AssistantProcess({
         </CollapsibleContent>
       </Collapsible>
     </motion.div>
+  )
+}
+
+function TextItem({ text }: { text: string }) {
+  return (
+    <div className="w-full min-w-0 px-0 py-0.5 text-sm text-foreground">
+      <MessageResponse className="text-foreground [&_p]:my-0" mode="static">
+        {text}
+      </MessageResponse>
+    </div>
   )
 }
 
@@ -165,7 +201,7 @@ function ThinkingItem({
             t("agentMessage.thoughtDone")
           )}
           {elapsed ? (
-            <span className="font-normal tabular-nums text-muted-foreground">
+            <span className="font-normal tabular-nums">
               {elapsed}
             </span>
           ) : null}
@@ -173,7 +209,7 @@ function ThinkingItem({
       }
       defaultOpen={defaultOpen}
     >
-      <p className="whitespace-pre-wrap text-sm text-muted-foreground">{text}</p>
+      <p className="whitespace-pre-wrap text-sm">{text}</p>
     </ProcessRow>
   )
 }
@@ -215,6 +251,26 @@ function ToolItem({
 }: {
   block: Extract<StreamBlock, { type: "tool_use" }>
 }) {
+  if (isBashTool(block.name)) {
+    return <BashToolItem block={block} />
+  }
+  if (isWriteTool(block.name)) {
+    return <WriteToolItem block={block} />
+  }
+  if (isEditTool(block.name)) {
+    return <EditToolItem block={block} />
+  }
+  if (isReadTool(block.name)) {
+    return <ReadToolItem block={block} />
+  }
+  return <GenericToolItem block={block} />
+}
+
+function GenericToolItem({
+  block,
+}: {
+  block: Extract<StreamBlock, { type: "tool_use" }>
+}) {
   const { t } = useTranslation()
   const tool = block.tool
   const running = isToolRunning(tool)
@@ -235,6 +291,272 @@ function ToolItem({
         </pre>
       ) : null}
     </ProcessRow>
+  )
+}
+
+function BashToolItem({
+  block,
+}: {
+  block: Extract<StreamBlock, { type: "tool_use" }>
+}) {
+  const input = usefulToolInput(block.tool?.input) ?? usefulToolInput(block.input)
+  const command = stringInput(input, "command")
+  const description = stringInput(input, "description")
+  const output = block.tool?.output?.trim() ?? ""
+  const status = toolResultStatus(block.tool)
+  const shouldReduceMotion = Boolean(useReducedMotion())
+  const inputStreaming =
+    status === "running" &&
+    output === "" &&
+    (jsonInputOpen(block.tool?.inputRaw) || command === undefined)
+  const { text: typedCommand, caret: commandCaret } = useTypedCommand(
+    command ?? "",
+    inputStreaming
+  )
+  const awaitingOutput =
+    status === "running" && !inputStreaming && !commandCaret
+  const copyText = [command, output].filter(Boolean).join("\n")
+  const showPrompt =
+    inputStreaming || Boolean(command || output) || awaitingOutput
+  const showOutput = Boolean(output) || (awaitingOutput && !shouldReduceMotion)
+  const body = showPrompt ? (
+    <div className="flex flex-col gap-2">
+      <BashCommandLine text={typedCommand} caret={commandCaret} />
+      {showOutput ? (
+        <pre className="m-0 whitespace-pre-wrap break-words font-mono text-xs leading-none text-muted-foreground">
+          {output}
+          {awaitingOutput && !shouldReduceMotion ? (
+            <CommandCaret className="bg-muted-foreground" />
+          ) : null}
+        </pre>
+      ) : null}
+    </div>
+  ) : null
+
+  return (
+    <div className="w-full min-w-0 px-0 py-0">
+      <ToolResult
+        tool="bash"
+        title={description ?? (inputStreaming ? "" : command) ?? ""}
+        kind="terminal"
+        status={status}
+        copyText={copyText || undefined}
+        onCopy={
+          copyText
+            ? () => {
+                void writeClipboardText(copyText)
+              }
+            : undefined
+        }
+        defaultOpen={status === "running"}
+        collapseOnComplete
+      >
+        {body}
+      </ToolResult>
+    </div>
+  )
+}
+
+function BashCommandLine({
+  text,
+  caret,
+}: {
+  text: string
+  caret: boolean
+}) {
+  return (
+    <div className="flex items-start">
+      <span className="shrink-0 select-none whitespace-pre font-mono text-xs leading-none">
+        {"$ "}
+      </span>
+      {caret ? (
+        <span className="min-w-0 flex-1 whitespace-pre-wrap break-words font-mono text-xs leading-none text-foreground/80">
+          {text}
+          <CommandCaret />
+        </span>
+      ) : text ? (
+        <ToolResultOutput className="min-w-0 flex-1 leading-none" language="bash">
+          {text}
+        </ToolResultOutput>
+      ) : null}
+    </div>
+  )
+}
+
+function CommandCaret({ className }: { className?: string }) {
+  return (
+    <motion.span
+      aria-hidden="true"
+      className={cn(
+        "ml-px inline-block h-[0.9em] w-[0.45ch] translate-y-[0.12em] bg-foreground/80",
+        className
+      )}
+      animate={{ opacity: [1, 1, 0, 0] }}
+      transition={{
+        duration: 1,
+        repeat: Infinity,
+        ease: "linear",
+        times: [0, 0.45, 0.55, 1],
+      }}
+    />
+  )
+}
+
+function useTypedCommand(target: string, streaming: boolean): {
+  text: string
+  caret: boolean
+} {
+  const shouldReduceMotion = Boolean(useReducedMotion())
+  const [shown, setShown] = React.useState(() =>
+    shouldReduceMotion || !streaming ? target : ""
+  )
+
+  React.useEffect(() => {
+    if (shouldReduceMotion) {
+      setShown(target)
+      return
+    }
+    if (shown === target) {
+      return
+    }
+    if (!target.startsWith(shown)) {
+      setShown(target)
+      return
+    }
+    const remaining = target.length - shown.length
+    const step = remaining > 32 ? Math.min(8, Math.ceil(remaining / 8)) : 1
+    const id = window.setTimeout(() => {
+      setShown(target.slice(0, shown.length + step))
+    }, 16)
+    return () => {
+      window.clearTimeout(id)
+    }
+  }, [shouldReduceMotion, shown, target])
+
+  if (shouldReduceMotion) {
+    return { text: target, caret: false }
+  }
+  return { text: shown, caret: streaming || shown !== target }
+}
+
+function WriteToolItem({
+  block,
+}: {
+  block: Extract<StreamBlock, { type: "tool_use" }>
+}) {
+  const input = usefulToolInput(block.tool?.input) ?? usefulToolInput(block.input)
+  const filePath =
+    stringInput(input, "file_path") ?? stringInput(input, "path")
+  const content =
+    stringInput(input, "content", { allowBlank: true }) ??
+    stringInput(input, "contents", { allowBlank: true })
+  const output = block.tool?.output?.trim() ?? ""
+  const status = toolResultStatus(block.tool)
+  const fromPatch = fileDiffLinesFromUnified(output)
+  const lines =
+    fromPatch.length > 0
+      ? fromPatch
+      : content === undefined
+        ? []
+        : fileDiffLinesFromContent(content)
+  const copyText = content ?? output
+  const running = status === "running"
+
+  return (
+    <FileDiff
+      tool="Write"
+      file={fileNameFromPath(filePath)}
+      lines={lines}
+      status={running ? "streaming" : "complete"}
+      language={languageFromPath(filePath)}
+      icon={
+        <FilePlusCornerIcon
+          aria-hidden="true"
+          className="size-[1em] shrink-0 text-muted-foreground/70"
+        />
+      }
+      copyText={copyText || undefined}
+      onCopy={
+        copyText
+          ? () => {
+              void writeClipboardText(copyText)
+            }
+          : undefined
+      }
+      defaultOpen={running}
+      collapseOnComplete
+    />
+  )
+}
+
+function EditToolItem({
+  block,
+}: {
+  block: Extract<StreamBlock, { type: "tool_use" }>
+}) {
+  const input = usefulToolInput(block.tool?.input) ?? usefulToolInput(block.input)
+  const filePath =
+    stringInput(input, "file_path") ?? stringInput(input, "path")
+  const oldString = stringInput(input, "old_string", { allowBlank: true })
+  const newString = stringInput(input, "new_string", { allowBlank: true })
+  const output = block.tool?.output?.trim() ?? ""
+  const status = toolResultStatus(block.tool)
+  const lines = fileDiffLinesFromEdit(oldString, newString, output)
+  const copyText = fileDiffCopyText(lines) || output
+  const running = status === "running"
+
+  return (
+    <FileDiff
+      tool="Edit"
+      file={fileNameFromPath(filePath)}
+      lines={lines}
+      status={running ? "streaming" : "complete"}
+      language={languageFromPath(filePath)}
+      icon={
+        <FilePenLineIcon
+          aria-hidden="true"
+          className="size-[1em] shrink-0 text-muted-foreground/70"
+        />
+      }
+      copyText={copyText || undefined}
+      onCopy={
+        copyText
+          ? () => {
+              void writeClipboardText(copyText)
+            }
+          : undefined
+      }
+      defaultOpen={running}
+      collapseOnComplete
+    />
+  )
+}
+
+function ReadToolItem({
+  block,
+}: {
+  block: Extract<StreamBlock, { type: "tool_use" }>
+}) {
+  const input = usefulToolInput(block.tool?.input) ?? usefulToolInput(block.input)
+  const filePath =
+    stringInput(input, "file_path") ?? stringInput(input, "path")
+  const status = toolResultStatus(block.tool)
+  const running = status === "running"
+  const view = running
+    ? undefined
+    : parseFileReadOutput(block.tool?.output)
+
+  return (
+    <FileRead
+      tool="Read"
+      file={fileNameFromPath(filePath)}
+      imageHint={isImageFilePath(filePath)}
+      view={view}
+      status={running ? "streaming" : "complete"}
+      language={languageFromPath(filePath)}
+      defaultOpen={running}
+      collapseOnComplete
+    />
   )
 }
 
@@ -331,7 +653,12 @@ function ProcessItemGroup({
   children: React.ReactNode
 }) {
   return (
-    <ItemGroup className={cn("gap-1 py-1 text-muted-foreground", className)}>
+    <ItemGroup
+      className={cn(
+        "gap-0.5 py-0 text-muted-foreground/70 has-data-[size=sm]:gap-0.5 has-data-[size=xs]:gap-0.5",
+        className
+      )}
+    >
       {children}
     </ItemGroup>
   )
@@ -362,7 +689,7 @@ function ProcessRow({
           <Icon />
         </ItemMedia>
       ) : null}
-      <ItemContent>
+      <ItemContent className="min-w-0 flex-none">
         <ItemTitle>{title}</ItemTitle>
       </ItemContent>
       {showActions ? (
@@ -378,7 +705,10 @@ function ProcessRow({
 
   if (!hasBody) {
     return (
-      <Item size="sm" className="bg-transparent hover:bg-transparent">
+      <Item
+        size="sm"
+        className="w-fit max-w-full bg-transparent px-0 py-0.5 hover:bg-transparent"
+      >
         {header}
       </Item>
     )
@@ -388,13 +718,13 @@ function ProcessRow({
     <Collapsible className="group/process-item" defaultOpen={defaultOpen}>
       <Item
         size="sm"
-        className="w-full cursor-pointer bg-transparent text-left hover:bg-transparent aria-expanded:bg-transparent"
+        className="w-fit max-w-full cursor-pointer bg-transparent px-0 py-0.5 text-left hover:bg-transparent aria-expanded:bg-transparent"
         render={<CollapsibleTrigger />}
       >
         {header}
       </Item>
       <CollapsibleContent className={PANEL_CLASS}>
-        <div className={Icon ? "px-3 pb-2 pl-9" : "px-3 pb-2"}>{children}</div>
+        <div className={Icon ? "pb-2 pl-6" : "pb-2"}>{children}</div>
       </CollapsibleContent>
     </Collapsible>
   )
@@ -438,6 +768,102 @@ function formatElapsedMs(ms: number): string {
   const minutes = Math.floor(totalSeconds / 60)
   const seconds = totalSeconds % 60
   return `${String(minutes)}m ${String(seconds).padStart(2, "0")}s`
+}
+
+function isBashTool(name: string): boolean {
+  const id = name.trim().toLowerCase()
+  return id === "bash" || id === "shell"
+}
+
+function isWriteTool(name: string): boolean {
+  return name.trim().toLowerCase() === "write"
+}
+
+function isEditTool(name: string): boolean {
+  return name.trim().toLowerCase() === "edit"
+}
+
+function isReadTool(name: string): boolean {
+  return name.trim().toLowerCase() === "read"
+}
+
+function fileNameFromPath(path: string | undefined): string {
+  if (path === undefined || path.trim() === "") {
+    return ""
+  }
+  const trimmed = path.trim().replaceAll("\\", "/")
+  const parts = trimmed.split("/")
+  return parts.at(-1) || trimmed
+}
+
+function languageFromPath(path: string | undefined): string {
+  if (path === undefined || path.trim() === "") {
+    return "text"
+  }
+  const ext = path.split(".").pop()?.toLowerCase()
+  if (ext === undefined || ext === path.toLowerCase()) {
+    return "text"
+  }
+  if (ext === "ts") return "typescript"
+  if (ext === "js") return "javascript"
+  if (ext === "md") return "markdown"
+  if (ext === "yml") return "yaml"
+  if (ext === "sh") return "bash"
+  if (ext === "ipynb") return "json"
+  return ext
+}
+
+function jsonInputOpen(raw: string | undefined): boolean {
+  if (raw === undefined || raw.trim() === "") {
+    return false
+  }
+  try {
+    JSON.parse(raw)
+    return false
+  } catch {
+    return true
+  }
+}
+
+function usefulToolInput(input: unknown): unknown {
+  if (input === undefined || input === null) {
+    return undefined
+  }
+  if (typeof input !== "object") {
+    return input
+  }
+  if (Array.isArray(input)) {
+    return input.length > 0 ? input : undefined
+  }
+  return Object.keys(input).length > 0 ? input : undefined
+}
+
+function stringInput(
+  input: unknown,
+  key: string,
+  options?: { allowBlank?: boolean }
+): string | undefined {
+  if (typeof input !== "object" || input === null) {
+    return undefined
+  }
+  const value = (input as Record<string, unknown>)[key]
+  if (typeof value !== "string") {
+    return undefined
+  }
+  if (!options?.allowBlank && value.trim() === "") {
+    return undefined
+  }
+  return value
+}
+
+function toolResultStatus(tool: ToolCard | undefined): ToolResultStatus {
+  if (tool?.launchStatus === "async_launched" || isToolRunning(tool)) {
+    return "running"
+  }
+  if (tool?.ok === false) {
+    return "error"
+  }
+  return "success"
 }
 
 function isToolRunning(tool: ToolCard | undefined): boolean {

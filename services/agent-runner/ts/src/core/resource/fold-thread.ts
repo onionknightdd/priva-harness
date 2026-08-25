@@ -11,7 +11,6 @@ const PASS_THROUGH_TYPES = new Set<AgentEvent['type']>([
   'run.started',
   'run.completed',
   'run.usage',
-  'tool.input_delta',
   'suggestion.prompts',
   'permission.requested',
   'permission.resolved',

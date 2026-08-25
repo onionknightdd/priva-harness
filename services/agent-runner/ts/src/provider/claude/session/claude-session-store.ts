@@ -277,7 +277,10 @@ export function mapClaudeMessage(raw: unknown, sessionId: string): SessionMessag
     type,
     uuid,
     sessionId: stringField(record, 'session_id') ?? stringField(record, 'sessionId') ?? sessionId,
-    message: record['message'] ?? raw,
+    message: withToolUseResult(
+      record['message'] ?? raw,
+      record['tool_use_result'] ?? record['toolUseResult'],
+    ),
     parentToolUseId: stringField(record, 'parent_tool_use_id')
       ?? stringField(record, 'parentToolUseId')
       ?? null,
@@ -361,6 +364,20 @@ function asRecord(value: unknown): Record<string, unknown> {
     return value as Record<string, unknown>
   }
   return {}
+}
+
+function withToolUseResult(message: unknown, result: unknown): unknown {
+  if (result === undefined) {
+    return message
+  }
+  if (typeof message !== 'object' || message === null || Array.isArray(message)) {
+    return message
+  }
+  const record = message as Record<string, unknown>
+  if (record['tool_use_result'] !== undefined || record['toolUseResult'] !== undefined) {
+    return message
+  }
+  return { ...record, tool_use_result: result }
 }
 
 function stringField(record: Record<string, unknown>, key: string): string | undefined {

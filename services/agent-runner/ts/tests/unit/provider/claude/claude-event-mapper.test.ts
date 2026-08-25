@@ -159,6 +159,45 @@ describe('ClaudeEventMapper', () => {
     }
   })
 
+  it('keeps split thinking, text, and tool snapshots on one message id', () => {
+    const mapper = new ClaudeEventMapper()
+    const events = [
+      ...mapper.push({
+        type: 'assistant',
+        message: {
+          id: 'msg_split',
+          content: [{ type: 'thinking', thinking: 'plan the sleeps' }],
+        },
+      }),
+      ...mapper.push({
+        type: 'assistant',
+        message: {
+          id: 'msg_split',
+          content: [{ type: 'text', text: '先执行第一次：' }],
+        },
+      }),
+      ...mapper.push({
+        type: 'assistant',
+        message: {
+          id: 'msg_split',
+          content: [{ type: 'tool_use', id: 'bash-1', name: 'Bash', input: { command: 'sleep 5' } }],
+        },
+      }),
+    ]
+    const snapshot = events.filter((event) => event.type === 'assistant.message').at(-1)
+    expect(snapshot?.type).toBe('assistant.message')
+    if (snapshot?.type === 'assistant.message') {
+      expect(snapshot.blocks.map((block) => block.type)).toEqual(['thinking', 'text', 'tool_use'])
+      expect(
+        snapshot.blocks.map((block) => {
+          if (block.type === 'thinking' || block.type === 'text') return block.text
+          if (block.type === 'tool_use') return block.id
+          return block.blockId
+        }),
+      ).toEqual(['plan the sleeps', '先执行第一次：', 'bash-1'])
+    }
+  })
+
   it('keeps subagent assistant and user events on the parent channel', () => {
     const mapper = new ClaudeEventMapper()
     const events = [
@@ -264,6 +303,170 @@ describe('ClaudeEventMapper', () => {
         ok: true,
         status: 'async_launched',
         agentId: 'ag-9',
+      }),
+    ]))
+  })
+
+  it('maps Edit tool_use_result.structuredPatch onto unified hunk output', () => {
+    const mapper = new ClaudeEventMapper()
+    mapper.push({
+      type: 'assistant',
+      message: {
+        id: 'msg_edit',
+        content: [{
+          type: 'tool_use',
+          id: 'edit_1',
+          name: 'Edit',
+          input: { file_path: 'a.ts', old_string: 'const a = 1', new_string: 'const a = 2' },
+        }],
+      },
+    })
+    const events = mapper.push({
+      type: 'user',
+      tool_use_result: {
+        filePath: 'a.ts',
+        oldString: 'const a = 1',
+        newString: 'const a = 2',
+        originalFile: null,
+        structuredPatch: [{
+          oldStart: 12,
+          oldLines: 3,
+          newStart: 12,
+          newLines: 3,
+          lines: [' keep', '-const a = 1', '+const a = 2'],
+        }],
+        userModified: false,
+        replaceAll: false,
+      },
+      message: {
+        content: [{
+          type: 'tool_result',
+          tool_use_id: 'edit_1',
+          content: '     12\tkeep\n     13\tconst a = 2',
+        }],
+      },
+    })
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'tool.completed',
+        id: 'edit_1',
+        name: 'edit',
+        ok: true,
+        output: [
+          '@@ -12,3 +12,3 @@',
+          ' keep',
+          '-const a = 1',
+          '+const a = 2',
+        ].join('\n'),
+      }),
+    ]))
+  })
+
+  it('maps Write gitDiff.patch when structuredPatch is empty', () => {
+    const mapper = new ClaudeEventMapper()
+    mapper.push({
+      type: 'assistant',
+      message: {
+        id: 'msg_write',
+        content: [{ type: 'tool_use', id: 'write_1', name: 'Write', input: { file_path: 'z.txt' } }],
+      },
+    })
+    const events = mapper.push({
+      type: 'user',
+      tool_use_result: {
+        type: 'create',
+        filePath: 'z.txt',
+        content: 'hello',
+        structuredPatch: [],
+        originalFile: null,
+        gitDiff: {
+          filename: 'z.txt',
+          status: 'added',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+          patch: '--- /dev/null\n+++ b/z.txt\n@@ -0,0 +1,1 @@\n+hello',
+        },
+      },
+      message: {
+        content: [{ type: 'tool_result', tool_use_id: 'write_1', content: 'Wrote z.txt' }],
+      },
+    })
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'tool.completed',
+        id: 'write_1',
+        name: 'write',
+        output: '--- /dev/null\n+++ b/z.txt\n@@ -0,0 +1,1 @@\n+hello',
+      }),
+    ]))
+  })
+
+  it('maps Read tool_use_result text onto a $read envelope', () => {
+    const mapper = new ClaudeEventMapper()
+    mapper.push({
+      type: 'assistant',
+      message: {
+        id: 'msg_read',
+        content: [{ type: 'tool_use', id: 'read_1', name: 'Read', input: { file_path: 'a.ts' } }],
+      },
+    })
+    const events = mapper.push({
+      type: 'user',
+      tool_use_result: {
+        type: 'text',
+        file: {
+          filePath: 'a.ts',
+          content: 'const a = 1',
+          numLines: 1,
+          startLine: 12,
+          totalLines: 40,
+        },
+      },
+      message: {
+        content: [{
+          type: 'tool_result',
+          tool_use_id: 'read_1',
+          content: '    12\tconst a = 1',
+        }],
+      },
+    })
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'tool.completed',
+        id: 'read_1',
+        name: 'read',
+        ok: true,
+        output: JSON.stringify({ $read: 'text', content: 'const a = 1', startLine: 12 }),
+      }),
+    ]))
+  })
+
+  it('maps Read tool_use_result image onto a $read envelope', () => {
+    const mapper = new ClaudeEventMapper()
+    mapper.push({
+      type: 'assistant',
+      message: {
+        id: 'msg_read_img',
+        content: [{ type: 'tool_use', id: 'read_img', name: 'Read', input: { file_path: 'shot.png' } }],
+      },
+    })
+    const events = mapper.push({
+      type: 'user',
+      tool_use_result: {
+        type: 'image',
+        file: { base64: 'abc', type: 'image/png', originalSize: 12 },
+      },
+      message: {
+        content: [{ type: 'tool_result', tool_use_id: 'read_img', content: [] }],
+      },
+    })
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'tool.completed',
+        id: 'read_img',
+        name: 'read',
+        output: JSON.stringify({ $read: 'image', mime: 'image/png', b64: 'abc' }),
       }),
     ]))
   })
