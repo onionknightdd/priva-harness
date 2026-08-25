@@ -49,7 +49,7 @@ export const zhCN = {
     modelRequired: "请先选择模型",
     sendFailed: "发送失败",
     scrollToLatest: "跳到最新消息",
-    thinking: "运行中……"
+    thinking: "运行中……",
     nestedAgent: "嵌套 Agent",
     workflow: "工作流",
     toolRunning: "执行中",

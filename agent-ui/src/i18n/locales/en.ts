@@ -49,7 +49,7 @@ export const en = {
     modelRequired: "Select a model first",
     sendFailed: "Failed to send",
     scrollToLatest: "Scroll to latest",
-    thinking: "Running…"
+    thinking: "Running…",
     nestedAgent: "Nested agent",
     workflow: "Workflow",
     toolRunning: "Running",
