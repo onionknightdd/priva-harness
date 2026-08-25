@@ -27,12 +27,13 @@ import {
 } from "@/components/ui/item"
 import { cn } from "@/lib/utils"
 
-import type {
-  AgentThreadMessage,
-  NestedAgent,
-  StreamBlock,
-  ToolCard,
-  WorkflowCard,
+import {
+  isProcessBlock,
+  type AgentThreadMessage,
+  type NestedAgent,
+  type StreamBlock,
+  type ToolCard,
+  type WorkflowCard,
 } from "../agent-message-data"
 
 const PANEL_CLASS =
@@ -58,7 +59,10 @@ export function AssistantProcess({
 
   const rows: React.ReactNode[] = []
   for (const block of blocks) {
-    if (block.type === "thinking" && block.text.trim() !== "") {
+    if (!isProcessBlock(block, blocks)) {
+      continue
+    }
+    if (block.type === "thinking") {
       rows.push(
         <ThinkingItem
           key={block.blockId}
@@ -69,6 +73,10 @@ export function AssistantProcess({
           defaultOpen={isStreaming}
         />
       )
+      continue
+    }
+    if (block.type === "text") {
+      rows.push(<TextItem key={block.blockId} text={block.text} />)
       continue
     }
     if (block.type === "image") {
@@ -133,6 +141,21 @@ export function AssistantProcess({
         </CollapsibleContent>
       </Collapsible>
     </motion.div>
+  )
+}
+
+function TextItem({ text }: { text: string }) {
+  return (
+    <Item
+      size="sm"
+      className="w-fit max-w-full bg-transparent py-1.5 hover:bg-transparent"
+    >
+      <ItemContent className="min-w-0 flex-none">
+        <p className="whitespace-pre-wrap text-sm leading-snug text-muted-foreground">
+          {text}
+        </p>
+      </ItemContent>
+    </Item>
   )
 }
 
@@ -331,7 +354,12 @@ function ProcessItemGroup({
   children: React.ReactNode
 }) {
   return (
-    <ItemGroup className={cn("gap-1 py-1 text-muted-foreground", className)}>
+    <ItemGroup
+      className={cn(
+        "gap-1 py-0.5 text-muted-foreground has-data-[size=sm]:gap-1 has-data-[size=xs]:gap-1",
+        className
+      )}
+    >
       {children}
     </ItemGroup>
   )
@@ -362,7 +390,7 @@ function ProcessRow({
           <Icon />
         </ItemMedia>
       ) : null}
-      <ItemContent>
+      <ItemContent className="min-w-0 flex-none">
         <ItemTitle>{title}</ItemTitle>
       </ItemContent>
       {showActions ? (
@@ -378,7 +406,10 @@ function ProcessRow({
 
   if (!hasBody) {
     return (
-      <Item size="sm" className="bg-transparent hover:bg-transparent">
+      <Item
+        size="sm"
+        className="w-fit max-w-full bg-transparent py-1.5 hover:bg-transparent"
+      >
         {header}
       </Item>
     )
@@ -388,7 +419,7 @@ function ProcessRow({
     <Collapsible className="group/process-item" defaultOpen={defaultOpen}>
       <Item
         size="sm"
-        className="w-full cursor-pointer bg-transparent text-left hover:bg-transparent aria-expanded:bg-transparent"
+        className="w-fit max-w-full cursor-pointer bg-transparent py-1.5 text-left hover:bg-transparent aria-expanded:bg-transparent"
         render={<CollapsibleTrigger />}
       >
         {header}

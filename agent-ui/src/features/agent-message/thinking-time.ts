@@ -18,12 +18,16 @@ export function frameOpensThinking(frame: ThinkingFrame): boolean {
   if (frame.type === "assistant.message") {
     return (
       Array.isArray(frame.blocks) &&
-      frame.blocks.some(
-        (block) =>
-          typeof block === "object" &&
-          block !== null &&
-          (block as { type?: unknown }).type === "thinking"
-      )
+      frame.blocks.some((block) => {
+        if (typeof block !== "object" || block === null) {
+          return false
+        }
+        const item = block as { type?: unknown; text?: unknown }
+        if (item.type !== "thinking") {
+          return false
+        }
+        return typeof item.text === "string" && item.text.trim() !== ""
+      })
     )
   }
   return false

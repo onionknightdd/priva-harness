@@ -237,7 +237,9 @@ export class ClaudeEventMapper {
       if (id === undefined) continue
       const name = normalizeToolName(stringField(block, 'name') ?? this.tools.get(id) ?? 'unknown')
       this.tools.set(id, name)
-      const toolIndex = this.indexByToolId.get(id) ?? index
+      const toolIndex =
+        this.indexByToolId.get(id) ??
+        nextFreeToolIndex(this.blocksByMessage.get(messageId), index, id)
       this.indexByToolId.set(id, toolIndex)
       incoming.push({
         type: 'tool_use',
@@ -526,11 +528,11 @@ export class ClaudeEventMapper {
       const toolIndex = block.type === 'tool_use' ? findToolIndex(existing, block.id) : undefined
       let index = toolIndex ?? block.index
       const occupant = existing.get(index)
-      if (occupant !== undefined && occupant.blockId !== block.blockId) {
+      if (occupant !== undefined && !sameMergeSlot(occupant, block)) {
         index = nextIndex
         nextIndex += 1
       }
-      existing.set(index, { ...block, index })
+      existing.set(index, withMergedAddress(messageId, block, index))
       if (index >= nextIndex) nextIndex = index + 1
     }
     this.blocksByMessage.set(messageId, existing)
@@ -761,4 +763,29 @@ function findToolIndex(blocks: Map<number, ContentBlock>, id: string): number | 
     if (block.type === 'tool_use' && block.id === id) return index
   }
   return undefined
+}
+
+function nextFreeToolIndex(
+  existing: Map<number, ContentBlock> | undefined,
+  requested: number,
+  toolId: string,
+): number {
+  if (existing === undefined) return requested
+  const occupant = existing.get(requested)
+  if (occupant === undefined) return requested
+  if (occupant.type === 'tool_use' && occupant.id === toolId) return requested
+  return maxIndex(existing) + 1
+}
+
+function sameMergeSlot(occupant: ContentBlock, incoming: ContentBlock): boolean {
+  if (occupant.type !== incoming.type) return false
+  if (occupant.type === 'tool_use' && incoming.type === 'tool_use') {
+    return occupant.id === incoming.id
+  }
+  return true
+}
+
+function withMergedAddress(messageId: string, block: ContentBlock, index: number): ContentBlock {
+  if (block.type === 'tool_use') return { ...block, index }
+  return { ...block, index, blockId: `${messageId}:${index}` }
 }

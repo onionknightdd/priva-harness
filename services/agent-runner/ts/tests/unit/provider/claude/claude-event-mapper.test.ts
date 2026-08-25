@@ -159,6 +159,45 @@ describe('ClaudeEventMapper', () => {
     }
   })
 
+  it('keeps split thinking, text, and tool snapshots on one message id', () => {
+    const mapper = new ClaudeEventMapper()
+    const events = [
+      ...mapper.push({
+        type: 'assistant',
+        message: {
+          id: 'msg_split',
+          content: [{ type: 'thinking', thinking: 'plan the sleeps' }],
+        },
+      }),
+      ...mapper.push({
+        type: 'assistant',
+        message: {
+          id: 'msg_split',
+          content: [{ type: 'text', text: '先执行第一次：' }],
+        },
+      }),
+      ...mapper.push({
+        type: 'assistant',
+        message: {
+          id: 'msg_split',
+          content: [{ type: 'tool_use', id: 'bash-1', name: 'Bash', input: { command: 'sleep 5' } }],
+        },
+      }),
+    ]
+    const snapshot = events.filter((event) => event.type === 'assistant.message').at(-1)
+    expect(snapshot?.type).toBe('assistant.message')
+    if (snapshot?.type === 'assistant.message') {
+      expect(snapshot.blocks.map((block) => block.type)).toEqual(['thinking', 'text', 'tool_use'])
+      expect(
+        snapshot.blocks.map((block) => {
+          if (block.type === 'thinking' || block.type === 'text') return block.text
+          if (block.type === 'tool_use') return block.id
+          return block.blockId
+        }),
+      ).toEqual(['plan the sleeps', '先执行第一次：', 'bash-1'])
+    }
+  })
+
   it('keeps subagent assistant and user events on the parent channel', () => {
     const mapper = new ClaudeEventMapper()
     const events = [

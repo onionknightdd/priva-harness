@@ -103,12 +103,36 @@ export function createAgentThreadMessage(
   }
 }
 
-export function textFromBlocks(blocks: readonly StreamBlock[]): string {
-  return [...blocks]
-    .filter((block): block is Extract<StreamBlock, { type: "text" }> => block.type === "text")
+export function answerTextBlock(
+  blocks: readonly StreamBlock[]
+): Extract<StreamBlock, { type: "text" }> | undefined {
+  const texts = [...blocks]
+    .filter(
+      (block): block is Extract<StreamBlock, { type: "text" }> =>
+        block.type === "text" && block.text.trim() !== ""
+    )
     .sort((left, right) => left.index - right.index)
-    .map((block) => block.text)
-    .join("")
+  return texts.at(-1)
+}
+
+export function textFromBlocks(blocks: readonly StreamBlock[]): string {
+  return answerTextBlock(blocks)?.text ?? ""
+}
+
+export function isProcessBlock(
+  block: StreamBlock,
+  blocks: readonly StreamBlock[]
+): boolean {
+  if (block.type === "thinking") {
+    return block.text.trim() !== ""
+  }
+  if (block.type === "image" || block.type === "tool_use") {
+    return true
+  }
+  if (block.type !== "text" || block.text.trim() === "") {
+    return false
+  }
+  return answerTextBlock(blocks)?.blockId !== block.blockId
 }
 
 export function assistantHasProcess(message: AgentThreadMessage): boolean {
@@ -118,10 +142,6 @@ export function assistantHasProcess(message: AgentThreadMessage): boolean {
   if ((message.workflows?.length ?? 0) > 0) {
     return true
   }
-  return (message.blocks ?? []).some((block) => {
-    if (block.type === "tool_use" || block.type === "image") {
-      return true
-    }
-    return block.type === "thinking" && block.text.trim() !== ""
-  })
+  const blocks = message.blocks ?? []
+  return blocks.some((block) => isProcessBlock(block, blocks))
 }

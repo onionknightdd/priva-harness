@@ -5,7 +5,7 @@ export function eventOpensThinking(event: AgentEvent): boolean {
   if (event.type === 'assistant.thinking_delta') return true
   if (event.type === 'assistant.block_start') return event.kind === 'thinking'
   if (event.type === 'assistant.message') {
-    return event.blocks.some((block) => block.type === 'thinking')
+    return event.blocks.some((block) => block.type === 'thinking' && block.text.trim() !== '')
   }
   return false
 }

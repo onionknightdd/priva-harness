@@ -114,12 +114,20 @@ export function threadBlocksFromContent(blocks: readonly ContentBlock[]): Thread
   })
 }
 
-export function textFromThreadBlocks(blocks: readonly ThreadBlock[]): string {
-  return [...blocks]
-    .filter((block): block is Extract<ThreadBlock, { type: 'text' }> => block.type === 'text')
+export function answerTextBlock(
+  blocks: readonly ThreadBlock[],
+): Extract<ThreadBlock, { type: 'text' }> | undefined {
+  const texts = [...blocks]
+    .filter(
+      (block): block is Extract<ThreadBlock, { type: 'text' }> =>
+        block.type === 'text' && block.text.trim() !== '',
+    )
     .sort((left, right) => left.index - right.index)
-    .map((block) => block.text)
-    .join('')
+  return texts.at(-1)
+}
+
+export function textFromThreadBlocks(blocks: readonly ThreadBlock[]): string {
+  return answerTextBlock(blocks)?.text ?? ''
 }
 
 export function threadHasVisibleContent(message: ThreadMessage): boolean {
@@ -128,6 +136,10 @@ export function threadHasVisibleContent(message: ThreadMessage): boolean {
   if ((message.workflows?.length ?? 0) > 0) return true
   if ((message.nestedAgents?.length ?? 0) > 0) return true
   return (message.blocks ?? []).some(
-    (block) => block.type === 'tool_use' || block.type === 'image' || block.type === 'thinking',
+    (block) =>
+      block.type === 'tool_use' ||
+      block.type === 'image' ||
+      (block.type === 'thinking' && block.text.trim() !== '') ||
+      (block.type === 'text' && block.text.trim() !== ''),
   )
 }

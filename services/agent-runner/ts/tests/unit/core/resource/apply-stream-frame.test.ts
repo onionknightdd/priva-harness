@@ -45,10 +45,107 @@ describe('applyStreamFrame', () => {
     expect(message.transcriptUuid).toBe('a2')
     expect(message.content).toBe('done')
   })
+
+  it('keeps earlier thinking when a later snapshot has empty thinking', () => {
+    let message = emptyAssistantMessage('a1', '2024-01-01T00:00:00.000Z')
+    message = applyStreamFrame(message, {
+      type: 'assistant.message',
+      messageId: 'a1',
+      blocks: [{ type: 'thinking', blockId: 'a1:0', index: 0, text: 'plan the bash calls' }],
+    })
+    message = applyStreamFrame(message, {
+      type: 'assistant.message',
+      messageId: 'a2',
+      blocks: [{ type: 'thinking', blockId: 'a2:0', index: 0, text: '' }],
+    })
+
+    expect(message.blocks).toEqual([
+      expect.objectContaining({ type: 'thinking', text: 'plan the bash calls' }),
+    ])
+  })
+
+  it('accumulates split assistant snapshots in arrival order when indices collide', () => {
+    let message = emptyAssistantMessage('a1', '2024-01-01T00:00:00.000Z')
+    message = applyStreamFrame(message, {
+      type: 'assistant.message',
+      messageId: 'a1',
+      blocks: [{ type: 'thinking', blockId: 'a1:0', index: 0, text: 'plan' }],
+    })
+    message = applyStreamFrame(message, {
+      type: 'assistant.message',
+      messageId: 'a1',
+      blocks: [{ type: 'text', blockId: 'a1:1', index: 0, text: '先执行第一次：' }],
+    })
+    message = applyStreamFrame(message, {
+      type: 'assistant.message',
+      messageId: 'a1',
+      blocks: [
+        {
+          type: 'tool_use',
+          blockId: 'bash-1',
+          index: 0,
+          id: 'bash-1',
+          name: 'bash',
+        },
+      ],
+    })
+    message = applyStreamFrame(message, {
+      type: 'assistant.message',
+      messageId: 'a2',
+      blocks: [{ type: 'thinking', blockId: 'a2:0', index: 0, text: '' }],
+    })
+    message = applyStreamFrame(message, {
+      type: 'assistant.message',
+      messageId: 'a2',
+      blocks: [{ type: 'text', blockId: 'a2:1', index: 0, text: '第一次完成。现在执行第二次：' }],
+    })
+    message = applyStreamFrame(message, {
+      type: 'assistant.message',
+      messageId: 'a2',
+      blocks: [
+        {
+          type: 'tool_use',
+          blockId: 'bash-2',
+          index: 0,
+          id: 'bash-2',
+          name: 'bash',
+        },
+      ],
+    })
+    expect(message.content).toBe('第一次完成。现在执行第二次：')
+
+    message = applyStreamFrame(message, {
+      type: 'assistant.message',
+      messageId: 'a3',
+      blocks: [{ type: 'text', blockId: 'a3:0', index: 0, text: '已完成 3 次 bash 工具调用' }],
+    })
+
+    expect(message.blocks?.map((block) => block.type)).toEqual([
+      'thinking',
+      'text',
+      'tool_use',
+      'text',
+      'tool_use',
+      'text',
+    ])
+    expect(texts(message.blocks)).toEqual([
+      '先执行第一次：',
+      '第一次完成。现在执行第二次：',
+      '已完成 3 次 bash 工具调用',
+    ])
+    expect(toolIds(message.blocks)).toEqual(['bash-1', 'bash-2'])
+    expect(message.content).toBe('已完成 3 次 bash 工具调用')
+  })
 })
 
 function toolIds(blocks: readonly ThreadBlock[] | undefined): string[] {
   return (blocks ?? [])
     .filter((block): block is Extract<ThreadBlock, { type: 'tool_use' }> => block.type === 'tool_use')
     .map((block) => block.id)
+}
+
+function texts(blocks: readonly ThreadBlock[] | undefined): string[] {
+  return (blocks ?? [])
+    .filter((block): block is Extract<ThreadBlock, { type: 'text' }> => block.type === 'text')
+    .map((block) => block.text)
 }

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { foldThread } from '../../../../src/core/resource/fold-thread.js'
 import { replayClaudeSessionMessages } from '../../../../src/provider/claude/session/claude-thread-replay.js'
 import type { SessionMessage } from '../../../../src/core/resource/session.js'
+import type { ThreadBlock } from '../../../../src/core/resource/thread.js'
 
 describe('replayClaudeSessionMessages', () => {
   it('folds user, tool result, nested agent, and async launch into one assistant turn', () => {
@@ -94,6 +95,114 @@ describe('replayClaudeSessionMessages', () => {
     expect(nestedText?.type === 'text' ? nestedText.text : undefined).toBe('found it')
     const nestedBash = nestedBlocks.find((block) => block.type === 'tool_use' && block.id === 'nested-bash')
     expect(nestedBash?.type === 'tool_use' ? nestedBash.tool?.output : undefined).toBe('/tmp\n')
+  })
+
+  it('keeps thinking and inter-tool text from split Claude bash snapshots', () => {
+    const messages: SessionMessage[] = [
+      session('user', 'u1', { role: 'user', content: '执行3次bash 工具，每次sleep 5s' }),
+      session('assistant', 'a1-think', {
+        role: 'assistant',
+        id: '1744a41d',
+        content: [{ type: 'thinking', thinking: 'The user asked for three bash sleeps.' }],
+      }),
+      session('assistant', 'a1-text', {
+        role: 'assistant',
+        id: '1744a41d',
+        content: [{ type: 'text', text: '我来执行 3 次 bash 工具调用，每次 sleep 5 秒。先执行第一次：' }],
+      }),
+      session('assistant', 'a1-tool', {
+        role: 'assistant',
+        id: '1744a41d',
+        content: [{ type: 'tool_use', id: 'bash-1', name: 'Bash', input: { command: 'sleep 5' } }],
+      }),
+      session('user', 't1', {
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: 'bash-1', content: '第 1 次完成' }],
+      }),
+      session('assistant', 'a2-think', {
+        role: 'assistant',
+        id: '3c42e957',
+        content: [{ type: 'thinking', thinking: '' }],
+      }),
+      session('assistant', 'a2-text', {
+        role: 'assistant',
+        id: '3c42e957',
+        content: [{ type: 'text', text: '第一次完成。现在执行第二次：' }],
+      }),
+      session('assistant', 'a2-tool', {
+        role: 'assistant',
+        id: '3c42e957',
+        content: [{ type: 'tool_use', id: 'bash-2', name: 'Bash', input: { command: 'sleep 5' } }],
+      }),
+      session('user', 't2', {
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: 'bash-2', content: '第 2 次完成' }],
+      }),
+      session('assistant', 'a3-think', {
+        role: 'assistant',
+        id: '6bc937dd',
+        content: [{ type: 'thinking', thinking: '' }],
+      }),
+      session('assistant', 'a3-text', {
+        role: 'assistant',
+        id: '6bc937dd',
+        content: [{ type: 'text', text: '第二次完成。现在执行第三次：' }],
+      }),
+      session('assistant', 'a3-tool', {
+        role: 'assistant',
+        id: '6bc937dd',
+        content: [{ type: 'tool_use', id: 'bash-3', name: 'Bash', input: { command: 'sleep 5' } }],
+      }),
+      session('user', 't3', {
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: 'bash-3', content: '第 3 次完成' }],
+      }),
+      session('assistant', 'a4-think', {
+        role: 'assistant',
+        id: 'cc035c31',
+        content: [{ type: 'thinking', thinking: '' }],
+      }),
+      session('assistant', 'a4-text', {
+        role: 'assistant',
+        id: 'cc035c31',
+        content: [{ type: 'text', text: '已完成 3 次 bash 工具调用' }],
+      }),
+    ]
+
+    const thread = foldThread(replayClaudeSessionMessages(messages))
+    expect(thread).toHaveLength(2)
+    const assistant = thread[1]
+    expect(assistant?.content).toBe('已完成 3 次 bash 工具调用')
+    expect(
+      assistant?.blocks
+        ?.filter((block): block is Extract<ThreadBlock, { type: 'thinking' }> => block.type === 'thinking')
+        .map((block) => block.text),
+    ).toEqual(['The user asked for three bash sleeps.'])
+    expect(
+      assistant?.blocks
+        ?.filter((block): block is Extract<ThreadBlock, { type: 'text' }> => block.type === 'text')
+        .map((block) => block.text),
+    ).toEqual([
+      '我来执行 3 次 bash 工具调用，每次 sleep 5 秒。先执行第一次：',
+      '第一次完成。现在执行第二次：',
+      '第二次完成。现在执行第三次：',
+      '已完成 3 次 bash 工具调用',
+    ])
+    expect(
+      assistant?.blocks
+        ?.filter((block): block is Extract<ThreadBlock, { type: 'tool_use' }> => block.type === 'tool_use')
+        .map((block) => block.id),
+    ).toEqual(['bash-1', 'bash-2', 'bash-3'])
+    expect(assistant?.blocks?.map((block) => block.type)).toEqual([
+      'thinking',
+      'text',
+      'tool_use',
+      'text',
+      'tool_use',
+      'text',
+      'tool_use',
+      'text',
+    ])
   })
 
   it('stamps thinking duration when stream_event timestamps differ', () => {
