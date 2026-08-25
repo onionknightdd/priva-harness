@@ -449,14 +449,15 @@ function WriteToolItem({
 
   return (
     <FileDiff
-      file={filePath ?? (running ? "" : block.name)}
+      tool="Write"
+      file={filePath ?? ""}
       lines={lines}
       status={running ? "streaming" : "complete"}
       language={languageFromPath(filePath)}
       icon={
         <FilePenLineIcon
           aria-hidden="true"
-          className="size-4 shrink-0 text-muted-foreground/70"
+          className="size-[1em] shrink-0 text-muted-foreground/70"
         />
       }
       copyText={copyText || undefined}

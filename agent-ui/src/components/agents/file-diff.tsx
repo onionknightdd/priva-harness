@@ -42,6 +42,7 @@ export interface FileDiffLine {
 export interface FileDiffProps {
   file: ReactNode;
   lines: FileDiffLine[];
+  tool?: ReactNode;
   status?: FileDiffStatus;
   open?: boolean;
   defaultOpen?: boolean;
@@ -76,6 +77,7 @@ function ChangeCount({ value, type }: { value: number; type: "added" | "removed"
 export function FileDiff({
   file,
   lines,
+  tool,
   status = "streaming",
   open,
   defaultOpen = true,
@@ -187,16 +189,23 @@ export function FileDiff({
         aria-expanded={currentOpen}
         aria-controls={contentId}
         onClick={() => setOpen(!currentOpen)}
-        className="group flex min-h-9 w-full items-center gap-2 rounded-md py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        className="group/item flex w-fit max-w-full min-h-0 items-center gap-1 rounded-md py-0.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       >
         {icon ?? (
           <FileCode2
             aria-hidden="true"
-            className="size-4 shrink-0 text-muted-foreground/70"
+            className="size-[1em] shrink-0 text-muted-foreground/70"
           />
         )}
-        <span className="min-w-0 flex-1 truncate font-mono text-xs text-foreground/80">
-          {file}
+        <span className="flex min-w-0 flex-none items-baseline gap-2">
+          {tool ? (
+            <span className="shrink-0 font-medium text-muted-foreground/70">
+              {tool}
+            </span>
+          ) : null}
+          <span className="min-w-0 truncate font-medium text-muted-foreground/70">
+            {file}
+          </span>
         </span>
         <span className="flex shrink-0 items-center gap-2">
           <ChangeCount value={additions} type="added" />
@@ -216,7 +225,7 @@ export function FileDiff({
           aria-hidden="true"
           animate={{ rotate: currentOpen ? 180 : 0 }}
           transition={reduce ? { duration: 0 } : SPRING_SWAP}
-          className="shrink-0 text-muted-foreground/45 transition-colors group-hover:text-muted-foreground"
+          className="shrink-0 text-muted-foreground/70 opacity-0 transition-[opacity,transform] duration-200 group-hover/item:opacity-100 group-focus-visible/item:opacity-100 motion-reduce:transition-none"
         >
           <ChevronDown className="size-3.5" />
         </motion.span>
@@ -228,7 +237,7 @@ export function FileDiff({
         aria-labelledby={triggerId}
         open={currentOpen}
       >
-        <div className="pl-6 pt-1.5">
+        <div className="pt-1.5 pl-[calc(1em+0.25rem)]">
           <div className="overflow-hidden rounded-xl bg-muted/80">
             <div
               ref={viewportRef}
