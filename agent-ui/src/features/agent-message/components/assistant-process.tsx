@@ -450,7 +450,7 @@ function WriteToolItem({
   return (
     <FileDiff
       tool="Write"
-      file={filePath ?? ""}
+      file={fileNameFromPath(filePath)}
       lines={lines}
       status={running ? "streaming" : "complete"}
       language={languageFromPath(filePath)}
@@ -761,6 +761,15 @@ function fileDiffLinesFromUnified(patch: string): FileDiffLine[] {
     newLine += 1
   }
   return lines
+}
+
+function fileNameFromPath(path: string | undefined): string {
+  if (path === undefined || path.trim() === "") {
+    return ""
+  }
+  const trimmed = path.trim().replaceAll("\\", "/")
+  const parts = trimmed.split("/")
+  return parts.at(-1) || trimmed
 }
 
 function languageFromPath(path: string | undefined): string {
