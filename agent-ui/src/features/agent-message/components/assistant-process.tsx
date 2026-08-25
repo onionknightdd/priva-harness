@@ -10,8 +10,15 @@ import {
 import { motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
+import {
+  ToolResult,
+  ToolResultOutput,
+  type ToolResultStatus,
+} from "@/components/agents/tool-result"
+import { MessageResponse } from "@/components/ai-elements/message"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { writeClipboardText } from "@/lib/clipboard"
 import {
   Collapsible,
   CollapsibleContent,
@@ -146,16 +153,11 @@ export function AssistantProcess({
 
 function TextItem({ text }: { text: string }) {
   return (
-    <Item
-      size="sm"
-      className="w-fit max-w-full bg-transparent py-1.5 hover:bg-transparent"
-    >
-      <ItemContent className="min-w-0 flex-none">
-        <p className="whitespace-pre-wrap text-sm leading-snug text-muted-foreground">
-          {text}
-        </p>
-      </ItemContent>
-    </Item>
+    <div className="w-full min-w-0 py-0.5 text-sm text-foreground">
+      <MessageResponse className="text-foreground" mode="static">
+        {text}
+      </MessageResponse>
+    </div>
   )
 }
 
@@ -238,6 +240,17 @@ function ToolItem({
 }: {
   block: Extract<StreamBlock, { type: "tool_use" }>
 }) {
+  if (isBashTool(block.name)) {
+    return <BashToolItem block={block} />
+  }
+  return <GenericToolItem block={block} />
+}
+
+function GenericToolItem({
+  block,
+}: {
+  block: Extract<StreamBlock, { type: "tool_use" }>
+}) {
   const { t } = useTranslation()
   const tool = block.tool
   const running = isToolRunning(tool)
@@ -258,6 +271,41 @@ function ToolItem({
         </pre>
       ) : null}
     </ProcessRow>
+  )
+}
+
+function BashToolItem({
+  block,
+}: {
+  block: Extract<StreamBlock, { type: "tool_use" }>
+}) {
+  const input = block.tool?.input ?? block.input
+  const command = stringInput(input, "command")
+  const description = stringInput(input, "description")
+  const output = block.tool?.output?.trim() ?? ""
+  const status = toolResultStatus(block.tool)
+  const body = [command ? `$ ${command}` : "", output].filter(Boolean).join("\n\n")
+
+  return (
+    <div className="w-full min-w-0 py-0.5 text-foreground">
+      <ToolResult
+        tool="bash"
+        title={description ?? command ?? block.name}
+        kind="terminal"
+        status={status}
+        copyText={body || undefined}
+        onCopy={
+          body
+            ? () => {
+                void writeClipboardText(body)
+              }
+            : undefined
+        }
+        defaultOpen={status === "running"}
+      >
+        <ToolResultOutput language="bash">{body}</ToolResultOutput>
+      </ToolResult>
+    </div>
   )
 }
 
@@ -356,7 +404,7 @@ function ProcessItemGroup({
   return (
     <ItemGroup
       className={cn(
-        "gap-1 py-0.5 text-muted-foreground has-data-[size=sm]:gap-1 has-data-[size=xs]:gap-1",
+        "gap-0.5 py-0 text-muted-foreground has-data-[size=sm]:gap-0.5 has-data-[size=xs]:gap-0.5",
         className
       )}
     >
@@ -408,7 +456,7 @@ function ProcessRow({
     return (
       <Item
         size="sm"
-        className="w-fit max-w-full bg-transparent py-1.5 hover:bg-transparent"
+        className="w-fit max-w-full bg-transparent py-0.5 hover:bg-transparent"
       >
         {header}
       </Item>
@@ -419,7 +467,7 @@ function ProcessRow({
     <Collapsible className="group/process-item" defaultOpen={defaultOpen}>
       <Item
         size="sm"
-        className="w-fit max-w-full cursor-pointer bg-transparent py-1.5 text-left hover:bg-transparent aria-expanded:bg-transparent"
+        className="w-fit max-w-full cursor-pointer bg-transparent py-0.5 text-left hover:bg-transparent aria-expanded:bg-transparent"
         render={<CollapsibleTrigger />}
       >
         {header}
@@ -469,6 +517,29 @@ function formatElapsedMs(ms: number): string {
   const minutes = Math.floor(totalSeconds / 60)
   const seconds = totalSeconds % 60
   return `${String(minutes)}m ${String(seconds).padStart(2, "0")}s`
+}
+
+function isBashTool(name: string): boolean {
+  const id = name.trim().toLowerCase()
+  return id === "bash" || id === "shell"
+}
+
+function stringInput(input: unknown, key: string): string | undefined {
+  if (typeof input !== "object" || input === null) {
+    return undefined
+  }
+  const value = (input as Record<string, unknown>)[key]
+  return typeof value === "string" && value.trim() !== "" ? value : undefined
+}
+
+function toolResultStatus(tool: ToolCard | undefined): ToolResultStatus {
+  if (tool?.launchStatus === "async_launched" || isToolRunning(tool)) {
+    return "running"
+  }
+  if (tool?.ok === false) {
+    return "error"
+  }
+  return "success"
 }
 
 function isToolRunning(tool: ToolCard | undefined): boolean {
