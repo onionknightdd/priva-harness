@@ -374,6 +374,34 @@ describe('applyStreamFrame', () => {
       new_string: 'const a = 2',
     })
   })
+
+  it('does not duplicate answer text when a snapshot reuses a different block id', () => {
+    let message = emptyAssistantMessage('msg_1', '2024-01-01T00:00:00.000Z')
+    message = applyStreamFrame(message, {
+      type: 'assistant.thinking_delta',
+      messageId: 'msg_1',
+      blockId: 'msg_1:0',
+      index: 0,
+      text: 'hmm',
+    })
+    message = applyStreamFrame(message, {
+      type: 'assistant.delta',
+      messageId: 'msg_1',
+      blockId: 'msg_1:1',
+      index: 1,
+      text: 'Hi! What can I help you with today?',
+    })
+    message = applyStreamFrame(message, {
+      type: 'assistant.message',
+      messageId: 'msg_1',
+      blocks: [
+        { type: 'thinking', blockId: 'msg:0', index: 0, text: 'hmm' },
+        { type: 'text', blockId: 'msg:1', index: 1, text: 'Hi! What can I help you with today?' },
+      ],
+    })
+    expect(texts(message.blocks)).toEqual(['Hi! What can I help you with today?'])
+    expect(message.content).toBe('Hi! What can I help you with today?')
+  })
 })
 
 function toolIds(blocks: readonly ThreadBlock[] | undefined): string[] {

@@ -150,7 +150,14 @@ export function isProcessBlock(
   if (block.type !== "text" || block.text.trim() === "") {
     return false
   }
-  return answerTextBlock(blocks)?.blockId !== block.blockId
+  const answer = answerTextBlock(blocks)
+  if (answer === undefined) {
+    return true
+  }
+  if (answer.blockId === block.blockId) {
+    return false
+  }
+  return answer.text.trim() !== block.text.trim()
 }
 
 export function assistantHasProcess(message: AgentThreadMessage): boolean {

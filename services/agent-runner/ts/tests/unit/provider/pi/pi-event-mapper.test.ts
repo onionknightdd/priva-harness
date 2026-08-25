@@ -231,4 +231,41 @@ describe('PiEventMapper', () => {
     ]))
     expect(events.some((event) => event.type === 'assistant.delta')).toBe(false)
   })
+
+  it('keeps message_end text on the same block id as streamed deltas', () => {
+    const mapper = new PiEventMapper({ sessionId: 'pi-sess', model: 'm' })
+    const events = [
+      ...mapper.push({
+        type: 'message_update',
+        assistantMessageEvent: { type: 'thinking_delta', contentIndex: 0, delta: 'hmm' },
+      }),
+      ...mapper.push({
+        type: 'message_update',
+        assistantMessageEvent: { type: 'text_delta', contentIndex: 1, delta: 'Hi!' },
+      }),
+      ...mapper.push({
+        type: 'message_end',
+        message: {
+          role: 'assistant',
+          id: 'asst_real',
+          content: [
+            { type: 'thinking', thinking: 'hmm' },
+            { type: 'text', text: 'Hi!' },
+          ],
+        },
+      }),
+    ]
+    const thinking = events.find((event) => event.type === 'assistant.thinking_delta')
+    const delta = events.find((event) => event.type === 'assistant.delta')
+    const snapshot = events.find((event) => event.type === 'assistant.message')
+    expect(thinking).toMatchObject({ type: 'assistant.thinking_delta', blockId: 'msg_1:0' })
+    expect(delta).toMatchObject({ type: 'assistant.delta', blockId: 'msg_1:1' })
+    expect(snapshot).toMatchObject({
+      type: 'assistant.message',
+      blocks: [
+        expect.objectContaining({ type: 'thinking', blockId: 'msg_1:0', text: 'hmm' }),
+        expect.objectContaining({ type: 'text', blockId: 'msg_1:1', text: 'Hi!' }),
+      ],
+    })
+  })
 })

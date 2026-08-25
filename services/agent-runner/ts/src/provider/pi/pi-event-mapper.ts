@@ -213,7 +213,7 @@ export class PiEventMapper {
       return []
     }
     const messageId = this.ensureMessageId(stringField(message, 'id'))
-    const blocks = this.snapshotBlocks(message)
+    const blocks = this.snapshotBlocks(message, messageId)
     this.currentMessageId = undefined
     this.pendingByIndex.clear()
     this.startedBlocks.clear()
@@ -328,10 +328,10 @@ export class PiEventMapper {
     }
   }
 
-  private snapshotBlocks(message: JsonRecord): ContentBlock[] {
-    const fromContent = contentBlocksFromMessage(message)
-    if (fromContent.length > 0) return fromContent
-    return [...this.blocks.values()].sort((left, right) => left.index - right.index)
+  private snapshotBlocks(message: JsonRecord, messageId: string): ContentBlock[] {
+    const remembered = [...this.blocks.values()].sort((left, right) => left.index - right.index)
+    if (remembered.length > 0) return remembered
+    return contentBlocksFromMessage(message, messageId)
   }
 
   private rememberText(index: number, blockId: string, text: string): void {
@@ -396,9 +396,8 @@ function toolCallFrom(message: JsonRecord | undefined, index: number): JsonRecor
   return asRecord(content[index])
 }
 
-function contentBlocksFromMessage(message: JsonRecord): ContentBlock[] {
+function contentBlocksFromMessage(message: JsonRecord, messageId: string): ContentBlock[] {
   const content = message['content']
-  const messageId = stringField(message, 'id') ?? 'msg'
   if (typeof content === 'string') {
     return content === ''
       ? []

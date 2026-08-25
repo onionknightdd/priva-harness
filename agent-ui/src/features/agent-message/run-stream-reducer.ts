@@ -422,7 +422,7 @@ function mergeSnapshot(existing: StreamBlock[], snapshot: StreamBlock[]): Stream
     if (block.type === "text" && block.text === "") {
       continue
     }
-    incoming.push(block)
+    incoming.push(alignSnapshotText(existing, block))
   }
 
   const incomingIds = new Set(incoming.map(snapshotIdentity))
@@ -452,6 +452,22 @@ function snapshotIdentity(block: StreamBlock): string {
     return "thinking"
   }
   return `block:${block.blockId}`
+}
+
+function alignSnapshotText(existing: StreamBlock[], block: StreamBlock): StreamBlock {
+  if (block.type !== "text" || block.text.trim() === "") {
+    return block
+  }
+  const match = existing.find(
+    (item) =>
+      item.type === "text" &&
+      item.index === block.index &&
+      item.text === block.text
+  )
+  if (match === undefined) {
+    return block
+  }
+  return { ...block, blockId: match.blockId }
 }
 
 function mergeSnapshotBlock(previous: StreamBlock, incoming: StreamBlock): StreamBlock {
