@@ -57,7 +57,7 @@ export function FilePathLink({
       className={cn(
         "relative z-10 inline-flex max-w-full min-w-0 pointer-events-auto items-center gap-0.5 align-middle text-left font-normal leading-none outline-none",
         className,
-        "bg-transparent p-0 text-sky-600 underline decoration-sky-600/50 underline-offset-2 hover:decoration-sky-600 focus-visible:ring-2 focus-visible:ring-ring dark:text-sky-400 dark:decoration-sky-400/50 dark:hover:decoration-sky-400"
+        "cursor-pointer bg-transparent p-0 text-sky-600 underline decoration-sky-600/50 underline-offset-2 hover:decoration-sky-600 focus-visible:ring-2 focus-visible:ring-ring dark:text-sky-400 dark:decoration-sky-400/50 dark:hover:decoration-sky-400"
       )}
     >
       {showIcon ? (

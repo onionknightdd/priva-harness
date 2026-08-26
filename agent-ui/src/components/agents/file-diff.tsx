@@ -215,7 +215,7 @@ export function FileDiff({
           aria-expanded={currentOpen}
           aria-controls={contentId}
           onClick={() => setOpen(!currentOpen)}
-          className="absolute inset-0 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          className="absolute inset-0 z-0 cursor-pointer rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
           <span className="sr-only">{currentOpen ? "Collapse" : "Expand"}</span>
         </button>
