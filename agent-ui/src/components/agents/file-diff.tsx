@@ -226,7 +226,7 @@ export function FileDiff({
               className="size-[1em] shrink-0 text-muted-foreground/70"
             />
           )}
-          <span className="min-w-0 truncate font-medium leading-snug text-muted-foreground/70">
+          <span className="min-w-0 -translate-y-px truncate font-medium leading-snug text-muted-foreground/70">
             {tool ? (
               typeof tool === "string" || typeof tool === "number" ? (
                 <ActionSwapRollText value={String(tool)}>

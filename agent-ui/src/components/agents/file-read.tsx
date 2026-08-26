@@ -144,7 +144,7 @@ export function FileRead({
             aria-hidden="true"
             className="size-[1em] shrink-0 text-muted-foreground/70"
           />
-          <span className="flex min-w-0 flex-none items-baseline gap-2">
+          <span className="flex min-w-0 flex-none -translate-y-px items-baseline gap-2">
             {tool ? (
               <span className="shrink-0 font-medium text-muted-foreground/70">
                 {typeof tool === "string" || typeof tool === "number" ? (
