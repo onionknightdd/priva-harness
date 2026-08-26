@@ -65,6 +65,7 @@ import {
   isWriteTool,
   toolItemStatusLabel,
 } from "../tool-activity"
+import { QuoteSelectable } from "./quote-selectable"
 
 const PANEL_CLASS =
   "h-[var(--collapsible-panel-height)] overflow-hidden transition-[height,opacity] duration-200 ease-out data-[ending-style]:h-0 data-[ending-style]:opacity-0 data-[starting-style]:h-0 data-[starting-style]:opacity-0 motion-reduce:transition-none"
@@ -177,9 +178,11 @@ export function AssistantProcess({
 function TextItem({ text }: { text: string }) {
   return (
     <div className="w-full min-w-0 px-0 py-0.5 text-base text-foreground">
-      <MessageResponse className="text-foreground [&_p]:my-0" mode="static">
-        {text}
-      </MessageResponse>
+      <QuoteSelectable>
+        <MessageResponse className="text-foreground [&_p]:my-0" mode="static">
+          {text}
+        </MessageResponse>
+      </QuoteSelectable>
     </div>
   )
 }
@@ -298,9 +301,11 @@ function GenericToolItem({
       defaultOpen={running}
     >
       {output ? (
-        <pre className="max-h-40 overflow-auto whitespace-pre-wrap text-sm text-muted-foreground">
-          {output}
-        </pre>
+        <QuoteSelectable>
+          <pre className="max-h-40 overflow-auto whitespace-pre-wrap text-sm text-muted-foreground">
+            {output}
+          </pre>
+        </QuoteSelectable>
       ) : null}
     </ProcessRow>
   )
@@ -630,9 +635,11 @@ function NestedAgentItem({ agent }: { agent: NestedAgent }) {
       {hasBody ? (
         <div className="flex flex-col gap-2">
           {text ? (
-            <p className="whitespace-pre-wrap text-base text-muted-foreground">
-              {text}
-            </p>
+            <QuoteSelectable>
+              <p className="whitespace-pre-wrap text-base text-muted-foreground">
+                {text}
+              </p>
+            </QuoteSelectable>
           ) : null}
           {agent.inbox.length > 0 ? (
             <ItemGroup className="gap-1 text-muted-foreground">
@@ -644,7 +651,10 @@ function NestedAgentItem({ agent }: { agent: NestedAgent }) {
                         ? t("agentMessage.coordinatorMessage")
                         : t("agentMessage.peerMessage")}
                     </ItemTitle>
-                    <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+                    <p
+                      className="whitespace-pre-wrap text-sm text-muted-foreground"
+                      data-assistant-selectable=""
+                    >
                       {item.body}
                     </p>
                   </ItemContent>

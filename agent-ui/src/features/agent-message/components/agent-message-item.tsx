@@ -31,6 +31,7 @@ import {
 } from "../agent-message-data"
 import { AssistantProcess } from "./assistant-process"
 import { AssistantMarkdownCode } from "./assistant-markdown-code"
+import { QuoteSelectable } from "./quote-selectable"
 
 function animateControl(control: HTMLButtonElement) {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -217,7 +218,7 @@ export function AgentMessageItem({
             className="rounded-xl bg-destructive/10 px-4 py-3 text-destructive"
             role="alert"
           >
-            {message.content}
+            <QuoteSelectable>{message.content}</QuoteSelectable>
           </MessageContent>
         </motion.div>
       ) : (
@@ -228,14 +229,11 @@ export function AgentMessageItem({
             className={
               message.role === "user" ? "whitespace-pre-wrap" : undefined
             }
-            data-assistant-selectable={
-              message.role === "assistant" ? "" : undefined
-            }
           >
             {message.role === "assistant" ? (
               <AssistantStreamBody message={message} isStreaming={isStreaming} />
             ) : (
-              message.content
+              <QuoteSelectable>{message.content}</QuoteSelectable>
             )}
           </MessageContent>
           {message.role === "assistant" && message.status === "complete" ? (
@@ -274,14 +272,16 @@ function AssistantStreamBody({
         <AssistantProcess message={message} isStreaming={isStreaming} />
       ) : null}
       {text.trim() !== "" ? (
-        <MessageResponse
-          animated={isStreaming && !shouldReduceMotion}
-          isAnimating={isStreaming}
-          mode={isStreaming ? "streaming" : "static"}
-          components={{ code: AssistantMarkdownCode }}
-        >
-          {text}
-        </MessageResponse>
+        <QuoteSelectable>
+          <MessageResponse
+            animated={isStreaming && !shouldReduceMotion}
+            isAnimating={isStreaming}
+            mode={isStreaming ? "streaming" : "static"}
+            components={{ code: AssistantMarkdownCode }}
+          >
+            {text}
+          </MessageResponse>
+        </QuoteSelectable>
       ) : null}
     </div>
   )

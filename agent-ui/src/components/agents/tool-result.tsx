@@ -332,7 +332,12 @@ export function ToolResult({
                 className="overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
                 style={{ maxHeight }}
               >
-                <div className={cn("p-3", contentClassName)}>{children}</div>
+                <div
+                  className={cn("p-3", contentClassName)}
+                  data-assistant-selectable=""
+                >
+                  {children}
+                </div>
               </div>
 
               {canCopy || onRetry ? (
