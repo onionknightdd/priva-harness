@@ -199,7 +199,7 @@ function ComposerControls({
       <div
         className={cn(
           COMPOSER_MODEL_TRIGGER_MAX_CLASS,
-          "min-w-0 text-xs font-normal"
+          "w-max min-w-0 overflow-hidden text-xs font-normal"
         )}
         onClick={(event) => event.stopPropagation()}
         onPointerDown={(event) => event.stopPropagation()}
@@ -213,7 +213,7 @@ function ComposerControls({
         type="submit"
         variant="default"
         size="icon-xs"
-        className="shrink-0 rounded-full"
+        className="relative z-10 shrink-0 rounded-full"
         disabled={!canSubmit}
         aria-label={sendLabel}
         title={modelReady ? sendLabel : modelRequired}

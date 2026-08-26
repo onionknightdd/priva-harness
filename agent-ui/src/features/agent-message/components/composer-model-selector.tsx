@@ -188,11 +188,12 @@ function CollapsingInline({
   return (
     <motion.span
       aria-hidden={!open}
-      className="inline-flex min-w-0 max-w-full overflow-hidden align-middle"
+      className="inline-flex min-w-0 max-w-full flex-1 overflow-hidden align-middle"
       initial={false}
       style={{ maxWidth: "100%" }}
       animate={{
         width: open ? openWidth || "auto" : 0,
+        maxWidth: "100%",
         opacity: open ? 1 : 0,
       }}
       transition={
@@ -201,7 +202,7 @@ function CollapsingInline({
     >
       <span
         ref={measureRef}
-        className="inline-flex min-w-0 max-w-full items-center gap-1 pl-1 whitespace-nowrap"
+        className="flex min-w-0 w-full items-center gap-1 pl-1"
       >
         {children}
       </span>
@@ -240,7 +241,7 @@ function OverflowFadeText({
       ref={viewportRef}
       data-overflowing={overflowing || undefined}
       className={cn(
-        "min-w-0 overflow-hidden whitespace-nowrap",
+        "min-w-0 flex-1 overflow-hidden whitespace-nowrap",
         overflowing &&
           "[mask-image:linear-gradient(to_right,black_calc(100%-1.25rem),transparent)]",
         className
@@ -858,7 +859,7 @@ export function ComposerModelSelector({
             size="xs"
             className={cn(
               COMPOSER_MODEL_TRIGGER_MAX_CLASS,
-              "min-w-0 shrink cursor-pointer overflow-hidden border-0 bg-transparent px-1.5 shadow-none hover:bg-muted/40 dark:bg-transparent dark:hover:bg-muted/30",
+              "w-full min-w-0 max-w-full shrink justify-start cursor-pointer overflow-hidden border-0 bg-transparent px-1.5 shadow-none hover:bg-muted/40 dark:bg-transparent dark:hover:bg-muted/30",
               COMPOSER_TEXT_CLASS
             )}
           />
@@ -868,7 +869,7 @@ export function ComposerModelSelector({
           <motion.span
             key={selectionKey}
             className={cn(
-              "flex min-w-0 items-center",
+              "flex w-full min-w-0 items-center",
               COMPOSER_TEXT_CLASS
             )}
             initial={shouldReduceMotion ? false : { opacity: 0, y: 3 }}
