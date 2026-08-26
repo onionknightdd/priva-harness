@@ -1,0 +1,126 @@
+# ONLYOFFICE Docs (Document Server) all-in-one for local minikube testing.
+# One container bundles nginx, Document Server, PostgreSQL, RabbitMQ, and Redis.
+#
+# Apply:
+#   kubectl apply -f deploy/onlyoffice/all-in-one.yaml
+# Access:
+#   kubectl -n onlyoffice port-forward svc/onlyoffice 8080:80
+# Then open http://localhost:8080/welcome/ and http://localhost:8080/example/
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: onlyoffice
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: onlyoffice-jwt
+  namespace: onlyoffice
+type: Opaque
+stringData:
+  JWT_SECRET: onlyoffice-minikube-test-secret
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: onlyoffice
+  namespace: onlyoffice
+  labels:
+    app: onlyoffice
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: onlyoffice
+  template:
+    metadata:
+      labels:
+        app: onlyoffice
+    spec:
+      containers:
+        - name: documentserver
+          image: onlyoffice/documentserver:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+          env:
+            - name: JWT_ENABLED
+              value: "true"
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: onlyoffice-jwt
+                  key: JWT_SECRET
+            - name: JWT_HEADER
+              value: Authorization
+            - name: JWT_IN_BODY
+              value: "true"
+            - name: EXAMPLE_ENABLED
+              value: "true"
+            - name: ALLOW_PRIVATE_IP_ADDRESS
+              value: "true"
+            - name: ALLOW_META_IP_ADDRESS
+              value: "true"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: 2Gi
+            limits:
+              cpu: "2"
+              memory: 3500Mi
+          startupProbe:
+            httpGet:
+              path: /healthcheck
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /healthcheck
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /healthcheck
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 6
+          volumeMounts:
+            - name: data
+              mountPath: /var/www/onlyoffice/Data
+            - name: lib
+              mountPath: /var/lib/onlyoffice
+            - name: logs
+              mountPath: /var/log/onlyoffice
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: lib
+          emptyDir: {}
+        - name: logs
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: onlyoffice
+  namespace: onlyoffice
+  labels:
+    app: onlyoffice
+spec:
+  type: NodePort
+  selector:
+    app: onlyoffice
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      nodePort: 30080
