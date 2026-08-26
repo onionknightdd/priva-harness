@@ -111,7 +111,7 @@ export function OnlyOfficeSpreadsheetPreview({
         <iframe
           title={fileName}
           src={editorUrl}
-          className="absolute inset-x-0 -top-8 h-[calc(100%+2rem)] w-full border-0 bg-background"
+          className="absolute inset-x-0 -top-10 h-[calc(100%+2.5rem)] w-full border-0 bg-background"
           onLoad={(event) => {
             if (iframeLooksUnavailable(event.currentTarget)) {
               setEditorUrl(null)
