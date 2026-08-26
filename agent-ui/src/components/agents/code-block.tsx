@@ -39,6 +39,7 @@ export interface CodeBlockProps {
   copyable?: boolean
   onCopy?: () => void | Promise<void>
   className?: string
+  lineNumberLeftPad?: number
 }
 
 export function CodeBlock({
@@ -55,6 +56,7 @@ export function CodeBlock({
   copyable = true,
   onCopy,
   className,
+  lineNumberLeftPad = 0,
 }: CodeBlockProps) {
   const { t } = useTranslation()
   const reduce = useReducedMotion() ?? false
@@ -228,7 +230,14 @@ export function CodeBlock({
                       <span
                         className="shrink-0 select-none px-1.5 text-right tabular-nums text-muted-foreground/35"
                         style={{
-                          width: `calc(${String(lineDigits)}ch + 0.75rem)`,
+                          width:
+                            lineNumberLeftPad > 0
+                              ? `calc(${String(lineDigits)}ch + 0.375rem + ${String(lineNumberLeftPad)}px)`
+                              : `calc(${String(lineDigits)}ch + 0.75rem)`,
+                          paddingLeft:
+                            lineNumberLeftPad > 0
+                              ? `${String(lineNumberLeftPad)}px`
+                              : undefined,
                         }}
                       >
                         {lineNumber}
