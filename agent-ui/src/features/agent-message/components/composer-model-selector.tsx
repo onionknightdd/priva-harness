@@ -45,6 +45,7 @@ import {
 
 const COMPOSER_MENU_WIDTH_CLASS = "w-56 min-w-56 max-w-56 text-xs"
 const COMPOSER_TEXT_CLASS = "text-xs font-normal"
+export const COMPOSER_MODEL_TRIGGER_MAX_CLASS = "max-w-[calc(8rem*4/3)]"
 const EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const
 
 export type ComposerEffort = (typeof EFFORT_LEVELS)[number]
@@ -205,6 +206,48 @@ function CollapsingInline({
         {children}
       </span>
     </motion.span>
+  )
+}
+
+function OverflowFadeText({
+  children,
+  className,
+}: {
+  children: string
+  className?: string
+}) {
+  const viewportRef = React.useRef<HTMLSpanElement>(null)
+  const [overflowing, setOverflowing] = React.useState(false)
+
+  React.useLayoutEffect(() => {
+    const viewport = viewportRef.current
+    if (!viewport) {
+      return
+    }
+
+    const updateOverflowing = () => {
+      setOverflowing(viewport.scrollWidth > viewport.clientWidth + 1)
+    }
+
+    updateOverflowing()
+    const observer = new ResizeObserver(updateOverflowing)
+    observer.observe(viewport)
+    return () => observer.disconnect()
+  }, [children])
+
+  return (
+    <span
+      ref={viewportRef}
+      data-overflowing={overflowing || undefined}
+      className={cn(
+        "min-w-0 overflow-hidden whitespace-nowrap",
+        overflowing &&
+          "[mask-image:linear-gradient(to_right,black_calc(100%-1.25rem),transparent)]",
+        className
+      )}
+    >
+      {children}
+    </span>
   )
 }
 
@@ -814,7 +857,8 @@ export function ComposerModelSelector({
             variant="ghost"
             size="xs"
             className={cn(
-              "max-w-32 min-w-0 shrink cursor-pointer overflow-hidden border-0 bg-transparent px-1.5 shadow-none hover:bg-muted/40 dark:bg-transparent dark:hover:bg-muted/30",
+              COMPOSER_MODEL_TRIGGER_MAX_CLASS,
+              "min-w-0 shrink cursor-pointer overflow-hidden border-0 bg-transparent px-1.5 shadow-none hover:bg-muted/40 dark:bg-transparent dark:hover:bg-muted/30",
               COMPOSER_TEXT_CLASS
             )}
           />
@@ -846,9 +890,9 @@ export function ComposerModelSelector({
             )}
             {selection?.modelId ? (
               <CollapsingInline open={!iconOnly} measureKey={selection.modelId}>
-                <span className={cn("min-w-0 truncate", COMPOSER_TEXT_CLASS)}>
+                <OverflowFadeText className={COMPOSER_TEXT_CLASS}>
                   {selection.modelId}
-                </span>
+                </OverflowFadeText>
                 <ChevronDownIcon
                   className={cn(
                     "size-3 shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none",

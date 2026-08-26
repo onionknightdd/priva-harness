@@ -17,7 +17,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 
-import { ComposerModelSelector, type ComposerEffort } from "./composer-model-selector"
+import { ComposerModelSelector, COMPOSER_MODEL_TRIGGER_MAX_CLASS, type ComposerEffort } from "./composer-model-selector"
 
 export const composerDockTransition = {
   duration: 0.4,
@@ -197,7 +197,10 @@ function ComposerControls({
   return (
     <div className="flex min-w-0 items-center gap-1">
       <div
-        className="min-w-0 max-w-32 text-xs font-normal"
+        className={cn(
+          COMPOSER_MODEL_TRIGGER_MAX_CLASS,
+          "min-w-0 text-xs font-normal"
+        )}
         onClick={(event) => event.stopPropagation()}
         onPointerDown={(event) => event.stopPropagation()}
       >
@@ -263,7 +266,7 @@ export function AgentMessageComposer({
     ? leftWidth || 42
     : COMPOSER_MULTI_PAD
   const fieldPadRight = singleLine
-    ? rightWidth || 168
+    ? rightWidth || 212
     : COMPOSER_MULTI_PAD
 
   return (
