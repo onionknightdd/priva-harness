@@ -508,7 +508,7 @@ function WriteToolItem({
       icon={
         <FilePlusCornerIcon
           aria-hidden="true"
-          className="size-[1em] shrink-0 text-muted-foreground/70"
+          className="block size-[1em] shrink-0 text-muted-foreground/70"
         />
       }
       copyText={copyText || undefined}
@@ -552,7 +552,7 @@ function EditToolItem({
       icon={
         <FilePenLineIcon
           aria-hidden="true"
-          className="size-[1em] shrink-0 text-muted-foreground/70"
+          className="block size-[1em] shrink-0 text-muted-foreground/70"
         />
       }
       copyText={copyText || undefined}

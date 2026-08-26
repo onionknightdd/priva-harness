@@ -55,12 +55,12 @@ export function FilePathLink({
       whileTap={shouldReduceMotion ? undefined : { scale: 0.98 }}
       transition={{ duration: shouldReduceMotion ? 0 : 0.16 }}
       className={cn(
-        "relative z-10 inline-flex max-w-full min-w-0 pointer-events-auto items-center gap-0.5 text-left font-normal leading-none outline-none",
+        "relative z-10 inline-flex max-w-full min-w-0 pointer-events-auto items-center gap-0.5 align-middle text-left font-normal leading-none outline-none",
         className,
         "cursor-pointer bg-transparent p-0 underline-offset-2 focus-visible:ring-2 focus-visible:ring-ring",
         variant === "code"
-          ? "-translate-y-px align-middle text-sky-600 underline decoration-sky-600/50 hover:decoration-sky-600 dark:text-sky-400 dark:decoration-sky-400/50 dark:hover:decoration-sky-400"
-          : "align-baseline hover:underline"
+          ? "text-sky-600 underline decoration-sky-600/50 hover:decoration-sky-600 dark:text-sky-400 dark:decoration-sky-400/50 dark:hover:decoration-sky-400"
+          : "hover:underline"
       )}
     >
       {showIcon ? (

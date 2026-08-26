@@ -142,9 +142,9 @@ export function FileRead({
         <div className="pointer-events-none relative z-10 flex min-w-0 items-center gap-1 py-0.5">
           <Icon
             aria-hidden="true"
-            className="size-[1em] shrink-0 text-muted-foreground/70"
+            className="block size-[1em] shrink-0 text-muted-foreground/70"
           />
-          <span className="flex min-w-0 flex-none -translate-y-px items-baseline gap-2">
+          <span className="flex min-w-0 flex-none items-center gap-2 leading-none">
             {tool ? (
               <span className="shrink-0 font-medium text-muted-foreground/70">
                 {typeof tool === "string" || typeof tool === "number" ? (
@@ -160,23 +160,23 @@ export function FileRead({
               {file}
             </span>
           </span>
-          <span className="grid size-4 shrink-0 place-items-center text-muted-foreground/60">
+          <span className="grid size-[1em] shrink-0 place-items-center text-muted-foreground/60">
             {streaming ? (
               <LoaderCircle
                 aria-label="Reading file"
-                className={cn("size-3.5", !reduce && "animate-spin")}
+                className={cn("size-[1em]", !reduce && "animate-spin")}
               />
             ) : (
-              <Check aria-label="File read" className="size-3.5" />
+              <Check aria-label="File read" className="size-[1em]" />
             )}
           </span>
           <motion.span
             aria-hidden="true"
             animate={{ rotate: currentOpen ? 180 : 0 }}
             transition={reduce ? { duration: 0 } : SPRING_SWAP}
-            className="shrink-0 text-muted-foreground/70 opacity-0 transition-[opacity,transform] duration-200 group-hover/item:opacity-100 group-focus-within/item:opacity-100 motion-reduce:transition-none"
+            className="grid size-[1em] shrink-0 place-items-center text-muted-foreground/70 opacity-0 transition-[opacity,transform] duration-200 group-hover/item:opacity-100 group-focus-within/item:opacity-100 motion-reduce:transition-none"
           >
-            <ChevronDown className="size-3.5" />
+            <ChevronDown className="size-[1em]" />
           </motion.span>
         </div>
       </div>

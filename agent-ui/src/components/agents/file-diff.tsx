@@ -223,10 +223,10 @@ export function FileDiff({
           {icon ?? (
             <FileCode2
               aria-hidden="true"
-              className="size-[1em] shrink-0 text-muted-foreground/70"
+              className="block size-[1em] shrink-0 text-muted-foreground/70"
             />
           )}
-          <span className="min-w-0 -translate-y-px truncate font-medium leading-snug text-muted-foreground/70">
+          <span className="flex min-w-0 items-center gap-1 font-medium leading-none text-muted-foreground/70">
             {tool ? (
               typeof tool === "string" || typeof tool === "number" ? (
                 <ActionSwapRollText value={String(tool)}>
@@ -236,36 +236,35 @@ export function FileDiff({
                 tool
               )
             ) : null}
-            {tool ? " " : null}
             {file}
             {additions > 0 ? (
               <span className="font-normal text-emerald-600 tabular-nums lining-nums dark:text-emerald-400">
-                {` +${String(additions)}`}
+                {`+${String(additions)}`}
               </span>
             ) : null}
             {deletions > 0 ? (
               <span className="font-normal text-rose-600 tabular-nums lining-nums dark:text-rose-400">
-                {` −${String(deletions)}`}
+                {`−${String(deletions)}`}
               </span>
             ) : null}
           </span>
-          <span className="grid size-4 shrink-0 place-items-center text-muted-foreground/60">
+          <span className="grid size-[1em] shrink-0 place-items-center text-muted-foreground/60">
             {streaming ? (
               <LoaderCircle
                 aria-label="Applying changes"
-                className={cn("size-3.5", !reduce && "animate-spin")}
+                className={cn("size-[1em]", !reduce && "animate-spin")}
               />
             ) : (
-              <Check aria-label="Changes applied" className="size-3.5" />
+              <Check aria-label="Changes applied" className="size-[1em]" />
             )}
           </span>
           <motion.span
             aria-hidden="true"
             animate={{ rotate: currentOpen ? 180 : 0 }}
             transition={reduce ? { duration: 0 } : SPRING_SWAP}
-            className="shrink-0 text-muted-foreground/70 opacity-0 transition-[opacity,transform] duration-200 group-hover/item:opacity-100 group-focus-within/item:opacity-100 motion-reduce:transition-none"
+            className="grid size-[1em] shrink-0 place-items-center text-muted-foreground/70 opacity-0 transition-[opacity,transform] duration-200 group-hover/item:opacity-100 group-focus-within/item:opacity-100 motion-reduce:transition-none"
           >
-            <ChevronDown className="size-3.5" />
+            <ChevronDown className="size-[1em]" />
           </motion.span>
         </div>
       </div>
