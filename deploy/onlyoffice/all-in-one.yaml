@@ -6,6 +6,11 @@
 # Access:
 #   kubectl -n onlyoffice port-forward svc/onlyoffice 8080:80
 # Then open http://localhost:8080/welcome/ and http://localhost:8080/example/
+#
+# 9.4 example workaround: the bundled example fetches meta/config from siteUrl.
+# production-linux defaults to "/", which Node fetch cannot resolve, so /example/
+# crashes with "languages.forEach is not a function". Point siteUrl at the
+# port-forward URL and listen on loopback :8080 so that fetch stays in-pod.
 ---
 apiVersion: v1
 kind: Namespace
@@ -20,6 +25,32 @@ metadata:
 type: Opaque
 stringData:
   JWT_SECRET: onlyoffice-minikube-test-secret
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: onlyoffice-example-fix
+  namespace: onlyoffice
+data:
+  production-linux.json: |
+    {
+      "server": {
+        "siteUrl": "http://127.0.0.1:8080/",
+        "storageFolder": "/var/lib/onlyoffice/documentserver-example/files",
+        "enableForgotten": false
+      }
+    }
+  fix-nginx-8080.sh: |
+    #!/bin/bash
+    set +e
+    for _ in $(seq 1 90); do
+      [ -f /etc/nginx/conf.d/ds.conf ] && break
+      sleep 1
+    done
+    if [ -f /etc/nginx/conf.d/ds.conf ] && ! grep -q "listen 127.0.0.1:8080" /etc/nginx/conf.d/ds.conf; then
+      sed -i "s/listen 0.0.0.0:80;/listen 0.0.0.0:80;\\n  listen 127.0.0.1:8080;/" /etc/nginx/conf.d/ds.conf
+      nginx -s reload
+    fi
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -44,6 +75,11 @@ spec:
         - name: documentserver
           image: onlyoffice/documentserver:latest
           imagePullPolicy: IfNotPresent
+          command: ["/bin/bash", "-lc"]
+          args:
+            - |
+              bash /usr/local/bin/fix-nginx-8080.sh >/tmp/fix-nginx-8080.log 2>&1 &
+              exec /app/ds/run-document-server.sh
           ports:
             - name: http
               containerPort: 80
@@ -100,6 +136,12 @@ spec:
               mountPath: /var/lib/onlyoffice
             - name: logs
               mountPath: /var/log/onlyoffice
+            - name: example-fix
+              mountPath: /etc/onlyoffice/documentserver-example/production-linux.json
+              subPath: production-linux.json
+            - name: example-fix
+              mountPath: /usr/local/bin/fix-nginx-8080.sh
+              subPath: fix-nginx-8080.sh
       volumes:
         - name: data
           emptyDir: {}
@@ -107,6 +149,10 @@ spec:
           emptyDir: {}
         - name: logs
           emptyDir: {}
+        - name: example-fix
+          configMap:
+            name: onlyoffice-example-fix
+            defaultMode: 0755
 ---
 apiVersion: v1
 kind: Service
