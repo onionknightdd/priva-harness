@@ -150,23 +150,19 @@ export function AssistantProcess({
             <Button
               variant="ghost"
               size="sm"
-              className={cn(
-                "h-auto min-h-7 justify-start whitespace-normal px-0 py-0.5 text-left text-base font-medium text-muted-foreground has-data-[icon=inline-end]:pr-0 hover:bg-transparent hover:text-muted-foreground focus:bg-transparent focus:text-muted-foreground active:translate-y-0 active:bg-transparent active:text-muted-foreground aria-expanded:bg-transparent aria-expanded:text-muted-foreground aria-expanded:hover:bg-transparent aria-expanded:hover:text-muted-foreground dark:hover:bg-transparent dark:hover:text-muted-foreground dark:aria-expanded:bg-transparent",
-                summary === "" ? "h-7 items-center py-0" : "items-start"
-              )}
+              className="h-auto min-h-7 max-w-full min-w-0 justify-start whitespace-normal px-0 text-base font-medium text-muted-foreground has-data-[icon=inline-end]:pr-0 hover:bg-transparent hover:text-muted-foreground focus:bg-transparent focus:text-muted-foreground active:translate-y-0 active:bg-transparent active:text-muted-foreground aria-expanded:bg-transparent aria-expanded:text-muted-foreground aria-expanded:hover:bg-transparent aria-expanded:hover:text-muted-foreground dark:hover:bg-transparent dark:hover:text-muted-foreground dark:aria-expanded:bg-transparent"
             />
           }
         >
           {isStreaming ? (
-            <span className="flex min-w-0 flex-col items-start gap-0.5">
-              <span className="shimmer">{t("agentMessage.thinking")}</span>
+            <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+              <span className="shimmer shrink-0">{t("agentMessage.thinking")}</span>
               {summary === "" ? null : (
                 <motion.span
                   key={summary}
                   initial={shouldReduceMotion ? false : { opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}
-                  className="text-sm font-normal text-muted-foreground/80"
                 >
                   {summary}
                 </motion.span>
@@ -181,7 +177,7 @@ export function AssistantProcess({
           />
         </CollapsibleTrigger>
         <CollapsibleContent className={PANEL_CLASS}>
-          <ProcessItemGroup>{rows}</ProcessItemGroup>
+          {rows.length > 0 ? <ProcessItemGroup>{rows}</ProcessItemGroup> : null}
         </CollapsibleContent>
       </Collapsible>
     </motion.div>
