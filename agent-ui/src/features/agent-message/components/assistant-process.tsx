@@ -22,6 +22,9 @@ import {
 import { MessageResponse } from "@/components/ai-elements/message"
 import { Badge } from "@/components/ui/badge"
 import { writeClipboardText } from "@/lib/clipboard"
+import { FilePathLink } from "@/features/files/file-path-link"
+import { useChatSession } from "@/features/chat-session"
+import { fileNameFromPath, resolveAgainstCwd } from "@/lib/file-path"
 import {
   Collapsible,
   CollapsibleContent,
@@ -449,6 +452,28 @@ function useTypedCommand(target: string, streaming: boolean): {
   return { text: shown, caret: streaming || shown !== target }
 }
 
+function ToolFileName({
+  path,
+  status,
+}: {
+  path: string | undefined
+  status: string
+}) {
+  const { runCwd } = useChatSession()
+  if (path === undefined || path.trim() === "") {
+    return ""
+  }
+
+  return (
+    <FilePathLink
+      path={resolveAgainstCwd(path, runCwd)}
+      label={fileNameFromPath(path)}
+      recheckKey={status}
+      className="text-muted-foreground/70"
+    />
+  )
+}
+
 function WriteToolItem({
   block,
 }: {
@@ -476,7 +501,7 @@ function WriteToolItem({
   return (
     <FileDiff
       tool={toolItemStatusLabel(block.name, running, t)}
-      file={fileNameFromPath(filePath)}
+      file={<ToolFileName path={filePath} status={status} />}
       lines={lines}
       status={running ? "streaming" : "complete"}
       language={languageFromPath(filePath)}
@@ -520,7 +545,7 @@ function EditToolItem({
   return (
     <FileDiff
       tool={toolItemStatusLabel(block.name, running, t)}
-      file={fileNameFromPath(filePath)}
+      file={<ToolFileName path={filePath} status={status} />}
       lines={lines}
       status={running ? "streaming" : "complete"}
       language={languageFromPath(filePath)}
@@ -562,7 +587,7 @@ function ReadToolItem({
   return (
     <FileRead
       tool={toolItemStatusLabel(block.name, running, t)}
-      file={fileNameFromPath(filePath)}
+      file={<ToolFileName path={filePath} status={status} />}
       imageHint={isImageFilePath(filePath)}
       view={view}
       status={running ? "streaming" : "complete"}
@@ -781,15 +806,6 @@ function formatElapsedMs(ms: number): string {
   const minutes = Math.floor(totalSeconds / 60)
   const seconds = totalSeconds % 60
   return `${String(minutes)}m ${String(seconds).padStart(2, "0")}s`
-}
-
-function fileNameFromPath(path: string | undefined): string {
-  if (path === undefined || path.trim() === "") {
-    return ""
-  }
-  const trimmed = path.trim().replaceAll("\\", "/")
-  const parts = trimmed.split("/")
-  return parts.at(-1) || trimmed
 }
 
 function jsonInputOpen(raw: string | undefined): boolean {

@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/sidebar"
 
 import { WorkspaceDensityBridge } from "./workspace-density"
+import { WorkspaceFilesProvider } from "./workspace-files-context"
 import { WorkspaceSidebar } from "./workspace-sidebar"
 import { WorkspacePanelButtons } from "./workspace-toggle"
 
@@ -111,32 +112,34 @@ export function WorkspaceShell({
       widthCookieName="workspace_width"
       stateCookieName="workspace_state"
     >
-      <WorkspaceDensityBridge
-        maximized={maximized}
-        shellWidth={layout.shellWidth}
-        workspaceEnabled={workspaceEnabled}
-      >
-        <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
-          {children}
-        </SidebarInset>
-        {workspaceEnabled && (
-          <>
-            <WorkspacePanelButtons
-              maximized={maximized}
-              onMaximizedChange={setMaximized}
-            />
-            <WorkspaceSidebar
-              resizable={!maximized}
-              className={maximized ? "z-30" : undefined}
-              style={
-                maximized && maximizedWidth > 0
-                  ? { width: `${maximizedWidth}px` }
-                  : undefined
-              }
-            />
-          </>
-        )}
-      </WorkspaceDensityBridge>
+      <WorkspaceFilesProvider>
+        <WorkspaceDensityBridge
+          maximized={maximized}
+          shellWidth={layout.shellWidth}
+          workspaceEnabled={workspaceEnabled}
+        >
+          <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
+            {children}
+          </SidebarInset>
+          {workspaceEnabled && (
+            <>
+              <WorkspacePanelButtons
+                maximized={maximized}
+                onMaximizedChange={setMaximized}
+              />
+              <WorkspaceSidebar
+                resizable={!maximized}
+                className={maximized ? "z-30" : undefined}
+                style={
+                  maximized && maximizedWidth > 0
+                    ? { width: `${maximizedWidth}px` }
+                    : undefined
+                }
+              />
+            </>
+          )}
+        </WorkspaceDensityBridge>
+      </WorkspaceFilesProvider>
     </SidebarProvider>
   )
 }

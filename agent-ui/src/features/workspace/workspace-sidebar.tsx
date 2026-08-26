@@ -12,7 +12,7 @@ import { EASE_OUT } from "@/lib/ease"
 import { cn } from "@/lib/utils"
 
 import { WorkspaceHome } from "./workspace-home"
-import { type WorkspaceModuleId } from "./workspace-modules"
+import { useWorkspaceFiles } from "./workspace-files-context"
 import { WorkspaceTabs } from "./workspace-tabs"
 import { WorkspaceToggle } from "./workspace-toggle"
 
@@ -27,8 +27,7 @@ export function WorkspaceSidebar({
 }) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
-  const [activeTabId, setActiveTabId] =
-    React.useState<WorkspaceModuleId | null>(null)
+  const { activeTabId, setActiveTabId } = useWorkspaceFiles()
 
   const tabMode = activeTabId !== null
   const motionTransition = shouldReduceMotion

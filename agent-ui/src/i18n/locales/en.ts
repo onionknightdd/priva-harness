@@ -110,6 +110,7 @@ export const en = {
       "This turn is not saved yet, so it cannot be forked from the middle.",
     forkFailed: "Unable to fork this chat",
     forking: "Forking…",
+    openFile: "Open {{name}}",
     justNow: "just now",
     mockAssistantReply:
       "Sure. This is a local preview reply. I'll stream it in so you can check scrolling, the caret, and message layout. A live model will replace this mock once streaming is connected.",

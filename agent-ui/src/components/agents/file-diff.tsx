@@ -208,62 +208,67 @@ export function FileDiff({
       aria-busy={streaming}
       className={cn("w-full text-base", className)}
     >
-      <button
-        id={triggerId}
-        type="button"
-        aria-expanded={currentOpen}
-        aria-controls={contentId}
-        onClick={() => setOpen(!currentOpen)}
-        className="group/item flex w-fit max-w-full min-h-0 items-center gap-1 rounded-md py-0.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-      >
-        {icon ?? (
-          <FileCode2
-            aria-hidden="true"
-            className="size-[1em] shrink-0 text-muted-foreground/70"
-          />
-        )}
-        <span className="min-w-0 truncate font-medium leading-snug text-muted-foreground/70">
-          {tool ? (
-            typeof tool === "string" || typeof tool === "number" ? (
-              <ActionSwapRollText value={String(tool)}>
-                {tool}
-              </ActionSwapRollText>
-            ) : (
-              tool
-            )
-          ) : null}
-          {tool ? " " : null}
-          {file}
-          {additions > 0 ? (
-            <span className="font-normal text-emerald-600 tabular-nums lining-nums dark:text-emerald-400">
-              {` +${String(additions)}`}
-            </span>
-          ) : null}
-          {deletions > 0 ? (
-            <span className="font-normal text-rose-600 tabular-nums lining-nums dark:text-rose-400">
-              {` −${String(deletions)}`}
-            </span>
-          ) : null}
-        </span>
-        <span className="grid size-4 shrink-0 place-items-center text-muted-foreground/60">
-          {streaming ? (
-            <LoaderCircle
-              aria-label="Applying changes"
-              className={cn("size-3.5", !reduce && "animate-spin")}
-            />
-          ) : (
-            <Check aria-label="Changes applied" className="size-3.5" />
-          )}
-        </span>
-        <motion.span
-          aria-hidden="true"
-          animate={{ rotate: currentOpen ? 180 : 0 }}
-          transition={reduce ? { duration: 0 } : SPRING_SWAP}
-          className="shrink-0 text-muted-foreground/70 opacity-0 transition-[opacity,transform] duration-200 group-hover/item:opacity-100 group-focus-visible/item:opacity-100 motion-reduce:transition-none"
+      <div className="group/item relative flex w-fit max-w-full min-h-0 items-center gap-1">
+        <button
+          id={triggerId}
+          type="button"
+          aria-expanded={currentOpen}
+          aria-controls={contentId}
+          onClick={() => setOpen(!currentOpen)}
+          className="absolute inset-0 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
-          <ChevronDown className="size-3.5" />
-        </motion.span>
-      </button>
+          <span className="sr-only">{currentOpen ? "Collapse" : "Expand"}</span>
+        </button>
+        <div className="pointer-events-none relative z-10 flex min-w-0 items-center gap-1 py-0.5">
+          {icon ?? (
+            <FileCode2
+              aria-hidden="true"
+              className="size-[1em] shrink-0 text-muted-foreground/70"
+            />
+          )}
+          <span className="min-w-0 truncate font-medium leading-snug text-muted-foreground/70">
+            {tool ? (
+              typeof tool === "string" || typeof tool === "number" ? (
+                <ActionSwapRollText value={String(tool)}>
+                  {tool}
+                </ActionSwapRollText>
+              ) : (
+                tool
+              )
+            ) : null}
+            {tool ? " " : null}
+            {file}
+            {additions > 0 ? (
+              <span className="font-normal text-emerald-600 tabular-nums lining-nums dark:text-emerald-400">
+                {` +${String(additions)}`}
+              </span>
+            ) : null}
+            {deletions > 0 ? (
+              <span className="font-normal text-rose-600 tabular-nums lining-nums dark:text-rose-400">
+                {` −${String(deletions)}`}
+              </span>
+            ) : null}
+          </span>
+          <span className="grid size-4 shrink-0 place-items-center text-muted-foreground/60">
+            {streaming ? (
+              <LoaderCircle
+                aria-label="Applying changes"
+                className={cn("size-3.5", !reduce && "animate-spin")}
+              />
+            ) : (
+              <Check aria-label="Changes applied" className="size-3.5" />
+            )}
+          </span>
+          <motion.span
+            aria-hidden="true"
+            animate={{ rotate: currentOpen ? 180 : 0 }}
+            transition={reduce ? { duration: 0 } : SPRING_SWAP}
+            className="shrink-0 text-muted-foreground/70 opacity-0 transition-[opacity,transform] duration-200 group-hover/item:opacity-100 group-focus-within/item:opacity-100 motion-reduce:transition-none"
+          >
+            <ChevronDown className="size-3.5" />
+          </motion.span>
+        </div>
+      </div>
 
       <AgentDisclosure
         id={contentId}

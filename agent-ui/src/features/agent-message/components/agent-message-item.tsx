@@ -30,6 +30,7 @@ import {
   type AgentThreadMessage,
 } from "../agent-message-data"
 import { AssistantProcess } from "./assistant-process"
+import { AssistantMarkdownCode } from "./assistant-markdown-code"
 
 function animateControl(control: HTMLButtonElement) {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -274,6 +275,7 @@ function AssistantStreamBody({
           animated={isStreaming && !shouldReduceMotion}
           isAnimating={isStreaming}
           mode={isStreaming ? "streaming" : "static"}
+          components={{ code: AssistantMarkdownCode }}
         >
           {text}
         </MessageResponse>

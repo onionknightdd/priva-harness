@@ -109,6 +109,7 @@ export const zhCN = {
     forkNeedsTranscript: "该轮回复尚未写入会话记录，暂时无法从中间分支",
     forkFailed: "无法创建对话分支",
     forking: "正在创建分支…",
+    openFile: "打开 {{name}}",
     justNow: "刚刚",
     mockAssistantReply:
       "好的。这是一条本地预览回复，我会用流式输出把内容逐字写出来，方便你检查滚动、光标和消息布局。实时模型接入后会换成真实回答。",

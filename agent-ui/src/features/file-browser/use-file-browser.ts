@@ -14,6 +14,7 @@ import {
   emptyFileBrowserModel,
   getFileBrowserBreadcrumb,
   getFileBrowserParentPath,
+  getFileBrowserPathName,
   isSameOrDescendantPath,
   mergeDirectoryListing,
   previewResponseToFile,
@@ -136,7 +137,7 @@ export function useFileBrowser() {
     return loadDirectory()
       .then((directory) => {
         setRootPath(directory.path)
-        setSelectedItemPath(directory.path)
+        setSelectedItemPath((current) => current ?? directory.path)
       })
       .catch((error: unknown) => {
         setInitialError(errorMessage(error))
@@ -213,6 +214,26 @@ export function useFileBrowser() {
     previewRequestsRef.current.set(item.path, request)
     return request
   }, [])
+
+  const openPath = React.useCallback(
+    async (path: string) => {
+      const parentPath = getFileBrowserParentPath(path)
+      if (parentPath) {
+        await loadDirectory(parentPath, parentPath).catch(() => undefined)
+      }
+
+      return openFile({
+        path,
+        name: getFileBrowserPathName(path),
+        type: "file",
+        size: null,
+        modifiedAt: null,
+        permissions: null,
+        parentPath,
+      })
+    },
+    [loadDirectory, openFile]
+  )
 
   const selectItem = React.useCallback(
     async (path: string, shouldLoadDirectory = true) => {
@@ -420,6 +441,7 @@ export function useFileBrowser() {
     navigateBreadcrumb,
     openedFiles,
     openFile,
+    openPath,
     refreshDirectory,
     refreshLoadedDirectories,
     rootPath,

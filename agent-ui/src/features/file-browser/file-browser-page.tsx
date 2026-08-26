@@ -21,6 +21,7 @@ import {
 } from "./file-browser-data"
 import { useFileBrowser } from "./use-file-browser"
 import { useTreePanelVisibility } from "./use-tree-panel-visibility"
+import { useOptionalWorkspaceFiles } from "@/features/workspace"
 
 export function FileBrowserPage({
   className,
@@ -31,6 +32,8 @@ export function FileBrowserPage({
 }) {
   const { t } = useTranslation()
   const browser = useFileBrowser()
+  const { openPath } = browser
+  const workspaceFiles = useOptionalWorkspaceFiles()
   const isMobile = useIsMobile()
   const pageRef = React.useRef<HTMLDivElement>(null)
   const uploadInputRef = React.useRef<HTMLInputElement>(null)
@@ -83,6 +86,30 @@ export function FileBrowserPage({
 
     return () => context.revert()
   }, [])
+
+  React.useEffect(() => {
+    if (!compact) {
+      return
+    }
+
+    const path = workspaceFiles?.pendingFilePath
+    if (!path) {
+      return
+    }
+
+    void openPath(path).then(() => {
+      if (isMobile) {
+        setTreeVisible(false)
+      }
+    })
+  }, [
+    compact,
+    isMobile,
+    openPath,
+    setTreeVisible,
+    workspaceFiles?.fileOpenNonce,
+    workspaceFiles?.pendingFilePath,
+  ])
 
   React.useEffect(
     () => () => {
