@@ -21,7 +21,6 @@ import {
 } from "@/components/agents/tool-result"
 import { MessageResponse } from "@/components/ai-elements/message"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { writeClipboardText } from "@/lib/clipboard"
 import {
   Collapsible,
@@ -145,35 +144,18 @@ export function AssistantProcess({
           }
         }}
       >
-        <CollapsibleTrigger
-          render={
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-auto min-h-7 max-w-full min-w-0 justify-start whitespace-normal px-0 text-base font-medium text-muted-foreground has-data-[icon=inline-end]:pr-0 hover:bg-transparent hover:text-muted-foreground focus:bg-transparent focus:text-muted-foreground active:translate-y-0 active:bg-transparent active:text-muted-foreground aria-expanded:bg-transparent aria-expanded:text-muted-foreground aria-expanded:hover:bg-transparent aria-expanded:hover:text-muted-foreground dark:hover:bg-transparent dark:hover:text-muted-foreground dark:aria-expanded:bg-transparent"
-            />
-          }
-        >
+        <CollapsibleTrigger className="group/process-trigger flex max-w-full min-w-0 items-center gap-1 rounded-md bg-transparent px-0 py-0.5 text-left text-sm leading-snug font-medium text-muted-foreground/70 outline-none hover:text-muted-foreground/70 focus-visible:ring-2 focus-visible:ring-ring">
           {isStreaming ? (
-            <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
-              <span className="shimmer shrink-0">{t("agentMessage.thinking")}</span>
-              {summary === "" ? null : (
-                <motion.span
-                  key={summary}
-                  initial={shouldReduceMotion ? false : { opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}
-                >
-                  {summary}
-                </motion.span>
-              )}
+            <span className="shimmer min-w-0 whitespace-normal">
+              {summary === ""
+                ? t("agentMessage.thinking")
+                : `${t("agentMessage.thinking")} ${summary}`}
             </span>
           ) : (
             t("agentMessage.chainOfThought")
           )}
           <ChevronDownIcon
-            data-icon="inline-end"
-            className="opacity-0 transition-[opacity,transform] duration-200 group-hover/button:opacity-100 group-focus-visible/button:opacity-100 group-data-open/process:rotate-180 motion-reduce:transition-none"
+            className="size-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-200 group-hover/process-trigger:opacity-100 group-focus-visible/process-trigger:opacity-100 group-data-open/process:rotate-180 motion-reduce:transition-none"
           />
         </CollapsibleTrigger>
         <CollapsibleContent className={PANEL_CLASS}>
