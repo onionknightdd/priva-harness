@@ -26,7 +26,6 @@
   flex: 1 0 auto;
   min-width: min-content;
   min-height: 1.25rem;
-  line-height: 1.25rem;
 }
 
 .agent-shiki.agent-shiki-wrap .line {
@@ -43,12 +42,8 @@
 .agent-shiki.has-diff .line.diff.add::before,
 .agent-shiki.has-diff .line.diff.remove::before {
   position: absolute;
-  left: 0;
-  top: 0;
-  width: 1.15rem;
-  height: 1.25rem;
-  line-height: 1.25rem;
-  text-align: center;
+  left: 0.15rem;
+  width: 0.85rem;
   font-weight: 500;
 }
 

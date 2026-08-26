@@ -85,7 +85,7 @@ function gutterWidth(digits: number): string | undefined {
   if (digits <= 0) {
     return undefined;
   }
-  return `calc(${String(digits)}ch + 0.5rem)`;
+  return `calc(${String(digits)}ch + 0.75rem)`;
 }
 
 function ChangeCount({ value, type }: { value: number; type: "added" | "removed" }) {
@@ -93,7 +93,7 @@ function ChangeCount({ value, type }: { value: number; type: "added" | "removed"
   return (
     <span
       className={cn(
-        "font-mono text-xs tabular-nums",
+        "shrink-0 font-medium tabular-nums",
         type === "added"
           ? "text-emerald-600 dark:text-emerald-400"
           : "text-rose-600 dark:text-rose-400",
@@ -254,8 +254,6 @@ export function FileDiff({
           <span className="min-w-0 truncate font-medium text-muted-foreground/70">
             {file}
           </span>
-        </span>
-        <span className="flex shrink-0 items-center gap-2">
           <ChangeCount value={additions} type="added" />
           <ChangeCount value={deletions} type="removed" />
         </span>
@@ -291,7 +289,7 @@ export function FileDiff({
               ref={viewportRef}
               data-slot="file-diff-viewport"
               aria-live="polite"
-              className="scrollbar-hide overflow-auto pt-[8px]"
+              className="scrollbar-hide overflow-auto pl-[4px] pt-[8px]"
               style={{ maxHeight }}
             >
               <pre className="agent-shiki shiki has-diff m-0 inline-block min-w-full whitespace-normal font-mono text-xs leading-5">
@@ -303,14 +301,14 @@ export function FileDiff({
                       <span
                         key={line.id}
                         className={cn(
-                          "flex min-h-5 min-w-full items-baseline",
+                          "flex min-w-full",
                           type === "added" && "bg-emerald-500/[0.07]",
                           type === "removed" && "bg-rose-500/[0.07]",
                         )}
                       >
                         {lineDigits > 0 ? (
                           <span
-                            className="shrink-0 select-none pr-2 text-left tabular-nums leading-5 text-muted-foreground/40"
+                            className="shrink-0 select-none px-1.5 text-right tabular-nums text-muted-foreground/40"
                             style={
                               lineGutterWidth === undefined
                                 ? undefined
