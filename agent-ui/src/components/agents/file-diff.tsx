@@ -88,23 +88,6 @@ function gutterWidth(digits: number): string | undefined {
   return `calc(${String(digits)}ch + 0.75rem)`;
 }
 
-function ChangeCount({ value, type }: { value: number; type: "added" | "removed" }) {
-  if (!value) return null;
-  return (
-    <span
-      className={cn(
-        "inline-flex h-[1em] shrink-0 items-center font-medium leading-none tabular-nums lining-nums",
-        type === "added"
-          ? "text-emerald-600 dark:text-emerald-400"
-          : "text-rose-600 dark:text-rose-400",
-      )}
-    >
-      {type === "added" ? "+" : "−"}
-      {value}
-    </span>
-  );
-}
-
 export function FileDiff({
   file,
   lines,
@@ -239,23 +222,28 @@ export function FileDiff({
             className="size-[1em] shrink-0 text-muted-foreground/70"
           />
         )}
-        <span className="flex min-w-0 flex-none items-center gap-2 leading-none">
+        <span className="min-w-0 truncate font-medium leading-snug text-muted-foreground/70">
           {tool ? (
-            <span className="inline-flex h-[1em] shrink-0 items-center font-medium text-muted-foreground/70">
-              {typeof tool === "string" || typeof tool === "number" ? (
-                <ActionSwapRollText value={String(tool)}>
-                  {tool}
-                </ActionSwapRollText>
-              ) : (
-                tool
-              )}
+            typeof tool === "string" || typeof tool === "number" ? (
+              <ActionSwapRollText value={String(tool)}>
+                {tool}
+              </ActionSwapRollText>
+            ) : (
+              tool
+            )
+          ) : null}
+          {tool ? " " : null}
+          {file}
+          {additions > 0 ? (
+            <span className="font-normal text-emerald-600 tabular-nums lining-nums dark:text-emerald-400">
+              {` +${String(additions)}`}
             </span>
           ) : null}
-          <span className="h-[1em] min-w-0 truncate font-medium leading-none text-muted-foreground/70">
-            {file}
-          </span>
-          <ChangeCount value={additions} type="added" />
-          <ChangeCount value={deletions} type="removed" />
+          {deletions > 0 ? (
+            <span className="font-normal text-rose-600 tabular-nums lining-nums dark:text-rose-400">
+              {` −${String(deletions)}`}
+            </span>
+          ) : null}
         </span>
         <span className="grid size-4 shrink-0 place-items-center text-muted-foreground/60">
           {streaming ? (
