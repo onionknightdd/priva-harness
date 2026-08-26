@@ -195,9 +195,9 @@ function ComposerControls({
   onEffortChange: (effort: ComposerEffort) => void
 }) {
   return (
-    <>
+    <div className="flex min-w-0 items-center gap-1">
       <div
-        className="min-w-0 max-w-full text-xs font-normal"
+        className="min-w-0 max-w-32 text-xs font-normal"
         onClick={(event) => event.stopPropagation()}
         onPointerDown={(event) => event.stopPropagation()}
       >
@@ -210,14 +210,14 @@ function ComposerControls({
         type="submit"
         variant="default"
         size="icon-xs"
-        className="rounded-full"
+        className="shrink-0 rounded-full"
         disabled={!canSubmit}
         aria-label={sendLabel}
         title={modelReady ? sendLabel : modelRequired}
       >
         <ArrowUpIcon />
       </InputGroupButton>
-    </>
+    </div>
   )
 }
 
@@ -263,7 +263,7 @@ export function AgentMessageComposer({
     ? leftWidth || 42
     : COMPOSER_MULTI_PAD
   const fieldPadRight = singleLine
-    ? rightWidth || 220
+    ? rightWidth || 168
     : COMPOSER_MULTI_PAD
 
   return (
@@ -363,11 +363,11 @@ export function AgentMessageComposer({
             <div className="min-w-0 flex-1" />
             <div
               ref={rightRef}
-              className="pointer-events-auto max-w-64 shrink-0 pr-2.5"
+              className="pointer-events-auto min-w-0 shrink-0 pr-2.5"
             >
               <InputGroupAddon
                 align="inline-end"
-                className="gap-1 p-0 has-[>button]:mr-0!"
+                className="min-w-0 justify-end gap-1 p-0 has-[>button]:mr-0!"
               >
                 <ComposerControls
                   canSubmit={canSubmit}

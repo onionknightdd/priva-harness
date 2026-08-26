@@ -187,8 +187,9 @@ function CollapsingInline({
   return (
     <motion.span
       aria-hidden={!open}
-      className="inline-flex overflow-hidden align-middle"
+      className="inline-flex min-w-0 max-w-full overflow-hidden align-middle"
       initial={false}
+      style={{ maxWidth: "100%" }}
       animate={{
         width: open ? openWidth || "auto" : 0,
         opacity: open ? 1 : 0,
@@ -199,7 +200,7 @@ function CollapsingInline({
     >
       <span
         ref={measureRef}
-        className="inline-flex items-center gap-1 pl-1 whitespace-nowrap"
+        className="inline-flex min-w-0 max-w-full items-center gap-1 pl-1 whitespace-nowrap"
       >
         {children}
       </span>
@@ -813,7 +814,7 @@ export function ComposerModelSelector({
             variant="ghost"
             size="xs"
             className={cn(
-              "max-w-64 min-w-0 cursor-pointer border-0 bg-transparent px-1.5 shadow-none hover:bg-muted/40 dark:bg-transparent dark:hover:bg-muted/30",
+              "max-w-32 min-w-0 shrink cursor-pointer overflow-hidden border-0 bg-transparent px-1.5 shadow-none hover:bg-muted/40 dark:bg-transparent dark:hover:bg-muted/30",
               COMPOSER_TEXT_CLASS
             )}
           />
@@ -845,7 +846,9 @@ export function ComposerModelSelector({
             )}
             {selection?.modelId ? (
               <CollapsingInline open={!iconOnly} measureKey={selection.modelId}>
-                <span className={COMPOSER_TEXT_CLASS}>{selection.modelId}</span>
+                <span className={cn("min-w-0 truncate", COMPOSER_TEXT_CLASS)}>
+                  {selection.modelId}
+                </span>
                 <ChevronDownIcon
                   className={cn(
                     "size-3 shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none",
