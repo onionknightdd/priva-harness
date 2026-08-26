@@ -2,7 +2,11 @@ import * as React from "react"
 import { motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
-import { createOfficePreviewSession } from "@/lib/api/sandbox-office"
+import { createLocalOnlyOfficePreviewSession } from "@/lib/api/onlyoffice-example"
+import {
+  createOfficePreviewSession,
+  type OfficePreviewSession,
+} from "@/lib/api/sandbox-office"
 import { EASE_OUT } from "@/lib/ease"
 
 import { PreviewRequestState } from "../preview-request-state"
@@ -11,6 +15,8 @@ import {
   loadOnlyOfficeApi,
 } from "./onlyoffice-api"
 import { SpreadsheetRenderer } from "./spreadsheet-renderer"
+
+const EDITOR_READY_TIMEOUT_MS = 45_000
 
 export function OnlyOfficeSpreadsheetPreview({
   fileId,
@@ -51,7 +57,7 @@ export function OnlyOfficeSpreadsheetPreview({
       if (!cancelled) {
         setStatus((current) => (current === "loading" ? "fallback" : current))
       }
-    }, 12_000)
+    }, EDITOR_READY_TIMEOUT_MS)
 
     const destroyEditor = () => {
       editorRef.current?.destroyEditor()
@@ -60,10 +66,13 @@ export function OnlyOfficeSpreadsheetPreview({
 
     void (async () => {
       try {
-        const session = await createOfficePreviewSession(
+        const session = await resolveOfficePreviewSession({
+          fileName,
           filePath,
-          controller.signal
-        )
+          mediaType,
+          source,
+          signal: controller.signal,
+        })
         const docsApi = await loadOnlyOfficeApi(session.documentServerUrl)
         if (cancelled) {
           return
@@ -73,7 +82,16 @@ export function OnlyOfficeSpreadsheetPreview({
           documentType: "cell",
           width: "100%",
           height: "100%",
-          document: session.document,
+          document: {
+            ...session.document,
+            permissions: {
+              comment: false,
+              download: true,
+              edit: false,
+              print: true,
+              review: false,
+            },
+          },
           editorConfig: {
             mode: "view",
             lang: i18n.language.startsWith("zh") ? "zh" : "en",
@@ -122,7 +140,7 @@ export function OnlyOfficeSpreadsheetPreview({
       destroyEditor()
       host.replaceChildren()
     }
-  }, [filePath, i18n.language, placeholderId])
+  }, [fileName, filePath, i18n.language, mediaType, placeholderId, source])
 
   React.useEffect(() => {
     if (status !== "fallback") {
@@ -167,4 +185,39 @@ export function OnlyOfficeSpreadsheetPreview({
       <div ref={hostRef} className="h-full min-h-0 w-full" />
     </div>
   )
+}
+
+async function resolveOfficePreviewSession(input: {
+  fileName: string
+  filePath: string
+  mediaType: string
+  source: string
+  signal: AbortSignal
+}): Promise<OfficePreviewSession> {
+  const bytes = await downloadWorkbookBytes(input.source, input.signal)
+
+  try {
+    return await createLocalOnlyOfficePreviewSession({
+      fileName: input.fileName,
+      filePath: input.filePath,
+      mediaType: input.mediaType,
+      bytes,
+      signal: input.signal,
+    })
+  } catch (error) {
+    if (input.signal.aborted) {
+      throw error
+    }
+  }
+
+  return createOfficePreviewSession(input.filePath, input.signal)
+}
+
+async function downloadWorkbookBytes(source: string, signal: AbortSignal) {
+  const response = await fetch(source, { cache: "no-store", signal })
+  if (!response.ok) {
+    throw new Error(response.statusText || `HTTP ${response.status}`)
+  }
+
+  return response.arrayBuffer()
 }

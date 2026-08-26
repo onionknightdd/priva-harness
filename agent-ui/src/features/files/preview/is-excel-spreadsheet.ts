@@ -1,5 +1,3 @@
-const EXCEL_EXTENSIONS = new Set(["xlsx", "xlsm", "xltx", "xltm"])
-
 const EXCEL_MEDIA_TYPES = new Set([
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "application/vnd.ms-excel.sheet.macroenabled.12",
@@ -7,9 +5,26 @@ const EXCEL_MEDIA_TYPES = new Set([
   "application/vnd.ms-excel.template.macroenabled.12",
 ])
 
-export function isExcelSpreadsheetFile(fileName: string, mediaType: string) {
+export type ExcelWorkbookFileType = "xlsx" | "xlsm" | "xltx" | "xltm"
+
+export function excelWorkbookFileType(
+  fileName: string
+): ExcelWorkbookFileType | null {
   const extension = fileName.split(".").at(-1)?.toLocaleLowerCase()
-  if (extension && EXCEL_EXTENSIONS.has(extension)) {
+  if (
+    extension === "xlsx" ||
+    extension === "xlsm" ||
+    extension === "xltx" ||
+    extension === "xltm"
+  ) {
+    return extension
+  }
+
+  return null
+}
+
+export function isExcelSpreadsheetFile(fileName: string, mediaType: string) {
+  if (excelWorkbookFileType(fileName) !== null) {
     return true
   }
 

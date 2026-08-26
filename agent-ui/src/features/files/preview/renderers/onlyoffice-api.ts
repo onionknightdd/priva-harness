@@ -15,6 +15,13 @@ export type OnlyOfficeEditorConfig = {
     key: string
     title: string
     url: string
+    permissions: {
+      comment: false
+      download: true
+      edit: false
+      print: true
+      review: false
+    }
   }
   editorConfig: {
     mode: "view"

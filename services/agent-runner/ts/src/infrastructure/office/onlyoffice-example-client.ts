@@ -7,6 +7,11 @@ import { OnlyOfficePreviewError } from '../../core/resource/office-preview.js'
 export const DEFAULT_ONLYOFFICE_URL = 'http://127.0.0.1:8080'
 export const EXCEL_PREVIEW_EXTENSIONS = new Set(['xlsx', 'xlsm', 'xltx', 'xltm'])
 
+const UPLOAD_ENDPOINTS = [
+  { upload: '/example/upload', download: '/example/download' },
+  { upload: '/upload', download: '/download' },
+] as const
+
 export interface OnlyOfficeExampleClientOptions {
   readonly baseUrl?: string
   readonly fetchImpl?: typeof fetch
@@ -43,49 +48,68 @@ export function createOnlyOfficeExampleClient(
         )
       }
 
-      await assertHealthy(baseUrl, fetchImpl, timeoutMs)
+      let lastError: OnlyOfficePreviewError | null = null
 
-      const form = new FormData()
-      form.append(
-        'uploadedFile',
-        new Blob([input.bytes], {
-          type: input.mimeType === '' ? excelMimeType(fileType) : input.mimeType,
-        }),
-        input.fileName,
+      for (const endpoint of UPLOAD_ENDPOINTS) {
+        try {
+          const form = new FormData()
+          form.append(
+            'uploadedFile',
+            new Blob([input.bytes], {
+              type: input.mimeType === '' ? excelMimeType(fileType) : input.mimeType,
+            }),
+            input.fileName,
+          )
+
+          const upload = await request(
+            fetchImpl,
+            `${baseUrl}${endpoint.upload}`,
+            { method: 'POST', body: form },
+            timeoutMs,
+          )
+
+          if (!upload.ok) {
+            lastError = new OnlyOfficePreviewError(
+              upload.status >= 500 || upload.status === 0 ? 'unavailable' : 'upload-failed',
+              `OnlyOffice upload failed (${upload.status === 0 ? 'network' : upload.status})`,
+            )
+            continue
+          }
+
+          const payload = await readJson(upload)
+          const storedName = storedFileName(payload)
+          if (storedName === null) {
+            lastError = new OnlyOfficePreviewError(
+              'upload-failed',
+              'OnlyOffice upload did not return a file name',
+            )
+            continue
+          }
+
+          return {
+            documentServerUrl: baseUrl,
+            document: {
+              fileType,
+              key: documentKey(input.path, input.size, input.modified),
+              title: input.fileName,
+              url: `${baseUrl}${endpoint.download}?fileName=${encodeURIComponent(storedName)}`,
+            },
+          }
+        } catch (error) {
+          lastError = error instanceof OnlyOfficePreviewError
+            ? error
+            : new OnlyOfficePreviewError(
+              'unavailable',
+              'OnlyOffice service is not reachable',
+              { cause: error },
+            )
+        }
+      }
+
+      throw lastError ?? new OnlyOfficePreviewError(
+        'unavailable',
+        'OnlyOffice service is not reachable',
       )
-
-      const upload = await request(
-        fetchImpl,
-        `${baseUrl}/example/upload`,
-        { method: 'POST', body: form },
-        timeoutMs,
-      )
-
-      if (!upload.ok) {
-        throw new OnlyOfficePreviewError(
-          upload.status >= 500 || upload.status === 0 ? 'unavailable' : 'upload-failed',
-          `OnlyOffice upload failed (${upload.status === 0 ? 'network' : upload.status})`,
-        )
-      }
-
-      const payload = await readJson(upload)
-      const storedName = storedFileName(payload, input.fileName)
-      if (storedName === null || storedName.trim() === '') {
-        throw new OnlyOfficePreviewError(
-          'upload-failed',
-          'OnlyOffice upload did not return a file name',
-        )
-      }
-
-      return {
-        documentServerUrl: baseUrl,
-        document: {
-          fileType,
-          key: documentKey(input.path, input.size, input.modified),
-          title: input.fileName,
-          url: `${baseUrl}/example/download?fileName=${encodeURIComponent(storedName)}`,
-        },
-      }
     },
   }
 }
@@ -105,51 +129,34 @@ function documentKey(path: string, size: number, modified: number): string {
     .slice(0, 20)
 }
 
-function storedFileName(payload: unknown, fallback: string): string | null {
-  if (!isRecord(payload)) {
-    return fallback
-  }
-
-  if (typeof payload['error'] === 'string' && payload['error'].trim() !== '') {
-    throw new OnlyOfficePreviewError('upload-failed', payload['error'])
-  }
-
-  if (typeof payload['filename'] === 'string' && payload['filename'].trim() !== '') {
-    return payload['filename']
-  }
-
-  return fallback
-}
-
-async function assertHealthy(
-  baseUrl: string,
-  fetchImpl: typeof fetch,
-  timeoutMs: number,
-): Promise<void> {
-  try {
-    const response = await request(
-      fetchImpl,
-      `${baseUrl}/healthcheck`,
-      { method: 'GET' },
-      timeoutMs,
-    )
-    if (!response.ok) {
+function storedFileName(payload: unknown): string | null {
+  if (isRecord(payload)) {
+    const error = payload['error']
+    if (error !== undefined && error !== null && error !== '' && error !== 0) {
       throw new OnlyOfficePreviewError(
-        'unavailable',
-        `OnlyOffice healthcheck failed (${response.status})`,
+        'upload-failed',
+        formatPayloadError(error),
       )
     }
-  } catch (error) {
-    if (error instanceof OnlyOfficePreviewError) {
-      throw error
-    }
 
-    throw new OnlyOfficePreviewError(
-      'unavailable',
-      'OnlyOffice service is not reachable',
-      { cause: error },
-    )
+    if (typeof payload['filename'] === 'string' && payload['filename'].trim() !== '') {
+      return payload['filename']
+    }
   }
+
+  return null
+}
+
+function formatPayloadError(error: unknown): string {
+  if (typeof error === 'string' && error.trim() !== '') {
+    return error
+  }
+
+  if (typeof error === 'number' || typeof error === 'boolean') {
+    return `OnlyOffice upload failed (${error})`
+  }
+
+  return 'OnlyOffice upload failed'
 }
 
 async function request(
