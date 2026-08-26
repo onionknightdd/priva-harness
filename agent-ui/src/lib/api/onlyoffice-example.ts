@@ -1,19 +1,12 @@
-import type { OfficePreviewSession } from "./sandbox-office"
-
 export const LOCAL_ONLYOFFICE_ORIGIN = "http://127.0.0.1:8080"
-const ONLYOFFICE_PROXY_BASE = "/onlyoffice"
-export const EXAMPLE_USER_ADDRESS = "127.0.0.1"
 
-const UPLOAD_ENDPOINTS = [
-  { upload: "/example/upload", download: "/example/download" },
-  { upload: "/upload", download: "/download" },
+const UPLOAD_PATHS = [
+  "/example/upload",
+  "/onlyoffice/example/upload",
+  `${LOCAL_ONLYOFFICE_ORIGIN}/example/upload`,
 ] as const
 
-const DOWNLOAD_USER_ADDRESSES = [
-  EXAMPLE_USER_ADDRESS,
-  "__1",
-  "__ffff_127.0.0.1",
-] as const
+const REQUEST_TIMEOUT_MS = 8_000
 
 export class OnlyOfficeExampleError extends Error {
   constructor(message: string) {
@@ -22,63 +15,50 @@ export class OnlyOfficeExampleError extends Error {
   }
 }
 
-export async function createLocalOnlyOfficePreviewSession(input: {
+export async function uploadWorkbookForExamplePreview(input: {
   fileName: string
-  filePath: string
   mediaType: string
   bytes: ArrayBuffer
   signal?: AbortSignal
-}): Promise<OfficePreviewSession> {
-  const fileType = workbookFileType(input.fileName)
-  if (fileType === null) {
+}) {
+  if (workbookFileType(input.fileName) === null) {
     throw new OnlyOfficeExampleError(
       "OnlyOffice preview is available for Excel workbooks"
     )
   }
 
-  const bases = [ONLYOFFICE_PROXY_BASE, LOCAL_ONLYOFFICE_ORIGIN]
   let lastError: Error = new OnlyOfficeExampleError(
     "OnlyOffice service is not reachable"
   )
 
-  for (const base of bases) {
-    for (const endpoint of UPLOAD_ENDPOINTS) {
-      try {
-        const storedName = await uploadWorkbook(base, endpoint.upload, input)
-        const downloadUrl = await resolveDownloadUrl(
-          base,
-          endpoint.download,
-          storedName,
-          input.signal
-        )
-        return {
-          documentServerUrl: LOCAL_ONLYOFFICE_ORIGIN,
-          document: {
-            fileType,
-            key: documentKey(input.filePath, input.bytes.byteLength),
-            title: input.fileName,
-            url: downloadUrl,
-          },
-        }
-      } catch (error) {
-        if (input.signal?.aborted) {
-          throw error
-        }
-
-        lastError = error instanceof Error ? error : lastError
+  for (const uploadPath of UPLOAD_PATHS) {
+    try {
+      const storedName = await uploadWorkbook(uploadPath, input)
+      return storedName
+    } catch (error) {
+      if (input.signal?.aborted) {
+        throw error
       }
+
+      lastError = error instanceof Error ? error : lastError
     }
   }
 
   throw lastError
 }
 
-export function exampleCallbackUrl(fileName: string) {
-  return `${LOCAL_ONLYOFFICE_ORIGIN}/example/track?filename=${encodeURIComponent(fileName)}&useraddress=${encodeURIComponent(EXAMPLE_USER_ADDRESS)}`
+export function exampleEditorUrl(fileName: string, language: string) {
+  const params = new URLSearchParams({
+    type: "embedded",
+    mode: "view",
+    fileName,
+    lang: language.startsWith("zh") ? "zh-CN" : "en",
+  })
+
+  return `/example/editor?${params.toString()}`
 }
 
 async function uploadWorkbook(
-  base: string,
   uploadPath: string,
   input: {
     fileName: string
@@ -99,11 +79,11 @@ async function uploadWorkbook(
     input.fileName
   )
 
-  const response = await fetch(`${base}${uploadPath}`, {
+  const response = await fetch(uploadPath, {
     method: "POST",
     body: form,
     cache: "no-store",
-    signal: input.signal,
+    signal: withTimeout(input.signal, REQUEST_TIMEOUT_MS),
   })
   const payload = await readJson(response)
   const uploadError = payloadError(payload)
@@ -124,56 +104,17 @@ async function uploadWorkbook(
   return storedName
 }
 
-async function resolveDownloadUrl(
-  base: string,
-  downloadPath: string,
-  storedName: string,
-  signal?: AbortSignal
-) {
-  const queries = [
-    `${downloadPath}?fileName=${encodeURIComponent(storedName)}`,
-    ...DOWNLOAD_USER_ADDRESSES.map(
-      (userAddress) =>
-        `${downloadPath}?fileName=${encodeURIComponent(storedName)}&useraddress=${encodeURIComponent(userAddress)}`
-    ),
-  ]
-
-  let lastError: Error = new OnlyOfficeExampleError(
-    "OnlyOffice download is not reachable"
-  )
-
-  for (const query of queries) {
-    try {
-      await assertDownloadable(`${base}${query}`, signal)
-      return `${LOCAL_ONLYOFFICE_ORIGIN}${query}`
-    } catch (error) {
-      if (signal?.aborted) {
-        throw error
-      }
-
-      lastError = error instanceof Error ? error : lastError
-    }
+function withTimeout(signal: AbortSignal | undefined, timeoutMs: number) {
+  const timeout = AbortSignal.timeout(timeoutMs)
+  if (signal === undefined) {
+    return timeout
   }
 
-  throw lastError
-}
-
-async function assertDownloadable(url: string, signal?: AbortSignal) {
-  const response = await fetch(url, {
-    method: "GET",
-    cache: "no-store",
-    signal,
-  })
-
-  try {
-    if (!response.ok) {
-      throw new OnlyOfficeExampleError(
-        `OnlyOffice download failed (${response.status})`
-      )
-    }
-  } finally {
-    await response.body?.cancel()
+  if (typeof AbortSignal.any === "function") {
+    return AbortSignal.any([signal, timeout])
   }
+
+  return timeout
 }
 
 function workbookFileType(fileName: string) {
@@ -188,11 +129,6 @@ function workbookFileType(fileName: string) {
   }
 
   return null
-}
-
-function documentKey(path: string, size: number) {
-  const safePath = path.replace(/[^0-9A-Za-z._-]/g, "_").slice(-48)
-  return `${safePath}_${size}_${Date.now().toString(36)}`.slice(0, 128)
 }
 
 function storedFileName(payload: unknown) {

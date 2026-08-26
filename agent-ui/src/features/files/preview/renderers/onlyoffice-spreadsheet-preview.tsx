@@ -3,23 +3,13 @@ import { motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
 import {
-  createLocalOnlyOfficePreviewSession,
-  exampleCallbackUrl,
+  exampleEditorUrl,
+  uploadWorkbookForExamplePreview,
 } from "@/lib/api/onlyoffice-example"
-import {
-  createOfficePreviewSession,
-  type OfficePreviewSession,
-} from "@/lib/api/sandbox-office"
 import { EASE_OUT } from "@/lib/ease"
 
 import { PreviewRequestState } from "../preview-request-state"
-import {
-  createOnlyOfficeEditor,
-  loadOnlyOfficeApi,
-} from "./onlyoffice-api"
 import { SpreadsheetRenderer } from "./spreadsheet-renderer"
-
-const EDITOR_READY_TIMEOUT_MS = 45_000
 
 export function OnlyOfficeSpreadsheetPreview({
   fileId,
@@ -36,43 +26,21 @@ export function OnlyOfficeSpreadsheetPreview({
 }) {
   const { t, i18n } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
-  const placeholderId = React.useId().replace(/:/g, "")
-  const hostRef = React.useRef<HTMLDivElement>(null)
-  const editorRef = React.useRef<{ destroyEditor: () => void } | null>(null)
   const [status, setStatus] = React.useState<"loading" | "ready" | "fallback">(
     "loading"
   )
+  const [editorUrl, setEditorUrl] = React.useState<string | null>(null)
   const [fallbackReason, setFallbackReason] = React.useState<string | null>(
     null
   )
 
   React.useEffect(() => {
-    const host = hostRef.current
-    if (!host) {
-      return
-    }
-
-    const placeholder = document.createElement("div")
-    placeholder.id = `onlyoffice-${placeholderId}`
-    placeholder.className = "h-full min-h-0 w-full"
-    host.replaceChildren(placeholder)
-
     let cancelled = false
     const controller = new AbortController()
-    const timeout = window.setTimeout(() => {
-      if (!cancelled) {
-        setFallbackReason("timed out")
-        setStatus((current) => (current === "loading" ? "fallback" : current))
-      }
-    }, EDITOR_READY_TIMEOUT_MS)
-
-    const destroyEditor = () => {
-      editorRef.current?.destroyEditor()
-      editorRef.current = null
-    }
 
     const fail = (reason: string) => {
       if (!cancelled) {
+        setEditorUrl(null)
         setFallbackReason(reason)
         setStatus("fallback")
       }
@@ -80,69 +48,18 @@ export function OnlyOfficeSpreadsheetPreview({
 
     void (async () => {
       try {
-        const session = await resolveOfficePreviewSession({
+        const bytes = await downloadWorkbookBytes(source, controller.signal)
+        const storedName = await uploadWorkbookForExamplePreview({
           fileName,
-          filePath,
           mediaType,
-          source,
+          bytes,
           signal: controller.signal,
         })
-        const docsApi = await loadOnlyOfficeApi(session.documentServerUrl)
         if (cancelled) {
           return
         }
 
-        editorRef.current = createOnlyOfficeEditor(docsApi, placeholder.id, {
-          documentType: "cell",
-          width: "100%",
-          height: "100%",
-          document: {
-            ...session.document,
-            permissions: {
-              comment: false,
-              download: true,
-              edit: false,
-              print: true,
-              review: false,
-            },
-          },
-          editorConfig: {
-            mode: "view",
-            lang: i18n.language.startsWith("zh") ? "zh-CN" : "en",
-            callbackUrl: exampleCallbackUrl(session.document.title),
-            user: {
-              id: "preview",
-              name: "Preview",
-            },
-            customization: {
-              anonymous: { request: false },
-              compactHeader: true,
-              compactToolbar: true,
-              hideRightMenu: true,
-              hideRulers: true,
-              toolbarNoTabs: true,
-            },
-          },
-          events: {
-            onAppReady: () => {
-              if (!cancelled) {
-                setStatus((current) =>
-                  current === "fallback" ? current : "ready"
-                )
-              }
-            },
-            onDocumentReady: () => {
-              if (!cancelled) {
-                setStatus((current) =>
-                  current === "fallback" ? current : "ready"
-                )
-              }
-            },
-            onError: (event) => {
-              fail(describeEditorError(event))
-            },
-          },
-        })
+        setEditorUrl(exampleEditorUrl(storedName, i18n.language))
       } catch (error) {
         fail(describeUnknownError(error))
       }
@@ -151,20 +68,8 @@ export function OnlyOfficeSpreadsheetPreview({
     return () => {
       cancelled = true
       controller.abort()
-      window.clearTimeout(timeout)
-      destroyEditor()
-      host.replaceChildren()
     }
-  }, [fileName, filePath, i18n.language, mediaType, placeholderId, source])
-
-  React.useEffect(() => {
-    if (status !== "fallback") {
-      return
-    }
-
-    editorRef.current?.destroyEditor()
-    editorRef.current = null
-  }, [status])
+  }, [fileName, filePath, i18n.language, mediaType, source])
 
   if (status === "fallback") {
     return (
@@ -201,35 +106,25 @@ export function OnlyOfficeSpreadsheetPreview({
           <PreviewRequestState loading />
         </div>
       ) : null}
-      <div ref={hostRef} className="h-full min-h-0 w-full" />
+      {editorUrl ? (
+        <iframe
+          title={fileName}
+          src={editorUrl}
+          className="h-full min-h-0 w-full border-0 bg-background"
+          onLoad={(event) => {
+            if (iframeLooksUnavailable(event.currentTarget)) {
+              setEditorUrl(null)
+              setFallbackReason("OnlyOffice editor was not found")
+              setStatus("fallback")
+              return
+            }
+
+            setStatus("ready")
+          }}
+        />
+      ) : null}
     </div>
   )
-}
-
-async function resolveOfficePreviewSession(input: {
-  fileName: string
-  filePath: string
-  mediaType: string
-  source: string
-  signal: AbortSignal
-}): Promise<OfficePreviewSession> {
-  const bytes = await downloadWorkbookBytes(input.source, input.signal)
-
-  try {
-    return await createLocalOnlyOfficePreviewSession({
-      fileName: input.fileName,
-      filePath: input.filePath,
-      mediaType: input.mediaType,
-      bytes,
-      signal: input.signal,
-    })
-  } catch (error) {
-    if (input.signal.aborted) {
-      throw error
-    }
-  }
-
-  return createOfficePreviewSession(input.filePath, input.signal)
 }
 
 async function downloadWorkbookBytes(source: string, signal: AbortSignal) {
@@ -241,25 +136,23 @@ async function downloadWorkbookBytes(source: string, signal: AbortSignal) {
   return response.arrayBuffer()
 }
 
-function describeEditorError(event: {
-  data?: { errorCode?: number; errorDescription?: string } | number
-}) {
-  const data = event.data
-  if (typeof data === "number") {
-    return `OnlyOffice error ${data}`
+function iframeLooksUnavailable(frame: HTMLIFrameElement) {
+  try {
+    const text = frame.contentDocument?.body?.innerText ?? ""
+            return (
+              text.includes("File not found") ||
+              text.includes("Cannot GET")
+            )
+  } catch {
+    return false
   }
-
-  if (typeof data?.errorCode === "number") {
-    const description = data.errorDescription?.trim()
-    return description
-      ? `OnlyOffice error ${data.errorCode}: ${description}`
-      : `OnlyOffice error ${data.errorCode}`
-  }
-
-  return "OnlyOffice editor failed"
 }
 
 function describeUnknownError(error: unknown) {
+  if (error instanceof DOMException && error.name === "TimeoutError") {
+    return "OnlyOffice upload timed out"
+  }
+
   if (error instanceof Error && error.message.trim() !== "") {
     return error.message
   }
