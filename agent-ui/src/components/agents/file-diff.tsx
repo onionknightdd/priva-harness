@@ -24,6 +24,7 @@ import {
   useAgentCodeTokens,
 } from "@/components/agents/agent-code";
 import { AgentDisclosure } from "@/components/agents/agent-disclosure";
+import { ActionSwapRollText } from "@/components/motion/action-swap-roll";
 import { writeClipboardText } from "@/lib/clipboard";
 import { SPRING_PRESS, SPRING_SWAP } from "@/lib/ease";
 import { cn } from "@/lib/utils";
@@ -232,7 +233,13 @@ export function FileDiff({
         <span className="flex min-w-0 flex-none items-baseline gap-2">
           {tool ? (
             <span className="shrink-0 font-medium text-muted-foreground/70">
-              {tool}
+              {typeof tool === "string" || typeof tool === "number" ? (
+                <ActionSwapRollText value={String(tool)}>
+                  {tool}
+                </ActionSwapRollText>
+              ) : (
+                tool
+              )}
             </span>
           ) : null}
           <span className="min-w-0 truncate font-medium text-muted-foreground/70">
