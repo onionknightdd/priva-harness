@@ -207,30 +207,30 @@ export function CodeBlock({
           )}
           style={{ maxHeight }}
         >
-          <pre className="agent-shiki shiki m-0 min-w-max font-mono text-xs leading-5 text-foreground/85">
-            <code>
+          <pre
+            className={cn(
+              "agent-shiki shiki m-0 font-mono text-xs leading-5 text-foreground/85",
+              wrap ? "w-full agent-shiki-wrap whitespace-normal" : "inline-block min-w-full whitespace-normal"
+            )}
+          >
+            <code className="block">
               {lines.map((line, index) => {
                 const lineNumber = startLine + index
                 return (
                   <span
                     key={line.offset}
                     className={cn(
-                      "grid min-h-5",
-                      showLineNumbers
-                        ? undefined
-                        : "grid-cols-1",
+                      "flex min-h-5 min-w-full",
                       emphasized.has(index + 1) && "bg-blue-500/[0.07]"
                     )}
-                    style={
-                      showLineNumbers
-                        ? {
-                            gridTemplateColumns: `calc(${String(lineDigits)}ch + 0.75rem) minmax(0,1fr)`,
-                          }
-                        : undefined
-                    }
                   >
                     {showLineNumbers ? (
-                      <span className="select-none px-1.5 text-right tabular-nums text-muted-foreground/35">
+                      <span
+                        className="shrink-0 select-none px-1.5 text-right tabular-nums text-muted-foreground/35"
+                        style={{
+                          width: `calc(${String(lineDigits)}ch + 0.75rem)`,
+                        }}
+                      >
                         {lineNumber}
                       </span>
                     ) : null}

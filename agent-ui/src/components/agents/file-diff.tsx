@@ -81,11 +81,11 @@ function maxDisplayLineDigits(lines: FileDiffLine[]): number {
   return max;
 }
 
-function lineNumberGridTemplate(digits: number): string {
+function gutterWidth(digits: number): string | undefined {
   if (digits <= 0) {
-    return "minmax(0,1fr)";
+    return undefined;
   }
-  return `calc(${String(digits)}ch + 0.75rem) minmax(0,1fr)`;
+  return `calc(${String(digits)}ch + 0.75rem)`;
 }
 
 function ChangeCount({ value, type }: { value: number; type: "added" | "removed" }) {
@@ -148,7 +148,7 @@ export function FileDiff({
       ? highlighted.lines
       : undefined;
   const lineDigits = maxDisplayLineDigits(lines);
-  const gridTemplateColumns = lineNumberGridTemplate(lineDigits);
+  const lineGutterWidth = gutterWidth(lineDigits);
 
   const setOpen = useCallback(
     (next: boolean) => {
@@ -294,8 +294,8 @@ export function FileDiff({
               className="scrollbar-hide overflow-auto pl-[4px] pt-[8px]"
               style={{ maxHeight }}
             >
-              <pre className="agent-shiki shiki has-diff m-0 font-mono text-xs leading-5">
-                <code>
+              <pre className="agent-shiki shiki has-diff m-0 inline-block min-w-full whitespace-normal font-mono text-xs leading-5">
+                <code className="block">
                   <span className="sr-only">File changes</span>
                   {lines.map((line, index) => {
                     const type = line.type ?? "context";
@@ -303,14 +303,20 @@ export function FileDiff({
                       <span
                         key={line.id}
                         className={cn(
-                          "grid",
+                          "flex min-w-full",
                           type === "added" && "bg-emerald-500/[0.07]",
                           type === "removed" && "bg-rose-500/[0.07]",
                         )}
-                        style={{ gridTemplateColumns }}
                       >
                         {lineDigits > 0 ? (
-                          <span className="select-none px-1.5 text-right tabular-nums text-muted-foreground/40">
+                          <span
+                            className="shrink-0 select-none px-1.5 text-right tabular-nums text-muted-foreground/40"
+                            style={
+                              lineGutterWidth === undefined
+                                ? undefined
+                                : { width: lineGutterWidth }
+                            }
+                          >
                             {displayLineNumber(line)}
                           </span>
                         ) : null}
@@ -318,7 +324,7 @@ export function FileDiff({
                           line={shikiLines?.[index]}
                           fallback={line.content}
                           className={cn(
-                            "min-w-0 whitespace-pre",
+                            "pr-4 whitespace-pre",
                             type === "added" && "diff add",
                             type === "removed" && "diff remove",
                           )}

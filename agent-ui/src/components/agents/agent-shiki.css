@@ -23,8 +23,15 @@
 
 .agent-shiki .line {
   display: block;
-  width: 100%;
+  flex: 1 0 auto;
+  min-width: min-content;
   min-height: 1.25rem;
+}
+
+.agent-shiki.agent-shiki-wrap .line {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
 }
 
 .agent-shiki.has-diff .line {
