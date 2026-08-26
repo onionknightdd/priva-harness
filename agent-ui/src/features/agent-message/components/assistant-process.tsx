@@ -88,7 +88,9 @@ export function AssistantProcess({
     ? t("agentMessage.thinking")
     : t("agentMessage.chainOfThought")
   const statusText =
-    summary === "" ? statusLabel : `${statusLabel} ${summary}`
+    summary === ""
+      ? statusLabel
+      : `${statusLabel}${t("agentMessage.toolSummary.separator")}${summary}`
 
   React.useEffect(() => {
     setOpen(isStreaming)
