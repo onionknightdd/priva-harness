@@ -194,8 +194,6 @@ export function AgentMessageItem({
   const shouldReduceMotion = Boolean(useReducedMotion())
   const isStreaming = message.status === "streaming"
   const isError = message.status === "error"
-  const showPlaceholder =
-    isStreaming && message.content.length === 0 && !assistantHasProcess(message)
 
   return (
     <Message from={message.role}>
@@ -230,9 +228,7 @@ export function AgentMessageItem({
               message.role === "user" ? "whitespace-pre-wrap" : undefined
             }
           >
-            {showPlaceholder ? (
-              <span className="shimmer">{t("agentMessage.thinking")}</span>
-            ) : message.role === "assistant" ? (
+            {message.role === "assistant" ? (
               <AssistantStreamBody message={message} isStreaming={isStreaming} />
             ) : (
               message.content
@@ -266,10 +262,11 @@ function AssistantStreamBody({
   const shouldReduceMotion = Boolean(useReducedMotion())
   const text = message.content
   const hasProcess = assistantHasProcess(message)
+  const showProcess = hasProcess || isStreaming
 
   return (
     <div className="flex flex-col gap-3">
-      {hasProcess ? (
+      {showProcess ? (
         <AssistantProcess message={message} isStreaming={isStreaming} />
       ) : null}
       {text.trim() !== "" ? (
