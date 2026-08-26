@@ -79,7 +79,12 @@ export function AssistantProcess({
   const blocks = [...(message.blocks ?? [])].sort(
     (left, right) => left.index - right.index
   )
-  const summary = isStreaming ? formatToolActivitySummary(blocks, t) : ""
+  const summary = formatToolActivitySummary(blocks, t)
+  const statusLabel = isStreaming
+    ? t("agentMessage.thinking")
+    : t("agentMessage.chainOfThought")
+  const statusText =
+    summary === "" ? statusLabel : `${statusLabel} ${summary}`
 
   React.useEffect(() => {
     setOpen(isStreaming)
@@ -146,15 +151,14 @@ export function AssistantProcess({
         }}
       >
         <CollapsibleTrigger className="group/process-trigger flex max-w-full min-w-0 items-center gap-1 rounded-md bg-transparent px-0 py-0.5 text-left text-sm leading-snug font-medium text-muted-foreground/70 outline-none hover:text-muted-foreground/70 focus-visible:ring-2 focus-visible:ring-ring">
-          {isStreaming ? (
-            <span className="shimmer min-w-0 whitespace-normal">
-              {summary === ""
-                ? t("agentMessage.thinking")
-                : `${t("agentMessage.thinking")} ${summary}`}
-            </span>
-          ) : (
-            t("agentMessage.chainOfThought")
-          )}
+          <span
+            className={cn(
+              "min-w-0 whitespace-normal",
+              isStreaming && "shimmer"
+            )}
+          >
+            {statusText}
+          </span>
           <ChevronDownIcon
             className="size-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-200 group-hover/process-trigger:opacity-100 group-focus-visible/process-trigger:opacity-100 group-data-open/process:rotate-180 motion-reduce:transition-none"
           />
