@@ -100,17 +100,18 @@ export function OnlyOfficeSpreadsheetPreview({
   }
 
   return (
-    <div className="relative h-full min-h-0 w-full bg-background">
+    <div className="relative h-full min-h-0 w-full overflow-hidden bg-background">
       {status === "loading" ? (
         <div className="absolute inset-0 z-10 bg-card">
           <PreviewRequestState loading />
         </div>
       ) : null}
       {editorUrl ? (
+        // Crop the embedded viewer header (ONLYOFFICE logo, filename, menu).
         <iframe
           title={fileName}
           src={editorUrl}
-          className="h-full min-h-0 w-full border-0 bg-background"
+          className="absolute inset-x-0 -top-[52px] h-[calc(100%+52px)] w-full border-0 bg-background"
           onLoad={(event) => {
             if (iframeLooksUnavailable(event.currentTarget)) {
               setEditorUrl(null)
@@ -139,10 +140,7 @@ async function downloadWorkbookBytes(source: string, signal: AbortSignal) {
 function iframeLooksUnavailable(frame: HTMLIFrameElement) {
   try {
     const text = frame.contentDocument?.body?.innerText ?? ""
-            return (
-              text.includes("File not found") ||
-              text.includes("Cannot GET")
-            )
+    return text.includes("File not found") || text.includes("Cannot GET")
   } catch {
     return false
   }
