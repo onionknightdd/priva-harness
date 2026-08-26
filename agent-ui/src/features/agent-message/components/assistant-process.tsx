@@ -150,7 +150,7 @@ export function AssistantProcess({
           }
         }}
       >
-        <CollapsibleTrigger className="group/process-trigger flex max-w-full min-w-0 items-center gap-1 rounded-md bg-transparent px-0 py-0.5 text-left text-sm leading-snug font-medium text-muted-foreground/70 outline-none hover:text-muted-foreground/70 focus-visible:ring-2 focus-visible:ring-ring">
+        <CollapsibleTrigger className="group/process-trigger flex max-w-full min-w-0 items-center gap-1 rounded-md bg-transparent px-0 py-0.5 text-left text-base leading-snug font-medium text-muted-foreground/70 outline-none hover:text-muted-foreground/70 focus-visible:ring-2 focus-visible:ring-ring">
           <span
             className={cn(
               "min-w-0 whitespace-normal",
@@ -173,7 +173,7 @@ export function AssistantProcess({
 
 function TextItem({ text }: { text: string }) {
   return (
-    <div className="w-full min-w-0 px-0 py-0.5 text-sm text-foreground">
+    <div className="w-full min-w-0 px-0 py-0.5 text-base text-foreground">
       <MessageResponse className="text-foreground [&_p]:my-0" mode="static">
         {text}
       </MessageResponse>
@@ -218,7 +218,7 @@ function ThinkingItem({
       }
       defaultOpen={defaultOpen}
     >
-      <p className="whitespace-pre-wrap text-sm">{text}</p>
+      <p className="whitespace-pre-wrap text-base">{text}</p>
     </ProcessRow>
   )
 }
@@ -605,7 +605,7 @@ function NestedAgentItem({ agent }: { agent: NestedAgent }) {
       {hasBody ? (
         <div className="flex flex-col gap-2">
           {text ? (
-            <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+            <p className="whitespace-pre-wrap text-base text-muted-foreground">
               {text}
             </p>
           ) : null}

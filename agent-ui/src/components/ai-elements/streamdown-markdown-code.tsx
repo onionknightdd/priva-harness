@@ -72,7 +72,7 @@ export function StreamdownMarkdownCode({
     return (
       <code
         className={cn(
-          "rounded bg-muted px-1.5 py-0.5 font-mono text-sm",
+          "rounded bg-muted px-1.5 py-0.5 font-mono text-[1em]",
           className
         )}
         data-streamdown="inline-code"
