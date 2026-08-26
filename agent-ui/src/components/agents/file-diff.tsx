@@ -93,7 +93,7 @@ function ChangeCount({ value, type }: { value: number; type: "added" | "removed"
   return (
     <span
       className={cn(
-        "shrink-0 font-medium tabular-nums",
+        "inline-flex h-[1em] shrink-0 items-center font-medium leading-none tabular-nums lining-nums",
         type === "added"
           ? "text-emerald-600 dark:text-emerald-400"
           : "text-rose-600 dark:text-rose-400",
@@ -239,9 +239,9 @@ export function FileDiff({
             className="size-[1em] shrink-0 text-muted-foreground/70"
           />
         )}
-        <span className="flex min-w-0 flex-none items-baseline gap-2">
+        <span className="flex min-w-0 flex-none items-center gap-2 leading-none">
           {tool ? (
-            <span className="shrink-0 font-medium text-muted-foreground/70">
+            <span className="inline-flex h-[1em] shrink-0 items-center font-medium text-muted-foreground/70">
               {typeof tool === "string" || typeof tool === "number" ? (
                 <ActionSwapRollText value={String(tool)}>
                   {tool}
@@ -251,7 +251,7 @@ export function FileDiff({
               )}
             </span>
           ) : null}
-          <span className="min-w-0 truncate font-medium text-muted-foreground/70">
+          <span className="h-[1em] min-w-0 truncate font-medium leading-none text-muted-foreground/70">
             {file}
           </span>
           <ChangeCount value={additions} type="added" />
