@@ -51,6 +51,7 @@ export default defineConfig({
       "react-resizable-panels",
       "recharts",
       "react-is",
+      "xlsx",
     ],
   },
 })
