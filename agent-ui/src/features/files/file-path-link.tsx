@@ -55,7 +55,7 @@ export function FilePathLink({
       whileTap={shouldReduceMotion ? undefined : { scale: 0.98 }}
       transition={{ duration: shouldReduceMotion ? 0 : 0.16 }}
       className={cn(
-        "relative z-10 inline-flex max-w-full min-w-0 pointer-events-auto items-center gap-0.5 align-middle text-left font-normal leading-none outline-none",
+        "relative z-10 inline-flex max-w-full min-w-0 -translate-y-px pointer-events-auto items-center gap-0.5 align-middle text-left font-normal leading-none outline-none",
         className,
         "cursor-pointer bg-transparent p-0 text-sky-600 underline decoration-sky-600/50 underline-offset-2 hover:decoration-sky-600 focus-visible:ring-2 focus-visible:ring-ring dark:text-sky-400 dark:decoration-sky-400/50 dark:hover:decoration-sky-400"
       )}
@@ -64,7 +64,7 @@ export function FilePathLink({
         <FileTypeIcon
           name={fileNameFromPath(path)}
           path={path}
-          className="block size-[0.875em] translate-y-px"
+          className="block size-[0.875em]"
         />
       ) : null}
       <span className="min-w-0 truncate">{label}</span>
