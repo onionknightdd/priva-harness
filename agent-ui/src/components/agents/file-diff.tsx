@@ -85,7 +85,7 @@ function gutterWidth(digits: number): string | undefined {
   if (digits <= 0) {
     return undefined;
   }
-  return `calc(${String(digits)}ch + 0.75rem)`;
+  return `calc(${String(digits)}ch + 0.5rem)`;
 }
 
 function ChangeCount({ value, type }: { value: number; type: "added" | "removed" }) {
@@ -291,7 +291,7 @@ export function FileDiff({
               ref={viewportRef}
               data-slot="file-diff-viewport"
               aria-live="polite"
-              className="scrollbar-hide overflow-auto pl-[4px] pt-[8px]"
+              className="scrollbar-hide overflow-auto pt-[8px]"
               style={{ maxHeight }}
             >
               <pre className="agent-shiki shiki has-diff m-0 inline-block min-w-full whitespace-normal font-mono text-xs leading-5">
@@ -303,14 +303,14 @@ export function FileDiff({
                       <span
                         key={line.id}
                         className={cn(
-                          "flex min-w-full",
+                          "flex min-h-5 min-w-full items-baseline",
                           type === "added" && "bg-emerald-500/[0.07]",
                           type === "removed" && "bg-rose-500/[0.07]",
                         )}
                       >
                         {lineDigits > 0 ? (
                           <span
-                            className="shrink-0 select-none px-1.5 text-right tabular-nums text-muted-foreground/40"
+                            className="shrink-0 select-none pr-2 text-left tabular-nums leading-5 text-muted-foreground/40"
                             style={
                               lineGutterWidth === undefined
                                 ? undefined
