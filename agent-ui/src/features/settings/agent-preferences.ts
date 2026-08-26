@@ -30,6 +30,7 @@ export type AgentPreferences = {
   lastModelReference: string | null
   queueBehavior: QueueBehavior
   inputSuggestions: boolean
+  onlineOfficePreview: boolean
 }
 
 export const DEFAULT_AGENT_PREFERENCES: AgentPreferences = {
@@ -39,6 +40,7 @@ export const DEFAULT_AGENT_PREFERENCES: AgentPreferences = {
   lastModelReference: null,
   queueBehavior: "follow-up",
   inputSuggestions: true,
+  onlineOfficePreview: false,
 }
 
 const UNAVAILABLE_STORAGE_ERRORS = new Set([
@@ -121,6 +123,10 @@ export function parseAgentPreferences(raw: unknown): AgentPreferences {
       typeof raw["inputSuggestions"] === "boolean"
         ? raw["inputSuggestions"]
         : DEFAULT_AGENT_PREFERENCES.inputSuggestions,
+    onlineOfficePreview:
+      typeof raw["onlineOfficePreview"] === "boolean"
+        ? raw["onlineOfficePreview"]
+        : DEFAULT_AGENT_PREFERENCES.onlineOfficePreview,
     queueBehavior: DEFAULT_AGENT_PREFERENCES.queueBehavior,
   }
 }
@@ -170,6 +176,7 @@ function toStoredAgentPreferences(preferences: AgentPreferences) {
     sessionModel: preferences.sessionModel,
     lastModelReference: preferences.lastModelReference,
     inputSuggestions: preferences.inputSuggestions,
+    onlineOfficePreview: preferences.onlineOfficePreview,
   }
 }
 

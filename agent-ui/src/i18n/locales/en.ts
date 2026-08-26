@@ -234,6 +234,7 @@ export const en = {
     spreadsheetSelectAll: "Select all cells",
     spreadsheetTruncated:
       "Showing {{rows}} of {{totalRows}} rows and {{columns}} of {{totalColumns}} columns.",
+    officeFallback: "Online Office preview is unavailable. Using the local spreadsheet view.",
   },
   sidebar: {
     brand: "Agent Workshop",
@@ -383,6 +384,12 @@ export const en = {
       inputSuggestions: "Input suggestions",
       inputSuggestionsDescription:
         "Allow Claude Code to suggest follow-up prompts.",
+    },
+    advanced: {
+      previewGroup: "Preview",
+      onlineOffice: "Online Office service",
+      onlineOfficeDescription:
+        "Use the local OnlyOffice service at http://127.0.0.1:8080 to preview Excel workbooks. If that service is unavailable, preview falls back to the built-in spreadsheet view.",
     },
     models: {
       profiles: "Profiles",

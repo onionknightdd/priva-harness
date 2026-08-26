@@ -17,10 +17,12 @@ import {
   PreviewSelectionBridgeProvider,
   type PreviewSelection,
 } from "@/features/files/selection"
+import { useAgentPreferences } from "@/features/settings/agent-preferences-context"
 import { cn } from "@/lib/utils"
 
 import { downloadTextFile } from "./download-text-file"
 import { FilePreviewToolbar } from "./file-preview-toolbar"
+import { isExcelSpreadsheetFile } from "./is-excel-spreadsheet"
 import { PreviewRendererBoundary } from "./preview-renderer-boundary"
 import { PreviewRequestState } from "./preview-request-state"
 import { HtmlRenderer } from "./renderers/html-renderer"
@@ -48,6 +50,11 @@ const PresentationRenderer = React.lazy(() =>
 const SpreadsheetRenderer = React.lazy(() =>
   import("./renderers/spreadsheet-renderer").then((module) => ({
     default: module.SpreadsheetRenderer,
+  }))
+)
+const OnlyOfficeSpreadsheetPreview = React.lazy(() =>
+  import("./renderers/onlyoffice-spreadsheet-preview").then((module) => ({
+    default: module.OnlyOfficeSpreadsheetPreview,
   }))
 )
 const HtmlVisualEditor = React.lazy(() =>
@@ -88,6 +95,8 @@ function getAvailableMode(
 }
 
 function RenderedFile({ file }: { file: PreviewFile }) {
+  const { onlineOfficePreview } = useAgentPreferences()
+
   if (!file.renderKind) {
     return <UnsupportedPreview hasFile />
   }
@@ -109,6 +118,21 @@ function RenderedFile({ file }: { file: PreviewFile }) {
   }
 
   if (file.renderKind === "spreadsheet" && file.renderSource) {
+    if (
+      onlineOfficePreview &&
+      isExcelSpreadsheetFile(file.name, file.mediaType)
+    ) {
+      return (
+        <OnlyOfficeSpreadsheetPreview
+          fileId={file.id}
+          fileName={file.name}
+          filePath={file.path}
+          mediaType={file.mediaType}
+          source={file.renderSource}
+        />
+      )
+    }
+
     return (
       <SpreadsheetRenderer
         fileId={file.id}

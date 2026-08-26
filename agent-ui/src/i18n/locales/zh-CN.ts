@@ -233,6 +233,7 @@ export const zhCN = {
     spreadsheetSelectAll: "选择全部单元格",
     spreadsheetTruncated:
       "正在显示 {{rows}} / {{totalRows}} 行，{{columns}} / {{totalColumns}} 列。",
+    officeFallback: "在线 Office 预览不可用，已改用本地表格预览。",
   },
   sidebar: {
     brand: "Agent Workshop",
@@ -380,6 +381,12 @@ export const zhCN = {
       inputSuggestions: "输入建议",
       inputSuggestionsDescription:
         "允许 Claude Code 给出后续输入建议。",
+    },
+    advanced: {
+      previewGroup: "预览",
+      onlineOffice: "启用在线 Office 服务",
+      onlineOfficeDescription:
+        "开启后使用本机 OnlyOffice 服务（http://127.0.0.1:8080）预览 Excel 工作簿。服务不可用时自动回退到本地表格预览。",
     },
     models: {
       profiles: "配置",

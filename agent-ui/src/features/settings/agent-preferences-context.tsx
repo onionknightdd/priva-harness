@@ -27,6 +27,7 @@ type AgentPreferencesContextValue = AgentPreferences & {
   setLastModelReference: (value: string | null) => void
   setQueueBehavior: (value: QueueBehavior) => void
   setInputSuggestions: (value: boolean) => void
+  setOnlineOfficePreview: (value: boolean) => void
 }
 
 const [AgentPreferencesContextProvider, useAgentPreferencesContext] =
@@ -130,6 +131,8 @@ export function AgentPreferencesProvider({
         update({ lastModelReference }),
       setQueueBehavior,
       setInputSuggestions: (inputSuggestions) => update({ inputSuggestions }),
+      setOnlineOfficePreview: (onlineOfficePreview) =>
+        update({ onlineOfficePreview }),
     }),
     [preferences, queueBehaviorBusy, queueBehaviorError, setQueueBehavior, update]
   )
