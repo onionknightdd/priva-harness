@@ -14,11 +14,11 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 
+import type { AgentCodeLanguage } from "@/components/agents/agent-code"
 import {
-  type AgentCodeLanguage,
-  AgentCodeLine,
-  useAgentCodeTokens,
-} from "@/components/agents/agent-code"
+  AgentShikiLineContent,
+  useAgentShikiHighlight,
+} from "@/components/agents/agent-shiki"
 import { writeClipboardText } from "@/lib/clipboard"
 import { SPRING_PRESS } from "@/lib/ease"
 import { cn } from "@/lib/utils"
@@ -62,8 +62,8 @@ export function CodeBlock({
   const copyTimer = useRef<number | undefined>(undefined)
   const [copied, setCopied] = useState(false)
   const streaming = status === "streaming"
-  const tokens = useAgentCodeTokens(code, language)
-  const highlighted = useMemo(
+  const highlighted = useAgentShikiHighlight(code, language)
+  const emphasized = useMemo(
     () => new Set(highlightLines),
     [highlightLines]
   )
@@ -77,6 +77,10 @@ export function CodeBlock({
   const lineDigits = showLineNumbers
     ? String(Math.max(startLine, lastLine, 1)).length
     : 0
+  const shikiLines =
+    highlighted !== null && highlighted.lines.length === lines.length
+      ? highlighted.lines
+      : undefined
   const copyLabel = copied ? t("common.copied") : t("common.copyCode")
   const showCopy = copyable || Boolean(onCopy)
 
@@ -203,7 +207,7 @@ export function CodeBlock({
           )}
           style={{ maxHeight }}
         >
-          <pre className="m-0 min-w-max font-mono text-xs leading-5 text-foreground/85">
+          <pre className="agent-shiki shiki m-0 min-w-max font-mono text-xs leading-5 text-foreground/85">
             <code>
               {lines.map((line, index) => {
                 const lineNumber = startLine + index
@@ -215,7 +219,7 @@ export function CodeBlock({
                       showLineNumbers
                         ? undefined
                         : "grid-cols-1",
-                      highlighted.has(index + 1) && "bg-blue-500/[0.07]"
+                      emphasized.has(index + 1) && "bg-blue-500/[0.07]"
                     )}
                     style={
                       showLineNumbers
@@ -230,9 +234,9 @@ export function CodeBlock({
                         {lineNumber}
                       </span>
                     ) : null}
-                    <AgentCodeLine
-                      code={line.content}
-                      tokens={tokens?.[index]}
+                    <AgentShikiLineContent
+                      line={shikiLines?.[index]}
+                      fallback={line.content}
                       className={cn(
                         "pr-4",
                         showLineNumbers ? "pl-1" : "pl-4",

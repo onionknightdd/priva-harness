@@ -1,0 +1,59 @@
+.agent-shiki.shiki {
+  background-color: transparent !important;
+  color: var(--shiki-light, currentColor);
+}
+
+.dark .agent-shiki.shiki {
+  color: var(--shiki-dark, currentColor);
+}
+
+.agent-shiki.shiki .line span {
+  color: var(--shiki-light, currentColor);
+  font-style: var(--shiki-light-font-style, inherit);
+  font-weight: var(--shiki-light-font-weight, inherit);
+  text-decoration: var(--shiki-light-text-decoration, inherit);
+}
+
+.dark .agent-shiki.shiki .line span {
+  color: var(--shiki-dark, currentColor);
+  font-style: var(--shiki-dark-font-style, inherit);
+  font-weight: var(--shiki-dark-font-weight, inherit);
+  text-decoration: var(--shiki-dark-text-decoration, inherit);
+}
+
+.agent-shiki .line {
+  display: block;
+  width: 100%;
+  min-height: 1.25rem;
+}
+
+.agent-shiki.has-diff .line {
+  position: relative;
+  padding-left: 1.15rem;
+}
+
+.agent-shiki.has-diff .line.diff.add::before,
+.agent-shiki.has-diff .line.diff.remove::before {
+  position: absolute;
+  left: 0.15rem;
+  width: 0.85rem;
+  font-weight: 500;
+}
+
+.agent-shiki.has-diff .line.diff.add::before {
+  color: rgb(5 150 105);
+  content: "+";
+}
+
+.agent-shiki.has-diff .line.diff.remove::before {
+  color: rgb(225 29 72);
+  content: "−";
+}
+
+.dark .agent-shiki.has-diff .line.diff.add::before {
+  color: rgb(52 211 153);
+}
+
+.dark .agent-shiki.has-diff .line.diff.remove::before {
+  color: rgb(251 113 133);
+}

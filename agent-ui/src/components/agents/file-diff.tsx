@@ -15,15 +15,17 @@ import {
   useEffect,
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
-import {
-  type AgentCodeLanguage,
-  AgentCodeLine,
-  useAgentCodeTokens,
-} from "@/components/agents/agent-code";
+import type { AgentCodeLanguage } from "@/components/agents/agent-code";
 import { AgentDisclosure } from "@/components/agents/agent-disclosure";
+import {
+  AgentShikiLineContent,
+  useAgentShikiHighlight,
+} from "@/components/agents/agent-shiki";
+import { toNotationDiffSource } from "@/components/agents/notation-diff";
 import { ActionSwapRollText } from "@/components/motion/action-swap-roll";
 import { writeClipboardText } from "@/lib/clipboard";
 import { SPRING_PRESS, SPRING_SWAP } from "@/lib/ease";
@@ -80,12 +82,10 @@ function maxDisplayLineDigits(lines: FileDiffLine[]): number {
 }
 
 function lineNumberGridTemplate(digits: number): string {
-  const columns: string[] = [];
-  if (digits > 0) {
-    columns.push(`calc(${String(digits)}ch + 0.75rem)`);
+  if (digits <= 0) {
+    return "minmax(0,1fr)";
   }
-  columns.push("1rem", "minmax(0,1fr)");
-  return columns.join(" ");
+  return `calc(${String(digits)}ch + 0.75rem) minmax(0,1fr)`;
 }
 
 function ChangeCount({ value, type }: { value: number; type: "added" | "removed" }) {
@@ -136,8 +136,17 @@ export function FileDiff({
   const additions = lines.filter((line) => line.type === "added").length;
   const deletions = lines.filter((line) => line.type === "removed").length;
   const canCopy = Boolean(copyText || onCopy);
-  const code = lines.map((line) => line.content).join("\n");
-  const tokens = useAgentCodeTokens(code, language);
+  const marked = useMemo(
+    () => toNotationDiffSource(lines, language),
+    [language, lines],
+  );
+  const highlighted = useAgentShikiHighlight(marked.code, marked.language, {
+    notationDiff: marked.hasMarkers,
+  });
+  const shikiLines =
+    highlighted !== null && highlighted.lines.length === lines.length
+      ? highlighted.lines
+      : undefined;
   const lineDigits = maxDisplayLineDigits(lines);
   const gridTemplateColumns = lineNumberGridTemplate(lineDigits);
 
@@ -285,49 +294,40 @@ export function FileDiff({
               className="scrollbar-hide overflow-auto pl-[4px] pt-[8px]"
               style={{ maxHeight }}
             >
-              <div className="font-mono text-xs leading-5">
-                <span className="sr-only">File changes</span>
-                {lines.map((line, index) => {
-                  const type = line.type ?? "context";
-                  return (
-                    <div
-                      key={line.id}
-                      className={cn(
-                        "grid",
-                        type === "added" && "bg-emerald-500/[0.07]",
-                        type === "removed" && "bg-rose-500/[0.07]",
-                      )}
-                      style={{ gridTemplateColumns }}
-                    >
-                      {lineDigits > 0 ? (
-                        <span className="select-none px-1.5 text-right tabular-nums text-muted-foreground/40">
-                          {displayLineNumber(line)}
-                        </span>
-                      ) : null}
+              <pre className="agent-shiki shiki has-diff m-0 font-mono text-xs leading-5">
+                <code>
+                  <span className="sr-only">File changes</span>
+                  {lines.map((line, index) => {
+                    const type = line.type ?? "context";
+                    return (
                       <span
+                        key={line.id}
                         className={cn(
-                          "select-none text-center text-muted-foreground/45",
-                          type === "added" &&
-                            "text-emerald-600 dark:text-emerald-400",
-                          type === "removed" &&
-                            "text-rose-600 dark:text-rose-400",
+                          "grid",
+                          type === "added" && "bg-emerald-500/[0.07]",
+                          type === "removed" && "bg-rose-500/[0.07]",
                         )}
+                        style={{ gridTemplateColumns }}
                       >
-                        {type === "added"
-                          ? "+"
-                          : type === "removed"
-                            ? "−"
-                            : ""}
+                        {lineDigits > 0 ? (
+                          <span className="select-none px-1.5 text-right tabular-nums text-muted-foreground/40">
+                            {displayLineNumber(line)}
+                          </span>
+                        ) : null}
+                        <AgentShikiLineContent
+                          line={shikiLines?.[index]}
+                          fallback={line.content}
+                          className={cn(
+                            "min-w-0 whitespace-pre",
+                            type === "added" && "diff add",
+                            type === "removed" && "diff remove",
+                          )}
+                        />
                       </span>
-                      <AgentCodeLine
-                        code={line.content}
-                        tokens={tokens?.[index]}
-                        className="min-w-0 whitespace-pre px-1.5"
-                      />
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </code>
+              </pre>
             </div>
 
             {canCopy ? (

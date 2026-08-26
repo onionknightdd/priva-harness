@@ -6,17 +6,15 @@ import {
   useEffect,
   useState,
 } from "react"
-import {
-  bundledLanguages,
-  createHighlighter,
-  type BundledLanguage,
-  type Highlighter,
-} from "shiki"
-import { createJavaScriptRegexEngine } from "shiki/engine/javascript"
 
+import {
+  resolveAgentCodeLanguage,
+  tokenizeAgentCode,
+} from "@/components/agents/agent-shiki"
 import { cn } from "@/lib/utils"
 
-export type AgentCodeLanguage = string
+export type { AgentCodeLanguage } from "@/components/agents/agent-shiki"
+export { resolveAgentCodeLanguage } from "@/components/agents/agent-shiki"
 
 export interface AgentCodeToken {
   content: string
@@ -29,7 +27,7 @@ export type AgentCodeTokenLines = AgentCodeToken[][]
 
 export interface AgentCodeProps {
   code: string
-  language?: AgentCodeLanguage
+  language?: string
   className?: string
 }
 
@@ -39,42 +37,13 @@ export interface AgentCodeLineProps {
   className?: string
 }
 
-const LIGHT_THEME = "github-light-high-contrast"
-const DARK_THEME = "github-dark-high-contrast"
-const engine = createJavaScriptRegexEngine({ forgiving: true })
-const highlighterCache = new Map<string, Promise<Highlighter>>()
 const tokenCache = new Map<string, AgentCodeTokenLines>()
-
-export function resolveAgentCodeLanguage(language: string) {
-  const id = language.trim().toLowerCase()
-
-  if (!id || !(id in bundledLanguages)) {
-    return null
-  }
-
-  return id as BundledLanguage
-}
-
-function getAgentCodeHighlighter(language: BundledLanguage) {
-  let highlighter = highlighterCache.get(language)
-
-  if (!highlighter) {
-    highlighter = createHighlighter({
-      engine,
-      langs: [language],
-      themes: [LIGHT_THEME, DARK_THEME],
-    })
-    highlighterCache.set(language, highlighter)
-  }
-
-  return highlighter
-}
 
 function tokenCacheKey(code: string, language: string) {
   return `${language}\u0000${code}`
 }
 
-export function useAgentCodeTokens(code: string, language: AgentCodeLanguage) {
+export function useAgentCodeTokens(code: string, language: string) {
   const resolvedLanguage = resolveAgentCodeLanguage(language)
   const key = tokenCacheKey(code, resolvedLanguage ?? "")
   const cached = resolvedLanguage ? tokenCache.get(key) : undefined
@@ -109,28 +78,23 @@ export function useAgentCodeTokens(code: string, language: AgentCodeLanguage) {
 
     let cancelled = false
 
-    getAgentCodeHighlighter(resolvedLanguage)
-      .then((highlighter) => {
-        if (cancelled) {
+    tokenizeAgentCode(code, resolvedLanguage)
+      .then((tokens) => {
+        if (cancelled || tokens === null) {
+          if (!cancelled) {
+            setResult(null)
+          }
           return
         }
 
-        const lines = highlighter
-          .codeToTokensWithThemes(code, {
-            lang: resolvedLanguage,
-            themes: {
-              light: LIGHT_THEME,
-              dark: DARK_THEME,
-            },
-          })
-          .map((line) =>
-            line.map((token) => ({
-              content: token.content,
-              offset: token.offset,
-              light: token.variants.light?.color,
-              dark: token.variants.dark?.color,
-            }))
-          )
+        const lines = tokens.map((line) =>
+          line.map((token) => ({
+            content: token.content,
+            offset: token.offset,
+            light: token.variants.light?.color,
+            dark: token.variants.dark?.color,
+          }))
+        )
 
         tokenCache.set(key, lines)
         setResult({

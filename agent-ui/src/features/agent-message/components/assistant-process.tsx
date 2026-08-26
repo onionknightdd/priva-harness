@@ -35,6 +35,7 @@ import {
   ItemMedia,
   ItemTitle,
 } from "@/components/ui/item"
+import { languageFromPath } from "@/lib/language-from-path"
 import { cn } from "@/lib/utils"
 
 import {
@@ -785,23 +786,6 @@ function fileNameFromPath(path: string | undefined): string {
   const trimmed = path.trim().replaceAll("\\", "/")
   const parts = trimmed.split("/")
   return parts.at(-1) || trimmed
-}
-
-function languageFromPath(path: string | undefined): string {
-  if (path === undefined || path.trim() === "") {
-    return "text"
-  }
-  const ext = path.split(".").pop()?.toLowerCase()
-  if (ext === undefined || ext === path.toLowerCase()) {
-    return "text"
-  }
-  if (ext === "ts") return "typescript"
-  if (ext === "js") return "javascript"
-  if (ext === "md") return "markdown"
-  if (ext === "yml") return "yaml"
-  if (ext === "sh") return "bash"
-  if (ext === "ipynb") return "json"
-  return ext
 }
 
 function jsonInputOpen(raw: string | undefined): boolean {
