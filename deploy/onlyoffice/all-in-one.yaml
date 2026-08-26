@@ -11,20 +11,14 @@
 # production-linux defaults to "/", which Node fetch cannot resolve, so /example/
 # crashes with "languages.forEach is not a function". Point siteUrl at the
 # port-forward URL and listen on loopback :8080 so that fetch stays in-pod.
+#
+# JWT is off for local example testing. With JWT on, /example/download returns 403
+# (jwt must be provided) and the editor shows "Download failed."
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
   name: onlyoffice
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: onlyoffice-jwt
-  namespace: onlyoffice
-type: Opaque
-stringData:
-  JWT_SECRET: onlyoffice-minikube-test-secret
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -85,16 +79,7 @@ spec:
               containerPort: 80
           env:
             - name: JWT_ENABLED
-              value: "true"
-            - name: JWT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: onlyoffice-jwt
-                  key: JWT_SECRET
-            - name: JWT_HEADER
-              value: Authorization
-            - name: JWT_IN_BODY
-              value: "true"
+              value: "false"
             - name: EXAMPLE_ENABLED
               value: "true"
             - name: ALLOW_PRIVATE_IP_ADDRESS
