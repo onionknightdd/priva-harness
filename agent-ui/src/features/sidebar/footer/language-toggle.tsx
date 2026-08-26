@@ -55,7 +55,7 @@ export function LanguageToggle({ className }: { className?: string }) {
     >
       <span
         ref={labelRef}
-        className="text-[10px] font-semibold tracking-wide"
+        className="text-[11px] font-semibold tracking-wide"
         aria-live="polite"
       >
         {isChinese ? "ZH" : "EN"}

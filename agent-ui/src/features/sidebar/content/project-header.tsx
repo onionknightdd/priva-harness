@@ -226,7 +226,7 @@ export function ProjectHeader({
               }}
               aria-label={t("sidebar.projects.search")}
               placeholder={t("sidebar.projects.searchPlaceholder")}
-              className="border-0 bg-sidebar-accent pr-14 pl-8 shadow-none focus-visible:border-0 focus-visible:ring-0 dark:bg-sidebar-accent"
+              className="border-0 bg-sidebar-accent pr-14 pl-8 text-base shadow-none focus-visible:border-0 focus-visible:ring-0 md:text-base dark:bg-sidebar-accent"
             />
             <SessionTagFilter
               knownTags={knownTags}
@@ -263,7 +263,7 @@ export function ProjectHeader({
             }
             transition={transition}
           >
-            <SidebarGroupLabel className="group/project-title w-full gap-0 pr-2">
+            <SidebarGroupLabel className="group/project-title w-full gap-0 pr-2 text-sm">
               <motion.span
                 className="shrink-0"
                 initial={shouldReduceMotion ? false : { opacity: 0, x: -4 }}

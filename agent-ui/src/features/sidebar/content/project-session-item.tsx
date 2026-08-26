@@ -115,7 +115,7 @@ export function ProjectSessionItem({
             ref={inputRef}
             value={draft}
             aria-label={t("sidebar.projects.renameSession")}
-            className="h-7 border-0 bg-[color-mix(in_oklch,var(--sidebar-accent),black_6%)] px-2 shadow-none focus-visible:border-0 focus-visible:ring-0 dark:bg-[color-mix(in_oklch,var(--sidebar-accent),black_12%)]"
+            className="h-7 border-0 bg-[color-mix(in_oklch,var(--sidebar-accent),black_6%)] px-2 text-base shadow-none focus-visible:border-0 focus-visible:ring-0 md:text-base dark:bg-[color-mix(in_oklch,var(--sidebar-accent),black_12%)]"
             onChange={(event) => setDraft(event.target.value)}
             onClick={(event) => event.stopPropagation()}
             onPointerDown={(event) => event.stopPropagation()}
@@ -142,7 +142,7 @@ export function ProjectSessionItem({
       ) : (
         <SidebarMenuSubButton
           render={<button type="button" />}
-          className="w-full pr-12 text-left"
+          className="w-full pr-12 text-left data-[size=md]:text-base"
           title={title}
           isActive={isActive}
           onClick={() => onSelect(session)}
@@ -195,12 +195,16 @@ export function ProjectSessionItem({
                 side={isMobile ? "bottom" : "right"}
                 align={isMobile ? "end" : "start"}
               >
-                <DropdownMenuItem onClick={() => onArchive(session)}>
+                <DropdownMenuItem
+                  className="text-base"
+                  onClick={() => onArchive(session)}
+                >
                   <ArchiveIcon />
                   <span>{t("sidebar.projects.archive")}</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   variant="destructive"
+                  className="text-base"
                   onClick={() => onDelete(session)}
                 >
                   <Trash2Icon />

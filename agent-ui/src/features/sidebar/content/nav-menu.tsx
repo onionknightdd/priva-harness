@@ -109,6 +109,7 @@ function NavMenuItem({
         <SidebarMenuButton
           isActive={isItemActive}
           tooltip={title}
+          className="text-base"
           onClick={selectItem}
           {...iconAnimationHandlers}
         >
@@ -130,6 +131,7 @@ function NavMenuItem({
           <SidebarMenuButton
             isActive={hasActiveSubmenuItem}
             tooltip={title}
+            className="text-base"
             {...iconAnimationHandlers}
           />
         }
@@ -142,7 +144,7 @@ function NavMenuItem({
             <SidebarMenuSubItem key={subItem.titleKey}>
               <SidebarMenuSubButton
                 render={<button type="button" />}
-                className="w-full text-left"
+                className="w-full text-left data-[size=md]:text-base"
                 isActive={subItem.view === activeView}
                 onClick={() => selectView(subItem.view)}
               >

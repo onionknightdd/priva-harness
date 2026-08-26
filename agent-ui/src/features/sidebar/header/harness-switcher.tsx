@@ -90,7 +90,7 @@ function HarnessOptionList({
   return (
     <div ref={listRef}>
       <DropdownMenuGroup className="flex flex-col gap-2">
-        <DropdownMenuLabel className="text-[11px] font-normal">
+        <DropdownMenuLabel className="text-xs font-normal">
           {t("sidebar.harness.select")}
         </DropdownMenuLabel>
         {harnessOptions.map((option) => {
@@ -117,18 +117,18 @@ function HarnessOptionList({
                   <HarnessBrandLogo harnessId={option.id} />
                 </ItemMedia>
                 <ItemContent className="min-w-0 gap-0.5">
-                  <ItemTitle className="text-xs">
+                  <ItemTitle className="text-sm">
                     <span className="truncate">{t(option.nameKey)}</span>
                     {option.disabled ? (
                       <Badge
                         variant="secondary"
-                        className="h-4 px-1.5 text-[10px]"
+                        className="h-4 px-1.5 text-[11px]"
                       >
                         {t("sidebar.harness.comingSoon")}
                       </Badge>
                     ) : null}
                   </ItemTitle>
-                  <ItemDescription className="text-[11px] leading-snug whitespace-normal">
+                  <ItemDescription className="text-xs leading-snug whitespace-normal">
                     {t(option.descriptionKey)}
                   </ItemDescription>
                 </ItemContent>
@@ -230,11 +230,11 @@ export function HarnessSwitcher() {
               >
                 <BotIcon aria-hidden="true" />
               </div>
-              <div className="grid min-w-0 flex-1 text-left text-xs leading-tight">
-                <span className="truncate text-base font-bold">
+              <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
+                <span className="truncate text-lg font-bold">
                   {t("sidebar.brand")}
                 </span>
-                <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+                <span className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground">
                   <span className="shrink-0">{t("sidebar.runtime")}</span>
                   <span className="shrink-0">:</span>
                   <AnimatePresence initial={false} mode="wait">

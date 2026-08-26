@@ -56,8 +56,8 @@ export function TagChip({
         className={cn(
           "border-0 px-1.5 shadow-none ring-0 focus-visible:border-0 focus-visible:ring-0",
           small
-            ? "h-4 max-w-28 text-[10px]"
-            : "h-5 max-w-32 text-xs",
+            ? "h-4 max-w-28 text-[11px]"
+            : "h-5 max-w-32 text-sm",
           removable && "pr-0.5",
           onSelect && "cursor-pointer"
         )}

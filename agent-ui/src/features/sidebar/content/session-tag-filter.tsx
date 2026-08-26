@@ -112,14 +112,14 @@ export function SessionTagFilter({
         align="end"
         side="bottom"
         sideOffset={6}
-        className="w-64 gap-2 p-2.5 text-xs"
+        className="w-64 gap-2 p-2.5 text-sm"
         onPointerDown={(event) => event.stopPropagation()}
       >
         <PopoverHeader className="gap-0.5">
-          <PopoverTitle className="text-xs font-bold">
+          <PopoverTitle className="text-sm font-bold">
             {t("sidebar.projects.filterTagsTitle")}
           </PopoverTitle>
-          <PopoverDescription className="text-[11px]">
+          <PopoverDescription className="text-xs">
             {t("sidebar.projects.filterTagsDescription")}
           </PopoverDescription>
         </PopoverHeader>
@@ -138,7 +138,7 @@ export function SessionTagFilter({
             onSelectedTagsChange((next ?? []).map((tag) => tag.name))
           }}
         >
-          <ComboboxChips className="min-h-8 w-full gap-1 rounded-md px-1.5 py-1 text-xs shadow-xs focus-within:border-input focus-within:ring-0 dark:bg-input/30">
+          <ComboboxChips className="min-h-8 w-full gap-1 rounded-md px-1.5 py-1 text-sm shadow-xs focus-within:border-input focus-within:ring-0 dark:bg-input/30">
             <ComboboxValue>
               {(value: KnownSessionTag[]) => (
                 <>
@@ -168,7 +168,7 @@ export function SessionTagFilter({
                   ))}
                   <ComboboxChipsInput
                     aria-label={t("sidebar.projects.filterTags")}
-                    className="h-4 min-w-12 flex-1 text-[10px] placeholder:text-muted-foreground"
+                    className="h-4 min-w-12 flex-1 text-[11px] placeholder:text-muted-foreground"
                     placeholder={
                       value.length === 0
                         ? t("sidebar.projects.filterTagsPlaceholder")
@@ -179,7 +179,7 @@ export function SessionTagFilter({
               )}
             </ComboboxValue>
           </ComboboxChips>
-          <ComboboxEmpty className="hidden py-2 text-xs has-[*]:flex">
+          <ComboboxEmpty className="hidden py-2 text-sm has-[*]:flex">
             {knownTags.length === 0
               ? t("sidebar.projects.filterTagsEmpty")
               : t("sidebar.projects.filterTagsNoResults")}
@@ -205,7 +205,7 @@ export function SessionTagFilter({
             type="button"
             className={cn(
               buttonVariants({ variant: "ghost", size: "xs" }),
-              "h-6 self-start px-1.5 text-[11px] text-muted-foreground"
+              "h-6 self-start px-1.5 text-xs text-muted-foreground"
             )}
             onClick={() => onSelectedTagsChange([])}
           >

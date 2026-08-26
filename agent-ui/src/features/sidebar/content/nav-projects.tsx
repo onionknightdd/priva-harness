@@ -128,7 +128,7 @@ function ProjectMenuItem({
           render={
             <SidebarMenuButton
               tooltip={cwd || name}
-              className="pr-12"
+              className="pr-12 text-base"
             />
           }
         >
@@ -174,7 +174,7 @@ function ProjectMenuItem({
           ))}
           {sessions.length === 0 && (
             <SidebarMenuSubItem>
-              <span className="flex h-7 items-center px-2 text-xs text-sidebar-foreground/60">
+              <span className="flex h-7 items-center px-2 text-sm text-sidebar-foreground/60">
                 {t("sidebar.projects.noSessions")}
               </span>
             </SidebarMenuSubItem>
@@ -183,7 +183,7 @@ function ProjectMenuItem({
             <SidebarMenuSubItem>
               <button
                 type="button"
-                className="flex h-7 w-full items-center px-2 text-xs text-sidebar-foreground/50 transition-colors hover:text-sidebar-foreground"
+                className="flex h-7 w-full items-center px-2 text-sm text-sidebar-foreground/50 transition-colors hover:text-sidebar-foreground"
                 onClick={() => {
                   const nextCount = shownCount + SESSION_PAGE_SIZE
                   if (nextCount > sessions.length && hasMore) {
@@ -213,7 +213,7 @@ function StatusMessage({
     <SidebarMenuItem>
       <motion.p
         role="status"
-        className="flex h-8 items-center px-2 text-xs text-sidebar-foreground/60"
+        className="flex h-8 items-center px-2 text-sm text-sidebar-foreground/60"
         initial={reduceMotion ? false : { opacity: 0, y: -3 }}
         animate={{ opacity: 1, y: 0 }}
         transition={reduceMotion ? { duration: 0 } : emptyStateTransition}

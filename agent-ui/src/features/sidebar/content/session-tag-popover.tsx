@@ -184,14 +184,14 @@ export function SessionTagPopover({
         align="start"
         side="bottom"
         sideOffset={4}
-        className="w-52 gap-2 p-2.5 text-xs"
+        className="w-52 gap-2 p-2.5 text-sm"
         onPointerDown={(event) => event.stopPropagation()}
       >
         <PopoverHeader className="gap-0.5">
-          <PopoverTitle className="text-xs font-bold">
+          <PopoverTitle className="text-sm font-bold">
             {t("sidebar.projects.tagTitle")}
           </PopoverTitle>
-          <PopoverDescription className="text-[11px]">
+          <PopoverDescription className="text-xs">
             {t("sidebar.projects.tagDescription")}
           </PopoverDescription>
         </PopoverHeader>
@@ -219,7 +219,7 @@ export function SessionTagPopover({
               disabled={pending}
               placeholder={tags.length === 0 ? t("sidebar.projects.tagPlaceholder") : undefined}
               aria-label={t("sidebar.projects.tag")}
-              className="h-5 min-w-12 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
+              className="h-5 min-w-12 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
               onChange={(event) => setDraft(event.target.value)}
               onClick={(event) => event.stopPropagation()}
               onKeyDown={(event) => {
@@ -288,7 +288,7 @@ export function SessionTagPopover({
                       value={tagQuery}
                       aria-label={t("sidebar.projects.searchTags")}
                       placeholder={t("sidebar.projects.searchTagsPlaceholder")}
-                      className="h-6 w-full rounded-md border-0 bg-sidebar-accent pr-6 pl-6 text-[11px] outline-none placeholder:text-muted-foreground"
+                      className="h-6 w-full rounded-md border-0 bg-sidebar-accent pr-6 pl-6 text-xs outline-none placeholder:text-muted-foreground"
                       onChange={(event) => setTagQuery(event.target.value)}
                       onKeyDown={(event) => {
                         if (event.key === "Escape") {
@@ -352,7 +352,7 @@ export function SessionTagPopover({
           </div>
         ) : null}
         {error ? (
-          <p role="alert" className="text-xs text-destructive">
+          <p role="alert" className="text-sm text-destructive">
             {error}
           </p>
         ) : null}

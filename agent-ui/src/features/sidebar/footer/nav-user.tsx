@@ -38,7 +38,7 @@ const ProfileDialog = React.lazy(async () => {
 })
 
 const menuItemClassName =
-  "gap-2 px-2 py-1.5 text-xs [&_svg]:text-muted-foreground"
+  "gap-2 px-2 py-1.5 text-sm [&_svg]:text-muted-foreground"
 
 function UserAvatar({
   className,
@@ -78,9 +78,9 @@ export function NavUser() {
             }}
           >
             <UserAvatar className="size-7" label={initials} />
-            <div className="grid min-w-0 flex-1 text-left text-xs leading-tight">
+            <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
               <span className="truncate font-medium">{name}</span>
-              <span className="truncate text-[11px] text-muted-foreground">
+              <span className="truncate text-xs text-muted-foreground">
                 {email}
               </span>
             </div>

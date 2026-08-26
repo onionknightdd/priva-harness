@@ -129,7 +129,7 @@ export function SidebarModeTabs() {
             >
               <TabsTrigger
                 value="agent"
-                className="dark:data-active:text-white"
+                className="group-data-[size=lg]/tabs-list:text-base dark:data-active:text-white"
               >
                 <ModeTabContent
                   active={mode === "agent"}
@@ -140,7 +140,7 @@ export function SidebarModeTabs() {
               </TabsTrigger>
               <TabsTrigger
                 value="code"
-                className="dark:data-active:text-white"
+                className="group-data-[size=lg]/tabs-list:text-base dark:data-active:text-white"
               >
                 <ModeTabContent
                   active={mode === "code"}
