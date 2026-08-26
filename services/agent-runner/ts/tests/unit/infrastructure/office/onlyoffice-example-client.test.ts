@@ -33,7 +33,7 @@ describe('createOnlyOfficeExampleClient', () => {
         fileType: 'xlsx',
         key: session.document.key,
         title: 'report.xlsx',
-        url: 'http://127.0.0.1:8080/example/download?fileName=stored-report.xlsx',
+        url: 'http://127.0.0.1:8080/example/download?fileName=stored-report.xlsx&useraddress=127.0.0.1',
       },
     })
     expect(session.document.key).toMatch(/^[0-9a-f]{20}$/)
@@ -69,7 +69,7 @@ describe('createOnlyOfficeExampleClient', () => {
     })
 
     expect(session.document.url).toBe(
-      'http://127.0.0.1:8080/download?fileName=stored-report.xlsx',
+      'http://127.0.0.1:8080/download?fileName=stored-report.xlsx&useraddress=127.0.0.1',
     )
   })
 

@@ -235,6 +235,8 @@ export const en = {
     spreadsheetTruncated:
       "Showing {{rows}} of {{totalRows}} rows and {{columns}} of {{totalColumns}} columns.",
     officeFallback: "Online Office preview is unavailable. Using the local spreadsheet view.",
+    officeFallbackWithReason:
+      "Online Office preview is unavailable ({{reason}}). Using the local spreadsheet view.",
   },
   sidebar: {
     brand: "Agent Workshop",

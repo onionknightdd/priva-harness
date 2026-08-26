@@ -64,7 +64,11 @@ export function createOnlyOfficeExampleClient(
           const upload = await request(
             fetchImpl,
             `${baseUrl}${endpoint.upload}`,
-            { method: 'POST', body: form },
+            {
+              method: 'POST',
+              body: form,
+              headers: { 'X-Forwarded-For': '127.0.0.1' },
+            },
             timeoutMs,
           )
 
@@ -92,7 +96,7 @@ export function createOnlyOfficeExampleClient(
               fileType,
               key: documentKey(input.path, input.size, input.modified),
               title: input.fileName,
-              url: `${baseUrl}${endpoint.download}?fileName=${encodeURIComponent(storedName)}`,
+              url: `${baseUrl}${endpoint.download}?fileName=${encodeURIComponent(storedName)}&useraddress=127.0.0.1`,
             },
           }
         } catch (error) {

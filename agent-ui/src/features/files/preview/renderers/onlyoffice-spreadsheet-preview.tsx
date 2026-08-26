@@ -2,7 +2,10 @@ import * as React from "react"
 import { motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
-import { createLocalOnlyOfficePreviewSession } from "@/lib/api/onlyoffice-example"
+import {
+  createLocalOnlyOfficePreviewSession,
+  exampleCallbackUrl,
+} from "@/lib/api/onlyoffice-example"
 import {
   createOfficePreviewSession,
   type OfficePreviewSession,
@@ -39,6 +42,9 @@ export function OnlyOfficeSpreadsheetPreview({
   const [status, setStatus] = React.useState<"loading" | "ready" | "fallback">(
     "loading"
   )
+  const [fallbackReason, setFallbackReason] = React.useState<string | null>(
+    null
+  )
 
   React.useEffect(() => {
     const host = hostRef.current
@@ -55,6 +61,7 @@ export function OnlyOfficeSpreadsheetPreview({
     const controller = new AbortController()
     const timeout = window.setTimeout(() => {
       if (!cancelled) {
+        setFallbackReason("timed out")
         setStatus((current) => (current === "loading" ? "fallback" : current))
       }
     }, EDITOR_READY_TIMEOUT_MS)
@@ -62,6 +69,13 @@ export function OnlyOfficeSpreadsheetPreview({
     const destroyEditor = () => {
       editorRef.current?.destroyEditor()
       editorRef.current = null
+    }
+
+    const fail = (reason: string) => {
+      if (!cancelled) {
+        setFallbackReason(reason)
+        setStatus("fallback")
+      }
     }
 
     void (async () => {
@@ -94,7 +108,12 @@ export function OnlyOfficeSpreadsheetPreview({
           },
           editorConfig: {
             mode: "view",
-            lang: i18n.language.startsWith("zh") ? "zh" : "en",
+            lang: i18n.language.startsWith("zh") ? "zh-CN" : "en",
+            callbackUrl: exampleCallbackUrl(session.document.title),
+            user: {
+              id: "preview",
+              name: "Preview",
+            },
             customization: {
               anonymous: { request: false },
               compactHeader: true,
@@ -119,17 +138,13 @@ export function OnlyOfficeSpreadsheetPreview({
                 )
               }
             },
-            onError: () => {
-              if (!cancelled) {
-                setStatus("fallback")
-              }
+            onError: (event) => {
+              fail(describeEditorError(event))
             },
           },
         })
-      } catch {
-        if (!cancelled) {
-          setStatus("fallback")
-        }
+      } catch (error) {
+        fail(describeUnknownError(error))
       }
     })()
 
@@ -161,7 +176,11 @@ export function OnlyOfficeSpreadsheetPreview({
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: shouldReduceMotion ? 0 : 0.18, ease: EASE_OUT }}
         >
-          {t("filePreview.officeFallback")}
+          {fallbackReason
+            ? t("filePreview.officeFallbackWithReason", {
+                reason: fallbackReason,
+              })
+            : t("filePreview.officeFallback")}
         </motion.p>
         <div className="min-h-0 flex-1">
           <SpreadsheetRenderer
@@ -220,4 +239,30 @@ async function downloadWorkbookBytes(source: string, signal: AbortSignal) {
   }
 
   return response.arrayBuffer()
+}
+
+function describeEditorError(event: {
+  data?: { errorCode?: number; errorDescription?: string } | number
+}) {
+  const data = event.data
+  if (typeof data === "number") {
+    return `OnlyOffice error ${data}`
+  }
+
+  if (typeof data?.errorCode === "number") {
+    const description = data.errorDescription?.trim()
+    return description
+      ? `OnlyOffice error ${data.errorCode}: ${description}`
+      : `OnlyOffice error ${data.errorCode}`
+  }
+
+  return "OnlyOffice editor failed"
+}
+
+function describeUnknownError(error: unknown) {
+  if (error instanceof Error && error.message.trim() !== "") {
+    return error.message
+  }
+
+  return "OnlyOffice preview failed"
 }

@@ -234,6 +234,8 @@ export const zhCN = {
     spreadsheetTruncated:
       "正在显示 {{rows}} / {{totalRows}} 行，{{columns}} / {{totalColumns}} 列。",
     officeFallback: "在线 Office 预览不可用，已改用本地表格预览。",
+    officeFallbackWithReason:
+      "在线 Office 预览不可用（{{reason}}），已改用本地表格预览。",
   },
   sidebar: {
     brand: "Agent Workshop",

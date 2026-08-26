@@ -2,10 +2,17 @@ import type { OfficePreviewSession } from "./sandbox-office"
 
 export const LOCAL_ONLYOFFICE_ORIGIN = "http://127.0.0.1:8080"
 const ONLYOFFICE_PROXY_BASE = "/onlyoffice"
+export const EXAMPLE_USER_ADDRESS = "127.0.0.1"
 
 const UPLOAD_ENDPOINTS = [
   { upload: "/example/upload", download: "/example/download" },
   { upload: "/upload", download: "/download" },
+] as const
+
+const DOWNLOAD_USER_ADDRESSES = [
+  EXAMPLE_USER_ADDRESS,
+  "__1",
+  "__ffff_127.0.0.1",
 ] as const
 
 export class OnlyOfficeExampleError extends Error {
@@ -38,13 +45,19 @@ export async function createLocalOnlyOfficePreviewSession(input: {
     for (const endpoint of UPLOAD_ENDPOINTS) {
       try {
         const storedName = await uploadWorkbook(base, endpoint.upload, input)
+        const downloadUrl = await resolveDownloadUrl(
+          base,
+          endpoint.download,
+          storedName,
+          input.signal
+        )
         return {
           documentServerUrl: LOCAL_ONLYOFFICE_ORIGIN,
           document: {
             fileType,
             key: documentKey(input.filePath, input.bytes.byteLength),
             title: input.fileName,
-            url: `${LOCAL_ONLYOFFICE_ORIGIN}${endpoint.download}?fileName=${encodeURIComponent(storedName)}`,
+            url: downloadUrl,
           },
         }
       } catch (error) {
@@ -58,6 +71,10 @@ export async function createLocalOnlyOfficePreviewSession(input: {
   }
 
   throw lastError
+}
+
+export function exampleCallbackUrl(fileName: string) {
+  return `${LOCAL_ONLYOFFICE_ORIGIN}/example/track?filename=${encodeURIComponent(fileName)}&useraddress=${encodeURIComponent(EXAMPLE_USER_ADDRESS)}`
 }
 
 async function uploadWorkbook(
@@ -105,6 +122,58 @@ async function uploadWorkbook(
   }
 
   return storedName
+}
+
+async function resolveDownloadUrl(
+  base: string,
+  downloadPath: string,
+  storedName: string,
+  signal?: AbortSignal
+) {
+  const queries = [
+    `${downloadPath}?fileName=${encodeURIComponent(storedName)}`,
+    ...DOWNLOAD_USER_ADDRESSES.map(
+      (userAddress) =>
+        `${downloadPath}?fileName=${encodeURIComponent(storedName)}&useraddress=${encodeURIComponent(userAddress)}`
+    ),
+  ]
+
+  let lastError: Error = new OnlyOfficeExampleError(
+    "OnlyOffice download is not reachable"
+  )
+
+  for (const query of queries) {
+    try {
+      await assertDownloadable(`${base}${query}`, signal)
+      return `${LOCAL_ONLYOFFICE_ORIGIN}${query}`
+    } catch (error) {
+      if (signal?.aborted) {
+        throw error
+      }
+
+      lastError = error instanceof Error ? error : lastError
+    }
+  }
+
+  throw lastError
+}
+
+async function assertDownloadable(url: string, signal?: AbortSignal) {
+  const response = await fetch(url, {
+    method: "GET",
+    cache: "no-store",
+    signal,
+  })
+
+  try {
+    if (!response.ok) {
+      throw new OnlyOfficeExampleError(
+        `OnlyOffice download failed (${response.status})`
+      )
+    }
+  } finally {
+    await response.body?.cancel()
+  }
 }
 
 function workbookFileType(fileName: string) {

@@ -26,6 +26,11 @@ export type OnlyOfficeEditorConfig = {
   editorConfig: {
     mode: "view"
     lang: string
+    callbackUrl: string
+    user: {
+      id: string
+      name: string
+    }
     customization: {
       anonymous: { request: false }
       compactHeader: true
@@ -38,7 +43,9 @@ export type OnlyOfficeEditorConfig = {
   events: {
     onAppReady?: () => void
     onDocumentReady?: () => void
-    onError?: (event: { data?: { errorCode?: number; errorDescription?: string } }) => void
+    onError?: (event: {
+      data?: number | { errorCode?: number; errorDescription?: string }
+    }) => void
   }
 }
 
