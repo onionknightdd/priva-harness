@@ -206,7 +206,7 @@ export function FileDiff({
     <div
       data-state={status}
       aria-busy={streaming}
-      className={cn("w-full text-sm", className)}
+      className={cn("w-full text-base", className)}
     >
       <button
         id={triggerId}
@@ -280,7 +280,7 @@ export function FileDiff({
               className="scrollbar-hide overflow-auto pl-[4px] pt-[8px]"
               style={{ maxHeight }}
             >
-              <pre className="agent-shiki shiki has-diff m-0 inline-block min-w-full whitespace-normal font-mono text-xs leading-5">
+              <pre className="agent-shiki shiki has-diff m-0 inline-block min-w-full whitespace-normal font-mono text-sm leading-5">
                 <code className="block">
                   <span className="sr-only">File changes</span>
                   {lines.map((line, index) => {

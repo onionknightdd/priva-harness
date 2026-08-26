@@ -126,7 +126,7 @@ export function FileRead({
     <div
       data-state={status}
       aria-busy={streaming}
-      className={cn("w-full text-sm", className)}
+      className={cn("w-full text-base", className)}
     >
       <button
         id={triggerId}

@@ -262,7 +262,7 @@ export function ToolResult({
     <div
       data-state={status}
       aria-busy={running}
-      className={cn("w-full text-sm", className)}
+      className={cn("w-full text-base", className)}
     >
       <button
         id={triggerId}
@@ -290,7 +290,7 @@ export function ToolResult({
             </ActionSwapRollText>
           </span>
           {meta ? (
-            <span className="shrink-0 text-xs text-muted-foreground/60">
+            <span className="shrink-0 text-sm text-muted-foreground/60">
               <ActionSwapRollText value={metaKey}>
                 {meta}
               </ActionSwapRollText>

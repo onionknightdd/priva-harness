@@ -209,7 +209,7 @@ export function CodeBlock({
         >
           <pre
             className={cn(
-              "agent-shiki shiki m-0 font-mono text-xs leading-5 text-foreground/85",
+              "agent-shiki shiki m-0 font-mono text-sm leading-5 text-foreground/85",
               wrap ? "w-full agent-shiki-wrap whitespace-normal" : "inline-block min-w-full whitespace-normal"
             )}
           >

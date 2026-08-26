@@ -295,7 +295,7 @@ function GenericToolItem({
       defaultOpen={running}
     >
       {output ? (
-        <pre className="max-h-40 overflow-auto whitespace-pre-wrap text-xs text-muted-foreground">
+        <pre className="max-h-40 overflow-auto whitespace-pre-wrap text-sm text-muted-foreground">
           {output}
         </pre>
       ) : null}
@@ -333,7 +333,7 @@ function BashToolItem({
     <div className="flex flex-col gap-2">
       <BashCommandLine text={typedCommand} caret={commandCaret} />
       {showOutput ? (
-        <pre className="m-0 whitespace-pre-wrap break-words font-mono text-xs leading-none text-muted-foreground">
+        <pre className="m-0 whitespace-pre-wrap break-words font-mono text-sm leading-none text-muted-foreground">
           {output}
           {awaitingOutput && !shouldReduceMotion ? (
             <CommandCaret className="bg-muted-foreground" />
@@ -376,11 +376,11 @@ function BashCommandLine({
 }) {
   return (
     <div className="flex items-start">
-      <span className="shrink-0 select-none whitespace-pre font-mono text-xs leading-none">
+      <span className="shrink-0 select-none whitespace-pre font-mono text-sm leading-none">
         {"$ "}
       </span>
       {caret ? (
-        <span className="min-w-0 flex-1 whitespace-pre-wrap break-words font-mono text-xs leading-none text-foreground/80">
+        <span className="min-w-0 flex-1 whitespace-pre-wrap break-words font-mono text-sm leading-none text-foreground/80">
           {text}
           <CommandCaret />
         </span>
@@ -619,7 +619,7 @@ function NestedAgentItem({ agent }: { agent: NestedAgent }) {
                         ? t("agentMessage.coordinatorMessage")
                         : t("agentMessage.peerMessage")}
                     </ItemTitle>
-                    <p className="whitespace-pre-wrap text-xs text-muted-foreground">
+                    <p className="whitespace-pre-wrap text-sm text-muted-foreground">
                       {item.body}
                     </p>
                   </ItemContent>
@@ -703,7 +703,7 @@ function ProcessRow({
         </ItemMedia>
       ) : null}
       <ItemContent className="min-w-0 flex-none">
-        <ItemTitle>{title}</ItemTitle>
+        <ItemTitle className="text-base">{title}</ItemTitle>
       </ItemContent>
       {showActions ? (
         <ItemActions>
@@ -720,7 +720,7 @@ function ProcessRow({
     return (
       <Item
         size="sm"
-        className="w-fit max-w-full bg-transparent px-0 py-0.5 hover:bg-transparent"
+        className="w-fit max-w-full bg-transparent px-0 py-0.5 text-base hover:bg-transparent"
       >
         {header}
       </Item>
@@ -731,7 +731,7 @@ function ProcessRow({
     <Collapsible className="group/process-item" defaultOpen={defaultOpen}>
       <Item
         size="sm"
-        className="w-fit max-w-full cursor-pointer bg-transparent px-0 py-0.5 text-left hover:bg-transparent aria-expanded:bg-transparent"
+        className="w-fit max-w-full cursor-pointer bg-transparent px-0 py-0.5 text-left text-base hover:bg-transparent aria-expanded:bg-transparent"
         render={<CollapsibleTrigger />}
       >
         {header}
