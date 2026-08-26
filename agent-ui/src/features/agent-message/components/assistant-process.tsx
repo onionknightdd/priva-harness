@@ -53,6 +53,15 @@ import {
   fileDiffLinesFromUnified,
 } from "../file-diff-lines"
 import { parseFileReadOutput, isImageFilePath } from "../file-read-view"
+import {
+  formatToolActivitySummary,
+  isBashTool,
+  isEditTool,
+  isReadTool,
+  isToolRunning,
+  isWriteTool,
+  toolItemStatusLabel,
+} from "../tool-activity"
 
 const PANEL_CLASS =
   "h-[var(--collapsible-panel-height)] overflow-hidden transition-[height,opacity] duration-200 ease-out data-[ending-style]:h-0 data-[ending-style]:opacity-0 data-[starting-style]:h-0 data-[starting-style]:opacity-0 motion-reduce:transition-none"
@@ -70,6 +79,7 @@ export function AssistantProcess({
   const blocks = [...(message.blocks ?? [])].sort(
     (left, right) => left.index - right.index
   )
+  const summary = isStreaming ? formatToolActivitySummary(blocks, t) : ""
 
   React.useEffect(() => {
     setOpen(isStreaming)
@@ -140,12 +150,28 @@ export function AssistantProcess({
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 justify-start px-0 text-base font-medium text-muted-foreground has-data-[icon=inline-end]:pr-0 hover:bg-transparent hover:text-muted-foreground focus:bg-transparent focus:text-muted-foreground active:translate-y-0 active:bg-transparent active:text-muted-foreground aria-expanded:bg-transparent aria-expanded:text-muted-foreground aria-expanded:hover:bg-transparent aria-expanded:hover:text-muted-foreground dark:hover:bg-transparent dark:hover:text-muted-foreground dark:aria-expanded:bg-transparent"
+              className={cn(
+                "h-auto min-h-7 justify-start whitespace-normal px-0 py-0.5 text-left text-base font-medium text-muted-foreground has-data-[icon=inline-end]:pr-0 hover:bg-transparent hover:text-muted-foreground focus:bg-transparent focus:text-muted-foreground active:translate-y-0 active:bg-transparent active:text-muted-foreground aria-expanded:bg-transparent aria-expanded:text-muted-foreground aria-expanded:hover:bg-transparent aria-expanded:hover:text-muted-foreground dark:hover:bg-transparent dark:hover:text-muted-foreground dark:aria-expanded:bg-transparent",
+                summary === "" ? "h-7 items-center py-0" : "items-start"
+              )}
             />
           }
         >
           {isStreaming ? (
-            <span className="shimmer">{t("agentMessage.thinking")}</span>
+            <span className="flex min-w-0 flex-col items-start gap-0.5">
+              <span className="shimmer">{t("agentMessage.thinking")}</span>
+              {summary === "" ? null : (
+                <motion.span
+                  key={summary}
+                  initial={shouldReduceMotion ? false : { opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}
+                  className="text-sm font-normal text-muted-foreground/80"
+                >
+                  {summary}
+                </motion.span>
+              )}
+            </span>
           ) : (
             t("agentMessage.chainOfThought")
           )}
@@ -280,7 +306,7 @@ function GenericToolItem({
   return (
     <ProcessRow
       icon={WrenchIcon}
-      title={block.name}
+      title={toolItemStatusLabel(block.name, running, t)}
       badge={label}
       badgeVariant={variant}
       defaultOpen={running}
@@ -299,6 +325,7 @@ function BashToolItem({
 }: {
   block: Extract<StreamBlock, { type: "tool_use" }>
 }) {
+  const { t } = useTranslation()
   const input = usefulToolInput(block.tool?.input) ?? usefulToolInput(block.input)
   const command = stringInput(input, "command")
   const description = stringInput(input, "description")
@@ -336,7 +363,7 @@ function BashToolItem({
   return (
     <div className="w-full min-w-0 px-0 py-0">
       <ToolResult
-        tool="bash"
+        tool={toolItemStatusLabel(block.name, status === "running", t)}
         title={description ?? (inputStreaming ? "" : command) ?? ""}
         kind="terminal"
         status={status}
@@ -444,6 +471,7 @@ function WriteToolItem({
 }: {
   block: Extract<StreamBlock, { type: "tool_use" }>
 }) {
+  const { t } = useTranslation()
   const input = usefulToolInput(block.tool?.input) ?? usefulToolInput(block.input)
   const filePath =
     stringInput(input, "file_path") ?? stringInput(input, "path")
@@ -464,7 +492,7 @@ function WriteToolItem({
 
   return (
     <FileDiff
-      tool="Write"
+      tool={toolItemStatusLabel(block.name, running, t)}
       file={fileNameFromPath(filePath)}
       lines={lines}
       status={running ? "streaming" : "complete"}
@@ -494,6 +522,7 @@ function EditToolItem({
 }: {
   block: Extract<StreamBlock, { type: "tool_use" }>
 }) {
+  const { t } = useTranslation()
   const input = usefulToolInput(block.tool?.input) ?? usefulToolInput(block.input)
   const filePath =
     stringInput(input, "file_path") ?? stringInput(input, "path")
@@ -507,7 +536,7 @@ function EditToolItem({
 
   return (
     <FileDiff
-      tool="Edit"
+      tool={toolItemStatusLabel(block.name, running, t)}
       file={fileNameFromPath(filePath)}
       lines={lines}
       status={running ? "streaming" : "complete"}
@@ -537,6 +566,7 @@ function ReadToolItem({
 }: {
   block: Extract<StreamBlock, { type: "tool_use" }>
 }) {
+  const { t } = useTranslation()
   const input = usefulToolInput(block.tool?.input) ?? usefulToolInput(block.input)
   const filePath =
     stringInput(input, "file_path") ?? stringInput(input, "path")
@@ -548,7 +578,7 @@ function ReadToolItem({
 
   return (
     <FileRead
-      tool="Read"
+      tool={toolItemStatusLabel(block.name, running, t)}
       file={fileNameFromPath(filePath)}
       imageHint={isImageFilePath(filePath)}
       view={view}
@@ -770,23 +800,6 @@ function formatElapsedMs(ms: number): string {
   return `${String(minutes)}m ${String(seconds).padStart(2, "0")}s`
 }
 
-function isBashTool(name: string): boolean {
-  const id = name.trim().toLowerCase()
-  return id === "bash" || id === "shell"
-}
-
-function isWriteTool(name: string): boolean {
-  return name.trim().toLowerCase() === "write"
-}
-
-function isEditTool(name: string): boolean {
-  return name.trim().toLowerCase() === "edit"
-}
-
-function isReadTool(name: string): boolean {
-  return name.trim().toLowerCase() === "read"
-}
-
 function fileNameFromPath(path: string | undefined): string {
   if (path === undefined || path.trim() === "") {
     return ""
@@ -864,13 +877,6 @@ function toolResultStatus(tool: ToolCard | undefined): ToolResultStatus {
     return "error"
   }
   return "success"
-}
-
-function isToolRunning(tool: ToolCard | undefined): boolean {
-  if (tool?.launchStatus === "async_launched") {
-    return true
-  }
-  return tool?.status !== "completed"
 }
 
 function toolBadge(

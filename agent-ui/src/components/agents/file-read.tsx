@@ -18,6 +18,7 @@ import {
 } from "react"
 
 import { AgentDisclosure } from "@/components/agents/agent-disclosure"
+import { ActionSwapRollText } from "@/components/motion/action-swap-roll"
 import { CodeBlock } from "@/components/agents/code-block"
 import type { AgentCodeLanguage } from "@/components/agents/agent-code"
 import { Lightbox } from "@/components/interior/lightbox"
@@ -142,7 +143,13 @@ export function FileRead({
         <span className="flex min-w-0 flex-none items-baseline gap-2">
           {tool ? (
             <span className="shrink-0 font-medium text-muted-foreground/70">
-              {tool}
+              {typeof tool === "string" || typeof tool === "number" ? (
+                <ActionSwapRollText value={String(tool)}>
+                  {tool}
+                </ActionSwapRollText>
+              ) : (
+                tool
+              )}
             </span>
           ) : null}
           <span className="min-w-0 truncate font-medium text-muted-foreground/70">
