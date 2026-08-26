@@ -14,6 +14,11 @@
 #
 # JWT is off for local example testing. With JWT on, /example/download returns 403
 # (jwt must be provided) and the editor shows "Download failed."
+#
+# The startup helper waits for storage.fs.secretString and copies it into the
+# active nginx secure_link secret. Reloading ds.conf too early leaves the
+# default "verysecretstring", so /cache/.../Editor.bin is 403 and the editor
+# shows "Download failed."
 ---
 apiVersion: v1
 kind: Namespace
@@ -37,14 +42,25 @@ data:
   fix-nginx-8080.sh: |
     #!/bin/bash
     set +e
-    for _ in $(seq 1 90); do
-      [ -f /etc/nginx/conf.d/ds.conf ] && break
+    secret=""
+    for _ in $(seq 1 120); do
+      if [ -f /etc/onlyoffice/documentserver/local.json ]; then
+        secret=$(python3 -c "import json,os; p='/etc/onlyoffice/documentserver/local.json'; print(json.load(open(p)).get('storage',{}).get('fs',{}).get('secretString','') if os.path.exists(p) else '')")
+      fi
+      if [ -n "$secret" ] && [ -f /etc/nginx/conf.d/ds.conf ]; then
+        break
+      fi
       sleep 1
     done
-    if [ -f /etc/nginx/conf.d/ds.conf ] && ! grep -q "listen 127.0.0.1:8080" /etc/nginx/conf.d/ds.conf; then
-      sed -i "s/listen 0.0.0.0:80;/listen 0.0.0.0:80;\\n  listen 127.0.0.1:8080;/" /etc/nginx/conf.d/ds.conf
-      nginx -s reload
+    for f in /etc/nginx/conf.d/ds.conf /etc/onlyoffice/documentserver/nginx/ds.conf; do
+      if [ -f "$f" ] && ! grep -q "listen 127.0.0.1:8080" "$f"; then
+        sed -i "s/listen 0.0.0.0:80;/listen 0.0.0.0:80;\\n  listen 127.0.0.1:8080;/" "$f"
+      fi
+    done
+    if [ -n "$secret" ] && [ -f /etc/nginx/conf.d/ds.conf ]; then
+      sed -i "s/set \$secure_link_secret .*/set \$secure_link_secret ${secret};/" /etc/nginx/conf.d/ds.conf
     fi
+    nginx -s reload
 ---
 apiVersion: apps/v1
 kind: Deployment
