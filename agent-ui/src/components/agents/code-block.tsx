@@ -228,12 +228,12 @@ export function CodeBlock({
                   >
                     {showLineNumbers ? (
                       <span
-                        className="shrink-0 select-none px-1.5 text-right tabular-nums text-muted-foreground/35"
+                        className="shrink-0 select-none pl-1.5 pr-3 text-right tabular-nums text-muted-foreground/35"
                         style={{
                           width:
                             lineNumberLeftPad > 0
-                              ? `calc(${String(lineDigits)}ch + 0.375rem + ${String(lineNumberLeftPad)}px)`
-                              : `calc(${String(lineDigits)}ch + 0.75rem)`,
+                              ? `calc(${String(lineDigits)}ch + 0.75rem + ${String(lineNumberLeftPad)}px)`
+                              : `calc(${String(lineDigits)}ch + 1.125rem)`,
                           paddingLeft:
                             lineNumberLeftPad > 0
                               ? `${String(lineNumberLeftPad)}px`
@@ -248,7 +248,7 @@ export function CodeBlock({
                       fallback={line.content}
                       className={cn(
                         "pr-4",
-                        showLineNumbers ? "pl-1" : "pl-4",
+                        showLineNumbers ? "pl-2" : "pl-4",
                         wrap
                           ? "whitespace-pre-wrap break-words"
                           : "whitespace-pre"
