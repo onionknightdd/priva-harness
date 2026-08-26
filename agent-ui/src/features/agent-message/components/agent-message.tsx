@@ -10,6 +10,10 @@ import { cn } from "@/lib/utils"
 
 import type { AgentThreadMessage } from "../agent-message-data"
 import {
+  appendQuotedDraft,
+  focusAgentComposer,
+} from "../quote-selection"
+import {
   AgentMessageComposer,
   composerDockTransition,
 } from "./agent-message-composer"
@@ -85,7 +89,15 @@ export function AgentMessage({
               exit={{ opacity: 0 }}
               transition={overlayTransition}
             >
-              <AgentMessageThread messages={messages} />
+              <AgentMessageThread
+                messages={messages}
+                onQuote={(text) => {
+                  onDraftChange(appendQuotedDraft(draft, text))
+                  requestAnimationFrame(() => {
+                    focusAgentComposer()
+                  })
+                }}
+              />
             </motion.div>
           )}
         </AnimatePresence>

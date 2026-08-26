@@ -330,6 +330,7 @@ export function AgentMessageComposer({
                 wrap={singleLine ? "off" : "soft"}
                 value={draft}
                 placeholder={t("agentMessage.promptPlaceholder")}
+                data-agent-composer="prompt"
                 className={
                   singleLine
                     ? "field-sizing-fixed h-8 min-h-8 max-h-8 w-full min-w-0 overflow-hidden px-0 py-0 leading-8 whitespace-nowrap"

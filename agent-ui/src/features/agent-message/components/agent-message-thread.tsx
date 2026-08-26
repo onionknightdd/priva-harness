@@ -18,11 +18,14 @@ import { formatSessionRelativeTime, useTickingNow } from "@/lib/relative-time"
 
 import type { AgentThreadMessage } from "../agent-message-data"
 import { AgentMessageItem } from "./agent-message-item"
+import { AssistantQuoteMenu } from "./assistant-quote-menu"
 
 export function AgentMessageThread({
   messages,
+  onQuote,
 }: {
   messages: AgentThreadMessage[]
+  onQuote?: (text: string) => void
 }) {
   const { t, i18n } = useTranslation()
   const { runHarnessId } = useHarness()
@@ -94,6 +97,7 @@ export function AgentMessageThread({
           <span className="sr-only">{t("agentMessage.scrollToLatest")}</span>
         </MessageScrollerButton>
       </MessageScroller>
+      {onQuote ? <AssistantQuoteMenu onQuote={onQuote} /> : null}
     </MessageScrollerProvider>
   )
 }

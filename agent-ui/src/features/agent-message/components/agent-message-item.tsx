@@ -228,6 +228,9 @@ export function AgentMessageItem({
             className={
               message.role === "user" ? "whitespace-pre-wrap" : undefined
             }
+            data-assistant-selectable={
+              message.role === "assistant" ? "" : undefined
+            }
           >
             {message.role === "assistant" ? (
               <AssistantStreamBody message={message} isStreaming={isStreaming} />
