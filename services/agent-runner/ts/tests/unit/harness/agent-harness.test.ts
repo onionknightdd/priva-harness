@@ -1,12 +1,17 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { StreamFrame } from '../../../src/core/event/agent-event.js'
 import { AgentHarness } from '../../../src/harness/agent-harness.js'
+import { DRAIN_SETTLE_MS } from '../../../src/harness/run/background-drain.js'
 import { LiveRunRegistry } from '../../../src/harness/run/live-run-registry.js'
 import { FakeAgentProvider } from '../../support/fake-agent-provider.js'
 import { testRunSpec } from '../../support/run-spec.js'
 
 describe('AgentHarness', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('emits run.started, forwards provider events, and releases the runtime', async () => {
     const provider = new FakeAgentProvider('claude', [
       {
@@ -147,6 +152,145 @@ describe('AgentHarness', () => {
     releaseGate()
     await live.waitForComplete()
     expect(liveRuns.listActive()).toEqual([])
-    expect(provider.released).toEqual(['warm'])
+    await waitForReleased(provider, ['warm'])
+  })
+
+  it('stops listing a session as running after the main turn while drain continues', async () => {
+    const provider = new FakeAgentProvider('claude', [
+      {
+        type: 'tool.completed',
+        id: 'call-a',
+        name: 'agent',
+        ok: true,
+        output: 'launched',
+        status: 'async_launched',
+        agentId: 'agent-1',
+      },
+      {
+        type: 'run.completed',
+        sessionId: 'sess-drain',
+        model: 'm',
+        durationMs: 1,
+      },
+    ])
+    let releaseDrain = (): void => undefined
+    provider.afterEventsGate = new Promise((resolve) => {
+      releaseDrain = resolve
+    })
+    const liveRuns = new LiveRunRegistry()
+    const harness = new AgentHarness({
+      providers: {
+        claude: provider,
+        pi: new FakeAgentProvider('pi', []),
+      },
+      cwd: '/tmp',
+      liveRuns,
+    })
+    const live = harness.launch(
+      { text: 'hi' },
+      testRunSpec({ cwd: '/tmp' }),
+      { session: { kind: 'resume', session: { provider: 'claude', id: 'sess-drain' } } },
+    )
+    await live.waitForComplete()
+    expect(live.status).toBe('complete')
+    expect(liveRuns.listActive()).toEqual([])
+    expect(provider.released).toEqual([])
+    releaseDrain()
+    await waitForReleased(provider, ['warm'])
+  })
+
+  it('ignores leftover idle events that are not an inbound turn', async () => {
+    const { provider, liveRuns, harness } = await warmAfterLaunch('sess-idle')
+    provider.emitIdle([
+      {
+        type: 'tool.completed',
+        id: 'late',
+        name: 'bash',
+        ok: true,
+        output: 'done',
+      },
+    ])
+    expect(liveRuns.listActive()).toEqual([])
+    await harness.disposePool()
+  })
+
+  it('reaps a silent inbound promotion so the session does not stay running', async () => {
+    const { provider, liveRuns, harness } = await warmAfterLaunch('sess-inbound')
+    vi.useFakeTimers()
+    provider.emitIdle([
+      {
+        type: 'assistant.delta',
+        messageId: 'm',
+        blockId: 'b',
+        index: 0,
+        text: 'hi',
+      },
+    ])
+    expect(liveRuns.listActive()).toHaveLength(1)
+    await vi.advanceTimersByTimeAsync(DRAIN_SETTLE_MS)
+    expect(liveRuns.listActive()).toEqual([])
+    await harness.disposePool()
+  })
+
+  it('clears an inbound live run when it is aborted', async () => {
+    const { provider, liveRuns, harness } = await warmAfterLaunch('sess-abort')
+    provider.emitIdle([
+      {
+        type: 'assistant.delta',
+        messageId: 'm',
+        blockId: 'b',
+        index: 0,
+        text: 'hi',
+      },
+    ])
+    const inbound = liveRuns.listActive()[0]
+    if (inbound === undefined) throw new Error('expected inbound live run')
+    harness.abortLive(inbound.runId)
+    expect(liveRuns.listActive()).toEqual([])
+    await harness.disposePool()
   })
 })
+
+async function warmAfterLaunch(sessionId: string) {
+  const provider = new FakeAgentProvider('claude', [
+    {
+      type: 'run.completed',
+      sessionId,
+      model: 'm',
+      durationMs: 1,
+    },
+  ])
+  const liveRuns = new LiveRunRegistry()
+  const harness = new AgentHarness({
+    providers: {
+      claude: provider,
+      pi: new FakeAgentProvider('pi', []),
+    },
+    cwd: '/tmp',
+    liveRuns,
+  })
+  const live = harness.launch(
+    { text: 'hi' },
+    testRunSpec({ cwd: '/tmp' }),
+    { session: { kind: 'resume', session: { provider: 'claude', id: sessionId } } },
+  )
+  await live.waitForComplete()
+  await waitForReleased(provider, ['warm'])
+  return { provider, liveRuns, harness }
+}
+
+async function waitForReleased(
+  provider: FakeAgentProvider,
+  expected: readonly string[],
+): Promise<void> {
+  const started = Date.now()
+  while (provider.released.length < expected.length) {
+    if (Date.now() - started > 1000) {
+      throw new Error(`runtime was not released as ${expected.join(',')}`)
+    }
+    await new Promise((resolve) => {
+      setTimeout(resolve, 10)
+    })
+  }
+  expect(provider.released).toEqual(expected)
+}

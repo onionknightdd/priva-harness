@@ -18,6 +18,8 @@ export class FakeAgentProvider implements AgentProvider {
   readonly specs: ProviderRunSpec[] = []
   readonly targets: SessionTarget[] = []
   gate: Promise<void> | undefined
+  afterEventsGate: Promise<void> | undefined
+  lastRuntime: FakeAgentRuntime | undefined
   delayMs = 0
 
   constructor(id: ProviderId, events: readonly AgentEvent[], sessions = new FakeSessionStore()) {
@@ -29,18 +31,33 @@ export class FakeAgentProvider implements AgentProvider {
   openSession(target: SessionTarget, spec: ProviderRunSpec): Promise<AgentRuntime> {
     this.targets.push(target)
     this.specs.push(spec)
-    return Promise.resolve(new FakeAgentRuntime(this, target))
+    const runtime = new FakeAgentRuntime(this, target)
+    this.lastRuntime = runtime
+    return Promise.resolve(runtime)
+  }
+
+  emitIdle(events: readonly AgentEvent[]): void {
+    this.lastRuntime?.emitIdle(events)
   }
 }
 
-class FakeAgentRuntime implements AgentRuntime {
+export class FakeAgentRuntime implements AgentRuntime {
   readonly session
+  private idleListener: ((events: readonly AgentEvent[]) => void) | undefined
 
   constructor(
     private readonly provider: FakeAgentProvider,
     target: SessionTarget,
   ) {
     this.session = { provider: provider.id, id: sessionIdFor(target) }
+  }
+
+  listenIdle(listener: ((events: readonly AgentEvent[]) => void) | undefined): void {
+    this.idleListener = listener
+  }
+
+  emitIdle(events: readonly AgentEvent[]): void {
+    this.idleListener?.(events)
   }
 
   async *run(turn: UserTurn, context: TurnContext): AsyncIterable<AgentEvent> {
@@ -58,6 +75,9 @@ class FakeAgentRuntime implements AgentRuntime {
     for (const event of this.provider.events) {
       yield withSession(event, this.session.id)
     }
+    if (this.provider.afterEventsGate !== undefined) {
+      await waitAbortable(this.provider.afterEventsGate, context.signal)
+    }
   }
 
   abort(): Promise<void> {
@@ -66,6 +86,7 @@ class FakeAgentRuntime implements AgentRuntime {
 
   release(retention: 'warm' | 'dispose'): Promise<void> {
     this.provider.released.push(retention)
+    if (retention === 'dispose') this.idleListener = undefined
     return Promise.resolve()
   }
 }

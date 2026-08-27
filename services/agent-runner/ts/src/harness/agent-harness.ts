@@ -14,6 +14,7 @@ import type { StreamFrame } from '../core/event/agent-event.js'
 import { isRunResultEvent } from '../core/event/agent-event.js'
 import type { UserTurn } from '../core/run/user-turn.js'
 import { SessionError } from '../core/resource/session.js'
+import { DRAIN_SETTLE_MS } from './run/background-drain.js'
 import { consumeRunEvents } from './run/consume-run-events.js'
 import { EnvelopeStamper } from './run/envelope-stamper.js'
 import type { LiveRun } from './run/live-run.js'
@@ -37,6 +38,7 @@ export interface AgentRunOptions {
 export class AgentHarness {
   private readonly liveRuns: LiveRunRegistry | undefined
   private readonly pool: WarmRuntimePool | undefined
+  private readonly inboundIdleTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
   constructor(private readonly options: AgentHarnessOptions) {
     this.liveRuns = options.liveRuns
@@ -93,6 +95,8 @@ export class AgentHarness {
   }
 
   async disposePool(): Promise<void> {
+    for (const timer of this.inboundIdleTimers.values()) clearTimeout(timer)
+    this.inboundIdleTimers.clear()
     await this.pool?.disposeAll()
   }
 
@@ -147,6 +151,7 @@ export class AgentHarness {
         }
         if (isRunResultEvent(frame)) sawResult = true
         live.publish(frame)
+        if (sawResult) live.complete()
       }
     } catch (error) {
       if (!sawResult) {
@@ -176,20 +181,15 @@ export class AgentHarness {
     session: SessionRef,
     events: readonly AgentEvent[],
   ): void {
+    if (events.length === 0) return
     const liveRuns = this.liveRuns
     if (liveRuns === undefined) return
     const existing = liveRuns.liveRunningForSession(session)
     if (existing !== undefined) {
-      for (const event of events) {
-        existing.publish(existing.stamp(event))
-        if (isRunResultEvent(event)) {
-          existing.complete()
-          liveRuns.finish(existing.runId)
-          void this.pool?.recycle(runtime, spec, session)
-        }
-      }
+      this.publishInbound(existing, events, runtime, spec, session)
       return
     }
+    if (!hasActiveInboundWork(events)) return
     this.pool?.claim(runtime)
     const runId = randomUUID()
     const abort = new AbortController()
@@ -200,16 +200,57 @@ export class AgentHarness {
       abort,
     })
     liveRuns.attachSession(runId, session.id)
+    abort.signal.addEventListener('abort', () => {
+      this.clearInboundIdle(runId)
+      if (live.status !== 'running') return
+      live.complete()
+      liveRuns.finish(runId)
+      void this.pool?.recycle(runtime, spec, session)
+    })
     live.publish(live.stamp({ type: 'run.started', model: spec.model }))
+    this.publishInbound(live, events, runtime, spec, session)
+  }
+
+  private publishInbound(
+    live: LiveRun,
+    events: readonly AgentEvent[],
+    runtime: AgentRuntime,
+    spec: ProviderRunSpec,
+    session: SessionRef,
+  ): void {
     for (const event of events) {
       live.publish(live.stamp(event))
-      if (isRunResultEvent(event)) {
-        live.complete()
-        liveRuns.finish(runId)
-        void this.pool?.recycle(runtime, spec, session)
-        return
-      }
+      if (!isRunResultEvent(event)) continue
+      this.clearInboundIdle(live.runId)
+      live.complete()
+      this.liveRuns?.finish(live.runId)
+      void this.pool?.recycle(runtime, spec, session)
+      return
     }
+    this.armInboundIdle(live, runtime, spec, session)
+  }
+
+  private armInboundIdle(
+    live: LiveRun,
+    runtime: AgentRuntime,
+    spec: ProviderRunSpec,
+    session: SessionRef,
+  ): void {
+    this.clearInboundIdle(live.runId)
+    const timer = setTimeout(() => {
+      this.inboundIdleTimers.delete(live.runId)
+      if (live.status !== 'running') return
+      live.complete()
+      this.liveRuns?.finish(live.runId)
+      void this.pool?.recycle(runtime, spec, session)
+    }, DRAIN_SETTLE_MS)
+    this.inboundIdleTimers.set(live.runId, timer)
+  }
+
+  private clearInboundIdle(runId: string): void {
+    const timer = this.inboundIdleTimers.get(runId)
+    if (timer !== undefined) clearTimeout(timer)
+    this.inboundIdleTimers.delete(runId)
   }
 
   private async *forward(
@@ -313,6 +354,27 @@ export class AgentHarness {
       context: spec.modelContext ?? null,
     })
   }
+}
+
+function hasActiveInboundWork(events: readonly AgentEvent[]): boolean {
+  return events.some((event) => {
+    switch (event.type) {
+      case 'assistant.delta':
+      case 'assistant.thinking_delta':
+      case 'assistant.block_start':
+      case 'assistant.image_delta':
+      case 'tool.started':
+      case 'tool.input_delta':
+      case 'tool.running':
+      case 'tool.progress':
+      case 'agent.started':
+      case 'workflow.started':
+      case 'workflow.progress':
+        return true
+      default:
+        return false
+    }
+  })
 }
 
 function sessionRefOf(session: SessionTarget): SessionRef | undefined {

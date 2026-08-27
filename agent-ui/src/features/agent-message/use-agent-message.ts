@@ -225,7 +225,7 @@ export function useAgentMessage() {
           suppressTranscriptSyncRef.current = false
           setAttached(false)
           const liveId = stream.sessionId ?? trackedLiveSessionId
-          if (!stream.detached && liveId) {
+          if (liveId) {
             endLiveSession(liveId)
           }
           if (activeStreamRef.current?.messageId === assistantMessage.id) {
