@@ -214,7 +214,7 @@ export function HarnessSwitcher() {
               title={
                 isCollapsed
                   ? t("common.expandSidebar")
-                  : `${t("sidebar.runtime")} : ${runtimeName}`
+                  : runtimeName
               }
               render={
                 <SidebarMenuButton
@@ -235,8 +235,6 @@ export function HarnessSwitcher() {
                   {t("sidebar.brand")}
                 </span>
                 <span className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground">
-                  <span className="shrink-0">{t("sidebar.runtime")}</span>
-                  <span className="shrink-0">:</span>
                   <AnimatePresence initial={false} mode="wait">
                     <motion.span
                       key={activeHarnessId}

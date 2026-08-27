@@ -242,7 +242,6 @@ export const zhCN = {
   },
   sidebar: {
     brand: "Agent Workshop",
-    runtime: "Runtime",
     modes: {
       label: "侧边栏模式",
       agent: "Agent",
