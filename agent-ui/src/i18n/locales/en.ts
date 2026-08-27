@@ -54,7 +54,7 @@ export const en = {
     thoughtDone: "Thought",
     nestedAgent: "Nested agent",
     workflow: "Workflow",
-    taskPlan: "Plan",
+    taskPlan: "Task",
     taskPlanProgress: "{{completed}} of {{total}}",
     toolRunning: "Running",
     toolCompleted: "Done",

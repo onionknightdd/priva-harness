@@ -35,7 +35,7 @@ export function TaskPlanPopover({
           animate={{ opacity: 1, y: 0 }}
           exit={shouldReduceMotion ? undefined : { opacity: 0, y: 6 }}
           transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}
-          className="mb-2 w-fit"
+          className="pointer-events-auto w-fit"
         >
           <TaskPlanPopoverCard plan={plan} />
         </motion.div>
@@ -63,7 +63,7 @@ function TaskPlanPopoverCard({ plan }: { plan: TaskPlan }) {
             type="button"
             className={cn(
               buttonVariants({ variant: "outline", size: "sm" }),
-              "rounded-full"
+              "rounded-full bg-background shadow-md"
             )}
             aria-label={`${title}, ${progress}`}
             whileTap={shouldReduceMotion ? undefined : { scale: 0.96 }}

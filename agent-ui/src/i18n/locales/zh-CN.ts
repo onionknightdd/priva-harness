@@ -54,7 +54,7 @@ export const zhCN = {
     thoughtDone: "已思考",
     nestedAgent: "嵌套 Agent",
     workflow: "工作流",
-    taskPlan: "计划",
+    taskPlan: "任务",
     taskPlanProgress: "{{completed}} / {{total}}",
     toolRunning: "执行中",
     toolCompleted: "已完成",
