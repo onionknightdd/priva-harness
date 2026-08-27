@@ -167,60 +167,30 @@ function filterModelGroups(
 
 function CollapsingInline({
   open,
-  measureKey,
   children,
 }: {
   open: boolean
-  measureKey: string
   children: React.ReactNode
 }) {
   const shouldReduceMotion = Boolean(useReducedMotion())
-  const measureRef = React.useRef<HTMLSpanElement>(null)
-  const [openWidth, setOpenWidth] = React.useState(0)
-
-  React.useLayoutEffect(() => {
-    if (!open) {
-      return
-    }
-
-    const element = measureRef.current
-    if (!element) {
-      return
-    }
-
-    // Measure unconstrained width. Measuring while collapsed would capture the
-    // 0-width parent and lock the label so it cannot reopen after resize.
-    element.style.width = "max-content"
-    element.style.maxWidth = "none"
-    const width = Math.ceil(element.scrollWidth)
-    element.style.width = ""
-    element.style.maxWidth = ""
-
-    if (width > 0) {
-      setOpenWidth(width)
-    }
-  }, [measureKey, open])
 
   return (
     <motion.span
       aria-hidden={!open}
-      className="inline-flex min-w-0 max-w-full flex-1 overflow-hidden align-middle"
+      className="inline-grid min-w-0 max-w-full overflow-hidden align-middle"
       initial={false}
-      style={{ maxWidth: "100%" }}
       animate={{
-        width: open ? openWidth || "auto" : 0,
-        maxWidth: "100%",
+        gridTemplateColumns: open ? "1fr" : "0fr",
         opacity: open ? 1 : 0,
       }}
       transition={
         shouldReduceMotion ? { duration: 0 } : workspaceDensityTransition
       }
     >
-      <span
-        ref={measureRef}
-        className="flex min-w-0 w-full items-center gap-1 pl-1"
-      >
-        {children}
+      <span className="flex min-w-0 overflow-hidden">
+        <span className="flex w-max max-w-full items-center gap-1 pl-1">
+          {children}
+        </span>
       </span>
     </motion.span>
   )
@@ -257,7 +227,7 @@ function OverflowFadeText({
       ref={viewportRef}
       data-overflowing={overflowing || undefined}
       className={cn(
-        "min-w-0 flex-1 overflow-hidden whitespace-nowrap",
+        "min-w-0 overflow-hidden whitespace-nowrap",
         overflowing &&
           "[mask-image:linear-gradient(to_right,black_calc(100%-1.25rem),transparent)]",
         className
@@ -875,7 +845,7 @@ export function ComposerModelSelector({
             size="xs"
             className={cn(
               COMPOSER_MODEL_TRIGGER_MAX_CLASS,
-              "w-full min-w-0 max-w-full shrink justify-start cursor-pointer overflow-hidden border-0 bg-transparent px-1.5 shadow-none hover:bg-muted/40 dark:bg-transparent dark:hover:bg-muted/30",
+              "w-max min-w-0 max-w-full shrink justify-start cursor-pointer overflow-hidden border-0 bg-transparent px-1.5 shadow-none hover:bg-muted/40 dark:bg-transparent dark:hover:bg-muted/30",
               COMPOSER_TEXT_CLASS
             )}
           />
@@ -885,7 +855,7 @@ export function ComposerModelSelector({
           <motion.span
             key={selectionKey}
             className={cn(
-              "flex w-full min-w-0 items-center",
+              "flex min-w-0 items-center",
               COMPOSER_TEXT_CLASS
             )}
             initial={shouldReduceMotion ? false : { opacity: 0, y: 3 }}
@@ -906,10 +876,7 @@ export function ComposerModelSelector({
               </span>
             )}
             {selection?.modelId ? (
-              <CollapsingInline
-                open={!iconOnly}
-                measureKey={displayModelName(selection.modelId)}
-              >
+              <CollapsingInline open={!iconOnly}>
                 <OverflowFadeText className={COMPOSER_TEXT_CLASS}>
                   {displayModelName(selection.modelId)}
                 </OverflowFadeText>
@@ -921,7 +888,7 @@ export function ComposerModelSelector({
                 />
               </CollapsingInline>
             ) : iconOnly ? null : (
-              <CollapsingInline open measureKey="select-model">
+              <CollapsingInline open>
                 <ChevronDownIcon
                   className={cn(
                     "size-3.5 shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none",
