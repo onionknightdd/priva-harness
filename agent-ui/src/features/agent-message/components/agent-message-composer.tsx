@@ -26,7 +26,7 @@ export const composerDockTransition = {
 
 const COMPOSER_FOOTER_HEIGHT = 40
 const COMPOSER_MULTI_PAD = 14
-const COMPOSER_SINGLE_PAD_Y = 4
+const COMPOSER_SINGLE_PAD_Y = 8
 const COMPACT_LINE_SLACK_PX = 8
 
 let measureContext: CanvasRenderingContext2D | null = null
@@ -354,7 +354,12 @@ export function AgentMessageComposer({
               />
             </motion.div>
           </div>
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex h-10 items-center">
+          <div
+            className={cn(
+              "pointer-events-none absolute z-10 flex items-center",
+              singleLine ? "inset-0" : "inset-x-0 bottom-0 h-10"
+            )}
+          >
             <div ref={leftRef} className="pointer-events-auto pl-2.5">
               <InputGroupAddon align="inline-start" className="p-0">
                 <AttachButton
