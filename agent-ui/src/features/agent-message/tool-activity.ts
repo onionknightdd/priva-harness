@@ -1,6 +1,7 @@
 import type { TFunction } from "i18next"
 
 import type { StreamBlock, ToolCard } from "./agent-message-data"
+import { isTaskBoardTool } from "./task-plan"
 
 export type ToolActivityKind = "read" | "edit" | "write" | "bash" | "other"
 
@@ -132,6 +133,7 @@ export function countToolActivity(
   const counts = emptyToolActivityCounts()
   for (const block of blocks) {
     if (block.type !== "tool_use") continue
+    if (isTaskBoardTool(block.name)) continue
     const kind = classifyToolName(block.name)
     if (isToolRunning(block.tool)) {
       counts[kind].running += 1

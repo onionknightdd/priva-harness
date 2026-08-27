@@ -12,7 +12,7 @@ import {
   stringField,
   type JsonRecord,
 } from '../../core/event/json-record.js'
-import { isAgentName, isReadToolName, isTerminalStatus, isWorkflowName } from '../../core/event/tool-names.js'
+import { isAgentName, isReadToolName, isTaskBoardName, isTerminalStatus, isWorkflowName } from '../../core/event/tool-names.js'
 import { unifiedDiffFromStructuredPatch } from '../../core/event/tool-patch.js'
 import { encodeReadView } from '../../core/event/tool-read.js'
 
@@ -24,6 +24,7 @@ export interface ClaudeSdkMessage {
   readonly event?: unknown
   readonly message?: unknown
   readonly tool_use_result?: unknown
+  readonly toolUseResult?: unknown
   readonly duration_ms?: number
   readonly total_cost_usd?: number
   readonly usage?: unknown
@@ -643,6 +644,10 @@ function claudeToolOutput(
   const gitDiff = result === undefined ? undefined : asRecord(result['gitDiff'])
   const gitPatch = gitDiff === undefined ? undefined : stringField(gitDiff, 'patch')
   if (gitPatch !== undefined && gitPatch !== '') return gitPatch
+  if (isTaskBoardName(name) && rawResult !== undefined && rawResult !== null) {
+    if (typeof rawResult === 'string' && rawResult.trim() !== '') return rawResult
+    return JSON.stringify(rawResult)
+  }
   return toolOutput(block['content'])
 }
 

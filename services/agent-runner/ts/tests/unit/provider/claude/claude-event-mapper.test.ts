@@ -490,4 +490,171 @@ describe('ClaudeEventMapper', () => {
       durationMs: 9,
     }])
   })
+
+  it('keeps TaskCreate JSONL toolUseResult so the plan can recover the task id', () => {
+    const mapper = new ClaudeEventMapper()
+    mapper.push({
+      type: 'assistant',
+      message: {
+        id: 'msg_task',
+        content: [{
+          type: 'tool_use',
+          id: 'create-1',
+          name: 'TaskCreate',
+          input: { subject: 'Read the file', description: 'Open src/app.ts' },
+        }],
+      },
+    })
+    const events = mapper.push({
+      type: 'user',
+      message: {
+        content: [{
+          type: 'tool_result',
+          tool_use_id: 'create-1',
+          content: 'Created task create-1',
+        }],
+      },
+      toolUseResult: { task: { id: 'task_a', subject: 'Read the file' } },
+    })
+
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'tool.completed',
+        id: 'create-1',
+        name: 'taskcreate',
+        ok: true,
+        output: JSON.stringify({ task: { id: 'task_a', subject: 'Read the file' } }),
+      }),
+    ]))
+  })
+
+  it('keeps TaskUpdate/Get/List JSONL toolUseResult as structured JSON', () => {
+    const mapper = new ClaudeEventMapper()
+    mapper.push({
+      type: 'assistant',
+      message: {
+        id: 'msg_board',
+        content: [
+          { type: 'tool_use', id: 'upd-1', name: 'TaskUpdate', input: { taskId: 'task_a', status: 'in_progress' } },
+          { type: 'tool_use', id: 'get-1', name: 'TaskGet', input: { taskId: 'task_a' } },
+          { type: 'tool_use', id: 'list-1', name: 'TaskList', input: {} },
+        ],
+      },
+    })
+
+    const update = mapper.push({
+      type: 'user',
+      message: {
+        content: [{ type: 'tool_result', tool_use_id: 'upd-1', content: 'Updated task task_a' }],
+      },
+      tool_use_result: {
+        success: true,
+        taskId: 'task_a',
+        updatedFields: ['status'],
+        statusChange: { from: 'pending', to: 'in_progress' },
+      },
+    })
+    const got = mapper.push({
+      type: 'user',
+      message: {
+        content: [{ type: 'tool_result', tool_use_id: 'get-1', content: 'Task task_a' }],
+      },
+      toolUseResult: {
+        task: {
+          id: 'task_a',
+          subject: 'Read the file',
+          description: 'Open src/app.ts',
+          status: 'in_progress',
+          blocks: ['task_b'],
+          blockedBy: [],
+        },
+      },
+    })
+    const listed = mapper.push({
+      type: 'user',
+      message: {
+        content: [{ type: 'tool_result', tool_use_id: 'list-1', content: '2 tasks' }],
+      },
+      toolUseResult: {
+        tasks: [
+          { id: 'task_a', subject: 'Read the file', status: 'in_progress', blockedBy: [] },
+          { id: 'task_b', subject: 'Draft the fix', status: 'pending', blockedBy: ['task_a'] },
+        ],
+      },
+    })
+
+    expect(update).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'tool.completed',
+        id: 'upd-1',
+        name: 'taskupdate',
+        output: JSON.stringify({
+          success: true,
+          taskId: 'task_a',
+          updatedFields: ['status'],
+          statusChange: { from: 'pending', to: 'in_progress' },
+        }),
+      }),
+    ]))
+    expect(got).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'tool.completed',
+        id: 'get-1',
+        name: 'taskget',
+        output: JSON.stringify({
+          task: {
+            id: 'task_a',
+            subject: 'Read the file',
+            description: 'Open src/app.ts',
+            status: 'in_progress',
+            blocks: ['task_b'],
+            blockedBy: [],
+          },
+        }),
+      }),
+    ]))
+    expect(listed).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'tool.completed',
+        id: 'list-1',
+        name: 'tasklist',
+        output: JSON.stringify({
+          tasks: [
+            { id: 'task_a', subject: 'Read the file', status: 'in_progress', blockedBy: [] },
+            { id: 'task_b', subject: 'Draft the fix', status: 'pending', blockedBy: ['task_a'] },
+          ],
+        }),
+      }),
+    ]))
+  })
+
+  it('does not treat the Agent/Task subagent tool as a task-board result', () => {
+    const mapper = new ClaudeEventMapper()
+    mapper.push({
+      type: 'assistant',
+      message: {
+        id: 'msg_agent',
+        content: [{ type: 'tool_use', id: 'agent-1', name: 'Task', input: { prompt: 'look' } }],
+      },
+    })
+    const events = mapper.push({
+      type: 'user',
+      message: {
+        content: [{
+          type: 'tool_result',
+          tool_use_id: 'agent-1',
+          content: '{"status":"async_launched","agentId":"ag-1"}',
+          toolUseResult: { status: 'async_launched', agentId: 'ag-1' },
+        }],
+      },
+    })
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'tool.completed',
+        id: 'agent-1',
+        name: 'task',
+        output: '{"status":"async_launched","agentId":"ag-1"}',
+      }),
+    ]))
+  })
 })

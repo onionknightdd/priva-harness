@@ -19,6 +19,16 @@ export function isWorkflowName(name: string): boolean {
   return name.trim().toLowerCase() === 'workflow'
 }
 
+export function isTaskBoardName(name: string): boolean {
+  const normalized = name.trim().toLowerCase().replace(/[_-]/g, '')
+  return (
+    normalized === 'taskcreate' ||
+    normalized === 'taskget' ||
+    normalized === 'taskupdate' ||
+    normalized === 'tasklist'
+  )
+}
+
 export function isReadToolName(name: string): boolean {
   return name.trim().toLowerCase() === 'read'
 }
