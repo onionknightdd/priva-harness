@@ -11,6 +11,7 @@ import {
   InputGroupButton,
   InputGroupTextarea,
 } from "@/components/ui/input-group"
+import { Separator } from "@/components/ui/separator"
 import {
   Tooltip,
   TooltipContent,
@@ -209,6 +210,10 @@ function ComposerControls({
           onEffortChange={onEffortChange}
         />
       </div>
+      <Separator
+        orientation="vertical"
+        className="h-4 data-vertical:self-center"
+      />
       <InputGroupButton
         type="submit"
         variant="default"
