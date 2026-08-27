@@ -11,22 +11,23 @@ import {
   type AgentThreadMessage,
 } from "./agent-message-data"
 import {
+  abortAgentSession,
+  attachAgentSession,
   runAgentSession,
+  type AgentRunConnection,
   type AgentRunEffort,
 } from "./run-agent-session"
-import { applyStreamFrame } from "./run-stream-reducer"
+import { applyStreamFrame, type StreamFrame } from "./run-stream-reducer"
 import { freezeMessageThinking } from "./thinking-time"
 
 type ActiveStream = {
-  controller: AbortController
+  connection: AgentRunConnection
   messageId: string
-  finished: Promise<void>
+  sessionId: string | null
+  detached: boolean
   inFlightTools: Set<string>
+  toolIdleWaiters: Array<() => void>
   waitForToolsIdle: () => Promise<void>
-}
-
-function isAbortError(error: unknown) {
-  return error instanceof DOMException && error.name === "AbortError"
 }
 
 export function useAgentMessage() {
@@ -38,7 +39,6 @@ export function useAgentMessage() {
     setLastModelReference,
   } = useAgentPreferences()
   const {
-    activeSession,
     threadMessages,
     messagesStatus,
     transcriptEpoch,
@@ -47,6 +47,9 @@ export function useAgentMessage() {
     bindRunSession,
     beginLiveSession,
     endLiveSession,
+    runningSessionIds,
+    runningSessions,
+    reloadThread,
   } = useChatSession()
   const [draft, setDraft] = React.useState("")
   const [modelReference, setModelReference] = React.useState<string | null>(
@@ -54,15 +57,22 @@ export function useAgentMessage() {
   )
   const [effort, setEffort] = React.useState<AgentRunEffort>("medium")
   const [messages, setMessages] = React.useState<AgentThreadMessage[]>([])
+  const [attached, setAttached] = React.useState(false)
   const activeStreamRef = React.useRef<ActiveStream | null>(null)
   const submitChainRef = React.useRef(Promise.resolve())
   const submitGenerationRef = React.useRef(0)
   const previousHarnessIdRef = React.useRef(runHarnessId)
+  const suppressTranscriptSyncRef = React.useRef(false)
 
   const bumpSubmitGeneration = React.useCallback(() => {
     submitGenerationRef.current += 1
-    activeStreamRef.current?.controller.abort()
-    activeStreamRef.current = null
+    const stream = activeStreamRef.current
+    if (stream) {
+      stream.detached = true
+      stream.connection.disconnect()
+      activeStreamRef.current = null
+      setAttached(false)
+    }
   }, [])
 
   React.useEffect(() => {
@@ -76,6 +86,10 @@ export function useAgentMessage() {
   }, [bumpSubmitGeneration, runHarnessId])
 
   React.useEffect(() => {
+    if (suppressTranscriptSyncRef.current) {
+      return
+    }
+
     if (messagesStatus === "loading") {
       setMessages([])
       return
@@ -88,16 +102,187 @@ export function useAgentMessage() {
     setMessages(threadMessages)
   }, [messagesStatus, threadMessages, transcriptEpoch])
 
+  const previousSessionIdRef = React.useRef(runSessionId)
   React.useEffect(() => {
+    const previous = previousSessionIdRef.current
+    previousSessionIdRef.current = runSessionId
+    if (previous === runSessionId || previous === null) {
+      return
+    }
     bumpSubmitGeneration()
-  }, [activeSession?.sessionId, bumpSubmitGeneration])
+  }, [bumpSubmitGeneration, runSessionId])
 
   React.useEffect(() => {
     return () => {
       submitGenerationRef.current += 1
-      activeStreamRef.current?.controller.abort()
+      const stream = activeStreamRef.current
+      if (stream) {
+        stream.detached = true
+        stream.connection.disconnect()
+      }
     }
   }, [])
+
+  const bindLive = React.useCallback(
+    (sessionId: string, assistantId: string) => {
+      bindRunSession(sessionId)
+      if (activeStreamRef.current?.messageId === assistantId) {
+        beginLiveSession(sessionId)
+      }
+    },
+    [beginLiveSession, bindRunSession]
+  )
+
+  const startStream = React.useCallback(
+    (
+      assistantMessage: AgentThreadMessage,
+      connection: AgentRunConnection,
+      liveSessionId: string | null
+    ) => {
+      const inFlightTools = new Set<string>()
+      const toolIdleWaiters: Array<() => void> = []
+      const notifyToolsIdle = () => {
+        if (inFlightTools.size > 0) {
+          return
+        }
+        for (const waiter of toolIdleWaiters.splice(0)) {
+          waiter()
+        }
+      }
+      let trackedLiveSessionId = liveSessionId
+      suppressTranscriptSyncRef.current = true
+      setAttached(true)
+
+      const stream: ActiveStream = {
+        connection,
+        messageId: assistantMessage.id,
+        sessionId: liveSessionId,
+        detached: false,
+        inFlightTools,
+        toolIdleWaiters,
+        waitForToolsIdle: () => {
+          if (inFlightTools.size === 0) {
+            return Promise.resolve()
+          }
+          return new Promise<void>((resolve) => {
+            toolIdleWaiters.push(resolve)
+          })
+        },
+      }
+
+      if (trackedLiveSessionId) {
+        beginLiveSession(trackedLiveSessionId)
+      }
+
+      const finished = connection.finished
+        .then(() => {
+          if (stream.detached) {
+            return
+          }
+          setMessages((currentMessages) =>
+            currentMessages.map((message) =>
+              message.id === assistantMessage.id &&
+              message.status === "streaming"
+                ? {
+                    ...freezeMessageThinking(message, Date.now()),
+                    status: "complete",
+                  }
+                : message
+            )
+          )
+        })
+        .catch((error: unknown) => {
+          if (stream.detached) {
+            return
+          }
+          setMessages((currentMessages) =>
+            currentMessages.map((message) =>
+              message.id === assistantMessage.id
+                ? {
+                    ...message,
+                    content:
+                      error instanceof Error && error.message
+                        ? error.message
+                        : t("agentMessage.sendFailed"),
+                    status: "error",
+                  }
+                : message
+            )
+          )
+        })
+        .finally(() => {
+          inFlightTools.clear()
+          notifyToolsIdle()
+          suppressTranscriptSyncRef.current = false
+          setAttached(false)
+          const liveId = stream.sessionId ?? trackedLiveSessionId
+          if (!stream.detached && liveId) {
+            endLiveSession(liveId)
+          }
+          if (activeStreamRef.current?.messageId === assistantMessage.id) {
+            activeStreamRef.current = null
+          }
+        })
+
+      void finished
+      activeStreamRef.current = stream
+    },
+    [beginLiveSession, endLiveSession, t]
+  )
+
+  const streamHandlers = React.useCallback(
+    (assistantMessage: AgentThreadMessage) => ({
+      onFrame: (frame: StreamFrame) => {
+        if (
+          activeStreamRef.current !== null &&
+          activeStreamRef.current.messageId !== assistantMessage.id
+        ) {
+          return
+        }
+        setMessages((currentMessages) =>
+          currentMessages.map((message) =>
+            message.id === assistantMessage.id
+              ? applyStreamFrame(message, frame)
+              : message
+          )
+        )
+      },
+      onToolStarted: (id: string) => {
+        activeStreamRef.current?.inFlightTools.add(id)
+      },
+      onToolCompleted: (id: string) => {
+        const stream = activeStreamRef.current
+        if (!stream) {
+          return
+        }
+        stream.inFlightTools.delete(id)
+        if (stream.inFlightTools.size === 0) {
+          for (const waiter of stream.toolIdleWaiters.splice(0)) {
+            waiter()
+          }
+        }
+      },
+      onError: (message: string) => {
+        setMessages((currentMessages) =>
+          currentMessages.map((item) =>
+            item.id === assistantMessage.id
+              ? { ...item, content: message, status: "error" as const }
+              : item
+          )
+        )
+      },
+      onSession: (sessionId: string) => {
+        if (activeStreamRef.current?.messageId === assistantMessage.id) {
+          activeStreamRef.current.sessionId = sessionId
+        }
+        bindLive(sessionId, assistantMessage.id)
+      },
+      onReplayGap: () => {
+        void reloadThread()
+      },
+    }),
+    [bindLive, reloadThread]
+  )
 
   const submit = React.useCallback(() => {
     const content = draft.trim()
@@ -137,67 +322,34 @@ export function useAgentMessage() {
       return [...settlePrevious, userMessage, assistantMessage]
     })
 
-    const updateAssistant = (
-      contentText: string,
-      status: "streaming" | "complete" | "error"
-    ) => {
-      setMessages((currentMessages) =>
-        currentMessages.map((message) =>
-          message.id === assistantMessage.id
-            ? { ...message, content: contentText, status }
-            : message
-        )
-      )
-    }
-
     submitChainRef.current = submitChainRef.current
       .catch(() => undefined)
       .then(async () => {
         if (generation !== submitGenerationRef.current) {
-          updateAssistant("", "complete")
+          setMessages((currentMessages) =>
+            currentMessages.map((message) =>
+              message.id === assistantMessage.id
+                ? { ...message, status: "complete" as const }
+                : message
+            )
+          )
           return
         }
 
-        await waitToSend(activeStreamRef.current, sendQueueBehavior)
+        await waitToSend(previousStream, sendQueueBehavior)
 
         if (generation !== submitGenerationRef.current) {
-          updateAssistant("", "complete")
+          setMessages((currentMessages) =>
+            currentMessages.map((message) =>
+              message.id === assistantMessage.id
+                ? { ...message, status: "complete" as const }
+                : message
+            )
+          )
           return
         }
 
-        const controller = new AbortController()
-        const inFlightTools = new Set<string>()
-        let trackedLiveSessionId = resumeSessionId
-        const toolIdleWaiters: Array<() => void> = []
-        const notifyToolsIdle = () => {
-          if (inFlightTools.size > 0) {
-            return
-          }
-          for (const waiter of toolIdleWaiters.splice(0)) {
-            waiter()
-          }
-        }
-
-        const stream: ActiveStream = {
-          controller,
-          messageId: assistantMessage.id,
-          inFlightTools,
-          waitForToolsIdle: () => {
-            if (inFlightTools.size === 0) {
-              return Promise.resolve()
-            }
-            return new Promise<void>((resolve) => {
-              toolIdleWaiters.push(resolve)
-            })
-          },
-          finished: Promise.resolve(),
-        }
-
-        if (trackedLiveSessionId) {
-          beginLiveSession(trackedLiveSessionId)
-        }
-
-        stream.finished = runAgentSession(
+        const connection = runAgentSession(
           {
             text: content,
             model: modelReference,
@@ -207,83 +359,14 @@ export function useAgentMessage() {
             promptSuggestions: inputSuggestions,
             ...(resumeSessionId ? { sessionId: resumeSessionId } : {}),
           },
-          {
-            signal: controller.signal,
-            onFrame: (frame) => {
-              if (activeStreamRef.current?.messageId !== assistantMessage.id) {
-                return
-              }
-              setMessages((currentMessages) =>
-                currentMessages.map((message) =>
-                  message.id === assistantMessage.id
-                    ? applyStreamFrame(message, frame)
-                    : message
-                )
-              )
-            },
-            onToolStarted: (id) => {
-              inFlightTools.add(id)
-            },
-            onToolCompleted: (id) => {
-              inFlightTools.delete(id)
-              notifyToolsIdle()
-            },
-            onError: (message) => {
-              updateAssistant(message, "error")
-            },
-            onSession: (sessionId) => {
-              bindRunSession(sessionId)
-              trackedLiveSessionId = sessionId
-              if (activeStreamRef.current?.messageId === assistantMessage.id) {
-                beginLiveSession(sessionId)
-              }
-            },
-          }
+          streamHandlers(assistantMessage)
         )
-          .then(() => {
-            setMessages((currentMessages) =>
-              currentMessages.map((message) =>
-                message.id === assistantMessage.id &&
-                message.status === "streaming"
-                  ? {
-                      ...freezeMessageThinking(message, Date.now()),
-                      status: "complete",
-                    }
-                  : message
-              )
-            )
-          })
-          .catch((error: unknown) => {
-            if (isAbortError(error)) {
-              return
-            }
 
-            updateAssistant(
-              error instanceof Error && error.message
-                ? error.message
-                : t("agentMessage.sendFailed"),
-              "error"
-            )
-          })
-          .finally(() => {
-            inFlightTools.clear()
-            notifyToolsIdle()
-            if (trackedLiveSessionId) {
-              endLiveSession(trackedLiveSessionId)
-            }
-            if (activeStreamRef.current?.messageId === assistantMessage.id) {
-              activeStreamRef.current = null
-            }
-          })
-
-        activeStreamRef.current = stream
+        startStream(assistantMessage, connection, resumeSessionId)
       })
   }, [
-    beginLiveSession,
-    bindRunSession,
     draft,
     effort,
-    endLiveSession,
     inputSuggestions,
     modelReference,
     queueBehavior,
@@ -291,13 +374,106 @@ export function useAgentMessage() {
     runHarnessId,
     runSessionId,
     setLastModelReference,
-    t,
+    startStream,
+    streamHandlers,
   ])
+
+  const stop = React.useCallback(() => {
+    const stream = activeStreamRef.current
+    if (stream) {
+      stream.connection.abort()
+      setMessages((currentMessages) => {
+        let changed = false
+        const next = currentMessages.map((message) => {
+          if (message.status !== "streaming") {
+            return message
+          }
+          changed = true
+          return {
+            ...freezeMessageThinking(message, Date.now()),
+            status: "complete" as const,
+          }
+        })
+        return changed ? next : currentMessages
+      })
+      return
+    }
+
+    if (!runHarnessId || !runSessionId) {
+      return
+    }
+
+    const running = runningSessions.find(
+      (item) => item.sessionId === runSessionId
+    )
+    abortAgentSession({
+      harness: runHarnessId,
+      sessionId: runSessionId,
+      ...(running ? { runId: running.runId } : {}),
+    })
+    endLiveSession(runSessionId)
+  }, [endLiveSession, runHarnessId, runSessionId, runningSessions])
+
+  const rejoin = React.useCallback(() => {
+    if (!runHarnessId || !runSessionId || !runCwd.trim()) {
+      return
+    }
+    const running = runningSessions.find(
+      (item) => item.sessionId === runSessionId
+    )
+    const assistantMessage = createAgentThreadMessage(
+      "assistant",
+      "",
+      "streaming"
+    )
+    const generation = submitGenerationRef.current
+    suppressTranscriptSyncRef.current = true
+
+    void reloadThread()
+      .catch(() => [] as AgentThreadMessage[])
+      .then(async (thread) => {
+        if (generation !== submitGenerationRef.current) {
+          suppressTranscriptSyncRef.current = false
+          return
+        }
+        setMessages([...thread, assistantMessage])
+        const connection = attachAgentSession(
+          {
+            harness: runHarnessId,
+            sessionId: runSessionId,
+            sinceSeq: 0,
+            ...(running ? { runId: running.runId } : {}),
+          },
+          streamHandlers(assistantMessage)
+        )
+        startStream(assistantMessage, connection, runSessionId)
+      })
+  }, [
+    reloadThread,
+    runCwd,
+    runHarnessId,
+    runSessionId,
+    runningSessions,
+    startStream,
+    streamHandlers,
+  ])
+
+  const isStreaming = attached || messages.some(
+    (message) => message.status === "streaming"
+  )
+
+  const canRejoin = Boolean(
+    runSessionId &&
+      runningSessionIds.has(runSessionId) &&
+      !isStreaming
+  )
 
   return {
     draft,
     messages,
     modelReference,
+    isStreaming,
+    canRejoin,
     canSubmit: Boolean(
       draft.trim() && modelReference && runHarnessId && runCwd.trim()
     ),
@@ -306,6 +482,8 @@ export function useAgentMessage() {
     setModelReference,
     setEffort,
     submit,
+    stop,
+    rejoin,
   }
 }
 
@@ -318,7 +496,7 @@ async function waitToSend(
   }
 
   if (queueBehavior === "follow-up") {
-    await previousStream.finished
+    await previousStream.connection.finished.catch(() => undefined)
     return
   }
 
@@ -326,6 +504,6 @@ async function waitToSend(
     await previousStream.waitForToolsIdle()
   }
 
-  previousStream.controller.abort()
-  await previousStream.finished
+  previousStream.connection.abort()
+  await previousStream.connection.finished.catch(() => undefined)
 }

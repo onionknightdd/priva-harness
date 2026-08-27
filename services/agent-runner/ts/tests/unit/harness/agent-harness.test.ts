@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { StreamFrame } from '../../../src/core/event/agent-event.js'
 import { AgentHarness } from '../../../src/harness/agent-harness.js'
+import { LiveRunRegistry } from '../../../src/harness/run/live-run-registry.js'
 import { FakeAgentProvider } from '../../support/fake-agent-provider.js'
 import { testRunSpec } from '../../support/run-spec.js'
 
@@ -47,7 +48,7 @@ describe('AgentHarness', () => {
     })
     expect(events[0]).toHaveProperty('runId')
     expect(events[1]).toMatchObject({ type: 'assistant.delta', text: 'Hi', seq: 2, harness: 'claude' })
-    expect(events[2]).toMatchObject({ type: 'run.completed', sessionId: 'sess-1', seq: 3 })
+    expect(events[2]).toMatchObject({ type: 'run.completed', sessionId: 'session-1', seq: 3 })
     expect(provider.released).toEqual(['dispose'])
     expect(provider.targets).toEqual([{ kind: 'new', provider: 'claude' }])
   })
@@ -108,5 +109,44 @@ describe('AgentHarness', () => {
     expect(provider.targets).toEqual([
       { kind: 'fork', source: { provider: 'claude', id: 'sess-1' } },
     ])
+  })
+
+  it('launches a live run that survives unsubscribing and rejects a busy init', async () => {
+    const provider = new FakeAgentProvider('claude', [
+      {
+        type: 'run.completed',
+        sessionId: 'sess-1',
+        model: 'm',
+        durationMs: 1,
+      },
+    ])
+    let releaseGate = (): void => undefined
+    provider.gate = new Promise((resolve) => {
+      releaseGate = resolve
+    })
+    const liveRuns = new LiveRunRegistry()
+    const harness = new AgentHarness({
+      providers: {
+        claude: provider,
+        pi: new FakeAgentProvider('pi', []),
+      },
+      cwd: '/tmp',
+      liveRuns,
+    })
+    const live = harness.launch(
+      { text: 'hi' },
+      testRunSpec({ cwd: '/tmp' }),
+      { session: { kind: 'resume', session: { provider: 'claude', id: 'sess-1' } } },
+    )
+    expect(liveRuns.listActive()).toHaveLength(1)
+    expect(() => harness.launch(
+      { text: 'again' },
+      testRunSpec({ cwd: '/tmp' }),
+      { session: { kind: 'resume', session: { provider: 'claude', id: 'sess-1' } } },
+    )).toThrow('Session has a live run')
+    releaseGate()
+    await live.waitForComplete()
+    expect(liveRuns.listActive()).toEqual([])
+    expect(provider.released).toEqual(['warm'])
   })
 })

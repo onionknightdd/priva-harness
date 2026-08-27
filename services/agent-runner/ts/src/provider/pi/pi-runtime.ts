@@ -92,13 +92,13 @@ export class PiRuntime implements AgentRuntime {
   }
 
   release(retention: 'warm' | 'dispose'): Promise<void> {
-    void retention
-    this.unsubscribe()
-    this.sessionHandle?.dispose()
-    this.sessionHandle = undefined
     this.events?.close()
     this.events = undefined
     this.mapper = undefined
+    if (retention === 'warm') return Promise.resolve()
+    this.unsubscribe()
+    this.sessionHandle?.dispose()
+    this.sessionHandle = undefined
     return Promise.resolve()
   }
 

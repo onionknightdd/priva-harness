@@ -1,6 +1,6 @@
 import * as React from "react"
-import { ArrowUpIcon, PlusIcon } from "lucide-react"
-import { motion, useReducedMotion } from "motion/react"
+import { ArrowUpIcon, PlusIcon, SquareIcon } from "lucide-react"
+import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
 import { SPRING_LAYOUT } from "@/lib/ease"
@@ -182,19 +182,28 @@ function AttachButton({
 
 function ComposerControls({
   canSubmit,
+  isStreaming,
   modelReady,
   sendLabel,
+  stopLabel,
   modelRequired,
+  onStop,
   onModelReferenceChange,
   onEffortChange,
 }: {
   canSubmit: boolean
+  isStreaming: boolean
   modelReady: boolean
   sendLabel: string
+  stopLabel: string
   modelRequired: string
+  onStop: () => void
   onModelReferenceChange: (model: string | null) => void
   onEffortChange: (effort: ComposerEffort) => void
 }) {
+  const shouldReduceMotion = Boolean(useReducedMotion())
+  const actionLabel = isStreaming ? stopLabel : sendLabel
+
   return (
     <div className="flex min-w-0 items-center gap-2">
       <div
@@ -215,15 +224,40 @@ function ComposerControls({
         className="mx-0.5 h-4 data-vertical:self-center"
       />
       <InputGroupButton
-        type="submit"
+        type={isStreaming ? "button" : "submit"}
         variant="default"
         size="icon-xs"
         className="relative z-10 shrink-0 rounded-full"
-        disabled={!canSubmit}
-        aria-label={sendLabel}
-        title={modelReady ? sendLabel : modelRequired}
+        disabled={!isStreaming && !canSubmit}
+        aria-label={actionLabel}
+        title={isStreaming ? stopLabel : modelReady ? sendLabel : modelRequired}
+        onClick={
+          isStreaming
+            ? (event) => {
+                event.preventDefault()
+                onStop()
+              }
+            : undefined
+        }
       >
-        <ArrowUpIcon />
+        <span className="relative flex size-4 items-center justify-center">
+          <AnimatePresence initial={false} mode="wait">
+            <motion.span
+              key={isStreaming ? "stop" : "send"}
+              initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.72 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.72 }}
+              transition={{ duration: shouldReduceMotion ? 0 : 0.16 }}
+              className="flex items-center justify-center"
+            >
+              {isStreaming ? (
+                <SquareIcon className="size-2.5 fill-current" />
+              ) : (
+                <ArrowUpIcon />
+              )}
+            </motion.span>
+          </AnimatePresence>
+        </span>
       </InputGroupButton>
     </div>
   )
@@ -233,20 +267,24 @@ export function AgentMessageComposer({
   compact = false,
   draft,
   canSubmit,
+  isStreaming = false,
   modelReady,
   onDraftChange,
   onModelReferenceChange,
   onEffortChange,
   onSubmit,
+  onStop,
 }: {
   compact?: boolean
   draft: string
   canSubmit: boolean
+  isStreaming?: boolean
   modelReady: boolean
   onDraftChange: (draft: string) => void
   onModelReferenceChange: (model: string | null) => void
   onEffortChange: (effort: ComposerEffort) => void
   onSubmit: () => void
+  onStop: () => void
 }) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
@@ -279,6 +317,9 @@ export function AgentMessageComposer({
       className="w-full min-w-0"
       onSubmit={(event) => {
         event.preventDefault()
+        if (isStreaming) {
+          return
+        }
         if (canSubmit) {
           onSubmit()
         }
@@ -385,9 +426,12 @@ export function AgentMessageComposer({
               >
                 <ComposerControls
                   canSubmit={canSubmit}
+                  isStreaming={isStreaming}
                   modelReady={modelReady}
                   sendLabel={t("agentMessage.send")}
+                  stopLabel={t("agentMessage.stop")}
                   modelRequired={t("agentMessage.modelRequired")}
+                  onStop={onStop}
                   onModelReferenceChange={onModelReferenceChange}
                   onEffortChange={onEffortChange}
                 />

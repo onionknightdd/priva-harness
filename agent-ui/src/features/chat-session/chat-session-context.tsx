@@ -37,6 +37,7 @@ type ChatSessionContextValue = ReturnType<typeof useSessionProjects> & {
   bindRunSession: (sessionId: string) => void
   beginLiveSession: (sessionId: string) => void
   endLiveSession: (sessionId: string) => void
+  reloadThread: () => Promise<AgentThreadMessage[]>
 }
 
 const ChatSessionContext = React.createContext<ChatSessionContextValue | null>(
@@ -360,6 +361,17 @@ export function ChatSessionProvider({
     })
   }, [])
 
+  const reloadThread = React.useCallback(async () => {
+    if (!activeSession || !runHarnessId) {
+      return [] as AgentThreadMessage[]
+    }
+    const payload = await listSessionThread(runHarnessId, activeSession.sessionId)
+    const next = threadMessagesFromApi(payload.messages)
+    setThreadMessages(next)
+    bumpTranscript()
+    return next
+  }, [activeSession, bumpTranscript, runHarnessId])
+
   const runningSessionIds = React.useMemo(() => {
     if (localLiveSessionIds.size === 0) {
       return projects.runningSessionIds
@@ -393,6 +405,7 @@ export function ChatSessionProvider({
       bindRunSession,
       beginLiveSession,
       endLiveSession,
+      reloadThread,
     }),
     [
       activeSession,
@@ -408,6 +421,7 @@ export function ChatSessionProvider({
       messagesStatus,
       openSession,
       projects,
+      reloadThread,
       remove,
       runCwd,
       runningSessionIds,

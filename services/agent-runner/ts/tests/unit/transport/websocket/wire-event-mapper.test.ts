@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { STREAM_PROTOCOL_VERSION } from '../../../../src/core/event/agent-event.js'
 import { encodeEvent } from '../../../../src/core/event/encode-event.js'
 import { EnvelopeStamper } from '../../../../src/harness/run/envelope-stamper.js'
-import { parseInitFrame, sessionTargetFromInit } from '../../../../src/transport/websocket/schema/run-frames.js'
+import { parseClientFrame, parseInitFrame, sessionTargetFromInit } from '../../../../src/transport/websocket/schema/run-frames.js'
 
 describe('run frames', () => {
   it('accepts init text, model, harness, and cwd', () => {
@@ -113,6 +113,36 @@ describe('run frames', () => {
       message: 'Pi does not support fork',
     })
     expect(parseInitFrame({ type: 'abort' }).ok).toBe(false)
+  })
+
+  it('parses attach and abort client frames', () => {
+    expect(parseClientFrame({
+      type: 'attach',
+      harness: 'claude',
+      sessionId: 'sess-1',
+      sinceSeq: 4,
+    })).toEqual({
+      ok: true,
+      frame: {
+        type: 'attach',
+        harness: 'claude',
+        sessionId: 'sess-1',
+        sinceSeq: 4,
+      },
+    })
+    expect(parseClientFrame({
+      type: 'abort',
+      harness: 'pi',
+      runId: 'run-1',
+    })).toEqual({
+      ok: true,
+      frame: {
+        type: 'abort',
+        harness: 'pi',
+        runId: 'run-1',
+      },
+    })
+    expect(parseClientFrame({ type: 'attach', harness: 'claude' }).ok).toBe(false)
   })
 
   it('accepts promptSuggestions on init and ignores queueBehavior', () => {

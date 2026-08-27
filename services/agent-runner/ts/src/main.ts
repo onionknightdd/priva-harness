@@ -110,6 +110,7 @@ export async function startServer(): Promise<void> {
   const host = process.env['HOST'] ?? '0.0.0.0'
 
   const close = async (): Promise<void> => {
+    await agentHarness.disposePool()
     await server.close()
   }
   process.once('SIGINT', () => { void close() })

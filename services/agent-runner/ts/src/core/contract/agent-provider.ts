@@ -26,9 +26,9 @@ export function isQueueBehavior(value: unknown): value is QueueBehavior {
 }
 
 export type SessionTarget =
-  | { kind: 'new'; provider: ProviderId }
+  | { kind: 'new'; provider: ProviderId; sessionId?: string }
   | { kind: 'resume'; session: SessionRef }
-  | { kind: 'fork'; source: SessionRef }
+  | { kind: 'fork'; source: SessionRef; sessionId?: string }
 
 export interface ProviderRunSpec {
   readonly cwd: string

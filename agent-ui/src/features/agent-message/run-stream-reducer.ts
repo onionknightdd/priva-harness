@@ -43,6 +43,10 @@ export type StreamFrame = {
   prompt?: string
   result?: string
   ts?: number
+  runId?: string
+  seq?: number
+  firstSeq?: number
+  lastSeq?: number
 }
 
 export function parseStreamFrame(raw: unknown): StreamFrame | undefined {

@@ -17,6 +17,8 @@ export class FakeAgentProvider implements AgentProvider {
   readonly released: string[] = []
   readonly specs: ProviderRunSpec[] = []
   readonly targets: SessionTarget[] = []
+  gate: Promise<void> | undefined
+  delayMs = 0
 
   constructor(id: ProviderId, events: readonly AgentEvent[], sessions = new FakeSessionStore()) {
     this.id = id
@@ -41,17 +43,20 @@ class FakeAgentRuntime implements AgentRuntime {
     this.session = { provider: provider.id, id: sessionIdFor(target) }
   }
 
-  run(turn: UserTurn, context: TurnContext): AsyncIterable<AgentEvent> {
+  async *run(turn: UserTurn, context: TurnContext): AsyncIterable<AgentEvent> {
     void turn
-    void context
-    const events = this.provider.events
-    return {
-      [Symbol.asyncIterator]() {
-        const iterator = events[Symbol.iterator]()
-        return {
-          next: () => Promise.resolve(iterator.next()),
-        }
-      },
+    if (this.provider.gate !== undefined) {
+      await waitAbortable(this.provider.gate, context.signal)
+    }
+    if (this.provider.delayMs > 0) {
+      await delay(this.provider.delayMs, context.signal)
+    }
+    if (context.signal.aborted) {
+      yield { type: 'run.aborted', sessionId: this.session.id }
+      return
+    }
+    for (const event of this.provider.events) {
+      yield withSession(event, this.session.id)
     }
   }
 
@@ -59,14 +64,49 @@ class FakeAgentRuntime implements AgentRuntime {
     return Promise.resolve()
   }
 
-  release(): Promise<void> {
-    this.provider.released.push('dispose')
+  release(retention: 'warm' | 'dispose'): Promise<void> {
+    this.provider.released.push(retention)
     return Promise.resolve()
   }
 }
 
 function sessionIdFor(target: SessionTarget): string {
   if (target.kind === 'resume') return target.session.id
-  if (target.kind === 'fork') return `fork-${target.source.id}`
-  return 'session-1'
+  if (target.kind === 'fork') return target.sessionId ?? `fork-${target.source.id}`
+  return target.sessionId ?? 'session-1'
+}
+
+function withSession(event: AgentEvent, sessionId: string): AgentEvent {
+  if (!('sessionId' in event)) return event
+  return { ...event, sessionId }
+}
+
+function waitAbortable(gate: Promise<void>, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const done = (): void => {
+      signal.removeEventListener('abort', done)
+      resolve()
+    }
+    if (signal.aborted) {
+      done()
+      return
+    }
+    signal.addEventListener('abort', done, { once: true })
+    void gate.then(done)
+  })
+}
+
+function delay(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms)
+    const onAbort = (): void => {
+      clearTimeout(timer)
+      resolve()
+    }
+    if (signal.aborted) {
+      onAbort()
+      return
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
 }

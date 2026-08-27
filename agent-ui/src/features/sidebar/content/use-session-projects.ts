@@ -11,6 +11,7 @@ import {
   renameSession,
   tagSession,
   type AgentRunHarness,
+  type RunningSession,
   type SessionInfo,
   type SessionProjectGroup,
 } from "@/lib/api/sandbox-sessions"
@@ -36,9 +37,18 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
   const [error, setError] = React.useState<string | null>(null)
   const [refreshing, setRefreshing] = React.useState(false)
   const [refreshIndex, setRefreshIndex] = React.useState(0)
-  const [runningSessionIds, setRunningSessionIds] = React.useState<
-    ReadonlySet<string>
-  >(() => new Set())
+  const [runningSessions, setRunningSessions] = React.useState<
+    readonly RunningSession[]
+  >([])
+  const runningSessionIds = React.useMemo(
+    () =>
+      new Set(
+        runningSessions.flatMap((item) =>
+          item.sessionId ? [item.sessionId] : []
+        )
+      ),
+    [runningSessions]
+  )
 
   const refresh = React.useCallback(() => {
     setRefreshIndex((current) => current + 1)
@@ -50,7 +60,7 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
       setActiveCwd("")
       setError(null)
       setRefreshing(false)
-      setRunningSessionIds(new Set())
+      setRunningSessions([])
       setStatus("unsupported")
       return
     }
@@ -98,13 +108,7 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
         if (cancelled) {
           return
         }
-        setRunningSessionIds(
-          new Set(
-            running.flatMap((item) =>
-              item.sessionId ? [item.sessionId] : []
-            )
-          )
-        )
+        setRunningSessions(running)
       } catch {
         // Keep the last known live set if a poll fails.
       }
@@ -301,6 +305,7 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
     rename,
     remove,
     prependSession,
+    runningSessions,
     runningSessionIds,
   }
 }

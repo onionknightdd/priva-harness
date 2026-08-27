@@ -57,6 +57,29 @@ describe('ClaudeRuntime stream input', () => {
     await query?.promptEnded
     expect(query?.waitingForMore).toBe(false)
   })
+
+  it('keeps the query open on warm release', async () => {
+    let query: FakeClaudeQuery | undefined
+    const runtime = new ClaudeRuntime(
+      testRunSpec(),
+      { kind: 'new', provider: 'claude' },
+      '/tmp/claude',
+      ({ prompt }) => {
+        query = new FakeClaudeQuery(prompt)
+        return query
+      },
+    )
+    await collect(runtime.run(
+      { text: 'hello' },
+      { signal: new AbortController().signal },
+    ))
+    await query?.turnReady
+    await runtime.release('warm')
+    expect(query?.waitingForMore).toBe(true)
+    await runtime.release('dispose')
+    await query?.promptEnded
+    expect(query?.waitingForMore).toBe(false)
+  })
 })
 
 async function collect(events: AsyncIterable<AgentEvent>): Promise<AgentEvent[]> {

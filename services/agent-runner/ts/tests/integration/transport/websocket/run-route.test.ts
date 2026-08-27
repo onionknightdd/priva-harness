@@ -6,6 +6,7 @@ import type { FastifyInstance } from 'fastify'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { AgentHarness } from '../../../../src/harness/agent-harness.js'
+import { LiveRunRegistry } from '../../../../src/harness/run/live-run-registry.js'
 import { NodeUserFileSystem } from '../../../../src/infrastructure/filesystem/node-user-file-system.js'
 import { buildHttpServer } from '../../../../src/transport/http/server.js'
 import { RUN_WEBSOCKET_PATH } from '../../../../src/transport/websocket/run-route.js'
@@ -18,6 +19,7 @@ describe('WS /api/sandbox/agent/ws/run', () => {
   let modelReference: string
   let claudeProvider: FakeAgentProvider
   let piProvider: FakeAgentProvider
+  let liveRuns: LiveRunRegistry
   let agentProfileService: ReturnType<typeof createTestAgentServices>['agentProfileService']
 
   beforeEach(async () => {
@@ -68,6 +70,7 @@ describe('WS /api/sandbox/agent/ws/run', () => {
       defaultModel: 'm',
     })
     modelReference = `${profile.id}:m`
+    liveRuns = new LiveRunRegistry()
     server = buildHttpServer({
       userFileSystem: new NodeUserFileSystem({ initialDirectory: testRoot }),
       modelProfileService,
@@ -78,6 +81,7 @@ describe('WS /api/sandbox/agent/ws/run', () => {
           pi: piProvider,
         },
         cwd: testRoot,
+        liveRuns,
       }),
     })
     await server.ready()
@@ -107,11 +111,12 @@ describe('WS /api/sandbox/agent/ws/run', () => {
       expect.objectContaining({ type: 'assistant.delta', text: 'Hello' }),
       expect.objectContaining({
         type: 'run.completed',
-        sessionId: 'sess-1',
         model: 'm',
         durationMs: 5,
       }),
     ]))
+    expect(claudeProvider.targets[0]).toMatchObject({ kind: 'new', provider: 'claude' })
+    expect(claudeProvider.targets[0]).toHaveProperty('sessionId')
   })
 
   it('returns an error frame for a missing init text', async () => {
@@ -262,6 +267,110 @@ describe('WS /api/sandbox/agent/ws/run', () => {
       queueBehavior: 'steer',
     }))
   })
+
+  it('keeps a live run after the socket closes and replays on attach', async () => {
+    let releaseGate = (): void => undefined
+    claudeProvider.gate = new Promise((resolve) => {
+      releaseGate = resolve
+    })
+    const socket = await server.injectWS(RUN_WEBSOCKET_PATH)
+    socket.send(JSON.stringify({
+      type: 'init',
+      text: 'hi',
+      model: modelReference,
+      harness: 'claude',
+      cwd: testRoot,
+    }))
+    const live = await waitFor(() => liveRuns.listActive()[0])
+    expect(live.sessionId).toEqual(expect.any(String))
+    socket.close()
+    expect(liveRuns.listActive()).toHaveLength(1)
+
+    const attach = await server.injectWS(RUN_WEBSOCKET_PATH)
+    const received: unknown[] = []
+    const closed = new Promise<void>((resolve, reject) => {
+      attach.on('message', (data: unknown) => {
+        received.push(JSON.parse(String(data)) as unknown)
+      })
+      attach.on('close', () => resolve())
+      attach.on('error', reject)
+    })
+    attach.send(JSON.stringify({
+      type: 'attach',
+      harness: 'claude',
+      sessionId: live.sessionId,
+      sinceSeq: 0,
+    }))
+    await waitFor(() => received[0])
+    expect(received[0]).toMatchObject({ type: 'run.started', runId: live.runId })
+    releaseGate()
+    await closed
+    expect(received).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'run.started', runId: live.runId }),
+      expect.objectContaining({ type: 'run.completed', runId: live.runId }),
+    ]))
+    expect(liveRuns.listActive()).toEqual([])
+  })
+
+  it('aborts a live run from an abort frame after disconnect', async () => {
+    claudeProvider.gate = new Promise(() => undefined)
+    const socket = await server.injectWS(RUN_WEBSOCKET_PATH)
+    socket.send(JSON.stringify({
+      type: 'init',
+      text: 'hi',
+      model: modelReference,
+      harness: 'claude',
+      cwd: testRoot,
+    }))
+    const live = await waitFor(() => liveRuns.listActive()[0])
+    socket.close()
+
+    const abortSocket = await server.injectWS(RUN_WEBSOCKET_PATH)
+    const frames = collectFrames(abortSocket)
+    abortSocket.send(JSON.stringify({
+      type: 'abort',
+      harness: 'claude',
+      sessionId: live.sessionId,
+      runId: live.runId,
+    }))
+    const received = await frames
+    expect(received).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'run.aborted', runId: live.runId }),
+    ]))
+    expect(liveRuns.listActive()).toEqual([])
+  })
+
+  it('rejects a second init while the session is live', async () => {
+    claudeProvider.gate = new Promise(() => undefined)
+    const socket = await server.injectWS(RUN_WEBSOCKET_PATH)
+    socket.send(JSON.stringify({
+      type: 'init',
+      text: 'hi',
+      model: modelReference,
+      harness: 'claude',
+      cwd: testRoot,
+      sessionId: 'sess-busy',
+    }))
+    await waitFor(() => liveRuns.listActive()[0])
+
+    const busy = await server.injectWS(RUN_WEBSOCKET_PATH)
+    const frames = collectFrames(busy)
+    busy.send(JSON.stringify({
+      type: 'init',
+      text: 'again',
+      model: modelReference,
+      harness: 'claude',
+      cwd: testRoot,
+      sessionId: 'sess-busy',
+    }))
+    expect(await frames).toEqual([
+      expect.objectContaining({
+        type: 'error',
+        message: 'Session has a live run',
+      }),
+    ])
+    socket.close()
+  })
 })
 
 function collectFrames(socket: { on: (event: string, listener: (...args: unknown[]) => void) => void }): Promise<unknown[]> {
@@ -273,4 +382,14 @@ function collectFrames(socket: { on: (event: string, listener: (...args: unknown
     socket.on('close', () => resolve(frames))
     socket.on('error', reject)
   })
+}
+
+async function waitFor<T>(read: () => T | undefined, timeoutMs = 1000): Promise<T> {
+  const started = Date.now()
+  for (;;) {
+    const value = read()
+    if (value !== undefined) return value
+    if (Date.now() - started > timeoutMs) throw new Error('timed out')
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
 }
