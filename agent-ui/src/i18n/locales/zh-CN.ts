@@ -33,8 +33,6 @@ export const zhCN = {
     promptPlaceholder: "问任何问题…",
     send: "发送",
     stop: "停止",
-    rejoin: "重新加入",
-    stillRunning: "该会话仍在运行",
     attach: "添加附件",
     attachUnavailable: "附件功能尚未开放",
     selectModel: "选择模型",
@@ -331,7 +329,6 @@ export const zhCN = {
       clearTagFilters: "清除筛选",
       revealInFiles: "在文件中查看",
       archive: "归档",
-      sessionIdle: "空闲",
       sessionRunning: "运行中",
     },
     user: {

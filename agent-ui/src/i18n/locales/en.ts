@@ -33,8 +33,6 @@ export const en = {
     promptPlaceholder: "Ask anything...",
     send: "Send",
     stop: "Stop",
-    rejoin: "Rejoin",
-    stillRunning: "This session is still running",
     attach: "Attach file",
     attachUnavailable: "Attachments are not available yet",
     selectModel: "Select model",
@@ -334,7 +332,6 @@ export const en = {
       clearTagFilters: "Clear filters",
       revealInFiles: "Reveal in Files",
       archive: "Archive",
-      sessionIdle: "Idle",
       sessionRunning: "Running",
     },
     user: {

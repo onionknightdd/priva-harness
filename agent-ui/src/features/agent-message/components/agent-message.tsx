@@ -6,7 +6,6 @@ import {
 import { useTranslation } from "react-i18next"
 
 import { useChatSession } from "@/features/chat-session"
-import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 import type { AgentThreadMessage } from "../agent-message-data"
@@ -36,27 +35,23 @@ export function AgentMessage({
   messages,
   canSubmit,
   isStreaming,
-  canRejoin,
   modelReady,
   onDraftChange,
   onModelReferenceChange,
   onEffortChange,
   onSubmit,
   onStop,
-  onRejoin,
 }: {
   draft: string
   messages: AgentThreadMessage[]
   canSubmit: boolean
   isStreaming: boolean
-  canRejoin: boolean
   modelReady: boolean
   onDraftChange: (draft: string) => void
   onModelReferenceChange: (model: string | null) => void
   onEffortChange: (effort: ComposerEffort) => void
   onSubmit: () => void
   onStop: () => void
-  onRejoin: () => void
 }) {
   const { t } = useTranslation()
   const { activeSession, forkError, runCwd } = useChatSession()
@@ -125,30 +120,6 @@ export function AgentMessage({
           !isEmpty && "pt-3"
         )}
       >
-        <AnimatePresence initial={false}>
-          {canRejoin ? (
-            <motion.div
-              key="agent-message-rejoin"
-              className="mb-2 flex items-center justify-between gap-3 rounded-2xl border border-border bg-muted/40 px-3 py-2"
-              initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
-              transition={overlayTransition}
-            >
-              <p className="min-w-0 text-sm text-muted-foreground">
-                {t("agentMessage.stillRunning")}
-              </p>
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                onClick={onRejoin}
-              >
-                {t("agentMessage.rejoin")}
-              </Button>
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
         <AgentMessageComposer
           compact={!isEmpty}
           draft={draft}

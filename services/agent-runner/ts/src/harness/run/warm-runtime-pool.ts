@@ -2,7 +2,7 @@ import type { AgentRuntime, ProviderRunSpec, SessionRef } from '../../core/contr
 import type { AgentEvent } from '../../core/event/agent-event.js'
 import { sessionRefKey } from '../../core/resource/session.js'
 
-export const WARM_POOL_LIMIT = 10
+export const WARM_POOL_LIMIT = 5
 export const WARM_IDLE_MS = 10 * 60 * 1000
 
 export function specFingerprint(spec: ProviderRunSpec): string {

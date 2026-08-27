@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { AgentRuntime, ProviderRunSpec, SessionRef } from '../../../../src/core/contract/agent-provider.js'
 import type { AgentEvent } from '../../../../src/core/event/agent-event.js'
-import { WarmRuntimePool } from '../../../../src/harness/run/warm-runtime-pool.js'
+import { WARM_POOL_LIMIT, WarmRuntimePool } from '../../../../src/harness/run/warm-runtime-pool.js'
 
 function fakeRuntime(id: string): AgentRuntime & { released: string[] } {
   const released: string[] = []
@@ -30,6 +30,23 @@ const spec: ProviderRunSpec = {
 describe('WarmRuntimePool', () => {
   afterEach(() => {
     vi.useRealTimers()
+  })
+
+  it('defaults to five live-plus-idle slots', async () => {
+    const pool = new WarmRuntimePool()
+    expect(WARM_POOL_LIMIT).toBe(5)
+    const parked: Array<ReturnType<typeof fakeRuntime>> = []
+    for (let index = 0; index < 5; index += 1) {
+      const runtime = fakeRuntime(`s${index}`)
+      await pool.acquire({ provider: 'claude', id: `s${index}` }, spec, () => Promise.resolve(runtime))
+      await pool.recycle(runtime, spec, runtime.session)
+      parked.push(runtime)
+    }
+    expect(pool.idleCount).toBe(5)
+    const extra = fakeRuntime('extra')
+    await pool.acquire({ provider: 'claude', id: 'extra' }, spec, () => Promise.resolve(extra))
+    expect(parked[0]?.released).toEqual(['warm', 'dispose'])
+    expect(pool.size).toBe(5)
   })
 
   it('reuses an idle runtime with the same spec fingerprint', async () => {

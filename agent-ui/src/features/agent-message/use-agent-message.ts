@@ -47,7 +47,6 @@ export function useAgentMessage() {
     bindRunSession,
     beginLiveSession,
     endLiveSession,
-    runningSessionIds,
     runningSessions,
     reloadThread,
   } = useChatSession()
@@ -103,12 +102,14 @@ export function useAgentMessage() {
   }, [messagesStatus, threadMessages, transcriptEpoch])
 
   const previousSessionIdRef = React.useRef(runSessionId)
+  const liveAttachKeyRef = React.useRef<string | null>(null)
   React.useEffect(() => {
     const previous = previousSessionIdRef.current
     previousSessionIdRef.current = runSessionId
     if (previous === runSessionId || previous === null) {
       return
     }
+    liveAttachKeyRef.current = null
     bumpSubmitGeneration()
   }, [bumpSubmitGeneration, runSessionId])
 
@@ -233,6 +234,11 @@ export function useAgentMessage() {
   const streamHandlers = React.useCallback(
     (assistantMessage: AgentThreadMessage) => ({
       onFrame: (frame: StreamFrame) => {
+        const liveSessionId =
+          activeStreamRef.current?.sessionId ?? frame.sessionId
+        if (liveSessionId && frame.runId) {
+          liveAttachKeyRef.current = `${liveSessionId}:${frame.runId}`
+        }
         if (
           activeStreamRef.current !== null &&
           activeStreamRef.current.messageId !== assistantMessage.id
@@ -414,58 +420,71 @@ export function useAgentMessage() {
     endLiveSession(runSessionId)
   }, [endLiveSession, runHarnessId, runSessionId, runningSessions])
 
-  const rejoin = React.useCallback(() => {
-    if (!runHarnessId || !runSessionId || !runCwd.trim()) {
+  React.useEffect(() => {
+    if (!attached || runSessionId === null) {
       return
     }
     const running = runningSessions.find(
       (item) => item.sessionId === runSessionId
     )
+    if (running) {
+      liveAttachKeyRef.current = `${runSessionId}:${running.runId}`
+    }
+  }, [attached, runSessionId, runningSessions])
+
+  React.useEffect(() => {
+    if (attached || runSessionId === null) {
+      return
+    }
+    if (messagesStatus !== "ready" || transcriptEpoch === 0) {
+      return
+    }
+    if (!runHarnessId || !runCwd.trim()) {
+      return
+    }
+    const running = runningSessions.find(
+      (item) => item.sessionId === runSessionId
+    )
+    if (running === undefined) {
+      return
+    }
+    const attachKey = `${runSessionId}:${running.runId}`
+    if (liveAttachKeyRef.current === attachKey) {
+      return
+    }
+    liveAttachKeyRef.current = attachKey
+
     const assistantMessage = createAgentThreadMessage(
       "assistant",
       "",
       "streaming"
     )
-    const generation = submitGenerationRef.current
     suppressTranscriptSyncRef.current = true
-
-    void reloadThread()
-      .catch(() => [] as AgentThreadMessage[])
-      .then(async (thread) => {
-        if (generation !== submitGenerationRef.current) {
-          suppressTranscriptSyncRef.current = false
-          return
-        }
-        setMessages([...thread, assistantMessage])
-        const connection = attachAgentSession(
-          {
-            harness: runHarnessId,
-            sessionId: runSessionId,
-            sinceSeq: 0,
-            ...(running ? { runId: running.runId } : {}),
-          },
-          streamHandlers(assistantMessage)
-        )
-        startStream(assistantMessage, connection, runSessionId)
-      })
+    setMessages((currentMessages) => [...currentMessages, assistantMessage])
+    const connection = attachAgentSession(
+      {
+        harness: runHarnessId,
+        sessionId: runSessionId,
+        sinceSeq: 0,
+        runId: running.runId,
+      },
+      streamHandlers(assistantMessage)
+    )
+    startStream(assistantMessage, connection, runSessionId)
   }, [
-    reloadThread,
+    attached,
+    messagesStatus,
     runCwd,
     runHarnessId,
     runSessionId,
     runningSessions,
     startStream,
     streamHandlers,
+    transcriptEpoch,
   ])
 
   const isStreaming = attached || messages.some(
     (message) => message.status === "streaming"
-  )
-
-  const canRejoin = Boolean(
-    runSessionId &&
-      runningSessionIds.has(runSessionId) &&
-      !isStreaming
   )
 
   return {
@@ -473,7 +492,6 @@ export function useAgentMessage() {
     messages,
     modelReference,
     isStreaming,
-    canRejoin,
     canSubmit: Boolean(
       draft.trim() && modelReference && runHarnessId && runCwd.trim()
     ),
@@ -483,7 +501,6 @@ export function useAgentMessage() {
     setEffort,
     submit,
     stop,
-    rejoin,
   }
 }
 

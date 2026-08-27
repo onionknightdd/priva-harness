@@ -157,14 +157,12 @@ export function ProjectSessionItem({
             setEditing(true)
           }}
         >
-          <StatusDot
-            status={isRunning ? "running" : "idle"}
-            label={
-              isRunning
-                ? t("sidebar.projects.sessionRunning")
-                : t("sidebar.projects.sessionIdle")
-            }
-          />
+          {isRunning ? (
+            <StatusDot
+              status="running"
+              label={t("sidebar.projects.sessionRunning")}
+            />
+          ) : null}
           {session.pinned ? (
             <PinIcon
               className="size-3.5 shrink-0 fill-current"
