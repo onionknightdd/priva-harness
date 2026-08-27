@@ -1,4 +1,11 @@
-import { useCallback, useLayoutEffect, useMemo, useRef } from "react"
+import {
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react"
 import { ArrowDownIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
@@ -18,10 +25,10 @@ import { formatSessionRelativeTime, useTickingNow } from "@/lib/relative-time"
 import { cn } from "@/lib/utils"
 
 import type { AgentThreadMessage } from "../agent-message-data"
-import { groupThreadTurns } from "../thread-turns"
+import { groupThreadTurns, type ThreadTurn } from "../thread-turns"
 import { AgentMessageItem } from "./agent-message-item"
 import { AssistantQuoteMenu } from "./assistant-quote-menu"
-import { StickyUserMessage } from "./sticky-user-message"
+import { StickyFreeze } from "./sticky-freeze"
 
 export function AgentMessageThread({
   messages,
@@ -57,10 +64,14 @@ export function AgentMessageThread({
     : untitled
   const turns = useMemo(() => groupThreadTurns(messages), [messages])
 
-  const renderMessage = (message: AgentThreadMessage) => (
+  const renderMessage = (
+    message: AgentThreadMessage,
+    stickyWorkingTop = 0
+  ) => (
     <AgentMessageItem
       key={message.id}
       message={message}
+      stickyWorkingTop={stickyWorkingTop}
       relativeTime={formatSessionRelativeTime(
         Date.parse(message.createdAt),
         locale,
@@ -83,29 +94,14 @@ export function AgentMessageThread({
       <MessageScroller>
         <MessageScrollerViewport>
           <MessageScrollerContent className="mx-auto w-full max-w-3xl gap-6 pt-6">
-            {turns.map((turn, index) => {
-              const isLast = index === turns.length - 1
-              const freezeUser = turn.user !== null
-
-              return (
-                <MessageScrollerItem
-                  key={turn.id}
-                  messageId={turn.id}
-                  scrollAnchor={freezeUser}
-                  className={cn(
-                    "flex flex-col gap-6 overflow-visible",
-                    (isLast || freezeUser) && "[content-visibility:visible]"
-                  )}
-                >
-                  {turn.user ? (
-                    <StickyUserMessage>
-                      {renderMessage(turn.user)}
-                    </StickyUserMessage>
-                  ) : null}
-                  {turn.replies.map((message) => renderMessage(message))}
-                </MessageScrollerItem>
-              )
-            })}
+            {turns.map((turn, index) => (
+              <ThreadTurnItem
+                key={turn.id}
+                isLast={index === turns.length - 1}
+                renderMessage={renderMessage}
+                turn={turn}
+              />
+            ))}
             <ThreadEndSpacer />
           </MessageScrollerContent>
         </MessageScrollerViewport>
@@ -117,6 +113,67 @@ export function AgentMessageThread({
       </MessageScroller>
       {onQuote ? <AssistantQuoteMenu onQuote={onQuote} /> : null}
     </MessageScrollerProvider>
+  )
+}
+
+function ThreadTurnItem({
+  isLast,
+  renderMessage,
+  turn,
+}: {
+  isLast: boolean
+  renderMessage: (
+    message: AgentThreadMessage,
+    stickyWorkingTop?: number
+  ) => ReactNode
+  turn: ThreadTurn
+}) {
+  const userRef = useRef<HTMLDivElement>(null)
+  const [userHeight, setUserHeight] = useState(0)
+  const freezeUser = turn.user !== null
+  const streamingReply = turn.replies.some(
+    (message) => message.status === "streaming"
+  )
+
+  useLayoutEffect(() => {
+    const user = userRef.current
+    if (!user) {
+      setUserHeight(0)
+      return
+    }
+
+    const syncHeight = () => {
+      setUserHeight(Math.round(user.getBoundingClientRect().height))
+    }
+
+    syncHeight()
+    const observer = new ResizeObserver(syncHeight)
+    observer.observe(user)
+    return () => observer.disconnect()
+  }, [turn.user?.id])
+
+  return (
+    <MessageScrollerItem
+      messageId={turn.id}
+      scrollAnchor={freezeUser}
+      className={cn(
+        "flex flex-col gap-6 overflow-visible",
+        (isLast || freezeUser) && "[content-visibility:visible]"
+      )}
+    >
+      {turn.user ? (
+        <StickyFreeze
+          ref={userRef}
+          className="z-20"
+          showTailMask={!streamingReply}
+        >
+          {renderMessage(turn.user)}
+        </StickyFreeze>
+      ) : null}
+      {turn.replies.map((message) =>
+        renderMessage(message, userHeight)
+      )}
+    </MessageScrollerItem>
   )
 }
 

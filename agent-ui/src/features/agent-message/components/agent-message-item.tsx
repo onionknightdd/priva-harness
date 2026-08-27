@@ -186,11 +186,13 @@ export function AgentMessageItem({
   relativeTime,
   onFork,
   forkDisabledReason,
+  stickyWorkingTop = 0,
 }: {
   message: AgentThreadMessage
   relativeTime?: RelativeTimeLabel | null
   onFork?: () => void
   forkDisabledReason?: string
+  stickyWorkingTop?: number
 }) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
@@ -231,7 +233,11 @@ export function AgentMessageItem({
             }
           >
             {message.role === "assistant" ? (
-              <AssistantStreamBody message={message} isStreaming={isStreaming} />
+              <AssistantStreamBody
+                message={message}
+                isStreaming={isStreaming}
+                stickyWorkingTop={stickyWorkingTop}
+              />
             ) : (
               <QuoteSelectable>{message.content}</QuoteSelectable>
             )}
@@ -257,9 +263,11 @@ export function AgentMessageItem({
 function AssistantStreamBody({
   message,
   isStreaming,
+  stickyWorkingTop,
 }: {
   message: AgentThreadMessage
   isStreaming: boolean
+  stickyWorkingTop: number
 }) {
   const shouldReduceMotion = Boolean(useReducedMotion())
   const text = message.content
@@ -269,7 +277,11 @@ function AssistantStreamBody({
   return (
     <div className="flex flex-col gap-3">
       {showProcess ? (
-        <AssistantProcess message={message} isStreaming={isStreaming} />
+        <AssistantProcess
+          message={message}
+          isStreaming={isStreaming}
+          stickyWorkingTop={stickyWorkingTop}
+        />
       ) : null}
       {text.trim() !== "" ? (
         <QuoteSelectable>
