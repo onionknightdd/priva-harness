@@ -5,12 +5,14 @@ import type {
   SessionTarget,
 } from '../../core/contract/agent-provider.js'
 import type { ProviderSessionStore } from '../../core/contract/provider-session-store.js'
+import type { ToolDefinition } from '../../core/tool/define-tool.js'
 import { ClaudeRuntime } from './claude-runtime.js'
 import { ClaudeSessionStore } from './session/claude-session-store.js'
 
 export interface ClaudeProviderOptions {
   readonly globalConfigDir: string
   readonly sessions?: ProviderSessionStore
+  readonly tools?: readonly ToolDefinition[]
 }
 
 export class ClaudeProvider implements AgentProvider {
@@ -31,7 +33,13 @@ export class ClaudeProvider implements AgentProvider {
       return Promise.reject(new Error('Claude provider cannot fork a non-claude session'))
     }
     return Promise.resolve(
-      new ClaudeRuntime(spec, target, this.options.globalConfigDir),
+      new ClaudeRuntime(
+        spec,
+        target,
+        this.options.globalConfigDir,
+        undefined,
+        this.options.tools ?? [],
+      ),
     )
   }
 }

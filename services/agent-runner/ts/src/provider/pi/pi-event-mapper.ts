@@ -12,7 +12,7 @@ import {
   type JsonRecord,
 } from '../../core/event/json-record.js'
 
-import { isReadToolName } from '../../core/event/tool-names.js'
+import { canonicalProductToolName, isReadToolName } from '../../core/event/tool-names.js'
 import { patchFromToolDetails } from '../../core/event/tool-patch.js'
 import { encodeReadView } from '../../core/event/tool-read.js'
 
@@ -456,7 +456,7 @@ function contentBlocksFromMessage(message: JsonRecord, messageId: string): Conte
 }
 
 function normalizeToolName(name: string): string {
-  return name.toLowerCase()
+  return canonicalProductToolName(name)
 }
 
 function completedToolOutput(name: string, value: unknown): string {

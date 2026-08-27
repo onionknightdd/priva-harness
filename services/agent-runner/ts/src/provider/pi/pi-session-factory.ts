@@ -10,15 +10,20 @@ import {
 } from '@earendil-works/pi-coding-agent'
 
 import type { ProviderRunSpec, SessionTarget } from '../../core/contract/agent-provider.js'
+import type { ToolDefinition } from '../../core/tool/define-tool.js'
 import { buildPiModelsConfig } from './pi-models-config.js'
 import { piSessionBucketDir } from './pi-paths.js'
 import { createPiSessionManager } from './pi-session-open.js'
 import type { PiSessionFactory } from './pi-provider.js'
 import type { PiAgentSession } from './pi-runtime.js'
 import type { PiSessionEvent } from './pi-event-mapper.js'
+import { compilePiCustomTools } from './tools/compile-custom-tools.js'
 
 export class CodingAgentSessionFactory implements PiSessionFactory {
-  constructor(private readonly agentDir: string) {}
+  constructor(
+    private readonly agentDir: string,
+    private readonly tools: readonly ToolDefinition[] = [],
+  ) {}
 
   async open(spec: ProviderRunSpec, target: SessionTarget): Promise<PiAgentSession> {
     const providerId = spec.profileId ?? 'custom'
@@ -54,6 +59,15 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
         sessionManager: await createPiSessionManager(this.agentDir, spec, target),
         settingsManager: SettingsManager.create(spec.cwd, this.agentDir),
         thinkingLevel: 'off',
+        ...(this.tools.length === 0
+          ? {}
+          : {
+              customTools: compilePiCustomTools(this.tools, {
+                cwd: spec.cwd,
+                session: { provider: 'pi', id: '' },
+                signal: new AbortController().signal,
+              }),
+            }),
       })
 
       return new SdkPiAgentSession(session, spec.model, runDir)

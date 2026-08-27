@@ -22,6 +22,7 @@ import { PiConfigAdapter } from './provider/pi/config-adapter/pi-config-adapter.
 import { PiProvider } from './provider/pi/pi-provider.js'
 import { PiSessionStore } from './provider/pi/pi-session-store.js'
 import { CodingAgentSessionFactory } from './provider/pi/pi-session-factory.js'
+import { productTools } from './core/tool/product-tools.js'
 import {
   createRuntimeConfig,
   resolveRuntimeHome,
@@ -69,9 +70,10 @@ export async function startServer(): Promise<void> {
   const claudeProvider = new ClaudeProvider({
     globalConfigDir: claudeConfigDir,
     sessions: new ClaudeSessionStore({ globalConfigDir: claudeConfigDir }),
+    tools: productTools,
   })
   const piProvider = new PiProvider(
-    new CodingAgentSessionFactory(piConfigDir),
+    new CodingAgentSessionFactory(piConfigDir, productTools),
     new PiSessionStore({ agentDir: piConfigDir }),
   )
   const providers = {

@@ -43,6 +43,7 @@
     "react-dom": "^19.2.8",
     "react-i18next": "^17.0.11",
     "react-is": "^19.2.8",
+    "react-jsx-parser": "^2.4.1",
     "react-markdown": "^10.1.0",
     "react-resizable-panels": "^4.12.3",
     "recharts": "^3.8.0",

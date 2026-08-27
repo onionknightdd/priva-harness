@@ -68,6 +68,8 @@ export const zhCN = {
       writeDone: "已创建",
       bashRunning: "正在运行",
       bashDone: "已运行",
+      visualizeRunning: "正在可视化",
+      visualizeDone: "可视化",
       otherRunning: "正在运行 {{name}}",
       otherDone: "{{name}}",
     },

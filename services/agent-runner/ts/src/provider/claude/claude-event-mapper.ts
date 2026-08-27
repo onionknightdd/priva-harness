@@ -12,7 +12,14 @@ import {
   stringField,
   type JsonRecord,
 } from '../../core/event/json-record.js'
-import { isAgentName, isReadToolName, isTaskBoardName, isTerminalStatus, isWorkflowName } from '../../core/event/tool-names.js'
+import {
+  canonicalProductToolName,
+  isAgentName,
+  isReadToolName,
+  isTaskBoardName,
+  isTerminalStatus,
+  isWorkflowName,
+} from '../../core/event/tool-names.js'
 import { unifiedDiffFromStructuredPatch } from '../../core/event/tool-patch.js'
 import { encodeReadView } from '../../core/event/tool-read.js'
 
@@ -599,7 +606,7 @@ function contentBlocks(value: unknown): JsonRecord[] {
 }
 
 function normalizeToolName(name: string): string {
-  return name.toLowerCase()
+  return canonicalProductToolName(name)
 }
 
 function kindFromBlockType(type: string): BlockKind {
