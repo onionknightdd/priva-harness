@@ -53,12 +53,15 @@ export const StickyFreeze = React.forwardRef<
     return () => observer.disconnect()
   }, [onStuckChange, top])
 
+  // Sentinel and bar are siblings of the turn item. Wrapping them in a
+  // short box would make that box the sticky containing block, so the
+  // bar would scroll away instead of freezing.
   return (
-    <div className="relative w-full min-w-0">
+    <>
       <div
         ref={sentinelRef}
         aria-hidden
-        className="pointer-events-none h-px w-full"
+        className="pointer-events-none h-px w-full shrink-0 -mb-px"
       />
       <motion.div
         ref={forwardedRef}
@@ -89,6 +92,6 @@ export const StickyFreeze = React.forwardRef<
           />
         ) : null}
       </motion.div>
-    </div>
+    </>
   )
 })
