@@ -53,6 +53,7 @@
     --color-status-idle: var(--status-idle);
     --color-status-running: var(--status-running);
     --color-status-warm: var(--status-warm);
+    --color-tool-output: var(--tool-output);
     --radius-sm: calc(var(--radius) * 0.6);
     --radius-md: calc(var(--radius) * 0.8);
     --radius-lg: var(--radius);
@@ -100,6 +101,7 @@
     --status-idle: var(--muted-foreground);
     --status-running: oklch(0.541 0.217 293.01);
     --status-warm: oklch(0.75 0.1 232);
+    --tool-output: rgb(243 243 243);
 }
 
 .dark {
@@ -139,6 +141,7 @@
     --status-idle: var(--muted-foreground);
     --status-running: oklch(0.702 0.161 293.54);
     --status-warm: oklch(0.78 0.1 232);
+    --tool-output: oklch(0.24 0 0);
 }
 
 @layer base {

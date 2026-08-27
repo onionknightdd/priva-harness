@@ -375,7 +375,7 @@ function BashToolItem({
     <div className="flex flex-col gap-2">
       <BashCommandLine text={typedCommand} caret={commandCaret} />
       {showOutput ? (
-        <pre className="m-0 whitespace-pre-wrap break-words font-mono text-sm leading-none text-muted-foreground">
+        <pre className="m-0 whitespace-pre-wrap break-words font-mono text-sm leading-5 text-muted-foreground">
           {output}
           {awaitingOutput && !shouldReduceMotion ? (
             <CommandCaret className="bg-muted-foreground" />
