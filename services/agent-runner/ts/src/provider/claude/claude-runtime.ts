@@ -27,6 +27,7 @@ export const CLAUDE_DISALLOWED_TOOLS = [
   'PushNotification',
   'Artifact',
   'Projects',
+  'DesignSync',
   'ReadMcpResourceDirTool',
   'RefreshMcpTools',
   'ShowOnboardingRolePicker',

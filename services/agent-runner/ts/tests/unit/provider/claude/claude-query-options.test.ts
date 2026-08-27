@@ -25,6 +25,7 @@ describe('resolveClaudeQueryOptions', () => {
     expect(options.agentProgressSummaries).toBe(true)
     expect(options.allowDangerouslySkipPermissions).toBe(true)
     expect(options.disallowedTools).toEqual([...CLAUDE_DISALLOWED_TOOLS])
+    expect(options.disallowedTools).toContain('DesignSync')
     expect(options.enableFileCheckpointing).toBe(true)
     expect(options.forwardSubagentText).toBe(true)
     expect(options.includePartialMessages).toBe(true)
