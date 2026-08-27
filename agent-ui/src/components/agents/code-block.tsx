@@ -151,9 +151,9 @@ export function CodeBlock({
       }}
       whileTap={reduce ? undefined : { scale: 0.9 }}
       transition={SPRING_PRESS}
-      className="grid size-7 shrink-0 place-items-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-background/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+      className="grid size-8 shrink-0 place-items-center rounded-full text-foreground outline-none transition-colors hover:bg-background/70 focus-visible:ring-2 focus-visible:ring-ring"
     >
-      {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+      {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
     </motion.button>
   ) : null
 
@@ -169,34 +169,34 @@ export function CodeBlock({
       {showHeader ? (
         <div
           className={cn(
-            "flex h-8 items-center gap-2 border-b border-foreground/[0.06]",
+            "flex h-16 items-center gap-4 border-b border-foreground/[0.06]",
             TOOL_OUTPUT_INSET_X_CLASS
           )}
         >
           <FileCode2
             aria-hidden="true"
-            className="size-3.5 shrink-0 text-muted-foreground/70"
+            className="size-4 shrink-0 text-foreground"
           />
           {filename ? (
-            <span className="min-w-0 truncate font-mono text-xs text-foreground/80">
+            <span className="min-w-0 truncate font-mono text-sm text-foreground">
               {filename}
             </span>
           ) : null}
-          <span className="text-[10px] font-medium tracking-wide text-muted-foreground/55 uppercase">
+          <span className="text-sm text-foreground">
             {language}
           </span>
           <span
             className={cn(
-              "ml-auto inline-flex shrink-0 items-center gap-1 text-[10px] font-medium",
+              "ml-auto inline-flex shrink-0 items-center gap-1.5 text-sm",
               streaming
                 ? "text-blue-600 dark:text-blue-400"
                 : "text-emerald-600 dark:text-emerald-400"
             )}
           >
             {streaming ? (
-              <LoaderCircle className={cn("size-3", !reduce && "animate-spin")} />
+              <LoaderCircle className={cn("size-3.5", !reduce && "animate-spin")} />
             ) : (
-              <Check className="size-3" />
+              <Check className="size-3.5" />
             )}
             {streaming ? t("common.codeWriting") : t("common.codeReady")}
           </span>
