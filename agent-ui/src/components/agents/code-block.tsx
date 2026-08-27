@@ -169,7 +169,7 @@ export function CodeBlock({
       {showHeader ? (
         <div
           className={cn(
-            "flex h-16 items-center gap-4 border-b border-foreground/[0.06]",
+            "flex items-center gap-4 border-b border-foreground/[0.06] py-[calc(2rem/3)]",
             TOOL_OUTPUT_INSET_X_CLASS
           )}
         >
