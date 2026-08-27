@@ -34,7 +34,7 @@ type ChatSessionContextValue = ReturnType<typeof useSessionProjects> & {
   closeSession: () => void
   startNewChat: (cwd?: string) => void
   forkFrom: (input: ForkFromInput) => Promise<void>
-  bindRunSession: (sessionId: string) => void
+  bindRunSession: (sessionId: string, seed?: { firstPrompt?: string }) => void
   beginLiveSession: (sessionId: string) => void
   endLiveSession: (sessionId: string) => void
   reloadThread: () => Promise<AgentThreadMessage[]>
@@ -308,7 +308,7 @@ export function ChatSessionProvider({
   )
 
   const bindRunSession = React.useCallback(
-    (sessionId: string) => {
+    (sessionId: string, seed?: { firstPrompt?: string }) => {
       const viewed = viewedSessionIdRef.current
       if (viewed !== null && viewed !== sessionId) {
         return
@@ -316,16 +316,24 @@ export function ChatSessionProvider({
       viewedSessionIdRef.current = sessionId
       skipTranscriptLoadRef.current = true
       setRunSessionId(sessionId)
-      setActiveSession((current) => {
-        if (current?.sessionId === sessionId) {
-          return current
+      const listed = projects.groups
+        .flatMap((group) => group.sessions)
+        .find((session) => session.sessionId === sessionId)
+      const prompt = seed?.firstPrompt?.trim() ?? ""
+      const next =
+        listed ??
+        {
+          ...liveSessionStub(sessionId, runCwd),
+          ...(prompt === ""
+            ? {}
+            : { firstPrompt: prompt, summary: prompt }),
         }
-        const listed = projects.groups
-          .flatMap((group) => group.sessions)
-          .find((session) => session.sessionId === sessionId)
-        return listed ?? liveSessionStub(sessionId, runCwd)
-      })
-      projects.refresh()
+      setActiveSession((current) =>
+        current?.sessionId === sessionId ? current : next
+      )
+      if (listed === undefined) {
+        projects.prependSession(next)
+      }
     },
     [projects, runCwd]
   )

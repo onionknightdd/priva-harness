@@ -24,6 +24,7 @@ type ActiveStream = {
   connection: AgentRunConnection
   messageId: string
   sessionId: string | null
+  seedTitle: string | null
   detached: boolean
   inFlightTools: Set<string>
   toolIdleWaiters: Array<() => void>
@@ -49,6 +50,7 @@ export function useAgentMessage() {
     endLiveSession,
     runningSessions,
     reloadThread,
+    refresh,
   } = useChatSession()
   const [draft, setDraft] = React.useState("")
   const [modelReference, setModelReference] = React.useState<string | null>(
@@ -136,7 +138,11 @@ export function useAgentMessage() {
         return
       }
       stream.sessionId = sessionId
-      bindRunSession(sessionId)
+      const firstPrompt = stream.seedTitle
+      bindRunSession(
+        sessionId,
+        firstPrompt ? { firstPrompt } : undefined
+      )
       beginLiveSession(sessionId)
     },
     [beginLiveSession, bindRunSession]
@@ -146,7 +152,8 @@ export function useAgentMessage() {
     (
       assistantMessage: AgentThreadMessage,
       connection: AgentRunConnection,
-      liveSessionId: string | null
+      liveSessionId: string | null,
+      seedTitle: string | null = null
     ) => {
       const inFlightTools = new Set<string>()
       const toolIdleWaiters: Array<() => void> = []
@@ -166,6 +173,7 @@ export function useAgentMessage() {
         connection,
         messageId: assistantMessage.id,
         sessionId: liveSessionId,
+        seedTitle,
         detached: false,
         inFlightTools,
         toolIdleWaiters,
@@ -228,6 +236,7 @@ export function useAgentMessage() {
           if (liveId) {
             endLiveSession(liveId)
           }
+          refresh()
           if (activeStreamRef.current?.messageId === assistantMessage.id) {
             activeStreamRef.current = null
           }
@@ -236,7 +245,7 @@ export function useAgentMessage() {
       void finished
       activeStreamRef.current = stream
     },
-    [beginLiveSession, endLiveSession, t]
+    [beginLiveSession, endLiveSession, refresh, t]
   )
 
   const streamHandlers = React.useCallback(
@@ -376,7 +385,12 @@ export function useAgentMessage() {
           streamHandlers(assistantMessage)
         )
 
-        startStream(assistantMessage, connection, resumeSessionId)
+        startStream(
+          assistantMessage,
+          connection,
+          resumeSessionId,
+          resumeSessionId ? null : content
+        )
       })
   }, [
     draft,

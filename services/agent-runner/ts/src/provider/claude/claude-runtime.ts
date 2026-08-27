@@ -205,10 +205,7 @@ export function resolveClaudeQueryOptions(
     ...(abortController === undefined ? {} : { abortController }),
   }
 
-  const namedSessionId = namedSessionIdOf(target)
-  if (namedSessionId !== undefined) {
-    options.extraArgs = { name: namedSessionId }
-  }
+  // Keep title unset so Claude still auto-names the session from the first prompt.
   if (target.kind === 'new' && target.sessionId !== undefined) {
     options.sessionId = target.sessionId
   }
@@ -282,12 +279,6 @@ function initialSessionId(target: SessionTarget): string {
   if (target.kind === 'resume') return target.session.id
   if (target.kind === 'fork') return target.sessionId ?? target.source.id
   return target.sessionId ?? ''
-}
-
-function namedSessionIdOf(target: SessionTarget): string | undefined {
-  if (target.kind === 'resume') return target.session.id
-  if (target.kind === 'fork') return target.sessionId ?? target.source.id
-  return target.sessionId
 }
 
 function sessionIdOf(message: SDKMessage): string | undefined {

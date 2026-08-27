@@ -76,14 +76,15 @@ describe('resolveClaudeQueryOptions', () => {
     expect(forked.sessionId).toBeUndefined()
   })
 
-  it('sets sessionId and extraArgs.name from a preassigned Claude session', () => {
+  it('sets sessionId from a preassigned Claude session without forcing a title', () => {
     const options = resolveClaudeQueryOptions(
       spec,
       '/cfg',
       { kind: 'new', provider: 'claude', sessionId: '11111111-1111-4111-8111-111111111111' },
     )
     expect(options.sessionId).toBe('11111111-1111-4111-8111-111111111111')
-    expect(options.extraArgs).toEqual({ name: '11111111-1111-4111-8111-111111111111' })
+    expect(options.extraArgs).toBeUndefined()
+    expect(options.title).toBeUndefined()
 
     const resumed = resolveClaudeQueryOptions(
       spec,
@@ -91,7 +92,8 @@ describe('resolveClaudeQueryOptions', () => {
       { kind: 'resume', session: { provider: 'claude', id: 'sess-1' } },
     )
     expect(resumed.sessionId).toBeUndefined()
-    expect(resumed.extraArgs).toEqual({ name: 'sess-1' })
+    expect(resumed.extraArgs).toBeUndefined()
+    expect(resumed.title).toBeUndefined()
 
     const forked = resolveClaudeQueryOptions(
       spec,
@@ -103,7 +105,8 @@ describe('resolveClaudeQueryOptions', () => {
       },
     )
     expect(forked.sessionId).toBe('22222222-2222-4222-8222-222222222222')
-    expect(forked.extraArgs).toEqual({ name: '22222222-2222-4222-8222-222222222222' })
+    expect(forked.extraArgs).toBeUndefined()
+    expect(forked.title).toBeUndefined()
   })
 
   it('disables prompt suggestions when the run spec asks', () => {
