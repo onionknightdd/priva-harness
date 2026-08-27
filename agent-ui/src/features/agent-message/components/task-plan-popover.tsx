@@ -4,7 +4,6 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
 import { AgentPlan } from "@/components/elements/agent-plan"
-import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
 import {
   Popover,
@@ -46,27 +45,39 @@ export function TaskPlanPopover({
 
 function TaskPlanPopoverCard({ plan }: { plan: TaskPlan }) {
   const { t } = useTranslation()
-  const shouldReduceMotion = Boolean(useReducedMotion())
   const running = plan.tasks.some((task) => task.status === "in_progress")
   const [open, setOpen] = React.useState(false)
+  const ignoreOpenRef = React.useRef(false)
   const progress = t("agentMessage.taskPlanProgress", {
     completed: plan.completedCount,
     total: plan.tasks.length,
   })
   const title = t("agentMessage.taskPlan")
 
+  const handleOpenChange = React.useCallback((next: boolean) => {
+    if (next && ignoreOpenRef.current) {
+      return
+    }
+    if (!next) {
+      ignoreOpenRef.current = true
+      window.setTimeout(() => {
+        ignoreOpenRef.current = false
+      }, 300)
+    }
+    setOpen(next)
+  }, [])
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger
         render={
-          <motion.button
+          <button
             type="button"
             className={cn(
               buttonVariants({ variant: "outline", size: "sm" }),
-              "rounded-full bg-background shadow-md"
+              "rounded-full bg-background shadow-none"
             )}
             aria-label={`${title}, ${progress}`}
-            whileTap={shouldReduceMotion ? undefined : { scale: 0.96 }}
           />
         }
       >
@@ -74,7 +85,7 @@ function TaskPlanPopoverCard({ plan }: { plan: TaskPlan }) {
         <span className={cn(running && "shimmer motion-reduce:animate-none")}>
           {title}
         </span>
-        <Badge variant={running ? "secondary" : "outline"}>{progress}</Badge>
+        <span className="text-xs font-medium tabular-nums">{progress}</span>
         <ChevronDownIcon
           className={cn(
             "size-3.5 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none",
@@ -86,13 +97,11 @@ function TaskPlanPopoverCard({ plan }: { plan: TaskPlan }) {
         align="start"
         side="top"
         sideOffset={8}
-        className="w-80 gap-3 p-3 motion-reduce:animate-none motion-reduce:transition-none"
+        className="w-80 gap-3 p-3 shadow-none motion-reduce:animate-none motion-reduce:transition-none data-closed:zoom-out-100"
       >
         <PopoverHeader className="flex-row items-center justify-between gap-2">
           <PopoverTitle>{title}</PopoverTitle>
-          <span className="text-xs text-muted-foreground tabular-nums">
-            {progress}
-          </span>
+          <span className="text-xs tabular-nums">{progress}</span>
         </PopoverHeader>
         <AgentPlan
           hideHeader

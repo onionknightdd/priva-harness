@@ -63,13 +63,7 @@ export function AgentPlan({
                   />
                 )}
               </span>
-              <span
-                className={cn(
-                  done && "text-foreground/40",
-                  active && "text-foreground/90",
-                  !done && !active && "text-foreground/35",
-                )}
-              >
+              <span className="text-foreground">
                 {step}
               </span>
             </li>
