@@ -8,7 +8,6 @@ import {
 } from "@/components/agents/tool-result"
 import { Skeleton } from "@/components/ui/skeleton"
 import { SPRING_SWAP } from "@/lib/ease"
-import { writeClipboardText } from "@/lib/clipboard"
 
 import type { StreamBlock } from "../agent-message-data"
 import { isToolRunning, toolItemStatusLabel } from "../tool-activity"
@@ -28,35 +27,26 @@ export function VisualizeToolItem({
   const jsx = visualizeJsxFromTool(tool?.output, tool?.input ?? block.input)
 
   return (
-    <div className="w-full min-w-0 px-0 py-0">
-      <ToolResult
-        tool={toolItemStatusLabel(block.name, status === "running", t)}
-        title=""
-        kind="custom"
-        status={status}
-        icon={<PresentationIcon className="size-[1em]" />}
-        copyText={jsx || undefined}
-        onCopy={
-          jsx
-            ? () => {
-                void writeClipboardText(jsx)
-              }
-            : undefined
-        }
-        defaultOpen
-        collapseOnComplete={false}
-        maxHeight={560}
-      >
-        <VisualizePreviewBody
-          jsx={jsx}
-          running={running}
-          failed={status === "error"}
-          errorText={status === "error" ? (tool?.output ?? "") : ""}
-          reduceMotion={shouldReduceMotion}
-          frameTitle={t("agentMessage.visualizeFrameTitle")}
-        />
-      </ToolResult>
-    </div>
+    <ToolResult
+      tool={toolItemStatusLabel(block.name, status === "running", t)}
+      title=""
+      kind="custom"
+      status={status}
+      icon={<PresentationIcon className="size-[1em]" />}
+      defaultOpen
+      collapseOnComplete={false}
+      framed={false}
+      maxHeight={560}
+    >
+      <VisualizePreviewBody
+        jsx={jsx}
+        running={running}
+        failed={status === "error"}
+        errorText={status === "error" ? (tool?.output ?? "") : ""}
+        reduceMotion={shouldReduceMotion}
+        frameTitle={t("agentMessage.visualizeFrameTitle")}
+      />
+    </ToolResult>
   )
 }
 

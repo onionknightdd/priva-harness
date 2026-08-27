@@ -17,6 +17,7 @@ import {
 import { motion, useReducedMotion } from "motion/react";
 import {
   type ReactNode,
+  type RefObject,
   useCallback,
   useEffect,
   useId,
@@ -57,6 +58,7 @@ export interface ToolResultProps {
   copyText?: string;
   onCopy?: () => void | Promise<void>;
   onRetry?: () => void;
+  framed?: boolean;
   className?: string;
   contentClassName?: string;
 }
@@ -140,6 +142,34 @@ function ToolResultAction({
   );
 }
 
+function ToolResultViewport({
+  viewportRef,
+  maxHeight,
+  contentClassName,
+  live = false,
+  children,
+}: {
+  viewportRef: RefObject<HTMLDivElement | null>;
+  maxHeight: number;
+  contentClassName?: string;
+  live?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      ref={viewportRef}
+      role={live ? "log" : "region"}
+      aria-live={live ? "polite" : undefined}
+      className="overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+      style={{ maxHeight }}
+    >
+      <div className={contentClassName} data-assistant-selectable="">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export function ToolResultOutput({
   children,
   language = "bash",
@@ -174,6 +204,7 @@ export function ToolResult({
   copyText,
   onCopy,
   onRetry,
+  framed = true,
   className,
   contentClassName,
 }: ToolResultProps) {
@@ -329,46 +360,49 @@ export function ToolResult({
           open={currentOpen}
         >
           <div className="pt-1.5 pl-[calc(1em+0.25rem)]">
-            <div className={TOOL_OUTPUT_FRAME_CLASS}>
-              <div className={TOOL_OUTPUT_INSET_CLASS}>
-                <div
-                  ref={viewportRef}
-                  role="log"
-                  aria-live="polite"
-                  className="overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
-                  style={{ maxHeight }}
-                >
-                  <div
-                    className={contentClassName}
-                    data-assistant-selectable=""
+            {framed ? (
+              <div className={TOOL_OUTPUT_FRAME_CLASS}>
+                <div className={TOOL_OUTPUT_INSET_CLASS}>
+                  <ToolResultViewport
+                    viewportRef={viewportRef}
+                    maxHeight={maxHeight}
+                    contentClassName={contentClassName}
+                    live
                   >
                     {children}
-                  </div>
+                  </ToolResultViewport>
+                  {hasActions ? (
+                    <div className="flex items-center gap-0.5">
+                      {canCopy ? (
+                        <ToolResultAction
+                          label={copied ? "Copied" : "Copy result"}
+                          onClick={handleCopy}
+                        >
+                          {copied ? (
+                            <Check className="size-3.5" />
+                          ) : (
+                            <Copy className="size-3.5" />
+                          )}
+                        </ToolResultAction>
+                      ) : null}
+                      {onRetry ? (
+                        <ToolResultAction label="Run again" onClick={onRetry}>
+                          <RotateCcw className="size-3.5" />
+                        </ToolResultAction>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
-
-                {hasActions ? (
-                  <div className="flex items-center gap-0.5">
-                    {canCopy ? (
-                      <ToolResultAction
-                        label={copied ? "Copied" : "Copy result"}
-                        onClick={handleCopy}
-                      >
-                        {copied ? (
-                          <Check className="size-3.5" />
-                        ) : (
-                          <Copy className="size-3.5" />
-                        )}
-                      </ToolResultAction>
-                    ) : null}
-                    {onRetry ? (
-                      <ToolResultAction label="Run again" onClick={onRetry}>
-                        <RotateCcw className="size-3.5" />
-                      </ToolResultAction>
-                    ) : null}
-                  </div>
-                ) : null}
               </div>
-            </div>
+            ) : (
+              <ToolResultViewport
+                viewportRef={viewportRef}
+                maxHeight={maxHeight}
+                contentClassName={contentClassName}
+              >
+                {children}
+              </ToolResultViewport>
+            )}
           </div>
         </AgentDisclosure>
       ) : null}
