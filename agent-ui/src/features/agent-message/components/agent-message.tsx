@@ -34,20 +34,24 @@ export function AgentMessage({
   draft,
   messages,
   canSubmit,
+  isStreaming,
   modelReady,
   onDraftChange,
   onModelReferenceChange,
   onEffortChange,
   onSubmit,
+  onStop,
 }: {
   draft: string
   messages: AgentThreadMessage[]
   canSubmit: boolean
+  isStreaming: boolean
   modelReady: boolean
   onDraftChange: (draft: string) => void
   onModelReferenceChange: (model: string | null) => void
   onEffortChange: (effort: ComposerEffort) => void
   onSubmit: () => void
+  onStop: () => void
 }) {
   const { t } = useTranslation()
   const { activeSession, forkError, runCwd } = useChatSession()
@@ -120,11 +124,13 @@ export function AgentMessage({
           compact={!isEmpty}
           draft={draft}
           canSubmit={canSubmit}
+          isStreaming={isStreaming}
           modelReady={modelReady}
           onDraftChange={onDraftChange}
           onModelReferenceChange={onModelReferenceChange}
           onEffortChange={onEffortChange}
           onSubmit={onSubmit}
+          onStop={onStop}
         />
         {runCwd ? (
           <SessionCwdBreadcrumb

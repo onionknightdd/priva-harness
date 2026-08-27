@@ -1,10 +1,11 @@
 import * as React from "react"
-import { ArrowUpIcon, PlusIcon } from "lucide-react"
+import { ArrowUpIcon, PlusIcon, SquareIcon } from "lucide-react"
 import { motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
 import { SPRING_LAYOUT } from "@/lib/ease"
 import { cn } from "@/lib/utils"
+import { ActionSwapRollIcon } from "@/components/motion/action-swap-roll"
 import { Field, FieldLabel } from "@/components/ui/field"
 import {
   InputGroupAddon,
@@ -18,6 +19,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 
+import { composerPrimaryAction } from "../composer-primary-action"
 import { ComposerModelSelector, COMPOSER_MODEL_TRIGGER_MAX_CLASS, type ComposerEffort } from "./composer-model-selector"
 
 export const composerDockTransition = {
@@ -181,20 +183,29 @@ function AttachButton({
 }
 
 function ComposerControls({
+  action,
   canSubmit,
   modelReady,
   sendLabel,
+  stopLabel,
   modelRequired,
+  onStop,
   onModelReferenceChange,
   onEffortChange,
 }: {
+  action: "send" | "stop"
   canSubmit: boolean
   modelReady: boolean
   sendLabel: string
+  stopLabel: string
   modelRequired: string
+  onStop: () => void
   onModelReferenceChange: (model: string | null) => void
   onEffortChange: (effort: ComposerEffort) => void
 }) {
+  const stopping = action === "stop"
+  const actionLabel = stopping ? stopLabel : sendLabel
+
   return (
     <div className="flex min-w-0 items-center gap-2">
       <div
@@ -215,15 +226,29 @@ function ComposerControls({
         className="mx-0.5 h-4 data-vertical:self-center"
       />
       <InputGroupButton
-        type="submit"
+        type={stopping ? "button" : "submit"}
         variant="default"
         size="icon-xs"
         className="relative z-10 shrink-0 rounded-full"
-        disabled={!canSubmit}
-        aria-label={sendLabel}
-        title={modelReady ? sendLabel : modelRequired}
+        disabled={!stopping && !canSubmit}
+        aria-label={actionLabel}
+        title={stopping ? stopLabel : modelReady ? sendLabel : modelRequired}
+        onClick={
+          stopping
+            ? (event) => {
+                event.preventDefault()
+                onStop()
+              }
+            : undefined
+        }
       >
-        <ArrowUpIcon />
+        <ActionSwapRollIcon value={action} className="size-4">
+          {stopping ? (
+            <SquareIcon className="size-2.5 fill-current" />
+          ) : (
+            <ArrowUpIcon />
+          )}
+        </ActionSwapRollIcon>
       </InputGroupButton>
     </div>
   )
@@ -233,20 +258,24 @@ export function AgentMessageComposer({
   compact = false,
   draft,
   canSubmit,
+  isStreaming,
   modelReady,
   onDraftChange,
   onModelReferenceChange,
   onEffortChange,
   onSubmit,
+  onStop,
 }: {
   compact?: boolean
   draft: string
   canSubmit: boolean
+  isStreaming: boolean
   modelReady: boolean
   onDraftChange: (draft: string) => void
   onModelReferenceChange: (model: string | null) => void
   onEffortChange: (effort: ComposerEffort) => void
   onSubmit: () => void
+  onStop: () => void
 }) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
@@ -267,6 +296,7 @@ export function AgentMessageComposer({
   const singleLine = compact && !overflowsCompactLine
   const promptId = React.useId()
   const transition = shouldReduceMotion ? { duration: 0 } : SPRING_LAYOUT
+  const primaryAction = composerPrimaryAction(draft, isStreaming)
   const fieldPadLeft = singleLine
     ? leftWidth || 42
     : COMPOSER_MULTI_PAD
@@ -384,10 +414,13 @@ export function AgentMessageComposer({
                 className="min-w-0 justify-end gap-1 p-0 has-[>button]:mr-0!"
               >
                 <ComposerControls
+                  action={primaryAction}
                   canSubmit={canSubmit}
                   modelReady={modelReady}
                   sendLabel={t("agentMessage.send")}
+                  stopLabel={t("agentMessage.stop")}
                   modelRequired={t("agentMessage.modelRequired")}
+                  onStop={onStop}
                   onModelReferenceChange={onModelReferenceChange}
                   onEffortChange={onEffortChange}
                 />

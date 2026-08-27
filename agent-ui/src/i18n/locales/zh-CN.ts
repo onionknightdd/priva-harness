@@ -32,6 +32,7 @@ export const zhCN = {
     promptLabel: "消息",
     promptPlaceholder: "问任何问题…",
     send: "发送",
+    stop: "停止",
     attach: "添加附件",
     attachUnavailable: "附件功能尚未开放",
     selectModel: "选择模型",

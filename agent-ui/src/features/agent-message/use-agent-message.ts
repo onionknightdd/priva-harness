@@ -278,10 +278,33 @@ export function useAgentMessage() {
     t,
   ])
 
+  const stop = React.useCallback(() => {
+    bumpSubmitGeneration()
+    setMessages((currentMessages) => {
+      let changed = false
+      const next = currentMessages.map((message) => {
+        if (message.status !== "streaming") {
+          return message
+        }
+        changed = true
+        return {
+          ...freezeMessageThinking(message, Date.now()),
+          status: "complete" as const,
+        }
+      })
+      return changed ? next : currentMessages
+    })
+  }, [bumpSubmitGeneration])
+
+  const isStreaming = messages.some(
+    (message) => message.status === "streaming"
+  )
+
   return {
     draft,
     messages,
     modelReference,
+    isStreaming,
     canSubmit: Boolean(
       draft.trim() && modelReference && runHarnessId && runCwd.trim()
     ),
@@ -290,6 +313,7 @@ export function useAgentMessage() {
     setModelReference,
     setEffort,
     submit,
+    stop,
   }
 }
 

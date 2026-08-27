@@ -9,11 +9,13 @@ export function AgentMessagePage() {
       draft={agentMessage.draft}
       messages={agentMessage.messages}
       canSubmit={agentMessage.canSubmit}
+      isStreaming={agentMessage.isStreaming}
       modelReady={agentMessage.modelReady}
       onDraftChange={agentMessage.setDraft}
       onModelReferenceChange={agentMessage.setModelReference}
       onEffortChange={agentMessage.setEffort}
       onSubmit={agentMessage.submit}
+      onStop={agentMessage.stop}
     />
   )
 }

@@ -32,6 +32,7 @@ export const en = {
     promptLabel: "Message",
     promptPlaceholder: "Ask anything...",
     send: "Send",
+    stop: "Stop",
     attach: "Attach file",
     attachUnavailable: "Attachments are not available yet",
     selectModel: "Select model",
