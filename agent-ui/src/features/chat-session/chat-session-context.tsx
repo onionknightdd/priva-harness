@@ -219,6 +219,9 @@ export function ChatSessionProvider({
   }, [activeSession?.sessionId, bumpTranscript, runHarnessId])
 
   const openSession = React.useCallback((session: SessionInfo) => {
+    if (viewedSessionIdRef.current === session.sessionId) {
+      return
+    }
     skipTranscriptLoadRef.current = false
     viewedSessionIdRef.current = session.sessionId
     setForkError(null)
