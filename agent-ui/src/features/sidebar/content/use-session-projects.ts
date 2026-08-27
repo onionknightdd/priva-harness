@@ -5,6 +5,7 @@ import {
   archiveSession,
   deleteSession,
   listGroupedSessions,
+  listRunningSessions,
   listSessionsForCwd,
   pinSession,
   renameSession,
@@ -35,6 +36,9 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
   const [error, setError] = React.useState<string | null>(null)
   const [refreshing, setRefreshing] = React.useState(false)
   const [refreshIndex, setRefreshIndex] = React.useState(0)
+  const [runningSessionIds, setRunningSessionIds] = React.useState<
+    ReadonlySet<string>
+  >(() => new Set())
 
   const refresh = React.useCallback(() => {
     setRefreshIndex((current) => current + 1)
@@ -46,6 +50,7 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
       setActiveCwd("")
       setError(null)
       setRefreshing(false)
+      setRunningSessionIds(new Set())
       setStatus("unsupported")
       return
     }
@@ -79,6 +84,42 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
       cancelled = true
     }
   }, [harness, loadFailed, refreshIndex])
+
+  React.useEffect(() => {
+    if (!harness) {
+      return
+    }
+
+    let cancelled = false
+
+    const pull = async () => {
+      try {
+        const running = await listRunningSessions(harness)
+        if (cancelled) {
+          return
+        }
+        setRunningSessionIds(
+          new Set(
+            running.flatMap((item) =>
+              item.sessionId ? [item.sessionId] : []
+            )
+          )
+        )
+      } catch {
+        // Keep the last known live set if a poll fails.
+      }
+    }
+
+    void pull()
+    const timer = window.setInterval(() => {
+      void pull()
+    }, 2500)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [harness, refreshIndex])
 
   const replaceSession = React.useCallback(
     (sessionId: string, patch: Partial<SessionInfo>) => {
@@ -260,5 +301,6 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
     rename,
     remove,
     prependSession,
+    runningSessionIds,
   }
 }

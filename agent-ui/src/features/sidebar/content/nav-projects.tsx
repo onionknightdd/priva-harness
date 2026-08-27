@@ -82,6 +82,7 @@ function ProjectMenuItem({
   onCreateSession,
   knownTags,
   activeSessionId,
+  runningSessionIds,
 }: {
   cwd: string
   name: string
@@ -102,6 +103,7 @@ function ProjectMenuItem({
   onCreateSession: (cwd: string) => void
   knownTags: KnownSessionTag[]
   activeSessionId: string | null
+  runningSessionIds: ReadonlySet<string>
 }) {
   const { t } = useTranslation()
   const [visibleCount, setVisibleCount] = React.useState(SESSION_PAGE_SIZE)
@@ -170,6 +172,7 @@ function ProjectMenuItem({
               onSelect={onSelect}
               knownTags={knownTags}
               isActive={session.sessionId === activeSessionId}
+              isRunning={runningSessionIds.has(session.sessionId)}
             />
           ))}
           {sessions.length === 0 && (
@@ -257,6 +260,7 @@ export function NavProjects({
     rename,
     remove,
     highlightedSessionId,
+    runningSessionIds,
   } = useChatSession()
 
   React.useEffect(() => {
@@ -402,6 +406,7 @@ export function NavProjects({
         onCreateSession={onCreateSession}
         knownTags={knownTags}
         activeSessionId={highlightedSessionId}
+        runningSessionIds={runningSessionIds}
       />
     ))
   }

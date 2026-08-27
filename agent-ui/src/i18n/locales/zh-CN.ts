@@ -328,6 +328,8 @@ export const zhCN = {
       clearTagFilters: "清除筛选",
       revealInFiles: "在文件中查看",
       archive: "归档",
+      sessionIdle: "空闲",
+      sessionRunning: "运行中",
     },
     user: {
       openMenu: "打开用户菜单",
