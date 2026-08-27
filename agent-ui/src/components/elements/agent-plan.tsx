@@ -45,12 +45,17 @@ export function AgentPlan({
           style={{ width: `${progress}%` }}
         />
       </div>
-      <ul className="flex flex-col gap-2.5">
+      <ul
+        className={cn(
+          "flex min-h-0 flex-col gap-2.5 overflow-y-auto overscroll-contain scrollbar-thin",
+          steps.length > 10 && "max-h-[calc(10*1rem+9*0.625rem)]",
+        )}
+      >
         {steps.map((step, i) => {
           const done = allDone || i < completed;
           const active = !allDone && i === completed;
           return (
-            <li key={`${i}:${step}`} className="flex items-center gap-2.5 text-[13.5px]">
+            <li key={`${i}:${step}`} className="flex min-h-4 shrink-0 items-center gap-2.5 text-[13.5px]">
               <span className="flex size-4 shrink-0 items-center justify-center">
                 {done ? (
                   <CheckIcon className="text-foreground/35 size-3.5" />
