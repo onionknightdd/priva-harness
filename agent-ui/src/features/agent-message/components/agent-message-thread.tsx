@@ -3,7 +3,6 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
-  useState,
   type ReactNode,
 } from "react"
 import { ArrowDownIcon } from "lucide-react"
@@ -25,10 +24,11 @@ import { formatSessionRelativeTime, useTickingNow } from "@/lib/relative-time"
 import { cn } from "@/lib/utils"
 
 import type { AgentThreadMessage } from "../agent-message-data"
-import { groupThreadTurns, type ThreadTurn } from "../thread-turns"
+import { groupThreadTurns, turnStickyParts, type ThreadTurn } from "../thread-turns"
 import { AgentMessageItem } from "./agent-message-item"
 import { AssistantQuoteMenu } from "./assistant-quote-menu"
 import { StickyFreeze } from "./sticky-freeze"
+import { WorkingStatusLine } from "./working-status-line"
 
 export function AgentMessageThread({
   messages,
@@ -66,12 +66,12 @@ export function AgentMessageThread({
 
   const renderMessage = (
     message: AgentThreadMessage,
-    stickyWorkingTop = 0
+    hideProcessHeader = false
   ) => (
     <AgentMessageItem
       key={message.id}
       message={message}
-      stickyWorkingTop={stickyWorkingTop}
+      hideProcessHeader={hideProcessHeader}
       relativeTime={formatSessionRelativeTime(
         Date.parse(message.createdAt),
         locale,
@@ -124,54 +124,33 @@ function ThreadTurnItem({
   isLast: boolean
   renderMessage: (
     message: AgentThreadMessage,
-    stickyWorkingTop?: number
+    hideProcessHeader?: boolean
   ) => ReactNode
   turn: ThreadTurn
 }) {
-  const userRef = useRef<HTMLDivElement>(null)
-  const [userHeight, setUserHeight] = useState(0)
-  const freezeUser = turn.user !== null
-  const streamingReply = turn.replies.some(
-    (message) => message.status === "streaming"
-  )
-
-  useLayoutEffect(() => {
-    const user = userRef.current
-    if (!user) {
-      setUserHeight(0)
-      return
-    }
-
-    const syncHeight = () => {
-      setUserHeight(Math.round(user.getBoundingClientRect().height))
-    }
-
-    syncHeight()
-    const observer = new ResizeObserver(syncHeight)
-    observer.observe(user)
-    return () => observer.disconnect()
-  }, [turn.user?.id])
+  const { user, working } = turnStickyParts(turn)
+  const freezeTurn = user !== null || working !== null
 
   return (
     <MessageScrollerItem
       messageId={turn.id}
-      scrollAnchor={freezeUser}
+      scrollAnchor={freezeTurn}
       className={cn(
-        "flex flex-col gap-6 overflow-visible",
-        (isLast || freezeUser) && "[content-visibility:visible]"
+        "flex flex-col overflow-visible",
+        working ? "gap-2" : "gap-6",
+        (isLast || freezeTurn) && "[content-visibility:visible]"
       )}
     >
-      {turn.user ? (
-        <StickyFreeze
-          ref={userRef}
-          className="z-20"
-          showBelowMask={!streamingReply}
-        >
-          {renderMessage(turn.user)}
+      {freezeTurn ? (
+        <StickyFreeze>
+          <div className="flex w-full min-w-0 flex-col gap-2 bg-background">
+            {user ? renderMessage(user) : null}
+            {working ? <WorkingStatusLine message={working} /> : null}
+          </div>
         </StickyFreeze>
       ) : null}
       {turn.replies.map((message) =>
-        renderMessage(message, userHeight)
+        renderMessage(message, message.status === "streaming")
       )}
     </MessageScrollerItem>
   )

@@ -56,8 +56,8 @@ import {
   fileDiffLinesFromUnified,
 } from "../file-diff-lines"
 import { parseFileReadOutput, isImageFilePath } from "../file-read-view"
+import { formatProcessStatusText } from "../process-status"
 import {
-  formatToolActivitySummary,
   isBashTool,
   isEditTool,
   isReadTool,
@@ -66,7 +66,6 @@ import {
   toolItemStatusLabel,
 } from "../tool-activity"
 import { QuoteSelectable } from "./quote-selectable"
-import { StickyFreeze } from "./sticky-freeze"
 
 const PANEL_CLASS =
   "h-[var(--collapsible-panel-height)] overflow-hidden transition-[height,opacity] duration-200 ease-out data-[ending-style]:h-0 data-[ending-style]:opacity-0 data-[starting-style]:h-0 data-[starting-style]:opacity-0 motion-reduce:transition-none"
@@ -74,11 +73,11 @@ const PANEL_CLASS =
 export function AssistantProcess({
   message,
   isStreaming,
-  stickyWorkingTop = 0,
+  hideHeader = false,
 }: {
   message: AgentThreadMessage
   isStreaming: boolean
-  stickyWorkingTop?: number
+  hideHeader?: boolean
 }) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
@@ -86,14 +85,6 @@ export function AssistantProcess({
   const blocks = [...(message.blocks ?? [])].sort(
     (left, right) => left.index - right.index
   )
-  const summary = formatToolActivitySummary(blocks, t)
-  const statusLabel = isStreaming
-    ? t("agentMessage.thinking")
-    : t("agentMessage.chainOfThought")
-  const statusText =
-    summary === ""
-      ? statusLabel
-      : `${statusLabel}${t("agentMessage.toolSummary.separator")}${summary}`
 
   React.useEffect(() => {
     setOpen(isStreaming)
@@ -144,21 +135,23 @@ export function AssistantProcess({
     )
   }
 
-  const trigger = (
-    <CollapsibleTrigger className="group/process-trigger flex max-w-full min-w-0 items-center gap-1 rounded-md bg-transparent px-0 py-0.5 text-left text-base leading-snug font-medium text-muted-foreground/70 outline-none hover:text-muted-foreground/70 focus-visible:ring-2 focus-visible:ring-ring">
-      <span
-        className={cn(
-          "min-w-0 whitespace-normal",
-          isStreaming && "shimmer"
-        )}
+  if (hideHeader) {
+    if (rows.length === 0) {
+      return null
+    }
+
+    return (
+      <motion.div
+        initial={shouldReduceMotion ? false : { opacity: 0, y: 4 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}
       >
-        {statusText}
-      </span>
-      <ChevronDownIcon
-        className="size-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-200 group-hover/process-trigger:opacity-100 group-focus-visible/process-trigger:opacity-100 group-data-open/process:rotate-180 motion-reduce:transition-none"
-      />
-    </CollapsibleTrigger>
-  )
+        <ProcessItemGroup>{rows}</ProcessItemGroup>
+      </motion.div>
+    )
+  }
+
+  const statusText = formatProcessStatusText(message, isStreaming, t)
 
   return (
     <motion.div
@@ -175,13 +168,19 @@ export function AssistantProcess({
           }
         }}
       >
-        <StickyFreeze
-          className="z-10"
-          enabled={isStreaming}
-          top={stickyWorkingTop}
-        >
-          {trigger}
-        </StickyFreeze>
+        <CollapsibleTrigger className="group/process-trigger flex max-w-full min-w-0 items-center gap-1 rounded-md bg-transparent px-0 py-0.5 text-left text-base leading-snug font-medium text-muted-foreground/70 outline-none hover:text-muted-foreground/70 focus-visible:ring-2 focus-visible:ring-ring">
+          <span
+            className={cn(
+              "min-w-0 whitespace-normal",
+              isStreaming && "shimmer"
+            )}
+          >
+            {statusText}
+          </span>
+          <ChevronDownIcon
+            className="size-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-200 group-hover/process-trigger:opacity-100 group-focus-visible/process-trigger:opacity-100 group-data-open/process:rotate-180 motion-reduce:transition-none"
+          />
+        </CollapsibleTrigger>
         <CollapsibleContent className={PANEL_CLASS}>
           {rows.length > 0 ? <ProcessItemGroup>{rows}</ProcessItemGroup> : null}
         </CollapsibleContent>

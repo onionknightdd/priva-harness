@@ -4,37 +4,20 @@ import { motion, useReducedMotion } from "motion/react"
 import { EASE_OUT } from "@/lib/ease"
 import { cn } from "@/lib/utils"
 
-const BELOW_FADE_CLASS =
-  "pointer-events-none absolute inset-x-0 top-full h-8 bg-background [mask-image:linear-gradient(to_bottom,black,transparent)]"
-
 export const StickyFreeze = React.forwardRef<
   HTMLDivElement,
   {
     children: React.ReactNode
     className?: string
-    enabled?: boolean
-    showBelowMask?: boolean
-    top?: number
   }
->(function StickyFreeze(
-  {
-    children,
-    className,
-    enabled = true,
-    showBelowMask = true,
-    top = 0,
-  },
-  forwardedRef
-) {
+>(function StickyFreeze({ children, className }, forwardedRef) {
   const sentinelRef = React.useRef<HTMLDivElement>(null)
   const [stuck, setStuck] = React.useState(false)
   const shouldReduceMotion = Boolean(useReducedMotion())
-  const frozen = enabled && stuck
 
   React.useEffect(() => {
     const sentinel = sentinelRef.current
-    if (!sentinel || !enabled) {
-      setStuck(false)
+    if (!sentinel) {
       return
     }
 
@@ -50,22 +33,19 @@ export const StickyFreeze = React.forwardRef<
 
     observer.observe(sentinel)
     return () => observer.disconnect()
-  }, [enabled])
+  }, [])
 
   return (
     <motion.div
       ref={forwardedRef}
       data-slot="sticky-freeze"
-      data-stuck={frozen || undefined}
+      data-stuck={stuck || undefined}
       className={cn(
-        "relative w-full min-w-0 overflow-visible",
-        enabled && "sticky z-10",
-        frozen && "bg-background",
+        "relative sticky top-0 z-10 w-full min-w-0 bg-background",
         className
       )}
-      style={enabled ? { top } : undefined}
       animate={{
-        boxShadow: frozen
+        boxShadow: stuck
           ? "0 1px 0 0 var(--border)"
           : "0 0 0 0 transparent",
       }}
@@ -81,8 +61,12 @@ export const StickyFreeze = React.forwardRef<
         className="pointer-events-none absolute inset-x-0 top-0 h-px -translate-y-full"
       />
       {children}
-      {frozen && showBelowMask ? (
-        <div aria-hidden className={BELOW_FADE_CLASS} />
+      {stuck ? (
+        <div
+          aria-hidden
+          data-slot="sticky-freeze-mask"
+          className="pointer-events-none absolute inset-x-0 top-full h-8 bg-gradient-to-b from-background to-transparent"
+        />
       ) : null}
     </motion.div>
   )

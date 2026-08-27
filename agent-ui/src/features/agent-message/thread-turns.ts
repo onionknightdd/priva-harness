@@ -28,3 +28,14 @@ export function groupThreadTurns(
 
   return turns
 }
+
+export function turnStickyParts(turn: ThreadTurn): {
+  user: AgentThreadMessage | null
+  working: AgentThreadMessage | null
+} {
+  return {
+    user: turn.user,
+    working:
+      turn.replies.find((message) => message.status === "streaming") ?? null,
+  }
+}
