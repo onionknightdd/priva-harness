@@ -14,10 +14,10 @@ describe('compile custom tools', () => {
   it('compiles visualize into a Claude SDK MCP server and aliases', () => {
     const compiled = compileClaudeCustomTools(productTools, context)
     expect(compiled.toolAliases).toEqual({
-      visualize: 'mcp__priva__visualize',
+      visualize: 'mcp__agentWorkshop__visualize',
     })
     expect(compiled.mcpServers).toMatchObject({
-      priva: { type: 'sdk', name: 'priva' },
+      agentWorkshop: { type: 'sdk', name: 'agentWorkshop' },
     })
   })
 
