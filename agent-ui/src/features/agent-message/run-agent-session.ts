@@ -132,9 +132,6 @@ function openRunSocket(
     if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
       socket.close()
     }
-    if (boundSessionId) {
-      handlers.onSession?.(boundSessionId)
-    }
     resolveFinished(error)
   }
 

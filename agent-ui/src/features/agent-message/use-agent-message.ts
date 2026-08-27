@@ -65,6 +65,7 @@ export function useAgentMessage() {
 
   const bumpSubmitGeneration = React.useCallback(() => {
     submitGenerationRef.current += 1
+    suppressTranscriptSyncRef.current = false
     const stream = activeStreamRef.current
     if (stream) {
       stream.detached = true
@@ -126,10 +127,17 @@ export function useAgentMessage() {
 
   const bindLive = React.useCallback(
     (sessionId: string, assistantId: string) => {
-      bindRunSession(sessionId)
-      if (activeStreamRef.current?.messageId === assistantId) {
-        beginLiveSession(sessionId)
+      const stream = activeStreamRef.current
+      if (
+        stream === null ||
+        stream.detached ||
+        stream.messageId !== assistantId
+      ) {
+        return
       }
+      stream.sessionId = sessionId
+      bindRunSession(sessionId)
+      beginLiveSession(sessionId)
     },
     [beginLiveSession, bindRunSession]
   )
@@ -234,15 +242,15 @@ export function useAgentMessage() {
   const streamHandlers = React.useCallback(
     (assistantMessage: AgentThreadMessage) => ({
       onFrame: (frame: StreamFrame) => {
-        const liveSessionId =
-          activeStreamRef.current?.sessionId ?? frame.sessionId
+        const stream = activeStreamRef.current
+        if (stream?.detached) {
+          return
+        }
+        const liveSessionId = stream?.sessionId ?? frame.sessionId
         if (liveSessionId && frame.runId) {
           liveAttachKeyRef.current = `${liveSessionId}:${frame.runId}`
         }
-        if (
-          activeStreamRef.current !== null &&
-          activeStreamRef.current.messageId !== assistantMessage.id
-        ) {
+        if (stream !== null && stream.messageId !== assistantMessage.id) {
           return
         }
         setMessages((currentMessages) =>
@@ -269,6 +277,9 @@ export function useAgentMessage() {
         }
       },
       onError: (message: string) => {
+        if (activeStreamRef.current?.detached) {
+          return
+        }
         setMessages((currentMessages) =>
           currentMessages.map((item) =>
             item.id === assistantMessage.id
@@ -278,9 +289,6 @@ export function useAgentMessage() {
         )
       },
       onSession: (sessionId: string) => {
-        if (activeStreamRef.current?.messageId === assistantMessage.id) {
-          activeStreamRef.current.sessionId = sessionId
-        }
         bindLive(sessionId, assistantMessage.id)
       },
       onReplayGap: () => {
@@ -454,13 +462,22 @@ export function useAgentMessage() {
     }
     liveAttachKeyRef.current = attachKey
 
-    const assistantMessage = createAgentThreadMessage(
-      "assistant",
-      "",
-      "streaming"
-    )
+    const lastAssistant = lastAssistantMessage(threadMessages)
+    const assistantMessage = lastAssistant
+      ? { ...lastAssistant, status: "streaming" as const }
+      : createAgentThreadMessage("assistant", "", "streaming")
     suppressTranscriptSyncRef.current = true
-    setMessages((currentMessages) => [...currentMessages, assistantMessage])
+    setMessages((currentMessages) => {
+      if (
+        lastAssistant &&
+        currentMessages.some((message) => message.id === lastAssistant.id)
+      ) {
+        return currentMessages.map((message) =>
+          message.id === lastAssistant.id ? assistantMessage : message
+        )
+      }
+      return [...currentMessages, assistantMessage]
+    })
     const connection = attachAgentSession(
       {
         harness: runHarnessId,
@@ -480,6 +497,7 @@ export function useAgentMessage() {
     runningSessions,
     startStream,
     streamHandlers,
+    threadMessages,
     transcriptEpoch,
   ])
 
@@ -523,4 +541,14 @@ async function waitToSend(
 
   previousStream.connection.abort()
   await previousStream.connection.finished.catch(() => undefined)
+}
+
+function lastAssistantMessage(messages: readonly AgentThreadMessage[]) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (message?.role === "assistant") {
+      return message
+    }
+  }
+  return undefined
 }

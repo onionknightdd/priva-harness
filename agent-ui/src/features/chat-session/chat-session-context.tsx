@@ -89,6 +89,7 @@ export function ChatSessionProvider({
   const [forking, setForking] = React.useState(false)
   const [forkError, setForkError] = React.useState<string | null>(null)
   const skipTranscriptLoadRef = React.useRef(false)
+  const viewedSessionIdRef = React.useRef<string | null>(null)
   const forkingRef = React.useRef(false)
 
   const bumpTranscript = React.useCallback(() => {
@@ -97,6 +98,7 @@ export function ChatSessionProvider({
 
   const closeSession = React.useCallback(() => {
     skipTranscriptLoadRef.current = false
+    viewedSessionIdRef.current = null
     setActiveSession(null)
     setThreadMessages([])
     setMessagesStatus("idle")
@@ -109,6 +111,7 @@ export function ChatSessionProvider({
   const startNewChat = React.useCallback(
     (cwd?: string) => {
       skipTranscriptLoadRef.current = false
+      viewedSessionIdRef.current = null
       setActiveSession(null)
       setThreadMessages([])
       setMessagesStatus("idle")
@@ -122,6 +125,7 @@ export function ChatSessionProvider({
 
   React.useEffect(() => {
     skipTranscriptLoadRef.current = false
+    viewedSessionIdRef.current = null
     setActiveSession(null)
     setThreadMessages([])
     setMessagesStatus("idle")
@@ -216,6 +220,7 @@ export function ChatSessionProvider({
 
   const openSession = React.useCallback((session: SessionInfo) => {
     skipTranscriptLoadRef.current = false
+    viewedSessionIdRef.current = session.sessionId
     setForkError(null)
     setRunSessionId(session.sessionId)
     setRunCwd(session.cwd?.trim() || "")
@@ -280,6 +285,7 @@ export function ChatSessionProvider({
         })
 
         skipTranscriptLoadRef.current = true
+        viewedSessionIdRef.current = created.sessionId
         setThreadMessages(kept)
         setMessagesStatus("ready")
         setRunSessionId(created.sessionId)
@@ -300,6 +306,11 @@ export function ChatSessionProvider({
 
   const bindRunSession = React.useCallback(
     (sessionId: string) => {
+      const viewed = viewedSessionIdRef.current
+      if (viewed !== null && viewed !== sessionId) {
+        return
+      }
+      viewedSessionIdRef.current = sessionId
       skipTranscriptLoadRef.current = true
       setRunSessionId(sessionId)
       setActiveSession((current) => {
