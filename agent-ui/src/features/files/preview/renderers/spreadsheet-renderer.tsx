@@ -570,7 +570,8 @@ export function SpreadsheetRenderer({
                           aria-colindex={columnOffset + 2}
                           className={cn(
                             "sticky top-0 z-20 h-7 min-w-24 border-b border-r border-border bg-muted px-2 text-center font-medium text-muted-foreground",
-                            selected && "bg-primary/10 text-foreground"
+                            selected &&
+                              "bg-[color-mix(in_oklch,var(--muted),var(--primary)_12%)] text-foreground"
                           )}
                         >
                           {encodeColumnLabel(column)}
@@ -598,7 +599,8 @@ export function SpreadsheetRenderer({
                         aria-rowindex={rowOffset + 2}
                         className={cn(
                           "sticky left-0 z-10 h-7 min-w-12 border-b border-r border-border bg-muted px-1 text-center font-medium text-muted-foreground",
-                          rowSelected && "bg-primary/10 text-foreground"
+                          rowSelected &&
+                            "bg-[color-mix(in_oklch,var(--muted),var(--primary)_12%)] text-foreground"
                         )}
                       >
                         {row + 1}
