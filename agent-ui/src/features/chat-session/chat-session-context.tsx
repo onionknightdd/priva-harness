@@ -35,6 +35,8 @@ type ChatSessionContextValue = ReturnType<typeof useSessionProjects> & {
   startNewChat: (cwd?: string) => void
   forkFrom: (input: ForkFromInput) => Promise<void>
   bindRunSession: (sessionId: string) => void
+  beginLiveSession: (sessionId: string) => void
+  endLiveSession: (sessionId: string) => void
 }
 
 const ChatSessionContext = React.createContext<ChatSessionContextValue | null>(
@@ -69,6 +71,9 @@ export function ChatSessionProvider({
 }) {
   const { runHarnessId } = useHarness()
   const projects = useSessionProjects(runHarnessId)
+  const [localLiveSessionIds, setLocalLiveSessionIds] = React.useState<
+    ReadonlySet<string>
+  >(() => new Set())
   const [activeSession, setActiveSession] =
     React.useState<SessionInfo | null>(null)
   const [threadMessages, setThreadMessages] = React.useState<
@@ -326,9 +331,50 @@ export function ChatSessionProvider({
     runHarnessId === "claude" && runSessionId && !forking
   )
 
+  React.useEffect(() => {
+    setLocalLiveSessionIds(new Set())
+  }, [runHarnessId])
+
+  const beginLiveSession = React.useCallback((sessionId: string) => {
+    if (sessionId.trim() === "") {
+      return
+    }
+    setLocalLiveSessionIds((current) => {
+      if (current.has(sessionId)) {
+        return current
+      }
+      const next = new Set(current)
+      next.add(sessionId)
+      return next
+    })
+  }, [])
+
+  const endLiveSession = React.useCallback((sessionId: string) => {
+    setLocalLiveSessionIds((current) => {
+      if (!current.has(sessionId)) {
+        return current
+      }
+      const next = new Set(current)
+      next.delete(sessionId)
+      return next
+    })
+  }, [])
+
+  const runningSessionIds = React.useMemo(() => {
+    if (localLiveSessionIds.size === 0) {
+      return projects.runningSessionIds
+    }
+    const merged = new Set(projects.runningSessionIds)
+    for (const sessionId of localLiveSessionIds) {
+      merged.add(sessionId)
+    }
+    return merged
+  }, [localLiveSessionIds, projects.runningSessionIds])
+
   const value = React.useMemo<ChatSessionContextValue>(
     () => ({
       ...projects,
+      runningSessionIds,
       remove,
       activeSession,
       threadMessages,
@@ -345,12 +391,16 @@ export function ChatSessionProvider({
       startNewChat,
       forkFrom,
       bindRunSession,
+      beginLiveSession,
+      endLiveSession,
     }),
     [
       activeSession,
+      beginLiveSession,
       bindRunSession,
       canFork,
       closeSession,
+      endLiveSession,
       forkError,
       forkFrom,
       forking,
@@ -360,6 +410,7 @@ export function ChatSessionProvider({
       projects,
       remove,
       runCwd,
+      runningSessionIds,
       runSessionId,
       startNewChat,
       threadMessages,

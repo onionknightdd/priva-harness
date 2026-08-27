@@ -233,6 +233,47 @@ export function tagSession(
   })
 }
 
+export type RunningSession = {
+  sessionId: string | null
+  runId: string
+  status: string
+  startedAt: number
+  lastSeq: number
+  firstSeq: number
+  runMode: SessionRunMode
+  harness: AgentRunHarness
+}
+
+export function listRunningSessions(
+  harness: AgentRunHarness,
+  signal?: AbortSignal
+) {
+  return requestJson<{
+    running: Array<{
+      session_id: string | null
+      run_id: string
+      status: string
+      started_at: number
+      last_seq: number
+      first_seq: number
+      run_mode: SessionRunMode
+      harness: AgentRunHarness
+    }>
+  }>(`${SESSION_API_PREFIX}/running?${harnessQuery(harness)}`, { signal }).then(
+    (payload) =>
+      payload.running.map((item) => ({
+        sessionId: item.session_id,
+        runId: item.run_id,
+        status: item.status,
+        startedAt: item.started_at,
+        lastSeq: item.last_seq,
+        firstSeq: item.first_seq,
+        runMode: item.run_mode,
+        harness: item.harness,
+      }))
+  )
+}
+
 export function listSessionThread(
   harness: AgentRunHarness,
   sessionId: string,

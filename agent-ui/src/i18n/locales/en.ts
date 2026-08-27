@@ -330,6 +330,8 @@ export const en = {
       clearTagFilters: "Clear filters",
       revealInFiles: "Reveal in Files",
       archive: "Archive",
+      sessionIdle: "Idle",
+      sessionRunning: "Running",
     },
     user: {
       openMenu: "Open user menu",
