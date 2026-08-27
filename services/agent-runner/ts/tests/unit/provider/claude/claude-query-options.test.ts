@@ -30,7 +30,7 @@ describe('resolveClaudeQueryOptions', () => {
     expect(options.disallowedTools).not.toContain('CronCreate')
     expect(options.disallowedTools).not.toContain('CronDelete')
     expect(options.disallowedTools).not.toContain('CronList')
-    expect(options.disallowedTools).not.toContain('ScheduleWakeup')
+    expect(options.disallowedTools).toContain('ScheduleWakeup')
     expect(options.enableFileCheckpointing).toBe(true)
     expect(options.forwardSubagentText).toBe(true)
     expect(options.includePartialMessages).toBe(true)

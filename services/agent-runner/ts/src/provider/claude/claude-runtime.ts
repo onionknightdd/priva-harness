@@ -21,6 +21,7 @@ export const CLAUDE_DISALLOWED_TOOLS = [
   'NotebookEdit',
   'WebFetch',
   'WebSearch',
+  'ScheduleWakeup',
   'RemoteTrigger',
   'PushNotification',
   'Artifact',
