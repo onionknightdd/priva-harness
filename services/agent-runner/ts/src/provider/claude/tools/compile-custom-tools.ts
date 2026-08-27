@@ -4,7 +4,7 @@ import { z, type ZodType } from 'zod'
 import type { ToolContext, ToolDefinition, ToolJsonSchema } from '../../../core/tool/define-tool.js'
 import { isRecord } from '../../../core/event/json-record.js'
 
-export const PRODUCT_MCP_SERVER_NAME = 'priva'
+export const PRODUCT_MCP_SERVER_NAME = 'agentWorkshop'
 
 export function compileClaudeCustomTools(
   tools: readonly ToolDefinition[],

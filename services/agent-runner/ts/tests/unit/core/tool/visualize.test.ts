@@ -37,9 +37,9 @@ describe('visualize tool', () => {
 
 describe('canonicalProductToolName', () => {
   it('maps Claude SDK MCP names onto visualize', () => {
-    expect(canonicalProductToolName('mcp__priva__visualize')).toBe('visualize')
+    expect(canonicalProductToolName('mcp__agentWorkshop__visualize')).toBe('visualize')
     expect(canonicalProductToolName('Visualize')).toBe('visualize')
-    expect(isVisualizeToolName('mcp__priva__visualize')).toBe(true)
+    expect(isVisualizeToolName('mcp__agentWorkshop__visualize')).toBe(true)
     expect(canonicalProductToolName('mcp__github__create_issue')).toBe(
       'mcp__github__create_issue',
     )

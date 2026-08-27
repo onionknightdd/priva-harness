@@ -89,10 +89,10 @@ describe('resolveClaudeQueryOptions', () => {
       productTools,
     )
     expect(options.toolAliases).toEqual({
-      visualize: 'mcp__priva__visualize',
+      visualize: 'mcp__agentWorkshop__visualize',
     })
     expect(options.mcpServers).toMatchObject({
-      priva: { type: 'sdk', name: 'priva' },
+      agentWorkshop: { type: 'sdk', name: 'agentWorkshop' },
     })
   })
 })

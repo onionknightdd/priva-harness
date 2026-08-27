@@ -12,7 +12,7 @@ const TERMINAL_STATUSES = new Set([
 
 export const VISUALIZE_TOOL_NAME = 'visualize'
 
-const MCP_TOOL_NAME = /^mcp__[a-z0-9_-]+__(.+)$/
+const MCP_TOOL_NAME = /^mcp__[a-zA-Z0-9_-]+__(.+)$/
 
 export function canonicalProductToolName(name: string): string {
   const lower = name.trim().toLowerCase()

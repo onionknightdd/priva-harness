@@ -502,7 +502,7 @@ describe('ClaudeEventMapper', () => {
           content_block: {
             type: 'tool_use',
             id: 'call_viz',
-            name: 'mcp__priva__visualize',
+            name: 'mcp__agentWorkshop__visualize',
             input: { jsx: '<div>hi</div>' },
           },
         },
