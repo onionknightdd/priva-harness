@@ -46,7 +46,7 @@ import {
 
 const COMPOSER_MENU_WIDTH_CLASS = "w-56 min-w-56 max-w-56 text-sm"
 const COMPOSER_TEXT_CLASS = "text-sm font-normal"
-export const COMPOSER_MODEL_TRIGGER_MAX_CLASS = "max-w-[calc(8rem*4/3)]"
+export const COMPOSER_MODEL_TRIGGER_MAX_CLASS = "max-w-[calc(8rem*5/3)]"
 const EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const
 
 export type ComposerEffort = (typeof EFFORT_LEVELS)[number]
