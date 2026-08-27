@@ -111,9 +111,9 @@ function HarnessOptionList({
               <Item
                 size="xs"
                 variant={isActive ? "muted" : "default"}
-                className="w-full flex-nowrap items-center p-2"
+                className="w-full flex-nowrap items-center gap-3 py-2 in-data-[slot=dropdown-menu-content]:px-3 in-data-[slot=dropdown-menu-content]:py-2"
               >
-                <ItemMedia className="self-center translate-y-0">
+                <ItemMedia className="size-8 self-center translate-y-0">
                   <HarnessBrandLogo harnessId={option.id} />
                 </ItemMedia>
                 <ItemContent className="min-w-0 gap-0.5">
