@@ -19,7 +19,7 @@ import {
   AgentShikiLineContent,
   useAgentShikiHighlight,
 } from "@/components/agents/agent-shiki"
-import { TOOL_OUTPUT_INSET_CLASS } from "@/components/agents/tool-output-frame"
+import { TOOL_OUTPUT_INSET_X_CLASS } from "@/components/agents/tool-output-frame"
 import { writeClipboardText } from "@/lib/clipboard"
 import { SPRING_PRESS } from "@/lib/ease"
 import { cn } from "@/lib/utils"
@@ -166,49 +166,57 @@ export function CodeBlock({
         className
       )}
     >
-      <div className={TOOL_OUTPUT_INSET_CLASS}>
-        {showHeader ? (
-          <div className="flex h-10 items-center gap-2.5">
-            <FileCode2
-              aria-hidden="true"
-              className="size-3.5 shrink-0 text-muted-foreground/70"
-            />
-            {filename ? (
-              <span className="min-w-0 truncate font-mono text-xs text-foreground/80">
-                {filename}
-              </span>
-            ) : null}
-            <span className="text-[10px] font-medium tracking-wide text-muted-foreground/55 uppercase">
-              {language}
+      {showHeader ? (
+        <div
+          className={cn(
+            "flex h-8 items-center gap-2 border-b border-foreground/[0.06]",
+            TOOL_OUTPUT_INSET_X_CLASS
+          )}
+        >
+          <FileCode2
+            aria-hidden="true"
+            className="size-3.5 shrink-0 text-muted-foreground/70"
+          />
+          {filename ? (
+            <span className="min-w-0 truncate font-mono text-xs text-foreground/80">
+              {filename}
             </span>
-            <span
-              className={cn(
-                "ml-auto inline-flex shrink-0 items-center gap-1 text-[10px] font-medium",
-                streaming
-                  ? "text-blue-600 dark:text-blue-400"
-                  : "text-emerald-600 dark:text-emerald-400"
-              )}
-            >
-              {streaming ? (
-                <LoaderCircle className={cn("size-3", !reduce && "animate-spin")} />
-              ) : (
-                <Check className="size-3" />
-              )}
-              {streaming ? t("common.codeWriting") : t("common.codeReady")}
-            </span>
-            {copyButton}
-          </div>
-        ) : null}
+          ) : null}
+          <span className="text-[10px] font-medium tracking-wide text-muted-foreground/55 uppercase">
+            {language}
+          </span>
+          <span
+            className={cn(
+              "ml-auto inline-flex shrink-0 items-center gap-1 text-[10px] font-medium",
+              streaming
+                ? "text-blue-600 dark:text-blue-400"
+                : "text-emerald-600 dark:text-emerald-400"
+            )}
+          >
+            {streaming ? (
+              <LoaderCircle className={cn("size-3", !reduce && "animate-spin")} />
+            ) : (
+              <Check className="size-3" />
+            )}
+            {streaming ? t("common.codeWriting") : t("common.codeReady")}
+          </span>
+          {copyButton}
+        </div>
+      ) : null}
 
+      <div
+        className={cn(
+          TOOL_OUTPUT_INSET_X_CLASS,
+          "pb-[var(--tool-output-inset)]",
+          !showHeader && "pt-[var(--tool-output-inset)]"
+        )}
+      >
         <div className="relative">
           <div
             ref={viewportRef}
             role={streaming ? "log" : undefined}
             aria-live={streaming ? "polite" : undefined}
-            className={cn(
-              "overflow-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
-              showHeader && "border-t border-foreground/[0.06]"
-            )}
+            className="overflow-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
             style={{ maxHeight }}
           >
             <pre
