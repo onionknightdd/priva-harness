@@ -12,8 +12,10 @@ import type { AgentEvent } from '../../core/event/agent-event.js'
 import type { UserTurn } from '../../core/run/user-turn.js'
 import { AsyncQueue } from '../../core/stream/async-queue.js'
 import { PushableStream } from '../../core/stream/pushable-stream.js'
+import type { ToolDefinition } from '../../core/tool/define-tool.js'
 import { ClaudeEventMapper } from './claude-event-mapper.js'
 import { claudeUserMessage } from './claude-user-message.js'
+import { compileClaudeCustomTools } from './tools/compile-custom-tools.js'
 
 export const CLAUDE_DISALLOWED_TOOLS = [
   'NotebookEdit',
@@ -53,6 +55,7 @@ export class ClaudeRuntime implements AgentRuntime {
     private readonly target: SessionTarget,
     private readonly globalConfigDir: string,
     startQuery?: ClaudeQueryStart,
+    private readonly tools: readonly ToolDefinition[] = [],
   ) {
     this.startQuery = startQuery ?? ((args) => query(args))
     this.sessionId = initialSessionId(target)
@@ -112,6 +115,7 @@ export class ClaudeRuntime implements AgentRuntime {
         this.globalConfigDir,
         this.target,
         abortController,
+        this.tools,
       ),
     })
     this.query = active
@@ -146,6 +150,7 @@ export function resolveClaudeQueryOptions(
   globalConfigDir: string,
   target: SessionTarget = { kind: 'new', provider: 'claude' },
   abortController?: AbortController,
+  tools: readonly ToolDefinition[] = [],
 ): Options {
   const options: Options = {
     cwd: spec.cwd,
@@ -161,6 +166,18 @@ export function resolveClaudeQueryOptions(
     systemPrompt: { type: 'preset', preset: 'claude_code' },
     env: resolveClaudeProcessEnv(spec, globalConfigDir),
     ...(abortController === undefined ? {} : { abortController }),
+  }
+
+  const compiled = compileClaudeCustomTools(tools, {
+    cwd: spec.cwd,
+    session: { provider: 'claude', id: initialSessionId(target) },
+    signal: abortController?.signal ?? new AbortController().signal,
+  })
+  if (compiled.mcpServers !== undefined) {
+    options.mcpServers = compiled.mcpServers
+  }
+  if (compiled.toolAliases !== undefined) {
+    options.toolAliases = compiled.toolAliases
   }
 
   if (spec.effort !== undefined) {

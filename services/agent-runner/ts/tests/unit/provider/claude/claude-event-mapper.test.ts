@@ -490,4 +490,49 @@ describe('ClaudeEventMapper', () => {
       durationMs: 9,
     }])
   })
+
+  it('canonicalizes Claude SDK MCP visualize names', () => {
+    const mapper = new ClaudeEventMapper()
+    const events = [
+      ...mapper.push({
+        type: 'stream_event',
+        event: {
+          type: 'content_block_start',
+          index: 0,
+          content_block: {
+            type: 'tool_use',
+            id: 'call_viz',
+            name: 'mcp__priva__visualize',
+            input: { jsx: '<div>hi</div>' },
+          },
+        },
+      }),
+      ...mapper.push({
+        type: 'user',
+        message: {
+          content: [{
+            type: 'tool_result',
+            tool_use_id: 'call_viz',
+            content: '<div>hi</div>',
+          }],
+        },
+      }),
+    ]
+
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'tool.started',
+        id: 'call_viz',
+        name: 'visualize',
+        input: { jsx: '<div>hi</div>' },
+      }),
+      expect.objectContaining({
+        type: 'tool.completed',
+        id: 'call_viz',
+        name: 'visualize',
+        ok: true,
+        output: '<div>hi</div>',
+      }),
+    ]))
+  })
 })
