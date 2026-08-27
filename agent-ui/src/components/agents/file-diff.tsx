@@ -26,6 +26,10 @@ import {
   useAgentShikiHighlight,
 } from "@/components/agents/agent-shiki";
 import { toNotationDiffSource } from "@/components/agents/notation-diff";
+import {
+  TOOL_OUTPUT_FRAME_CLASS,
+  TOOL_OUTPUT_INSET_X_CLASS,
+} from "@/components/agents/tool-output-frame";
 import { ActionSwapRollText } from "@/components/motion/action-swap-roll";
 import { writeClipboardText } from "@/lib/clipboard";
 import { SPRING_PRESS, SPRING_SWAP } from "@/lib/ease";
@@ -276,13 +280,13 @@ export function FileDiff({
         open={currentOpen}
       >
         <div className="pt-[10px] pl-[calc(1em+0.25rem)]">
-          <div className="overflow-hidden rounded-xl bg-muted/80">
+          <div className={TOOL_OUTPUT_FRAME_CLASS}>
             <div
               ref={viewportRef}
               data-slot="file-diff-viewport"
               data-assistant-selectable=""
               aria-live="polite"
-              className="scrollbar-hide overflow-auto pl-[4px] pt-[8px]"
+              className="scrollbar-hide overflow-auto pt-[8px]"
               style={{ maxHeight }}
             >
               <pre className="agent-shiki shiki has-diff m-0 inline-block min-w-full whitespace-normal font-mono text-sm leading-5">
@@ -295,13 +299,14 @@ export function FileDiff({
                         key={line.id}
                         className={cn(
                           "flex min-w-full",
+                          TOOL_OUTPUT_INSET_X_CLASS,
                           type === "added" && "bg-emerald-500/[0.07]",
                           type === "removed" && "bg-rose-500/[0.07]",
                         )}
                       >
                         {lineDigits > 0 ? (
                           <span
-                            className="shrink-0 select-none px-1.5 text-right tabular-nums text-muted-foreground/40"
+                            className="shrink-0 select-none pr-1.5 text-right tabular-nums text-muted-foreground/40"
                             style={
                               lineGutterWidth === undefined
                                 ? undefined
@@ -315,7 +320,7 @@ export function FileDiff({
                           line={shikiLines?.[index]}
                           fallback={line.content}
                           className={cn(
-                            "pr-4 whitespace-pre",
+                            "whitespace-pre",
                             type === "added" && "diff add",
                             type === "removed" && "diff remove",
                           )}
@@ -328,7 +333,12 @@ export function FileDiff({
             </div>
 
             {canCopy ? (
-              <div className="flex justify-end px-2 pb-1.5 pt-1">
+              <div
+                className={cn(
+                  "flex justify-end pb-1.5 pt-1",
+                  TOOL_OUTPUT_INSET_X_CLASS
+                )}
+              >
                 <motion.button
                   type="button"
                   aria-label={copied ? "Copied" : "Copy diff"}

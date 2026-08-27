@@ -197,7 +197,7 @@ export function FileRead({
                 showHeader={false}
                 startLine={view.startLine}
                 maxHeight={maxHeight}
-                className="rounded-xl"
+                className="rounded-xl [--tool-output-inset:var(--radius-xl)]"
               />
             </div>
           ) : null}

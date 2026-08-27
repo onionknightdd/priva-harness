@@ -30,6 +30,10 @@ import {
 } from "@/components/agents/agent-code";
 import { ActionSwapRollText } from "@/components/motion/action-swap-roll";
 import { AgentDisclosure } from "@/components/agents/agent-disclosure";
+import {
+  TOOL_OUTPUT_FRAME_CLASS,
+  TOOL_OUTPUT_INSET_X_CLASS,
+} from "@/components/agents/tool-output-frame";
 import { SPRING_PRESS, SPRING_SWAP } from "@/lib/ease";
 import { cn } from "@/lib/utils";
 
@@ -324,7 +328,7 @@ export function ToolResult({
           open={currentOpen}
         >
           <div className="pt-1.5 pl-[calc(1em+0.25rem)]">
-            <div className="overflow-hidden rounded-xl bg-muted/80">
+            <div className={TOOL_OUTPUT_FRAME_CLASS}>
               <div
                 ref={viewportRef}
                 role="log"
@@ -333,7 +337,11 @@ export function ToolResult({
                 style={{ maxHeight }}
               >
                 <div
-                  className={cn("p-3", contentClassName)}
+                  className={cn(
+                    "py-3",
+                    TOOL_OUTPUT_INSET_X_CLASS,
+                    contentClassName
+                  )}
                   data-assistant-selectable=""
                 >
                   {children}
@@ -341,7 +349,12 @@ export function ToolResult({
               </div>
 
               {canCopy || onRetry ? (
-                <div className="flex items-center gap-0.5 px-2 pb-1.5">
+                <div
+                  className={cn(
+                    "flex items-center gap-0.5 pb-1.5",
+                    TOOL_OUTPUT_INSET_X_CLASS
+                  )}
+                >
                   {canCopy ? (
                     <ToolResultAction
                       label={copied ? "Copied" : "Copy result"}

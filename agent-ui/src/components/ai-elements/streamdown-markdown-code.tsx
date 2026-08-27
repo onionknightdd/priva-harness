@@ -105,7 +105,6 @@ export function StreamdownMarkdownCode({
       language={language || "text"}
       showLineNumbers={lineNumbers !== false}
       status={isIncomplete ? "streaming" : "complete"}
-      lineNumberLeftPad={8}
     />
   )
 }

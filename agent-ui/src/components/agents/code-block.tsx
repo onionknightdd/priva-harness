@@ -19,6 +19,7 @@ import {
   AgentShikiLineContent,
   useAgentShikiHighlight,
 } from "@/components/agents/agent-shiki"
+import { TOOL_OUTPUT_INSET_X_CLASS } from "@/components/agents/tool-output-frame"
 import { writeClipboardText } from "@/lib/clipboard"
 import { SPRING_PRESS } from "@/lib/ease"
 import { cn } from "@/lib/utils"
@@ -161,12 +162,12 @@ export function CodeBlock({
       data-state={status}
       aria-busy={streaming}
       className={cn(
-        "w-full min-w-0 overflow-hidden rounded-2xl bg-muted/80 text-sm",
+        "w-full min-w-0 overflow-hidden rounded-2xl bg-muted/80 text-sm [--tool-output-inset:var(--radius-2xl)]",
         className
       )}
     >
       {showHeader ? (
-        <div className="flex h-10 items-center gap-2.5 px-3">
+        <div className={cn("flex h-10 items-center gap-2.5", TOOL_OUTPUT_INSET_X_CLASS)}>
           <FileCode2
             aria-hidden="true"
             className="size-3.5 shrink-0 text-muted-foreground/70"
@@ -223,17 +224,18 @@ export function CodeBlock({
                     key={line.offset}
                     className={cn(
                       "flex min-h-5 min-w-full",
+                      TOOL_OUTPUT_INSET_X_CLASS,
                       emphasized.has(index + 1) && "bg-blue-500/[0.07]"
                     )}
                   >
                     {showLineNumbers ? (
                       <span
-                        className="shrink-0 select-none pl-1.5 pr-3 text-right tabular-nums text-muted-foreground/35"
+                        className="shrink-0 select-none pr-3 text-right tabular-nums text-muted-foreground/35"
                         style={{
                           width:
                             lineNumberLeftPad > 0
                               ? `calc(${String(lineDigits)}ch + 0.75rem + ${String(lineNumberLeftPad)}px)`
-                              : `calc(${String(lineDigits)}ch + 1.125rem)`,
+                              : `calc(${String(lineDigits)}ch + 0.75rem)`,
                           paddingLeft:
                             lineNumberLeftPad > 0
                               ? `${String(lineNumberLeftPad)}px`
@@ -247,8 +249,7 @@ export function CodeBlock({
                       line={shikiLines?.[index]}
                       fallback={line.content}
                       className={cn(
-                        "pr-4",
-                        showLineNumbers ? "pl-2" : "pl-4",
+                        showLineNumbers ? "pl-2" : undefined,
                         wrap
                           ? "whitespace-pre-wrap break-words"
                           : "whitespace-pre"
