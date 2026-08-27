@@ -16,7 +16,11 @@ import {
 } from "@/components/ui/combobox"
 import { cn } from "@/lib/utils"
 
-import { groupModelIds, type ModelIdGroup } from "./model-provider"
+import {
+  displayModelName,
+  groupModelIds,
+  type ModelIdGroup,
+} from "./model-provider"
 import { ProviderIcon } from "./provider-icon"
 
 export function ModelSelector({
@@ -45,6 +49,7 @@ export function ModelSelector({
       items={groups}
       value={value}
       disabled={disabled}
+      itemToStringLabel={displayModelName}
       onValueChange={onValueChange}
     >
       <ComboboxInput
@@ -66,7 +71,7 @@ export function ModelSelector({
               <ComboboxCollection>
                 {(modelId: string) => (
                   <ComboboxItem key={modelId} value={modelId}>
-                    <span className="truncate">{modelId}</span>
+                    <span className="truncate">{displayModelName(modelId)}</span>
                   </ComboboxItem>
                 )}
               </ComboboxCollection>

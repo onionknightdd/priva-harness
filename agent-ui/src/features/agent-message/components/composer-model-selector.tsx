@@ -33,6 +33,7 @@ import {
 import { useAgentPreferences } from "@/features/settings/agent-preferences-context"
 import { parseComposerModelReference } from "@/features/settings/agent-preferences"
 import {
+  displayModelName,
   getModelProviderId,
   groupModelIds,
   type ModelIdGroup,
@@ -476,7 +477,7 @@ function ProfileModelSubmenu({
                             active={modelMarqueeId === modelId}
                             className="flex-1"
                           >
-                            {modelId}
+                            {displayModelName(modelId)}
                           </HoverMarquee>
                           {isSelected ? (
                             <CheckIcon className="absolute right-2 size-4" />
@@ -890,9 +891,12 @@ export function ComposerModelSelector({
               </span>
             )}
             {selection?.modelId ? (
-              <CollapsingInline open={!iconOnly} measureKey={selection.modelId}>
+              <CollapsingInline
+                open={!iconOnly}
+                measureKey={displayModelName(selection.modelId)}
+              >
                 <OverflowFadeText className={COMPOSER_TEXT_CLASS}>
-                  {selection.modelId}
+                  {displayModelName(selection.modelId)}
                 </OverflowFadeText>
                 <ChevronDownIcon
                   className={cn(

@@ -276,6 +276,10 @@ export function getModelProviderId(
   return resolveModelProvider(modelId).provider?.id ?? null
 }
 
+export function displayModelName(modelId: string) {
+  return modelId.split("/").at(-1) || modelId
+}
+
 export function groupModelIds(modelIds: readonly string[]): ModelIdGroup[] {
   const groups = new Map<string, ModelIdGroup>()
 
