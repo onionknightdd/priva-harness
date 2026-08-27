@@ -50,6 +50,8 @@
     --color-background: var(--background);
     --color-workspace-panel: var(--workspace-panel);
     --color-workspace-tab-active: var(--workspace-tab-active);
+    --color-status-idle: var(--status-idle);
+    --color-status-running: var(--status-running);
     --radius-sm: calc(var(--radius) * 0.6);
     --radius-md: calc(var(--radius) * 0.8);
     --radius-lg: var(--radius);
@@ -94,6 +96,8 @@
     --sidebar-ring: oklch(0.708 0 0);
     --workspace-panel: rgb(245 245 245);
     --workspace-tab-active: rgb(222 222 222);
+    --status-idle: var(--muted-foreground);
+    --status-running: oklch(0.541 0.217 293.01);
 }
 
 .dark {
@@ -130,6 +134,8 @@
     --sidebar-ring: oklch(0.556 0 0);
     --workspace-panel: oklch(0.24 0 0);
     --workspace-tab-active: oklch(0.32 0 0);
+    --status-idle: var(--muted-foreground);
+    --status-running: oklch(0.702 0.161 293.54);
 }
 
 @layer base {

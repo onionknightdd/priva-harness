@@ -45,6 +45,8 @@ export function useAgentMessage() {
     runCwd,
     runSessionId,
     bindRunSession,
+    beginLiveSession,
+    endLiveSession,
   } = useChatSession()
   const [draft, setDraft] = React.useState("")
   const [modelReference, setModelReference] = React.useState<string | null>(
@@ -165,6 +167,7 @@ export function useAgentMessage() {
 
         const controller = new AbortController()
         const inFlightTools = new Set<string>()
+        let trackedLiveSessionId = resumeSessionId
         const toolIdleWaiters: Array<() => void> = []
         const notifyToolsIdle = () => {
           if (inFlightTools.size > 0) {
@@ -188,6 +191,10 @@ export function useAgentMessage() {
             })
           },
           finished: Promise.resolve(),
+        }
+
+        if (trackedLiveSessionId) {
+          beginLiveSession(trackedLiveSessionId)
         }
 
         stream.finished = runAgentSession(
@@ -226,6 +233,10 @@ export function useAgentMessage() {
             },
             onSession: (sessionId) => {
               bindRunSession(sessionId)
+              trackedLiveSessionId = sessionId
+              if (activeStreamRef.current?.messageId === assistantMessage.id) {
+                beginLiveSession(sessionId)
+              }
             },
           }
         )
@@ -257,6 +268,9 @@ export function useAgentMessage() {
           .finally(() => {
             inFlightTools.clear()
             notifyToolsIdle()
+            if (trackedLiveSessionId) {
+              endLiveSession(trackedLiveSessionId)
+            }
             if (activeStreamRef.current?.messageId === assistantMessage.id) {
               activeStreamRef.current = null
             }
@@ -265,9 +279,11 @@ export function useAgentMessage() {
         activeStreamRef.current = stream
       })
   }, [
+    beginLiveSession,
     bindRunSession,
     draft,
     effort,
+    endLiveSession,
     inputSuggestions,
     modelReference,
     queueBehavior,
