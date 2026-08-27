@@ -372,7 +372,7 @@ export function ToolResult({
                     {children}
                   </ToolResultViewport>
                   {hasActions ? (
-                    <div className="flex items-center gap-0.5">
+                    <div className="flex items-center gap-0.5 pt-[var(--tool-output-inset)]">
                       {canCopy ? (
                         <ToolResultAction
                           label={copied ? "Copied" : "Copy result"}
