@@ -27,7 +27,8 @@ export const StatusIndicator = ({
       className={cn(
         "absolute inline-flex size-full rounded-full opacity-75",
         "hidden motion-safe:group-[.running]:inline-flex motion-safe:group-[.running]:animate-ping",
-        "bg-status-running"
+        "motion-safe:group-[.warm]:inline-flex motion-safe:group-[.warm]:animate-ping",
+        "bg-status-running group-[.warm]:bg-status-warm"
       )}
     />
     <span
