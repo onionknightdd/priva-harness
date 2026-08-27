@@ -39,3 +39,19 @@ export function turnStickyParts(turn: ThreadTurn): {
       turn.replies.find((message) => message.status === "streaming") ?? null,
   }
 }
+
+export function freezeBelowMaskTarget({
+  userStuck,
+  workingStuck,
+}: {
+  userStuck: boolean
+  workingStuck: boolean
+}): "user" | "working" | null {
+  if (workingStuck) {
+    return "working"
+  }
+  if (userStuck) {
+    return "user"
+  }
+  return null
+}

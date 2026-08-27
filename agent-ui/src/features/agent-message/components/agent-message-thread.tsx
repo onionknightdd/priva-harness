@@ -3,6 +3,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
   type ReactNode,
 } from "react"
 import { ArrowDownIcon } from "lucide-react"
@@ -24,7 +25,11 @@ import { formatSessionRelativeTime, useTickingNow } from "@/lib/relative-time"
 import { cn } from "@/lib/utils"
 
 import type { AgentThreadMessage } from "../agent-message-data"
-import { groupThreadTurns, turnStickyParts, type ThreadTurn } from "../thread-turns"
+import {
+  groupThreadTurns,
+  turnStickyParts,
+  type ThreadTurn,
+} from "../thread-turns"
 import { AgentMessageItem } from "./agent-message-item"
 import { AssistantQuoteMenu } from "./assistant-quote-menu"
 import { StickyFreeze } from "./sticky-freeze"
@@ -130,6 +135,32 @@ function ThreadTurnItem({
 }) {
   const { user, working } = turnStickyParts(turn)
   const freezeTurn = user !== null || working !== null
+  const userRef = useRef<HTMLDivElement>(null)
+  const [userHeight, setUserHeight] = useState(0)
+  const [workingStuck, setWorkingStuck] = useState(false)
+
+  useLayoutEffect(() => {
+    const userBar = userRef.current
+    if (!userBar) {
+      setUserHeight(0)
+      return
+    }
+
+    const syncHeight = () => {
+      setUserHeight(Math.round(userBar.getBoundingClientRect().height))
+    }
+
+    syncHeight()
+    const observer = new ResizeObserver(syncHeight)
+    observer.observe(userBar)
+    return () => observer.disconnect()
+  }, [user?.id])
+
+  useLayoutEffect(() => {
+    if (working === null) {
+      setWorkingStuck(false)
+    }
+  }, [working])
 
   return (
     <MessageScrollerItem
@@ -141,12 +172,22 @@ function ThreadTurnItem({
         (isLast || freezeTurn) && "[content-visibility:visible]"
       )}
     >
-      {freezeTurn ? (
-        <StickyFreeze>
-          <div className="flex w-full min-w-0 flex-col gap-2 bg-background">
-            {user ? renderMessage(user) : null}
-            {working ? <WorkingStatusLine message={working} /> : null}
-          </div>
+      {user ? (
+        <StickyFreeze
+          ref={userRef}
+          className="z-20"
+          showBelowMask={!workingStuck}
+        >
+          {renderMessage(user)}
+        </StickyFreeze>
+      ) : null}
+      {working ? (
+        <StickyFreeze
+          className="z-10"
+          onStuckChange={setWorkingStuck}
+          top={user ? userHeight : 0}
+        >
+          <WorkingStatusLine message={working} />
         </StickyFreeze>
       ) : null}
       {turn.replies.map((message) =>
