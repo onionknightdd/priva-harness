@@ -165,7 +165,7 @@ function ThreadTurnItem({
         <StickyFreeze
           ref={userRef}
           className="z-20"
-          showTailMask={!streamingReply}
+          showBelowMask={!streamingReply}
         >
           {renderMessage(turn.user)}
         </StickyFreeze>

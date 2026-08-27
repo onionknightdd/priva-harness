@@ -4,9 +4,7 @@ import { motion, useReducedMotion } from "motion/react"
 import { EASE_OUT } from "@/lib/ease"
 import { cn } from "@/lib/utils"
 
-const TAIL_MASK_CLASS =
-  "[mask-image:linear-gradient(to_bottom,black_calc(100%-1.25rem),transparent)]"
-const TAIL_FADE_CLASS =
+const BELOW_FADE_CLASS =
   "pointer-events-none absolute inset-x-0 top-full h-8 bg-background [mask-image:linear-gradient(to_bottom,black,transparent)]"
 
 export const StickyFreeze = React.forwardRef<
@@ -15,7 +13,7 @@ export const StickyFreeze = React.forwardRef<
     children: React.ReactNode
     className?: string
     enabled?: boolean
-    showTailMask?: boolean
+    showBelowMask?: boolean
     top?: number
   }
 >(function StickyFreeze(
@@ -23,15 +21,13 @@ export const StickyFreeze = React.forwardRef<
     children,
     className,
     enabled = true,
-    showTailMask = true,
+    showBelowMask = true,
     top = 0,
   },
   forwardedRef
 ) {
   const sentinelRef = React.useRef<HTMLDivElement>(null)
-  const contentRef = React.useRef<HTMLDivElement>(null)
   const [stuck, setStuck] = React.useState(false)
-  const [overflowing, setOverflowing] = React.useState(false)
   const shouldReduceMotion = Boolean(useReducedMotion())
   const frozen = enabled && stuck
 
@@ -56,30 +52,13 @@ export const StickyFreeze = React.forwardRef<
     return () => observer.disconnect()
   }, [enabled])
 
-  React.useLayoutEffect(() => {
-    const content = contentRef.current
-    if (!content || !frozen) {
-      setOverflowing(false)
-      return
-    }
-
-    const updateOverflowing = () => {
-      setOverflowing(content.scrollHeight > content.clientHeight + 1)
-    }
-
-    updateOverflowing()
-    const observer = new ResizeObserver(updateOverflowing)
-    observer.observe(content)
-    return () => observer.disconnect()
-  }, [children, frozen])
-
   return (
     <motion.div
       ref={forwardedRef}
       data-slot="sticky-freeze"
       data-stuck={frozen || undefined}
       className={cn(
-        "relative w-full min-w-0",
+        "relative w-full min-w-0 overflow-visible",
         enabled && "sticky z-10",
         frozen && "bg-background",
         className
@@ -101,17 +80,9 @@ export const StickyFreeze = React.forwardRef<
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-px -translate-y-full"
       />
-      <div
-        ref={contentRef}
-        className={cn(
-          frozen && "max-h-[40vh] overflow-hidden",
-          frozen && overflowing && TAIL_MASK_CLASS
-        )}
-      >
-        {children}
-      </div>
-      {frozen && showTailMask ? (
-        <div aria-hidden className={TAIL_FADE_CLASS} />
+      {children}
+      {frozen && showBelowMask ? (
+        <div aria-hidden className={BELOW_FADE_CLASS} />
       ) : null}
     </motion.div>
   )
