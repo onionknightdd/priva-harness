@@ -4,6 +4,7 @@ import {
   CLAUDE_DISALLOWED_TOOLS,
   resolveClaudeQueryOptions,
 } from '../../../../src/provider/claude/claude-runtime.js'
+import { productTools } from '../../../../src/core/tool/product-tools.js'
 
 const spec = {
   cwd: '/work/repo',
@@ -77,5 +78,21 @@ describe('resolveClaudeQueryOptions', () => {
       '/cfg',
     )
     expect(options.promptSuggestions).toBe(false)
+  })
+
+  it('compiles product tools into an SDK MCP server', () => {
+    const options = resolveClaudeQueryOptions(
+      spec,
+      '/cfg',
+      { kind: 'new', provider: 'claude' },
+      undefined,
+      productTools,
+    )
+    expect(options.toolAliases).toEqual({
+      visualize: 'mcp__agentWorkshop__visualize',
+    })
+    expect(options.mcpServers).toMatchObject({
+      agentWorkshop: { type: 'sdk', name: 'agentWorkshop' },
+    })
   })
 })

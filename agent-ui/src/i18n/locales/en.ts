@@ -66,6 +66,8 @@ export const en = {
       writeDone: "Write",
       bashRunning: "Running",
       bashDone: "Ran",
+      visualizeRunning: "Visualizing",
+      visualizeDone: "Visualize",
       otherRunning: "Running {{name}}",
       otherDone: "{{name}}",
     },

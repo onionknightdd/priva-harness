@@ -1,6 +1,7 @@
 import type { TFunction } from "i18next"
 
 import type { StreamBlock, ToolCard } from "./agent-message-data"
+import { isVisualizeTool } from "./visualize-jsx"
 
 export type ToolActivityKind = "read" | "edit" | "write" | "bash" | "other"
 
@@ -92,6 +93,13 @@ export function toolItemStatusLabel(
   running: boolean,
   t: TFunction
 ): string {
+  if (isVisualizeTool(name)) {
+    return t(
+      running
+        ? "agentMessage.toolItem.visualizeRunning"
+        : "agentMessage.toolItem.visualizeDone"
+    )
+  }
   const kind = classifyToolName(name)
   if (kind === "other") {
     return t(

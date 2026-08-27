@@ -66,6 +66,8 @@ import {
   toolItemStatusLabel,
 } from "../tool-activity"
 import { QuoteSelectable } from "./quote-selectable"
+import { VisualizeToolItem } from "./visualize-tool-item"
+import { isVisualizeTool } from "../visualize-jsx"
 
 const PANEL_CLASS =
   "h-[var(--collapsible-panel-height)] overflow-hidden transition-[height,opacity] duration-200 ease-out data-[ending-style]:h-0 data-[ending-style]:opacity-0 data-[starting-style]:h-0 data-[starting-style]:opacity-0 motion-reduce:transition-none"
@@ -279,6 +281,9 @@ function ToolItem({
   }
   if (isReadTool(block.name)) {
     return <ReadToolItem block={block} />
+  }
+  if (isVisualizeTool(block.name)) {
+    return <VisualizeToolItem block={block} />
   }
   return <GenericToolItem block={block} />
 }
