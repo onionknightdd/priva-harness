@@ -33,7 +33,7 @@ import { ActionSwapRollText } from "@/components/motion/action-swap-roll";
 import { AgentDisclosure } from "@/components/agents/agent-disclosure";
 import {
   TOOL_OUTPUT_FRAME_CLASS,
-  TOOL_OUTPUT_INSET_CLASS,
+  TOOL_OUTPUT_INSET_X_CLASS,
 } from "@/components/agents/tool-output-frame";
 import { SPRING_PRESS, SPRING_SWAP } from "@/lib/ease";
 import { cn } from "@/lib/utils";
@@ -362,7 +362,13 @@ export function ToolResult({
           <div className="pt-1.5 pl-[calc(1em+0.25rem)]">
             {framed ? (
               <div className={TOOL_OUTPUT_FRAME_CLASS}>
-                <div className={TOOL_OUTPUT_INSET_CLASS}>
+                <div
+                  className={cn(
+                    TOOL_OUTPUT_INSET_X_CLASS,
+                    "pt-[var(--tool-output-inset)]",
+                    !hasActions && "pb-[var(--tool-output-inset)]"
+                  )}
+                >
                   <ToolResultViewport
                     viewportRef={viewportRef}
                     maxHeight={maxHeight}
@@ -371,28 +377,34 @@ export function ToolResult({
                   >
                     {children}
                   </ToolResultViewport>
-                  {hasActions ? (
-                    <div className="flex items-center gap-0.5">
-                      {canCopy ? (
-                        <ToolResultAction
-                          label={copied ? "Copied" : "Copy result"}
-                          onClick={handleCopy}
-                        >
-                          {copied ? (
-                            <Check className="size-3.5" />
-                          ) : (
-                            <Copy className="size-3.5" />
-                          )}
-                        </ToolResultAction>
-                      ) : null}
-                      {onRetry ? (
-                        <ToolResultAction label="Run again" onClick={onRetry}>
-                          <RotateCcw className="size-3.5" />
-                        </ToolResultAction>
-                      ) : null}
-                    </div>
-                  ) : null}
                 </div>
+                {hasActions ? (
+                  <div
+                    className={cn(
+                      "flex items-center gap-0.5",
+                      TOOL_OUTPUT_INSET_X_CLASS,
+                      "py-[var(--tool-output-inset)]"
+                    )}
+                  >
+                    {canCopy ? (
+                      <ToolResultAction
+                        label={copied ? "Copied" : "Copy result"}
+                        onClick={handleCopy}
+                      >
+                        {copied ? (
+                          <Check className="size-3.5" />
+                        ) : (
+                          <Copy className="size-3.5" />
+                        )}
+                      </ToolResultAction>
+                    ) : null}
+                    {onRetry ? (
+                      <ToolResultAction label="Run again" onClick={onRetry}>
+                        <RotateCcw className="size-3.5" />
+                      </ToolResultAction>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             ) : (
               <ToolResultViewport

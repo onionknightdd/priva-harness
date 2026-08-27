@@ -49,6 +49,22 @@ describe('PiRuntime stream input', () => {
     expect(session.disposed).toBe(true)
   })
 
+  it('keeps the session on warm release', async () => {
+    const session = new FakePiAgentSession()
+    const runtime = new PiRuntime(session)
+    for await (const event of consumeRunEvents(runtime.run(
+      { text: 'hello' },
+      { signal: new AbortController().signal },
+    ))) {
+      void event
+    }
+    await runtime.release('warm')
+    expect(session.unsubscribed).toBe(0)
+    expect(session.disposed).toBe(false)
+    await runtime.release('dispose')
+    expect(session.disposed).toBe(true)
+  })
+
   it('sends follow-up on the live session when already streaming', async () => {
     const session = new FakePiAgentSession()
     session.streaming = true

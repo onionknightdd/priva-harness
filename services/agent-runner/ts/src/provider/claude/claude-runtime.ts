@@ -47,8 +47,11 @@ export class ClaudeRuntime implements AgentRuntime {
   private input: PushableStream<SDKUserMessage> | undefined
   private events: AsyncQueue<AgentEvent> | undefined
   private mapper: ClaudeEventMapper | undefined
+  private idleMapper: ClaudeEventMapper | undefined
   private abortController: AbortController | undefined
   private sessionId = ''
+  private inTurn = false
+  private idleListener: ((events: readonly AgentEvent[]) => void) | undefined
   private readonly startQuery: ClaudeQueryStart
 
   constructor(
@@ -66,7 +69,14 @@ export class ClaudeRuntime implements AgentRuntime {
     return { provider: 'claude', id: this.sessionId }
   }
 
+  listenIdle(listener: ((events: readonly AgentEvent[]) => void) | undefined): void {
+    this.idleListener = listener
+    if (listener === undefined) this.idleMapper = undefined
+  }
+
   async *run(turn: UserTurn, context: TurnContext): AsyncIterable<AgentEvent> {
+    this.inTurn = true
+    this.idleMapper = undefined
     this.mapper = new ClaudeEventMapper()
     this.events = new AsyncQueue<AgentEvent>()
     this.ensureQuery()
@@ -81,6 +91,10 @@ export class ClaudeRuntime implements AgentRuntime {
     try {
       yield* this.events.iterate()
     } finally {
+      this.inTurn = false
+      this.events.close()
+      this.events = undefined
+      this.mapper = undefined
       context.signal.removeEventListener('abort', onAbort)
     }
   }
@@ -90,15 +104,18 @@ export class ClaudeRuntime implements AgentRuntime {
   }
 
   release(retention: 'warm' | 'dispose'): Promise<void> {
-    void retention
+    this.events?.close()
+    this.events = undefined
+    this.mapper = undefined
+    this.inTurn = false
+    if (retention === 'warm') return Promise.resolve()
+    this.idleListener = undefined
+    this.idleMapper = undefined
     this.input?.close()
     this.query?.close()
     this.abortController?.abort()
     this.query = undefined
     this.input = undefined
-    this.events?.close()
-    this.events = undefined
-    this.mapper = undefined
     this.abortController = undefined
     return Promise.resolve()
   }
@@ -128,21 +145,39 @@ export class ClaudeRuntime implements AgentRuntime {
       for await (const message of active) {
         const sessionId = sessionIdOf(message)
         if (sessionId !== undefined) this.sessionId = sessionId
-        const mapper = this.mapper
-        const events = this.events
-        if (mapper === undefined || events === undefined) continue
-        for (const event of mapper.push(message)) events.push(event)
+        const mapped = this.mapMessage(message)
+        if (this.inTurn) {
+          const events = this.events
+          if (events === undefined) continue
+          for (const event of mapped) events.push(event)
+          continue
+        }
+        if (this.idleListener !== undefined && mapped.length > 0) {
+          this.idleListener(mapped)
+        }
       }
     } catch (error) {
-      this.events?.push({
+      const failed: AgentEvent = {
         type: 'run.failed',
         message: error instanceof Error ? error.message : String(error),
         ...(this.sessionId === '' ? {} : { sessionId: this.sessionId }),
         model: this.spec.model,
-      })
+      }
+      if (this.inTurn) this.events?.push(failed)
+      else if (this.idleListener !== undefined) this.idleListener([failed])
     } finally {
       this.events?.close()
     }
+  }
+
+  private mapMessage(message: SDKMessage): readonly AgentEvent[] {
+    if (this.inTurn) {
+      const mapper = this.mapper
+      if (mapper === undefined) return []
+      return mapper.push(message)
+    }
+    this.idleMapper ??= new ClaudeEventMapper()
+    return this.idleMapper.push(message)
   }
 }
 
@@ -165,8 +200,17 @@ export function resolveClaudeQueryOptions(
     permissionMode: 'bypassPermissions',
     promptSuggestions: spec.promptSuggestions !== false,
     systemPrompt: { type: 'preset', preset: 'claude_code' },
+    settings: { crossSessionInbound: 'accept' },
     env: resolveClaudeProcessEnv(spec, globalConfigDir),
     ...(abortController === undefined ? {} : { abortController }),
+  }
+
+  // Keep title unset so Claude still auto-names the session from the first prompt.
+  if (target.kind === 'new' && target.sessionId !== undefined) {
+    options.sessionId = target.sessionId
+  }
+  if (target.kind === 'fork' && target.sessionId !== undefined) {
+    options.sessionId = target.sessionId
   }
 
   const compiled = compileClaudeCustomTools(tools, {
@@ -209,6 +253,7 @@ function resolveClaudeProcessEnv(
   assignEnv(env, 'ANTHROPIC_BASE_URL', spec.baseUrl)
   assignEnv(env, 'ANTHROPIC_API_KEY', spec.authToken)
   assignEnv(env, 'ANTHROPIC_AUTH_TOKEN', spec.authToken)
+  assignEnv(env, 'CLAUDE_CODE_HARBOR_KITE', '1')
   return env
 }
 
@@ -232,8 +277,8 @@ const OMITTED_INHERITED_ENV = new Set([
 
 function initialSessionId(target: SessionTarget): string {
   if (target.kind === 'resume') return target.session.id
-  if (target.kind === 'fork') return target.source.id
-  return ''
+  if (target.kind === 'fork') return target.sessionId ?? target.source.id
+  return target.sessionId ?? ''
 }
 
 function sessionIdOf(message: SDKMessage): string | undefined {

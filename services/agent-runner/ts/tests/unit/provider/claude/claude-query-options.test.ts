@@ -47,6 +47,9 @@ describe('resolveClaudeQueryOptions', () => {
     expect(options.env?.['ANTHROPIC_API_KEY']).toBe('secret')
     expect(options.env?.['ANTHROPIC_AUTH_TOKEN']).toBe('secret')
     expect(options.env?.['ANTHROPIC_MODEL']).toBeUndefined()
+    expect(options.env?.['CLAUDE_CODE_HARBOR_KITE']).toBe('1')
+    expect(options.settings).toEqual({ crossSessionInbound: 'accept' })
+    expect(options.extraArgs).toBeUndefined()
     expect(options.env?.['PATH'] ?? process.env['PATH']).toBe(process.env['PATH'])
   })
 
@@ -71,6 +74,39 @@ describe('resolveClaudeQueryOptions', () => {
     expect(forked.resume).toBe('sess-1')
     expect(forked.forkSession).toBe(true)
     expect(forked.sessionId).toBeUndefined()
+  })
+
+  it('sets sessionId from a preassigned Claude session without forcing a title', () => {
+    const options = resolveClaudeQueryOptions(
+      spec,
+      '/cfg',
+      { kind: 'new', provider: 'claude', sessionId: '11111111-1111-4111-8111-111111111111' },
+    )
+    expect(options.sessionId).toBe('11111111-1111-4111-8111-111111111111')
+    expect(options.extraArgs).toBeUndefined()
+    expect(options.title).toBeUndefined()
+
+    const resumed = resolveClaudeQueryOptions(
+      spec,
+      '/cfg',
+      { kind: 'resume', session: { provider: 'claude', id: 'sess-1' } },
+    )
+    expect(resumed.sessionId).toBeUndefined()
+    expect(resumed.extraArgs).toBeUndefined()
+    expect(resumed.title).toBeUndefined()
+
+    const forked = resolveClaudeQueryOptions(
+      spec,
+      '/cfg',
+      {
+        kind: 'fork',
+        source: { provider: 'claude', id: 'sess-1' },
+        sessionId: '22222222-2222-4222-8222-222222222222',
+      },
+    )
+    expect(forked.sessionId).toBe('22222222-2222-4222-8222-222222222222')
+    expect(forked.extraArgs).toBeUndefined()
+    expect(forked.title).toBeUndefined()
   })
 
   it('disables prompt suggestions when the run spec asks', () => {

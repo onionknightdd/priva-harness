@@ -215,7 +215,7 @@ export function FileRead({
                 whileHover={reduce ? undefined : { scale: 1.01 }}
                 whileTap={reduce ? undefined : { scale: 0.99 }}
                 transition={SPRING_SWAP}
-                className="block max-w-full overflow-hidden rounded-xl border border-border bg-muted/80 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                className="block max-w-full overflow-hidden rounded-xl border border-border bg-tool-output outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 <img
                   src={imageSrc}

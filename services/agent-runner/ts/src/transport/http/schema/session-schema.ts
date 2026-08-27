@@ -155,7 +155,7 @@ export const listRunningSessionsSchema = {
     200: {
       type: 'object',
       additionalProperties: false,
-      required: ['running'],
+      required: ['running', 'warm'],
       properties: {
         running: {
           type: 'array',
@@ -184,6 +184,19 @@ export const listRunningSessionsSchema = {
               first_user_uuid: nullableString,
               pending_permission: { type: 'null' },
               run_mode: { type: 'string', enum: ['agent', 'code'] },
+              harness: harnessQuery,
+            },
+          },
+        },
+        warm: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['session_id', 'status', 'harness'],
+            properties: {
+              session_id: { type: 'string' },
+              status: { type: 'string', enum: ['warm'] },
               harness: harnessQuery,
             },
           },

@@ -5,11 +5,13 @@ import {
   archiveSession,
   deleteSession,
   listGroupedSessions,
+  listRunningSessions,
   listSessionsForCwd,
   pinSession,
   renameSession,
   tagSession,
   type AgentRunHarness,
+  type RunningSession,
   type SessionInfo,
   type SessionProjectGroup,
 } from "@/lib/api/sandbox-sessions"
@@ -35,6 +37,21 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
   const [error, setError] = React.useState<string | null>(null)
   const [refreshing, setRefreshing] = React.useState(false)
   const [refreshIndex, setRefreshIndex] = React.useState(0)
+  const [runningSessions, setRunningSessions] = React.useState<
+    readonly RunningSession[]
+  >([])
+  const [warmSessionIds, setWarmSessionIds] = React.useState<
+    ReadonlySet<string>
+  >(() => new Set())
+  const runningSessionIds = React.useMemo(
+    () =>
+      new Set(
+        runningSessions.flatMap((item) =>
+          item.sessionId ? [item.sessionId] : []
+        )
+      ),
+    [runningSessions]
+  )
 
   const refresh = React.useCallback(() => {
     setRefreshIndex((current) => current + 1)
@@ -46,6 +63,8 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
       setActiveCwd("")
       setError(null)
       setRefreshing(false)
+      setRunningSessions([])
+      setWarmSessionIds(new Set())
       setStatus("unsupported")
       return
     }
@@ -79,6 +98,37 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
       cancelled = true
     }
   }, [harness, loadFailed, refreshIndex])
+
+  React.useEffect(() => {
+    if (!harness) {
+      return
+    }
+
+    let cancelled = false
+
+    const pull = async () => {
+      try {
+        const live = await listRunningSessions(harness)
+        if (cancelled) {
+          return
+        }
+        setRunningSessions(live.running)
+        setWarmSessionIds(new Set(live.warmSessionIds))
+      } catch {
+        // Keep the last known live set if a poll fails.
+      }
+    }
+
+    void pull()
+    const timer = window.setInterval(() => {
+      void pull()
+    }, 2500)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [harness, refreshIndex])
 
   const replaceSession = React.useCallback(
     (sessionId: string, patch: Partial<SessionInfo>) => {
@@ -260,5 +310,8 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
     rename,
     remove,
     prependSession,
+    runningSessions,
+    runningSessionIds,
+    warmSessionIds,
   }
 }

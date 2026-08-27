@@ -62,16 +62,18 @@ describe('/api/sandbox/agent/sessions', () => {
       modelProfiles: modelProfileService,
       activeCwd: testRoot,
     })
+    const agentHarness = new AgentHarness({
+      providers,
+      cwd: testRoot,
+      liveRuns,
+      sessions: sessionService,
+    })
+    sessionService.bindWarmListing((harness) => agentHarness.listWarm(harness))
     server = buildHttpServer({
       userFileSystem: new NodeUserFileSystem({ initialDirectory: testRoot }),
       modelProfileService,
       agentProfileService,
-      agentHarness: new AgentHarness({
-        providers,
-        cwd: testRoot,
-        liveRuns,
-        sessions: sessionService,
-      }),
+      agentHarness,
       sessionService,
     })
     await server.ready()
@@ -166,6 +168,7 @@ describe('/api/sandbox/agent/sessions', () => {
         run_mode: 'agent',
         harness: 'claude',
       }],
+      warm: [],
     })
   })
 

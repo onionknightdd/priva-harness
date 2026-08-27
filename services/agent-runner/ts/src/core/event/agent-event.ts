@@ -174,6 +174,11 @@ export type AgentEvent =
       readonly model?: string
     }
   | { readonly type: 'error'; readonly code?: string; readonly message: string }
+  | {
+      readonly type: 'replay.gap'
+      readonly firstSeq: number
+      readonly lastSeq: number
+    }
   | ({
       readonly type: 'agent.message'
       readonly direction: 'received'

@@ -10,6 +10,7 @@ import {
 import { motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
+import { StatusDot } from "@/components/kibo-ui/status"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,6 +49,8 @@ export function ProjectSessionItem({
   onSelect,
   knownTags,
   isActive = false,
+  isRunning = false,
+  isWarm = false,
 }: {
   session: SessionInfo
   isMobile: boolean
@@ -59,6 +62,8 @@ export function ProjectSessionItem({
   onSelect: (session: SessionInfo) => void
   knownTags: KnownSessionTag[]
   isActive?: boolean
+  isRunning?: boolean
+  isWarm?: boolean
 }) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
@@ -154,6 +159,17 @@ export function ProjectSessionItem({
             setEditing(true)
           }}
         >
+          {isRunning ? (
+            <StatusDot
+              status="running"
+              label={t("sidebar.projects.sessionRunning")}
+            />
+          ) : isWarm ? (
+            <StatusDot
+              status="warm"
+              label={t("sidebar.projects.sessionWarm")}
+            />
+          ) : null}
           {session.pinned ? (
             <PinIcon
               className="size-3.5 shrink-0 fill-current"

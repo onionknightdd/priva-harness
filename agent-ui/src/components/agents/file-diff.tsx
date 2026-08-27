@@ -333,7 +333,7 @@ export function FileDiff({
               </div>
 
               {canCopy ? (
-                <div className="flex justify-end">
+                <div className="flex items-center justify-end pt-[var(--tool-output-inset)]">
                   <motion.button
                     type="button"
                     aria-label={copied ? "Copied" : "Copy diff"}

@@ -1,11 +1,10 @@
 import * as React from "react"
 import { ArrowUpIcon, PlusIcon, SquareIcon } from "lucide-react"
-import { motion, useReducedMotion } from "motion/react"
+import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
 import { SPRING_LAYOUT } from "@/lib/ease"
 import { cn } from "@/lib/utils"
-import { ActionSwapRollIcon } from "@/components/motion/action-swap-roll"
 import { Field, FieldLabel } from "@/components/ui/field"
 import {
   InputGroupAddon,
@@ -203,6 +202,7 @@ function ComposerControls({
   onModelReferenceChange: (model: string | null) => void
   onEffortChange: (effort: ComposerEffort) => void
 }) {
+  const shouldReduceMotion = Boolean(useReducedMotion())
   const stopping = action === "stop"
   const actionLabel = stopping ? stopLabel : sendLabel
 
@@ -242,13 +242,24 @@ function ComposerControls({
             : undefined
         }
       >
-        <ActionSwapRollIcon value={action} className="size-4">
-          {stopping ? (
-            <SquareIcon className="size-2.5 fill-current" />
-          ) : (
-            <ArrowUpIcon />
-          )}
-        </ActionSwapRollIcon>
+        <span className="relative flex size-4 items-center justify-center">
+          <AnimatePresence initial={false} mode="wait">
+            <motion.span
+              key={action}
+              initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.72 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.72 }}
+              transition={{ duration: shouldReduceMotion ? 0 : 0.16 }}
+              className="flex items-center justify-center"
+            >
+              {stopping ? (
+                <SquareIcon className="size-2.5 fill-current" />
+              ) : (
+                <ArrowUpIcon />
+              )}
+            </motion.span>
+          </AnimatePresence>
+        </span>
       </InputGroupButton>
     </div>
   )
@@ -258,7 +269,7 @@ export function AgentMessageComposer({
   compact = false,
   draft,
   canSubmit,
-  isStreaming,
+  isStreaming = false,
   modelReady,
   onDraftChange,
   onModelReferenceChange,
@@ -269,7 +280,7 @@ export function AgentMessageComposer({
   compact?: boolean
   draft: string
   canSubmit: boolean
-  isStreaming: boolean
+  isStreaming?: boolean
   modelReady: boolean
   onDraftChange: (draft: string) => void
   onModelReferenceChange: (model: string | null) => void
@@ -309,6 +320,9 @@ export function AgentMessageComposer({
       className="w-full min-w-0"
       onSubmit={(event) => {
         event.preventDefault()
+        if (primaryAction === "stop") {
+          return
+        }
         if (canSubmit) {
           onSubmit()
         }

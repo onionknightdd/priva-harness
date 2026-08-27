@@ -1,5 +1,5 @@
 export const TOOL_OUTPUT_FRAME_CLASS =
-  "overflow-hidden rounded-xl bg-muted/80 [--tool-output-inset:var(--radius-xl)]"
+  "overflow-hidden rounded-xl bg-tool-output [--tool-output-inset:var(--radius-xl)]"
 
 export const TOOL_OUTPUT_INSET_CLASS = "p-[var(--tool-output-inset)]"
 

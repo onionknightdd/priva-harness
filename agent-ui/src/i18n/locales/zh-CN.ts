@@ -242,7 +242,6 @@ export const zhCN = {
   },
   sidebar: {
     brand: "Agent Workshop",
-    runtime: "Runtime",
     modes: {
       label: "侧边栏模式",
       agent: "Agent",
@@ -329,6 +328,8 @@ export const zhCN = {
       clearTagFilters: "清除筛选",
       revealInFiles: "在文件中查看",
       archive: "归档",
+      sessionRunning: "运行中",
+      sessionWarm: "暖池",
     },
     user: {
       openMenu: "打开用户菜单",

@@ -17,6 +17,10 @@ export class FakeAgentProvider implements AgentProvider {
   readonly released: string[] = []
   readonly specs: ProviderRunSpec[] = []
   readonly targets: SessionTarget[] = []
+  gate: Promise<void> | undefined
+  afterEventsGate: Promise<void> | undefined
+  lastRuntime: FakeAgentRuntime | undefined
+  delayMs = 0
 
   constructor(id: ProviderId, events: readonly AgentEvent[], sessions = new FakeSessionStore()) {
     this.id = id
@@ -27,12 +31,19 @@ export class FakeAgentProvider implements AgentProvider {
   openSession(target: SessionTarget, spec: ProviderRunSpec): Promise<AgentRuntime> {
     this.targets.push(target)
     this.specs.push(spec)
-    return Promise.resolve(new FakeAgentRuntime(this, target))
+    const runtime = new FakeAgentRuntime(this, target)
+    this.lastRuntime = runtime
+    return Promise.resolve(runtime)
+  }
+
+  emitIdle(events: readonly AgentEvent[]): void {
+    this.lastRuntime?.emitIdle(events)
   }
 }
 
-class FakeAgentRuntime implements AgentRuntime {
+export class FakeAgentRuntime implements AgentRuntime {
   readonly session
+  private idleListener: ((events: readonly AgentEvent[]) => void) | undefined
 
   constructor(
     private readonly provider: FakeAgentProvider,
@@ -41,17 +52,31 @@ class FakeAgentRuntime implements AgentRuntime {
     this.session = { provider: provider.id, id: sessionIdFor(target) }
   }
 
-  run(turn: UserTurn, context: TurnContext): AsyncIterable<AgentEvent> {
+  listenIdle(listener: ((events: readonly AgentEvent[]) => void) | undefined): void {
+    this.idleListener = listener
+  }
+
+  emitIdle(events: readonly AgentEvent[]): void {
+    this.idleListener?.(events)
+  }
+
+  async *run(turn: UserTurn, context: TurnContext): AsyncIterable<AgentEvent> {
     void turn
-    void context
-    const events = this.provider.events
-    return {
-      [Symbol.asyncIterator]() {
-        const iterator = events[Symbol.iterator]()
-        return {
-          next: () => Promise.resolve(iterator.next()),
-        }
-      },
+    if (this.provider.gate !== undefined) {
+      await waitAbortable(this.provider.gate, context.signal)
+    }
+    if (this.provider.delayMs > 0) {
+      await delay(this.provider.delayMs, context.signal)
+    }
+    if (context.signal.aborted) {
+      yield { type: 'run.aborted', sessionId: this.session.id }
+      return
+    }
+    for (const event of this.provider.events) {
+      yield withSession(event, this.session.id)
+    }
+    if (this.provider.afterEventsGate !== undefined) {
+      await waitAbortable(this.provider.afterEventsGate, context.signal)
     }
   }
 
@@ -59,14 +84,50 @@ class FakeAgentRuntime implements AgentRuntime {
     return Promise.resolve()
   }
 
-  release(): Promise<void> {
-    this.provider.released.push('dispose')
+  release(retention: 'warm' | 'dispose'): Promise<void> {
+    this.provider.released.push(retention)
+    if (retention === 'dispose') this.idleListener = undefined
     return Promise.resolve()
   }
 }
 
 function sessionIdFor(target: SessionTarget): string {
   if (target.kind === 'resume') return target.session.id
-  if (target.kind === 'fork') return `fork-${target.source.id}`
-  return 'session-1'
+  if (target.kind === 'fork') return target.sessionId ?? `fork-${target.source.id}`
+  return target.sessionId ?? 'session-1'
+}
+
+function withSession(event: AgentEvent, sessionId: string): AgentEvent {
+  if (!('sessionId' in event)) return event
+  return { ...event, sessionId }
+}
+
+function waitAbortable(gate: Promise<void>, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const done = (): void => {
+      signal.removeEventListener('abort', done)
+      resolve()
+    }
+    if (signal.aborted) {
+      done()
+      return
+    }
+    signal.addEventListener('abort', done, { once: true })
+    void gate.then(done)
+  })
+}
+
+function delay(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms)
+    const onAbort = (): void => {
+      clearTimeout(timer)
+      resolve()
+    }
+    if (signal.aborted) {
+      onAbort()
+      return
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
 }

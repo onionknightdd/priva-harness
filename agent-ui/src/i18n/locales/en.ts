@@ -243,7 +243,6 @@ export const en = {
   },
   sidebar: {
     brand: "Agent Workshop",
-    runtime: "Runtime",
     modes: {
       label: "Sidebar mode",
       agent: "Agent",
@@ -332,6 +331,8 @@ export const en = {
       clearTagFilters: "Clear filters",
       revealInFiles: "Reveal in Files",
       archive: "Archive",
+      sessionRunning: "Running",
+      sessionWarm: "Warm",
     },
     user: {
       openMenu: "Open user menu",

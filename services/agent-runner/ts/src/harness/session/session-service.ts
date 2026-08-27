@@ -83,13 +83,19 @@ export type SessionListResult =
   }
   | { readonly kind: 'archived'; readonly sessions: readonly SessionView[] }
 
+export interface WarmSessionView {
+  readonly sessionId: string
+  readonly status: 'warm'
+  readonly harness: ProviderId
+}
+
 export interface RunningSessionView {
   readonly sessionId: string | null
   readonly runId: string
   readonly status: 'running'
   readonly startedAt: number
-  readonly lastSeq: 0
-  readonly firstSeq: 0
+  readonly lastSeq: number
+  readonly firstSeq: number
   readonly firstUserUuid: null
   readonly pendingPermission: null
   readonly runMode: RunMode
@@ -101,8 +107,8 @@ export interface SessionMessagesView {
   readonly addDirs: readonly string[]
   readonly runMode: RunMode
   readonly liveRunId: string | null
-  readonly liveSeq: 0
-  readonly liveFirstSeq: 0
+  readonly liveSeq: number
+  readonly liveFirstSeq: number
 }
 
 export interface SessionThreadView {
@@ -119,7 +125,13 @@ export interface RecordRunCompletedInput {
 }
 
 export class SessionService {
+  private warmListing: ((harness: ProviderId) => readonly SessionRef[]) | undefined
+
   constructor(private readonly options: SessionServiceOptions) {}
+
+  bindWarmListing(listWarm: (harness: ProviderId) => readonly SessionRef[]): void {
+    this.warmListing = listWarm
+  }
 
   async list(query: SessionListQuery): Promise<SessionListResult> {
     const provider = this.provider(query.harness)
@@ -158,6 +170,17 @@ export class SessionService {
     }
   }
 
+  listWarm(harness: ProviderId): readonly WarmSessionView[] {
+    this.provider(harness)
+    return (this.warmListing?.(harness) ?? [])
+      .filter((session) => session.provider === harness && session.id !== '')
+      .map((session) => ({
+        sessionId: session.id,
+        status: 'warm',
+        harness: session.provider,
+      }))
+  }
+
   listRunning(harness: ProviderId): Promise<readonly RunningSessionView[]> {
     this.provider(harness)
     return Promise.resolve(this.options.liveRuns.listActive(harness).map((record) => ({
@@ -165,8 +188,8 @@ export class SessionService {
       runId: record.runId,
       status: 'running',
       startedAt: record.startedAt,
-      lastSeq: 0,
-      firstSeq: 0,
+      lastSeq: record.lastSeq,
+      firstSeq: record.firstSeq,
       firstUserUuid: null,
       pendingPermission: null,
       runMode: record.runMode,
@@ -191,8 +214,8 @@ export class SessionService {
       addDirs: metadata.addDirs,
       runMode: metadata.runMode ?? 'code',
       liveRunId: live?.runId ?? null,
-      liveSeq: 0,
-      liveFirstSeq: 0,
+      liveSeq: live?.lastSeq ?? 0,
+      liveFirstSeq: live?.firstSeq ?? 0,
     }
   }
 
@@ -230,9 +253,7 @@ export class SessionService {
     const ref = this.ref(harness, sessionId)
     const provider = this.provider(harness)
     await provider.sessions.read(ref)
-    if (this.options.liveRuns.liveForSession(ref) !== undefined) {
-      throw new SessionError('session-busy', 'Session has a live run')
-    }
+    this.rejectIfLive(ref)
     await provider.sessions.delete(ref)
     await this.options.metadata.delete(ref)
   }
@@ -262,6 +283,7 @@ export class SessionService {
     const ref = this.ref(harness, sessionId)
     const provider = this.provider(harness)
     const source = await provider.sessions.read(ref)
+    this.rejectIfLive(ref)
     const listed = await provider.sessions.list(
       source.cwd === null || source.cwd === '' ? {} : { cwd: source.cwd },
     )
@@ -351,8 +373,15 @@ export class SessionService {
   ): Promise<{ pinned: boolean; archived: boolean }> {
     const ref = this.ref(harness, sessionId)
     await this.provider(harness).sessions.read(ref)
+    if (patch.archived === true) this.rejectIfLive(ref)
     const metadata = await this.options.metadata.upsert(ref, patch)
     return metadata.flags
+  }
+
+  private rejectIfLive(ref: SessionRef): void {
+    if (this.options.liveRuns.liveRunningForSession(ref) !== undefined) {
+      throw new SessionError('session-busy', 'Session has a live run')
+    }
   }
 
   private provider(harness: ProviderId): AgentProvider {

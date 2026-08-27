@@ -34,7 +34,10 @@ type ChatSessionContextValue = ReturnType<typeof useSessionProjects> & {
   closeSession: () => void
   startNewChat: (cwd?: string) => void
   forkFrom: (input: ForkFromInput) => Promise<void>
-  bindRunSession: (sessionId: string) => void
+  bindRunSession: (sessionId: string, seed?: { firstPrompt?: string }) => void
+  beginLiveSession: (sessionId: string) => void
+  endLiveSession: (sessionId: string) => void
+  reloadThread: () => Promise<AgentThreadMessage[]>
 }
 
 const ChatSessionContext = React.createContext<ChatSessionContextValue | null>(
@@ -69,6 +72,9 @@ export function ChatSessionProvider({
 }) {
   const { runHarnessId } = useHarness()
   const projects = useSessionProjects(runHarnessId)
+  const [localLiveSessionIds, setLocalLiveSessionIds] = React.useState<
+    ReadonlySet<string>
+  >(() => new Set())
   const [activeSession, setActiveSession] =
     React.useState<SessionInfo | null>(null)
   const [threadMessages, setThreadMessages] = React.useState<
@@ -83,6 +89,7 @@ export function ChatSessionProvider({
   const [forking, setForking] = React.useState(false)
   const [forkError, setForkError] = React.useState<string | null>(null)
   const skipTranscriptLoadRef = React.useRef(false)
+  const viewedSessionIdRef = React.useRef<string | null>(null)
   const forkingRef = React.useRef(false)
 
   const bumpTranscript = React.useCallback(() => {
@@ -91,6 +98,7 @@ export function ChatSessionProvider({
 
   const closeSession = React.useCallback(() => {
     skipTranscriptLoadRef.current = false
+    viewedSessionIdRef.current = null
     setActiveSession(null)
     setThreadMessages([])
     setMessagesStatus("idle")
@@ -103,6 +111,7 @@ export function ChatSessionProvider({
   const startNewChat = React.useCallback(
     (cwd?: string) => {
       skipTranscriptLoadRef.current = false
+      viewedSessionIdRef.current = null
       setActiveSession(null)
       setThreadMessages([])
       setMessagesStatus("idle")
@@ -116,6 +125,7 @@ export function ChatSessionProvider({
 
   React.useEffect(() => {
     skipTranscriptLoadRef.current = false
+    viewedSessionIdRef.current = null
     setActiveSession(null)
     setThreadMessages([])
     setMessagesStatus("idle")
@@ -209,7 +219,11 @@ export function ChatSessionProvider({
   }, [activeSession?.sessionId, bumpTranscript, runHarnessId])
 
   const openSession = React.useCallback((session: SessionInfo) => {
+    if (viewedSessionIdRef.current === session.sessionId) {
+      return
+    }
     skipTranscriptLoadRef.current = false
+    viewedSessionIdRef.current = session.sessionId
     setForkError(null)
     setRunSessionId(session.sessionId)
     setRunCwd(session.cwd?.trim() || "")
@@ -274,6 +288,7 @@ export function ChatSessionProvider({
         })
 
         skipTranscriptLoadRef.current = true
+        viewedSessionIdRef.current = created.sessionId
         setThreadMessages(kept)
         setMessagesStatus("ready")
         setRunSessionId(created.sessionId)
@@ -293,19 +308,32 @@ export function ChatSessionProvider({
   )
 
   const bindRunSession = React.useCallback(
-    (sessionId: string) => {
+    (sessionId: string, seed?: { firstPrompt?: string }) => {
+      const viewed = viewedSessionIdRef.current
+      if (viewed !== null && viewed !== sessionId) {
+        return
+      }
+      viewedSessionIdRef.current = sessionId
       skipTranscriptLoadRef.current = true
       setRunSessionId(sessionId)
-      setActiveSession((current) => {
-        if (current?.sessionId === sessionId) {
-          return current
+      const listed = projects.groups
+        .flatMap((group) => group.sessions)
+        .find((session) => session.sessionId === sessionId)
+      const prompt = seed?.firstPrompt?.trim() ?? ""
+      const next =
+        listed ??
+        {
+          ...liveSessionStub(sessionId, runCwd),
+          ...(prompt === ""
+            ? {}
+            : { firstPrompt: prompt, summary: prompt }),
         }
-        const listed = projects.groups
-          .flatMap((group) => group.sessions)
-          .find((session) => session.sessionId === sessionId)
-        return listed ?? liveSessionStub(sessionId, runCwd)
-      })
-      projects.refresh()
+      setActiveSession((current) =>
+        current?.sessionId === sessionId ? current : next
+      )
+      if (listed === undefined) {
+        projects.prependSession(next)
+      }
     },
     [projects, runCwd]
   )
@@ -326,9 +354,61 @@ export function ChatSessionProvider({
     runHarnessId === "claude" && runSessionId && !forking
   )
 
+  React.useEffect(() => {
+    setLocalLiveSessionIds(new Set())
+  }, [runHarnessId])
+
+  const beginLiveSession = React.useCallback((sessionId: string) => {
+    if (sessionId.trim() === "") {
+      return
+    }
+    setLocalLiveSessionIds((current) => {
+      if (current.has(sessionId)) {
+        return current
+      }
+      const next = new Set(current)
+      next.add(sessionId)
+      return next
+    })
+  }, [])
+
+  const endLiveSession = React.useCallback((sessionId: string) => {
+    setLocalLiveSessionIds((current) => {
+      if (!current.has(sessionId)) {
+        return current
+      }
+      const next = new Set(current)
+      next.delete(sessionId)
+      return next
+    })
+  }, [])
+
+  const reloadThread = React.useCallback(async () => {
+    if (!activeSession || !runHarnessId) {
+      return [] as AgentThreadMessage[]
+    }
+    const payload = await listSessionThread(runHarnessId, activeSession.sessionId)
+    const next = threadMessagesFromApi(payload.messages)
+    setThreadMessages(next)
+    bumpTranscript()
+    return next
+  }, [activeSession, bumpTranscript, runHarnessId])
+
+  const runningSessionIds = React.useMemo(() => {
+    if (localLiveSessionIds.size === 0) {
+      return projects.runningSessionIds
+    }
+    const merged = new Set(projects.runningSessionIds)
+    for (const sessionId of localLiveSessionIds) {
+      merged.add(sessionId)
+    }
+    return merged
+  }, [localLiveSessionIds, projects.runningSessionIds])
+
   const value = React.useMemo<ChatSessionContextValue>(
     () => ({
       ...projects,
+      runningSessionIds,
       remove,
       activeSession,
       threadMessages,
@@ -345,12 +425,17 @@ export function ChatSessionProvider({
       startNewChat,
       forkFrom,
       bindRunSession,
+      beginLiveSession,
+      endLiveSession,
+      reloadThread,
     }),
     [
       activeSession,
+      beginLiveSession,
       bindRunSession,
       canFork,
       closeSession,
+      endLiveSession,
       forkError,
       forkFrom,
       forking,
@@ -358,8 +443,10 @@ export function ChatSessionProvider({
       messagesStatus,
       openSession,
       projects,
+      reloadThread,
       remove,
       runCwd,
+      runningSessionIds,
       runSessionId,
       startNewChat,
       threadMessages,
