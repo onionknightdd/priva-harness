@@ -171,7 +171,7 @@ function AttachButton({
           className="rounded-full"
           aria-label={label}
         >
-          <PlusIcon />
+          <PlusIcon className="size-5" />
         </InputGroupButton>
       </TooltipTrigger>
       <TooltipContent>{unavailable}</TooltipContent>
@@ -199,7 +199,7 @@ function ComposerControls({
       <div
         className={cn(
           COMPOSER_MODEL_TRIGGER_MAX_CLASS,
-          "w-max min-w-0 overflow-hidden text-xs font-normal"
+          "w-max min-w-0 overflow-hidden text-sm font-normal"
         )}
         onClick={(event) => event.stopPropagation()}
         onPointerDown={(event) => event.stopPropagation()}
@@ -334,14 +334,15 @@ export function AgentMessageComposer({
                 value={draft}
                 placeholder={t("agentMessage.promptPlaceholder")}
                 data-agent-composer="prompt"
-                className={
+                className={cn(
+                  "w-full min-w-0 px-0 py-0 text-base!",
                   singleLine
-                    ? "field-sizing-fixed h-8 min-h-8 max-h-8 w-full min-w-0 overflow-hidden px-0 py-0 leading-8 whitespace-nowrap"
+                    ? "field-sizing-fixed h-8 min-h-8 max-h-8 overflow-hidden leading-8 whitespace-nowrap"
                     : cn(
-                        "max-h-60 w-full min-w-0 field-sizing-content px-0 py-0",
+                        "max-h-60 field-sizing-content",
                         compact ? "min-h-8" : "min-h-12"
                       )
-                }
+                )}
                 onChange={(event) => onDraftChange(event.currentTarget.value)}
                 onKeyDown={(event) => {
                   if (event.key !== "Enter" || event.shiftKey) {

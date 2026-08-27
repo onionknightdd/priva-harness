@@ -43,8 +43,8 @@ import {
   workspaceDensityTransition,
 } from "@/features/workspace"
 
-const COMPOSER_MENU_WIDTH_CLASS = "w-56 min-w-56 max-w-56 text-xs"
-const COMPOSER_TEXT_CLASS = "text-xs font-normal"
+const COMPOSER_MENU_WIDTH_CLASS = "w-56 min-w-56 max-w-56 text-sm"
+const COMPOSER_TEXT_CLASS = "text-sm font-normal"
 export const COMPOSER_MODEL_TRIGGER_MAX_CLASS = "max-w-[calc(8rem*4/3)]"
 const EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const
 
@@ -375,7 +375,7 @@ function ProfileModelSubmenu({
     >
       <DropdownMenuSubTrigger
         className={cn(
-          "min-w-0 gap-2 [&_svg:not([class*='size-'])]:size-3",
+          "min-w-0 gap-2 [&_svg:not([class*='size-'])]:size-3.5",
           COMPOSER_TEXT_CLASS
         )}
         closeDelay={120}
@@ -392,7 +392,7 @@ function ProfileModelSubmenu({
           {profile.label}
         </HoverMarquee>
         {isSelected ? (
-          <CheckIcon className="size-3.5 shrink-0" aria-hidden="true" />
+          <CheckIcon className="size-4 shrink-0" aria-hidden="true" />
         ) : null}
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent
@@ -411,14 +411,14 @@ function ProfileModelSubmenu({
               <div className="relative">
                 <SearchIcon
                   aria-hidden="true"
-                  className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+                  className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
                 />
                 <Input
                   ref={inputRef}
                   value={query}
                   aria-label={t("agentMessage.modelSearchLabel")}
                   placeholder={t("agentMessage.modelSearchPlaceholder")}
-                  className="h-8 border-0 bg-muted/60 pl-8 text-xs shadow-none md:text-xs focus-visible:ring-0"
+                  className="h-8 border-0 bg-muted/60 pl-8 text-sm shadow-none md:text-sm focus-visible:ring-0"
                   onChange={(event) => setQuery(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key !== "Escape") {
@@ -479,7 +479,7 @@ function ProfileModelSubmenu({
                             {modelId}
                           </HoverMarquee>
                           {isSelected ? (
-                            <CheckIcon className="absolute right-2 size-3.5" />
+                            <CheckIcon className="absolute right-2 size-4" />
                           ) : null}
                         </DropdownMenuItem>
                       )
@@ -489,7 +489,7 @@ function ProfileModelSubmenu({
               ) : (
                 <div
                   role="status"
-                  className="flex min-h-24 items-center justify-center px-4 text-center text-xs text-muted-foreground"
+                  className="flex min-h-24 items-center justify-center px-4 text-center text-sm text-muted-foreground"
                 >
                   {t("agentMessage.noModelResults", {
                     query: normalizedQuery,
@@ -524,7 +524,7 @@ function EffortSubmenu({
     <DropdownMenuSub>
       <DropdownMenuSubTrigger
         className={cn(
-          "min-w-0 gap-2 [&_svg:not([class*='size-'])]:size-3",
+          "min-w-0 gap-2 [&_svg:not([class*='size-'])]:size-3.5",
           COMPOSER_TEXT_CLASS
         )}
         closeDelay={120}
@@ -570,7 +570,7 @@ function EffortSubmenu({
               key={level}
               className={cn(
                 COMPOSER_TEXT_CLASS,
-                "[&_svg:not([class*='size-'])]:size-3.5"
+                "[&_svg:not([class*='size-'])]:size-4"
               )}
               value={level}
             >
@@ -879,11 +879,11 @@ export function ComposerModelSelector({
           >
             {selection?.modelId ? (
               <ProviderIcon
-                className="size-3.5 shrink-0"
+                className="size-4 shrink-0"
                 providerId={getModelProviderId(selection.modelId)}
               />
             ) : iconOnly ? (
-              <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
+              <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
             ) : (
               <span className={cn("truncate text-muted-foreground", COMPOSER_TEXT_CLASS)}>
                 {t("agentMessage.selectModel")}
@@ -896,7 +896,7 @@ export function ComposerModelSelector({
                 </OverflowFadeText>
                 <ChevronDownIcon
                   className={cn(
-                    "size-3 shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none",
+                    "size-3.5 shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none",
                     "group-data-[popup-open]/button:rotate-180"
                   )}
                 />
@@ -905,7 +905,7 @@ export function ComposerModelSelector({
               <CollapsingInline open measureKey="select-model">
                 <ChevronDownIcon
                   className={cn(
-                    "size-3 shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none",
+                    "size-3.5 shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none",
                     "group-data-[popup-open]/button:rotate-180"
                   )}
                 />
