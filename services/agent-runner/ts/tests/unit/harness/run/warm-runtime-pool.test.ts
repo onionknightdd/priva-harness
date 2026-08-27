@@ -35,7 +35,7 @@ describe('WarmRuntimePool', () => {
   it('defaults to five live-plus-idle slots', async () => {
     const pool = new WarmRuntimePool()
     expect(WARM_POOL_LIMIT).toBe(5)
-    const parked: Array<ReturnType<typeof fakeRuntime>> = []
+    const parked: ReturnType<typeof fakeRuntime>[] = []
     for (let index = 0; index < 5; index += 1) {
       const runtime = fakeRuntime(`s${index}`)
       await pool.acquire({ provider: 'claude', id: `s${index}` }, spec, () => Promise.resolve(runtime))
