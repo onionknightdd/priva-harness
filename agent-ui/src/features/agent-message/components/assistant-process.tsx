@@ -5,7 +5,6 @@ import {
   FilePenLineIcon,
   FilePlusCornerIcon,
   ImageIcon,
-  ListTodoIcon,
   WorkflowIcon,
   WrenchIcon,
   type LucideIcon,
@@ -21,7 +20,6 @@ import {
   type ToolResultStatus,
 } from "@/components/agents/tool-result"
 import { MessageResponse } from "@/components/ai-elements/message"
-import { AgentPlan } from "@/components/elements/agent-plan"
 import { Badge } from "@/components/ui/badge"
 import { writeClipboardText } from "@/lib/clipboard"
 import { FilePathLink } from "@/features/files/file-path-link"
@@ -67,7 +65,6 @@ import {
   isWriteTool,
   toolItemStatusLabel,
 } from "../tool-activity"
-import { foldTaskPlan, isTaskBoardTool, type TaskPlan } from "../task-plan"
 import { QuoteSelectable } from "./quote-selectable"
 
 const PANEL_CLASS =
@@ -87,7 +84,6 @@ export function AssistantProcess({
     (left, right) => left.index - right.index
   )
   const summary = formatToolActivitySummary(blocks, t)
-  const taskPlan = foldTaskPlan(blocks)
   const statusLabel = isStreaming
     ? t("agentMessage.thinking")
     : t("agentMessage.chainOfThought")
@@ -101,7 +97,6 @@ export function AssistantProcess({
   }, [isStreaming])
 
   const rows: React.ReactNode[] = []
-  let planRendered = false
   for (const block of blocks) {
     if (!isProcessBlock(block, blocks)) {
       continue
@@ -134,19 +129,6 @@ export function AssistantProcess({
       continue
     }
     if (block.type === "tool_use") {
-      if (isTaskBoardTool(block.name)) {
-        if (!planRendered && taskPlan) {
-          rows.push(
-            <TaskPlanItem
-              key="task-plan"
-              plan={taskPlan}
-              defaultOpen={isStreaming}
-            />
-          )
-          planRendered = true
-        }
-        continue
-      }
       rows.push(<ToolItem key={block.id} block={block} />)
     }
   }
@@ -710,38 +692,6 @@ function WorkflowItem({ workflow }: { workflow: WorkflowCard }) {
       badge={workflow.summary ?? workflow.status}
       badgeVariant={running ? "secondary" : "outline"}
     />
-  )
-}
-
-function TaskPlanItem({
-  plan,
-  defaultOpen,
-}: {
-  plan: TaskPlan
-  defaultOpen: boolean
-}) {
-  const { t } = useTranslation()
-  const running = plan.tasks.some((task) => task.status === "in_progress")
-
-  return (
-    <ProcessRow
-      icon={ListTodoIcon}
-      title={t("agentMessage.taskPlan")}
-      badge={t("agentMessage.taskPlanProgress", {
-        completed: plan.completedCount,
-        total: plan.tasks.length,
-      })}
-      badgeVariant={running ? "secondary" : "outline"}
-      defaultOpen={defaultOpen || running}
-    >
-      <AgentPlan
-        hideHeader
-        title={t("agentMessage.taskPlan")}
-        steps={plan.steps}
-        activeIndex={plan.activeIndex}
-        className="max-w-none pt-1"
-      />
-    </ProcessRow>
   )
 }
 

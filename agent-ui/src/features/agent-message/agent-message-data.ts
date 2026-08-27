@@ -1,3 +1,5 @@
+import { isTaskBoardTool } from "./task-plan"
+
 export type AgentMessageRole = "user" | "assistant"
 
 export type AgentMessageStatus = "streaming" | "complete" | "error"
@@ -130,7 +132,10 @@ function blockHasVisibleContent(block: StreamBlock): boolean {
   if (block.type === "thinking" || block.type === "text") {
     return block.text.trim() !== ""
   }
-  return block.type === "tool_use" || block.type === "image"
+  if (block.type === "tool_use") {
+    return !isTaskBoardTool(block.name)
+  }
+  return block.type === "image"
 }
 
 export function textFromBlocks(blocks: readonly StreamBlock[]): string {
@@ -144,8 +149,11 @@ export function isProcessBlock(
   if (block.type === "thinking") {
     return block.text.trim() !== ""
   }
-  if (block.type === "image" || block.type === "tool_use") {
+  if (block.type === "image") {
     return true
+  }
+  if (block.type === "tool_use") {
+    return !isTaskBoardTool(block.name)
   }
   if (block.type !== "text" || block.text.trim() === "") {
     return false

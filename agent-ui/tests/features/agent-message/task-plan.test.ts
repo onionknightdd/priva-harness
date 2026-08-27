@@ -4,6 +4,7 @@ import { describe, it } from "node:test"
 import type { StreamBlock } from "../../../src/features/agent-message/agent-message-data.ts"
 import {
   foldTaskPlan,
+  foldThreadTaskPlan,
   isTaskBoardTool,
 } from "../../../src/features/agent-message/task-plan.ts"
 
@@ -334,5 +335,69 @@ describe("task board tools", () => {
     assert.ok(plan)
     assert.equal(plan.tasks[0]?.status, "in_progress")
     assert.equal(plan.steps[0], "Drafting the fix")
+  })
+
+  it("folds Task* tools across messages without mixing their indexes", () => {
+    const plan = foldThreadTaskPlan([
+      {
+        id: "m1",
+        role: "assistant",
+        content: "",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        status: "complete",
+        blocks: [
+          tool(
+            0,
+            "c1",
+            "TaskCreate",
+            { subject: "First" },
+            JSON.stringify({ task: { id: "a", subject: "First" } })
+          ),
+        ],
+      },
+      {
+        id: "u1",
+        role: "user",
+        content: "continue",
+        createdAt: "2026-01-01T00:00:01.000Z",
+        status: "complete",
+      },
+      {
+        id: "m2",
+        role: "assistant",
+        content: "",
+        createdAt: "2026-01-01T00:00:02.000Z",
+        status: "complete",
+        blocks: [
+          tool(
+            0,
+            "u1",
+            "TaskUpdate",
+            { taskId: "a", status: "completed" },
+            JSON.stringify({
+              success: true,
+              taskId: "a",
+              updatedFields: ["status"],
+              statusChange: { from: "pending", to: "completed" },
+            })
+          ),
+          tool(
+            1,
+            "c2",
+            "TaskCreate",
+            { subject: "Second" },
+            JSON.stringify({ task: { id: "b", subject: "Second" } })
+          ),
+        ],
+      },
+    ])
+    assert.ok(plan)
+    assert.deepEqual(
+      plan.tasks.map((task) => [task.id, task.status]),
+      [
+        ["a", "completed"],
+        ["b", "pending"],
+      ]
+    )
   })
 })

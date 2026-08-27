@@ -1,4 +1,4 @@
-import type { StreamBlock } from "./agent-message-data"
+import type { AgentThreadMessage, StreamBlock } from "./agent-message-data"
 
 export type TaskBoardStatus = "pending" | "in_progress" | "completed"
 
@@ -32,15 +32,36 @@ export function isTaskBoardTool(name: string): boolean {
 }
 
 export function foldTaskPlan(blocks: readonly StreamBlock[]): TaskPlan | null {
+  return foldTaskPlanInOrder(
+    [...blocks].sort((left, right) => left.index - right.index)
+  )
+}
+
+export function foldThreadTaskPlan(
+  messages: readonly AgentThreadMessage[]
+): TaskPlan | null {
+  const blocks: StreamBlock[] = []
+  for (const message of messages) {
+    if (message.role !== "assistant") {
+      continue
+    }
+    blocks.push(
+      ...[...(message.blocks ?? [])].sort(
+        (left, right) => left.index - right.index
+      )
+    )
+  }
+  return foldTaskPlanInOrder(blocks)
+}
+
+function foldTaskPlanInOrder(blocks: readonly StreamBlock[]): TaskPlan | null {
   const tasks = new Map<string, TaskBoardItem>()
   const aliases = new Map<string, string>()
 
-  const ordered = [...blocks]
-    .filter(
-      (block): block is Extract<StreamBlock, { type: "tool_use" }> =>
-        block.type === "tool_use" && isTaskBoardTool(block.name)
-    )
-    .sort((left, right) => left.index - right.index)
+  const ordered = blocks.filter(
+    (block): block is Extract<StreamBlock, { type: "tool_use" }> =>
+      block.type === "tool_use" && isTaskBoardTool(block.name)
+  )
 
   for (const block of ordered) {
     applyTaskTool(tasks, aliases, block)

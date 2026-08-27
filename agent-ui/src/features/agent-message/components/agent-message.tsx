@@ -21,6 +21,7 @@ import { AgentMessageEmptyState } from "./agent-message-empty-state"
 import { AgentMessageThread } from "./agent-message-thread"
 import type { ComposerEffort } from "./composer-model-selector"
 import { SessionCwdBreadcrumb } from "./session-cwd-breadcrumb"
+import { TaskPlanPanel } from "./task-plan-panel"
 
 const fadeTransition = {
   duration: 0.2,
@@ -110,6 +111,7 @@ export function AgentMessage({
           !isEmpty && "pt-3"
         )}
       >
+        <TaskPlanPanel messages={messages} />
         <AgentMessageComposer
           compact={!isEmpty}
           draft={draft}
