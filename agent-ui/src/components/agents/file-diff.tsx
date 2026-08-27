@@ -28,9 +28,7 @@ import {
 import { toNotationDiffSource } from "@/components/agents/notation-diff";
 import {
   TOOL_OUTPUT_FRAME_CLASS,
-  TOOL_OUTPUT_INSET_B_CLASS,
-  TOOL_OUTPUT_INSET_T_CLASS,
-  TOOL_OUTPUT_INSET_X_CLASS,
+  TOOL_OUTPUT_INSET_CLASS,
 } from "@/components/agents/tool-output-frame";
 import { ActionSwapRollText } from "@/components/motion/action-swap-roll";
 import { writeClipboardText } from "@/lib/clipboard";
@@ -283,86 +281,77 @@ export function FileDiff({
       >
         <div className="pt-[10px] pl-[calc(1em+0.25rem)]">
           <div className={TOOL_OUTPUT_FRAME_CLASS}>
-            <div
-              ref={viewportRef}
-              data-slot="file-diff-viewport"
-              data-assistant-selectable=""
-              aria-live="polite"
-              className={cn(
-                "scrollbar-hide overflow-auto",
-                TOOL_OUTPUT_INSET_T_CLASS,
-                canCopy ? undefined : TOOL_OUTPUT_INSET_B_CLASS
-              )}
-              style={{ maxHeight }}
-            >
-              <pre className="agent-shiki shiki has-diff m-0 inline-block min-w-full whitespace-normal font-mono text-sm leading-5">
-                <code className="block">
-                  <span className="sr-only">File changes</span>
-                  {lines.map((line, index) => {
-                    const type = line.type ?? "context";
-                    return (
-                      <span
-                        key={line.id}
-                        className={cn(
-                          "flex min-w-full",
-                          TOOL_OUTPUT_INSET_X_CLASS,
-                          type === "added" && "bg-emerald-500/[0.07]",
-                          type === "removed" && "bg-rose-500/[0.07]",
-                        )}
-                      >
-                        {lineDigits > 0 ? (
-                          <span
-                            className="shrink-0 select-none pr-1.5 text-right tabular-nums text-muted-foreground/40"
-                            style={
-                              lineGutterWidth === undefined
-                                ? undefined
-                                : { width: lineGutterWidth }
-                            }
-                          >
-                            {displayLineNumber(line)}
-                          </span>
-                        ) : null}
-                        <AgentShikiLineContent
-                          line={shikiLines?.[index]}
-                          fallback={line.content}
-                          className={cn(
-                            "whitespace-pre",
-                            type === "added" && "diff add",
-                            type === "removed" && "diff remove",
-                          )}
-                        />
-                      </span>
-                    );
-                  })}
-                </code>
-              </pre>
-            </div>
-
-            {canCopy ? (
+            <div className={TOOL_OUTPUT_INSET_CLASS}>
               <div
-                className={cn(
-                  "flex justify-end",
-                  TOOL_OUTPUT_INSET_X_CLASS,
-                  TOOL_OUTPUT_INSET_B_CLASS
-                )}
+                ref={viewportRef}
+                data-slot="file-diff-viewport"
+                data-assistant-selectable=""
+                aria-live="polite"
+                className="scrollbar-hide overflow-auto"
+                style={{ maxHeight }}
               >
-                <motion.button
-                  type="button"
-                  aria-label={copied ? "Copied" : "Copy diff"}
-                  title={copied ? "Copied" : "Copy diff"}
-                  onClick={handleCopy}
-                  whileTap={reduce ? undefined : { scale: 0.9 }}
-                  transition={SPRING_PRESS}
-                  className="grid size-7 place-items-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-background/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  {copied ? (
-                    <Check className="size-3.5" />
-                  ) : (
-                    <Copy className="size-3.5" />
-                  )}
-                </motion.button>
+                <pre className="agent-shiki shiki has-diff m-0 inline-block min-w-full whitespace-normal font-mono text-sm leading-5">
+                  <code className="block">
+                    <span className="sr-only">File changes</span>
+                    {lines.map((line, index) => {
+                      const type = line.type ?? "context";
+                      return (
+                        <span
+                          key={line.id}
+                          className={cn(
+                            "flex min-w-full",
+                            type === "added" && "bg-emerald-500/[0.07]",
+                            type === "removed" && "bg-rose-500/[0.07]",
+                          )}
+                        >
+                          {lineDigits > 0 ? (
+                            <span
+                              className="shrink-0 select-none pr-1.5 text-right tabular-nums text-muted-foreground/40"
+                              style={
+                                lineGutterWidth === undefined
+                                  ? undefined
+                                  : { width: lineGutterWidth }
+                              }
+                            >
+                              {displayLineNumber(line)}
+                            </span>
+                          ) : null}
+                          <AgentShikiLineContent
+                            line={shikiLines?.[index]}
+                            fallback={line.content}
+                            className={cn(
+                              "whitespace-pre",
+                              type === "added" && "diff add",
+                              type === "removed" && "diff remove",
+                            )}
+                          />
+                        </span>
+                      );
+                    })}
+                  </code>
+                </pre>
               </div>
-            ) : null}
+
+              {canCopy ? (
+                <div className="flex justify-end">
+                  <motion.button
+                    type="button"
+                    aria-label={copied ? "Copied" : "Copy diff"}
+                    title={copied ? "Copied" : "Copy diff"}
+                    onClick={handleCopy}
+                    whileTap={reduce ? undefined : { scale: 0.9 }}
+                    transition={SPRING_PRESS}
+                    className="grid size-7 place-items-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-background/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {copied ? (
+                      <Check className="size-3.5" />
+                    ) : (
+                      <Copy className="size-3.5" />
+                    )}
+                  </motion.button>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       </AgentDisclosure>

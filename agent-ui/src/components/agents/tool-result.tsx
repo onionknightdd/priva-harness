@@ -32,9 +32,7 @@ import { ActionSwapRollText } from "@/components/motion/action-swap-roll";
 import { AgentDisclosure } from "@/components/agents/agent-disclosure";
 import {
   TOOL_OUTPUT_FRAME_CLASS,
-  TOOL_OUTPUT_INSET_B_CLASS,
-  TOOL_OUTPUT_INSET_T_CLASS,
-  TOOL_OUTPUT_INSET_X_CLASS,
+  TOOL_OUTPUT_INSET_CLASS,
 } from "@/components/agents/tool-output-frame";
 import { SPRING_PRESS, SPRING_SWAP } from "@/lib/ease";
 import { cn } from "@/lib/utils";
@@ -332,53 +330,44 @@ export function ToolResult({
         >
           <div className="pt-1.5 pl-[calc(1em+0.25rem)]">
             <div className={TOOL_OUTPUT_FRAME_CLASS}>
-              <div
-                ref={viewportRef}
-                role="log"
-                aria-live="polite"
-                className="overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
-                style={{ maxHeight }}
-              >
+              <div className={TOOL_OUTPUT_INSET_CLASS}>
                 <div
-                  className={cn(
-                    TOOL_OUTPUT_INSET_X_CLASS,
-                    TOOL_OUTPUT_INSET_T_CLASS,
-                    hasActions ? undefined : TOOL_OUTPUT_INSET_B_CLASS,
-                    contentClassName
-                  )}
-                  data-assistant-selectable=""
+                  ref={viewportRef}
+                  role="log"
+                  aria-live="polite"
+                  className="overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+                  style={{ maxHeight }}
                 >
-                  {children}
+                  <div
+                    className={contentClassName}
+                    data-assistant-selectable=""
+                  >
+                    {children}
+                  </div>
                 </div>
-              </div>
 
-              {hasActions ? (
-                <div
-                  className={cn(
-                    "flex items-center gap-0.5",
-                    TOOL_OUTPUT_INSET_X_CLASS,
-                    TOOL_OUTPUT_INSET_B_CLASS
-                  )}
-                >
-                  {canCopy ? (
-                    <ToolResultAction
-                      label={copied ? "Copied" : "Copy result"}
-                      onClick={handleCopy}
-                    >
-                      {copied ? (
-                        <Check className="size-3.5" />
-                      ) : (
-                        <Copy className="size-3.5" />
-                      )}
-                    </ToolResultAction>
-                  ) : null}
-                  {onRetry ? (
-                    <ToolResultAction label="Run again" onClick={onRetry}>
-                      <RotateCcw className="size-3.5" />
-                    </ToolResultAction>
-                  ) : null}
-                </div>
-              ) : null}
+                {hasActions ? (
+                  <div className="flex items-center gap-0.5">
+                    {canCopy ? (
+                      <ToolResultAction
+                        label={copied ? "Copied" : "Copy result"}
+                        onClick={handleCopy}
+                      >
+                        {copied ? (
+                          <Check className="size-3.5" />
+                        ) : (
+                          <Copy className="size-3.5" />
+                        )}
+                      </ToolResultAction>
+                    ) : null}
+                    {onRetry ? (
+                      <ToolResultAction label="Run again" onClick={onRetry}>
+                        <RotateCcw className="size-3.5" />
+                      </ToolResultAction>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
         </AgentDisclosure>

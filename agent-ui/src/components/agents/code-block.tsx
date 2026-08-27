@@ -19,7 +19,7 @@ import {
   AgentShikiLineContent,
   useAgentShikiHighlight,
 } from "@/components/agents/agent-shiki"
-import { TOOL_OUTPUT_INSET_X_CLASS, TOOL_OUTPUT_INSET_Y_CLASS } from "@/components/agents/tool-output-frame"
+import { TOOL_OUTPUT_INSET_CLASS } from "@/components/agents/tool-output-frame"
 import { writeClipboardText } from "@/lib/clipboard"
 import { SPRING_PRESS } from "@/lib/ease"
 import { cn } from "@/lib/utils"
@@ -166,107 +166,109 @@ export function CodeBlock({
         className
       )}
     >
-      {showHeader ? (
-        <div className={cn("flex h-10 items-center gap-2.5", TOOL_OUTPUT_INSET_X_CLASS)}>
-          <FileCode2
-            aria-hidden="true"
-            className="size-3.5 shrink-0 text-muted-foreground/70"
-          />
-          {filename ? (
-            <span className="min-w-0 truncate font-mono text-xs text-foreground/80">
-              {filename}
+      <div className={TOOL_OUTPUT_INSET_CLASS}>
+        {showHeader ? (
+          <div className="flex h-10 items-center gap-2.5">
+            <FileCode2
+              aria-hidden="true"
+              className="size-3.5 shrink-0 text-muted-foreground/70"
+            />
+            {filename ? (
+              <span className="min-w-0 truncate font-mono text-xs text-foreground/80">
+                {filename}
+              </span>
+            ) : null}
+            <span className="text-[10px] font-medium tracking-wide text-muted-foreground/55 uppercase">
+              {language}
             </span>
-          ) : null}
-          <span className="text-[10px] font-medium tracking-wide text-muted-foreground/55 uppercase">
-            {language}
-          </span>
-          <span
-            className={cn(
-              "ml-auto inline-flex shrink-0 items-center gap-1 text-[10px] font-medium",
-              streaming
-                ? "text-blue-600 dark:text-blue-400"
-                : "text-emerald-600 dark:text-emerald-400"
-            )}
-          >
-            {streaming ? (
-              <LoaderCircle className={cn("size-3", !reduce && "animate-spin")} />
-            ) : (
-              <Check className="size-3" />
-            )}
-            {streaming ? t("common.codeWriting") : t("common.codeReady")}
-          </span>
-          {copyButton}
-        </div>
-      ) : null}
-
-      <div className="relative">
-        <div
-          ref={viewportRef}
-          role={streaming ? "log" : undefined}
-          aria-live={streaming ? "polite" : undefined}
-          className={cn(
-            "overflow-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
-            TOOL_OUTPUT_INSET_Y_CLASS,
-            showHeader && "border-t border-foreground/[0.06]"
-          )}
-          style={{ maxHeight }}
-        >
-          <pre
-            className={cn(
-              "agent-shiki shiki m-0 font-mono text-sm leading-5 text-foreground/85",
-              wrap ? "w-full agent-shiki-wrap whitespace-normal" : "inline-block min-w-full whitespace-normal"
-            )}
-          >
-            <code className="block">
-              {lines.map((line, index) => {
-                const lineNumber = startLine + index
-                return (
-                  <span
-                    key={line.offset}
-                    className={cn(
-                      "flex min-h-5 min-w-full",
-                      TOOL_OUTPUT_INSET_X_CLASS,
-                      emphasized.has(index + 1) && "bg-blue-500/[0.07]"
-                    )}
-                  >
-                    {showLineNumbers ? (
-                      <span
-                        className="shrink-0 select-none pr-3 text-right tabular-nums text-muted-foreground/35"
-                        style={{
-                          width:
-                            lineNumberLeftPad > 0
-                              ? `calc(${String(lineDigits)}ch + 0.75rem + ${String(lineNumberLeftPad)}px)`
-                              : `calc(${String(lineDigits)}ch + 0.75rem)`,
-                          paddingLeft:
-                            lineNumberLeftPad > 0
-                              ? `${String(lineNumberLeftPad)}px`
-                              : undefined,
-                        }}
-                      >
-                        {lineNumber}
-                      </span>
-                    ) : null}
-                    <AgentShikiLineContent
-                      line={shikiLines?.[index]}
-                      fallback={line.content}
-                      className={cn(
-                        showLineNumbers ? "pl-2" : undefined,
-                        wrap
-                          ? "whitespace-pre-wrap break-words"
-                          : "whitespace-pre"
-                      )}
-                    />
-                  </span>
-                )
-              })}
-            </code>
-          </pre>
-        </div>
-        {!showHeader ? (
-          <div className="pointer-events-none absolute top-1.5 right-1.5">
-            <span className="pointer-events-auto">{copyButton}</span>
+            <span
+              className={cn(
+                "ml-auto inline-flex shrink-0 items-center gap-1 text-[10px] font-medium",
+                streaming
+                  ? "text-blue-600 dark:text-blue-400"
+                  : "text-emerald-600 dark:text-emerald-400"
+              )}
+            >
+              {streaming ? (
+                <LoaderCircle className={cn("size-3", !reduce && "animate-spin")} />
+              ) : (
+                <Check className="size-3" />
+              )}
+              {streaming ? t("common.codeWriting") : t("common.codeReady")}
+            </span>
+            {copyButton}
           </div>
         ) : null}
+
+        <div className="relative">
+          <div
+            ref={viewportRef}
+            role={streaming ? "log" : undefined}
+            aria-live={streaming ? "polite" : undefined}
+            className={cn(
+              "overflow-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
+              showHeader && "border-t border-foreground/[0.06]"
+            )}
+            style={{ maxHeight }}
+          >
+            <pre
+              className={cn(
+                "agent-shiki shiki m-0 font-mono text-sm leading-5 text-foreground/85",
+                wrap
+                  ? "w-full agent-shiki-wrap whitespace-normal"
+                  : "inline-block min-w-full whitespace-normal"
+              )}
+            >
+              <code className="block">
+                {lines.map((line, index) => {
+                  const lineNumber = startLine + index
+                  return (
+                    <span
+                      key={line.offset}
+                      className={cn(
+                        "flex min-h-5 min-w-full",
+                        emphasized.has(index + 1) && "bg-blue-500/[0.07]"
+                      )}
+                    >
+                      {showLineNumbers ? (
+                        <span
+                          className="shrink-0 select-none pr-3 text-right tabular-nums text-muted-foreground/35"
+                          style={{
+                            width:
+                              lineNumberLeftPad > 0
+                                ? `calc(${String(lineDigits)}ch + 0.75rem + ${String(lineNumberLeftPad)}px)`
+                                : `calc(${String(lineDigits)}ch + 0.75rem)`,
+                            paddingLeft:
+                              lineNumberLeftPad > 0
+                                ? `${String(lineNumberLeftPad)}px`
+                                : undefined,
+                          }}
+                        >
+                          {lineNumber}
+                        </span>
+                      ) : null}
+                      <AgentShikiLineContent
+                        line={shikiLines?.[index]}
+                        fallback={line.content}
+                        className={cn(
+                          showLineNumbers ? "pl-2" : undefined,
+                          wrap
+                            ? "whitespace-pre-wrap break-words"
+                            : "whitespace-pre"
+                        )}
+                      />
+                    </span>
+                  )
+                })}
+              </code>
+            </pre>
+          </div>
+          {!showHeader ? (
+            <div className="pointer-events-none absolute top-0 right-0">
+              <span className="pointer-events-auto">{copyButton}</span>
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   )
