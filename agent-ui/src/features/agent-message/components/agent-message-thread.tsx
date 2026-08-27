@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef } from "react"
+import { useCallback, useLayoutEffect, useMemo, useRef } from "react"
 import { ArrowDownIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
@@ -15,10 +15,13 @@ import { useChatSession } from "@/features/chat-session"
 import { sessionDisplayTitle } from "@/features/sidebar/content/session-projects"
 import { useHarness } from "@/features/sidebar/header/harness-context"
 import { formatSessionRelativeTime, useTickingNow } from "@/lib/relative-time"
+import { cn } from "@/lib/utils"
 
 import type { AgentThreadMessage } from "../agent-message-data"
+import { groupThreadTurns } from "../thread-turns"
 import { AgentMessageItem } from "./agent-message-item"
 import { AssistantQuoteMenu } from "./assistant-quote-menu"
+import { StickyUserMessage } from "./sticky-user-message"
 
 export function AgentMessageThread({
   messages,
@@ -52,42 +55,57 @@ export function AgentMessageThread({
   const stem = activeSession
     ? sessionDisplayTitle(activeSession, untitled)
     : untitled
+  const turns = useMemo(() => groupThreadTurns(messages), [messages])
+
+  const renderMessage = (message: AgentThreadMessage) => (
+    <AgentMessageItem
+      key={message.id}
+      message={message}
+      relativeTime={formatSessionRelativeTime(
+        Date.parse(message.createdAt),
+        locale,
+        justNow,
+        now
+      )}
+      onFork={
+        canFork
+          ? () => {
+              void forkFrom({ message, messages, stem })
+            }
+          : undefined
+      }
+      forkDisabledReason={forkDisabledReason}
+    />
+  )
 
   return (
     <MessageScrollerProvider autoScroll>
       <MessageScroller>
         <MessageScrollerViewport>
           <MessageScrollerContent className="mx-auto w-full max-w-3xl gap-6 pt-6">
-            {messages.map((message, index) => (
-              <MessageScrollerItem
-                key={message.id}
-                messageId={message.id}
-                scrollAnchor={message.role === "user"}
-                className={
-                  index === messages.length - 1
-                    ? "[content-visibility:visible]"
-                    : undefined
-                }
-              >
-                <AgentMessageItem
-                  message={message}
-                  relativeTime={formatSessionRelativeTime(
-                    Date.parse(message.createdAt),
-                    locale,
-                    justNow,
-                    now
+            {turns.map((turn, index) => {
+              const isLast = index === turns.length - 1
+              const freezeUser = turn.user !== null
+
+              return (
+                <MessageScrollerItem
+                  key={turn.id}
+                  messageId={turn.id}
+                  scrollAnchor={freezeUser}
+                  className={cn(
+                    "flex flex-col gap-6 overflow-visible",
+                    (isLast || freezeUser) && "[content-visibility:visible]"
                   )}
-                  onFork={
-                    canFork
-                      ? () => {
-                          void forkFrom({ message, messages, stem })
-                        }
-                      : undefined
-                  }
-                  forkDisabledReason={forkDisabledReason}
-                />
-              </MessageScrollerItem>
-            ))}
+                >
+                  {turn.user ? (
+                    <StickyUserMessage>
+                      {renderMessage(turn.user)}
+                    </StickyUserMessage>
+                  ) : null}
+                  {turn.replies.map((message) => renderMessage(message))}
+                </MessageScrollerItem>
+              )
+            })}
             <ThreadEndSpacer />
           </MessageScrollerContent>
         </MessageScrollerViewport>
