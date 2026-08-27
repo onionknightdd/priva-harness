@@ -4,10 +4,11 @@ import { defineTool, stringToolArg } from './define-tool.js'
 export const visualizeTool = defineTool({
   name: VISUALIZE_TOOL_NAME,
   description: [
-    'Render a visual for the user from React JSX.',
+    'Render an interactive visual for the user from React JSX.',
+    'The snippet runs in a sandboxed iframe, so onClick and useState work.',
     'Call this when the user asks to visualize, chart, diagram, or mock a UI.',
-    'Pass a complete JSX snippet in "jsx", for example <div style={{padding: 16}}>…</div>.',
-    'Do not wrap the JSX in markdown fences, and do not include import/export or function wrappers.',
+    'Pass either a JSX snippet or a function named App, for example function App() { const [n, setN] = useState(0); return <button onClick={() => setN(n + 1)}>{n}</button>; }.',
+    'Do not wrap the JSX in markdown fences, and do not import or export modules.',
     'Prefer inline style objects.',
     'Optional components: Card, CardHeader, CardTitle, CardDescription, CardContent, Button, Badge, Progress, Separator.',
   ].join(' '),

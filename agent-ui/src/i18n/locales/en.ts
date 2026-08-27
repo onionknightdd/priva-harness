@@ -73,6 +73,7 @@ export const en = {
       otherRunning: "Running {{name}}",
       otherDone: "{{name}}",
     },
+    visualizeFrameTitle: "Interactive visualize preview",
     toolSummary: {
       separator: ", ",
       runningReadOne: "Reading {{count}} file",

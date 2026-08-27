@@ -73,6 +73,7 @@ export const zhCN = {
       otherRunning: "正在运行 {{name}}",
       otherDone: "{{name}}",
     },
+    visualizeFrameTitle: "可视化交互预览",
     toolSummary: {
       separator: "，",
       runningReadOne: "正在读取{{count}}个文件",

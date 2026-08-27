@@ -3,11 +3,6 @@ import { motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
 import {
-  JSXPreview,
-  JSXPreviewContent,
-  JSXPreviewError,
-} from "@/components/ai-elements/jsx-preview"
-import {
   ToolResult,
   type ToolResultStatus,
 } from "@/components/agents/tool-result"
@@ -18,7 +13,7 @@ import { writeClipboardText } from "@/lib/clipboard"
 import type { StreamBlock } from "../agent-message-data"
 import { isToolRunning, toolItemStatusLabel } from "../tool-activity"
 import { visualizeJsxFromTool } from "../visualize-jsx"
-import { visualizePreviewComponents } from "../visualize-preview-components"
+import { VisualizeSandboxFrame } from "../visualize-sandbox/visualize-sandbox-frame"
 
 export function VisualizeToolItem({
   block,
@@ -58,6 +53,7 @@ export function VisualizeToolItem({
           failed={status === "error"}
           errorText={status === "error" ? (tool?.output ?? "") : ""}
           reduceMotion={shouldReduceMotion}
+          frameTitle={t("agentMessage.visualizeFrameTitle")}
         />
       </ToolResult>
     </div>
@@ -70,12 +66,14 @@ function VisualizePreviewBody({
   failed,
   errorText,
   reduceMotion,
+  frameTitle,
 }: {
   jsx: string
   running: boolean
   failed: boolean
   errorText: string
   reduceMotion: boolean
+  frameTitle: string
 }) {
   if (failed && jsx === "") {
     return (
@@ -91,14 +89,11 @@ function VisualizePreviewBody({
       animate={{ opacity: 1, y: 0 }}
       transition={reduceMotion ? { duration: 0 } : SPRING_SWAP}
     >
-      <JSXPreview
+      <VisualizeSandboxFrame
         jsx={jsx}
-        isStreaming={running}
-        components={visualizePreviewComponents}
-      >
-        <JSXPreviewContent className="min-h-24 text-sm text-foreground" />
-        <JSXPreviewError />
-      </JSXPreview>
+        streaming={running}
+        title={frameTitle}
+      />
     </motion.div>
   )
 }

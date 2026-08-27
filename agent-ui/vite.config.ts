@@ -3,6 +3,7 @@ import path from "node:path"
 
 import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
+import { build as esbuildBuild } from "esbuild"
 import { defineConfig, type Plugin } from "vite"
 
 function materialIconThemeAssets(): Plugin {
@@ -28,8 +29,59 @@ function materialIconThemeAssets(): Plugin {
   }
 }
 
+function visualizeSandboxRuntime(): Plugin {
+  const virtualId = "virtual:visualize-sandbox-runtime"
+  const resolvedId = `\0${virtualId}`
+  const entry = path.resolve(
+    import.meta.dirname,
+    "src/features/agent-message/visualize-sandbox/runtime-entry.ts"
+  )
+  const components = path.resolve(
+    import.meta.dirname,
+    "src/features/agent-message/visualize-sandbox/sandbox-components.tsx"
+  )
+
+  return {
+    name: "visualize-sandbox-runtime",
+    resolveId(id) {
+      if (id === virtualId) {
+        return resolvedId
+      }
+    },
+    async load(id) {
+      if (id !== resolvedId) {
+        return
+      }
+      this.addWatchFile(entry)
+      this.addWatchFile(components)
+      const result = await esbuildBuild({
+        absWorkingDir: import.meta.dirname,
+        bundle: true,
+        entryPoints: [entry],
+        format: "iife",
+        jsx: "automatic",
+        minify: true,
+        platform: "browser",
+        target: "es2022",
+        write: false,
+        logLevel: "silent",
+      })
+      const code = result.outputFiles[0]?.text
+      if (!code) {
+        throw new Error("visualize sandbox runtime bundle is empty")
+      }
+      return `export default ${JSON.stringify(code)};`
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss(), materialIconThemeAssets()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    materialIconThemeAssets(),
+    visualizeSandboxRuntime(),
+  ],
   server: {
     proxy: {
       "/api": {
