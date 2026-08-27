@@ -179,7 +179,22 @@ function CollapsingInline({
   const [openWidth, setOpenWidth] = React.useState(0)
 
   React.useLayoutEffect(() => {
-    const width = measureRef.current?.scrollWidth ?? 0
+    if (!open) {
+      return
+    }
+
+    const element = measureRef.current
+    if (!element) {
+      return
+    }
+
+    // Measure unconstrained width. Measuring while collapsed would capture the
+    // 0-width parent and lock the label so it cannot reopen after resize.
+    element.style.width = "max-content"
+    element.style.maxWidth = "none"
+    const width = Math.ceil(element.scrollWidth)
+    element.style.width = ""
+    element.style.maxWidth = ""
 
     if (width > 0) {
       setOpenWidth(width)
