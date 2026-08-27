@@ -40,6 +40,9 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
   const [runningSessions, setRunningSessions] = React.useState<
     readonly RunningSession[]
   >([])
+  const [warmSessionIds, setWarmSessionIds] = React.useState<
+    ReadonlySet<string>
+  >(() => new Set())
   const runningSessionIds = React.useMemo(
     () =>
       new Set(
@@ -61,6 +64,7 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
       setError(null)
       setRefreshing(false)
       setRunningSessions([])
+      setWarmSessionIds(new Set())
       setStatus("unsupported")
       return
     }
@@ -104,11 +108,12 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
 
     const pull = async () => {
       try {
-        const running = await listRunningSessions(harness)
+        const live = await listRunningSessions(harness)
         if (cancelled) {
           return
         }
-        setRunningSessions(running)
+        setRunningSessions(live.running)
+        setWarmSessionIds(new Set(live.warmSessionIds))
       } catch {
         // Keep the last known live set if a poll fails.
       }
@@ -307,5 +312,6 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
     prependSession,
     runningSessions,
     runningSessionIds,
+    warmSessionIds,
   }
 }

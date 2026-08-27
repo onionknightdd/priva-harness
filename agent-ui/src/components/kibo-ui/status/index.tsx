@@ -2,7 +2,7 @@ import type { ComponentProps, HTMLAttributes } from "react"
 
 import { cn } from "@/lib/utils"
 
-export type StatusTone = "idle" | "running"
+export type StatusTone = "idle" | "running" | "warm"
 
 export type StatusProps = HTMLAttributes<HTMLSpanElement> & {
   status: StatusTone
@@ -33,7 +33,7 @@ export const StatusIndicator = ({
     <span
       className={cn(
         "relative inline-flex size-2 rounded-full",
-        "bg-status-idle group-[.running]:bg-status-running"
+        "bg-status-idle group-[.running]:bg-status-running group-[.warm]:bg-status-warm"
       )}
     />
   </span>

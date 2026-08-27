@@ -83,6 +83,12 @@ export type SessionListResult =
   }
   | { readonly kind: 'archived'; readonly sessions: readonly SessionView[] }
 
+export interface WarmSessionView {
+  readonly sessionId: string
+  readonly status: 'warm'
+  readonly harness: ProviderId
+}
+
 export interface RunningSessionView {
   readonly sessionId: string | null
   readonly runId: string
@@ -119,7 +125,13 @@ export interface RecordRunCompletedInput {
 }
 
 export class SessionService {
+  private warmListing: ((harness: ProviderId) => readonly SessionRef[]) | undefined
+
   constructor(private readonly options: SessionServiceOptions) {}
+
+  bindWarmListing(listWarm: (harness: ProviderId) => readonly SessionRef[]): void {
+    this.warmListing = listWarm
+  }
 
   async list(query: SessionListQuery): Promise<SessionListResult> {
     const provider = this.provider(query.harness)
@@ -156,6 +168,17 @@ export class SessionService {
       groups: groupSessions(filtered, this.options.activeCwd),
       activeCwd: this.options.activeCwd,
     }
+  }
+
+  listWarm(harness: ProviderId): readonly WarmSessionView[] {
+    this.provider(harness)
+    return (this.warmListing?.(harness) ?? [])
+      .filter((session) => session.provider === harness && session.id !== '')
+      .map((session) => ({
+        sessionId: session.id,
+        status: 'warm',
+        harness: session.provider,
+      }))
   }
 
   listRunning(harness: ProviderId): Promise<readonly RunningSessionView[]> {

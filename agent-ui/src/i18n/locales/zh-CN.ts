@@ -330,6 +330,7 @@ export const zhCN = {
       revealInFiles: "在文件中查看",
       archive: "归档",
       sessionRunning: "运行中",
+      sessionWarm: "暖池",
     },
     user: {
       openMenu: "打开用户菜单",

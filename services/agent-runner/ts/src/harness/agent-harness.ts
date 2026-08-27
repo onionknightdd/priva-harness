@@ -80,6 +80,10 @@ export class AgentHarness {
     return this.liveRuns?.liveRunningForSession(ref)
   }
 
+  listWarm(harness: ProviderId): readonly SessionRef[] {
+    return this.pool?.listIdle().filter((session) => session.provider === harness) ?? []
+  }
+
   abortLive(runId: string): void {
     this.liveRuns?.get(runId)?.abort.abort()
   }

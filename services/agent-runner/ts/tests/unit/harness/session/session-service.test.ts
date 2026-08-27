@@ -154,3 +154,27 @@ describe('SessionService last_response_model', () => {
     expect(second.customTitle).toBe('设计 API (2)')
   })
 })
+
+describe('SessionService warm listing', () => {
+  it('lists bound warm sessions for the requested harness', async () => {
+    const runtimeHome = await mkdtemp(join(tmpdir(), 'priva-session-warm-'))
+    const service = new SessionService({
+      providers: {
+        claude: new FakeAgentProvider('claude', []),
+        pi: new FakeAgentProvider('pi', []),
+      },
+      metadata: new MemorySessionMetadataRepository(),
+      liveRuns: new LiveRunRegistry(),
+      modelProfiles: createTestModelProfileService(runtimeHome),
+      activeCwd: '/work',
+    })
+    service.bindWarmListing((harness) =>
+      harness === 'claude' ? [{ provider: 'claude', id: 'warm-1' }] : []
+    )
+    expect(service.listWarm('claude')).toEqual([
+      { sessionId: 'warm-1', status: 'warm', harness: 'claude' },
+    ])
+    expect(service.listWarm('pi')).toEqual([])
+    await rm(runtimeHome, { recursive: true, force: true })
+  })
+})

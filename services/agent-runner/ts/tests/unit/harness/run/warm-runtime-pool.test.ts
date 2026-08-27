@@ -43,6 +43,13 @@ describe('WarmRuntimePool', () => {
       parked.push(runtime)
     }
     expect(pool.idleCount).toBe(5)
+    expect(pool.listIdle().map((session) => session.id)).toEqual([
+      's0',
+      's1',
+      's2',
+      's3',
+      's4',
+    ])
     const extra = fakeRuntime('extra')
     await pool.acquire({ provider: 'claude', id: 'extra' }, spec, () => Promise.resolve(extra))
     expect(parked[0]?.released).toEqual(['warm', 'dispose'])

@@ -50,6 +50,7 @@ export function ProjectSessionItem({
   knownTags,
   isActive = false,
   isRunning = false,
+  isWarm = false,
 }: {
   session: SessionInfo
   isMobile: boolean
@@ -62,6 +63,7 @@ export function ProjectSessionItem({
   knownTags: KnownSessionTag[]
   isActive?: boolean
   isRunning?: boolean
+  isWarm?: boolean
 }) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
@@ -161,6 +163,11 @@ export function ProjectSessionItem({
             <StatusDot
               status="running"
               label={t("sidebar.projects.sessionRunning")}
+            />
+          ) : isWarm ? (
+            <StatusDot
+              status="warm"
+              label={t("sidebar.projects.sessionWarm")}
             />
           ) : null}
           {session.pinned ? (

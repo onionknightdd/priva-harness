@@ -93,6 +93,7 @@ export async function startServer(): Promise<void> {
     liveRuns,
     sessions: sessionService,
   })
+  sessionService.bindWarmListing((harness) => agentHarness.listWarm(harness))
   const configDistributor = new ConfigDistributor([
     new ClaudeConfigAdapter(),
     new PiConfigAdapter(),

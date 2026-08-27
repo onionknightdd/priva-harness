@@ -333,6 +333,7 @@ export const en = {
       revealInFiles: "Reveal in Files",
       archive: "Archive",
       sessionRunning: "Running",
+      sessionWarm: "Warm",
     },
     user: {
       openMenu: "Open user menu",

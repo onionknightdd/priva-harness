@@ -99,6 +99,11 @@ export const sessionRoutes: FastifyPluginCallback<SessionRoutesOptions> = (
         run_mode: item.runMode,
         harness: item.harness,
       })),
+      warm: sessionService.listWarm(request.query.harness).map((item) => ({
+        session_id: item.sessionId,
+        status: item.status,
+        harness: item.harness,
+      })),
     }),
   )
 

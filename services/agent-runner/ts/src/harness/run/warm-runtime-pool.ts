@@ -154,6 +154,10 @@ export class WarmRuntimePool {
     return this.idle.size + this.busy.size
   }
 
+  listIdle(): readonly SessionRef[] {
+    return [...this.idle.values()].map((lease) => lease.session)
+  }
+
   get idleCount(): number {
     return this.idle.size
   }

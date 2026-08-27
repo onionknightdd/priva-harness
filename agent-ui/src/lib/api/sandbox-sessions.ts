@@ -244,6 +244,11 @@ export type RunningSession = {
   harness: AgentRunHarness
 }
 
+export type LiveSessionLists = {
+  running: RunningSession[]
+  warmSessionIds: string[]
+}
+
 export function listRunningSessions(
   harness: AgentRunHarness,
   signal?: AbortSignal
@@ -259,9 +264,14 @@ export function listRunningSessions(
       run_mode: SessionRunMode
       harness: AgentRunHarness
     }>
+    warm: Array<{
+      session_id: string
+      status: "warm"
+      harness: AgentRunHarness
+    }>
   }>(`${SESSION_API_PREFIX}/running?${harnessQuery(harness)}`, { signal }).then(
-    (payload) =>
-      payload.running.map((item) => ({
+    (payload): LiveSessionLists => ({
+      running: payload.running.map((item) => ({
         sessionId: item.session_id,
         runId: item.run_id,
         status: item.status,
@@ -270,7 +280,9 @@ export function listRunningSessions(
         firstSeq: item.first_seq,
         runMode: item.run_mode,
         harness: item.harness,
-      }))
+      })),
+      warmSessionIds: payload.warm.map((item) => item.session_id),
+    })
   )
 }
 
