@@ -19,7 +19,10 @@ import {
   AgentShikiLineContent,
   useAgentShikiHighlight,
 } from "@/components/agents/agent-shiki"
-import { TOOL_OUTPUT_INSET_X_CLASS } from "@/components/agents/tool-output-frame"
+import {
+  TOOL_OUTPUT_INSET_CLASS,
+  TOOL_OUTPUT_INSET_X_CLASS,
+} from "@/components/agents/tool-output-frame"
 import { writeClipboardText } from "@/lib/clipboard"
 import { SPRING_PRESS } from "@/lib/ease"
 import { cn } from "@/lib/utils"
@@ -204,13 +207,7 @@ export function CodeBlock({
         </div>
       ) : null}
 
-      <div
-        className={cn(
-          TOOL_OUTPUT_INSET_X_CLASS,
-          "pb-[var(--tool-output-inset)]",
-          !showHeader && "pt-[var(--tool-output-inset)]"
-        )}
-      >
+      <div className={TOOL_OUTPUT_INSET_CLASS}>
         <div className="relative">
           <div
             ref={viewportRef}
