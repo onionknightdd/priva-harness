@@ -70,6 +70,8 @@ import { QuoteSelectable } from "./quote-selectable"
 const PANEL_CLASS =
   "h-[var(--collapsible-panel-height)] overflow-hidden transition-[height,opacity] duration-200 ease-out data-[ending-style]:h-0 data-[ending-style]:opacity-0 data-[starting-style]:h-0 data-[starting-style]:opacity-0 motion-reduce:transition-none"
 
+const TEXT_LINE_GAP_CLASS = "[line-height:calc(1.5em+2px)]"
+
 export function AssistantProcess({
   message,
   isStreaming,
@@ -193,7 +195,13 @@ function TextItem({ text }: { text: string }) {
   return (
     <div className="w-full min-w-0 px-0 py-0.5 text-base text-foreground">
       <QuoteSelectable>
-        <MessageResponse className="text-foreground [&_p]:my-0" mode="static">
+        <MessageResponse
+          className={cn(
+            "text-foreground [&_p]:my-0",
+            "[&_p]:[line-height:calc(1.5em+2px)] [&_p+p]:mt-[2px]"
+          )}
+          mode="static"
+        >
           {text}
         </MessageResponse>
       </QuoteSelectable>
@@ -238,7 +246,9 @@ function ThinkingItem({
       }
       defaultOpen={defaultOpen}
     >
-      <p className="whitespace-pre-wrap text-base">{text}</p>
+      <p className={cn("whitespace-pre-wrap text-base", TEXT_LINE_GAP_CLASS)}>
+        {text}
+      </p>
     </ProcessRow>
   )
 }
@@ -316,7 +326,12 @@ function GenericToolItem({
     >
       {output ? (
         <QuoteSelectable>
-          <pre className="max-h-40 overflow-auto whitespace-pre-wrap text-sm text-muted-foreground">
+          <pre
+            className={cn(
+              "max-h-40 overflow-auto whitespace-pre-wrap text-sm text-muted-foreground",
+              TEXT_LINE_GAP_CLASS
+            )}
+          >
             {output}
           </pre>
         </QuoteSelectable>
@@ -650,7 +665,12 @@ function NestedAgentItem({ agent }: { agent: NestedAgent }) {
         <div className="flex flex-col gap-2">
           {text ? (
             <QuoteSelectable>
-              <p className="whitespace-pre-wrap text-base text-muted-foreground">
+              <p
+                className={cn(
+                  "whitespace-pre-wrap text-base text-muted-foreground",
+                  TEXT_LINE_GAP_CLASS
+                )}
+              >
                 {text}
               </p>
             </QuoteSelectable>
@@ -666,7 +686,10 @@ function NestedAgentItem({ agent }: { agent: NestedAgent }) {
                         : t("agentMessage.peerMessage")}
                     </ItemTitle>
                     <p
-                      className="whitespace-pre-wrap text-sm text-muted-foreground"
+                      className={cn(
+                        "whitespace-pre-wrap text-sm text-muted-foreground",
+                        TEXT_LINE_GAP_CLASS
+                      )}
                       data-assistant-selectable=""
                     >
                       {item.body}
@@ -786,7 +809,14 @@ function ProcessRow({
         {header}
       </Item>
       <CollapsibleContent className={PANEL_CLASS}>
-        <div className={Icon ? "pb-2 pl-6" : "pb-2"}>{children}</div>
+        <div
+          className={cn(
+            Icon ? "pb-2 pl-6" : "pb-2",
+            TEXT_LINE_GAP_CLASS
+          )}
+        >
+          {children}
+        </div>
       </CollapsibleContent>
     </Collapsible>
   )
