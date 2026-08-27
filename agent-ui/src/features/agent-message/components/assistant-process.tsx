@@ -717,7 +717,7 @@ function ProcessItemGroup({
   return (
     <ItemGroup
       className={cn(
-        "gap-0.5 py-0 text-muted-foreground/70 has-data-[size=sm]:gap-0.5 has-data-[size=xs]:gap-0.5",
+        "gap-1 py-0 text-muted-foreground/70 has-data-[size=sm]:gap-1 has-data-[size=xs]:gap-1",
         className
       )}
     >
