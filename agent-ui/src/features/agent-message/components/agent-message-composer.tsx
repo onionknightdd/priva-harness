@@ -196,7 +196,7 @@ function ComposerControls({
   onEffortChange: (effort: ComposerEffort) => void
 }) {
   return (
-    <div className="flex min-w-0 items-center gap-1">
+    <div className="flex min-w-0 items-center gap-2">
       <div
         className={cn(
           COMPOSER_MODEL_TRIGGER_MAX_CLASS,
@@ -212,7 +212,7 @@ function ComposerControls({
       </div>
       <Separator
         orientation="vertical"
-        className="h-4 data-vertical:self-center"
+        className="mx-0.5 h-4 data-vertical:self-center"
       />
       <InputGroupButton
         type="submit"
