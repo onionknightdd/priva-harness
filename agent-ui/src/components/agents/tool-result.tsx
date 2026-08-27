@@ -32,6 +32,8 @@ import { ActionSwapRollText } from "@/components/motion/action-swap-roll";
 import { AgentDisclosure } from "@/components/agents/agent-disclosure";
 import {
   TOOL_OUTPUT_FRAME_CLASS,
+  TOOL_OUTPUT_INSET_B_CLASS,
+  TOOL_OUTPUT_INSET_T_CLASS,
   TOOL_OUTPUT_INSET_X_CLASS,
 } from "@/components/agents/tool-output-frame";
 import { SPRING_PRESS, SPRING_SWAP } from "@/lib/ease";
@@ -189,6 +191,7 @@ export function ToolResult({
   const currentOpen = open ?? internalOpen;
   const running = status === "running";
   const canCopy = Boolean(copyText || onCopy);
+  const hasActions = canCopy || Boolean(onRetry);
   const titleKey = getSwapKey(title, status);
   const metaKey = getSwapKey(meta, `${status}-meta`);
   const toolKey = getSwapKey(tool, `${status}-tool`);
@@ -338,8 +341,9 @@ export function ToolResult({
               >
                 <div
                   className={cn(
-                    "py-3",
                     TOOL_OUTPUT_INSET_X_CLASS,
+                    TOOL_OUTPUT_INSET_T_CLASS,
+                    hasActions ? undefined : TOOL_OUTPUT_INSET_B_CLASS,
                     contentClassName
                   )}
                   data-assistant-selectable=""
@@ -348,11 +352,12 @@ export function ToolResult({
                 </div>
               </div>
 
-              {canCopy || onRetry ? (
+              {hasActions ? (
                 <div
                   className={cn(
-                    "flex items-center gap-0.5 pb-1.5",
-                    TOOL_OUTPUT_INSET_X_CLASS
+                    "flex items-center gap-0.5",
+                    TOOL_OUTPUT_INSET_X_CLASS,
+                    TOOL_OUTPUT_INSET_B_CLASS
                   )}
                 >
                   {canCopy ? (

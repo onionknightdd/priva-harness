@@ -19,7 +19,7 @@ import {
   AgentShikiLineContent,
   useAgentShikiHighlight,
 } from "@/components/agents/agent-shiki"
-import { TOOL_OUTPUT_INSET_X_CLASS } from "@/components/agents/tool-output-frame"
+import { TOOL_OUTPUT_INSET_X_CLASS, TOOL_OUTPUT_INSET_Y_CLASS } from "@/components/agents/tool-output-frame"
 import { writeClipboardText } from "@/lib/clipboard"
 import { SPRING_PRESS } from "@/lib/ease"
 import { cn } from "@/lib/utils"
@@ -205,7 +205,8 @@ export function CodeBlock({
           role={streaming ? "log" : undefined}
           aria-live={streaming ? "polite" : undefined}
           className={cn(
-            "overflow-auto py-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
+            "overflow-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
+            TOOL_OUTPUT_INSET_Y_CLASS,
             showHeader && "border-t border-foreground/[0.06]"
           )}
           style={{ maxHeight }}

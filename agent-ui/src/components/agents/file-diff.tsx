@@ -28,6 +28,8 @@ import {
 import { toNotationDiffSource } from "@/components/agents/notation-diff";
 import {
   TOOL_OUTPUT_FRAME_CLASS,
+  TOOL_OUTPUT_INSET_B_CLASS,
+  TOOL_OUTPUT_INSET_T_CLASS,
   TOOL_OUTPUT_INSET_X_CLASS,
 } from "@/components/agents/tool-output-frame";
 import { ActionSwapRollText } from "@/components/motion/action-swap-roll";
@@ -286,7 +288,11 @@ export function FileDiff({
               data-slot="file-diff-viewport"
               data-assistant-selectable=""
               aria-live="polite"
-              className="scrollbar-hide overflow-auto pt-[8px]"
+              className={cn(
+                "scrollbar-hide overflow-auto",
+                TOOL_OUTPUT_INSET_T_CLASS,
+                canCopy ? undefined : TOOL_OUTPUT_INSET_B_CLASS
+              )}
               style={{ maxHeight }}
             >
               <pre className="agent-shiki shiki has-diff m-0 inline-block min-w-full whitespace-normal font-mono text-sm leading-5">
@@ -335,8 +341,9 @@ export function FileDiff({
             {canCopy ? (
               <div
                 className={cn(
-                  "flex justify-end pb-1.5 pt-1",
-                  TOOL_OUTPUT_INSET_X_CLASS
+                  "flex justify-end",
+                  TOOL_OUTPUT_INSET_X_CLASS,
+                  TOOL_OUTPUT_INSET_B_CLASS
                 )}
               >
                 <motion.button
