@@ -5,15 +5,24 @@ import { sessionRefKey } from '../../core/resource/session.js'
 export const WARM_POOL_LIMIT = 5
 export const WARM_IDLE_MS = 10 * 60 * 1000
 
-export function specFingerprint(spec: ProviderRunSpec): string {
+export function identityFingerprint(spec: ProviderRunSpec): string {
   return [
     spec.provider,
     spec.cwd,
-    spec.model,
     spec.profileId ?? '',
     spec.baseUrl,
     spec.authToken,
   ].join('|')
+}
+
+export function canApplyWarmRunSpec(
+  current: ProviderRunSpec,
+  next: ProviderRunSpec,
+): boolean {
+  return identityFingerprint(current) === identityFingerprint(next)
+    && current.effort === next.effort
+    && current.modelContext === next.modelContext
+    && current.promptSuggestions === next.promptSuggestions
 }
 
 export interface IdleWatchable {
@@ -28,7 +37,6 @@ interface WarmLease {
   readonly runtime: AgentRuntime
   readonly spec: ProviderRunSpec
   readonly session: SessionRef
-  readonly fingerprint: string
   idleSince: number
   timer: ReturnType<typeof setTimeout> | undefined
 }
@@ -70,14 +78,20 @@ export class WarmRuntimePool {
       const key = sessionRefKey(session)
       const lease = this.idle.get(key)
       if (lease !== undefined) {
-        if (lease.fingerprint === specFingerprint(spec)) {
-          this.clearTimer(lease)
-          this.idle.delete(key)
-          if (isIdleWatchable(lease.runtime)) lease.runtime.listenIdle(undefined)
-          this.busy.add(lease.runtime)
-          return lease.runtime
+        if (canApplyWarmRunSpec(lease.spec, spec)) {
+          try {
+            await lease.runtime.applyRunSpec(spec)
+            this.clearTimer(lease)
+            this.idle.delete(key)
+            if (isIdleWatchable(lease.runtime)) lease.runtime.listenIdle(undefined)
+            this.busy.add(lease.runtime)
+            return lease.runtime
+          } catch {
+            await this.evict(key)
+          }
+        } else {
+          await this.evict(key)
         }
-        await this.evict(key)
       }
     }
     while (this.size >= this.limit && this.idle.size > 0) {
@@ -131,7 +145,6 @@ export class WarmRuntimePool {
       runtime,
       spec,
       session,
-      fingerprint: specFingerprint(spec),
       idleSince: this.now(),
       timer: undefined,
     }

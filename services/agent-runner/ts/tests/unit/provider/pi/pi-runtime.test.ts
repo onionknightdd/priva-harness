@@ -4,6 +4,7 @@ import type { AgentEvent } from '../../../../src/core/event/agent-event.js'
 import { consumeRunEvents } from '../../../../src/harness/run/consume-run-events.js'
 import { PiRuntime, type PiAgentSession } from '../../../../src/provider/pi/pi-runtime.js'
 import type { PiSessionEvent } from '../../../../src/provider/pi/pi-event-mapper.js'
+import { testRunSpec } from '../../../support/run-spec.js'
 
 describe('PiRuntime stream input', () => {
   it('keeps the session subscription open until release and sends with prompt when idle', async () => {
@@ -119,11 +120,30 @@ describe('PiRuntime stream input', () => {
     expect(session.followUps).toEqual([])
     await runtime.release('dispose')
   })
+
+  it('applies a new model on the live session', async () => {
+    const session = new FakePiAgentSession()
+    const runtime = new PiRuntime(session)
+    await runtime.applyRunSpec(testRunSpec({ provider: 'pi', model: 'm2' }))
+    expect(session.modelId).toBe('m2')
+    expect(session.models).toEqual(['m2'])
+    await runtime.release('dispose')
+  })
+
+  it('throws when the session cannot change model in place', async () => {
+    const session = new FakePiAgentSession()
+    Reflect.deleteProperty(session, 'setRunModel')
+    const runtime = new PiRuntime(session)
+    await expect(runtime.applyRunSpec(testRunSpec({ provider: 'pi', model: 'm2' })))
+      .rejects.toThrow('Pi session cannot change model in place')
+    await runtime.release('dispose')
+  })
 })
 
 class FakePiAgentSession implements PiAgentSession {
   readonly sessionId = 'pi-1'
-  readonly modelId = 'm'
+  modelId = 'm'
+  readonly models: string[] = []
   streaming = false
   unsubscribed = 0
   disposed = false
@@ -174,6 +194,12 @@ class FakePiAgentSession implements PiAgentSession {
 
   abort(): Promise<void> {
     this.aborts += 1
+    return Promise.resolve()
+  }
+
+  setRunModel?: (modelId: string) => Promise<void> = (modelId) => {
+    this.models.push(modelId)
+    this.modelId = modelId
     return Promise.resolve()
   }
 

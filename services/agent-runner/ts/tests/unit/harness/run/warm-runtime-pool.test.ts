@@ -2,14 +2,30 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { AgentRuntime, ProviderRunSpec, SessionRef } from '../../../../src/core/contract/agent-provider.js'
 import type { AgentEvent } from '../../../../src/core/event/agent-event.js'
-import { WARM_POOL_LIMIT, WarmRuntimePool } from '../../../../src/harness/run/warm-runtime-pool.js'
+import {
+  canApplyWarmRunSpec,
+  identityFingerprint,
+  WARM_POOL_LIMIT,
+  WarmRuntimePool,
+} from '../../../../src/harness/run/warm-runtime-pool.js'
 
-function fakeRuntime(id: string): AgentRuntime & { released: string[] } {
+function fakeRuntime(
+  id: string,
+  options: {
+    applied?: ProviderRunSpec[]
+    applyError?: Error
+  } = {},
+): AgentRuntime & { released: string[] } {
   const released: string[] = []
   return {
     session: { provider: 'claude', id },
     released,
     run: () => ({ [Symbol.asyncIterator]: () => ({ next: () => Promise.resolve({ done: true, value: undefined }) }) }),
+    applyRunSpec: (spec) => {
+      if (options.applyError !== undefined) return Promise.reject(options.applyError)
+      options.applied?.push(spec)
+      return Promise.resolve()
+    },
     abort: () => Promise.resolve(),
     release: (retention) => {
       released.push(retention)
@@ -56,7 +72,7 @@ describe('WarmRuntimePool', () => {
     expect(pool.size).toBe(5)
   })
 
-  it('reuses an idle runtime with the same spec fingerprint', async () => {
+  it('reuses an idle runtime with the same identity', async () => {
     const pool = new WarmRuntimePool({ limit: 2 })
     const first = fakeRuntime('s1')
     const acquired = await pool.acquire({ provider: 'claude', id: 's1' }, spec, () => Promise.resolve(first))
@@ -122,7 +138,7 @@ describe('WarmRuntimePool', () => {
     expect(acquired).toBe(replacement)
   })
 
-  it('invalidates an idle lease when cwd or model changes', async () => {
+  it('invalidates an idle lease when cwd changes', async () => {
     const pool = new WarmRuntimePool({ limit: 2 })
     const runtime = fakeRuntime('s1')
     await pool.acquire({ provider: 'claude', id: 's1' }, spec, () => Promise.resolve(runtime))
@@ -135,6 +151,50 @@ describe('WarmRuntimePool', () => {
     )
     expect(runtime.released).toEqual(['warm', 'dispose'])
     expect(acquired).toBe(replacement)
+  })
+
+  it('reuses an idle runtime and applies the new model in place', async () => {
+    const pool = new WarmRuntimePool({ limit: 2 })
+    const applied: ProviderRunSpec[] = []
+    const runtime = fakeRuntime('s1', { applied })
+    await pool.acquire({ provider: 'claude', id: 's1' }, spec, () => Promise.resolve(runtime))
+    await pool.recycle(runtime, spec, runtime.session)
+    const next = { ...spec, model: 'other-model' }
+    const acquired = await pool.acquire(
+      { provider: 'claude', id: 's1' },
+      next,
+      () => Promise.resolve(fakeRuntime('other')),
+    )
+    expect(acquired).toBe(runtime)
+    expect(runtime.released).toEqual(['warm'])
+    expect(applied).toEqual([next])
+  })
+
+  it('evicts when in-place apply fails', async () => {
+    const pool = new WarmRuntimePool({ limit: 2 })
+    const runtime = fakeRuntime('s1', { applyError: new Error('cannot switch') })
+    await pool.acquire({ provider: 'claude', id: 's1' }, spec, () => Promise.resolve(runtime))
+    await pool.recycle(runtime, spec, runtime.session)
+    const replacement = fakeRuntime('s1')
+    const acquired = await pool.acquire(
+      { provider: 'claude', id: 's1' },
+      { ...spec, model: 'other-model' },
+      () => Promise.resolve(replacement),
+    )
+    expect(runtime.released).toEqual(['warm', 'dispose'])
+    expect(acquired).toBe(replacement)
+  })
+})
+
+describe('warm run spec reuse', () => {
+  it('applies a model change when identity stays the same', () => {
+    expect(identityFingerprint(spec)).toBe('claude|/work|p1|https://example.test|secret')
+    expect(canApplyWarmRunSpec(spec, { ...spec, model: 'other' })).toBe(true)
+  })
+
+  it('rejects a change that needs a new process', () => {
+    expect(canApplyWarmRunSpec(spec, { ...spec, profileId: 'p2' })).toBe(false)
+    expect(canApplyWarmRunSpec(spec, { ...spec, effort: 'high' })).toBe(false)
   })
 })
 
@@ -152,6 +212,7 @@ describe('WarmRuntimePool idle inbound', () => {
       session: { provider: 'claude', id: 's1' } satisfies SessionRef,
       run: () => ({ [Symbol.asyncIterator]: () => ({ next: () => Promise.resolve({ done: true, value: undefined }) }) }),
       abort: () => Promise.resolve(),
+      applyRunSpec: () => Promise.resolve(),
       release: () => Promise.resolve(),
       listenIdle: (next) => {
         listener = next

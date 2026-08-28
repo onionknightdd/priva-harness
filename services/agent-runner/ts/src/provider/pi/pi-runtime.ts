@@ -1,5 +1,6 @@
 import type {
   AgentRuntime,
+  ProviderRunSpec,
   QueueBehavior,
   SessionRef,
   TurnContext,
@@ -23,6 +24,7 @@ export interface PiAgentSession {
   dispose(): void
   bindImageEmit?(emit: ((image: ToolImageDelta) => void) | undefined): void
   bindProgressEmit?(emit: ((chunk: string) => void) | undefined): void
+  setRunModel?(modelId: string): Promise<void>
 }
 
 export class PiRuntime implements AgentRuntime {
@@ -34,7 +36,7 @@ export class PiRuntime implements AgentRuntime {
 
   constructor(
     private readonly agentSession: PiAgentSession,
-    private readonly queueBehavior: QueueBehavior = 'follow-up',
+    private queueBehavior: QueueBehavior = 'follow-up',
   ) {
     this.sessionHandle = agentSession
     this.unsubscribe = agentSession.subscribe((event) => {
@@ -93,6 +95,16 @@ export class PiRuntime implements AgentRuntime {
       this.events.close()
       this.events = undefined
     }
+  }
+
+  async applyRunSpec(spec: ProviderRunSpec): Promise<void> {
+    if (spec.model !== this.agentSession.modelId) {
+      if (this.agentSession.setRunModel === undefined) {
+        throw new Error('Pi session cannot change model in place')
+      }
+      await this.agentSession.setRunModel(spec.model)
+    }
+    this.queueBehavior = spec.queueBehavior ?? 'follow-up'
   }
 
   async abort(): Promise<void> {

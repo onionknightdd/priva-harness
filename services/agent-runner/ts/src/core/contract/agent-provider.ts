@@ -53,6 +53,7 @@ export interface TurnContext {
 export interface AgentRuntime {
   readonly session: SessionRef
   run(turn: UserTurn, context: TurnContext): AsyncIterable<AgentEvent>
+  applyRunSpec(spec: ProviderRunSpec): Promise<void>
   abort(reason?: string): Promise<void>
   release(retention: 'warm' | 'dispose'): Promise<void>
 }
