@@ -23,14 +23,15 @@ export function SessionCwdIndicator({
   return (
     <div
       className={cn(
-        "ml-[calc(0.5rem+1px)] flex w-fit min-w-0 items-center gap-1 text-xs text-muted-foreground",
+        // 1px transparent border + pl-2.5 matches the composer plus control inset.
+        "flex w-fit min-w-0 items-center gap-1 border-l border-transparent pl-2.5 text-xs text-muted-foreground",
         className
       )}
       title={cwd}
       aria-label={`${t("agentMessage.sessionCwd")}: ${cwd}`}
     >
       <span className="flex size-6 shrink-0 items-center justify-center">
-        <FolderIcon className="size-4" aria-hidden="true" />
+        <FolderIcon className="size-5" aria-hidden="true" />
       </span>
       <span className="min-w-0 truncate">{name}</span>
     </div>
