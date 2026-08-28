@@ -29,10 +29,6 @@ export function isSlashOrigin(value: unknown): value is SlashOrigin {
   return typeof value === 'string' && (SLASH_ORIGINS as readonly string[]).includes(value)
 }
 
-export function isExcludedSlashName(name: string): boolean {
-  return name.startsWith('mcp__') || name.includes(':')
-}
-
 export function compareSlashCommands(left: SlashCommand, right: SlashCommand): number {
   return left.name.localeCompare(right.name)
 }
@@ -40,7 +36,6 @@ export function compareSlashCommands(left: SlashCommand, right: SlashCommand): n
 export function mergeSlashCommands(entries: readonly SlashCommand[]): SlashCommand[] {
   const byName = new Map<string, SlashCommand>()
   for (const entry of entries) {
-    if (isExcludedSlashName(entry.name)) continue
     const current = byName.get(entry.name)
     if (current === undefined || ORIGIN_RANK[entry.origin] >= ORIGIN_RANK[current.origin]) {
       byName.set(entry.name, entry)

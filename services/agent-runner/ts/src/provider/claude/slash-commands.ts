@@ -9,7 +9,6 @@ import {
   CLAUDE_SLASH_COMMAND_WHITELIST,
   compareSlashCommands,
   intersectSlashCommands,
-  isExcludedSlashName,
   type SlashCommand,
   type SlashKind,
   type SlashOrigin,
@@ -71,10 +70,9 @@ export async function assembleClaudeSlashCommands(
 ): Promise<SlashCommand[]> {
   const skillNames = new Set(skills.map((skill) => skill.name))
   const assembled = await Promise.all(
-    commands.flatMap((command) => {
-      if (isExcludedSlashName(command.name)) return []
+    commands.map((command) => {
       const kind: SlashKind = skillNames.has(command.name) ? 'skill' : 'command'
-      return [mapSdkCommand(command, kind, cwd, globalConfigDir)]
+      return mapSdkCommand(command, kind, cwd, globalConfigDir)
     }),
   )
   return intersectSlashCommands(assembled.sort(compareSlashCommands), CLAUDE_SLASH_COMMAND_WHITELIST)

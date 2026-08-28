@@ -39,7 +39,7 @@ describe('Claude slash command catalog', () => {
     expect(await classifyClaudeSlashOrigin('code-review', 'skill', nested, globalConfigDir)).toBe('builtin')
   })
 
-  it('marks reloadSkills names as skills and drops MCP or plugin entries', async () => {
+  it('marks reloadSkills names as skills and keeps only whitelisted names', async () => {
     const root = await mkdtemp(join(tmpdir(), 'claude-slash-assemble-'))
     const cwd = join(root, 'repo')
     const globalConfigDir = join(root, '.claude')
