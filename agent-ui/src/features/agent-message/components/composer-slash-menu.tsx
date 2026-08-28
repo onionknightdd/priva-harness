@@ -59,7 +59,7 @@ export function ComposerSlashMenu({
       open={open}
       modal={false}
       onOpenChange={(nextOpen, eventDetails) => {
-        if (!nextOpen && eventDetails?.reason === "focusOut") {
+        if (!nextOpen && eventDetails?.reason === "focus-out") {
           eventDetails.cancel()
           return
         }
