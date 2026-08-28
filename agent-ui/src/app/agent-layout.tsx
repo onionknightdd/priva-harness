@@ -80,7 +80,7 @@ export function AgentLayout({
     <WorkspaceShell workspaceEnabled={workspaceEnabled}>
       <header
         className={cn(
-          "relative z-20 flex shrink-0 items-center gap-2",
+          "z-20 flex shrink-0 items-center gap-2",
           isFileBrowser ? "h-10" : "h-[35px] pt-[5px]"
         )}
       >
@@ -112,12 +112,6 @@ export function AgentLayout({
             <AgentChatHeader />
           )}
         </div>
-        {isFileBrowser ? null : (
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0 top-full h-6 bg-linear-to-b from-background to-transparent"
-          />
-        )}
       </header>
       {isFileBrowser ? (
         <React.Suspense fallback={<AgentLayoutFallback />}>
