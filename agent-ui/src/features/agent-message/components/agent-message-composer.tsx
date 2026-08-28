@@ -417,7 +417,7 @@ export function AgentMessageComposer({
             <div className="min-w-0 flex-1" />
             <div
               ref={rightRef}
-              className="pointer-events-auto min-w-0 shrink-0 pr-2.5"
+              className="pointer-events-auto flex h-8 min-w-0 shrink-0 items-center pr-2.5"
             >
               <ComposerControls
                 action={primaryAction}
