@@ -12,6 +12,7 @@ import type {
 import type { AgentEvent } from '../core/event/agent-event.js'
 import type { StreamFrame } from '../core/event/agent-event.js'
 import { isRunResultEvent } from '../core/event/agent-event.js'
+import type { SlashCommand } from '../core/resource/slash-command.js'
 import type { UserTurn } from '../core/run/user-turn.js'
 import { SessionError } from '../core/resource/session.js'
 import { DRAIN_SETTLE_MS } from './run/background-drain.js'
@@ -33,6 +34,18 @@ export interface AgentHarnessOptions {
 export interface AgentRunOptions {
   readonly runId?: string
   readonly session?: SessionTarget
+}
+
+export interface ListSlashCommandsOptions {
+  readonly provider: ProviderId
+  readonly cwd: string
+  readonly spec?: ProviderRunSpec
+}
+
+export interface SlashCommandCatalog {
+  readonly harness: ProviderId
+  readonly cwd: string
+  readonly commands: readonly SlashCommand[]
 }
 
 export class AgentHarness {
@@ -84,6 +97,24 @@ export class AgentHarness {
 
   listWarm(harness: ProviderId): readonly SessionRef[] {
     return this.pool?.listIdle().filter((session) => session.provider === harness) ?? []
+  }
+
+  async listSlashCommands(options: ListSlashCommandsOptions): Promise<SlashCommandCatalog> {
+    if (options.provider === 'claude' && options.spec === undefined) {
+      throw new SessionError(
+        'invalid-request',
+        'Claude slash command listing requires a model profile',
+      )
+    }
+    const commands = await this.options.providers[options.provider].listSlashCommands({
+      cwd: options.cwd,
+      ...(options.spec === undefined ? {} : { spec: options.spec }),
+    })
+    return {
+      harness: options.provider,
+      cwd: options.cwd,
+      commands,
+    }
   }
 
   abortLive(runId: string): void {

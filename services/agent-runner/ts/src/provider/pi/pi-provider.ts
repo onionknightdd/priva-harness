@@ -3,9 +3,12 @@ import type {
   AgentRuntime,
   ProviderRunSpec,
   SessionTarget,
+  SlashCommandListRequest,
 } from '../../core/contract/agent-provider.js'
 import type { ProviderSessionStore } from '../../core/contract/provider-session-store.js'
+import type { SlashCommand } from '../../core/resource/slash-command.js'
 import { PiRuntime, type PiAgentSession } from './pi-runtime.js'
+import { listPiSlashCommands } from './slash-commands.js'
 
 export interface PiSessionFactory {
   open(spec: ProviderRunSpec, target: SessionTarget): Promise<PiAgentSession>
@@ -18,6 +21,7 @@ export class PiProvider implements AgentProvider {
   constructor(
     private readonly sessionFactory: PiSessionFactory,
     store: ProviderSessionStore,
+    private readonly agentDir: string,
   ) {
     this.sessions = store
   }
@@ -33,5 +37,12 @@ export class PiProvider implements AgentProvider {
       await this.sessionFactory.open(spec, target),
       spec.queueBehavior ?? 'follow-up',
     )
+  }
+
+  listSlashCommands(request: SlashCommandListRequest): Promise<readonly SlashCommand[]> {
+    return listPiSlashCommands({
+      cwd: request.cwd,
+      agentDir: this.agentDir,
+    })
   }
 }

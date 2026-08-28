@@ -25,6 +25,7 @@ import { runWebsocketRoutes } from '../websocket/run-route.js'
 import { agentProfileRoutes } from './route/agent-profile.js'
 import { modelProfileRoutes } from './route/model-profiles.js'
 import { sessionRoutes } from './route/sessions.js'
+import { slashCommandRoutes } from './route/slash-commands.js'
 import { userFileRoutes } from './route/user-files.js'
 
 export interface BuildHttpServerOptions {
@@ -106,6 +107,11 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
       harness: options.agentHarness,
       modelProfileService: options.modelProfileService,
       agentProfileService: options.agentProfileService,
+      cwd: options.userFileSystem.initialDirectory,
+    })
+    void server.register(slashCommandRoutes, {
+      harness: options.agentHarness,
+      modelProfileService: options.modelProfileService,
       cwd: options.userFileSystem.initialDirectory,
     })
   }

@@ -1,4 +1,5 @@
 import type { AgentEvent } from '../event/agent-event.js'
+import type { SlashCommand } from '../resource/slash-command.js'
 import type { UserTurn } from '../run/user-turn.js'
 import type { ImageToolProfile } from '../tool/define-tool.js'
 import type { ProviderSessionStore } from './provider-session-store.js'
@@ -57,8 +58,14 @@ export interface AgentRuntime {
   release(retention: 'warm' | 'dispose'): Promise<void>
 }
 
+export interface SlashCommandListRequest {
+  readonly cwd: string
+  readonly spec?: ProviderRunSpec
+}
+
 export interface AgentProvider {
   readonly id: ProviderId
   readonly sessions: ProviderSessionStore
   openSession(target: SessionTarget, spec: ProviderRunSpec): Promise<AgentRuntime>
+  listSlashCommands(request: SlashCommandListRequest): Promise<readonly SlashCommand[]>
 }

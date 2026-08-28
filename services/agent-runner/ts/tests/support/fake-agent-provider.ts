@@ -4,9 +4,11 @@ import type {
   ProviderId,
   ProviderRunSpec,
   SessionTarget,
+  SlashCommandListRequest,
   TurnContext,
 } from '../../src/core/contract/agent-provider.js'
 import type { AgentEvent } from '../../src/core/event/agent-event.js'
+import type { SlashCommand } from '../../src/core/resource/slash-command.js'
 import type { UserTurn } from '../../src/core/run/user-turn.js'
 import { FakeSessionStore } from './fake-session-store.js'
 
@@ -17,6 +19,8 @@ export class FakeAgentProvider implements AgentProvider {
   readonly released: string[] = []
   readonly specs: ProviderRunSpec[] = []
   readonly targets: SessionTarget[] = []
+  readonly slashRequests: SlashCommandListRequest[] = []
+  slashCommands: readonly SlashCommand[] = []
   gate: Promise<void> | undefined
   afterEventsGate: Promise<void> | undefined
   lastRuntime: FakeAgentRuntime | undefined
@@ -34,6 +38,11 @@ export class FakeAgentProvider implements AgentProvider {
     const runtime = new FakeAgentRuntime(this, target)
     this.lastRuntime = runtime
     return Promise.resolve(runtime)
+  }
+
+  listSlashCommands(request: SlashCommandListRequest): Promise<readonly SlashCommand[]> {
+    this.slashRequests.push(request)
+    return Promise.resolve(this.slashCommands)
   }
 
   emitIdle(events: readonly AgentEvent[]): void {

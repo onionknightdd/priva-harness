@@ -249,6 +249,43 @@ describe('AgentHarness', () => {
     expect(liveRuns.listActive()).toEqual([])
     await harness.disposePool()
   })
+
+  it('forwards slash command listing to the selected provider', async () => {
+    const claude = new FakeAgentProvider('claude', [])
+    claude.slashCommands = [
+      {
+        name: 'compact',
+        description: 'Compact context',
+        kind: 'command',
+        origin: 'builtin',
+      },
+    ]
+    const harness = new AgentHarness({
+      providers: {
+        claude,
+        pi: new FakeAgentProvider('pi', []),
+      },
+      cwd: '/tmp',
+    })
+    const spec = testRunSpec({ cwd: '/work/repo' })
+
+    await expect(harness.listSlashCommands({
+      provider: 'claude',
+      cwd: '/work/repo',
+    })).rejects.toThrow('Claude slash command listing requires a model profile')
+
+    const catalog = await harness.listSlashCommands({
+      provider: 'claude',
+      cwd: '/work/repo',
+      spec,
+    })
+    expect(catalog).toEqual({
+      harness: 'claude',
+      cwd: '/work/repo',
+      commands: claude.slashCommands,
+    })
+    expect(claude.slashRequests).toEqual([{ cwd: '/work/repo', spec }])
+  })
 })
 
 async function warmAfterLaunch(sessionId: string) {

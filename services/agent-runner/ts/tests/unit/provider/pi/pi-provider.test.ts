@@ -10,7 +10,7 @@ import { testRunSpec } from '../../../support/run-spec.js'
 describe('PiProvider', () => {
   it('opens new and resume targets through the session factory', async () => {
     const factory = new RecordingPiSessionFactory()
-    const provider = new PiProvider(factory, new FakeSessionStore())
+    const provider = new PiProvider(factory, new FakeSessionStore(), '/tmp/pi-agent')
     const spec = testRunSpec({ provider: 'pi', cwd: '/work/repo' })
 
     await provider.openSession({ kind: 'new', provider: 'pi' }, spec)
@@ -27,7 +27,7 @@ describe('PiProvider', () => {
   })
 
   it('rejects fork and resume of a non-pi session', async () => {
-    const provider = new PiProvider(new RecordingPiSessionFactory(), new FakeSessionStore())
+    const provider = new PiProvider(new RecordingPiSessionFactory(), new FakeSessionStore(), '/tmp/pi-agent')
     const spec = testRunSpec({ provider: 'pi' })
 
     await expect(provider.openSession(

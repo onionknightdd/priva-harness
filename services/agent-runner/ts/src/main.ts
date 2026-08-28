@@ -75,6 +75,7 @@ export async function startServer(): Promise<void> {
   const piProvider = new PiProvider(
     new CodingAgentSessionFactory(piConfigDir, productTools),
     new PiSessionStore({ agentDir: piConfigDir }),
+    piConfigDir,
   )
   const providers = {
     claude: claudeProvider,
