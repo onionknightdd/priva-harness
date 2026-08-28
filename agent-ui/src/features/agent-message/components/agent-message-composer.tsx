@@ -1,5 +1,5 @@
 import * as React from "react"
-import { ArrowUpIcon, PlusIcon, SquareIcon } from "lucide-react"
+import { ArrowUpIcon, SquareIcon } from "lucide-react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
@@ -12,13 +12,15 @@ import {
   InputGroupTextarea,
 } from "@/components/ui/input-group"
 import { Separator } from "@/components/ui/separator"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
 
+import {
+  createComposerAttachments,
+  revokeComposerAttachment,
+  type ComposerAttachment,
+} from "../composer-attachments"
 import { composerPrimaryAction } from "../composer-primary-action"
+import { ComposerAttachMenu } from "./composer-attach-menu"
+import { ComposerAttachmentChips } from "./composer-attachment-chips"
 import { ComposerModelSelector, COMPOSER_MODEL_TRIGGER_MAX_CLASS, type ComposerEffort } from "./composer-model-selector"
 
 export const composerDockTransition = {
@@ -157,30 +159,6 @@ function useCompactLineOverflow(
   return overflows
 }
 
-function AttachButton({
-  label,
-  unavailable,
-}: {
-  label: string
-  unavailable: string
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger render={<span className="inline-flex" />}>
-        <InputGroupButton
-          disabled
-          size="icon-xs"
-          className="rounded-full"
-          aria-label={label}
-        >
-          <PlusIcon className="size-5" />
-        </InputGroupButton>
-      </TooltipTrigger>
-      <TooltipContent>{unavailable}</TooltipContent>
-    </Tooltip>
-  )
-}
-
 function ComposerControls({
   action,
   canSubmit,
@@ -294,6 +272,11 @@ export function AgentMessageComposer({
   const leftRef = React.useRef<HTMLDivElement>(null)
   const rightRef = React.useRef<HTMLDivElement>(null)
   const textareaRef = React.useRef<HTMLTextAreaElement>(null)
+  const attachmentsRef = React.useRef<ComposerAttachment[]>([])
+  const [attachments, setAttachments] = React.useState<ComposerAttachment[]>(
+    []
+  )
+  attachmentsRef.current = attachments
   const leftWidth = useOffsetWidth(leftRef)
   const rightWidth = useOffsetWidth(rightRef)
   const overflowsCompactLine = useCompactLineOverflow(
@@ -304,7 +287,8 @@ export function AgentMessageComposer({
     rightRef,
     textareaRef
   )
-  const singleLine = compact && !overflowsCompactLine
+  const singleLine =
+    compact && attachments.length === 0 && !overflowsCompactLine
   const promptId = React.useId()
   const transition = shouldReduceMotion ? { duration: 0 } : SPRING_LAYOUT
   const primaryAction = composerPrimaryAction(draft, isStreaming)
@@ -314,6 +298,29 @@ export function AgentMessageComposer({
   const fieldPadRight = singleLine
     ? rightWidth || 212
     : COMPOSER_MULTI_PAD
+
+  React.useEffect(() => {
+    return () => {
+      attachmentsRef.current.forEach(revokeComposerAttachment)
+    }
+  }, [])
+
+  const addAttachments = React.useCallback((files: File[]) => {
+    setAttachments((current) => [
+      ...current,
+      ...createComposerAttachments(files),
+    ])
+  }, [])
+
+  const removeAttachment = React.useCallback((id: string) => {
+    setAttachments((current) => {
+      const removed = current.find((attachment) => attachment.id === id)
+      if (removed) {
+        revokeComposerAttachment(removed)
+      }
+      return current.filter((attachment) => attachment.id !== id)
+    })
+  }, [])
 
   return (
     <form
@@ -346,7 +353,7 @@ export function AgentMessageComposer({
             if (
               !(target instanceof HTMLElement) ||
               target.closest(
-                "button, a, [role='menuitem'], [data-slot^='dropdown-menu']"
+                "button, a, [role='menuitem'], [data-slot^='dropdown-menu'], [data-slot^='menu']"
               )
             ) {
               return
@@ -355,6 +362,10 @@ export function AgentMessageComposer({
             textareaRef.current?.focus()
           }}
         >
+          <ComposerAttachmentChips
+            attachments={attachments}
+            onRemove={removeAttachment}
+          />
           <div
             className="min-w-0"
             style={{
@@ -412,10 +423,7 @@ export function AgentMessageComposer({
           >
             <div ref={leftRef} className="pointer-events-auto pl-2.5">
               <InputGroupAddon align="inline-start" className="p-0">
-                <AttachButton
-                  label={t("agentMessage.attach")}
-                  unavailable={t("agentMessage.attachUnavailable")}
-                />
+                <ComposerAttachMenu onFilesSelected={addAttachments} />
               </InputGroupAddon>
             </div>
             <div className="min-w-0 flex-1" />
