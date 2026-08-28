@@ -89,6 +89,10 @@ export class FakeAgentRuntime implements AgentRuntime {
     }
   }
 
+  applyRunSpec(): Promise<void> {
+    return Promise.resolve()
+  }
+
   abort(): Promise<void> {
     return Promise.resolve()
   }

@@ -80,6 +80,43 @@ describe('ClaudeRuntime stream input', () => {
     await query?.promptEnded
     expect(query?.waitingForMore).toBe(false)
   })
+
+  it('switches the warm query model without starting a new query', async () => {
+    let query: FakeClaudeQuery | undefined
+    let started = 0
+    const runtime = new ClaudeRuntime(
+      testRunSpec({ model: 'm1' }),
+      { kind: 'new', provider: 'claude' },
+      '/tmp/claude',
+      ({ prompt }) => {
+        started += 1
+        query = new FakeClaudeQuery(prompt)
+        return query
+      },
+    )
+
+    await collect(runtime.run(
+      { text: 'hello' },
+      { signal: new AbortController().signal },
+    ))
+    await query?.turnReady
+    await runtime.applyRunSpec(testRunSpec({ model: 'm2' }))
+    expect(query?.models).toEqual(['m2'])
+
+    const second = await collect(runtime.run(
+      { text: 'again' },
+      { signal: new AbortController().signal },
+    ))
+    expect(second).toEqual([
+      expect.objectContaining({
+        type: 'run.completed',
+        sessionId: 'sess-stream',
+      }),
+    ])
+    expect(userTexts(query?.received)).toEqual(['hello', 'again'])
+    expect(started).toBe(1)
+    await runtime.release('dispose')
+  })
 })
 
 async function collect(events: AsyncIterable<AgentEvent>): Promise<AgentEvent[]> {
@@ -101,8 +138,13 @@ class FakeClaudeQuery implements ClaudeQuery {
   readonly received: SDKUserMessage[] = []
   readonly turnReady: Promise<void>
   readonly promptEnded: Promise<void>
+  readonly models: string[] = []
   readonly interrupt = (): Promise<undefined> => Promise.resolve(undefined)
   readonly close = (): void => undefined
+  readonly setModel = (model?: string): Promise<void> => {
+    this.models.push(model ?? '')
+    return Promise.resolve()
+  }
 
   private readonly resolveTurnReady: () => void
   private readonly resolvePromptEnded: () => void

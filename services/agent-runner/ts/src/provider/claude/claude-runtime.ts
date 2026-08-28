@@ -42,7 +42,7 @@ export const CLAUDE_DISABLED_SKILLS = [
   'run-skill-generator',
 ] as const
 
-export type ClaudeQuery = Pick<Query, 'interrupt' | 'close'> & AsyncIterable<SDKMessage>
+export type ClaudeQuery = Pick<Query, 'interrupt' | 'close' | 'setModel'> & AsyncIterable<SDKMessage>
 
 export type ClaudeQueryStart = (args: {
   prompt: AsyncIterable<SDKUserMessage>
@@ -63,7 +63,7 @@ export class ClaudeRuntime implements AgentRuntime {
   private toolImageBlockId: string | undefined
 
   constructor(
-    private readonly spec: ProviderRunSpec,
+    private spec: ProviderRunSpec,
     private readonly target: SessionTarget,
     private readonly globalConfigDir: string,
     startQuery?: ClaudeQueryStart,
@@ -105,6 +105,13 @@ export class ClaudeRuntime implements AgentRuntime {
       this.mapper = undefined
       context.signal.removeEventListener('abort', onAbort)
     }
+  }
+
+  async applyRunSpec(spec: ProviderRunSpec): Promise<void> {
+    if (this.query !== undefined && this.spec.model !== spec.model) {
+      await this.query.setModel(spec.model)
+    }
+    this.spec = spec
   }
 
   async abort(): Promise<void> {

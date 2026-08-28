@@ -12,7 +12,7 @@ import {
 import type { ProviderRunSpec, SessionTarget } from '../../core/contract/agent-provider.js'
 import type { ToolDefinition, ToolImageDelta } from '../../core/tool/define-tool.js'
 import { imageToolsFromSpec } from '../../core/tool/image-tool-shared.js'
-import { buildPiModelsConfig } from './pi-models-config.js'
+import { buildPiModelsConfig, piSessionNeedsModelSwitch } from './pi-models-config.js'
 import { piSessionBucketDir } from './pi-paths.js'
 import { createPiSessionManager } from './pi-session-open.js'
 import type { PiSessionFactory } from './pi-provider.js'
@@ -78,7 +78,22 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
             }),
       })
 
-      return new SdkPiAgentSession(session, spec.model, runDir, imageSink, progressSink)
+      if (
+        target.kind === 'resume'
+        && piSessionNeedsModelSwitch(session.model, providerId, spec.model)
+      ) {
+        await session.setModel(model)
+      }
+
+      return new SdkPiAgentSession(
+        session,
+        spec.model,
+        runDir,
+        imageSink,
+        progressSink,
+        modelRuntime,
+        providerId,
+      )
     } catch (error) {
       await rm(runDir, { recursive: true, force: true })
       throw error
@@ -87,13 +102,33 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
 }
 
 class SdkPiAgentSession implements PiAgentSession {
+  private currentModelId: string
+
   constructor(
     private readonly session: Awaited<ReturnType<typeof createAgentSession>>['session'],
-    readonly modelId: string,
+    modelId: string,
     private readonly runDir: string,
     private readonly imageSink: { emit?: (image: ToolImageDelta) => void } = {},
     private readonly progressSink: { emit?: (chunk: string) => void } = {},
-  ) {}
+    private readonly modelRuntime: ModelRuntime,
+    private readonly providerId: string,
+  ) {
+    this.currentModelId = modelId
+  }
+
+  get modelId(): string {
+    return this.currentModelId
+  }
+
+  async setRunModel(modelId: string): Promise<void> {
+    if (modelId === this.currentModelId) return
+    const model = this.modelRuntime.getModel(this.providerId, modelId)
+    if (model === undefined) {
+      throw new Error(`Unknown model ${modelId}`)
+    }
+    await this.session.setModel(model)
+    this.currentModelId = modelId
+  }
 
   bindImageEmit(emit: ((image: ToolImageDelta) => void) | undefined): void {
     if (emit === undefined) {

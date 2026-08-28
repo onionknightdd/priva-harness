@@ -53,9 +53,14 @@ export function useAgentMessage() {
     refresh,
   } = useChatSession()
   const [draft, setDraft] = React.useState("")
-  const [modelReference, setModelReference] = React.useState<string | null>(
+  const [modelReference, setModelReferenceState] = React.useState<string | null>(
     null
   )
+  const modelReferenceRef = React.useRef<string | null>(null)
+  const setModelReference = React.useCallback((next: string | null) => {
+    modelReferenceRef.current = next
+    setModelReferenceState(next)
+  }, [])
   const [effort, setEffort] = React.useState<AgentRunEffort>("medium")
   const [messages, setMessages] = React.useState<AgentThreadMessage[]>([])
   const [attached, setAttached] = React.useState(false)
@@ -312,7 +317,9 @@ export function useAgentMessage() {
     const cwd = runCwd.trim()
     const sendQueueBehavior = queueBehavior
 
-    if (!content || !modelReference || !runHarnessId || !cwd) {
+    const selectedModel = modelReferenceRef.current
+
+    if (!content || !selectedModel || !runHarnessId || !cwd) {
       return
     }
 
@@ -326,7 +333,7 @@ export function useAgentMessage() {
     const resumeSessionId = runSessionId
     const previousStream = activeStreamRef.current
 
-    setLastModelReference(modelReference)
+    setLastModelReference(selectedModel)
     setDraft("")
     setMessages((currentMessages) => {
       const settlePrevious =
@@ -375,7 +382,7 @@ export function useAgentMessage() {
         const connection = runAgentSession(
           {
             text: content,
-            model: modelReference,
+            model: selectedModel,
             harness: runHarnessId,
             cwd,
             effort,
@@ -396,7 +403,6 @@ export function useAgentMessage() {
     draft,
     effort,
     inputSuggestions,
-    modelReference,
     queueBehavior,
     runCwd,
     runHarnessId,

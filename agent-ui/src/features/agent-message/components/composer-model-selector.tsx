@@ -23,7 +23,6 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import {
-  catalogModelIds,
   listModelProfiles,
   listProfileModels,
   setDefaultModelProfile,
@@ -33,7 +32,11 @@ import {
 } from "@/features/model-settings/model-profile-api"
 import { ModelCapabilityIcons } from "@/features/model-settings/model-capability-icons"
 import { useAgentPreferences } from "@/features/settings/agent-preferences-context"
-import { parseComposerModelReference } from "@/features/settings/agent-preferences"
+import {
+  knownProfileModelIds,
+  resolveComposerSelection,
+  type ComposerModelSelection,
+} from "@/features/agent-message/composer-model-selection"
 import {
   displayModelName,
   getModelProviderId,
@@ -53,12 +56,6 @@ const EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const
 
 export type ComposerEffort = (typeof EFFORT_LEVELS)[number]
 
-type ComposerModelSelection = {
-  profileId: string
-  profileLabel: string
-  modelId: string
-}
-
 type ProfileModelsEntry = {
   status: "idle" | "loading" | "ready" | "error"
   models: string[]
@@ -72,71 +69,12 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
 }
 
-function knownProfileModelIds(profile: ModelProfileSummary): string[] {
-  const modelIds = new Set<string>()
-  const add = (value: string | null | undefined) => {
-    const modelId = value?.trim()
-    if (modelId) {
-      modelIds.add(modelId)
-    }
-  }
-
-  add(profile.defaultModel)
-  add(profile.imageUnderstandingModel)
-  add(profile.imageGenerationModel)
-  add(profile.imageEditModel)
-
-  for (const modelId of catalogModelIds(profile.modelCapabilities)) {
-    add(modelId)
-  }
-
-  return [...modelIds]
-}
-
 function defaultProfileFromCollection(collection: ModelProfileCollection) {
   return (
     collection.profiles.find(
       (profile) => profile.id === collection.defaultProfileId
     ) ?? collection.profiles[0]
   )
-}
-
-function selectionFromProfile(
-  profile: ModelProfileSummary | undefined
-): ComposerModelSelection | null {
-  if (!profile) {
-    return null
-  }
-
-  return {
-    profileId: profile.id,
-    profileLabel: profile.label,
-    modelId:
-      profile.defaultModel?.trim() ||
-      knownProfileModelIds(profile)[0] ||
-      "",
-  }
-}
-
-function selectionFromLastUsed(
-  profiles: ModelProfileSummary[],
-  lastModelReference: string | null
-): ComposerModelSelection | null {
-  const parsed = parseComposerModelReference(lastModelReference)
-  if (!parsed) {
-    return null
-  }
-
-  const profile = profiles.find((item) => item.id === parsed.profileId)
-  if (!profile) {
-    return null
-  }
-
-  return {
-    profileId: profile.id,
-    profileLabel: profile.label,
-    modelId: parsed.modelId,
-  }
 }
 
 function stopComposerFocus(event: React.SyntheticEvent) {
@@ -697,40 +635,23 @@ export function ComposerModelSelector({
       return
     }
 
-    if (sessionModel === "last-used") {
-      const restored = selectionFromLastUsed(
+    setSelection((current) =>
+      resolveComposerSelection({
+        sessionModel,
         profiles,
-        lastModelReferenceRef.current
-      )
-      setSelection(
-        restored ??
-          selectionFromProfile(
-            profiles.find((profile) => profile.id === defaultProfileId) ??
-              profiles[0]
-          )
-      )
-      const profileToLoad = restored
-        ? profiles.find((profile) => profile.id === restored.profileId)
-        : undefined
-      if (profileToLoad) {
-        void ensureProfileModels(profileToLoad)
-      }
-      return
-    }
-
-    setSelection(
-      selectionFromProfile(
-        profiles.find((profile) => profile.id === defaultProfileId) ??
-          profiles[0]
-      )
+        defaultProfileId,
+        lastModelReference: lastModelReferenceRef.current,
+        current,
+      })
     )
-  }, [
-    defaultProfileId,
-    ensureProfileModels,
-    profiles,
-    profilesStatus,
-    sessionModel,
-  ])
+  }, [defaultProfileId, profiles, profilesStatus, sessionModel])
+
+  React.useEffect(() => {
+    const profile = profiles.find((item) => item.id === selection?.profileId)
+    if (profile) {
+      void ensureProfileModels(profile)
+    }
+  }, [ensureProfileModels, profiles, selection?.profileId])
 
   const selectModel = React.useCallback(
     (next: ComposerModelSelection) => {
@@ -750,19 +671,17 @@ export function ComposerModelSelector({
         return
       }
 
-      const previousSelection = selection
-      const previousDefaultProfileId = defaultProfileId
-      setLastModelReference(`${next.profileId}:${next.modelId}`)
+      const reference = `${next.profileId}:${next.modelId}`
+      setLastModelReference(reference)
+      onModelReferenceChange?.(reference)
+      setSelection(next)
+      setSaveError(null)
 
       if (sessionModel === "last-used") {
-        setSelection(next)
-        setSaveError(null)
         return
       }
 
       savingRef.current = true
-      setSelection(next)
-      setSaveError(null)
       setSaving(true)
 
       void (async () => {
@@ -784,8 +703,6 @@ export function ComposerModelSelector({
             setDefaultProfileId(result.default_profile_id)
           }
         } catch (error) {
-          setSelection(previousSelection)
-          setDefaultProfileId(previousDefaultProfileId)
           setSaveError(
             getErrorMessage(error, t("agentMessage.saveModelFailed"))
           )
@@ -795,7 +712,15 @@ export function ComposerModelSelector({
         }
       })()
     },
-    [defaultProfileId, profiles, selection, sessionModel, setLastModelReference, t]
+    [
+      defaultProfileId,
+      onModelReferenceChange,
+      profiles,
+      selection,
+      sessionModel,
+      setLastModelReference,
+      t,
+    ]
   )
 
   React.useEffect(() => {
