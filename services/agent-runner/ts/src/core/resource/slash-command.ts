@@ -64,10 +64,30 @@ export const PI_SLASH_COMMAND_WHITELIST = [
   'session',
 ] as const
 
+export function canonicalSlashName(name: string): string {
+  return name.trim().replace(/^\/+/u, '')
+}
+
+export function isWhitelistedSlashName(
+  name: string,
+  whitelist: readonly string[],
+): boolean {
+  const allowed = new Set(whitelist.map((entry) => canonicalSlashName(entry).toLocaleLowerCase()))
+  return slashNameKeys(name).some((key) => allowed.has(key))
+}
+
 export function intersectSlashCommands(
   commands: readonly SlashCommand[],
   whitelist: readonly string[],
 ): SlashCommand[] {
-  const allowed = new Set(whitelist)
-  return commands.filter((command) => allowed.has(command.name))
+  return commands.filter((command) => isWhitelistedSlashName(command.name, whitelist))
+}
+
+function slashNameKeys(name: string): string[] {
+  const normalized = canonicalSlashName(name).toLocaleLowerCase()
+  const colon = normalized.lastIndexOf(':')
+  if (colon === -1 || colon === normalized.length - 1) {
+    return [normalized]
+  }
+  return [normalized, normalized.slice(colon + 1)]
 }

@@ -56,5 +56,29 @@ describe('slash command catalog helpers', () => {
         ['ghost', ...CLAUDE_SLASH_COMMAND_WHITELIST],
       ),
     ).toEqual([])
+    expect(
+      intersectSlashCommands(
+        [{ ...compact, name: '/Compact' }],
+        CLAUDE_SLASH_COMMAND_WHITELIST,
+      ),
+    ).toEqual([{ ...compact, name: '/Compact' }])
+    expect(
+      intersectSlashCommands(
+        [{
+          name: 'plugin:code-review',
+          description: 'Review a change',
+          kind: 'skill',
+          origin: 'builtin',
+        }],
+        CLAUDE_SLASH_COMMAND_WHITELIST,
+      ),
+    ).toEqual([
+      {
+        name: 'plugin:code-review',
+        description: 'Review a change',
+        kind: 'skill',
+        origin: 'builtin',
+      },
+    ])
   })
 })

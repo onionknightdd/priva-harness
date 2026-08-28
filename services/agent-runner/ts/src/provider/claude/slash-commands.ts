@@ -7,8 +7,10 @@ import { query } from '@anthropic-ai/claude-agent-sdk'
 import type { ProviderRunSpec } from '../../core/contract/agent-provider.js'
 import {
   CLAUDE_SLASH_COMMAND_WHITELIST,
+  canonicalSlashName,
   compareSlashCommands,
   intersectSlashCommands,
+  isWhitelistedSlashName,
   type SlashCommand,
   type SlashKind,
   type SlashOrigin,
@@ -68,10 +70,19 @@ export async function assembleClaudeSlashCommands(
   cwd: string,
   globalConfigDir: string,
 ): Promise<SlashCommand[]> {
-  const skillNames = new Set(skills.map((skill) => skill.name))
+  const skillNames = new Set(
+    skills.map((skill) => canonicalSlashName(skill.name).toLocaleLowerCase()),
+  )
+  const selected = commands.filter((command) =>
+    isWhitelistedSlashName(command.name, CLAUDE_SLASH_COMMAND_WHITELIST),
+  )
   const assembled = await Promise.all(
-    commands.map((command) => {
-      const kind: SlashKind = skillNames.has(command.name) ? 'skill' : 'command'
+    selected.map((command) => {
+      const kind: SlashKind = skillNames.has(
+        canonicalSlashName(command.name).toLocaleLowerCase(),
+      )
+        ? 'skill'
+        : 'command'
       return mapSdkCommand(command, kind, cwd, globalConfigDir)
     }),
   )
@@ -123,22 +134,27 @@ async function mapSdkCommand(
   cwd: string,
   globalConfigDir: string,
 ): Promise<SlashCommand> {
+  const name = canonicalSlashName(command.name)
   const origin = await classifyClaudeSlashOrigin(
-    command.name,
+    name,
     kind,
     cwd,
     globalConfigDir,
   )
-  const argumentHint = command.argumentHint.trim()
+  const argumentHint = readSlashText(command.argumentHint)
   const aliases = command.aliases?.filter((alias) => alias.trim() !== '') ?? []
   return {
-    name: command.name,
-    description: command.description,
+    name,
+    description: readSlashText(command.description),
     kind,
     origin,
     ...(argumentHint === '' ? {} : { argumentHint }),
     ...(aliases.length === 0 ? {} : { aliases }),
   }
+}
+
+function readSlashText(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
 }
 
 function isSafeSlashName(name: string): boolean {

@@ -47,11 +47,11 @@ describe('Claude slash command catalog', () => {
     await writeFile(join(cwd, '.claude', 'skills', 'code-review', 'SKILL.md'), '# code-review\n')
 
     const commands: SdkSlashCommand[] = [
-      { name: 'compact', description: 'Compact context', argumentHint: '' },
+      { name: '/compact', description: 'Compact context', argumentHint: '' },
       { name: 'review', description: 'Review a change', argumentHint: '<file>', aliases: ['pr'] },
       { name: 'code-review', description: 'Review a change', argumentHint: '<file>', aliases: ['pr'] },
-      { name: 'mcp__linear__create_issue', description: 'MCP', argumentHint: '' },
-      { name: 'plugin:dataviz', description: 'Plugin', argumentHint: '' },
+      { name: 'mcp__linear__create_issue', description: 'MCP' } as SdkSlashCommand,
+      { name: 'plugin:dataviz', description: 'Plugin' } as SdkSlashCommand,
     ]
     const skills: SdkSlashCommand[] = [
       { name: 'code-review', description: 'Review a change', argumentHint: '<file>' },
