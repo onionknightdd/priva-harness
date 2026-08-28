@@ -493,7 +493,7 @@ export function AgentMessageComposer({
                   }
                   data-agent-composer="prompt"
                   style={
-                    chipOccupy > 0 ? { paddingLeft: chipOccupy } : undefined
+                    chipOccupy > 0 ? { textIndent: chipOccupy } : undefined
                   }
                   className={cn(
                     "w-full min-w-0 px-0 py-0 text-base! leading-8",
