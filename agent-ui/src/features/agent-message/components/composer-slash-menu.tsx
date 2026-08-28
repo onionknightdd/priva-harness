@@ -135,7 +135,6 @@ export function ComposerSlashMenu({
         <motion.div
           ref={panelRef}
           id={menuId}
-          inert
           aria-hidden="true"
           initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -149,10 +148,16 @@ export function ComposerSlashMenu({
             zIndex: 50,
           }}
           className={cn(
-            "bg-popover text-popover-foreground max-h-72 origin-bottom overflow-x-hidden overflow-y-auto rounded-md border p-1 shadow-md outline-none",
+            "bg-popover text-popover-foreground max-h-72 origin-bottom overflow-x-hidden overflow-y-auto overscroll-contain rounded-md border p-1 shadow-md outline-none",
             COMPOSER_SLASH_MENU_WIDTH_CLASS
           )}
-          onMouseDown={(event) => event.preventDefault()}
+          onWheel={(event) => event.stopPropagation()}
+          onMouseDown={(event) => {
+            if (isVerticalScrollbarClick(event)) {
+              return
+            }
+            event.preventDefault()
+          }}
         >
           {groups.length === 0 ? (
             <div className="px-2 py-3 text-sm text-muted-foreground">
@@ -206,6 +211,16 @@ export function ComposerSlashMenu({
     </AnimatePresence>,
     document.body
   )
+}
+
+function isVerticalScrollbarClick(event: React.MouseEvent<HTMLElement>) {
+  const node = event.currentTarget
+  const gutter = node.offsetWidth - node.clientWidth
+  if (gutter <= 0) {
+    return false
+  }
+
+  return event.clientX >= node.getBoundingClientRect().right - gutter
 }
 
 function slashKindLabelKey(kind: SlashKind) {
