@@ -214,11 +214,11 @@ export function ComposerSlashMenu({
           </div>
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-x-0 top-0 z-10 h-2 bg-gradient-to-b from-popover to-transparent"
+            className="pointer-events-none absolute inset-x-0 top-0 z-10 h-3 bg-gradient-to-b from-popover to-transparent"
           />
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-2 bg-gradient-to-t from-popover to-transparent"
+            className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-3 bg-gradient-to-t from-popover to-transparent"
           />
         </motion.div>
       ) : null}
