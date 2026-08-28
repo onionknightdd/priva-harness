@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  CLAUDE_SLASH_COMMAND_WHITELIST,
+  intersectSlashCommands,
   isExcludedSlashName,
   mergeSlashCommands,
+  PI_SLASH_COMMAND_WHITELIST,
   type SlashCommand,
 } from '../../../../src/core/resource/slash-command.js'
 
@@ -25,5 +28,41 @@ describe('slash command catalog helpers', () => {
       { name: 'compact', description: 'project', kind: 'command', origin: 'project' },
       { name: 'review', description: 'skill', kind: 'skill', origin: 'user' },
     ])
+  })
+
+  it('keeps only runtime entries whose names are in the whitelist', () => {
+    const compact: SlashCommand = {
+      name: 'compact',
+      description: 'Compact context',
+      argumentHint: '[focus]',
+      aliases: ['summarize'],
+      kind: 'command',
+      origin: 'project',
+    }
+    const session: SlashCommand = {
+      name: 'session',
+      description: 'Session info',
+      kind: 'command',
+      origin: 'builtin',
+    }
+    const extra: SlashCommand = {
+      name: 'model',
+      description: 'Not allowed',
+      aliases: ['compact'],
+      kind: 'command',
+      origin: 'builtin',
+    }
+
+    expect(intersectSlashCommands([extra, compact, session], PI_SLASH_COMMAND_WHITELIST)).toEqual([
+      compact,
+      session,
+    ])
+    expect(intersectSlashCommands([compact], CLAUDE_SLASH_COMMAND_WHITELIST)).toEqual([compact])
+    expect(
+      intersectSlashCommands(
+        [extra],
+        ['ghost', ...CLAUDE_SLASH_COMMAND_WHITELIST],
+      ),
+    ).toEqual([])
   })
 })

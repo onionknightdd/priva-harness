@@ -4,7 +4,6 @@ import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
-import { PI_BUILTIN_SLASH_COMMANDS } from '../../../../src/provider/pi/pi-builtin-slash-commands.js'
 import {
   assemblePiSlashCommands,
   listPiSlashCommands,
@@ -22,30 +21,20 @@ describe('Pi slash command catalog', () => {
       ],
     )
 
-    expect(assembled.find((command) => command.name === 'compact')).toEqual({
-      name: 'compact',
-      description: 'Project compact skill',
-      kind: 'skill',
-      origin: 'project',
-    })
-    expect(assembled.find((command) => command.name === 'deploy')).toEqual({
-      name: 'deploy',
-      description: 'Deploy prompt',
-      kind: 'command',
-      origin: 'project',
-      argumentHint: '<env>',
-    })
-    expect(assembled.find((command) => command.name === 'notes')).toEqual({
-      name: 'notes',
-      description: 'User notes',
-      kind: 'skill',
-      origin: 'user',
-    })
-    expect(assembled.find((command) => command.name === 'model')).toMatchObject({
-      kind: 'command',
-      origin: 'builtin',
-    })
-    expect(assembled).toHaveLength(PI_BUILTIN_SLASH_COMMANDS.length + 2)
+    expect(assembled).toEqual([
+      {
+        name: 'compact',
+        description: 'Project compact skill',
+        kind: 'skill',
+        origin: 'project',
+      },
+      {
+        name: 'session',
+        description: 'Show session info and stats',
+        kind: 'command',
+        origin: 'builtin',
+      },
+    ])
   })
 
   it('loads skills and prompts from the Pi resource directories', async () => {
@@ -69,22 +58,9 @@ describe('Pi slash command catalog', () => {
     )
 
     const commands = await listPiSlashCommands({ cwd, agentDir })
-    expect(commands.find((command) => command.name === 'review')).toEqual({
-      name: 'review',
-      description: 'Review the change',
-      kind: 'skill',
-      origin: 'project',
-    })
-    expect(commands.find((command) => command.name === 'notes')).toEqual({
-      name: 'notes',
-      description: 'Capture notes',
-      kind: 'skill',
-      origin: 'user',
-    })
-    expect(commands.find((command) => command.name === 'deploy')).toMatchObject({
-      name: 'deploy',
-      kind: 'command',
-      origin: 'project',
-    })
+    expect(commands.find((command) => command.name === 'review')).toBeUndefined()
+    expect(commands.find((command) => command.name === 'notes')).toBeUndefined()
+    expect(commands.find((command) => command.name === 'deploy')).toBeUndefined()
+    expect(commands.map((command) => command.name)).toEqual(['compact', 'session'])
   })
 })

@@ -43,33 +43,34 @@ describe('Claude slash command catalog', () => {
     const root = await mkdtemp(join(tmpdir(), 'claude-slash-assemble-'))
     const cwd = join(root, 'repo')
     const globalConfigDir = join(root, '.claude')
-    await mkdir(join(cwd, '.claude', 'skills', 'review'), { recursive: true })
-    await writeFile(join(cwd, '.claude', 'skills', 'review', 'SKILL.md'), '# review\n')
+    await mkdir(join(cwd, '.claude', 'skills', 'code-review'), { recursive: true })
+    await writeFile(join(cwd, '.claude', 'skills', 'code-review', 'SKILL.md'), '# code-review\n')
 
     const commands: SdkSlashCommand[] = [
       { name: 'compact', description: 'Compact context', argumentHint: '' },
       { name: 'review', description: 'Review a change', argumentHint: '<file>', aliases: ['pr'] },
+      { name: 'code-review', description: 'Review a change', argumentHint: '<file>', aliases: ['pr'] },
       { name: 'mcp__linear__create_issue', description: 'MCP', argumentHint: '' },
       { name: 'plugin:dataviz', description: 'Plugin', argumentHint: '' },
     ]
     const skills: SdkSlashCommand[] = [
-      { name: 'review', description: 'Review a change', argumentHint: '<file>' },
+      { name: 'code-review', description: 'Review a change', argumentHint: '<file>' },
     ]
 
     expect(await assembleClaudeSlashCommands(commands, skills, cwd, globalConfigDir)).toEqual([
       {
-        name: 'compact',
-        description: 'Compact context',
-        kind: 'command',
-        origin: 'builtin',
-      },
-      {
-        name: 'review',
+        name: 'code-review',
         description: 'Review a change',
         argumentHint: '<file>',
         aliases: ['pr'],
         kind: 'skill',
         origin: 'project',
+      },
+      {
+        name: 'compact',
+        description: 'Compact context',
+        kind: 'command',
+        origin: 'builtin',
       },
     ])
   })

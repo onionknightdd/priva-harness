@@ -48,3 +48,31 @@ export function mergeSlashCommands(entries: readonly SlashCommand[]): SlashComma
   }
   return [...byName.values()].sort(compareSlashCommands)
 }
+
+export const CLAUDE_SLASH_COMMAND_WHITELIST = [
+  'clear',
+  'compact',
+  'context',
+  'debug',
+  'deep-research',
+  'goal',
+  'list-agents',
+  'verify',
+  'code-review',
+  'loop',
+  'security-review',
+  'simplify',
+] as const
+
+export const PI_SLASH_COMMAND_WHITELIST = [
+  'compact',
+  'session',
+] as const
+
+export function intersectSlashCommands(
+  commands: readonly SlashCommand[],
+  whitelist: readonly string[],
+): SlashCommand[] {
+  const allowed = new Set(whitelist)
+  return commands.filter((command) => allowed.has(command.name))
+}

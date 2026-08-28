@@ -1,7 +1,9 @@
 import { DefaultResourceLoader, SettingsManager } from '@earendil-works/pi-coding-agent'
 
 import {
+  intersectSlashCommands,
   mergeSlashCommands,
+  PI_SLASH_COMMAND_WHITELIST,
   type SlashCommand,
   type SlashOrigin,
 } from '../../core/resource/slash-command.js'
@@ -18,29 +20,32 @@ export function assemblePiSlashCommands(
   skills: readonly PiSlashResource[],
   prompts: readonly PiSlashResource[],
 ): SlashCommand[] {
-  return mergeSlashCommands([
-    ...PI_BUILTIN_SLASH_COMMANDS.map((command) => ({
-      name: command.name,
-      description: command.description,
-      kind: 'command' as const,
-      origin: 'builtin' as const,
-      ...(command.argumentHint === undefined ? {} : { argumentHint: command.argumentHint }),
-    })),
-    ...prompts.map((prompt) => ({
-      name: prompt.name,
-      description: prompt.description,
-      kind: 'command' as const,
-      origin: prompt.origin,
-      ...(prompt.argumentHint === undefined ? {} : { argumentHint: prompt.argumentHint }),
-    })),
-    ...skills.map((skill) => ({
-      name: skill.name,
-      description: skill.description,
-      kind: 'skill' as const,
-      origin: skill.origin,
-      ...(skill.argumentHint === undefined ? {} : { argumentHint: skill.argumentHint }),
-    })),
-  ])
+  return intersectSlashCommands(
+    mergeSlashCommands([
+      ...PI_BUILTIN_SLASH_COMMANDS.map((command) => ({
+        name: command.name,
+        description: command.description,
+        kind: 'command' as const,
+        origin: 'builtin' as const,
+        ...(command.argumentHint === undefined ? {} : { argumentHint: command.argumentHint }),
+      })),
+      ...prompts.map((prompt) => ({
+        name: prompt.name,
+        description: prompt.description,
+        kind: 'command' as const,
+        origin: prompt.origin,
+        ...(prompt.argumentHint === undefined ? {} : { argumentHint: prompt.argumentHint }),
+      })),
+      ...skills.map((skill) => ({
+        name: skill.name,
+        description: skill.description,
+        kind: 'skill' as const,
+        origin: skill.origin,
+        ...(skill.argumentHint === undefined ? {} : { argumentHint: skill.argumentHint }),
+      })),
+    ]),
+    PI_SLASH_COMMAND_WHITELIST,
+  )
 }
 
 export async function listPiSlashCommands(options: {

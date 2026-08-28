@@ -6,7 +6,9 @@ import { query } from '@anthropic-ai/claude-agent-sdk'
 
 import type { ProviderRunSpec } from '../../core/contract/agent-provider.js'
 import {
+  CLAUDE_SLASH_COMMAND_WHITELIST,
   compareSlashCommands,
+  intersectSlashCommands,
   isExcludedSlashName,
   type SlashCommand,
   type SlashKind,
@@ -75,7 +77,7 @@ export async function assembleClaudeSlashCommands(
       return [mapSdkCommand(command, kind, cwd, globalConfigDir)]
     }),
   )
-  return assembled.sort(compareSlashCommands)
+  return intersectSlashCommands(assembled.sort(compareSlashCommands), CLAUDE_SLASH_COMMAND_WHITELIST)
 }
 
 export async function listClaudeSlashCommands(options: {
