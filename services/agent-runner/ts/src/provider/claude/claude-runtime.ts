@@ -32,6 +32,15 @@ export const CLAUDE_DISALLOWED_TOOLS = [
   'ShowOnboardingRolePicker',
 ] as const
 
+export const CLAUDE_DISABLED_SKILLS = [
+  'dataviz',
+  'update-config',
+  'fewer-permission-prompts',
+  'claude-api',
+  'run',
+  'run-skill-generator',
+] as const
+
 export type ClaudeQuery = Pick<Query, 'interrupt' | 'close'> & AsyncIterable<SDKMessage>
 
 export type ClaudeQueryStart = (args: {
@@ -197,7 +206,12 @@ export function resolveClaudeQueryOptions(
     permissionMode: 'bypassPermissions',
     promptSuggestions: spec.promptSuggestions !== false,
     systemPrompt: { type: 'preset', preset: 'claude_code' },
-    settings: { crossSessionInbound: 'accept' },
+    settings: {
+      crossSessionInbound: 'accept',
+      skillOverrides: Object.fromEntries(
+        CLAUDE_DISABLED_SKILLS.map((name) => [name, 'off' as const]),
+      ),
+    },
     env: resolveClaudeProcessEnv(spec, globalConfigDir),
     ...(abortController === undefined ? {} : { abortController }),
   }

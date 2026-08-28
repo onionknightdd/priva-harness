@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  CLAUDE_DISABLED_SKILLS,
   CLAUDE_DISALLOWED_TOOLS,
   resolveClaudeQueryOptions,
 } from '../../../../src/provider/claude/claude-runtime.js'
@@ -52,7 +53,12 @@ describe('resolveClaudeQueryOptions', () => {
     expect(options.env?.['ANTHROPIC_AUTH_TOKEN']).toBe('secret')
     expect(options.env?.['ANTHROPIC_MODEL']).toBeUndefined()
     expect(options.env?.['CLAUDE_CODE_HARBOR_KITE']).toBe('1')
-    expect(options.settings).toEqual({ crossSessionInbound: 'accept' })
+    expect(options.settings).toEqual({
+      crossSessionInbound: 'accept',
+      skillOverrides: Object.fromEntries(
+        CLAUDE_DISABLED_SKILLS.map((name) => [name, 'off']),
+      ),
+    })
     expect(options.extraArgs).toBeUndefined()
     expect(options.env?.['PATH'] ?? process.env['PATH']).toBe(process.env['PATH'])
   })
