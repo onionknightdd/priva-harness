@@ -68,7 +68,13 @@ export function AgentPlan({
                   />
                 )}
               </span>
-              <span className="text-foreground">
+              <span
+                className={cn(
+                  done
+                    ? "text-muted-foreground line-through"
+                    : "text-foreground"
+                )}
+              >
                 {step}
               </span>
             </li>

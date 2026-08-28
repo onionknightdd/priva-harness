@@ -125,7 +125,7 @@ export function AgentMessageThread({
         </MessageScrollerViewport>
         <KeepExpandAnchor />
         <PinLatestAtCenter messages={messages} />
-        <MessageScrollerButton>
+        <MessageScrollerButton className="data-[direction=end]:bottom-2">
           <ArrowDownIcon />
           <span className="sr-only">{t("agentMessage.scrollToLatest")}</span>
         </MessageScrollerButton>

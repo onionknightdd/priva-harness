@@ -41,7 +41,7 @@ const COMPOSER_FOOTER_HEIGHT = 40
 const COMPOSER_MULTI_PAD = 14
 const COMPOSER_SINGLE_PAD_Y = 8
 const COMPOSER_CHIP_GAP = 8
-const COMPOSER_LEFT_FALLBACK_PX = 52
+const COMPOSER_LEFT_FALLBACK_PX = 46
 const COMPACT_LINE_SLACK_PX = 8
 
 let measureContext: CanvasRenderingContext2D | null = null
@@ -580,7 +580,7 @@ export function AgentMessageComposer({
           >
             <div
               ref={leftRef}
-              className="pointer-events-auto flex h-8 items-center pr-2.5 pl-2.5"
+              className="pointer-events-auto flex h-8 items-center pr-1 pl-2.5"
             >
               <ComposerAttachMenu onFilesSelected={addAttachments} />
             </div>

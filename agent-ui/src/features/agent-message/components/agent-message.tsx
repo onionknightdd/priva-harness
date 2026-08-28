@@ -72,7 +72,7 @@ export function AgentMessage({
   return (
     <section
       aria-label={t("agentMessage.contentLabel")}
-      className="@container/agent-message flex min-h-0 flex-1 flex-col overflow-hidden p-4 pt-0"
+      className="@container/agent-message flex min-h-0 flex-1 flex-col overflow-hidden pt-0 pr-2 pb-4 pl-4"
     >
       <div className="relative min-h-0 flex-1">
         <AnimatePresence initial={false}>
@@ -111,7 +111,7 @@ export function AgentMessage({
             </motion.div>
           )}
         </AnimatePresence>
-        <div className="pointer-events-none absolute inset-x-0 bottom-3 z-20">
+        <div className="pointer-events-none absolute inset-x-0 bottom-1.5 z-20">
           <div className="mx-auto w-full max-w-3xl">
             <TaskPlanPopover messages={messages} />
           </div>
@@ -122,7 +122,7 @@ export function AgentMessage({
         className={cn(
           "shrink-0",
           agentColumnClassName,
-          !isEmpty && "pt-3"
+          !isEmpty && "pt-1.5"
         )}
       >
         <AgentMessageComposer
