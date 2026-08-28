@@ -534,7 +534,10 @@ export function AgentMessageComposer({
                         closeSlashMenu()
                         return
                       }
-                      if (event.key === "Enter" && !event.shiftKey) {
+                      if (
+                        (event.key === "Enter" && !event.shiftKey) ||
+                        (event.key === "Tab" && !event.shiftKey)
+                      ) {
                         const selected = filteredCommands[highlightedIndex]
                         if (selected) {
                           event.preventDefault()
