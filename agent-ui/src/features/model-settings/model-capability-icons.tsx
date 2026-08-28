@@ -1,4 +1,4 @@
-import { EyeIcon, ImagePlusIcon, PencilIcon } from "lucide-react"
+import { EyeIcon, ImagePlusIcon, ImagesIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { cn } from "@/lib/utils"
@@ -21,7 +21,7 @@ const ICONS = [
   },
   {
     capability: "image_edit",
-    Icon: PencilIcon,
+    Icon: ImagesIcon,
     labelKey: "settings.models.imageEdit",
   },
 ] as const
@@ -46,7 +46,7 @@ export function ModelCapabilityIcons({
   return (
     <span
       className={cn(
-        "ml-auto inline-flex shrink-0 items-center gap-0.5 text-muted-foreground",
+        "inline-flex shrink-0 items-center justify-start gap-0.5 text-muted-foreground",
         className
       )}
     >

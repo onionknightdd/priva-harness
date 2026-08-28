@@ -75,13 +75,15 @@ export function ModelSelector({
               <ComboboxCollection>
                 {(modelId: string) => (
                   <ComboboxItem key={modelId} value={modelId}>
-                    <span className="min-w-0 truncate">
-                      {displayModelName(modelId)}
+                    <span className="flex min-w-0 flex-1 items-center justify-start gap-1.5">
+                      <span className="min-w-0 truncate">
+                        {displayModelName(modelId)}
+                      </span>
+                      <ModelCapabilityIcons
+                        catalog={catalog}
+                        modelId={modelId}
+                      />
                     </span>
-                    <ModelCapabilityIcons
-                      catalog={catalog}
-                      modelId={modelId}
-                    />
                   </ComboboxItem>
                 )}
               </ComboboxCollection>

@@ -398,17 +398,18 @@ function ProfileModelSubmenu({
                             })
                           }
                         >
-                          <HoverMarquee
-                            active={modelMarqueeId === modelId}
-                            className="flex-1"
-                          >
-                            {displayModelName(modelId)}
-                          </HoverMarquee>
-                          <ModelCapabilityIcons
-                            className="ml-0"
-                            catalog={profile.modelCapabilities}
-                            modelId={modelId}
-                          />
+                          <span className="flex min-w-0 flex-1 items-center justify-start gap-1.5">
+                            <HoverMarquee
+                              active={modelMarqueeId === modelId}
+                              className="min-w-0"
+                            >
+                              {displayModelName(modelId)}
+                            </HoverMarquee>
+                            <ModelCapabilityIcons
+                              catalog={profile.modelCapabilities}
+                              modelId={modelId}
+                            />
+                          </span>
                           {isSelected ? (
                             <CheckIcon className="absolute right-2 size-4" />
                           ) : null}
