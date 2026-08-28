@@ -9,6 +9,16 @@ const profile = {
 
 const pngB64 = Buffer.from('png-bytes').toString('base64')
 
+function jsonBody(init?: RequestInit): { stream?: boolean } {
+  const raw = init?.body
+  if (typeof raw !== 'string') return {}
+  return JSON.parse(raw) as { stream?: boolean }
+}
+
+function imageResponse(): Promise<Response> {
+  return Promise.resolve(Response.json({ data: [{ b64_json: pngB64 }] }))
+}
+
 describe('compatible image API', () => {
   it('normalizes OpenAI size form and rejects other separators', () => {
     expect(normalizeSize(undefined)).toBe('1024x1024')
@@ -17,31 +27,30 @@ describe('compatible image API', () => {
   })
 
   it('falls back from a rejected stream to a one-shot generation', async () => {
-    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
-      const body = JSON.parse(String(init?.body)) as { stream?: boolean }
-      if (body.stream === true) {
-        return new Response('stream not supported', { status: 400 })
+    const fetchImpl = vi.fn((_url: string, init?: RequestInit) => {
+      if (jsonBody(init).stream === true) {
+        return Promise.resolve(new Response('stream not supported', { status: 400 }))
       }
-      return Response.json({ data: [{ b64_json: pngB64 }] })
+      return imageResponse()
     })
-    const api = new CompatibleImageApi({ fetch: fetchImpl as typeof fetch })
+    const api = new CompatibleImageApi({ fetch: fetchImpl })
     const image = await api.generate(profile, 'gen-a', { prompt: 'a cat', stream: true })
     expect(Buffer.from(image.bytes).toString()).toBe('png-bytes')
     expect(fetchImpl).toHaveBeenCalledTimes(2)
   })
 
   it('retries image edit without quality when the gateway rejects it', async () => {
-    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+    const fetchImpl = vi.fn((_url: string, init?: RequestInit) => {
       const body = init?.body
       if (!(body instanceof FormData)) {
-        return new Response('expected form', { status: 400 })
+        return Promise.resolve(new Response('expected form', { status: 400 }))
       }
       if (body.get('quality') === 'high') {
-        return new Response('unknown field quality', { status: 400 })
+        return Promise.resolve(new Response('unknown field quality', { status: 400 }))
       }
-      return Response.json({ data: [{ b64_json: pngB64 }] })
+      return imageResponse()
     })
-    const api = new CompatibleImageApi({ fetch: fetchImpl as typeof fetch })
+    const api = new CompatibleImageApi({ fetch: fetchImpl })
     const image = await api.edit(profile, 'edit-a', {
       prompt: 'make it blue',
       images: [{ bytes: Uint8Array.from([1]), mime: 'image/png', name: 'a.png' }],
@@ -51,15 +60,15 @@ describe('compatible image API', () => {
   })
 
   it('sends multiple edit images as image[]', async () => {
-    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+    const fetchImpl = vi.fn((_url: string, init?: RequestInit) => {
       const body = init?.body
       if (!(body instanceof FormData)) {
-        return new Response('expected form', { status: 400 })
+        return Promise.resolve(new Response('expected form', { status: 400 }))
       }
       expect(body.getAll('image[]')).toHaveLength(2)
-      return Response.json({ data: [{ b64_json: pngB64 }] })
+      return imageResponse()
     })
-    const api = new CompatibleImageApi({ fetch: fetchImpl as typeof fetch })
+    const api = new CompatibleImageApi({ fetch: fetchImpl })
     await api.edit(profile, 'edit-a', {
       prompt: 'merge',
       images: [

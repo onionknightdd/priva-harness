@@ -96,10 +96,18 @@ class SdkPiAgentSession implements PiAgentSession {
   ) {}
 
   bindImageEmit(emit: ((image: ToolImageDelta) => void) | undefined): void {
+    if (emit === undefined) {
+      delete this.imageSink.emit
+      return
+    }
     this.imageSink.emit = emit
   }
 
   bindProgressEmit(emit: ((chunk: string) => void) | undefined): void {
+    if (emit === undefined) {
+      delete this.progressSink.emit
+      return
+    }
     this.progressSink.emit = emit
   }
 

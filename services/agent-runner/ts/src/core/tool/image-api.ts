@@ -1,7 +1,7 @@
 import type { ModelProfile } from '../resource/model-profile.js'
 import { ModelProfileError } from '../resource/model-profile.js'
 
-export type ImageBytes = {
+export interface ImageBytes {
   readonly bytes: Uint8Array
   readonly mime: string
   readonly name: string
@@ -13,17 +13,17 @@ export type ImageDeltaHandler = (image: {
   readonly final: boolean
 }) => void
 
-export type ImageApiOptions = {
-  readonly fetch?: typeof globalThis.fetch
+export interface ImageApiOptions {
+  readonly fetch?: (input: string, init?: RequestInit) => Promise<Response>
 }
 
 const DEFAULT_SIZE = '1024x1024'
 
 export class CompatibleImageApi {
-  private readonly fetch: typeof globalThis.fetch
+  private readonly fetch: (input: string, init?: RequestInit) => Promise<Response>
 
   constructor(options: ImageApiOptions = {}) {
-    this.fetch = options.fetch ?? globalThis.fetch
+    this.fetch = options.fetch ?? ((input, init) => globalThis.fetch(input, init))
   }
 
   async generate(
@@ -182,7 +182,7 @@ export class CompatibleImageApi {
         headers: authHeaders(profile),
         body,
         redirect: 'error',
-        signal,
+        ...(signal === undefined ? {} : { signal }),
       },
     )
     return await readImageResponse(response, onImage)
@@ -202,7 +202,7 @@ export class CompatibleImageApi {
       },
       body: JSON.stringify(body),
       redirect: 'error',
-      signal,
+      ...(signal === undefined ? {} : { signal }),
     })
   }
 
@@ -220,11 +220,12 @@ export class CompatibleImageApi {
 }
 
 export function normalizeSize(raw: string | undefined): string {
-  const value = raw?.trim() || DEFAULT_SIZE
-  if (!/^\d+x\d+$/.test(value)) {
+  const value = raw?.trim() ?? DEFAULT_SIZE
+  const size = value === '' ? DEFAULT_SIZE : value
+  if (!/^\d+x\d+$/.test(size)) {
     throw new Error('size must look like 1024x1024')
   }
-  return value
+  return size
 }
 
 function firstEndpoint(baseUrl: string, pathSuffix: string): string {
@@ -369,7 +370,7 @@ function eventType(payload: unknown): string {
 
 function chatDeltaText(payload: unknown): string {
   const record = asRecord(payload)
-  const choice = Array.isArray(record?.['choices']) ? asRecord(record.choices[0]) : undefined
+  const choice = Array.isArray(record?.['choices']) ? asRecord(record['choices'][0]) : undefined
   return stringField(asRecord(choice?.['delta']), 'content')
     ?? stringField(asRecord(choice?.['message']), 'content')
     ?? ''

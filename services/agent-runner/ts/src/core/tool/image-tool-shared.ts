@@ -34,7 +34,7 @@ export function requireImageModel(
   profile: ImageToolProfile | undefined,
   capability: ModelCapability,
 ):
-  | { ok: true; model: string }
+  | { ok: true; model: string; profile: ImageToolProfile }
   | { ok: false; error: string } {
   if (profile === undefined) {
     return { ok: false, error: CAPABILITY_ERROR[capability] }
@@ -43,7 +43,7 @@ export function requireImageModel(
   if (model === null || model === '') {
     return { ok: false, error: CAPABILITY_ERROR[capability] }
   }
-  return { ok: true, model }
+  return { ok: true, model, profile }
 }
 
 export async function writeGeneratedImage(input: {

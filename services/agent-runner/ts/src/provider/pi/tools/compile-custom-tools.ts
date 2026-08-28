@@ -30,10 +30,10 @@ async function executePiTool(
     cwd: context.cwd,
     session: context.session,
     signal: signal ?? context.signal,
-    profile: context.profile,
-    streamImages: context.streamImages,
-    emitImage: context.emitImage,
-    emitProgress: context.emitProgress,
+    ...(context.profile === undefined ? {} : { profile: context.profile }),
+    ...(context.streamImages === undefined ? {} : { streamImages: context.streamImages }),
+    ...(context.emitImage === undefined ? {} : { emitImage: context.emitImage }),
+    ...(context.emitProgress === undefined ? {} : { emitProgress: context.emitProgress }),
   })
   return {
     content: [{ type: 'text' as const, text: result.text }],

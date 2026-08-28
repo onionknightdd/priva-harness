@@ -3,7 +3,7 @@ import type {
   ModelCapabilityCatalog,
 } from '../resource/model-profile.js'
 
-export type ImageToolProfile = {
+export interface ImageToolProfile {
   readonly baseUrl: string
   readonly authToken: string
   readonly imageUnderstandingModel: string | null
@@ -12,7 +12,7 @@ export type ImageToolProfile = {
   readonly modelCapabilities: ModelCapabilityCatalog
 }
 
-export type ToolImageDelta = {
+export interface ToolImageDelta {
   readonly mime: string
   readonly b64: string
   readonly final: boolean

@@ -223,7 +223,7 @@ export class ClaudeRuntime implements AgentRuntime {
   }
 }
 
-export type ClaudeToolEmitters = {
+export interface ClaudeToolEmitters {
   readonly emitImage?: (image: ToolImageDelta) => void
   readonly emitProgress?: (chunk: string) => void
 }
@@ -272,8 +272,8 @@ export function resolveClaudeQueryOptions(
     signal: abortController?.signal ?? new AbortController().signal,
     profile: imageToolsFromSpec(spec),
     streamImages: spec.streamImages === true,
-    emitImage: emitters.emitImage,
-    emitProgress: emitters.emitProgress,
+    ...(emitters.emitImage === undefined ? {} : { emitImage: emitters.emitImage }),
+    ...(emitters.emitProgress === undefined ? {} : { emitProgress: emitters.emitProgress }),
   })
   if (compiled.mcpServers !== undefined) {
     options.mcpServers = compiled.mcpServers

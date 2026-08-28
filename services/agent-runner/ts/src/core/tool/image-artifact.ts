@@ -16,12 +16,12 @@ export function encodeBase32(bytes: Uint8Array): string {
     value = (value << 8) | byte
     bits += 8
     while (bits >= 5) {
-      output += BASE32_ALPHABET[(value >>> (bits - 5)) & 31]
+      output += BASE32_ALPHABET.charAt((value >>> (bits - 5)) & 31)
       bits -= 5
     }
   }
   if (bits > 0) {
-    output += BASE32_ALPHABET[(value << (5 - bits)) & 31]
+    output += BASE32_ALPHABET.charAt((value << (5 - bits)) & 31)
   }
   return output
 }

@@ -38,19 +38,16 @@ export const imageReadTool = defineTool({
     if (!resolved.ok) {
       return { ok: false, text: resolved.error }
     }
-    if (context.profile === undefined) {
-      return { ok: false, text: resolved.error }
-    }
     try {
       const image = await loadWorkspaceImage(context.cwd, imagePath)
       const text = await new CompatibleImageApi().read(
-        context.profile,
+        resolved.profile,
         resolved.model,
         {
           prompt,
           image,
-          onDelta: context.emitProgress,
           signal: context.signal,
+          ...(context.emitProgress === undefined ? {} : { onDelta: context.emitProgress }),
         },
       )
       return { ok: true, text }

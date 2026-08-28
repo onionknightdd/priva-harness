@@ -45,9 +45,6 @@ export const imageEditTool = defineTool({
     if (!resolved.ok) {
       return { ok: false, text: resolved.error }
     }
-    if (context.profile === undefined) {
-      return { ok: false, text: resolved.error }
-    }
     const size = stringToolArg(input, 'size').trim()
     try {
       const images = []
@@ -55,15 +52,15 @@ export const imageEditTool = defineTool({
         images.push(await loadWorkspaceImage(context.cwd, imagePath))
       }
       const edited = await new CompatibleImageApi().edit(
-        context.profile,
+        resolved.profile,
         resolved.model,
         {
           prompt,
           images,
-          ...(size === '' ? {} : { size }),
           stream: context.streamImages === true,
-          onImage: context.emitImage,
           signal: context.signal,
+          ...(size === '' ? {} : { size }),
+          ...(context.emitImage === undefined ? {} : { onImage: context.emitImage }),
         },
       )
       const filePath = await writeGeneratedImage({

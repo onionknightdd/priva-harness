@@ -55,9 +55,9 @@ describe('image tools', () => {
   })
 
   it('writes a generated image under .images and returns the path', async () => {
-    const fetchImpl = vi.fn(async () => Response.json({ data: [{ b64_json: pngB64 }] }))
+    const fetchImpl = vi.fn(() => Promise.resolve(Response.json({ data: [{ b64_json: pngB64 }] })))
     const originalFetch = globalThis.fetch
-    globalThis.fetch = fetchImpl as typeof fetch
+    globalThis.fetch = fetchImpl
     try {
       const toolContext = await context({
         profile: profile({
@@ -77,11 +77,11 @@ describe('image tools', () => {
   })
 
   it('reads a workspace image through chat completions', async () => {
-    const fetchImpl = vi.fn(async () => Response.json({
+    const fetchImpl = vi.fn(() => Promise.resolve(Response.json({
       choices: [{ message: { content: 'a red square' } }],
-    }))
+    })))
     const originalFetch = globalThis.fetch
-    globalThis.fetch = fetchImpl as typeof fetch
+    globalThis.fetch = fetchImpl
     try {
       const toolContext = await context({
         profile: profile({ imageUnderstandingModel: 'vision-a' }),
@@ -96,12 +96,12 @@ describe('image tools', () => {
   })
 
   it('edits multiple workspace images', async () => {
-    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+    const fetchImpl = vi.fn((_url: string, init?: RequestInit) => {
       const body = init?.body
       if (body instanceof FormData) {
         expect(body.getAll('image[]')).toHaveLength(2)
       }
-      return Response.json({ data: [{ b64_json: pngB64 }] })
+      return Promise.resolve(Response.json({ data: [{ b64_json: pngB64 }] }))
     })
     const originalFetch = globalThis.fetch
     globalThis.fetch = fetchImpl as typeof fetch
