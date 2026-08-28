@@ -51,7 +51,7 @@ describe('resolveClaudeQueryOptions', () => {
     )
     expect(options.env?.['ANTHROPIC_API_KEY']).toBe('secret')
     expect(options.env?.['ANTHROPIC_AUTH_TOKEN']).toBe('secret')
-    expect(options.env?.['ANTHROPIC_MODEL']).toBeUndefined()
+    expect(options.env?.['ANTHROPIC_MODEL']).toBe('deepseek-v4-flash')
     expect(options.env?.['CLAUDE_CODE_HARBOR_KITE']).toBe('1')
     expect(options.settings).toEqual({
       crossSessionInbound: 'accept',
@@ -74,6 +74,7 @@ describe('resolveClaudeQueryOptions', () => {
     expect(resume.forkSession).toBeUndefined()
     expect(resume.env?.['ANTHROPIC_BASE_URL']).toBeUndefined()
     expect(resume.env?.['ANTHROPIC_API_KEY']).toBeUndefined()
+    expect(resume.env?.['ANTHROPIC_MODEL']).toBe('deepseek-v4-flash')
     expect(resume.env?.['CLAUDE_CONFIG_DIR']).toBe('/cfg')
 
     const forked = resolveClaudeQueryOptions(

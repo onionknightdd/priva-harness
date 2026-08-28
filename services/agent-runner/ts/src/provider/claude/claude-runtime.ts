@@ -9,6 +9,11 @@ import type {
   TurnContext,
 } from '../../core/contract/agent-provider.js'
 import type { AgentEvent } from '../../core/event/agent-event.js'
+import {
+  mergeProviderProcessEnv,
+  profileEnvKeys,
+  resolveProviderRunEnv,
+} from '../../core/resource/provider-run-env.js'
 import type { UserTurn } from '../../core/run/user-turn.js'
 import { AsyncQueue } from '../../core/stream/async-queue.js'
 import { PushableStream } from '../../core/stream/pushable-stream.js'
@@ -261,7 +266,7 @@ export function resolveClaudeQueryOptions(
         CLAUDE_DISABLED_SKILLS.map((name) => [name, 'off' as const]),
       ),
     },
-    env: resolveClaudeProcessEnv(spec, globalConfigDir),
+    env: resolveClaudeQueryEnv(spec, globalConfigDir),
     ...(abortController === undefined ? {} : { abortController }),
   }
 
@@ -304,40 +309,19 @@ export function resolveClaudeQueryOptions(
   return options
 }
 
-function resolveClaudeProcessEnv(
+export function resolveClaudeQueryEnv(
   spec: ProviderRunSpec,
   globalConfigDir: string,
 ): Record<string, string> {
-  const env: Record<string, string> = {}
-  for (const [key, value] of Object.entries(process.env)) {
-    if (value === undefined || OMITTED_INHERITED_ENV.has(key)) continue
-    env[key] = value
-  }
-  assignEnv(env, 'CLAUDE_CONFIG_DIR', globalConfigDir)
-  assignEnv(env, 'ANTHROPIC_BASE_URL', spec.baseUrl)
-  assignEnv(env, 'ANTHROPIC_API_KEY', spec.authToken)
-  assignEnv(env, 'ANTHROPIC_AUTH_TOKEN', spec.authToken)
-  assignEnv(env, 'CLAUDE_CODE_HARBOR_KITE', '1')
-  return env
+  return mergeProviderProcessEnv(
+    resolveProviderRunEnv(spec),
+    new Set([...profileEnvKeys('claude'), 'CLAUDE_CONFIG_DIR']),
+    {
+      CLAUDE_CONFIG_DIR: globalConfigDir,
+      CLAUDE_CODE_HARBOR_KITE: '1',
+    },
+  )
 }
-
-function assignEnv(
-  env: Record<string, string>,
-  key: string,
-  value: string,
-): void {
-  const trimmed = value.trim()
-  if (trimmed === '') return
-  env[key] = trimmed
-}
-
-const OMITTED_INHERITED_ENV = new Set([
-  'ANTHROPIC_API_KEY',
-  'ANTHROPIC_AUTH_TOKEN',
-  'ANTHROPIC_BASE_URL',
-  'ANTHROPIC_MODEL',
-  'CLAUDE_CONFIG_DIR',
-])
 
 function initialSessionId(target: SessionTarget): string {
   if (target.kind === 'resume') return target.session.id

@@ -12,7 +12,7 @@ import {
 import type { ProviderRunSpec, SessionTarget } from '../../core/contract/agent-provider.js'
 import type { ToolDefinition, ToolImageDelta } from '../../core/tool/define-tool.js'
 import { imageToolsFromSpec } from '../../core/tool/image-tool-shared.js'
-import { buildPiModelsConfig, piSessionNeedsModelSwitch } from './pi-models-config.js'
+import { piSessionNeedsModelSwitch, resolvePiSessionOptions } from './pi-models-config.js'
 import { piSessionBucketDir } from './pi-paths.js'
 import { createPiSessionManager } from './pi-session-open.js'
 import type { PiSessionFactory } from './pi-provider.js'
@@ -27,17 +27,15 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
   ) {}
 
   async open(spec: ProviderRunSpec, target: SessionTarget): Promise<PiAgentSession> {
-    const providerId = spec.profileId ?? 'custom'
+    const options = resolvePiSessionOptions(spec)
     const runDir = join(tmpdir(), 'pi-model-runtime', randomUUID())
     await mkdir(runDir, { recursive: true, mode: 0o700 })
     const authPath = join(runDir, 'auth.json')
     const modelsPath = join(runDir, 'models.json')
     await writeFile(authPath, '{}\n', { mode: 0o600 })
-    // Overlay the runner model profile as a native Pi custom provider for this
-    // turn only. agentDir keeps Pi's own files; credentials stay in bambuddy.settings.json.
     await writeFile(
       modelsPath,
-      `${JSON.stringify(buildPiModelsConfig(spec.baseUrl, spec.model, providerId), null, 2)}\n`,
+      `${JSON.stringify(options.modelsConfig, null, 2)}\n`,
       { mode: 0o600 },
     )
 
@@ -49,8 +47,7 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
 
     try {
       const modelRuntime = await ModelRuntime.create({ authPath, modelsPath })
-      await modelRuntime.setRuntimeApiKey(providerId, spec.authToken)
-      const model = modelRuntime.getModel(providerId, spec.model)
+      const model = modelRuntime.getModel(options.providerId, options.modelId)
       if (model === undefined) {
         throw new Error(`Unknown model ${spec.model}`)
       }
@@ -80,19 +77,19 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
 
       if (
         target.kind === 'resume'
-        && piSessionNeedsModelSwitch(session.model, providerId, spec.model)
+        && piSessionNeedsModelSwitch(session.model, options.providerId, options.modelId)
       ) {
         await session.setModel(model)
       }
 
       return new SdkPiAgentSession(
         session,
-        spec.model,
+        options.modelId,
         runDir,
         imageSink,
         progressSink,
         modelRuntime,
-        providerId,
+        options.providerId,
       )
     } catch (error) {
       await rm(runDir, { recursive: true, force: true })
