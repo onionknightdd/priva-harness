@@ -334,8 +334,9 @@ export const en = {
       clearTagFilters: "Clear filters",
       revealInFiles: "Reveal in Files",
       archive: "Archive",
-      sessionRunning: "Running",
-      sessionWarm: "Warm",
+      sessionRunning: "Streaming data from the server",
+      sessionWarm:
+        "Ready to receive messages and can be found by other sessions",
     },
     user: {
       openMenu: "Open user menu",

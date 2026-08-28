@@ -331,8 +331,8 @@ export const zhCN = {
       clearTagFilters: "清除筛选",
       revealInFiles: "在文件中查看",
       archive: "归档",
-      sessionRunning: "运行中",
-      sessionWarm: "暖池",
+      sessionRunning: "正在从服务器接收数据流",
+      sessionWarm: "已就绪，可接收消息，也可被其他会话找到",
     },
     user: {
       openMenu: "打开用户菜单",
