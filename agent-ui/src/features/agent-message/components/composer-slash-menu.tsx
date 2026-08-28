@@ -12,11 +12,8 @@ import {
   slashKindLabelKey,
   slashOptionId,
   slashOriginLabelKey,
-  SLASH_MENU_PANEL_WIDTH_PX,
 } from "../composer-slash-command"
 
-const COMPOSER_SLASH_MENU_WIDTH_CLASS =
-  "w-80 min-w-80 max-w-[min(20rem,calc(100vw-2rem))] text-sm"
 const COMPOSER_SLASH_LABEL_CLASS =
   "px-2 py-1.5 text-xs font-medium text-muted-foreground"
 const COMPOSER_SLASH_ITEM_CLASS =
@@ -46,9 +43,11 @@ export function ComposerSlashMenu({
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
   const panelRef = React.useRef<HTMLDivElement>(null)
-  const [box, setBox] = React.useState<{ left: number; bottom: number } | null>(
-    null
-  )
+  const [box, setBox] = React.useState<{
+    left: number
+    bottom: number
+    width: number
+  } | null>(null)
   const groups = groupSlashCommands(commands)
   let itemIndex = -1
 
@@ -68,10 +67,14 @@ export function ComposerSlashMenu({
         rect.top,
         rect.left,
         window.innerWidth,
-        window.innerHeight
+        window.innerHeight,
+        rect.width
       )
       setBox((current) =>
-        current && current.left === next.left && current.bottom === next.bottom
+        current &&
+        current.left === next.left &&
+        current.bottom === next.bottom &&
+        current.width === next.width
           ? current
           : next
       )
@@ -137,7 +140,6 @@ export function ComposerSlashMenu({
         <motion.div
           ref={panelRef}
           id={menuId}
-          inert
           aria-hidden="true"
           initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -147,14 +149,17 @@ export function ComposerSlashMenu({
             position: "fixed",
             left: box.left,
             bottom: box.bottom,
-            width: SLASH_MENU_PANEL_WIDTH_PX,
+            width: box.width,
             zIndex: 50,
           }}
-          className={cn(
-            "bg-popover text-popover-foreground max-h-72 origin-bottom overflow-x-hidden overflow-y-auto rounded-md border p-1 shadow-md outline-none",
-            COMPOSER_SLASH_MENU_WIDTH_CLASS
-          )}
-          onMouseDown={(event) => event.preventDefault()}
+          className="bg-popover text-popover-foreground max-h-72 origin-bottom overflow-x-hidden overflow-y-auto overscroll-contain rounded-md border p-1 text-sm shadow-md outline-none"
+          onWheel={(event) => event.stopPropagation()}
+          onMouseDown={(event) => {
+            if (isVerticalScrollbarClick(event)) {
+              return
+            }
+            event.preventDefault()
+          }}
         >
           {groups.length === 0 ? (
             <div className="px-2 py-3 text-sm text-muted-foreground">
@@ -186,8 +191,8 @@ export function ComposerSlashMenu({
                         onClick={() => onSelect(command)}
                       >
                         <span className="flex min-w-0 flex-1 items-center gap-2">
-                          <span className="shrink-0 font-mono">
-                            /{command.name}
+                          <span className="shrink-0">
+                            {command.name}
                           </span>
                           <span className="min-w-0 flex-1 truncate text-muted-foreground">
                             {command.description}
@@ -208,4 +213,14 @@ export function ComposerSlashMenu({
     </AnimatePresence>,
     document.body
   )
+}
+
+function isVerticalScrollbarClick(event: React.MouseEvent<HTMLElement>) {
+  const node = event.currentTarget
+  const gutter = node.offsetWidth - node.clientWidth
+  if (gutter <= 0) {
+    return false
+  }
+
+  return event.clientX >= node.getBoundingClientRect().right - gutter
 }
