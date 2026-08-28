@@ -671,19 +671,17 @@ export function ComposerModelSelector({
         return
       }
 
-      const previousSelection = selection
-      const previousDefaultProfileId = defaultProfileId
-      setLastModelReference(`${next.profileId}:${next.modelId}`)
+      const reference = `${next.profileId}:${next.modelId}`
+      setLastModelReference(reference)
+      onModelReferenceChange?.(reference)
+      setSelection(next)
+      setSaveError(null)
 
       if (sessionModel === "last-used") {
-        setSelection(next)
-        setSaveError(null)
         return
       }
 
       savingRef.current = true
-      setSelection(next)
-      setSaveError(null)
       setSaving(true)
 
       void (async () => {
@@ -705,8 +703,6 @@ export function ComposerModelSelector({
             setDefaultProfileId(result.default_profile_id)
           }
         } catch (error) {
-          setSelection(previousSelection)
-          setDefaultProfileId(previousDefaultProfileId)
           setSaveError(
             getErrorMessage(error, t("agentMessage.saveModelFailed"))
           )
@@ -716,7 +712,15 @@ export function ComposerModelSelector({
         }
       })()
     },
-    [defaultProfileId, profiles, selection, sessionModel, setLastModelReference, t]
+    [
+      defaultProfileId,
+      onModelReferenceChange,
+      profiles,
+      selection,
+      sessionModel,
+      setLastModelReference,
+      t,
+    ]
   )
 
   React.useEffect(() => {

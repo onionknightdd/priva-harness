@@ -6,7 +6,14 @@ export const WARM_POOL_LIMIT = 5
 export const WARM_IDLE_MS = 10 * 60 * 1000
 
 export function specFingerprint(spec: ProviderRunSpec): string {
-  return `${spec.provider}|${spec.cwd}|${spec.model}|${spec.profileId ?? ''}|${spec.baseUrl}`
+  return [
+    spec.provider,
+    spec.cwd,
+    spec.model,
+    spec.profileId ?? '',
+    spec.baseUrl,
+    spec.authToken,
+  ].join('|')
 }
 
 export interface IdleWatchable {

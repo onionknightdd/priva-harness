@@ -1,3 +1,14 @@
+export function piSessionNeedsModelSwitch(
+  current: { readonly provider: string; readonly id: string } | undefined,
+  nextProvider: string,
+  nextModelId: string,
+): boolean {
+  if (current === undefined) {
+    return true
+  }
+  return current.provider !== nextProvider || current.id !== nextModelId
+}
+
 export function buildPiModelsConfig(baseUrl: string, modelId: string, providerId: string) {
   return {
     providers: {

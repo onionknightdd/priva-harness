@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildPiModelsConfig } from '../../../../src/provider/pi/pi-models-config.js'
+import {
+  buildPiModelsConfig,
+  piSessionNeedsModelSwitch,
+} from '../../../../src/provider/pi/pi-models-config.js'
 
 describe('buildPiModelsConfig', () => {
   it('maps a runner model profile into a native Pi custom provider', () => {
@@ -31,5 +34,27 @@ describe('buildPiModelsConfig', () => {
         },
       },
     })
+  })
+})
+
+describe('piSessionNeedsModelSwitch', () => {
+  it('switches when a resumed session still has the previous profile', () => {
+    expect(
+      piSessionNeedsModelSwitch(
+        { provider: 'model-old', id: 'shared-model' },
+        'model-new',
+        'shared-model',
+      ),
+    ).toBe(true)
+  })
+
+  it('keeps the current model when the selected profile already matches', () => {
+    expect(
+      piSessionNeedsModelSwitch(
+        { provider: 'model-new', id: 'shared-model' },
+        'model-new',
+        'shared-model',
+      ),
+    ).toBe(false)
   })
 })

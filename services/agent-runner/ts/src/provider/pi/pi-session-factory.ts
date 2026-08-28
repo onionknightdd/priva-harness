@@ -12,7 +12,7 @@ import {
 import type { ProviderRunSpec, SessionTarget } from '../../core/contract/agent-provider.js'
 import type { ToolDefinition, ToolImageDelta } from '../../core/tool/define-tool.js'
 import { imageToolsFromSpec } from '../../core/tool/image-tool-shared.js'
-import { buildPiModelsConfig } from './pi-models-config.js'
+import { buildPiModelsConfig, piSessionNeedsModelSwitch } from './pi-models-config.js'
 import { piSessionBucketDir } from './pi-paths.js'
 import { createPiSessionManager } from './pi-session-open.js'
 import type { PiSessionFactory } from './pi-provider.js'
@@ -77,6 +77,13 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
               }),
             }),
       })
+
+      if (
+        target.kind === 'resume'
+        && piSessionNeedsModelSwitch(session.model, providerId, spec.model)
+      ) {
+        await session.setModel(model)
+      }
 
       return new SdkPiAgentSession(session, spec.model, runDir, imageSink, progressSink)
     } catch (error) {

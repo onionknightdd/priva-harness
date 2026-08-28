@@ -107,6 +107,21 @@ describe('WarmRuntimePool', () => {
     expect(pool.size).toBe(0)
   })
 
+  it('invalidates an idle lease when the profile or auth token changes', async () => {
+    const pool = new WarmRuntimePool({ limit: 2 })
+    const runtime = fakeRuntime('s1')
+    await pool.acquire({ provider: 'claude', id: 's1' }, spec, () => Promise.resolve(runtime))
+    await pool.recycle(runtime, spec, runtime.session)
+    const replacement = fakeRuntime('s1')
+    const acquired = await pool.acquire(
+      { provider: 'claude', id: 's1' },
+      { ...spec, profileId: 'p2', authToken: 'other-secret' },
+      () => Promise.resolve(replacement),
+    )
+    expect(runtime.released).toEqual(['warm', 'dispose'])
+    expect(acquired).toBe(replacement)
+  })
+
   it('invalidates an idle lease when cwd or model changes', async () => {
     const pool = new WarmRuntimePool({ limit: 2 })
     const runtime = fakeRuntime('s1')
