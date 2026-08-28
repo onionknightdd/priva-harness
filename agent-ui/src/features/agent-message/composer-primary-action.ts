@@ -2,9 +2,10 @@ export type ComposerPrimaryAction = "send" | "stop"
 
 export function composerPrimaryAction(
   draft: string,
-  isStreaming: boolean
+  isStreaming: boolean,
+  hasSlashCommand = false
 ): ComposerPrimaryAction {
-  if (isStreaming && draft.trim() === "") {
+  if (isStreaming && draft.trim() === "" && !hasSlashCommand) {
     return "stop"
   }
   return "send"

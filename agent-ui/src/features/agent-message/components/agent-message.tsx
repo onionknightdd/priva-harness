@@ -6,6 +6,7 @@ import {
 import { useTranslation } from "react-i18next"
 
 import { useChatSession } from "@/features/chat-session"
+import type { SlashCommand } from "@/lib/api/slash-commands"
 import { cn } from "@/lib/utils"
 
 import type { AgentThreadMessage } from "../agent-message-data"
@@ -36,7 +37,9 @@ export function AgentMessage({
   canSubmit,
   isStreaming,
   modelReady,
+  slashCommand,
   onDraftChange,
+  onSlashCommandChange,
   onModelReferenceChange,
   onEffortChange,
   onSubmit,
@@ -47,7 +50,9 @@ export function AgentMessage({
   canSubmit: boolean
   isStreaming: boolean
   modelReady: boolean
+  slashCommand: SlashCommand | null
   onDraftChange: (draft: string) => void
+  onSlashCommandChange: (command: SlashCommand | null) => void
   onModelReferenceChange: (model: string | null) => void
   onEffortChange: (effort: ComposerEffort) => void
   onSubmit: () => void
@@ -126,7 +131,9 @@ export function AgentMessage({
           canSubmit={canSubmit}
           isStreaming={isStreaming}
           modelReady={modelReady}
+          slashCommand={slashCommand}
           onDraftChange={onDraftChange}
+          onSlashCommandChange={onSlashCommandChange}
           onModelReferenceChange={onModelReferenceChange}
           onEffortChange={onEffortChange}
           onSubmit={onSubmit}

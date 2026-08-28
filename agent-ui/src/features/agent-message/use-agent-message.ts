@@ -5,11 +5,13 @@ import { useAgentPreferences } from "@/features/settings/agent-preferences-conte
 import type { QueueBehavior } from "@/features/settings/agent-preferences"
 import { useChatSession } from "@/features/chat-session"
 import { useHarness } from "@/features/sidebar/header/harness-context"
+import type { SlashCommand } from "@/lib/api/slash-commands"
 
 import {
   createAgentThreadMessage,
   type AgentThreadMessage,
 } from "./agent-message-data"
+import { composeSlashMessage } from "./composer-slash-command"
 import {
   abortAgentSession,
   attachAgentSession,
@@ -53,6 +55,9 @@ export function useAgentMessage() {
     refresh,
   } = useChatSession()
   const [draft, setDraft] = React.useState("")
+  const [slashCommand, setSlashCommand] = React.useState<SlashCommand | null>(
+    null
+  )
   const [modelReference, setModelReferenceState] = React.useState<string | null>(
     null
   )
@@ -90,6 +95,7 @@ export function useAgentMessage() {
     previousHarnessIdRef.current = runHarnessId
     bumpSubmitGeneration()
     setDraft("")
+    setSlashCommand(null)
   }, [bumpSubmitGeneration, runHarnessId])
 
   React.useEffect(() => {
@@ -313,7 +319,11 @@ export function useAgentMessage() {
   )
 
   const submit = React.useCallback(() => {
-    const content = draft.trim()
+    const content = (
+      slashCommand
+        ? composeSlashMessage(slashCommand.name, draft)
+        : draft
+    ).trim()
     const cwd = runCwd.trim()
     const sendQueueBehavior = queueBehavior
 
@@ -335,6 +345,7 @@ export function useAgentMessage() {
 
     setLastModelReference(selectedModel)
     setDraft("")
+    setSlashCommand(null)
     setMessages((currentMessages) => {
       const settlePrevious =
         sendQueueBehavior === "interrupt" && previousStream
@@ -408,6 +419,7 @@ export function useAgentMessage() {
     runHarnessId,
     runSessionId,
     setLastModelReference,
+    slashCommand,
     startStream,
     streamHandlers,
   ])
@@ -531,10 +543,15 @@ export function useAgentMessage() {
     modelReference,
     isStreaming,
     canSubmit: Boolean(
-      draft.trim() && modelReference && runHarnessId && runCwd.trim()
+      (draft.trim() || slashCommand) &&
+        modelReference &&
+        runHarnessId &&
+        runCwd.trim()
     ),
     modelReady: Boolean(modelReference && runHarnessId),
+    slashCommand,
     setDraft,
+    setSlashCommand,
     setModelReference,
     setEffort,
     submit,

@@ -13,6 +13,10 @@ describe("composerPrimaryAction", () => {
     assert.equal(composerPrimaryAction("follow up", true), "send")
   })
 
+  it("is send when a slash command is selected, even with an empty draft", () => {
+    assert.equal(composerPrimaryAction("", true, true), "send")
+  })
+
   it("is send when nothing is streaming", () => {
     assert.equal(composerPrimaryAction("", false), "send")
     assert.equal(composerPrimaryAction("hello", false), "send")

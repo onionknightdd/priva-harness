@@ -3,6 +3,7 @@ import { ArrowUpIcon, SquareIcon } from "lucide-react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
+import type { SlashCommand } from "@/lib/api/slash-commands"
 import { SPRING_LAYOUT } from "@/lib/ease"
 import { cn } from "@/lib/utils"
 import { Field, FieldLabel } from "@/components/ui/field"
@@ -18,9 +19,18 @@ import {
   type ComposerAttachment,
 } from "../composer-attachments"
 import { composerPrimaryAction } from "../composer-primary-action"
+import {
+  applySlashSelection,
+  filterSlashCommands,
+  parseSlashTrigger,
+  shouldDeleteSlashChip,
+} from "../composer-slash-command"
+import { useSlashCommandCatalog } from "../use-slash-command-catalog"
 import { ComposerAttachMenu } from "./composer-attach-menu"
 import { ComposerAttachmentChips } from "./composer-attachment-chips"
 import { ComposerModelSelector, COMPOSER_MODEL_TRIGGER_MAX_CLASS, type ComposerEffort } from "./composer-model-selector"
+import { ComposerSlashChip } from "./composer-slash-chip"
+import { ComposerSlashMenu } from "./composer-slash-menu"
 
 export const composerDockTransition = {
   duration: 0.4,
@@ -238,7 +248,9 @@ export function AgentMessageComposer({
   canSubmit,
   isStreaming = false,
   modelReady,
+  slashCommand,
   onDraftChange,
+  onSlashCommandChange,
   onModelReferenceChange,
   onEffortChange,
   onSubmit,
@@ -249,7 +261,9 @@ export function AgentMessageComposer({
   canSubmit: boolean
   isStreaming?: boolean
   modelReady: boolean
+  slashCommand: SlashCommand | null
   onDraftChange: (draft: string) => void
+  onSlashCommandChange: (command: SlashCommand | null) => void
   onModelReferenceChange: (model: string | null) => void
   onEffortChange: (effort: ComposerEffort) => void
   onSubmit: () => void
@@ -266,6 +280,21 @@ export function AgentMessageComposer({
     []
   )
   attachmentsRef.current = attachments
+  const catalog = useSlashCommandCatalog()
+  const [dismissedQuery, setDismissedQuery] = React.useState<string | null>(null)
+  const [highlightedIndex, setHighlightedIndex] = React.useState(0)
+  const slashTrigger =
+    slashCommand === null ? parseSlashTrigger(draft) : null
+  const slashQuery = slashTrigger?.query ?? null
+  const filteredCommands = React.useMemo(
+    () =>
+      slashQuery === null
+        ? []
+        : filterSlashCommands(catalog, slashQuery),
+    [catalog, slashQuery]
+  )
+  const slashMenuOpen =
+    slashTrigger !== null && dismissedQuery !== slashTrigger.query
   const leftWidth = useOffsetWidth(leftRef)
   const rightWidth = useOffsetWidth(rightRef)
   const overflowsLine = useLineOverflow(
@@ -275,16 +304,35 @@ export function AgentMessageComposer({
     rightRef,
     textareaRef
   )
-  const singleLine = attachments.length === 0 && !overflowsLine
+  const singleLine =
+    attachments.length === 0 && !overflowsLine && slashCommand === null
   const promptId = React.useId()
   const transition = shouldReduceMotion ? { duration: 0 } : SPRING_LAYOUT
-  const primaryAction = composerPrimaryAction(draft, isStreaming)
+  const primaryAction = composerPrimaryAction(
+    draft,
+    isStreaming,
+    slashCommand !== null
+  )
   const fieldPadLeft = singleLine
     ? leftWidth || 42
     : COMPOSER_MULTI_PAD
   const fieldPadRight = singleLine
     ? rightWidth || 212
     : COMPOSER_MULTI_PAD
+
+  React.useEffect(() => {
+    setHighlightedIndex(0)
+    if (slashQuery === null) {
+      setDismissedQuery(null)
+    }
+  }, [slashQuery])
+
+  React.useEffect(() => {
+    if (highlightedIndex < filteredCommands.length) {
+      return
+    }
+    setHighlightedIndex(0)
+  }, [filteredCommands.length, highlightedIndex])
 
   React.useEffect(() => {
     return () => {
@@ -308,6 +356,24 @@ export function AgentMessageComposer({
       return current.filter((attachment) => attachment.id !== id)
     })
   }, [])
+
+  const selectSlashCommand = React.useCallback(
+    (command: SlashCommand) => {
+      onSlashCommandChange(command)
+      onDraftChange(applySlashSelection(draft))
+      setDismissedQuery(null)
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus()
+      })
+    },
+    [draft, onDraftChange, onSlashCommandChange]
+  )
+
+  const closeSlashMenu = React.useCallback(() => {
+    if (slashQuery !== null) {
+      setDismissedQuery(slashQuery)
+    }
+  }, [slashQuery])
 
   return (
     <form
@@ -353,6 +419,19 @@ export function AgentMessageComposer({
             attachments={attachments}
             onRemove={removeAttachment}
           />
+          <ComposerSlashMenu
+            open={slashMenuOpen}
+            commands={filteredCommands}
+            highlightedIndex={highlightedIndex}
+            textareaRef={textareaRef}
+            onOpenChange={(open) => {
+              if (!open) {
+                closeSlashMenu()
+              }
+            }}
+            onHighlight={setHighlightedIndex}
+            onSelect={selectSlashCommand}
+          />
           <div
             className="min-w-0"
             style={{
@@ -373,33 +452,104 @@ export function AgentMessageComposer({
               transition={transition}
               className="min-w-0"
             >
-              <InputGroupTextarea
-                ref={textareaRef}
-                id={promptId}
-                rows={1}
-                wrap={singleLine ? "off" : "soft"}
-                value={draft}
-                placeholder={t("agentMessage.promptPlaceholder")}
-                data-agent-composer="prompt"
+              <div
                 className={cn(
-                  "w-full min-w-0 px-0 py-0 text-base! leading-8",
-                  singleLine
-                    ? "field-sizing-fixed h-8 min-h-8 max-h-8 overflow-hidden whitespace-nowrap"
-                    : cn(
-                        "max-h-60 field-sizing-content",
-                        compact ? "min-h-8" : "min-h-12"
-                      )
+                  "flex min-w-0",
+                  slashCommand ? "flex-wrap items-center gap-1.5" : null
                 )}
-                onChange={(event) => onDraftChange(event.currentTarget.value)}
-                onKeyDown={(event) => {
-                  if (event.key !== "Enter" || event.shiftKey) {
-                    return
+              >
+                <AnimatePresence initial={false}>
+                  {slashCommand ? (
+                    <ComposerSlashChip
+                      key={slashCommand.name}
+                      name={slashCommand.name}
+                      onRemove={() => onSlashCommandChange(null)}
+                    />
+                  ) : null}
+                </AnimatePresence>
+                <InputGroupTextarea
+                  ref={textareaRef}
+                  id={promptId}
+                  rows={1}
+                  wrap={singleLine ? "off" : "soft"}
+                  value={draft}
+                  placeholder={
+                    slashCommand?.argumentHint ??
+                    t("agentMessage.promptPlaceholder")
                   }
+                  data-agent-composer="prompt"
+                  className={cn(
+                    "min-w-0 px-0 py-0 text-base! leading-8",
+                    slashCommand ? "flex-1" : "w-full",
+                    singleLine
+                      ? "field-sizing-fixed h-8 min-h-8 max-h-8 overflow-hidden whitespace-nowrap"
+                      : cn(
+                          "max-h-60 field-sizing-content",
+                          compact ? "min-h-8" : "min-h-12"
+                        )
+                  )}
+                  onChange={(event) => onDraftChange(event.currentTarget.value)}
+                  onKeyDown={(event) => {
+                    if (slashMenuOpen) {
+                      if (event.key === "ArrowDown") {
+                        event.preventDefault()
+                        if (filteredCommands.length === 0) {
+                          return
+                        }
+                        setHighlightedIndex(
+                          (current) => (current + 1) % filteredCommands.length
+                        )
+                        return
+                      }
+                      if (event.key === "ArrowUp") {
+                        event.preventDefault()
+                        if (filteredCommands.length === 0) {
+                          return
+                        }
+                        setHighlightedIndex(
+                          (current) =>
+                            (current - 1 + filteredCommands.length) %
+                            filteredCommands.length
+                        )
+                        return
+                      }
+                      if (event.key === "Escape") {
+                        event.preventDefault()
+                        closeSlashMenu()
+                        return
+                      }
+                      if (event.key === "Enter" && !event.shiftKey) {
+                        const selected = filteredCommands[highlightedIndex]
+                        if (selected) {
+                          event.preventDefault()
+                          selectSlashCommand(selected)
+                          return
+                        }
+                      }
+                    }
 
-                  event.preventDefault()
-                  event.currentTarget.form?.requestSubmit()
-                }}
-              />
+                    if (
+                      event.key === "Backspace" &&
+                      slashCommand !== null &&
+                      shouldDeleteSlashChip(
+                        event.currentTarget.selectionStart,
+                        event.currentTarget.selectionEnd
+                      )
+                    ) {
+                      event.preventDefault()
+                      onSlashCommandChange(null)
+                      return
+                    }
+
+                    if (event.key !== "Enter" || event.shiftKey) {
+                      return
+                    }
+
+                    event.preventDefault()
+                    event.currentTarget.form?.requestSubmit()
+                  }}
+                />
+              </div>
             </motion.div>
           </div>
           <div

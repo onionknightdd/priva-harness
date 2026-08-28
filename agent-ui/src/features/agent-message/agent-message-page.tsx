@@ -11,7 +11,9 @@ export function AgentMessagePage() {
       canSubmit={agentMessage.canSubmit}
       isStreaming={agentMessage.isStreaming}
       modelReady={agentMessage.modelReady}
+      slashCommand={agentMessage.slashCommand}
       onDraftChange={agentMessage.setDraft}
+      onSlashCommandChange={agentMessage.setSlashCommand}
       onModelReferenceChange={agentMessage.setModelReference}
       onEffortChange={agentMessage.setEffort}
       onSubmit={agentMessage.submit}
