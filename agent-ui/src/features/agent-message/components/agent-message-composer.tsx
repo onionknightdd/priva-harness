@@ -24,6 +24,7 @@ import {
   filterSlashCommands,
   parseSlashTrigger,
   shouldDeleteSlashChip,
+  slashOptionId,
 } from "../composer-slash-command"
 import { useSlashCommandCatalog } from "../use-slash-command-catalog"
 import { ComposerAttachMenu } from "./composer-attach-menu"
@@ -307,6 +308,7 @@ export function AgentMessageComposer({
   const singleLine =
     attachments.length === 0 && !overflowsLine && slashCommand === null
   const promptId = React.useId()
+  const slashMenuId = React.useId()
   const transition = shouldReduceMotion ? { duration: 0 } : SPRING_LAYOUT
   const primaryAction = composerPrimaryAction(
     draft,
@@ -421,8 +423,10 @@ export function AgentMessageComposer({
           />
           <ComposerSlashMenu
             open={slashMenuOpen}
+            menuId={slashMenuId}
             commands={filteredCommands}
             highlightedIndex={highlightedIndex}
+            anchorRef={shellRef}
             textareaRef={textareaRef}
             onOpenChange={(open) => {
               if (!open) {
@@ -478,6 +482,15 @@ export function AgentMessageComposer({
                     t("agentMessage.promptPlaceholder")
                   }
                   data-agent-composer="prompt"
+                  role={slashMenuOpen ? "combobox" : undefined}
+                  aria-autocomplete={slashMenuOpen ? "list" : undefined}
+                  aria-expanded={slashMenuOpen || undefined}
+                  aria-controls={slashMenuOpen ? slashMenuId : undefined}
+                  aria-activedescendant={
+                    slashMenuOpen && filteredCommands[highlightedIndex]
+                      ? slashOptionId(slashMenuId, highlightedIndex)
+                      : undefined
+                  }
                   className={cn(
                     "min-w-0 px-0 py-0 text-base! leading-8",
                     slashCommand ? "flex-1" : "w-full",

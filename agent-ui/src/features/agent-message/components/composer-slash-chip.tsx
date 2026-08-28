@@ -32,6 +32,7 @@ export function ComposerSlashChip({
         type="button"
         className="rounded-sm p-0.5 text-current/70 transition-colors hover:bg-sky-500/20 hover:text-current"
         aria-label={t("agentMessage.removeSlashCommand", { name })}
+        onMouseDown={(event) => event.preventDefault()}
         onClick={onRemove}
       >
         <XIcon className="size-3" />

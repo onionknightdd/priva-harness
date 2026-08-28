@@ -8,6 +8,7 @@ import {
   filterSlashCommands,
   groupSlashCommands,
   parseSlashTrigger,
+  positionSlashMenuPanel,
   shouldDeleteSlashChip,
 } from "../../../src/features/agent-message/composer-slash-command.ts"
 
@@ -58,5 +59,16 @@ describe("composer slash command helpers", () => {
     assert.equal(shouldDeleteSlashChip(0, 0), true)
     assert.equal(shouldDeleteSlashChip(1, 1), false)
     assert.equal(shouldDeleteSlashChip(0, 3), false)
+  })
+
+  it("keeps the slash menu inside the viewport above the composer", () => {
+    assert.deepEqual(positionSlashMenuPanel(700, 48, 1280, 800, 320), {
+      left: 48,
+      bottom: 108,
+    })
+    assert.deepEqual(positionSlashMenuPanel(40, 1200, 1280, 800, 320), {
+      left: 952,
+      bottom: 768,
+    })
   })
 })

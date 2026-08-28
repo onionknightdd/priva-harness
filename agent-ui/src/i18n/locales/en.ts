@@ -45,6 +45,7 @@ export const en = {
     slashOriginUser: "user",
     slashOriginProject: "project",
     slashEmpty: "No matching slash commands",
+    slashMenuLabel: "Slash commands",
     removeSlashCommand: "Remove /{{name}}",
     selectModel: "Select model",
     profileMenuLabel: "Model Profiles",

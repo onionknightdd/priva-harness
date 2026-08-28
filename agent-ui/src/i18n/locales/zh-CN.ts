@@ -45,6 +45,7 @@ export const zhCN = {
     slashOriginUser: "用户",
     slashOriginProject: "项目",
     slashEmpty: "没有匹配的斜杠命令",
+    slashMenuLabel: "斜杠命令",
     removeSlashCommand: "移除 /{{name}}",
     selectModel: "选择模型",
     profileMenuLabel: "模型配置",

@@ -70,3 +70,28 @@ export function shouldDeleteSlashChip(
 ): boolean {
   return selectionStart === 0 && selectionEnd === 0
 }
+
+export const SLASH_MENU_PANEL_WIDTH_PX = 320
+const SLASH_MENU_VIEWPORT_INSET_PX = 8
+
+export function slashOptionId(menuId: string, index: number) {
+  return `${menuId}-option-${index}`
+}
+
+export function positionSlashMenuPanel(
+  anchorTop: number,
+  anchorLeft: number,
+  viewportWidth: number,
+  viewportHeight: number,
+  panelWidth = SLASH_MENU_PANEL_WIDTH_PX,
+  gap = SLASH_MENU_VIEWPORT_INSET_PX
+): { left: number; bottom: number } {
+  const maxLeft = viewportWidth - panelWidth - SLASH_MENU_VIEWPORT_INSET_PX
+  return {
+    left: Math.min(
+      Math.max(SLASH_MENU_VIEWPORT_INSET_PX, anchorLeft),
+      Math.max(SLASH_MENU_VIEWPORT_INSET_PX, maxLeft)
+    ),
+    bottom: Math.max(gap, viewportHeight - anchorTop + gap),
+  }
+}
