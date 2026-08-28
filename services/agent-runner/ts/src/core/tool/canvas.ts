@@ -68,9 +68,9 @@ export const canvasTool = defineTool({
 export function canvasFileName(raw: string): string {
   const base = raw.replaceAll('\\', '/').split('/').pop() ?? ''
   const stripped = base
+    .replace(/\.html?$/i, '')
     .replace(/[^A-Za-z0-9._-]+/g, '-')
     .replace(/^-+|-+$/g, '')
-    .replace(/\.html?$/i, '')
     .slice(0, 64)
   if (stripped === '') {
     return DEFAULT_CANVAS_FILE_NAME
