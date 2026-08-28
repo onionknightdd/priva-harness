@@ -40,6 +40,7 @@ export const composerDockTransition = {
 const COMPOSER_FOOTER_HEIGHT = 40
 const COMPOSER_MULTI_PAD = 14
 const COMPOSER_SINGLE_PAD_Y = 8
+const COMPOSER_CHIP_GAP = 8
 const COMPACT_LINE_SLACK_PX = 8
 
 let measureContext: CanvasRenderingContext2D | null = null
@@ -61,13 +62,17 @@ function measureTextWidth(text: string, source: HTMLElement) {
   return measureContext.measureText(text).width
 }
 
-function useOffsetWidth(ref: React.RefObject<HTMLElement | null>) {
+function useOffsetWidth(
+  ref: React.RefObject<HTMLElement | null>,
+  enabled = true
+) {
   const [width, setWidth] = React.useState(0)
 
   React.useLayoutEffect(() => {
     const element = ref.current
 
-    if (!element) {
+    if (!enabled || !element) {
+      setWidth(0)
       return
     }
 
@@ -79,7 +84,7 @@ function useOffsetWidth(ref: React.RefObject<HTMLElement | null>) {
     const observer = new ResizeObserver(update)
     observer.observe(element)
     return () => observer.disconnect()
-  }, [ref])
+  }, [enabled, ref])
 
   return width
 }
@@ -89,7 +94,8 @@ function useLineOverflow(
   shellRef: React.RefObject<HTMLDivElement | null>,
   leftRef: React.RefObject<HTMLDivElement | null>,
   rightRef: React.RefObject<HTMLDivElement | null>,
-  textareaRef: React.RefObject<HTMLTextAreaElement | null>
+  textareaRef: React.RefObject<HTMLTextAreaElement | null>,
+  leadingWidth = 0
 ) {
   const [overflows, setOverflows] = React.useState(false)
 
@@ -113,7 +119,8 @@ function useLineOverflow(
       return
     }
 
-    const available = shell.clientWidth - left.offsetWidth - right.offsetWidth
+    const available =
+      shell.clientWidth - left.offsetWidth - right.offsetWidth - leadingWidth
 
     if (available <= 0) {
       return
@@ -128,7 +135,7 @@ function useLineOverflow(
 
       return textWidth > available
     })
-  }, [draft, leftRef, rightRef, shellRef, textareaRef])
+  }, [draft, leadingWidth, leftRef, rightRef, shellRef, textareaRef])
 
   React.useLayoutEffect(() => {
     update()
@@ -275,6 +282,7 @@ export function AgentMessageComposer({
   const leftRef = React.useRef<HTMLDivElement>(null)
   const rightRef = React.useRef<HTMLDivElement>(null)
   const textareaRef = React.useRef<HTMLTextAreaElement>(null)
+  const chipRef = React.useRef<HTMLDivElement>(null)
   const attachmentsRef = React.useRef<ComposerAttachment[]>([])
   const [attachments, setAttachments] = React.useState<ComposerAttachment[]>(
     []
@@ -297,15 +305,18 @@ export function AgentMessageComposer({
     slashTrigger !== null && dismissedQuery !== slashTrigger.query
   const leftWidth = useOffsetWidth(leftRef)
   const rightWidth = useOffsetWidth(rightRef)
+  const chipWidth = useOffsetWidth(chipRef, slashCommand !== null)
+  const chipOccupy =
+    slashCommand && chipWidth > 0 ? chipWidth + COMPOSER_CHIP_GAP : 0
   const overflowsLine = useLineOverflow(
     draft,
     shellRef,
     leftRef,
     rightRef,
-    textareaRef
+    textareaRef,
+    chipOccupy
   )
-  const singleLine =
-    attachments.length === 0 && !overflowsLine && slashCommand === null
+  const singleLine = attachments.length === 0 && !overflowsLine
   const promptId = React.useId()
   const slashMenuId = React.useId()
   const transition = shouldReduceMotion ? { duration: 0 } : SPRING_LAYOUT
@@ -455,19 +466,19 @@ export function AgentMessageComposer({
               transition={transition}
               className="min-w-0"
             >
-              <div
-                className={cn(
-                  "flex min-w-0",
-                  slashCommand ? "items-start gap-2" : null
-                )}
-              >
+              <div className="relative min-w-0 w-full">
                 <AnimatePresence initial={false}>
                   {slashCommand ? (
-                    <ComposerSlashChip
-                      key={slashCommand.name}
-                      name={slashCommand.name}
-                      onRemove={() => onSlashCommandChange(null)}
-                    />
+                    <div
+                      ref={chipRef}
+                      className="absolute top-0 left-0 z-10 flex h-8 items-center"
+                    >
+                      <ComposerSlashChip
+                        key={slashCommand.name}
+                        name={slashCommand.name}
+                        onRemove={() => onSlashCommandChange(null)}
+                      />
+                    </div>
                   ) : null}
                 </AnimatePresence>
                 <InputGroupTextarea
@@ -481,15 +492,17 @@ export function AgentMessageComposer({
                     t("agentMessage.promptPlaceholder")
                   }
                   data-agent-composer="prompt"
+                  style={
+                    chipOccupy > 0 ? { paddingLeft: chipOccupy } : undefined
+                  }
                   className={cn(
-                    "min-w-0 px-0 py-0 text-base! leading-8",
-                    slashCommand ? "min-w-[8rem] flex-1" : "w-full",
-                    slashCommand || !singleLine
-                      ? cn(
+                    "w-full min-w-0 px-0 py-0 text-base! leading-8",
+                    singleLine
+                      ? "field-sizing-fixed h-8 min-h-8 max-h-8 overflow-hidden whitespace-nowrap"
+                      : cn(
                           "max-h-60 field-sizing-content",
-                          slashCommand || compact ? "min-h-8" : "min-h-12"
+                          compact ? "min-h-8" : "min-h-12"
                         )
-                      : "field-sizing-fixed h-8 min-h-8 max-h-8 overflow-hidden whitespace-nowrap"
                   )}
                   onChange={(event) => onDraftChange(event.currentTarget.value)}
                   onKeyDown={(event) => {
