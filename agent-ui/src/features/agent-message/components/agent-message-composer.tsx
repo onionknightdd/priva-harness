@@ -7,7 +7,6 @@ import { SPRING_LAYOUT } from "@/lib/ease"
 import { cn } from "@/lib/utils"
 import { Field, FieldLabel } from "@/components/ui/field"
 import {
-  InputGroupAddon,
   InputGroupButton,
   InputGroupTextarea,
 } from "@/components/ui/input-group"
@@ -50,29 +49,6 @@ function measureTextWidth(text: string, source: HTMLElement) {
 
   measureContext.font = getComputedStyle(source).font
   return measureContext.measureText(text).width
-}
-
-function useOffsetWidth(ref: React.RefObject<HTMLElement | null>) {
-  const [width, setWidth] = React.useState(0)
-
-  React.useLayoutEffect(() => {
-    const element = ref.current
-
-    if (!element) {
-      return
-    }
-
-    const update = () => {
-      setWidth(element.offsetWidth)
-    }
-
-    update()
-    const observer = new ResizeObserver(update)
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [ref])
-
-  return width
 }
 
 function useCompactLineOverflow(
@@ -277,8 +253,6 @@ export function AgentMessageComposer({
     []
   )
   attachmentsRef.current = attachments
-  const leftWidth = useOffsetWidth(leftRef)
-  const rightWidth = useOffsetWidth(rightRef)
   const overflowsCompactLine = useCompactLineOverflow(
     draft,
     compact,
@@ -292,12 +266,6 @@ export function AgentMessageComposer({
   const promptId = React.useId()
   const transition = shouldReduceMotion ? { duration: 0 } : SPRING_LAYOUT
   const primaryAction = composerPrimaryAction(draft, isStreaming)
-  const fieldPadLeft = singleLine
-    ? leftWidth || 42
-    : COMPOSER_MULTI_PAD
-  const fieldPadRight = singleLine
-    ? rightWidth || 212
-    : COMPOSER_MULTI_PAD
 
   React.useEffect(() => {
     return () => {
@@ -321,6 +289,20 @@ export function AgentMessageComposer({
       return current.filter((attachment) => attachment.id !== id)
     })
   }, [])
+
+  const renderComposerControls = () => (
+    <ComposerControls
+      action={primaryAction}
+      canSubmit={canSubmit}
+      modelReady={modelReady}
+      sendLabel={t("agentMessage.send")}
+      stopLabel={t("agentMessage.stop")}
+      modelRequired={t("agentMessage.modelRequired")}
+      onStop={onStop}
+      onModelReferenceChange={onModelReferenceChange}
+      onEffortChange={onEffortChange}
+    />
+  )
 
   return (
     <form
@@ -366,89 +348,68 @@ export function AgentMessageComposer({
             attachments={attachments}
             onRemove={removeAttachment}
           />
-          <div
-            className="min-w-0"
-            style={{
-              paddingLeft: fieldPadLeft,
-              paddingRight: fieldPadRight,
+          <motion.div
+            initial={false}
+            animate={{
+              paddingTop: singleLine
+                ? COMPOSER_SINGLE_PAD_Y
+                : COMPOSER_MULTI_PAD,
+              paddingBottom: singleLine
+                ? COMPOSER_SINGLE_PAD_Y
+                : COMPOSER_FOOTER_HEIGHT,
             }}
+            transition={transition}
+            className="flex min-w-0 items-start gap-1.5"
           >
-            <motion.div
-              initial={false}
-              animate={{
-                paddingTop: singleLine
-                  ? COMPOSER_SINGLE_PAD_Y
-                  : COMPOSER_MULTI_PAD,
-                paddingBottom: singleLine
-                  ? COMPOSER_SINGLE_PAD_Y
-                  : COMPOSER_FOOTER_HEIGHT,
-              }}
-              transition={transition}
-              className="min-w-0"
-            >
-              <InputGroupTextarea
-                ref={textareaRef}
-                id={promptId}
-                rows={1}
-                wrap={singleLine ? "off" : "soft"}
-                value={draft}
-                placeholder={t("agentMessage.promptPlaceholder")}
-                data-agent-composer="prompt"
-                className={cn(
-                  "w-full min-w-0 px-0 py-0 text-base!",
-                  singleLine
-                    ? "field-sizing-fixed h-8 min-h-8 max-h-8 overflow-hidden leading-8 whitespace-nowrap"
-                    : cn(
-                        "max-h-60 field-sizing-content",
-                        compact ? "min-h-8" : "min-h-12"
-                      )
-                )}
-                onChange={(event) => onDraftChange(event.currentTarget.value)}
-                onKeyDown={(event) => {
-                  if (event.key !== "Enter" || event.shiftKey) {
-                    return
-                  }
-
-                  event.preventDefault()
-                  event.currentTarget.form?.requestSubmit()
-                }}
-              />
-            </motion.div>
-          </div>
-          <div
-            className={cn(
-              "pointer-events-none absolute z-10 flex items-center",
-              singleLine ? "inset-0" : "inset-x-0 bottom-0 h-10"
-            )}
-          >
-            <div ref={leftRef} className="pointer-events-auto pl-2.5">
-              <InputGroupAddon align="inline-start" className="p-0">
-                <ComposerAttachMenu onFilesSelected={addAttachments} />
-              </InputGroupAddon>
-            </div>
-            <div className="min-w-0 flex-1" />
             <div
-              ref={rightRef}
-              className="pointer-events-auto min-w-0 shrink-0 pr-2.5"
+              ref={leftRef}
+              className="flex h-8 shrink-0 items-center pl-2.5"
             >
-              <InputGroupAddon
-                align="inline-end"
-                className="min-w-0 justify-end gap-1 p-0 has-[>button]:mr-0!"
-              >
-                <ComposerControls
-                  action={primaryAction}
-                  canSubmit={canSubmit}
-                  modelReady={modelReady}
-                  sendLabel={t("agentMessage.send")}
-                  stopLabel={t("agentMessage.stop")}
-                  modelRequired={t("agentMessage.modelRequired")}
-                  onStop={onStop}
-                  onModelReferenceChange={onModelReferenceChange}
-                  onEffortChange={onEffortChange}
-                />
-              </InputGroupAddon>
+              <ComposerAttachMenu onFilesSelected={addAttachments} />
             </div>
-          </div>
+            <InputGroupTextarea
+              ref={textareaRef}
+              id={promptId}
+              rows={1}
+              wrap={singleLine ? "off" : "soft"}
+              value={draft}
+              placeholder={t("agentMessage.promptPlaceholder")}
+              data-agent-composer="prompt"
+              className={cn(
+                "min-w-0 flex-1 px-0 py-0 text-base! leading-8",
+                singleLine
+                  ? "field-sizing-fixed h-8 min-h-8 max-h-8 overflow-hidden whitespace-nowrap"
+                  : cn(
+                      "max-h-60 field-sizing-content pr-3.5",
+                      compact ? "min-h-8" : "min-h-12"
+                    )
+              )}
+              onChange={(event) => onDraftChange(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" || event.shiftKey) {
+                  return
+                }
+
+                event.preventDefault()
+                event.currentTarget.form?.requestSubmit()
+              }}
+            />
+            {singleLine ? (
+              <div
+                ref={rightRef}
+                className="flex h-8 min-w-0 shrink-0 items-center pr-2.5"
+              >
+                {renderComposerControls()}
+              </div>
+            ) : null}
+          </motion.div>
+          {singleLine ? null : (
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex h-10 items-center justify-end pr-2.5">
+              <div ref={rightRef} className="pointer-events-auto min-w-0">
+                {renderComposerControls()}
+              </div>
+            </div>
+          )}
         </div>
       </Field>
     </form>
