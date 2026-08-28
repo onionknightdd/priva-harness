@@ -11,9 +11,9 @@ export const canvasTool = defineTool({
   name: CANVAS_TOOL_NAME,
   description: [
     'Open HTML in the workspace preview.',
-    'Pass html when you are writing the document now. The tool saves it under .canvas and returns the file path.',
-    'Pass path when the HTML already exists in the workspace. The tool does not rewrite that file.',
-    'Pass both to write html to that workspace path.',
+    'Pass html only for the first version of a new document. The tool saves it under .canvas and returns the file path.',
+    'If this document already exists, or the user provided an HTML file path, do not generate a new file and do not pass html again.',
+    'Edit the existing file with the file tools to match the user request, then call canvas with path only so the preview reloads that file.',
     'html may also be a .html file path when you are not sending markup.',
     'Use this for multi-section pages, documents, dashboards, or any HTML that needs a full preview surface.',
     'Inline script and click handlers run in the workspace preview sandbox.',
@@ -27,12 +27,12 @@ export const canvasTool = defineTool({
       html: {
         type: 'string',
         description:
-          'Complete HTML document to write, or an existing .html file path. Raw HTML only, no markdown fences.',
+          'Complete HTML document for a new artifact, or an existing .html file path. Use only when the file does not exist yet. Raw HTML only, no markdown fences.',
       },
       path: {
         type: 'string',
         description:
-          'Existing workspace .html file to open in preview. Relative to the working directory or absolute inside it.',
+          'Existing workspace .html file to reload in preview after you edited it. Relative to the working directory or absolute inside it. Do not pass html with this path.',
       },
       name: {
         type: 'string',

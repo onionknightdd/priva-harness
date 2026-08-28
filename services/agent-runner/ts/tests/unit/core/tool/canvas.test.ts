@@ -136,10 +136,11 @@ describe('canvas tool', () => {
     ])
   })
 
-  it('tells the model it can write html or open an existing path', () => {
+  it('tells the model to edit and reload existing files instead of regenerating', () => {
     expect(canvasTool.description).toContain('workspace preview')
     expect(canvasTool.description).toContain('does not show the HTML')
-    expect(canvasTool.description).toContain('Pass path')
+    expect(canvasTool.description).toContain('do not generate a new file')
+    expect(canvasTool.description).toContain('path only')
     expect(canvasTool.description).toContain('preview sandbox')
     expect(canvasTool.description).toContain('visualize')
   })
