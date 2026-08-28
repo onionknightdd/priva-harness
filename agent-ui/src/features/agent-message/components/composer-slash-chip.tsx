@@ -17,13 +17,12 @@ export function ComposerSlashChip({
 
   return (
     <motion.code
-      layout={!shouldReduceMotion}
       initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.96 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.96 }}
       transition={shouldReduceMotion ? { duration: 0 } : SPRING_LAYOUT}
       className={cn(
-        "inline-flex h-7 max-w-full shrink-0 items-center gap-0.5 rounded-md px-1.5 font-mono text-[13px] leading-none",
+        "inline-flex h-8 max-w-[min(100%,16rem)] shrink-0 items-center gap-1 rounded-md px-2 font-mono text-[13px] leading-8",
         "bg-sky-500/15 text-sky-800 dark:bg-sky-400/15 dark:text-sky-200"
       )}
     >

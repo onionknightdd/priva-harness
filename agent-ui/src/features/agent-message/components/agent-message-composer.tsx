@@ -458,7 +458,7 @@ export function AgentMessageComposer({
               <div
                 className={cn(
                   "flex min-w-0",
-                  slashCommand ? "flex-wrap items-center gap-1.5" : null
+                  slashCommand ? "items-start gap-2" : null
                 )}
               >
                 <AnimatePresence initial={false}>
@@ -483,13 +483,13 @@ export function AgentMessageComposer({
                   data-agent-composer="prompt"
                   className={cn(
                     "min-w-0 px-0 py-0 text-base! leading-8",
-                    slashCommand ? "flex-1" : "w-full",
-                    singleLine
-                      ? "field-sizing-fixed h-8 min-h-8 max-h-8 overflow-hidden whitespace-nowrap"
-                      : cn(
+                    slashCommand ? "min-w-[8rem] flex-1" : "w-full",
+                    slashCommand || !singleLine
+                      ? cn(
                           "max-h-60 field-sizing-content",
-                          compact ? "min-h-8" : "min-h-12"
+                          slashCommand || compact ? "min-h-8" : "min-h-12"
                         )
+                      : "field-sizing-fixed h-8 min-h-8 max-h-8 overflow-hidden whitespace-nowrap"
                   )}
                   onChange={(event) => onDraftChange(event.currentTarget.value)}
                   onKeyDown={(event) => {
