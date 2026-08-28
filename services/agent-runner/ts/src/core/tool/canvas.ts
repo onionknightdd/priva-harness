@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import { CANVAS_TOOL_NAME } from '../event/tool-names.js'
@@ -10,12 +10,15 @@ const DEFAULT_CANVAS_FILE_NAME = 'canvas.html'
 export const canvasTool = defineTool({
   name: CANVAS_TOOL_NAME,
   description: [
-    'Write a large HTML artifact for the user to open in the workspace HTML preview.',
-    'Use this for multi-section pages, documents, dashboards, or any HTML that needs a full preview surface and richer workspace interaction.',
+    'Open HTML in the workspace preview.',
+    'Pass html when you are writing the document now. The tool saves it under .canvas and returns the file path.',
+    'Pass path when the HTML already exists in the workspace. The tool does not rewrite that file.',
+    'Pass both to write html to that workspace path.',
+    'html may also be a .html file path when you are not sending markup.',
+    'Use this for multi-section pages, documents, dashboards, or any HTML that needs a full preview surface.',
     'Inline script and click handlers run in the workspace preview sandbox.',
     'Do not use this for compact inline React snippets; use visualize for those.',
-    'Pass a complete HTML document in html. Optional name or title becomes the .canvas file name.',
-    'Do not wrap the HTML in markdown fences.',
+    'Do not wrap markup in markdown fences.',
     'The chat UI does not show the HTML. It opens the workspace preview when the user clicks the canvas card.',
   ].join(' '),
   inputSchema: {
@@ -24,34 +27,51 @@ export const canvasTool = defineTool({
       html: {
         type: 'string',
         description:
-          'Complete HTML document to write. Raw HTML only, no markdown fences.',
+          'Complete HTML document to write, or an existing .html file path. Raw HTML only, no markdown fences.',
+      },
+      path: {
+        type: 'string',
+        description:
+          'Existing workspace .html file to open in preview. Relative to the working directory or absolute inside it.',
       },
       name: {
         type: 'string',
         description:
-          'Optional file name for the artifact. Stored as .canvas/<name>.html.',
+          'Optional file name when writing html without path. Stored as .canvas/<name>.html.',
       },
       title: {
         type: 'string',
         description: 'Optional display title. Used as the file name when name is omitted.',
       },
     },
-    required: ['html'],
   },
   async execute(input, context) {
-    const html = stringToolArg(input, 'html')
-    if (html.trim() === '') {
+    const { html, path: filePathArg } = canvasSource(input)
+    if (html === '' && filePathArg === '') {
       return {
         ok: false,
-        text: 'canvas requires a non-empty html string',
+        text: 'canvas requires html or an html file path',
       }
     }
 
-    const fileName = canvasFileName(
-      stringToolArg(input, 'name') || stringToolArg(input, 'title'),
-    )
-
     try {
+      if (filePathArg !== '') {
+        const filePath = resolveWorkspaceFilePath(context.cwd, filePathArg)
+        if (!isHtmlFilePath(filePath)) {
+          return { ok: false, text: 'canvas path must be an .html file' }
+        }
+        if (html !== '') {
+          await mkdir(path.dirname(filePath), { recursive: true })
+          await writeFile(filePath, html, 'utf8')
+          return { ok: true, text: filePath }
+        }
+        await assertExistingHtmlFile(filePath)
+        return { ok: true, text: filePath }
+      }
+
+      const fileName = canvasFileName(
+        stringToolArg(input, 'name') || stringToolArg(input, 'title'),
+      )
       const filePath = resolveCanvasFilePath(context.cwd, fileName)
       await mkdir(path.dirname(filePath), { recursive: true })
       await writeFile(filePath, html, 'utf8')
@@ -64,6 +84,25 @@ export const canvasTool = defineTool({
     }
   },
 })
+
+export function canvasSource(input: Readonly<Record<string, unknown>>): {
+  html: string
+  path: string
+} {
+  const htmlArg = (
+    stringToolArg(input, 'html') || stringToolArg(input, 'code')
+  ).trim()
+  const pathArg = (
+    stringToolArg(input, 'path') || stringToolArg(input, 'file_path')
+  ).trim()
+  if (pathArg !== '') {
+    return { html: looksLikeHtmlFilePath(htmlArg) ? '' : htmlArg, path: pathArg }
+  }
+  if (looksLikeHtmlFilePath(htmlArg)) {
+    return { html: '', path: htmlArg }
+  }
+  return { html: htmlArg, path: '' }
+}
 
 export function canvasFileName(raw: string): string {
   const base = raw.replaceAll('\\', '/').split('/').pop() ?? ''
@@ -86,4 +125,35 @@ export function resolveCanvasFilePath(cwd: string, fileName: string): string {
     throw new Error('canvas path must stay inside .canvas')
   }
   return filePath
+}
+
+export function resolveWorkspaceFilePath(cwd: string, raw: string): string {
+  const root = path.resolve(cwd)
+  const filePath = path.isAbsolute(raw) ? path.resolve(raw) : path.resolve(root, raw)
+  const relative = path.relative(root, filePath)
+  if (relative === '' || relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('canvas path must stay inside the workspace')
+  }
+  return filePath
+}
+
+export function isHtmlFilePath(filePath: string): boolean {
+  return /\.html?$/i.test(filePath)
+}
+
+export function looksLikeHtmlFilePath(value: string): boolean {
+  const trimmed = value.trim()
+  return isHtmlFilePath(trimmed) && !trimmed.includes('<') && !trimmed.includes('\n')
+}
+
+async function assertExistingHtmlFile(filePath: string): Promise<void> {
+  let info
+  try {
+    info = await stat(filePath)
+  } catch {
+    throw new Error(`canvas path does not exist: ${filePath}`)
+  }
+  if (!info.isFile()) {
+    throw new Error(`canvas path is not a file: ${filePath}`)
+  }
 }

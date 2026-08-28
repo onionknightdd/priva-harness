@@ -57,10 +57,21 @@ describe("canvasPathFromTool", () => {
     )
   })
 
-  it("does not treat html input as a path", () => {
+  it("does not treat html markup as a path", () => {
     assert.equal(
       canvasPathFromTool("", { html: "<html><body>nope</body></html>" }),
       ""
+    )
+  })
+
+  it("treats an html argument that is a file path as a path", () => {
+    assert.equal(
+      canvasPathFromTool("", { html: "docs/board.html" }),
+      "docs/board.html"
+    )
+    assert.equal(
+      canvasPathFromTool("", { code: "/work/page.html" }),
+      "/work/page.html"
     )
   })
 })

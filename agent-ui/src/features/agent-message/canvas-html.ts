@@ -17,7 +17,12 @@ export function canvasPathFromTool(
   if (fromOutput !== "") {
     return fromOutput
   }
-  return canvasField(input, "path") || canvasField(input, "file_path")
+  const fromPath = canvasField(input, "path") || canvasField(input, "file_path")
+  if (fromPath !== "") {
+    return fromPath
+  }
+  const html = canvasField(input, "html") || canvasField(input, "code")
+  return isHtmlArtifactPath(html) ? html : ""
 }
 
 export function canvasTitleFromInput(input: unknown): string {

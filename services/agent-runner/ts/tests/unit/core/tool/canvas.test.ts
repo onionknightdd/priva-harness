@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -57,12 +57,63 @@ describe('canvas tool', () => {
     })
   })
 
-  it('rejects a blank html payload', async () => {
+  it('opens an existing workspace html file without rewriting it', async () => {
+    const context = await toolContext()
+    const filePath = path.join(context.cwd, 'docs', 'board.html')
+    await mkdir(path.dirname(filePath), { recursive: true })
+    await writeFile(filePath, '<p>keep me</p>', 'utf8')
+
     await expect(
-      canvasTool.execute({ html: '   ' }, await toolContext()),
+      canvasTool.execute({ path: 'docs/board.html' }, context),
+    ).resolves.toEqual({ ok: true, text: filePath })
+    await expect(readFile(filePath, 'utf8')).resolves.toBe('<p>keep me</p>')
+  })
+
+  it('treats an html argument that is a file path as a path', async () => {
+    const context = await toolContext()
+    const filePath = path.join(context.cwd, 'page.html')
+    await writeFile(filePath, '<p>from path</p>', 'utf8')
+
+    await expect(
+      canvasTool.execute({ html: 'page.html' }, context),
+    ).resolves.toEqual({ ok: true, text: filePath })
+    await expect(readFile(filePath, 'utf8')).resolves.toBe('<p>from path</p>')
+  })
+
+  it('writes html to a provided workspace path', async () => {
+    const context = await toolContext()
+    const html = '<h1>Saved</h1>'
+    const result = await canvasTool.execute(
+      { html, path: 'public/deck.html' },
+      context,
+    )
+    const expected = path.join(context.cwd, 'public', 'deck.html')
+    expect(result).toEqual({ ok: true, text: expected })
+    await expect(readFile(expected, 'utf8')).resolves.toBe(html)
+  })
+
+  it('rejects a blank payload and a missing or unsafe path', async () => {
+    const context = await toolContext()
+    await expect(canvasTool.execute({ html: '   ' }, context)).resolves.toEqual({
+      ok: false,
+      text: 'canvas requires html or an html file path',
+    })
+    await expect(
+      canvasTool.execute({ path: 'missing.html' }, context),
+    ).resolves.toMatchObject({
+      ok: false,
+    })
+    await expect(
+      canvasTool.execute({ path: '../secret.html' }, context),
     ).resolves.toEqual({
       ok: false,
-      text: 'canvas requires a non-empty html string',
+      text: 'canvas path must stay inside the workspace',
+    })
+    await expect(
+      canvasTool.execute({ path: 'notes.txt' }, context),
+    ).resolves.toEqual({
+      ok: false,
+      text: 'canvas path must be an .html file',
     })
   })
 
@@ -85,9 +136,10 @@ describe('canvas tool', () => {
     ])
   })
 
-  it('tells the model to write large HTML for workspace preview', () => {
-    expect(canvasTool.description).toContain('workspace HTML preview')
+  it('tells the model it can write html or open an existing path', () => {
+    expect(canvasTool.description).toContain('workspace preview')
     expect(canvasTool.description).toContain('does not show the HTML')
+    expect(canvasTool.description).toContain('Pass path')
     expect(canvasTool.description).toContain('preview sandbox')
     expect(canvasTool.description).toContain('visualize')
   })
