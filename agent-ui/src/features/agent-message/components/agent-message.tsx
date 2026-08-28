@@ -20,7 +20,7 @@ import {
 import { AgentMessageEmptyState } from "./agent-message-empty-state"
 import { AgentMessageThread } from "./agent-message-thread"
 import type { ComposerEffort } from "./composer-model-selector"
-import { SessionCwdBreadcrumb } from "./session-cwd-breadcrumb"
+import { SessionCwdIndicator } from "./session-cwd-indicator"
 import { TaskPlanPopover } from "./task-plan-popover"
 
 const fadeTransition = {
@@ -133,7 +133,7 @@ export function AgentMessage({
           onStop={onStop}
         />
         {runCwd ? (
-          <SessionCwdBreadcrumb
+          <SessionCwdIndicator
             key={runCwd}
             cwd={runCwd}
             className="mt-2"
