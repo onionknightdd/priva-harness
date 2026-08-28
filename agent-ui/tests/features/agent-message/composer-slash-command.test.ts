@@ -62,13 +62,15 @@ describe("composer slash command helpers", () => {
   })
 
   it("keeps the slash menu inside the viewport above the composer", () => {
-    assert.deepEqual(positionSlashMenuPanel(700, 48, 1280, 800, 320), {
+    assert.deepEqual(positionSlashMenuPanel(700, 48, 1280, 800, 720), {
       left: 48,
       bottom: 108,
+      width: 720,
     })
     assert.deepEqual(positionSlashMenuPanel(40, 1200, 1280, 800, 320), {
       left: 952,
       bottom: 768,
+      width: 320,
     })
   })
 })
