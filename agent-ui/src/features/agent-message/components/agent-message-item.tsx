@@ -16,6 +16,7 @@ import {
   MessageContent,
   MessageResponse,
 } from "@/components/ai-elements/message"
+import { Marker, MarkerContent } from "@/components/ui/marker"
 import {
   Tooltip,
   TooltipContent,
@@ -29,7 +30,9 @@ import {
   assistantHasProcess,
   type AgentThreadMessage,
 } from "../agent-message-data"
+import { userMessageSurface } from "../slash-command-envelope"
 import { AssistantProcess } from "./assistant-process"
+import { CompactSessionMarker } from "./compact-session-marker"
 import { AssistantMarkdownCode } from "./assistant-markdown-code"
 import { QuoteSelectable } from "./quote-selectable"
 
@@ -198,6 +201,37 @@ export function AgentMessageItem({
   const shouldReduceMotion = Boolean(useReducedMotion())
   const isStreaming = message.status === "streaming"
   const isError = message.status === "error"
+
+  if (message.role === "user") {
+    const surface = userMessageSurface(message.content)
+    if (surface === "hidden") {
+      return null
+    }
+    if (surface === "conversation-compacted") {
+      return (
+        <CompactSessionMarker
+          compact={
+            message.compact ?? {
+              phase: "compacted",
+            }
+          }
+        />
+      )
+    }
+    if (surface === "session-reset") {
+      return (
+        <motion.div
+          initial={shouldReduceMotion ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}
+        >
+          <Marker variant="separator">
+            <MarkerContent>{t("agentMessage.sessionReset")}</MarkerContent>
+          </Marker>
+        </motion.div>
+      )
+    }
+  }
 
   return (
     <Message from={message.role}>

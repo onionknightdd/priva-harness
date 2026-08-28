@@ -22,7 +22,9 @@ import type { ThreadReplayItem } from '../../../core/resource/thread.js'
 import {
   attachTranscriptToolUseResult,
   EMPTY_TOOL_USE_RESULTS,
+  mergeSdkAndTranscriptMessages,
   toolUseResultsFromTranscriptLines,
+  transcriptThreadRecords,
 } from './claude-transcript.js'
 import { replayClaudeSessionMessages } from './claude-thread-replay.js'
 
@@ -70,6 +72,7 @@ interface TranscriptFileCache {
   readonly size: number
   readonly lastAssistant: LastAssistantModel | undefined
   readonly toolUseResults: ReadonlyMap<string, unknown>
+  readonly threadRecords: readonly unknown[]
 }
 
 export class ClaudeSessionStore implements ProviderSessionStore {
@@ -112,8 +115,10 @@ export class ClaudeSessionStore implements ProviderSessionStore {
     const info = await this.read(ref)
     const options = dirOptions(info.cwd)
     const listed = await this.sdk.getSessionMessages(ref.id, options)
-    const toolUseResults = await this.toolUseResultsFromTranscript(ref.id, info.cwd)
-    const mapped = listed.map((message) => this.mapHydratedMessage(message, ref.id, toolUseResults))
+    const transcript = await this.loadTranscriptFor(ref.id, info.cwd)
+    const toolUseResults = transcript?.toolUseResults ?? EMPTY_TOOL_USE_RESULTS
+    const source = mergeSdkAndTranscriptMessages(listed, transcript?.threadRecords ?? [])
+    const mapped = source.map((message) => this.mapHydratedMessage(message, ref.id, toolUseResults))
     if (page?.limit === undefined) {
       const subagents = await this.sdk.listSubagents(ref.id, options)
       for (const subagent of subagents) {
@@ -216,13 +221,13 @@ export class ClaudeSessionStore implements ProviderSessionStore {
     return mapClaudeMessage(attachTranscriptToolUseResult(raw, toolUseResults), sessionId)
   }
 
-  private async toolUseResultsFromTranscript(
+  private async loadTranscriptFor(
     sessionId: string,
     cwd: string | null,
-  ): Promise<ReadonlyMap<string, unknown>> {
+  ): Promise<TranscriptFileCache | undefined> {
     const transcriptPath = await this.findTranscriptPath(sessionId, cwd)
-    if (transcriptPath === undefined) return EMPTY_TOOL_USE_RESULTS
-    return (await this.loadTranscript(transcriptPath)).toolUseResults
+    if (transcriptPath === undefined) return undefined
+    return await this.loadTranscript(transcriptPath)
   }
 
   private async lastAssistantFromTranscript(path: string): Promise<LastAssistantModel | undefined> {
@@ -242,6 +247,7 @@ export class ClaudeSessionStore implements ProviderSessionStore {
       size: stats.size,
       lastAssistant: lastAssistantFromTranscriptLines(lines, stats.mtimeMs),
       toolUseResults: toolUseResultsFromTranscriptLines(lines),
+      threadRecords: transcriptThreadRecords(lines),
     }
     this.transcriptCache.set(path, loaded)
     return loaded

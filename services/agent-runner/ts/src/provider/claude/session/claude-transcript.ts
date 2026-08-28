@@ -37,6 +37,53 @@ export function toolUseResultsFromTranscriptLines(
   return results
 }
 
+export function transcriptThreadRecords(lines: readonly string[]): unknown[] {
+  const records: unknown[] = []
+  for (const line of lines) {
+    if (line.trim() === '') continue
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(line) as unknown
+    } catch {
+      continue
+    }
+    const record = asRecord(parsed)
+    if (record === undefined || !isMainThreadRecord(record)) continue
+    records.push(parsed)
+  }
+  return records
+}
+
+export function mergeSdkAndTranscriptMessages(
+  sdkMessages: readonly unknown[],
+  transcriptRecords: readonly unknown[],
+): unknown[] {
+  const sdkByUuid = new Map<string, unknown>()
+  for (const raw of sdkMessages) {
+    const uuid = recordUuid(raw)
+    if (uuid !== undefined) sdkByUuid.set(uuid, raw)
+  }
+
+  const used = new Set<string>()
+  const merged: unknown[] = []
+  for (const record of transcriptRecords) {
+    const uuid = recordUuid(record)
+    if (uuid !== undefined && sdkByUuid.has(uuid)) {
+      merged.push(sdkByUuid.get(uuid))
+      used.add(uuid)
+      continue
+    }
+    merged.push(record)
+    if (uuid !== undefined) used.add(uuid)
+  }
+  for (const raw of sdkMessages) {
+    const uuid = recordUuid(raw)
+    if (uuid !== undefined && used.has(uuid)) continue
+    merged.push(raw)
+  }
+  return merged
+}
+
 export function attachTranscriptToolUseResult(
   raw: unknown,
   results: ReadonlyMap<string, unknown>,
@@ -66,6 +113,41 @@ function firstToolResultId(record: JsonRecord): string | undefined {
     if (id !== undefined) return id
   }
   return undefined
+}
+
+function isMainThreadRecord(record: JsonRecord): boolean {
+  const type = stringField(record, 'type')
+  if (type !== 'user' && type !== 'assistant') return false
+  if (isSidechain(record)) return false
+  if (record['isMeta'] === true) return false
+  if (type === 'assistant' && isNoResponseRequested(record)) return false
+  return true
+}
+
+function isNoResponseRequested(record: JsonRecord): boolean {
+  const message = asRecord(record['message']) ?? record
+  return assistantText(message) === 'No response requested.'
+}
+
+function assistantText(message: JsonRecord): string {
+  const content = message['content']
+  if (typeof content === 'string') return content.trim()
+  if (!Array.isArray(content)) return ''
+  return content
+    .map((part) => {
+      const item = asRecord(part)
+      if (item === undefined) return ''
+      if (stringField(item, 'type') !== 'text') return ''
+      return stringField(item, 'text') ?? ''
+    })
+    .join('')
+    .trim()
+}
+
+function recordUuid(raw: unknown): string | undefined {
+  const record = asRecord(raw)
+  if (record === undefined) return undefined
+  return nonEmpty(stringField(record, 'uuid')) ?? nonEmpty(stringField(record, 'id'))
 }
 
 function isSidechain(record: JsonRecord): boolean {

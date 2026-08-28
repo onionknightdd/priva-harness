@@ -11,7 +11,7 @@ export interface AgentDisclosureProps
   openHeight?: CSSProperties["height"];
 }
 
-/** Shared transform-only reveal for collapsible agent content. */
+/** Height-only reveal so collapsible agent content always grows downward. */
 export function AgentDisclosure({
   open,
   openHeight = "auto",
@@ -28,27 +28,23 @@ export function AgentDisclosure({
       aria-hidden={!open}
       inert={!open}
       initial={false}
-      animate={
-        reduce
-          ? { opacity: open ? 1 : 0 }
-          : {
-              opacity: open ? 1 : 0,
-              clipPath: open ? "inset(0 0 0% 0)" : "inset(0 0 100% 0)",
-              y: open ? 0 : -4,
-            }
-      }
+      animate={{
+        opacity: open ? 1 : 0,
+        height: open ? openHeight : 0,
+      }}
       transition={
         transition ?? {
           duration: reduce ? 0 : open ? 0.22 : 0.14,
           ease: EASE_OUT,
         }
       }
-      className={cn("overflow-hidden", className)}
+      className={cn(
+        "origin-top overflow-hidden [overflow-anchor:none]",
+        className
+      )}
       style={{
         ...style,
-        height: open ? openHeight : 0,
         pointerEvents: open ? undefined : "none",
-        transformOrigin: "top",
       }}
     />
   );

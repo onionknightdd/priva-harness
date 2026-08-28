@@ -90,6 +90,10 @@ export type AgentThreadMessage = {
   blocks?: StreamBlock[]
   nestedAgents?: NestedAgent[]
   workflows?: WorkflowCard[]
+  compact?: {
+    phase: "compacting" | "compacted"
+    summary?: string
+  }
 }
 
 export function createAgentThreadMessage(

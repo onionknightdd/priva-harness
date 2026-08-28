@@ -26,6 +26,12 @@ import { cn } from "@/lib/utils"
 
 import type { AgentThreadMessage } from "../agent-message-data"
 import {
+  captureExpandTrigger,
+  isExpandScrollLocked,
+  keepExpandTriggerInPlace,
+} from "../expand-down-anchor"
+import { foldCommandSurfaces } from "../slash-command-envelope"
+import {
   groupThreadTurns,
   turnStickyParts,
   type ThreadTurn,
@@ -67,7 +73,14 @@ export function AgentMessageThread({
   const stem = activeSession
     ? sessionDisplayTitle(activeSession, untitled)
     : untitled
-  const turns = useMemo(() => groupThreadTurns(messages), [messages])
+  const visibleMessages = useMemo(
+    () => foldCommandSurfaces(messages),
+    [messages]
+  )
+  const turns = useMemo(
+    () => groupThreadTurns(visibleMessages),
+    [visibleMessages]
+  )
 
   const renderMessage = (
     message: AgentThreadMessage,
@@ -110,6 +123,7 @@ export function AgentMessageThread({
             <ThreadEndSpacer />
           </MessageScrollerContent>
         </MessageScrollerViewport>
+        <KeepExpandAnchor />
         <PinLatestAtCenter messages={messages} />
         <MessageScrollerButton>
           <ArrowDownIcon />
@@ -233,6 +247,55 @@ function ThreadEndSpacer() {
   )
 }
 
+function KeepExpandAnchor() {
+  useLayoutEffect(() => {
+    const viewport = document.querySelector<HTMLElement>(
+      '[data-slot="message-scroller-viewport"]'
+    )
+    if (!viewport) {
+      return
+    }
+
+    const onPointerDown = (event: PointerEvent) => {
+      captureExpandTrigger(event.target)
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Enter" || event.key === " ") {
+        captureExpandTrigger(event.target)
+      }
+    }
+
+    const restore = () => {
+      keepExpandTriggerInPlace(viewport)
+      requestAnimationFrame(() => {
+        keepExpandTriggerInPlace(viewport)
+        requestAnimationFrame(() => {
+          keepExpandTriggerInPlace(viewport)
+        })
+      })
+    }
+
+    viewport.addEventListener("pointerdown", onPointerDown, true)
+    viewport.addEventListener("keydown", onKeyDown, true)
+
+    const content = viewport.querySelector(
+      '[data-slot="message-scroller-content"]'
+    )
+    const observer = new ResizeObserver(restore)
+    if (content) {
+      observer.observe(content)
+    }
+
+    return () => {
+      viewport.removeEventListener("pointerdown", onPointerDown, true)
+      viewport.removeEventListener("keydown", onKeyDown, true)
+      observer.disconnect()
+    }
+  }, [])
+
+  return null
+}
+
 const END_EDGE_PX = 8
 
 function isScrolledToEnd(viewport: HTMLElement) {
@@ -253,7 +316,7 @@ function PinLatestAtCenter({
   const threadKey = messages[0]?.id ?? "empty"
 
   const followLatest = useCallback(() => {
-    if (!pinnedRef.current) {
+    if (!pinnedRef.current || isExpandScrollLocked()) {
       return
     }
 
@@ -281,7 +344,7 @@ function PinLatestAtCenter({
     }
 
     const onScroll = () => {
-      if (programmaticRef.current) {
+      if (programmaticRef.current || isExpandScrollLocked()) {
         return
       }
 

@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 
 import {
   attachTranscriptToolUseResult,
+  mergeSdkAndTranscriptMessages,
   toolUseResultsFromTranscriptLines,
+  transcriptThreadRecords,
 } from '../../../../src/provider/claude/session/claude-transcript.js'
 
 const editPatch = {
@@ -124,5 +126,90 @@ describe('attachTranscriptToolUseResult', () => {
       message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'bash-1', content: 'ok' }] },
     }
     expect(attachTranscriptToolUseResult(raw, results)).toBe(raw)
+  })
+})
+
+describe('transcriptThreadRecords', () => {
+  it('keeps main-thread user and assistant records and drops compact plumbing', () => {
+    const records = transcriptThreadRecords([
+      JSON.stringify({ type: 'user', uuid: 'u1', message: { role: 'user', content: 'hello' } }),
+      JSON.stringify({ type: 'queue-operation', operation: 'enqueue', content: '/compact' }),
+      JSON.stringify({
+        type: 'system',
+        subtype: 'compact_boundary',
+        uuid: 'b1',
+        content: 'Conversation compacted',
+      }),
+      JSON.stringify({
+        type: 'user',
+        uuid: 'meta',
+        isMeta: true,
+        message: { role: 'user', content: '<local-command-caveat>skip</local-command-caveat>' },
+      }),
+      JSON.stringify({
+        type: 'user',
+        uuid: 'cmd',
+        message: {
+          role: 'user',
+          content: '<command-name>/compact</command-name>\n<command-message>compact</command-message>',
+        },
+      }),
+    ])
+    expect(records.map((record) => (record as { uuid: string }).uuid)).toEqual(['u1', 'cmd'])
+  })
+
+  it('drops the synthetic No response requested assistant', () => {
+    const records = transcriptThreadRecords([
+      JSON.stringify({
+        type: 'assistant',
+        uuid: 'syn',
+        message: {
+          role: 'assistant',
+          model: '<synthetic>',
+          content: [{ type: 'text', text: 'No response requested.' }],
+        },
+      }),
+      JSON.stringify({
+        type: 'user',
+        uuid: 'u2',
+        message: { role: 'user', content: '不用了' },
+      }),
+    ])
+    expect(records.map((record) => (record as { uuid: string }).uuid)).toEqual(['u2'])
+  })
+})
+
+describe('mergeSdkAndTranscriptMessages', () => {
+  it('restores pre-compact transcript turns that the SDK parent-chain walk dropped', () => {
+    const earlyUser = { type: 'user', uuid: 'u1', message: { role: 'user', content: '写一个mock 的sre 大盘' } }
+    const earlyAssistant = {
+      type: 'assistant',
+      uuid: 'a-tool',
+      message: { role: 'assistant', content: [{ type: 'tool_use', id: 'edit-1', name: 'Edit' }] },
+    }
+    const tail = {
+      type: 'assistant',
+      uuid: 'a-tail',
+      message: { role: 'assistant', content: [{ type: 'text', text: '完成。' }] },
+    }
+    const command = {
+      type: 'user',
+      uuid: 'cmd',
+      message: { role: 'user', content: '<command-name>/compact</command-name>' },
+    }
+    const sdkTail = { ...tail, session_id: 'sess-1' }
+
+    const merged = mergeSdkAndTranscriptMessages(
+      [sdkTail, command],
+      [earlyUser, earlyAssistant, tail, command],
+    )
+
+    expect(merged.map((record) => (record as { uuid: string }).uuid)).toEqual([
+      'u1',
+      'a-tool',
+      'a-tail',
+      'cmd',
+    ])
+    expect(merged[2]).toBe(sdkTail)
   })
 })

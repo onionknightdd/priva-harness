@@ -72,7 +72,7 @@ import { isCanvasTool } from "../canvas-html"
 import { isVisualizeTool } from "../visualize-jsx"
 
 const PANEL_CLASS =
-  "h-[var(--collapsible-panel-height)] overflow-hidden transition-[height,opacity] duration-200 ease-out data-[ending-style]:h-0 data-[ending-style]:opacity-0 data-[starting-style]:h-0 data-[starting-style]:opacity-0 motion-reduce:transition-none"
+  "h-[var(--collapsible-panel-height)] overflow-hidden [overflow-anchor:none] transition-[height,opacity] duration-200 ease-out data-[ending-style]:h-0 data-[ending-style]:opacity-0 data-[starting-style]:h-0 data-[starting-style]:opacity-0 motion-reduce:transition-none"
 
 const TEXT_LINE_GAP_CLASS = "[line-height:calc(1.5em+2px)]"
 

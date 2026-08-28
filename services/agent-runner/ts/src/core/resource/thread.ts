@@ -142,16 +142,20 @@ export function textFromThreadBlocks(blocks: readonly ThreadBlock[]): string {
   return answerTextBlock(blocks)?.text ?? ''
 }
 
+const NO_RESPONSE_REQUESTED = 'No response requested.'
+
 export function threadHasVisibleContent(message: ThreadMessage): boolean {
   if (message.role === 'user') return message.content.trim() !== ''
-  if (message.content.trim() !== '') return true
+  if (message.content.trim() !== '' && message.content.trim() !== NO_RESPONSE_REQUESTED) {
+    return true
+  }
   if ((message.workflows?.length ?? 0) > 0) return true
   if ((message.nestedAgents?.length ?? 0) > 0) return true
-  return (message.blocks ?? []).some(
-    (block) =>
-      block.type === 'tool_use' ||
-      block.type === 'image' ||
-      (block.type === 'thinking' && block.text.trim() !== '') ||
-      (block.type === 'text' && block.text.trim() !== ''),
-  )
+  return (message.blocks ?? []).some((block) => {
+    if (block.type === 'tool_use' || block.type === 'image') return true
+    if (block.type === 'thinking') return block.text.trim() !== ''
+    if (block.type !== 'text') return false
+    const text = block.text.trim()
+    return text !== '' && text !== NO_RESPONSE_REQUESTED
+  })
 }

@@ -130,6 +130,21 @@ describe('foldThread', () => {
       status: 'running',
     })
   })
+
+  it('drops the synthetic No response requested assistant', () => {
+    const thread = foldThread([
+      user('u1', '/compact'),
+      frame({
+        type: 'assistant.message',
+        messageId: 'a1',
+        blocks: [textBlock('No response requested.', 'a1:0', 0)],
+      }),
+    ])
+
+    expect(thread).toEqual([
+      expect.objectContaining({ role: 'user', content: '/compact' }),
+    ])
+  })
 })
 
 function user(id: string, content: string): ThreadReplayItem {
