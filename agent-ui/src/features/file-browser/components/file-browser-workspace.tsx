@@ -14,6 +14,7 @@ export function FileBrowserWorkspace({
   compact = false,
   filePreview,
   onResizeTree,
+  onUserResizeTree,
   panelTransitioning,
   treeDefaultSize,
   treeMaxSize,
@@ -26,6 +27,7 @@ export function FileBrowserWorkspace({
   compact?: boolean
   filePreview: React.ReactNode
   onResizeTree: (sizePercentage: number) => void
+  onUserResizeTree: () => void
   panelTransitioning: boolean
   treeDefaultSize: number
   treeMaxSize: number
@@ -88,6 +90,11 @@ export function FileBrowserWorkspace({
         <ResizablePanelGroup
           orientation="horizontal"
           className="min-h-0 flex-1"
+          onLayoutChanged={(_layout, meta) => {
+            if (meta.isUserInteraction) {
+              onUserResizeTree()
+            }
+          }}
         >
           <ResizablePanel
             id="file-tree-panel"

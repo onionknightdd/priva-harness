@@ -224,13 +224,19 @@ function FileBrowserTreeNode({
           ) : (
             <FileTypeIcon name={data.name} path={data.path} />
           )}
-          <OverflowMarquee
-            active={nameMarqueeActive}
-            playback="once"
+          <span
+            data-file-tree-name=""
+            data-file-tree-name-text={data.name}
             className="min-w-0 flex-1"
           >
-            {data.name}
-          </OverflowMarquee>
+            <OverflowMarquee
+              active={nameMarqueeActive}
+              playback="once"
+              className="min-w-0 w-full"
+            >
+              {data.name}
+            </OverflowMarquee>
+          </span>
           {loading && (
             <LoaderCircleIcon className="size-3 shrink-0 animate-spin text-muted-foreground motion-reduce:animate-none" />
           )}
@@ -329,6 +335,7 @@ export function FileBrowserTree({
   onDownload,
   onItemSelect,
   onUpload,
+  onVisibleRowsChange,
   query,
   rootPath,
   selectedItemPath,
@@ -344,6 +351,7 @@ export function FileBrowserTree({
     shouldLoadDirectory: boolean
   ) => Promise<void>
   onUpload: (directory: string) => void
+  onVisibleRowsChange?: () => void
   query: string
   rootPath: string
   selectedItemPath: string | null
@@ -390,9 +398,15 @@ export function FileBrowserTree({
     ],
   })
 
+  const expandedKey = tree.getState().expandedItems.join("\n")
+
   React.useLayoutEffect(() => {
     tree.rebuildTree()
   }, [model, rootPath, tree])
+
+  React.useLayoutEffect(() => {
+    onVisibleRowsChange?.()
+  }, [expandedKey, loadingDirectories, model, onVisibleRowsChange, query])
 
   React.useEffect(() => {
     if (

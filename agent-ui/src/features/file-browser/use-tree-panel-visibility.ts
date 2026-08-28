@@ -1,6 +1,11 @@
 import * as React from "react"
 import gsap from "gsap"
+import { animate } from "motion/react"
 import { usePanelRef } from "react-resizable-panels"
+
+import { SPRING_LAYOUT } from "@/lib/ease"
+
+import { fileTreeTargetPanelWidth } from "./file-tree-content-width"
 
 const TREE_DEFAULT_SIZE = 30
 const TREE_MIN_SIZE = 18
@@ -15,12 +20,15 @@ export function useTreePanelVisibility() {
   const treePaneContentRef = React.useRef<HTMLDivElement>(null)
   const panelAnimationRef = React.useRef<gsap.core.Timeline | null>(null)
   const previousTreeSizeRef = React.useRef(TREE_DEFAULT_SIZE)
+  const userOverrideRef = React.useRef(false)
+  const fitAnimationRef = React.useRef<{ stop: () => void } | null>(null)
   const [treeVisible, setTreeVisible] = React.useState(true)
   const [panelTransitioning, setPanelTransitioning] = React.useState(false)
 
   React.useEffect(
     () => () => {
       panelAnimationRef.current?.kill()
+      fitAnimationRef.current?.stop()
     },
     []
   )
@@ -35,6 +43,8 @@ export function useTreePanelVisibility() {
     }
 
     panelAnimationRef.current?.kill()
+    fitAnimationRef.current?.stop()
+    fitAnimationRef.current = null
 
     const currentSize = panel.getSize().asPercentage
     if (!visible && currentSize > 0) {
@@ -107,7 +117,81 @@ export function useTreePanelVisibility() {
     }
   }, [panelTransitioning, treeVisible])
 
+  const markUserResizedTree = React.useCallback(() => {
+    userOverrideRef.current = true
+    fitAnimationRef.current?.stop()
+    fitAnimationRef.current = null
+  }, [])
+
+  const fitTreeToNameOverflow = React.useCallback((overflowPx: number) => {
+    if (
+      !treeVisible ||
+      panelTransitioning ||
+      userOverrideRef.current
+    ) {
+      return
+    }
+
+    const panel = treePanelRef.current
+    if (!panel) {
+      return
+    }
+
+    const current = panel.getSize()
+    if (current.inPixels <= 0 || current.asPercentage <= 0) {
+      return
+    }
+
+    const groupWidth = current.inPixels / (current.asPercentage / 100)
+    const target = fileTreeTargetPanelWidth({
+      currentWidth: current.inPixels,
+      overflow: overflowPx,
+      maxWidth: groupWidth * (TREE_MAX_SIZE / 100),
+    })
+
+    if (target - current.inPixels < 8) {
+      return
+    }
+
+    fitAnimationRef.current?.stop()
+
+    const reducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches
+
+    if (reducedMotion) {
+      panel.resize(target)
+      previousTreeSizeRef.current = clampTreeSize(
+        panel.getSize().asPercentage
+      )
+      fitAnimationRef.current = null
+      return
+    }
+
+    const playback = animate(current.inPixels, target, {
+      ...SPRING_LAYOUT,
+      onUpdate: (value) => {
+        panel.resize(Math.round(value))
+      },
+      onComplete: () => {
+        previousTreeSizeRef.current = clampTreeSize(
+          panel.getSize().asPercentage
+        )
+        fitAnimationRef.current = null
+      },
+    })
+
+    fitAnimationRef.current = playback
+  }, [panelTransitioning, treePanelRef, treeVisible])
+
+  const onTreeStructureChange = React.useCallback(() => {
+    userOverrideRef.current = false
+  }, [])
+
   return {
+    fitTreeToNameOverflow,
+    markUserResizedTree,
+    onTreeStructureChange,
     panelTransitioning,
     rememberTreeSize,
     setDesktopTreeVisibility,

@@ -18,6 +18,7 @@ import {
   type FileBrowserItem,
   type FileBrowserModel,
 } from "../file-browser-data"
+import { measureFileTreeNameOverflow } from "../file-tree-content-width"
 import { FileBrowserTree } from "./file-browser-tree"
 
 export function FileTreePane({
@@ -32,6 +33,7 @@ export function FileTreePane({
   onRefresh,
   onRetry,
   onUpload,
+  onVisibleContentOverflow,
   rootPath,
   selectedItemPath,
 }: {
@@ -49,11 +51,13 @@ export function FileTreePane({
   onRefresh: () => Promise<void>
   onRetry: () => Promise<void>
   onUpload: (directory: string) => void
+  onVisibleContentOverflow?: (overflowPx: number) => void
   rootPath: string | null
   selectedItemPath: string | null
 }) {
   const { t } = useTranslation()
   const refreshIconRef = React.useRef<SVGSVGElement>(null)
+  const treeScrollRef = React.useRef<HTMLDivElement>(null)
   const announcementTimerRef = React.useRef<number | null>(null)
   const [query, setQuery] = React.useState("")
   const [refreshing, setRefreshing] = React.useState(false)
@@ -68,6 +72,15 @@ export function FileTreePane({
     },
     []
   )
+
+  const reportVisibleContentOverflow = React.useCallback(() => {
+    const root = treeScrollRef.current
+    if (!root || !onVisibleContentOverflow) {
+      return
+    }
+
+    onVisibleContentOverflow(measureFileTreeNameOverflow(root))
+  }, [onVisibleContentOverflow])
 
   const announceAction = React.useCallback((message: string) => {
     setAnnouncement(message)
@@ -152,6 +165,7 @@ export function FileTreePane({
         </Tooltip>
       </div>
       <div
+        ref={treeScrollRef}
         data-file-tree-scroll
         className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pb-2 [scrollbar-gutter:stable] [container-type:inline-size]"
       >
@@ -203,6 +217,7 @@ export function FileTreePane({
             onDownload={onDownload}
             onItemSelect={onItemSelect}
             onUpload={onUpload}
+            onVisibleRowsChange={reportVisibleContentOverflow}
           />
         )}
       </div>

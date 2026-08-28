@@ -54,6 +54,9 @@ export function FileBrowserPage({
     TREE_MAX_SIZE,
     TREE_MIN_SIZE,
     panelTransitioning,
+    fitTreeToNameOverflow,
+    markUserResizedTree,
+    onTreeStructureChange,
     rememberTreeSize,
     setDesktopTreeVisibility,
     setTreeVisible,
@@ -61,6 +64,14 @@ export function FileBrowserPage({
     treePanelRef,
     treeVisible,
   } = useTreePanelVisibility()
+
+  const handleVisibleContentOverflow = React.useCallback(
+    (overflowPx: number) => {
+      onTreeStructureChange()
+      fitTreeToNameOverflow(overflowPx)
+    },
+    [fitTreeToNameOverflow, onTreeStructureChange]
+  )
 
   React.useLayoutEffect(() => {
     const page = pageRef.current
@@ -259,6 +270,7 @@ export function FileBrowserPage({
       onRefresh={browser.refreshLoadedDirectories}
       onRetry={browser.loadInitialDirectory}
       onUpload={handleUploadRequest}
+      onVisibleContentOverflow={handleVisibleContentOverflow}
     />
   )
 
@@ -310,6 +322,7 @@ export function FileBrowserPage({
         compact={compact}
         filePreview={filePreview}
         onResizeTree={rememberTreeSize}
+        onUserResizeTree={markUserResizedTree}
         panelTransitioning={panelTransitioning}
         treeDefaultSize={TREE_DEFAULT_SIZE}
         treeMaxSize={TREE_MAX_SIZE}
