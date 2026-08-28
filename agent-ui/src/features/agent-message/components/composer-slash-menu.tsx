@@ -3,13 +3,15 @@ import { createPortal } from "react-dom"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
-import type { SlashCommand, SlashKind, SlashOrigin } from "@/lib/api/slash-commands"
+import type { SlashCommand } from "@/lib/api/slash-commands"
 import { cn } from "@/lib/utils"
 
 import {
   groupSlashCommands,
   positionSlashMenuPanel,
+  slashKindLabelKey,
   slashOptionId,
+  slashOriginLabelKey,
   SLASH_MENU_PANEL_WIDTH_PX,
 } from "../composer-slash-command"
 
@@ -206,21 +208,4 @@ export function ComposerSlashMenu({
     </AnimatePresence>,
     document.body
   )
-}
-
-function slashKindLabelKey(kind: SlashKind) {
-  return kind === "skill"
-    ? "agentMessage.slashSkillGroup"
-    : "agentMessage.slashCommandGroup"
-}
-
-function slashOriginLabelKey(origin: SlashOrigin) {
-  switch (origin) {
-    case "user":
-      return "agentMessage.slashOriginUser"
-    case "project":
-      return "agentMessage.slashOriginProject"
-    default:
-      return "agentMessage.slashOriginBuiltin"
-  }
 }

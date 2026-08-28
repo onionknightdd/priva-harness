@@ -475,7 +475,7 @@ export function AgentMessageComposer({
                     >
                       <ComposerSlashChip
                         key={slashCommand.name}
-                        name={slashCommand.name}
+                        command={slashCommand}
                         onRemove={() => onSlashCommandChange(null)}
                       />
                     </div>

@@ -1,4 +1,4 @@
-import type { SlashCommand, SlashKind } from "@/lib/api/slash-commands"
+import type { SlashCommand, SlashKind, SlashOrigin } from "@/lib/api/slash-commands"
 
 export type SlashTrigger = {
   query: string
@@ -76,6 +76,23 @@ const SLASH_MENU_VIEWPORT_INSET_PX = 8
 
 export function slashOptionId(menuId: string, index: number) {
   return `${menuId}-option-${index}`
+}
+
+export function slashKindLabelKey(kind: SlashKind) {
+  return kind === "skill"
+    ? "agentMessage.slashSkillGroup"
+    : "agentMessage.slashCommandGroup"
+}
+
+export function slashOriginLabelKey(origin: SlashOrigin) {
+  switch (origin) {
+    case "user":
+      return "agentMessage.slashOriginUser"
+    case "project":
+      return "agentMessage.slashOriginProject"
+    default:
+      return "agentMessage.slashOriginBuiltin"
+  }
 }
 
 export function positionSlashMenuPanel(

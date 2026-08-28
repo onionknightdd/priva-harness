@@ -10,6 +10,8 @@ import {
   parseSlashTrigger,
   positionSlashMenuPanel,
   shouldDeleteSlashChip,
+  slashKindLabelKey,
+  slashOriginLabelKey,
 } from "../../../src/features/agent-message/composer-slash-command.ts"
 
 const compact: SlashCommand = {
@@ -59,6 +61,14 @@ describe("composer slash command helpers", () => {
     assert.equal(shouldDeleteSlashChip(0, 0), true)
     assert.equal(shouldDeleteSlashChip(1, 1), false)
     assert.equal(shouldDeleteSlashChip(0, 3), false)
+  })
+
+  it("maps kind and origin to hover-card badge labels", () => {
+    assert.equal(slashKindLabelKey("command"), "agentMessage.slashCommandGroup")
+    assert.equal(slashKindLabelKey("skill"), "agentMessage.slashSkillGroup")
+    assert.equal(slashOriginLabelKey("builtin"), "agentMessage.slashOriginBuiltin")
+    assert.equal(slashOriginLabelKey("user"), "agentMessage.slashOriginUser")
+    assert.equal(slashOriginLabelKey("project"), "agentMessage.slashOriginProject")
   })
 
   it("keeps the slash menu inside the viewport above the composer", () => {
