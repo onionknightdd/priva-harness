@@ -32,13 +32,13 @@ export function ComposerSlashChip({
         render={<span />}
         className="inline-flex"
       >
-        <motion.code
+        <motion.span
           initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.96 }}
           transition={shouldReduceMotion ? { duration: 0 } : SPRING_LAYOUT}
           className={cn(
-            "inline-flex h-7 max-w-[min(100%,16rem)] shrink-0 items-center gap-1 rounded-md px-2 font-mono text-[13px] leading-7",
+            "inline-flex h-6 max-w-[min(100%,16rem)] shrink-0 items-center gap-1 rounded-md px-2 text-sm leading-6",
             "bg-sky-500/15 text-sky-800 dark:bg-sky-400/15 dark:text-sky-200"
           )}
         >
@@ -54,7 +54,7 @@ export function ComposerSlashChip({
           >
             <XIcon className="size-3" />
           </button>
-        </motion.code>
+        </motion.span>
       </HoverCardTrigger>
       <HoverCardContent
         side="top"
@@ -67,7 +67,7 @@ export function ComposerSlashChip({
         )}
       >
         <div className="flex flex-wrap items-center gap-2">
-          <span className="min-w-0 truncate font-mono text-sm font-medium">
+          <span className="min-w-0 truncate text-sm font-medium">
             /{command.name}
           </span>
           <div className="flex shrink-0 items-center gap-1">
