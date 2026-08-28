@@ -62,13 +62,16 @@ export function ComposerSlashMenu({
         return
       }
       const rect = anchor.getBoundingClientRect()
-      setBox(
-        positionSlashMenuPanel(
-          rect.top,
-          rect.left,
-          window.innerWidth,
-          window.innerHeight
-        )
+      const next = positionSlashMenuPanel(
+        rect.top,
+        rect.left,
+        window.innerWidth,
+        window.innerHeight
+      )
+      setBox((current) =>
+        current && current.left === next.left && current.bottom === next.bottom
+          ? current
+          : next
       )
     }
 
@@ -132,9 +135,8 @@ export function ComposerSlashMenu({
         <motion.div
           ref={panelRef}
           id={menuId}
-          role="listbox"
-          aria-label={t("agentMessage.slashMenuLabel")}
-          tabIndex={-1}
+          inert
+          aria-hidden="true"
           initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.95 }}
@@ -162,7 +164,7 @@ export function ComposerSlashMenu({
                 {groupIndex > 0 ? (
                   <div className="bg-border -mx-1 my-1 h-px" />
                 ) : null}
-                <div role="group" aria-label={t(slashKindLabelKey(group.kind))}>
+                <div>
                   <div className={COMPOSER_SLASH_LABEL_CLASS}>
                     {t(slashKindLabelKey(group.kind))}
                   </div>
@@ -174,8 +176,6 @@ export function ComposerSlashMenu({
                       <div
                         key={`${command.kind}:${command.name}`}
                         id={slashOptionId(menuId, index)}
-                        role="option"
-                        aria-selected={highlighted}
                         className={cn(
                           COMPOSER_SLASH_ITEM_CLASS,
                           highlighted && "bg-accent"

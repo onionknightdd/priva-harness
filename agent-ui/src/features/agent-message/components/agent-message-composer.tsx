@@ -24,7 +24,6 @@ import {
   filterSlashCommands,
   parseSlashTrigger,
   shouldDeleteSlashChip,
-  slashOptionId,
 } from "../composer-slash-command"
 import { useSlashCommandCatalog } from "../use-slash-command-catalog"
 import { ComposerAttachMenu } from "./composer-attach-menu"
@@ -482,15 +481,6 @@ export function AgentMessageComposer({
                     t("agentMessage.promptPlaceholder")
                   }
                   data-agent-composer="prompt"
-                  role={slashMenuOpen ? "combobox" : undefined}
-                  aria-autocomplete={slashMenuOpen ? "list" : undefined}
-                  aria-expanded={slashMenuOpen || undefined}
-                  aria-controls={slashMenuOpen ? slashMenuId : undefined}
-                  aria-activedescendant={
-                    slashMenuOpen && filteredCommands[highlightedIndex]
-                      ? slashOptionId(slashMenuId, highlightedIndex)
-                      : undefined
-                  }
                   className={cn(
                     "min-w-0 px-0 py-0 text-base! leading-8",
                     slashCommand ? "flex-1" : "w-full",
