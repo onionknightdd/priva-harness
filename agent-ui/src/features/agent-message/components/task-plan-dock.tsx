@@ -10,9 +10,19 @@ import {
 import type { AgentThreadMessage } from "../agent-message-data"
 import {
   foldThreadTaskPlan,
-  type TaskBoardStatus,
+  toTodoItemStatus,
   type TaskPlan,
 } from "../task-plan"
+
+const STATUS_COPY: Record<
+  TodoItemStatus,
+  "pending" | "inProgress" | "completed" | "cancelled"
+> = {
+  pending: "pending",
+  "in-progress": "inProgress",
+  completed: "completed",
+  cancelled: "cancelled",
+}
 
 export function TaskPlanDock({
   messages,
@@ -35,9 +45,10 @@ export function TaskPlanDock({
           className="mb-2 w-full"
         >
           <TodoList
-            title={t("agentMessage.taskPlan")}
-            items={toTodoItems(plan)}
-            className="rounded-3xl border-input bg-background shadow-xs dark:bg-input/30"
+            title={t("agentMessage.todoList")}
+            items={toTodoItems(plan, (status) =>
+              t(`agentMessage.todoStatus.${STATUS_COPY[status]}`)
+            )}
           />
         </motion.div>
       ) : null}
@@ -45,18 +56,17 @@ export function TaskPlanDock({
   )
 }
 
-function toTodoItems(plan: TaskPlan): TodoItem[] {
-  return plan.tasks.map((task) => ({
-    id: task.id,
-    title:
-      task.status === "in_progress" && task.activeForm
-        ? task.activeForm
-        : task.subject,
-    status: toTodoStatus(task.status),
-    detail: task.owner,
-  }))
-}
-
-function toTodoStatus(status: TaskBoardStatus): TodoItemStatus {
-  return status === "in_progress" ? "in-progress" : status
+function toTodoItems(
+  plan: TaskPlan,
+  statusText: (status: TodoItemStatus) => string
+): TodoItem[] {
+  return plan.tasks.map((task) => {
+    const status = toTodoItemStatus(task.status)
+    return {
+      id: task.id,
+      title: task.subject,
+      status,
+      detail: statusText(status),
+    }
+  })
 }
