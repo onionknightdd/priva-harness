@@ -138,6 +138,9 @@ describe('resolveClaudeQueryOptions', () => {
     expect(options.toolAliases).toEqual({
       visualize: 'mcp__agentWorkshop__visualize',
       canvas: 'mcp__agentWorkshop__canvas',
+      image_gen: 'mcp__agentWorkshop__image_gen',
+      image_read: 'mcp__agentWorkshop__image_read',
+      image_edit: 'mcp__agentWorkshop__image_edit',
     })
     expect(options.mcpServers).toMatchObject({
       agentWorkshop: { type: 'sdk', name: 'agentWorkshop' },

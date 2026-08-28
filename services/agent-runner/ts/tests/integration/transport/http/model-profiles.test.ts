@@ -66,7 +66,11 @@ describe('/api/sandbox/credentials/profiles', () => {
       image_understanding_model: 'vision-a',
       image_generation_model: 'image-a',
       image_edit_model: 'edit-a',
-      model_capabilities: {},
+      model_capabilities: {
+        image_understanding: [],
+        image_generation: [],
+        image_edit: [],
+      },
       model_count: null,
     })
 
@@ -233,11 +237,9 @@ describe('/api/sandbox/credentials/profiles', () => {
     })
     expect(cached.json()).toMatchObject({
       model_capabilities: {
-        'image-a': {
-          image_understanding: null,
-          image_generation: true,
-          image_edit: null,
-        },
+        image_understanding: [],
+        image_generation: ['image-a'],
+        image_edit: [],
       },
     })
 
@@ -273,9 +275,32 @@ describe('/api/sandbox/credentials/profiles', () => {
       url: `/api/sandbox/credentials/profiles/${profileId}`,
     })).json()).toMatchObject({
       model_capabilities: {
-        'image-a': {
-          image_generation: true,
+        image_understanding: [],
+        image_generation: ['image-a'],
+        image_edit: [],
+      },
+    })
+  })
+
+  it('persists a capability catalog supplied at create time', async () => {
+    const created = await server.inject({
+      method: 'POST',
+      url: '/api/sandbox/credentials/profiles',
+      payload: {
+        ...profilePayload('gateway'),
+        model_capabilities: {
+          image_understanding: ['vision-a'],
+          image_generation: ['gen-a'],
+          image_edit: [],
         },
+      },
+    })
+    expect(created.statusCode).toBe(201)
+    expect(created.json()).toMatchObject({
+      model_capabilities: {
+        image_understanding: ['vision-a'],
+        image_generation: ['gen-a'],
+        image_edit: [],
       },
     })
   })
@@ -300,7 +325,13 @@ describe('/api/sandbox/credentials/profiles', () => {
     expect((await server.inject({
       method: 'GET',
       url: `/api/sandbox/credentials/profiles/${profileId}`,
-    })).json()).toMatchObject({ model_capabilities: {} })
+    })).json()).toMatchObject({
+      model_capabilities: {
+        image_understanding: [],
+        image_generation: [],
+        image_edit: [],
+      },
+    })
   })
 
   it('requires a ready profile before changing the default and promotes on deletion', async () => {

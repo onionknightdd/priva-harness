@@ -59,11 +59,9 @@ describe('ModelProfileService', () => {
     const profile = {
       ...baseProfile,
       modelCapabilities: {
-        'model-a': {
-          imageUnderstanding: false,
-          imageGeneration: null,
-          imageEdit: null,
-        },
+        imageUnderstanding: [],
+        imageGeneration: [],
+        imageEdit: [],
       },
     }
     const store = new MemoryModelProfileStore({
@@ -82,7 +80,13 @@ describe('ModelProfileService', () => {
     await expect(service.probeImageCapability('gateway', 'model-a')).resolves.toEqual({
       profileId: 'gateway',
       modelId: 'model-a',
-      image: false,
+      image: true,
+      cached: false,
+    })
+    await expect(service.probeImageCapability('gateway', 'model-a')).resolves.toEqual({
+      profileId: 'gateway',
+      modelId: 'model-a',
+      image: true,
       cached: true,
     })
     const [first, second] = await Promise.all([
@@ -92,11 +96,11 @@ describe('ModelProfileService', () => {
 
     expect(first).toMatchObject({ image: true, cached: false })
     expect(second).toEqual(first)
-    expect(probes).toBe(1)
-    expect((await service.getProfile('gateway')).modelCapabilities['model-a']).toEqual({
-      imageUnderstanding: true,
-      imageGeneration: null,
-      imageEdit: null,
+    expect(probes).toBe(2)
+    expect((await service.getProfile('gateway')).modelCapabilities).toEqual({
+      imageUnderstanding: ['model-a'],
+      imageGeneration: [],
+      imageEdit: [],
     })
   })
 
@@ -126,10 +130,10 @@ describe('ModelProfileService', () => {
       supported: true,
     })
 
-    expect((await service.getProfile(profile.id)).modelCapabilities['image-a']).toEqual({
-      imageUnderstanding: null,
-      imageGeneration: true,
-      imageEdit: true,
+    expect((await service.getProfile(profile.id)).modelCapabilities).toEqual({
+      imageUnderstanding: [],
+      imageGeneration: ['image-a'],
+      imageEdit: ['image-a'],
     })
   })
 
@@ -149,7 +153,11 @@ describe('ModelProfileService', () => {
       'model-a',
       'image_understanding',
     )).rejects.toMatchObject({ kind: 'upstream-unavailable' })
-    expect((await service.getProfile(profile.id)).modelCapabilities).toEqual({})
+    expect((await service.getProfile(profile.id)).modelCapabilities).toEqual({
+      imageUnderstanding: [],
+      imageGeneration: [],
+      imageEdit: [],
+    })
   })
 })
 

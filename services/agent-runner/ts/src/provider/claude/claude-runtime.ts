@@ -12,7 +12,8 @@ import type { AgentEvent } from '../../core/event/agent-event.js'
 import type { UserTurn } from '../../core/run/user-turn.js'
 import { AsyncQueue } from '../../core/stream/async-queue.js'
 import { PushableStream } from '../../core/stream/pushable-stream.js'
-import type { ToolDefinition } from '../../core/tool/define-tool.js'
+import type { ToolDefinition, ToolImageDelta } from '../../core/tool/define-tool.js'
+import { imageToolsFromSpec } from '../../core/tool/image-tool-shared.js'
 import { ClaudeEventMapper } from './claude-event-mapper.js'
 import { claudeUserMessage } from './claude-user-message.js'
 import { compileClaudeCustomTools } from './tools/compile-custom-tools.js'
@@ -59,6 +60,7 @@ export class ClaudeRuntime implements AgentRuntime {
   private inTurn = false
   private idleListener: ((events: readonly AgentEvent[]) => void) | undefined
   private readonly startQuery: ClaudeQueryStart
+  private toolImageBlockId: string | undefined
 
   constructor(
     private readonly spec: ProviderRunSpec,
@@ -140,6 +142,10 @@ export class ClaudeRuntime implements AgentRuntime {
         this.target,
         abortController,
         this.tools,
+        {
+          emitImage: (image) => this.emitToolImage(image),
+          emitProgress: (chunk) => this.emitToolProgress(chunk),
+        },
       ),
     })
     this.query = active
@@ -176,6 +182,36 @@ export class ClaudeRuntime implements AgentRuntime {
     }
   }
 
+  private emitToolImage(image: ToolImageDelta): void {
+    const mapper = this.mapper
+    const events = this.events
+    if (mapper === undefined || events === undefined) return
+    this.toolImageBlockId ??= `img_${crypto.randomUUID()}`
+    const blockId = this.toolImageBlockId
+    events.push({
+      type: 'assistant.image_delta',
+      messageId: mapper.activeMessageId(),
+      blockId,
+      mime: image.mime,
+      b64: image.b64,
+      final: image.final,
+    })
+    if (image.final) this.toolImageBlockId = undefined
+  }
+
+  private emitToolProgress(chunk: string): void {
+    const mapper = this.mapper
+    const events = this.events
+    const toolId = mapper?.latestToolId()
+    if (mapper === undefined || events === undefined || toolId === undefined) return
+    events.push({
+      type: 'tool.progress',
+      id: toolId,
+      channel: 'log',
+      chunk,
+    })
+  }
+
   private mapMessage(message: SDKMessage): readonly AgentEvent[] {
     if (this.inTurn) {
       const mapper = this.mapper
@@ -187,12 +223,18 @@ export class ClaudeRuntime implements AgentRuntime {
   }
 }
 
+export type ClaudeToolEmitters = {
+  readonly emitImage?: (image: ToolImageDelta) => void
+  readonly emitProgress?: (chunk: string) => void
+}
+
 export function resolveClaudeQueryOptions(
   spec: ProviderRunSpec,
   globalConfigDir: string,
   target: SessionTarget = { kind: 'new', provider: 'claude' },
   abortController?: AbortController,
   tools: readonly ToolDefinition[] = [],
+  emitters: ClaudeToolEmitters = {},
 ): Options {
   const options: Options = {
     cwd: spec.cwd,
@@ -228,6 +270,10 @@ export function resolveClaudeQueryOptions(
     cwd: spec.cwd,
     session: { provider: 'claude', id: initialSessionId(target) },
     signal: abortController?.signal ?? new AbortController().signal,
+    profile: imageToolsFromSpec(spec),
+    streamImages: spec.streamImages === true,
+    emitImage: emitters.emitImage,
+    emitProgress: emitters.emitProgress,
   })
   if (compiled.mcpServers !== undefined) {
     options.mcpServers = compiled.mcpServers

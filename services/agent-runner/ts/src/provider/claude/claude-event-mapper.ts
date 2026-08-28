@@ -57,6 +57,15 @@ export class ClaudeEventMapper {
   private readonly startedBlocks = new Set<string>()
   private readonly blocksByMessage = new Map<string, Map<number, ContentBlock>>()
   private readonly agentIdByParent = new Map<string, string>()
+  private lastToolId: string | undefined
+
+  activeMessageId(): string {
+    return this.ensureMessageId()
+  }
+
+  latestToolId(): string | undefined {
+    return this.lastToolId
+  }
 
   push(message: ClaudeSdkMessage): AgentEvent[] {
     this.rememberSession(message)
@@ -110,6 +119,7 @@ export class ClaudeEventMapper {
       this.pendingByIndex.set(index, { id, name })
       this.indexByToolId.set(id, index)
       this.tools.set(id, name)
+      this.lastToolId = id
       const events = this.emitBlockStart(messageId, id, index, 'tool_use', channel)
       if (this.started.has(id)) return events
       this.started.add(id)
@@ -248,6 +258,7 @@ export class ClaudeEventMapper {
       if (id === undefined) continue
       const name = normalizeToolName(stringField(block, 'name') ?? this.tools.get(id) ?? 'unknown')
       this.tools.set(id, name)
+      this.lastToolId = id
       const toolIndex =
         this.indexByToolId.get(id) ??
         nextFreeToolIndex(this.blocksByMessage.get(messageId), index, id)

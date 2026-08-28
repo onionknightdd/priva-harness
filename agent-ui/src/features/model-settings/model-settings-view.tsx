@@ -20,9 +20,11 @@ import { cn } from "@/lib/utils"
 import {
   createModelProfile,
   deleteModelProfile,
+  emptyModelCapabilityCatalog,
   listModelProfiles,
   setDefaultModelProfile,
   updateModelProfile,
+  type ModelCapabilityCatalog,
   type ModelProfileCreateInput,
   type ModelProfileSummary,
 } from "./model-profile-api"
@@ -42,6 +44,7 @@ const emptyProfileDraft: ProfileDraft = {
   imageUnderstandingModel: null,
   imageGenerationModel: null,
   imageEditModel: null,
+  modelCapabilities: emptyModelCapabilityCatalog(),
 }
 
 function profileToDraft(profile: ModelProfileSummary): ProfileDraft {
@@ -53,6 +56,7 @@ function profileToDraft(profile: ModelProfileSummary): ProfileDraft {
     imageUnderstandingModel: profile.imageUnderstandingModel,
     imageGenerationModel: profile.imageGenerationModel,
     imageEditModel: profile.imageEditModel,
+    modelCapabilities: profile.modelCapabilities,
   }
 }
 
@@ -197,6 +201,19 @@ export function ModelSettingsView() {
     void loadProfiles(undefined, true)
   }, [loadProfiles])
 
+  const updateCatalog = React.useCallback((catalog: ModelCapabilityCatalog) => {
+    setDraft((currentDraft) => ({ ...currentDraft, modelCapabilities: catalog }))
+    if (selectedProfileId) {
+      setProfiles((current) =>
+        current.map((profile) =>
+          profile.id === selectedProfileId
+            ? { ...profile, modelCapabilities: catalog }
+            : profile
+        )
+      )
+    }
+  }, [selectedProfileId])
+
   const updateDraft = React.useCallback(
     <Key extends keyof ProfileDraft>(key: Key, value: ProfileDraft[Key]) => {
       if (key === "baseUrl" || key === "authToken") {
@@ -219,6 +236,7 @@ export function ModelSettingsView() {
         draft.imageUnderstandingModel?.trim() || null,
       imageGenerationModel: draft.imageGenerationModel?.trim() || null,
       imageEditModel: draft.imageEditModel?.trim() || null,
+      modelCapabilities: draft.modelCapabilities,
     }),
     [draft]
   )
@@ -443,6 +461,7 @@ export function ModelSettingsView() {
             testStatus={testStatus}
             onCancel={cancelCreating}
             onDelete={() => void handleDelete()}
+            onCatalogChange={updateCatalog}
             onDraftChange={updateDraft}
             onSave={() => void handleSave()}
             onSetDefault={() => void handleSetDefault()}

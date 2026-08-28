@@ -10,7 +10,8 @@ import {
 } from '@earendil-works/pi-coding-agent'
 
 import type { ProviderRunSpec, SessionTarget } from '../../core/contract/agent-provider.js'
-import type { ToolDefinition } from '../../core/tool/define-tool.js'
+import type { ToolDefinition, ToolImageDelta } from '../../core/tool/define-tool.js'
+import { imageToolsFromSpec } from '../../core/tool/image-tool-shared.js'
 import { buildPiModelsConfig } from './pi-models-config.js'
 import { piSessionBucketDir } from './pi-paths.js'
 import { createPiSessionManager } from './pi-session-open.js'
@@ -43,6 +44,9 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
     const sessionDir = piSessionBucketDir(this.agentDir, spec.cwd)
     await mkdir(sessionDir, { recursive: true, mode: 0o700 })
 
+    const imageSink: { emit?: (image: ToolImageDelta) => void } = {}
+    const progressSink: { emit?: (chunk: string) => void } = {}
+
     try {
       const modelRuntime = await ModelRuntime.create({ authPath, modelsPath })
       await modelRuntime.setRuntimeApiKey(providerId, spec.authToken)
@@ -66,11 +70,15 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
                 cwd: spec.cwd,
                 session: { provider: 'pi', id: '' },
                 signal: new AbortController().signal,
+                profile: imageToolsFromSpec(spec),
+                streamImages: spec.streamImages === true,
+                emitImage: (image) => imageSink.emit?.(image),
+                emitProgress: (chunk) => progressSink.emit?.(chunk),
               }),
             }),
       })
 
-      return new SdkPiAgentSession(session, spec.model, runDir)
+      return new SdkPiAgentSession(session, spec.model, runDir, imageSink, progressSink)
     } catch (error) {
       await rm(runDir, { recursive: true, force: true })
       throw error
@@ -83,7 +91,17 @@ class SdkPiAgentSession implements PiAgentSession {
     private readonly session: Awaited<ReturnType<typeof createAgentSession>>['session'],
     readonly modelId: string,
     private readonly runDir: string,
+    private readonly imageSink: { emit?: (image: ToolImageDelta) => void } = {},
+    private readonly progressSink: { emit?: (chunk: string) => void } = {},
   ) {}
+
+  bindImageEmit(emit: ((image: ToolImageDelta) => void) | undefined): void {
+    this.imageSink.emit = emit
+  }
+
+  bindProgressEmit(emit: ((chunk: string) => void) | undefined): void {
+    this.progressSink.emit = emit
+  }
 
   get sessionId(): string {
     return this.session.sessionId

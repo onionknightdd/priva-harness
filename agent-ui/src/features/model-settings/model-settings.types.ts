@@ -1,3 +1,5 @@
+import type { ModelCapabilityCatalog } from "./model-profile-api"
+
 export type ProfileDraft = {
   label: string
   baseUrl: string
@@ -6,6 +8,7 @@ export type ProfileDraft = {
   imageUnderstandingModel: string | null
   imageGenerationModel: string | null
   imageEditModel: string | null
+  modelCapabilities: ModelCapabilityCatalog
 }
 
 export type ModelSettingsFeedback = {

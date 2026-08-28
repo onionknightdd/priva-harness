@@ -1,5 +1,6 @@
 import type { AgentEvent } from '../event/agent-event.js'
 import type { UserTurn } from '../run/user-turn.js'
+import type { ImageToolProfile } from '../tool/define-tool.js'
 import type { ProviderSessionStore } from './provider-session-store.js'
 
 export type ProviderId = 'claude' | 'pi'
@@ -41,6 +42,8 @@ export interface ProviderRunSpec {
   readonly effort?: EffortLevel
   readonly queueBehavior?: QueueBehavior
   readonly promptSuggestions?: boolean
+  readonly imageTools?: ImageToolProfile
+  readonly streamImages?: boolean
 }
 
 export interface TurnContext {

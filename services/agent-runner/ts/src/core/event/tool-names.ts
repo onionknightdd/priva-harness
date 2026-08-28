@@ -12,8 +12,17 @@ const TERMINAL_STATUSES = new Set([
 
 export const VISUALIZE_TOOL_NAME = 'visualize'
 export const CANVAS_TOOL_NAME = 'canvas'
+export const IMAGE_GEN_TOOL_NAME = 'image_gen'
+export const IMAGE_READ_TOOL_NAME = 'image_read'
+export const IMAGE_EDIT_TOOL_NAME = 'image_edit'
 
-const PRODUCT_TOOL_NAMES = new Set([VISUALIZE_TOOL_NAME, CANVAS_TOOL_NAME])
+const PRODUCT_TOOL_NAMES = new Set([
+  VISUALIZE_TOOL_NAME,
+  CANVAS_TOOL_NAME,
+  IMAGE_GEN_TOOL_NAME,
+  IMAGE_READ_TOOL_NAME,
+  IMAGE_EDIT_TOOL_NAME,
+])
 
 const MCP_TOOL_NAME = /^mcp__[a-zA-Z0-9_-]+__(.+)$/
 
@@ -30,6 +39,18 @@ export function isVisualizeToolName(name: string): boolean {
 
 export function isCanvasToolName(name: string): boolean {
   return canonicalProductToolName(name) === CANVAS_TOOL_NAME
+}
+
+export function isImageGenToolName(name: string): boolean {
+  return canonicalProductToolName(name) === IMAGE_GEN_TOOL_NAME
+}
+
+export function isImageReadToolName(name: string): boolean {
+  return canonicalProductToolName(name) === IMAGE_READ_TOOL_NAME
+}
+
+export function isImageEditToolName(name: string): boolean {
+  return canonicalProductToolName(name) === IMAGE_EDIT_TOOL_NAME
 }
 
 function stripMcpToolPrefix(name: string): string {

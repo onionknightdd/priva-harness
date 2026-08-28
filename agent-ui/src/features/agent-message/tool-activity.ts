@@ -2,6 +2,7 @@ import type { TFunction } from "i18next"
 
 import type { StreamBlock, ToolCard } from "./agent-message-data"
 import { isCanvasTool } from "./canvas-html"
+import { isImageEditTool, isImageGenTool, isImageReadTool } from "./image-tools"
 import { isTaskBoardTool } from "./task-plan"
 import { isVisualizeTool } from "./visualize-jsx"
 
@@ -107,6 +108,27 @@ export function toolItemStatusLabel(
       running
         ? "agentMessage.toolItem.canvasRunning"
         : "agentMessage.toolItem.canvasDone"
+    )
+  }
+  if (isImageGenTool(name)) {
+    return t(
+      running
+        ? "agentMessage.toolItem.imageGenRunning"
+        : "agentMessage.toolItem.imageGenDone"
+    )
+  }
+  if (isImageReadTool(name)) {
+    return t(
+      running
+        ? "agentMessage.toolItem.imageReadRunning"
+        : "agentMessage.toolItem.imageReadDone"
+    )
+  }
+  if (isImageEditTool(name)) {
+    return t(
+      running
+        ? "agentMessage.toolItem.imageEditRunning"
+        : "agentMessage.toolItem.imageEditDone"
     )
   }
   const kind = classifyToolName(name)

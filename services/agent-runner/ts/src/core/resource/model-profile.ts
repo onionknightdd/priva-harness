@@ -14,10 +14,15 @@ export type ModelCapability =
   | 'image_generation'
   | 'image_edit'
 
-export interface ModelCapabilities {
-  readonly imageUnderstanding: boolean | null
-  readonly imageGeneration: boolean | null
-  readonly imageEdit: boolean | null
+export type ModelCapabilityCatalogKey =
+  | 'imageUnderstanding'
+  | 'imageGeneration'
+  | 'imageEdit'
+
+export interface ModelCapabilityCatalog {
+  readonly imageUnderstanding: readonly string[]
+  readonly imageGeneration: readonly string[]
+  readonly imageEdit: readonly string[]
 }
 
 export interface ModelProfile {
@@ -29,7 +34,7 @@ export interface ModelProfile {
   readonly imageUnderstandingModel: string | null
   readonly imageGenerationModel: string | null
   readonly imageEditModel: string | null
-  readonly modelCapabilities: Readonly<Record<string, ModelCapabilities>>
+  readonly modelCapabilities: ModelCapabilityCatalog
 }
 
 export interface ModelProfileSummary extends ModelProfile {
@@ -51,6 +56,7 @@ export interface ModelProfileCreateInput {
   readonly imageUnderstandingModel?: string | null
   readonly imageGenerationModel?: string | null
   readonly imageEditModel?: string | null
+  readonly modelCapabilities?: ModelCapabilityCatalog
 }
 
 export interface ModelProfilePatch {
@@ -166,42 +172,72 @@ export function allocateUniqueModelProfileId(
   throw new ModelProfileError('profile-id-exists', 'profile_id_exists')
 }
 
-export function emptyModelCapabilities(): ModelCapabilities {
+export function emptyModelCapabilityCatalog(): ModelCapabilityCatalog {
   return {
-    imageUnderstanding: null,
-    imageGeneration: null,
-    imageEdit: null,
+    imageUnderstanding: [],
+    imageGeneration: [],
+    imageEdit: [],
   }
 }
 
-export function capabilityValue(
-  capabilities: ModelCapabilities | undefined,
+export function capabilityCatalogKey(
   capability: ModelCapability,
-): boolean | null {
-  if (capabilities === undefined) return null
+): ModelCapabilityCatalogKey {
   switch (capability) {
     case 'image_understanding':
-      return capabilities.imageUnderstanding
+      return 'imageUnderstanding'
     case 'image_generation':
-      return capabilities.imageGeneration
+      return 'imageGeneration'
     case 'image_edit':
-      return capabilities.imageEdit
+      return 'imageEdit'
   }
 }
 
-export function withCachedCapability(
-  current: ModelCapabilities,
+export function modelIdsForCapability(
+  catalog: ModelCapabilityCatalog,
   capability: ModelCapability,
+): readonly string[] {
+  return catalog[capabilityCatalogKey(capability)]
+}
+
+export function catalogHasModel(
+  catalog: ModelCapabilityCatalog,
+  capability: ModelCapability,
+  modelId: string,
+): boolean {
+  return modelIdsForCapability(catalog, capability).includes(modelId)
+}
+
+export function withProbedCapability(
+  catalog: ModelCapabilityCatalog,
+  capability: ModelCapability,
+  modelId: string,
   supported: boolean,
-): ModelCapabilities {
-  switch (capability) {
-    case 'image_understanding':
-      return { ...current, imageUnderstanding: supported }
-    case 'image_generation':
-      return { ...current, imageGeneration: supported }
-    case 'image_edit':
-      return { ...current, imageEdit: supported }
-  }
+): ModelCapabilityCatalog {
+  if (!supported) return catalog
+  const key = capabilityCatalogKey(capability)
+  if (catalog[key].includes(modelId)) return catalog
+  return { ...catalog, [key]: [...catalog[key], modelId] }
+}
+
+export function resolveCapabilityModel(
+  profile: Pick<
+    ModelProfile,
+    | 'imageUnderstandingModel'
+    | 'imageGenerationModel'
+    | 'imageEditModel'
+    | 'modelCapabilities'
+  >,
+  capability: ModelCapability,
+): string | null {
+  const configured =
+    capability === 'image_understanding'
+      ? profile.imageUnderstandingModel
+      : capability === 'image_generation'
+        ? profile.imageGenerationModel
+        : profile.imageEditModel
+  if (configured !== null && configured !== '') return configured
+  return modelIdsForCapability(profile.modelCapabilities, capability)[0] ?? null
 }
 
 export function normalizeModelId(value: string): string {
@@ -229,7 +265,9 @@ export function createModelProfile(
     imageUnderstandingModel: normalizeOptionalModel(input.imageUnderstandingModel),
     imageGenerationModel: normalizeOptionalModel(input.imageGenerationModel),
     imageEditModel: normalizeOptionalModel(input.imageEditModel),
-    modelCapabilities: {},
+    modelCapabilities: input.modelCapabilities === undefined
+      ? emptyModelCapabilityCatalog()
+      : normalizeCapabilityCatalog(input.modelCapabilities),
   }
 }
 
@@ -435,34 +473,56 @@ function parseStoredProfile(value: unknown): ModelProfile {
   }
 }
 
-function parseStoredCapabilities(value: unknown): Readonly<Record<string, ModelCapabilities>> {
+function parseStoredCapabilities(value: unknown): ModelCapabilityCatalog {
+  if (value === undefined) return emptyModelCapabilityCatalog()
   if (!isRecord(value)) throw corruptStore('modelCapabilities must be an object')
-  const capabilities: (readonly [string, ModelCapabilities])[] = []
-  for (const [modelId, rawCapabilities] of Object.entries(value)) {
-    normalizeModelId(modelId)
-    if (!isRecord(rawCapabilities)) {
-      throw corruptStore(`Capabilities for ${modelId} must be an object`)
-    }
-    assertOnlyStoredKeys(rawCapabilities, [
-      'imageUnderstanding',
-      'imageGeneration',
-      'imageEdit',
-    ], `Capabilities for ${modelId}`)
-    capabilities.push([modelId, {
-      imageUnderstanding: parseStoredCapabilityFlag(
-        rawCapabilities,
-        'imageUnderstanding',
-        modelId,
-      ),
-      imageGeneration: parseStoredCapabilityFlag(
-        rawCapabilities,
-        'imageGeneration',
-        modelId,
-      ),
-      imageEdit: parseStoredCapabilityFlag(rawCapabilities, 'imageEdit', modelId),
-    }])
+  const first = Object.values(value)[0]
+  if (isRecord(first)) {
+    throw corruptStore('modelCapabilities must map capability names to model id lists')
   }
-  return Object.fromEntries(capabilities)
+  assertOnlyStoredKeys(value, [
+    'imageUnderstanding',
+    'imageGeneration',
+    'imageEdit',
+  ], 'modelCapabilities')
+  return {
+    imageUnderstanding: parseStoredModelIdList(value['imageUnderstanding'], 'imageUnderstanding'),
+    imageGeneration: parseStoredModelIdList(value['imageGeneration'], 'imageGeneration'),
+    imageEdit: parseStoredModelIdList(value['imageEdit'], 'imageEdit'),
+  }
+}
+
+function normalizeCapabilityCatalog(
+  catalog: ModelCapabilityCatalog,
+): ModelCapabilityCatalog {
+  return {
+    imageUnderstanding: uniqueModelIds(catalog.imageUnderstanding),
+    imageGeneration: uniqueModelIds(catalog.imageGeneration),
+    imageEdit: uniqueModelIds(catalog.imageEdit),
+  }
+}
+
+function uniqueModelIds(values: readonly string[]): readonly string[] {
+  const seen = new Set<string>()
+  const ids: string[] = []
+  for (const value of values) {
+    const id = normalizeModelId(value)
+    if (seen.has(id)) continue
+    seen.add(id)
+    ids.push(id)
+  }
+  return ids
+}
+
+function parseStoredModelIdList(value: unknown, key: string): readonly string[] {
+  if (value === undefined) return []
+  if (!Array.isArray(value)) throw corruptStore(`${key} must be an array of model ids`)
+  return value.map((item, index) => {
+    if (typeof item !== 'string') {
+      throw corruptStore(`${key}[${index}] must be a string`)
+    }
+    return normalizeModelId(item)
+  })
 }
 
 function normalizeLabel(value: string): string {
@@ -552,18 +612,6 @@ function assertOnlyStoredKeys(
   if (unsupported !== undefined) {
     throw corruptStore(`${context} contains unsupported field: ${unsupported}`)
   }
-}
-
-function parseStoredCapabilityFlag(
-  value: Readonly<Record<string, unknown>>,
-  key: 'imageUnderstanding' | 'imageGeneration' | 'imageEdit',
-  modelId: string,
-): boolean | null {
-  const field = value[key]
-  if (field !== null && typeof field !== 'boolean') {
-    throw corruptStore(`Invalid ${key} capability for ${modelId}`)
-  }
-  return field
 }
 
 function randomEntropy(byteCount: number): Uint8Array {

@@ -53,10 +53,19 @@ export class PiEventMapper {
   private readonly startedBlocks = new Set<string>()
   private readonly blocks = new Map<number, ContentBlock>()
   private readonly indexByToolId = new Map<string, number>()
+  private lastToolId: string | undefined
 
   constructor(private readonly options: PiEventMapperOptions) {
     this.startedAt = options.startedAt ?? Date.now()
     this.model = options.model
+  }
+
+  activeMessageId(): string {
+    return this.ensureMessageId()
+  }
+
+  latestToolId(): string | undefined {
+    return this.lastToolId
   }
 
   push(event: PiSessionEvent): AgentEvent[] {
@@ -228,6 +237,7 @@ export class PiEventMapper {
     if (id === undefined) return []
     const name = normalizeToolName(event.toolName ?? this.tools.get(id) ?? 'unknown')
     this.tools.set(id, name)
+    this.lastToolId = id
     const messageId = this.lastMessageId ?? this.ensureMessageId()
     const index = this.indexByToolId.get(id)
     const events: AgentEvent[] = []

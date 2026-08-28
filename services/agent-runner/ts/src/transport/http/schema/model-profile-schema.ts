@@ -4,21 +4,19 @@ const nullableString = {
 
 const modelProfileTags = ['model-profiles'] as const
 
-const nullableBoolean = {
-  anyOf: [{ type: 'boolean' }, { type: 'null' }],
+const modelIdListSchema = {
+  type: 'array',
+  items: { type: 'string', minLength: 1 },
 } as const
 
 const modelCapabilitiesSchema = {
   type: 'object',
-  additionalProperties: {
-    type: 'object',
-    additionalProperties: false,
-    required: ['image_understanding', 'image_generation', 'image_edit'],
-    properties: {
-      image_understanding: nullableBoolean,
-      image_generation: nullableBoolean,
-      image_edit: nullableBoolean,
-    },
+  additionalProperties: false,
+  required: ['image_understanding', 'image_generation', 'image_edit'],
+  properties: {
+    image_understanding: modelIdListSchema,
+    image_generation: modelIdListSchema,
+    image_edit: modelIdListSchema,
   },
 } as const
 
@@ -83,6 +81,7 @@ const modelProfileCreateBodySchema = {
     image_understanding_model: nullableString,
     image_generation_model: nullableString,
     image_edit_model: nullableString,
+    model_capabilities: modelCapabilitiesSchema,
     ...removedHarnessModelProperties,
   },
 } as const

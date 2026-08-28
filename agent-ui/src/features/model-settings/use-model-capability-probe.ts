@@ -20,6 +20,7 @@ export function useModelCapabilityProbe({
   enabled,
   isCreating,
   modelId,
+  onResolved,
   selectedProfileId,
 }: {
   cachedSupported: boolean | null
@@ -29,6 +30,7 @@ export function useModelCapabilityProbe({
   enabled: boolean
   isCreating: boolean
   modelId: string | null
+  onResolved?: (supported: boolean) => void
   selectedProfileId: string | null
 }) {
   const [status, setStatus] =
@@ -93,6 +95,7 @@ export function useModelCapabilityProbe({
         }
 
         setStatus(result.supported ? "supported" : "unsupported")
+        onResolved?.(result.supported)
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted || isAbortError(error)) {
@@ -103,6 +106,7 @@ export function useModelCapabilityProbe({
         setErrorMessage(
           error instanceof Error && error.message ? error.message : null
         )
+        onResolved?.(false)
       })
 
     return () => controller.abort()
@@ -115,6 +119,7 @@ export function useModelCapabilityProbe({
     enabled,
     isCreating,
     modelId,
+    onResolved,
     selectedProfileId,
   ])
 

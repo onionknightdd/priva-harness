@@ -16,6 +16,8 @@ import {
 } from "@/components/ui/combobox"
 import { cn } from "@/lib/utils"
 
+import { ModelCapabilityIcons } from "./model-capability-icons"
+import type { ModelCapabilityCatalog } from "./model-profile-api"
 import {
   displayModelName,
   groupModelIds,
@@ -24,6 +26,7 @@ import {
 import { ProviderIcon } from "./provider-icon"
 
 export function ModelSelector({
+  catalog,
   className,
   disabled = false,
   emptyText,
@@ -33,6 +36,7 @@ export function ModelSelector({
   value,
   onValueChange,
 }: {
+  catalog?: ModelCapabilityCatalog
   className?: string
   disabled?: boolean
   emptyText: string
@@ -71,7 +75,13 @@ export function ModelSelector({
               <ComboboxCollection>
                 {(modelId: string) => (
                   <ComboboxItem key={modelId} value={modelId}>
-                    <span className="truncate">{displayModelName(modelId)}</span>
+                    <span className="min-w-0 truncate">
+                      {displayModelName(modelId)}
+                    </span>
+                    <ModelCapabilityIcons
+                      catalog={catalog}
+                      modelId={modelId}
+                    />
                   </ComboboxItem>
                 )}
               </ComboboxCollection>

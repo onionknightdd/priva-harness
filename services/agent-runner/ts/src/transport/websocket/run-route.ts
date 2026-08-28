@@ -197,6 +197,15 @@ async function buildRunSpec(
     ...(frame.promptSuggestions === undefined
       ? {}
       : { promptSuggestions: frame.promptSuggestions }),
+    imageTools: {
+      baseUrl: rewriteProviderBaseUrl(resolved.profile.baseUrl, frame.harness),
+      authToken: resolved.profile.authToken,
+      imageUnderstandingModel: resolved.profile.imageUnderstandingModel,
+      imageGenerationModel: resolved.profile.imageGenerationModel,
+      imageEditModel: resolved.profile.imageEditModel,
+      modelCapabilities: resolved.profile.modelCapabilities,
+    },
+    streamImages: true,
   }
 }
 

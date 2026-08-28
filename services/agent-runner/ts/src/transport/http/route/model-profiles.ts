@@ -28,6 +28,12 @@ interface ProfileIdParams {
   readonly profileId: string
 }
 
+interface ModelCapabilityCatalogBody {
+  readonly image_understanding?: readonly string[]
+  readonly image_generation?: readonly string[]
+  readonly image_edit?: readonly string[]
+}
+
 interface ModelProfileCreateBody {
   readonly label: string
   readonly base_url: string
@@ -36,6 +42,7 @@ interface ModelProfileCreateBody {
   readonly image_understanding_model?: string | null
   readonly image_generation_model?: string | null
   readonly image_edit_model?: string | null
+  readonly model_capabilities?: ModelCapabilityCatalogBody
 }
 
 interface ModelProfilePatchBody {
@@ -199,6 +206,15 @@ function fromCreateBody(body: ModelProfileCreateBody): ModelProfileCreateInput {
     imageUnderstandingModel: body.image_understanding_model ?? null,
     imageGenerationModel: body.image_generation_model ?? null,
     imageEditModel: body.image_edit_model ?? null,
+    ...(body.model_capabilities === undefined
+      ? {}
+      : {
+          modelCapabilities: {
+            imageUnderstanding: [...(body.model_capabilities.image_understanding ?? [])],
+            imageGeneration: [...(body.model_capabilities.image_generation ?? [])],
+            imageEdit: [...(body.model_capabilities.image_edit ?? [])],
+          },
+        }),
   }
 }
 
@@ -247,16 +263,11 @@ function toProfileResponse(profile: ModelProfile): Record<string, unknown> {
     image_understanding_model: profile.imageUnderstandingModel,
     image_generation_model: profile.imageGenerationModel,
     image_edit_model: profile.imageEditModel,
-    model_capabilities: Object.fromEntries(
-      Object.entries(profile.modelCapabilities).map(([modelId, capabilities]) => [
-        modelId,
-        {
-          image_understanding: capabilities.imageUnderstanding,
-          image_generation: capabilities.imageGeneration,
-          image_edit: capabilities.imageEdit,
-        },
-      ]),
-    ),
+    model_capabilities: {
+      image_understanding: [...profile.modelCapabilities.imageUnderstanding],
+      image_generation: [...profile.modelCapabilities.imageGeneration],
+      image_edit: [...profile.modelCapabilities.imageEdit],
+    },
   }
 }
 

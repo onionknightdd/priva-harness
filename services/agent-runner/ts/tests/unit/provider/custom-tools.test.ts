@@ -16,6 +16,9 @@ describe('compile custom tools', () => {
     expect(compiled.toolAliases).toEqual({
       visualize: 'mcp__agentWorkshop__visualize',
       canvas: 'mcp__agentWorkshop__canvas',
+      image_gen: 'mcp__agentWorkshop__image_gen',
+      image_read: 'mcp__agentWorkshop__image_read',
+      image_edit: 'mcp__agentWorkshop__image_edit',
     })
     expect(compiled.mcpServers).toMatchObject({
       agentWorkshop: { type: 'sdk', name: 'agentWorkshop' },

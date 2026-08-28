@@ -35,7 +35,10 @@ import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 
-import type { ModelProfileSummary } from "./model-profile-api"
+import type {
+  ModelCapabilityCatalog,
+  ModelProfileSummary,
+} from "./model-profile-api"
 import { ModelSelector } from "./model-selector"
 import { MultimodalModelFields } from "./multimodal-model-fields"
 import type {
@@ -70,6 +73,7 @@ export function ModelProfileEditor({
   testStatus,
   onCancel,
   onDelete,
+  onCatalogChange,
   onDraftChange,
   onSave,
   onSetDefault,
@@ -88,6 +92,7 @@ export function ModelProfileEditor({
   testFeedback: ModelSettingsFeedback | null
   testStatus: ModelConnectionTestStatus
   onCancel: () => void
+  onCatalogChange: (catalog: ModelCapabilityCatalog) => void
   onDelete: () => void
   onDraftChange: <Key extends keyof ProfileDraft>(
     key: Key,
@@ -291,6 +296,7 @@ export function ModelProfileEditor({
               </FieldLabel>
               <ModelSelector
                 id="model-profile-default-model"
+                catalog={draft.modelCapabilities}
                 value={draft.defaultModel}
                 disabled={!isConnectionVerified}
                 emptyText={t("settings.models.noModels")}
@@ -312,6 +318,7 @@ export function ModelProfileEditor({
               isConnectionVerified={isConnectionVerified}
               modelIds={modelIds}
               profile={profile}
+              onCatalogChange={onCatalogChange}
               onDraftChange={(key, value) => onDraftChange(key, value)}
             />
           </FieldGroup>

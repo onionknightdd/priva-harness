@@ -6,13 +6,11 @@ import type {
 } from '../../core/contract/model-profile.js'
 import {
   allocateUniqueModelProfileId,
-  capabilityValue,
+  catalogHasModel,
   createModelProfile,
-  emptyModelCapabilities,
   type ImageCapabilityProbeResult,
   type ModelCapability,
   type ModelCapabilityProbeResult,
-  type ModelCapabilities,
   type ModelInfo,
   type ModelProfile,
   type ModelProfileCollection,
@@ -26,7 +24,7 @@ import {
   type ResolvedModelProfile,
   resolveModelProfile,
   summarizeModelProfile,
-  withCachedCapability,
+  withProbedCapability,
 } from '../../core/resource/model-profile.js'
 
 export interface ModelProfilesResponse {
@@ -261,14 +259,12 @@ export class ModelProfileService implements ModelProfileCapabilities, ModelProfi
       const currentProfile = findProfile(collection, profileId)
       const updatedProfile: ModelProfile = {
         ...currentProfile,
-        modelCapabilities: {
-          ...currentProfile.modelCapabilities,
-          [modelId]: withCachedCapability(
-            modelCapabilitiesFor(currentProfile, modelId) ?? emptyModelCapabilities(),
-            capability,
-            supported,
-          ),
-        },
+        modelCapabilities: withProbedCapability(
+          currentProfile.modelCapabilities,
+          capability,
+          modelId,
+          supported,
+        ),
       }
       return {
         collection: {
@@ -330,19 +326,9 @@ function findProfile(collection: ModelProfileCollection, profileId: string): Mod
 }
 
 function cachedImageCapability(profile: ModelProfile, modelId: string): boolean | null {
-  return capabilityValue(
-    modelCapabilitiesFor(profile, modelId),
-    'image_understanding',
-  )
-}
-
-function modelCapabilitiesFor(
-  profile: ModelProfile,
-  modelId: string,
-): ModelCapabilities | undefined {
-  return Object.hasOwn(profile.modelCapabilities, modelId)
-    ? profile.modelCapabilities[modelId]
-    : undefined
+  return catalogHasModel(profile.modelCapabilities, 'image_understanding', modelId)
+    ? true
+    : null
 }
 
 function imageProbeResult(

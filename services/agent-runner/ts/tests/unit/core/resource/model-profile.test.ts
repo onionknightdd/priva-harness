@@ -9,6 +9,7 @@ import {
   MODEL_CONTEXT_1M,
   parseModelProfileCollection,
   patchModelProfile,
+  resolveCapabilityModel,
   resolveModelProfile,
   splitModelContext,
 } from '../../../../src/core/resource/model-profile.js'
@@ -25,7 +26,7 @@ describe('model profile domain', () => {
     )
   })
 
-  it('rejects stored capabilities that still use the removed image transport shape', () => {
+  it('rejects stored capabilities that still map model ids to flag objects', () => {
     const profile = createModelProfile({
       id: 'gateway',
       label: 'Gateway',
@@ -38,10 +39,10 @@ describe('model profile domain', () => {
       profiles: [{
         ...profile,
         modelCapabilities: {
-          'model-a': { image: true, imageReadTransport: 'chat_completions' },
+          'model-a': { imageUnderstanding: true, imageGeneration: null, imageEdit: null },
         },
       }],
-    })).toThrow('Capabilities for model-a contains unsupported field: image')
+    })).toThrow('modelCapabilities must map capability names to model id lists')
   })
 
   it('normalizes profile fields and rejects embedded URL credentials', () => {
@@ -126,6 +127,25 @@ describe('model profile domain', () => {
 
     expect(() => resolveModelProfile('ollama:llama3:8b', collection)).toThrow('profile_not_found')
     expect(() => resolveModelProfile('gateway:', collection)).toThrow('invalid_model_reference')
+  })
+
+  it('resolves a capability model from the override, then the catalog', () => {
+    const profile = createModelProfile({
+      id: 'gateway',
+      label: 'Gateway',
+      baseUrl: 'https://api.example.com',
+      authToken: 'secret',
+      imageGenerationModel: 'override-gen',
+      modelCapabilities: {
+        imageUnderstanding: ['vision-a'],
+        imageGeneration: ['gen-a'],
+        imageEdit: [],
+      },
+    })
+
+    expect(resolveCapabilityModel(profile, 'image_generation')).toBe('override-gen')
+    expect(resolveCapabilityModel(profile, 'image_understanding')).toBe('vision-a')
+    expect(resolveCapabilityModel(profile, 'image_edit')).toBeNull()
   })
 
   it('resolves a qualified profile without a default profile', () => {

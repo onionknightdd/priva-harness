@@ -1,4 +1,22 @@
 import type { SessionRef } from '../contract/agent-provider.js'
+import type {
+  ModelCapabilityCatalog,
+} from '../resource/model-profile.js'
+
+export type ImageToolProfile = {
+  readonly baseUrl: string
+  readonly authToken: string
+  readonly imageUnderstandingModel: string | null
+  readonly imageGenerationModel: string | null
+  readonly imageEditModel: string | null
+  readonly modelCapabilities: ModelCapabilityCatalog
+}
+
+export type ToolImageDelta = {
+  readonly mime: string
+  readonly b64: string
+  readonly final: boolean
+}
 
 export interface ToolJsonProperty {
   readonly type: 'string'
@@ -15,6 +33,10 @@ export interface ToolContext {
   readonly cwd: string
   readonly session: SessionRef
   readonly signal: AbortSignal
+  readonly profile?: ImageToolProfile
+  readonly streamImages?: boolean
+  readonly emitImage?: (image: ToolImageDelta) => void
+  readonly emitProgress?: (chunk: string) => void
 }
 
 export interface ToolResult {
@@ -46,4 +68,20 @@ export function stringToolArg(
 ): string {
   const value = input[key]
   return typeof value === 'string' ? value : ''
+}
+
+export function stringListToolArg(
+  input: Readonly<Record<string, unknown>>,
+  key: string,
+): string[] {
+  const value = input[key]
+  if (typeof value === 'string') {
+    return value
+      .split(/[\n,]+/)
+      .map((item) => item.trim())
+      .filter((item) => item !== '')
+  }
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item) =>
+    typeof item === 'string' ? stringListToolArg({ value: item }, 'value') : [])
 }

@@ -1,9 +1,9 @@
 const MODEL_PROFILE_API_PREFIX = "/api/sandbox/credentials/profiles"
 
-type ModelCapabilitiesResponse = {
-  image_understanding: boolean | null
-  image_generation: boolean | null
-  image_edit: boolean | null
+type ModelCapabilityCatalogResponse = {
+  image_understanding: string[]
+  image_generation: string[]
+  image_edit: string[]
 }
 
 type ModelProfileSummaryResponse = {
@@ -15,7 +15,7 @@ type ModelProfileSummaryResponse = {
   image_understanding_model: string | null
   image_generation_model: string | null
   image_edit_model: string | null
-  model_capabilities: Record<string, ModelCapabilitiesResponse>
+  model_capabilities: ModelCapabilityCatalogResponse
   auth_token_set: boolean
   model_count: number | null
 }
@@ -33,10 +33,10 @@ type ErrorResponse = {
   detail?: string
 }
 
-export type ModelCapabilities = {
-  imageUnderstanding: boolean | null
-  imageGeneration: boolean | null
-  imageEdit: boolean | null
+export type ModelCapabilityCatalog = {
+  imageUnderstanding: string[]
+  imageGeneration: string[]
+  imageEdit: string[]
 }
 
 export type ModelProfileSummary = {
@@ -47,7 +47,7 @@ export type ModelProfileSummary = {
   imageUnderstandingModel: string | null
   imageGenerationModel: string | null
   imageEditModel: string | null
-  modelCapabilities: Record<string, ModelCapabilities>
+  modelCapabilities: ModelCapabilityCatalog
   authTokenSet: boolean
   modelCount: number | null
 }
@@ -65,6 +65,7 @@ export type ModelProfileCreateInput = {
   imageUnderstandingModel: string | null
   imageGenerationModel: string | null
   imageEditModel: string | null
+  modelCapabilities?: ModelCapabilityCatalog
 }
 
 export type ModelProfileUpdateInput = {
@@ -149,16 +150,7 @@ function toProfileSummary(
     imageUnderstandingModel: profile.image_understanding_model,
     imageGenerationModel: profile.image_generation_model,
     imageEditModel: profile.image_edit_model,
-    modelCapabilities: Object.fromEntries(
-      Object.entries(profile.model_capabilities).map(([modelId, capabilities]) => [
-        modelId,
-        {
-          imageUnderstanding: capabilities.image_understanding,
-          imageGeneration: capabilities.image_generation,
-          imageEdit: capabilities.image_edit,
-        },
-      ])
-    ),
+    modelCapabilities: toCapabilityCatalog(profile.model_capabilities),
     authTokenSet: profile.auth_token_set,
     modelCount: profile.model_count,
   }
@@ -173,6 +165,15 @@ function toRequestBody(input: ModelProfileCreateInput) {
     image_understanding_model: input.imageUnderstandingModel,
     image_generation_model: input.imageGenerationModel,
     image_edit_model: input.imageEditModel,
+    ...(input.modelCapabilities === undefined
+      ? {}
+      : {
+          model_capabilities: {
+            image_understanding: input.modelCapabilities.imageUnderstanding,
+            image_generation: input.modelCapabilities.imageGeneration,
+            image_edit: input.modelCapabilities.imageEdit,
+          },
+        }),
   }
 }
 
@@ -362,27 +363,78 @@ function toCapabilityProbeResult(
   }
 }
 
+export function emptyModelCapabilityCatalog(): ModelCapabilityCatalog {
+  return {
+    imageUnderstanding: [],
+    imageGeneration: [],
+    imageEdit: [],
+  }
+}
+
+function toCapabilityCatalog(
+  raw: ModelCapabilityCatalogResponse | undefined
+): ModelCapabilityCatalog {
+  return {
+    imageUnderstanding: [...(raw?.image_understanding ?? [])],
+    imageGeneration: [...(raw?.image_generation ?? [])],
+    imageEdit: [...(raw?.image_edit ?? [])],
+  }
+}
+
+function catalogKey(
+  capability: ModelCapability
+): keyof ModelCapabilityCatalog {
+  switch (capability) {
+    case "image_understanding":
+      return "imageUnderstanding"
+    case "image_generation":
+      return "imageGeneration"
+    case "image_edit":
+      return "imageEdit"
+  }
+}
+
+export function catalogModelIds(
+  catalog: ModelCapabilityCatalog | undefined
+): string[] {
+  if (catalog === undefined) {
+    return []
+  }
+  return [
+    ...new Set([
+      ...catalog.imageUnderstanding,
+      ...catalog.imageGeneration,
+      ...catalog.imageEdit,
+    ]),
+  ]
+}
+
+export function withProbedCapability(
+  catalog: ModelCapabilityCatalog,
+  capability: ModelCapability,
+  modelId: string,
+  supported: boolean
+): ModelCapabilityCatalog {
+  if (!supported) {
+    return catalog
+  }
+  const key = catalogKey(capability)
+  if (catalog[key].includes(modelId)) {
+    return catalog
+  }
+  return { ...catalog, [key]: [...catalog[key], modelId] }
+}
+
 export function cachedModelCapability(
-  capabilities: Record<string, ModelCapabilities> | undefined,
+  catalog: ModelCapabilityCatalog | undefined,
   modelId: string | null | undefined,
   capability: ModelCapability
 ): boolean | null {
   const normalizedModelId = modelId?.trim() ?? ""
-  if (normalizedModelId === "" || capabilities === undefined) {
+  if (normalizedModelId === "" || catalog === undefined) {
     return null
   }
-
-  const entry = capabilities[normalizedModelId]
-  if (entry === undefined) {
-    return null
-  }
-
-  switch (capability) {
-    case "image_understanding":
-      return entry.imageUnderstanding
-    case "image_generation":
-      return entry.imageGeneration
-    case "image_edit":
-      return entry.imageEdit
-  }
+  return catalog[catalogKey(capability)].includes(normalizedModelId)
+    ? true
+    : null
 }

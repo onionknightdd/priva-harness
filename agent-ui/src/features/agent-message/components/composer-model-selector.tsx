@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import {
+  catalogModelIds,
   listModelProfiles,
   listProfileModels,
   setDefaultModelProfile,
@@ -30,6 +31,7 @@ import {
   type ModelProfileCollection,
   type ModelProfileSummary,
 } from "@/features/model-settings/model-profile-api"
+import { ModelCapabilityIcons } from "@/features/model-settings/model-capability-icons"
 import { useAgentPreferences } from "@/features/settings/agent-preferences-context"
 import { parseComposerModelReference } from "@/features/settings/agent-preferences"
 import {
@@ -84,7 +86,7 @@ function knownProfileModelIds(profile: ModelProfileSummary): string[] {
   add(profile.imageGenerationModel)
   add(profile.imageEditModel)
 
-  for (const modelId of Object.keys(profile.modelCapabilities)) {
+  for (const modelId of catalogModelIds(profile.modelCapabilities)) {
     add(modelId)
   }
 
@@ -464,6 +466,11 @@ function ProfileModelSubmenu({
                           >
                             {displayModelName(modelId)}
                           </HoverMarquee>
+                          <ModelCapabilityIcons
+                            className="ml-0"
+                            catalog={profile.modelCapabilities}
+                            modelId={modelId}
+                          />
                           {isSelected ? (
                             <CheckIcon className="absolute right-2 size-4" />
                           ) : null}
