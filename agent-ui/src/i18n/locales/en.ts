@@ -67,7 +67,6 @@ export const en = {
     nestedAgent: "Nested agent",
     workflow: "Workflow",
     taskPlan: "Task",
-    taskPlanProgress: "{{completed}} of {{total}}",
     toolRunning: "Running",
     toolCompleted: "Done",
     toolFailed: "Failed",
