@@ -6,7 +6,6 @@ import {
   foldTaskPlan,
   foldThreadTaskPlan,
   isTaskBoardTool,
-  toTodoItemStatus,
 } from "../../../src/features/agent-message/task-plan.ts"
 
 function tool(
@@ -44,12 +43,6 @@ describe("task board tools", () => {
     assert.equal(isTaskBoardTool("TaskOutput"), false)
     assert.equal(isTaskBoardTool("TaskStop"), false)
     assert.equal(isTaskBoardTool("TodoWrite"), false)
-  })
-
-  it("maps board status onto beUI TodoItem status", () => {
-    assert.equal(toTodoItemStatus("pending"), "pending")
-    assert.equal(toTodoItemStatus("in_progress"), "in-progress")
-    assert.equal(toTodoItemStatus("completed"), "completed")
   })
 
   it("folds create → update lifecycle from Claude JSONL-shaped tool results", () => {

@@ -31,12 +31,6 @@ export function isTaskBoardTool(name: string): boolean {
   return BOARD_TOOLS.has(normalizeToolName(name))
 }
 
-export function toTodoItemStatus(
-  status: TaskBoardStatus
-): "pending" | "in-progress" | "completed" {
-  return status === "in_progress" ? "in-progress" : status
-}
-
 export function foldTaskPlan(blocks: readonly StreamBlock[]): TaskPlan | null {
   return foldTaskPlanInOrder(
     [...blocks].sort((left, right) => left.index - right.index)

@@ -22,7 +22,7 @@ import { AgentMessageEmptyState } from "./agent-message-empty-state"
 import { AgentMessageThread } from "./agent-message-thread"
 import type { ComposerEffort } from "./composer-model-selector"
 import { SessionCwdIndicator } from "./session-cwd-indicator"
-import { TaskPlanDock } from "./task-plan-dock"
+import { TaskPlanPopover } from "./task-plan-popover"
 
 const fadeTransition = {
   duration: 0.2,
@@ -111,6 +111,11 @@ export function AgentMessage({
             </motion.div>
           )}
         </AnimatePresence>
+        <div className="pointer-events-none absolute inset-x-0 bottom-3 z-20">
+          <div className="mx-auto w-full max-w-3xl">
+            <TaskPlanPopover messages={messages} />
+          </div>
+        </div>
       </div>
 
       <div
@@ -120,7 +125,6 @@ export function AgentMessage({
           !isEmpty && "pt-3"
         )}
       >
-        <TaskPlanDock messages={messages} />
         <AgentMessageComposer
           compact={!isEmpty}
           draft={draft}
