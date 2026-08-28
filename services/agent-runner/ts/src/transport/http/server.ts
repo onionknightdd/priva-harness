@@ -16,6 +16,12 @@ import {
 } from '../../core/resource/runtime-settings.js'
 import { SessionError, type SessionErrorKind } from '../../core/resource/session.js'
 import { UserFileError, type UserFileErrorKind } from '../../core/resource/user-file.js'
+import type { OnlyOfficeExampleClient } from '../../core/contract/office-preview-client.js'
+import {
+  OnlyOfficePreviewError,
+  unavailableOnlyOfficeClient,
+  type OnlyOfficePreviewErrorKind,
+} from '../../core/resource/office-preview.js'
 import type { AgentHarness } from '../../harness/agent-harness.js'
 import type { AgentProfileService } from '../../harness/config/agent-profile-service.js'
 import type { ConfigDistributor } from '../../harness/config/config-distributor.js'
@@ -25,6 +31,7 @@ import { runWebsocketRoutes } from '../websocket/run-route.js'
 import { agentProfileRoutes } from './route/agent-profile.js'
 import { modelProfileRoutes } from './route/model-profiles.js'
 import { sessionRoutes } from './route/sessions.js'
+import { officePreviewRoutes } from './route/office-preview.js'
 import { userFileRoutes } from './route/user-files.js'
 
 export interface BuildHttpServerOptions {
@@ -34,6 +41,7 @@ export interface BuildHttpServerOptions {
   readonly agentHarness?: AgentHarness
   readonly sessionService?: SessionService
   readonly configDistributor?: ConfigDistributor
+  readonly officeClient?: OnlyOfficeExampleClient
   readonly logger?: FastifyServerOptions['logger']
 }
 
@@ -46,6 +54,11 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
   server.setErrorHandler((error, request, reply) => {
     if (error instanceof UserFileError) {
       void reply.code(statusForUserFileError(error.kind)).send({ detail: error.message })
+      return
+    }
+
+    if (error instanceof OnlyOfficePreviewError) {
+      void reply.code(statusForOnlyOfficeError(error.kind)).send({ detail: error.message })
       return
     }
 
@@ -95,6 +108,10 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
     },
   })
   void server.register(userFileRoutes, { fileSystem: options.userFileSystem })
+  void server.register(officePreviewRoutes, {
+    fileSystem: options.userFileSystem,
+    officeClient: options.officeClient ?? unavailableOnlyOfficeClient(),
+  })
   void server.register(modelProfileRoutes, { service: options.modelProfileService })
   void server.register(agentProfileRoutes, { service: options.agentProfileService })
   if (options.sessionService !== undefined) {
@@ -123,6 +140,14 @@ function statusForSessionError(kind: SessionErrorKind): number {
     case 'session-busy': return 409
     case 'invalid-request': return 400
     case 'io-failure': return 500
+  }
+}
+
+function statusForOnlyOfficeError(kind: OnlyOfficePreviewErrorKind): number {
+  switch (kind) {
+    case 'invalid-file': return 400
+    case 'unavailable': return 502
+    case 'upload-failed': return 502
   }
 }
 

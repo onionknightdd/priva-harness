@@ -51,6 +51,7 @@ import {
 import { ModelSettingsView } from "@/features/model-settings"
 import { cn } from "@/lib/utils"
 
+import { AdvancedSettingsView } from "./advanced-settings-view"
 import { AgentSettingsView } from "./agent-settings-view"
 
 const settingsNavigation = [
@@ -120,6 +121,7 @@ export function SettingsDialog({
   const activeSectionTitle = t(activeSection.titleKey)
   const isModelSection = activeSectionId === "llmProviders"
   const isAgentSection = activeSectionId === "agent"
+  const isAdvancedSection = activeSectionId === "advanced"
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -261,6 +263,8 @@ export function SettingsDialog({
                   <ModelSettingsView />
                 ) : isAgentSection ? (
                   <AgentSettingsView />
+                ) : isAdvancedSection ? (
+                  <AdvancedSettingsView />
                 ) : (
                   <div className="flex max-w-lg flex-col gap-2 py-2">
                     <p className="text-sm font-medium">

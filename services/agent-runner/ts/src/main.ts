@@ -10,6 +10,7 @@ import { LiveRunRegistry } from './harness/run/live-run-registry.js'
 import { SessionService } from './harness/session/session-service.js'
 import { JsonSessionMetadataStore } from './infrastructure/session/json-session-metadata-store.js'
 import { NodeUserFileSystem } from './infrastructure/filesystem/node-user-file-system.js'
+import { createOnlyOfficeExampleClient } from './infrastructure/office/onlyoffice-example-client.js'
 import { CompatibleModelEndpointClient } from './infrastructure/model-profile/compatible-model-endpoint-client.js'
 import { JsonModelProfileStore } from './infrastructure/model-profile/json-model-profile-store.js'
 import { JsonRuntimeSettingsStore } from './infrastructure/settings/json-runtime-settings-store.js'
@@ -105,6 +106,7 @@ export async function startServer(): Promise<void> {
     agentHarness,
     sessionService,
     configDistributor,
+    officeClient: createOnlyOfficeExampleClient(),
     logger: true,
   })
   const port = parsePort(process.env['PORT'])

@@ -6,6 +6,39 @@ import react from "@vitejs/plugin-react"
 import { build as esbuildBuild } from "esbuild"
 import { defineConfig, type Plugin } from "vite"
 
+function onlyOfficeProxyPaths() {
+  const target = process.env.ONLYOFFICE_URL ?? "http://127.0.0.1:8080"
+  const proxy = {
+    target,
+    changeOrigin: true,
+    ws: true,
+    configure(proxyServer: {
+      on: (
+        event: "proxyReq",
+        listener: (proxyReq: { setHeader: (name: string, value: string) => void }) => void
+      ) => void
+    }) {
+      proxyServer.on("proxyReq", (proxyReq) => {
+        proxyReq.setHeader("X-Forwarded-For", "127.0.0.1")
+      })
+    },
+  }
+
+  return {
+    "/example": { ...proxy },
+    "/web-apps": { ...proxy },
+    "/sdkjs": { ...proxy },
+    "/sdkjs-plugins": { ...proxy },
+    "/cache": { ...proxy },
+    "/coauthoring": { ...proxy },
+    "/onlyoffice": {
+      ...proxy,
+      rewrite: (proxyPath: string) =>
+        proxyPath.replace(/^\/onlyoffice/, "") || "/",
+    },
+  }
+}
+
 function materialIconThemeAssets(): Plugin {
   const sourceDirectory = path.resolve(
     import.meta.dirname,
@@ -89,6 +122,7 @@ export default defineConfig({
         changeOrigin: true,
         ws: true,
       },
+      ...onlyOfficeProxyPaths(),
     },
   },
   resolve: {
