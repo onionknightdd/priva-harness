@@ -11,18 +11,25 @@ const TERMINAL_STATUSES = new Set([
 ])
 
 export const VISUALIZE_TOOL_NAME = 'visualize'
+export const CANVAS_TOOL_NAME = 'canvas'
+
+const PRODUCT_TOOL_NAMES = new Set([VISUALIZE_TOOL_NAME, CANVAS_TOOL_NAME])
 
 const MCP_TOOL_NAME = /^mcp__[a-zA-Z0-9_-]+__(.+)$/
 
 export function canonicalProductToolName(name: string): string {
   const lower = name.trim().toLowerCase()
   const stripped = stripMcpToolPrefix(lower)
-  if (stripped === VISUALIZE_TOOL_NAME) return VISUALIZE_TOOL_NAME
+  if (PRODUCT_TOOL_NAMES.has(stripped)) return stripped
   return lower
 }
 
 export function isVisualizeToolName(name: string): boolean {
   return canonicalProductToolName(name) === VISUALIZE_TOOL_NAME
+}
+
+export function isCanvasToolName(name: string): boolean {
+  return canonicalProductToolName(name) === CANVAS_TOOL_NAME
 }
 
 function stripMcpToolPrefix(name: string): string {

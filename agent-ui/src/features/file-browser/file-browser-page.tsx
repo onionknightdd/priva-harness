@@ -2,7 +2,7 @@ import * as React from "react"
 import gsap from "gsap"
 import { useTranslation } from "react-i18next"
 
-import { RichFilePreview, type PreviewFile } from "@/features/files"
+import { RichFilePreview, type FilePreviewMode, type PreviewFile } from "@/features/files"
 import { saveEditedHtmlFile } from "@/features/files/preview/save-edited-html-file"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { startFileDownload } from "@/lib/api/sandbox-files"
@@ -34,6 +34,9 @@ export function FileBrowserPage({
   const browser = useFileBrowser()
   const { openPath } = browser
   const workspaceFiles = useOptionalWorkspaceFiles()
+  const [previewMode, setPreviewMode] = React.useState<
+    FilePreviewMode | undefined
+  >(undefined)
   const isMobile = useIsMobile()
   const pageRef = React.useRef<HTMLDivElement>(null)
   const uploadInputRef = React.useRef<HTMLInputElement>(null)
@@ -97,7 +100,9 @@ export function FileBrowserPage({
       return
     }
 
+    const mode = workspaceFiles.pendingPreviewMode ?? undefined
     void openPath(path).then(() => {
+      setPreviewMode(mode)
       if (isMobile) {
         setTreeVisible(false)
       }
@@ -109,6 +114,7 @@ export function FileBrowserPage({
     setTreeVisible,
     workspaceFiles?.fileOpenNonce,
     workspaceFiles?.pendingFilePath,
+    workspaceFiles?.pendingPreviewMode,
   ])
 
   React.useEffect(
@@ -148,6 +154,7 @@ export function FileBrowserPage({
     path: string,
     shouldLoadDirectory: boolean
   ) => {
+    setPreviewMode(undefined)
     const item = browser.model.items[path]
     await browser.selectItem(path, shouldLoadDirectory)
 
@@ -160,6 +167,7 @@ export function FileBrowserPage({
     path: string,
     type: FileBrowserItem["type"]
   ) => {
+    setPreviewMode(undefined)
     void browser.navigateBreadcrumb(path, type)
     if (isMobile && type === "file") {
       setTreeVisible(false)
@@ -260,7 +268,12 @@ export function FileBrowserPage({
       compact={compact}
       expanded={!treeVisible}
       files={browser.openedFiles}
-      onActiveFileChange={browser.setActiveFile}
+      mode={previewMode}
+      onActiveFileChange={(fileId) => {
+        setPreviewMode(undefined)
+        browser.setActiveFile(fileId)
+      }}
+      onModeChange={setPreviewMode}
       onCloseAll={browser.closeAllFiles}
       onDownload={(file) => startFileDownload(file.path, file.name)}
       onSaveHtml={handleSaveHtml}

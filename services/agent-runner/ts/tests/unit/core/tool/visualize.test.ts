@@ -31,7 +31,10 @@ describe('visualize tool', () => {
   })
 
   it('is registered on the product catalog', () => {
-    expect(productTools.map((tool) => tool.name)).toEqual([VISUALIZE_TOOL_NAME])
+    expect(productTools.map((tool) => tool.name)).toEqual([
+      VISUALIZE_TOOL_NAME,
+      'canvas',
+    ])
   })
 
   it('tells the model the preview is interactive and sandboxed', () => {

@@ -1,6 +1,7 @@
 import type { TFunction } from "i18next"
 
 import type { StreamBlock, ToolCard } from "./agent-message-data"
+import { isCanvasTool } from "./canvas-html"
 import { isTaskBoardTool } from "./task-plan"
 import { isVisualizeTool } from "./visualize-jsx"
 
@@ -99,6 +100,13 @@ export function toolItemStatusLabel(
       running
         ? "agentMessage.toolItem.visualizeRunning"
         : "agentMessage.toolItem.visualizeDone"
+    )
+  }
+  if (isCanvasTool(name)) {
+    return t(
+      running
+        ? "agentMessage.toolItem.canvasRunning"
+        : "agentMessage.toolItem.canvasDone"
     )
   }
   const kind = classifyToolName(name)

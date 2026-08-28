@@ -11,10 +11,11 @@ const context = {
 }
 
 describe('compile custom tools', () => {
-  it('compiles visualize into a Claude SDK MCP server and aliases', () => {
+  it('compiles product tools into a Claude SDK MCP server and aliases', () => {
     const compiled = compileClaudeCustomTools(productTools, context)
     expect(compiled.toolAliases).toEqual({
       visualize: 'mcp__agentWorkshop__visualize',
+      canvas: 'mcp__agentWorkshop__canvas',
     })
     expect(compiled.mcpServers).toMatchObject({
       agentWorkshop: { type: 'sdk', name: 'agentWorkshop' },
