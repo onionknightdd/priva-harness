@@ -32,12 +32,12 @@ export function TaskPlanDock({
           animate={{ opacity: 1, y: 0 }}
           exit={shouldReduceMotion ? undefined : { opacity: 0, y: 6 }}
           transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}
-          className="pointer-events-auto w-full"
+          className="mb-2 w-full"
         >
           <TodoList
             title={t("agentMessage.taskPlan")}
             items={toTodoItems(plan)}
-            className="bg-background"
+            className="rounded-3xl border-input bg-background shadow-xs dark:bg-input/30"
           />
         </motion.div>
       ) : null}

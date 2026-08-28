@@ -111,11 +111,6 @@ export function AgentMessage({
             </motion.div>
           )}
         </AnimatePresence>
-        <div className="pointer-events-none absolute inset-x-0 bottom-3 z-20">
-          <div className="mx-auto w-full max-w-3xl">
-            <TaskPlanDock messages={messages} />
-          </div>
-        </div>
       </div>
 
       <div
@@ -125,6 +120,7 @@ export function AgentMessage({
           !isEmpty && "pt-3"
         )}
       >
+        <TaskPlanDock messages={messages} />
         <AgentMessageComposer
           compact={!isEmpty}
           draft={draft}
