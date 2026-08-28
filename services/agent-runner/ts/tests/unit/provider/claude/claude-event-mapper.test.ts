@@ -658,6 +658,51 @@ describe('ClaudeEventMapper', () => {
     ]))
   })
 
+  it('canonicalizes Claude SDK MCP canvas names', () => {
+    const mapper = new ClaudeEventMapper()
+    const events = [
+      ...mapper.push({
+        type: 'stream_event',
+        event: {
+          type: 'content_block_start',
+          index: 0,
+          content_block: {
+            type: 'tool_use',
+            id: 'call_canvas',
+            name: 'mcp__agentWorkshop__canvas',
+            input: { html: '<h1>Deck</h1>', name: 'deck' },
+          },
+        },
+      }),
+      ...mapper.push({
+        type: 'user',
+        message: {
+          content: [{
+            type: 'tool_result',
+            tool_use_id: 'call_canvas',
+            content: '/work/.canvas/deck.html',
+          }],
+        },
+      }),
+    ]
+
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'tool.started',
+        id: 'call_canvas',
+        name: 'canvas',
+        input: { html: '<h1>Deck</h1>', name: 'deck' },
+      }),
+      expect.objectContaining({
+        type: 'tool.completed',
+        id: 'call_canvas',
+        name: 'canvas',
+        ok: true,
+        output: '/work/.canvas/deck.html',
+      }),
+    ]))
+  })
+
   it('canonicalizes Claude SDK MCP visualize names', () => {
     const mapper = new ClaudeEventMapper()
     const events = [

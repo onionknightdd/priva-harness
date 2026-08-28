@@ -66,7 +66,9 @@ import {
   toolItemStatusLabel,
 } from "../tool-activity"
 import { QuoteSelectable } from "./quote-selectable"
+import { CanvasToolItem } from "./canvas-tool-item"
 import { VisualizeToolItem } from "./visualize-tool-item"
+import { isCanvasTool } from "../canvas-html"
 import { isVisualizeTool } from "../visualize-jsx"
 
 const PANEL_CLASS =
@@ -306,6 +308,9 @@ function ToolItem({
   }
   if (isVisualizeTool(block.name)) {
     return <VisualizeToolItem block={block} />
+  }
+  if (isCanvasTool(block.name)) {
+    return <CanvasToolItem block={block} />
   }
   return <GenericToolItem block={block} />
 }

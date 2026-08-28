@@ -6,7 +6,8 @@ export const visualizeTool = defineTool({
   description: [
     'Render an interactive visual for the user from React JSX.',
     'The snippet runs in a sandboxed iframe, so onClick and useState work.',
-    'Call this when the user asks to visualize, chart, diagram, or mock a UI.',
+    'Call this when the user asks to visualize, chart, diagram, or mock a compact UI in chat.',
+    'Use canvas instead for large HTML documents that should open in the workspace preview.',
     'Pass either a JSX snippet or a function named App, for example function App() { const [n, setN] = useState(0); return <button onClick={() => setN(n + 1)}>{n}</button>; }.',
     'Do not wrap the JSX in markdown fences, and do not import or export modules.',
     'Prefer inline style objects.',

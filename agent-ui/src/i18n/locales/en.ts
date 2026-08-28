@@ -71,10 +71,13 @@ export const en = {
       bashDone: "Ran",
       visualizeRunning: "Visualizing",
       visualizeDone: "Visualize",
+      canvasRunning: "Writing canvas",
+      canvasDone: "Canvas",
       otherRunning: "Running {{name}}",
       otherDone: "{{name}}",
     },
     visualizeFrameTitle: "Interactive visualize preview",
+    canvasOpenPreview: "Open preview",
     toolSummary: {
       separator: ", ",
       runningReadOne: "Reading {{count}} file",

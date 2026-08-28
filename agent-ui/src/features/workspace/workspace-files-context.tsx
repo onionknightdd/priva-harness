@@ -1,14 +1,23 @@
 import * as React from "react"
 
 import { useSidebar } from "@/components/ui/sidebar"
+import type { FilePreviewMode } from "@/features/files/model/file.types"
 
 import { type WorkspaceModuleId } from "./workspace-modules"
+
+export type OpenFileInWorkspaceOptions = {
+  previewMode?: FilePreviewMode
+}
 
 type WorkspaceFilesContextValue = {
   activeTabId: WorkspaceModuleId | null
   pendingFilePath: string | null
+  pendingPreviewMode: FilePreviewMode | null
   fileOpenNonce: number
-  openFileInWorkspace: (path: string) => void
+  openFileInWorkspace: (
+    path: string,
+    options?: OpenFileInWorkspaceOptions
+  ) => void
   setActiveTabId: (id: WorkspaceModuleId | null) => void
 }
 
@@ -26,11 +35,14 @@ export function WorkspaceFilesProvider({
   const [pendingFilePath, setPendingFilePath] = React.useState<string | null>(
     null
   )
+  const [pendingPreviewMode, setPendingPreviewMode] =
+    React.useState<FilePreviewMode | null>(null)
   const [fileOpenNonce, setFileOpenNonce] = React.useState(0)
 
   const openFileInWorkspace = React.useCallback(
-    (path: string) => {
+    (path: string, options?: OpenFileInWorkspaceOptions) => {
       setPendingFilePath(path)
+      setPendingPreviewMode(options?.previewMode ?? null)
       setFileOpenNonce((current) => current + 1)
       setActiveTabId("files")
       if (isMobile) {
@@ -46,11 +58,18 @@ export function WorkspaceFilesProvider({
     () => ({
       activeTabId,
       pendingFilePath,
+      pendingPreviewMode,
       fileOpenNonce,
       openFileInWorkspace,
       setActiveTabId,
     }),
-    [activeTabId, fileOpenNonce, openFileInWorkspace, pendingFilePath]
+    [
+      activeTabId,
+      fileOpenNonce,
+      openFileInWorkspace,
+      pendingFilePath,
+      pendingPreviewMode,
+    ]
   )
 
   return (
