@@ -38,6 +38,10 @@ import { FileTypeIcon } from "./file-type-icon"
 const FILE_TREE_INDENT = 20
 const FILE_TREE_STICKY_ROW_HEIGHT = 32
 const FILE_TREE_PANEL_TRANSITION_MS = 200
+const fileTreeRowVisibilityStyle = {
+  contentVisibility: "auto",
+  containIntrinsicSize: `auto ${FILE_TREE_STICKY_ROW_HEIGHT}px`,
+} satisfies React.CSSProperties
 
 function resolveFileTreeHighlightElement(item: HTMLElement) {
   return item.querySelector<HTMLElement>(
@@ -202,7 +206,7 @@ function FileBrowserTreeNode({
               top: `${level * FILE_TREE_STICKY_ROW_HEIGHT}px`,
               zIndex: 50 - level,
             }
-          : undefined
+          : fileTreeRowVisibilityStyle
       }
     >
       {isFolder &&

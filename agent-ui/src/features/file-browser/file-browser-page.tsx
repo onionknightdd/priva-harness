@@ -65,14 +65,6 @@ export function FileBrowserPage({
     treeVisible,
   } = useTreePanelVisibility()
 
-  const handleVisibleContentOverflow = React.useCallback(
-    (overflowPx: number) => {
-      onTreeStructureChange()
-      fitTreeToNameOverflow(overflowPx)
-    },
-    [fitTreeToNameOverflow, onTreeStructureChange]
-  )
-
   React.useLayoutEffect(() => {
     const page = pageRef.current
 
@@ -269,8 +261,9 @@ export function FileBrowserPage({
       onItemSelect={handleItemSelect}
       onRefresh={browser.refreshLoadedDirectories}
       onRetry={browser.loadInitialDirectory}
+      onTreeStructureChange={onTreeStructureChange}
       onUpload={handleUploadRequest}
-      onVisibleContentOverflow={handleVisibleContentOverflow}
+      onVisibleContentOverflow={fitTreeToNameOverflow}
     />
   )
 

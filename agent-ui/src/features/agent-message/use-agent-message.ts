@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 
 import { useAgentPreferences } from "@/features/settings/agent-preferences-context"
 import type { QueueBehavior } from "@/features/settings/agent-preferences"
-import { useChatSession } from "@/features/chat-session"
+import { useChatSession, useLiveSessions } from "@/features/chat-session"
 import { useHarness } from "@/features/sidebar/header/harness-context"
 import type { SlashCommand } from "@/lib/api/slash-commands"
 
@@ -48,12 +48,11 @@ export function useAgentMessage() {
     runCwd,
     runSessionId,
     bindRunSession,
-    beginLiveSession,
-    endLiveSession,
-    runningSessions,
     reloadThread,
     refresh,
   } = useChatSession()
+  const { beginLiveSession, endLiveSession, runningSessions } =
+    useLiveSessions()
   const [draft, setDraft] = React.useState("")
   const [slashCommand, setSlashCommand] = React.useState<SlashCommand | null>(
     null

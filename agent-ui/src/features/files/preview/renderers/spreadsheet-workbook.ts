@@ -1,42 +1,13 @@
 import { read, utils, type CellObject, type WorkSheet } from "xlsx"
 
-export const MAX_PREVIEW_ROWS = 500
-export const MAX_PREVIEW_COLS = 40
-export const MAX_SELECTION_TEXT_CELLS = 2_000
-
-export type SpreadsheetMerge = {
-  row: number
-  column: number
-  rowSpan: number
-  columnSpan: number
-}
-
-export type SpreadsheetSheet = {
-  id: string
-  name: string
-  originRow: number
-  originColumn: number
-  rowCount: number
-  columnCount: number
-  totalRows: number
-  totalColumns: number
-  truncated: boolean
-  values: string[][]
-  formulas: Map<string, string>
-  merges: SpreadsheetMerge[]
-  coveredCells: Set<string>
-}
-
-export type SpreadsheetWorkbook = {
-  sheets: SpreadsheetSheet[]
-}
-
-export type SpreadsheetCellRange = {
-  rowStart: number
-  rowEnd: number
-  columnStart: number
-  columnEnd: number
-}
+import {
+  MAX_PREVIEW_COLS,
+  MAX_PREVIEW_ROWS,
+  spreadsheetCellKey,
+  type SpreadsheetMerge,
+  type SpreadsheetSheet,
+  type SpreadsheetWorkbook,
+} from "./spreadsheet-model"
 
 function isCsvSource(fileName: string, mediaType: string) {
   const extension = fileName.split(".").at(-1)?.toLocaleLowerCase()
@@ -61,10 +32,6 @@ function decodeTextWorkbook(data: ArrayBuffer) {
   }
 
   return new TextDecoder("utf-8").decode(bytes)
-}
-
-function cellKey(row: number, column: number) {
-  return `${row},${column}`
 }
 
 function cellDisplayValue(cell: CellObject | undefined) {
@@ -150,7 +117,10 @@ function worksheetToSheet(name: string, worksheet: WorkSheet): SpreadsheetSheet 
     const formula = cellFormula(cell)
 
     if (formula) {
-      formulas.set(cellKey(relativeRow, relativeColumn), formula)
+      formulas.set(
+        spreadsheetCellKey(relativeRow, relativeColumn),
+        formula
+      )
     }
   }
 
@@ -183,7 +153,9 @@ function worksheetToSheet(name: string, worksheet: WorkSheet): SpreadsheetSheet 
           coveredColumn <= columnEnd;
           coveredColumn += 1
         ) {
-          coveredCells.add(cellKey(coveredRow, coveredColumn))
+          coveredCells.add(
+            spreadsheetCellKey(coveredRow, coveredColumn)
+          )
         }
       }
       continue
@@ -203,7 +175,9 @@ function worksheetToSheet(name: string, worksheet: WorkSheet): SpreadsheetSheet 
         coveredColumn += 1
       ) {
         if (coveredRow !== row || coveredColumn !== column) {
-          coveredCells.add(cellKey(coveredRow, coveredColumn))
+          coveredCells.add(
+            spreadsheetCellKey(coveredRow, coveredColumn)
+          )
         }
       }
     }
@@ -264,120 +238,4 @@ export function parseSpreadsheetWorkbook(
       return [worksheetToSheet(name, worksheet)]
     }),
   }
-}
-
-export function encodeColumnLabel(column: number) {
-  return utils.encode_col(column)
-}
-
-export function encodeCellAddress(row: number, column: number) {
-  return utils.encode_cell({ r: row, c: column })
-}
-
-export function encodeRangeAddress(range: SpreadsheetCellRange) {
-  if (
-    range.rowStart === range.rowEnd &&
-    range.columnStart === range.columnEnd
-  ) {
-    return encodeCellAddress(range.rowStart, range.columnStart)
-  }
-
-  return utils.encode_range({
-    s: { r: range.rowStart, c: range.columnStart },
-    e: { r: range.rowEnd, c: range.columnEnd },
-  })
-}
-
-export function normalizeRange(
-  first: { row: number; column: number },
-  second: { row: number; column: number }
-): SpreadsheetCellRange {
-  return {
-    rowStart: Math.min(first.row, second.row),
-    rowEnd: Math.max(first.row, second.row),
-    columnStart: Math.min(first.column, second.column),
-    columnEnd: Math.max(first.column, second.column),
-  }
-}
-
-export function rangeCellCount(range: SpreadsheetCellRange) {
-  return (
-    (range.rowEnd - range.rowStart + 1) *
-    (range.columnEnd - range.columnStart + 1)
-  )
-}
-
-export function selectionText(
-  sheet: SpreadsheetSheet,
-  range: SpreadsheetCellRange
-) {
-  if (rangeCellCount(range) > MAX_SELECTION_TEXT_CELLS) {
-    return undefined
-  }
-
-  const lines: string[] = []
-
-  for (let row = range.rowStart; row <= range.rowEnd; row += 1) {
-    const relativeRow = row - sheet.originRow
-
-    if (relativeRow < 0 || relativeRow >= sheet.rowCount) {
-      continue
-    }
-
-    const cells: string[] = []
-
-    for (
-      let column = range.columnStart;
-      column <= range.columnEnd;
-      column += 1
-    ) {
-      const relativeColumn = column - sheet.originColumn
-
-      if (
-        relativeColumn < 0 ||
-        relativeColumn >= sheet.columnCount
-      ) {
-        continue
-      }
-
-      cells.push(sheet.values[relativeRow]?.[relativeColumn] ?? "")
-    }
-
-    lines.push(cells.join("\t"))
-  }
-
-  return lines.join("\n")
-}
-
-export function cellFormulaOrValue(
-  sheet: SpreadsheetSheet,
-  row: number,
-  column: number
-) {
-  const relativeRow = row - sheet.originRow
-  const relativeColumn = column - sheet.originColumn
-
-  return (
-    sheet.formulas.get(cellKey(relativeRow, relativeColumn)) ??
-    sheet.values[relativeRow]?.[relativeColumn] ??
-    ""
-  )
-}
-
-export function mergeAt(
-  sheet: SpreadsheetSheet,
-  relativeRow: number,
-  relativeColumn: number
-) {
-  return sheet.merges.find(
-    (merge) => merge.row === relativeRow && merge.column === relativeColumn
-  )
-}
-
-export function isCoveredCell(
-  sheet: SpreadsheetSheet,
-  relativeRow: number,
-  relativeColumn: number
-) {
-  return sheet.coveredCells.has(cellKey(relativeRow, relativeColumn))
 }

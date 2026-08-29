@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useVirtualizer } from "@tanstack/react-virtual"
 import { Table2Icon } from "lucide-react"
 import { motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
@@ -34,13 +35,16 @@ import {
   isCoveredCell,
   mergeAt,
   normalizeRange,
-  parseSpreadsheetWorkbook,
   selectionText,
   type SpreadsheetCellRange,
   type SpreadsheetSheet,
-  type SpreadsheetWorkbook,
-} from "./spreadsheet-workbook"
-import { useBinaryPreview } from "./use-binary-preview"
+} from "./spreadsheet-model"
+import {
+  mergeSafeRowRange,
+  SPREADSHEET_ROW_HEIGHT,
+  SPREADSHEET_ROW_OVERSCAN,
+} from "./spreadsheet-virtualization"
+import { useSpreadsheetWorkbook } from "./use-spreadsheet-workbook"
 
 type CellPosition = {
   row: number
@@ -48,6 +52,47 @@ type CellPosition = {
 }
 
 type DragMode = "cell" | "row" | "column"
+
+let spreadsheetTextMeasureContext: CanvasRenderingContext2D | null = null
+
+function getSpreadsheetTextMeasureContext() {
+  if (spreadsheetTextMeasureContext) {
+    return spreadsheetTextMeasureContext
+  }
+
+  const context = document.createElement("canvas").getContext("2d")
+
+  if (context) {
+    const fontFamily = getComputedStyle(document.body).fontFamily
+    context.font = `12px ${fontFamily}`
+    spreadsheetTextMeasureContext = context
+  }
+
+  return context
+}
+
+function columnWidthSamples(sheet: SpreadsheetSheet) {
+  const measureContext = getSpreadsheetTextMeasureContext()
+
+  return Array.from({ length: sheet.columnCount }, (_, column) => {
+    let sample = encodeColumnLabel(sheet.originColumn + column)
+    let sampleWidth =
+      measureContext?.measureText(sample).width ?? sample.length
+
+    for (let row = 0; row < sheet.rowCount; row += 1) {
+      const value = sheet.values[row]?.[column] ?? ""
+      const width =
+        measureContext?.measureText(value).width ?? value.length
+
+      if (width > sampleWidth) {
+        sample = value
+        sampleWidth = width
+      }
+    }
+
+    return sample
+  })
+}
 
 function isInRange(
   row: number,
@@ -155,15 +200,21 @@ export function SpreadsheetRenderer({
 }) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
-  const binary = useBinaryPreview(source)
+  const parsedWorkbook = useSpreadsheetWorkbook({
+    source,
+    fileName,
+    mediaType,
+  })
   const gridRef = React.useRef<HTMLDivElement>(null)
   const dragRef = React.useRef<{
     mode: DragMode
     anchor: CellPosition
   } | null>(null)
-  const [workbook, setWorkbook] =
-    React.useState<SpreadsheetWorkbook | null>(null)
-  const [parseError, setParseError] = React.useState<string | null>(null)
+  const dragFrameRef = React.useRef<number | null>(null)
+  const pendingDragSelectionRef = React.useRef<{
+    anchor: CellPosition
+    focus: CellPosition
+  } | null>(null)
   const [activeSheetId, setActiveSheetId] = React.useState<string | null>(
     null
   )
@@ -172,54 +223,48 @@ export function SpreadsheetRenderer({
   const { clearSelection, reportSelection } =
     usePreviewSelectionReporter(fileId)
 
-  React.useEffect(() => {
-    if (binary.status !== "ready") {
-      return
-    }
+  const workbook = parsedWorkbook.workbook
 
-    let active = true
-    setWorkbook(null)
-    setParseError(null)
-    setActiveSheetId(null)
+  React.useEffect(() => {
+    setActiveSheetId(workbook?.sheets[0]?.id ?? null)
     setAnchor(null)
     setFocus(null)
     clearSelection()
-
-    try {
-      const nextWorkbook = parseSpreadsheetWorkbook(
-        binary.data,
-        fileName,
-        mediaType
-      )
-
-      if (!active) {
-        return
-      }
-
-      if (nextWorkbook.sheets.length === 0) {
-        setParseError(t("filePreview.spreadsheetEmpty"))
-        return
-      }
-
-      setWorkbook(nextWorkbook)
-      setActiveSheetId(nextWorkbook.sheets[0]?.id ?? null)
-    } catch (error: unknown) {
-      if (active) {
-        setParseError(
-          error instanceof Error ? error.message : String(error)
-        )
-      }
-    }
-
-    return () => {
-      active = false
-    }
-  }, [binary, clearSelection, fileName, mediaType, t])
+  }, [clearSelection, workbook])
 
   const sheet =
     workbook?.sheets.find((candidate) => candidate.id === activeSheetId) ??
     workbook?.sheets[0] ??
     null
+
+  const rowVirtualizer = useVirtualizer({
+    count: sheet?.rowCount ?? 0,
+    getScrollElement: () => gridRef.current,
+    estimateSize: () => SPREADSHEET_ROW_HEIGHT,
+    overscan: SPREADSHEET_ROW_OVERSCAN,
+  })
+  const virtualRows = rowVirtualizer.getVirtualItems()
+  const rawRowStart = virtualRows[0]?.index ?? 0
+  const rawRowEnd =
+    virtualRows[virtualRows.length - 1]?.index ??
+    Math.min(sheet?.rowCount ?? 1, 1) - 1
+  const rowRange = sheet
+    ? mergeSafeRowRange(sheet, rawRowStart, rawRowEnd)
+    : { start: 0, end: -1 }
+  const renderedRowOffsets = React.useMemo(
+    () =>
+      rowRange.end < rowRange.start
+        ? []
+        : Array.from(
+            { length: rowRange.end - rowRange.start + 1 },
+            (_, index) => rowRange.start + index
+          ),
+    [rowRange.end, rowRange.start]
+  )
+  const widthSamples = React.useMemo(
+    () => (sheet ? columnWidthSamples(sheet) : []),
+    [sheet]
+  )
 
   React.useEffect(() => {
     if (!sheet || sheet.rowCount === 0 || sheet.columnCount === 0) {
@@ -266,10 +311,70 @@ export function SpreadsheetRenderer({
         return
       }
 
-      setAnchor(clampPosition(sheet, nextAnchor))
-      setFocus(clampPosition(sheet, nextFocus))
+      const clampedAnchor = clampPosition(sheet, nextAnchor)
+      const clampedFocus = clampPosition(sheet, nextFocus)
+
+      setAnchor((current) =>
+        current?.row === clampedAnchor.row &&
+        current.column === clampedAnchor.column
+          ? current
+          : clampedAnchor
+      )
+      setFocus((current) =>
+        current?.row === clampedFocus.row &&
+        current.column === clampedFocus.column
+          ? current
+          : clampedFocus
+      )
     },
     [sheet]
+  )
+
+  const flushPendingDragSelection = React.useCallback(() => {
+    if (dragFrameRef.current != null) {
+      cancelAnimationFrame(dragFrameRef.current)
+      dragFrameRef.current = null
+    }
+
+    const pending = pendingDragSelectionRef.current
+    pendingDragSelectionRef.current = null
+
+    if (pending) {
+      selectCells(pending.anchor, pending.focus)
+    }
+  }, [selectCells])
+
+  const scheduleDragSelection = React.useCallback(
+    (nextAnchor: CellPosition, nextFocus: CellPosition) => {
+      pendingDragSelectionRef.current = {
+        anchor: nextAnchor,
+        focus: nextFocus,
+      }
+
+      if (dragFrameRef.current != null) {
+        return
+      }
+
+      dragFrameRef.current = requestAnimationFrame(() => {
+        dragFrameRef.current = null
+        const pending = pendingDragSelectionRef.current
+        pendingDragSelectionRef.current = null
+
+        if (pending) {
+          selectCells(pending.anchor, pending.focus)
+        }
+      })
+    },
+    [selectCells]
+  )
+
+  React.useEffect(
+    () => () => {
+      if (dragFrameRef.current != null) {
+        cancelAnimationFrame(dragFrameRef.current)
+      }
+    },
+    []
   )
 
   const applyDragIntent = React.useCallback(
@@ -378,7 +483,7 @@ export function SpreadsheetRenderer({
     }
 
     if (drag.mode === "row" && intent.mode === "row") {
-      selectCells(drag.anchor, {
+      scheduleDragSelection(drag.anchor, {
         row: intent.row,
         column: lastPosition(sheet).column,
       })
@@ -386,7 +491,7 @@ export function SpreadsheetRenderer({
     }
 
     if (drag.mode === "column" && intent.mode === "column") {
-      selectCells(drag.anchor, {
+      scheduleDragSelection(drag.anchor, {
         row: lastPosition(sheet).row,
         column: intent.column,
       })
@@ -394,7 +499,7 @@ export function SpreadsheetRenderer({
     }
 
     if (drag.mode === "cell" && intent.mode === "cell") {
-      selectCells(drag.anchor, {
+      scheduleDragSelection(drag.anchor, {
         row: intent.row,
         column: intent.column,
       })
@@ -404,6 +509,8 @@ export function SpreadsheetRenderer({
   const handleGridPointerUp = (
     event: React.PointerEvent<HTMLDivElement>
   ) => {
+    flushPendingDragSelection()
+
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
@@ -435,10 +542,14 @@ export function SpreadsheetRenderer({
     }
 
     event.preventDefault()
-    const nextFocus = {
+    const nextFocus = clampPosition(sheet, {
       row: focus.row + delta.row,
       column: focus.column + delta.column,
-    }
+    })
+
+    rowVirtualizer.scrollToIndex(nextFocus.row - sheet.originRow, {
+      align: "auto",
+    })
 
     if (event.shiftKey && event.key !== "Tab") {
       selectCells(anchor, nextFocus)
@@ -464,18 +575,22 @@ export function SpreadsheetRenderer({
   }
 
   if (
-    binary.status === "loading" ||
-    (binary.status === "ready" && !workbook && !parseError)
+    parsedWorkbook.status === "idle" ||
+    parsedWorkbook.status === "loading"
   ) {
     return <PreviewRequestState loading />
   }
 
-  if (binary.status === "error") {
-    return <PreviewRequestState error={binary.error} />
+  if (parsedWorkbook.status === "error") {
+    return <PreviewRequestState error={parsedWorkbook.error} />
   }
 
-  if (parseError || !workbook || !sheet) {
-    return <PreviewRequestState error={parseError ?? undefined} />
+  if (!workbook || workbook.sheets.length === 0 || !sheet) {
+    return (
+      <PreviewRequestState
+        error={t("filePreview.spreadsheetEmpty")}
+      />
+    )
   }
 
   const rangeAddress = selectionRange
@@ -582,7 +697,32 @@ export function SpreadsheetRenderer({
                 </tr>
               </thead>
               <tbody>
-                {Array.from({ length: sheet.rowCount }, (_, rowOffset) => {
+                <tr aria-hidden="true" className="h-0">
+                  <td className="h-0 min-w-12 border-0 p-0" />
+                  {widthSamples.map((sample, columnOffset) => (
+                    <td
+                      key={columnOffset}
+                      className="h-0 max-w-64 min-w-24 border-0 p-0"
+                    >
+                      <span className="invisible block h-0 overflow-hidden whitespace-nowrap px-2 text-xs">
+                        {sample}
+                      </span>
+                    </td>
+                  ))}
+                </tr>
+                {rowRange.start > 0 ? (
+                  <tr aria-hidden="true">
+                    <td
+                      colSpan={sheet.columnCount + 1}
+                      className="border-0 p-0"
+                      style={{
+                        height:
+                          rowRange.start * SPREADSHEET_ROW_HEIGHT,
+                      }}
+                    />
+                  </tr>
+                ) : null}
+                {renderedRowOffsets.map((rowOffset) => {
                   const row = sheet.originRow + rowOffset
                   const rowSelected = Boolean(
                     selectionRange &&
@@ -654,6 +794,19 @@ export function SpreadsheetRenderer({
                     </tr>
                   )
                 })}
+                {rowRange.end < sheet.rowCount - 1 ? (
+                  <tr aria-hidden="true">
+                    <td
+                      colSpan={sheet.columnCount + 1}
+                      className="border-0 p-0"
+                      style={{
+                        height:
+                          (sheet.rowCount - rowRange.end - 1) *
+                          SPREADSHEET_ROW_HEIGHT,
+                      }}
+                    />
+                  </tr>
+                ) : null}
               </tbody>
             </table>
           </div>

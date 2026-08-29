@@ -12,6 +12,12 @@ import {
 } from "@/lib/api/sandbox-sessions"
 
 import { threadMessagesFromApi } from "./session-thread-messages"
+import {
+  LiveSessionContext,
+  LiveSessionStatusContext,
+  type LiveSessionContextValue,
+  type LiveSessionStatusContextValue,
+} from "./live-session-context"
 
 type ForkFromInput = {
   message: AgentThreadMessage
@@ -19,7 +25,16 @@ type ForkFromInput = {
   stem: string
 }
 
-type ChatSessionContextValue = ReturnType<typeof useSessionProjects> & {
+type SessionProjectsValue = ReturnType<typeof useSessionProjects>
+type LiveSessionProjectKey =
+  | "runningSessions"
+  | "runningSessionIds"
+  | "warmSessionIds"
+
+type ChatSessionContextValue = Omit<
+  SessionProjectsValue,
+  LiveSessionProjectKey
+> & {
   activeSession: SessionInfo | null
   threadMessages: AgentThreadMessage[]
   messagesStatus: "idle" | "loading" | "ready" | "error"
@@ -35,8 +50,6 @@ type ChatSessionContextValue = ReturnType<typeof useSessionProjects> & {
   startNewChat: (cwd?: string) => void
   forkFrom: (input: ForkFromInput) => Promise<void>
   bindRunSession: (sessionId: string, seed?: { firstPrompt?: string }) => void
-  beginLiveSession: (sessionId: string) => void
-  endLiveSession: (sessionId: string) => void
   reloadThread: () => Promise<AgentThreadMessage[]>
 }
 
@@ -71,7 +84,24 @@ export function ChatSessionProvider({
   children: React.ReactNode
 }) {
   const { runHarnessId } = useHarness()
-  const projects = useSessionProjects(runHarnessId)
+  const {
+    groups,
+    activeCwd,
+    status,
+    error,
+    refreshing,
+    refresh,
+    loadMore,
+    setPinned,
+    archive,
+    setTags,
+    rename,
+    remove: removeProject,
+    prependSession,
+    runningSessions,
+    runningSessionIds: polledRunningSessionIds,
+    warmSessionIds,
+  } = useSessionProjects(runHarnessId)
   const [localLiveSessionIds, setLocalLiveSessionIds] = React.useState<
     ReadonlySet<string>
   >(() => new Set())
@@ -103,10 +133,10 @@ export function ChatSessionProvider({
     setThreadMessages([])
     setMessagesStatus("idle")
     setRunSessionId(null)
-    setRunCwd(projects.activeCwd)
+    setRunCwd(activeCwd)
     setForkError(null)
     bumpTranscript()
-  }, [bumpTranscript, projects.activeCwd])
+  }, [activeCwd, bumpTranscript])
 
   const startNewChat = React.useCallback(
     (cwd?: string) => {
@@ -116,11 +146,11 @@ export function ChatSessionProvider({
       setThreadMessages([])
       setMessagesStatus("idle")
       setRunSessionId(null)
-      setRunCwd(cwd?.trim() || projects.activeCwd)
+      setRunCwd(cwd?.trim() || activeCwd)
       setForkError(null)
       bumpTranscript()
     },
-    [bumpTranscript, projects.activeCwd]
+    [activeCwd, bumpTranscript]
   )
 
   React.useEffect(() => {
@@ -141,17 +171,17 @@ export function ChatSessionProvider({
     if (activeSession || runSessionId) {
       return
     }
-    if (runCwd === "" && projects.activeCwd) {
-      setRunCwd(projects.activeCwd)
+    if (runCwd === "" && activeCwd) {
+      setRunCwd(activeCwd)
     }
-  }, [activeSession, projects.activeCwd, runCwd, runSessionId])
+  }, [activeCwd, activeSession, runCwd, runSessionId])
 
   React.useEffect(() => {
     if (!activeSession) {
       return
     }
 
-    const next = projects.groups
+    const next = groups
       .flatMap((group) => group.sessions)
       .find((session) => session.sessionId === activeSession.sessionId)
 
@@ -169,7 +199,7 @@ export function ChatSessionProvider({
     ) {
       setActiveSession(next)
     }
-  }, [activeSession, projects.groups])
+  }, [activeSession, groups])
 
   React.useEffect(() => {
     if (!activeSession || !runHarnessId) {
@@ -295,8 +325,8 @@ export function ChatSessionProvider({
         setRunCwd(created.cwd?.trim() || runCwd)
         setActiveSession(created)
         bumpTranscript()
-        projects.prependSession(created)
-        projects.refresh()
+        prependSession(created)
+        refresh()
       } catch (error: unknown) {
         setForkError(errorMessage(error, "failed"))
       } finally {
@@ -304,7 +334,14 @@ export function ChatSessionProvider({
         setForking(false)
       }
     },
-    [bumpTranscript, projects, runCwd, runHarnessId, runSessionId]
+    [
+      bumpTranscript,
+      prependSession,
+      refresh,
+      runCwd,
+      runHarnessId,
+      runSessionId,
+    ]
   )
 
   const bindRunSession = React.useCallback(
@@ -316,7 +353,7 @@ export function ChatSessionProvider({
       viewedSessionIdRef.current = sessionId
       skipTranscriptLoadRef.current = true
       setRunSessionId(sessionId)
-      const listed = projects.groups
+      const listed = groups
         .flatMap((group) => group.sessions)
         .find((session) => session.sessionId === sessionId)
       const prompt = seed?.firstPrompt?.trim() ?? ""
@@ -332,10 +369,10 @@ export function ChatSessionProvider({
         current?.sessionId === sessionId ? current : next
       )
       if (listed === undefined) {
-        projects.prependSession(next)
+        prependSession(next)
       }
     },
-    [projects, runCwd]
+    [groups, prependSession, runCwd]
   )
 
   const remove = React.useCallback(
@@ -344,9 +381,9 @@ export function ChatSessionProvider({
         closeSession()
       }
 
-      await projects.remove(sessionId)
+      await removeProject(sessionId)
     },
-    [activeSession?.sessionId, closeSession, projects, runSessionId]
+    [activeSession?.sessionId, closeSession, removeProject, runSessionId]
   )
 
   const highlightedSessionId = activeSession?.sessionId ?? runSessionId
@@ -396,20 +433,30 @@ export function ChatSessionProvider({
 
   const runningSessionIds = React.useMemo(() => {
     if (localLiveSessionIds.size === 0) {
-      return projects.runningSessionIds
+      return polledRunningSessionIds
     }
-    const merged = new Set(projects.runningSessionIds)
+    const merged = new Set(polledRunningSessionIds)
     for (const sessionId of localLiveSessionIds) {
       merged.add(sessionId)
     }
     return merged
-  }, [localLiveSessionIds, projects.runningSessionIds])
+  }, [localLiveSessionIds, polledRunningSessionIds])
 
   const value = React.useMemo<ChatSessionContextValue>(
     () => ({
-      ...projects,
-      runningSessionIds,
+      groups,
+      activeCwd,
+      status,
+      error,
+      refreshing,
+      refresh,
+      loadMore,
+      setPinned,
+      archive,
+      setTags,
+      rename,
       remove,
+      prependSession,
       activeSession,
       threadMessages,
       messagesStatus,
@@ -425,38 +472,65 @@ export function ChatSessionProvider({
       startNewChat,
       forkFrom,
       bindRunSession,
-      beginLiveSession,
-      endLiveSession,
       reloadThread,
     }),
     [
+      activeCwd,
       activeSession,
-      beginLiveSession,
+      archive,
       bindRunSession,
       canFork,
       closeSession,
-      endLiveSession,
+      error,
       forkError,
       forkFrom,
       forking,
+      groups,
       highlightedSessionId,
+      loadMore,
       messagesStatus,
       openSession,
-      projects,
+      prependSession,
+      refresh,
+      refreshing,
       reloadThread,
       remove,
+      rename,
       runCwd,
-      runningSessionIds,
       runSessionId,
+      setPinned,
+      setTags,
       startNewChat,
+      status,
       threadMessages,
       transcriptEpoch,
     ]
   )
 
+  const liveValue = React.useMemo<LiveSessionContextValue>(
+    () => ({
+      runningSessions,
+      beginLiveSession,
+      endLiveSession,
+    }),
+    [beginLiveSession, endLiveSession, runningSessions]
+  )
+
+  const liveStatusValue = React.useMemo<LiveSessionStatusContextValue>(
+    () => ({
+      runningSessionIds,
+      warmSessionIds,
+    }),
+    [runningSessionIds, warmSessionIds]
+  )
+
   return (
     <ChatSessionContext.Provider value={value}>
-      {children}
+      <LiveSessionContext.Provider value={liveValue}>
+        <LiveSessionStatusContext.Provider value={liveStatusValue}>
+          {children}
+        </LiveSessionStatusContext.Provider>
+      </LiveSessionContext.Provider>
     </ChatSessionContext.Provider>
   )
 }

@@ -31,6 +31,11 @@ export function OverflowMarquee({
   }, [active])
 
   React.useLayoutEffect(() => {
+    if (!active) {
+      setOverflowDistance(0)
+      return
+    }
+
     const viewport = viewportRef.current
     const content = contentRef.current
 
@@ -51,7 +56,7 @@ export function OverflowMarquee({
     resizeObserver.observe(content)
 
     return () => resizeObserver.disconnect()
-  }, [children])
+  }, [active, children])
 
   const shouldAnimate =
     active &&

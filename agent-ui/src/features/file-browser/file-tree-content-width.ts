@@ -48,8 +48,9 @@ function getMeasureNode() {
   return node
 }
 
-export function measureFileTreeNameOverflow(root: HTMLElement) {
-  const slots = root.querySelectorAll<HTMLElement>("[data-file-tree-name]")
+export function measureFileTreeNameOverflow(
+  slots: Iterable<HTMLElement>
+) {
   const probe = getMeasureNode()
   const rows: { nameWidth: number; nameSlotWidth: number }[] = []
 

@@ -26,6 +26,51 @@ function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
 }
 
+function runningSessionEquals(
+  current: RunningSession,
+  next: RunningSession
+) {
+  return (
+    current.sessionId === next.sessionId &&
+    current.runId === next.runId &&
+    current.status === next.status &&
+    current.startedAt === next.startedAt &&
+    current.lastSeq === next.lastSeq &&
+    current.firstSeq === next.firstSeq &&
+    current.runMode === next.runMode &&
+    current.harness === next.harness
+  )
+}
+
+function runningSessionsEqual(
+  current: readonly RunningSession[],
+  next: readonly RunningSession[]
+) {
+  if (current.length !== next.length) {
+    return false
+  }
+
+  const currentByRunId = new Map(
+    current.map((session) => [session.runId, session])
+  )
+
+  return next.every((session) => {
+    const previous = currentByRunId.get(session.runId)
+    return previous !== undefined && runningSessionEquals(previous, session)
+  })
+}
+
+function nextSessionIdSet(
+  current: ReadonlySet<string>,
+  next: readonly string[]
+) {
+  const nextSet = new Set(next)
+  const unchanged =
+    current.size === nextSet.size &&
+    next.every((sessionId) => current.has(sessionId))
+  return unchanged ? current : nextSet
+}
+
 export function useSessionProjects(harness: AgentRunHarness | null) {
   const { t } = useTranslation()
   const loadFailed = t("sidebar.projects.loadFailed")
@@ -40,18 +85,12 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
   const [runningSessions, setRunningSessions] = React.useState<
     readonly RunningSession[]
   >([])
+  const [runningSessionIds, setRunningSessionIds] = React.useState<
+    ReadonlySet<string>
+  >(() => new Set())
   const [warmSessionIds, setWarmSessionIds] = React.useState<
     ReadonlySet<string>
   >(() => new Set())
-  const runningSessionIds = React.useMemo(
-    () =>
-      new Set(
-        runningSessions.flatMap((item) =>
-          item.sessionId ? [item.sessionId] : []
-        )
-      ),
-    [runningSessions]
-  )
 
   const refresh = React.useCallback(() => {
     setRefreshIndex((current) => current + 1)
@@ -64,6 +103,7 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
       setError(null)
       setRefreshing(false)
       setRunningSessions([])
+      setRunningSessionIds(new Set())
       setWarmSessionIds(new Set())
       setStatus("unsupported")
       return
@@ -105,6 +145,7 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
     }
 
     let cancelled = false
+    let timer: number | null = null
 
     const pull = async () => {
       try {
@@ -112,21 +153,38 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
         if (cancelled) {
           return
         }
-        setRunningSessions(live.running)
-        setWarmSessionIds(new Set(live.warmSessionIds))
+        setRunningSessions((current) =>
+          runningSessionsEqual(current, live.running) ? current : live.running
+        )
+        setWarmSessionIds((current) =>
+          nextSessionIdSet(current, live.warmSessionIds)
+        )
+        setRunningSessionIds((current) =>
+          nextSessionIdSet(
+            current,
+            live.running.flatMap((session) =>
+              session.sessionId ? [session.sessionId] : []
+            )
+          )
+        )
       } catch {
         // Keep the last known live set if a poll fails.
+      } finally {
+        if (!cancelled) {
+          timer = window.setTimeout(() => {
+            void pull()
+          }, 2500)
+        }
       }
     }
 
     void pull()
-    const timer = window.setInterval(() => {
-      void pull()
-    }, 2500)
 
     return () => {
       cancelled = true
-      window.clearInterval(timer)
+      if (timer !== null) {
+        window.clearTimeout(timer)
+      }
     }
   }, [harness, refreshIndex])
 

@@ -22,6 +22,7 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
+import { useLiveSessionStatus } from "@/features/chat-session"
 import type { SessionInfo } from "@/lib/api/sandbox-sessions"
 
 import {
@@ -38,6 +39,28 @@ const renameTransition = {
   mass: 0.75,
 }
 
+function SessionLiveStatus({
+  sessionId,
+  runningLabel,
+  warmLabel,
+}: {
+  sessionId: string
+  runningLabel: string
+  warmLabel: string
+}) {
+  const { runningSessionIds, warmSessionIds } = useLiveSessionStatus()
+
+  if (runningSessionIds.has(sessionId)) {
+    return <StatusDot status="running" label={runningLabel} />
+  }
+
+  if (warmSessionIds.has(sessionId)) {
+    return <StatusDot status="warm" label={warmLabel} />
+  }
+
+  return null
+}
+
 export function ProjectSessionItem({
   session,
   isMobile,
@@ -49,8 +72,6 @@ export function ProjectSessionItem({
   onSelect,
   knownTags,
   isActive = false,
-  isRunning = false,
-  isWarm = false,
 }: {
   session: SessionInfo
   isMobile: boolean
@@ -62,8 +83,6 @@ export function ProjectSessionItem({
   onSelect: (session: SessionInfo) => void
   knownTags: KnownSessionTag[]
   isActive?: boolean
-  isRunning?: boolean
-  isWarm?: boolean
 }) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
@@ -159,17 +178,11 @@ export function ProjectSessionItem({
             setEditing(true)
           }}
         >
-          {isRunning ? (
-            <StatusDot
-              status="running"
-              label={t("sidebar.projects.sessionRunning")}
-            />
-          ) : isWarm ? (
-            <StatusDot
-              status="warm"
-              label={t("sidebar.projects.sessionWarm")}
-            />
-          ) : null}
+          <SessionLiveStatus
+            sessionId={session.sessionId}
+            runningLabel={t("sidebar.projects.sessionRunning")}
+            warmLabel={t("sidebar.projects.sessionWarm")}
+          />
           {session.pinned ? (
             <PinIcon
               className="size-3.5 shrink-0 fill-current"

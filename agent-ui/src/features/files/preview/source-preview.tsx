@@ -14,6 +14,8 @@ const sourceFrameClassName =
   "min-h-full min-w-0 w-full bg-muted/20 py-3 font-mono text-[13px] leading-6"
 const sourceLineClassName =
   "grid grid-cols-[3.5rem_minmax(0,1fr)] px-3"
+const SOURCE_LINE_HEIGHT = 24
+const SOURCE_VISIBILITY_CHUNK_SIZE = 80
 
 type HighlightedSource = {
   code: string
@@ -57,15 +59,55 @@ function getTokenStyle(token: ThemedToken): React.CSSProperties {
   }
 }
 
-function PlainSourceLines({ content }: { content: string }) {
-  return content.split("\n").map((line, index) => (
-    <div key={index} className={sourceLineClassName}>
-      <LineNumber value={index + 1} />
-      <code className="break-words whitespace-pre-wrap pl-4">
-        {line || "\u200b"}
-      </code>
+function SourceVisibilityChunk({
+  children,
+  lineCount,
+}: {
+  children: React.ReactNode
+  lineCount: number
+}) {
+  return (
+    <div
+      style={
+        {
+          contentVisibility: "auto",
+          containIntrinsicSize: `auto ${lineCount * SOURCE_LINE_HEIGHT}px`,
+        } satisfies React.CSSProperties
+      }
+    >
+      {children}
     </div>
-  ))
+  )
+}
+
+function PlainSourceLines({ content }: { content: string }) {
+  const lines = content.split("\n")
+
+  return Array.from(
+    {
+      length: Math.ceil(lines.length / SOURCE_VISIBILITY_CHUNK_SIZE),
+    },
+    (_, chunkIndex) => {
+      const start = chunkIndex * SOURCE_VISIBILITY_CHUNK_SIZE
+      const chunk = lines.slice(start, start + SOURCE_VISIBILITY_CHUNK_SIZE)
+
+      return (
+        <SourceVisibilityChunk
+          key={start}
+          lineCount={chunk.length}
+        >
+          {chunk.map((line, index) => (
+            <div key={start + index} className={sourceLineClassName}>
+              <LineNumber value={start + index + 1} />
+              <code className="break-words whitespace-pre-wrap pl-4">
+                {line || "\u200b"}
+              </code>
+            </div>
+          ))}
+        </SourceVisibilityChunk>
+      )
+    }
+  )
 }
 
 function HighlightedSourceLines({
@@ -73,20 +115,40 @@ function HighlightedSourceLines({
 }: {
   tokens: ThemedToken[][]
 }) {
-  return tokens.map((line, lineIndex) => (
-    <div key={lineIndex} className={sourceLineClassName}>
-      <LineNumber value={lineIndex + 1} />
-      <code className="break-words whitespace-pre-wrap pl-4">
-        {line.length > 0
-          ? line.map((token, tokenIndex) => (
-              <span key={tokenIndex} style={getTokenStyle(token)}>
-                {token.content}
-              </span>
-            ))
-          : "\u200b"}
-      </code>
-    </div>
-  ))
+  return Array.from(
+    {
+      length: Math.ceil(tokens.length / SOURCE_VISIBILITY_CHUNK_SIZE),
+    },
+    (_, chunkIndex) => {
+      const start = chunkIndex * SOURCE_VISIBILITY_CHUNK_SIZE
+      const chunk = tokens.slice(
+        start,
+        start + SOURCE_VISIBILITY_CHUNK_SIZE
+      )
+
+      return (
+        <SourceVisibilityChunk
+          key={start}
+          lineCount={chunk.length}
+        >
+          {chunk.map((line, index) => (
+            <div key={start + index} className={sourceLineClassName}>
+              <LineNumber value={start + index + 1} />
+              <code className="break-words whitespace-pre-wrap pl-4">
+                {line.length > 0
+                  ? line.map((token, tokenIndex) => (
+                      <span key={tokenIndex} style={getTokenStyle(token)}>
+                        {token.content}
+                      </span>
+                    ))
+                  : "\u200b"}
+              </code>
+            </div>
+          ))}
+        </SourceVisibilityChunk>
+      )
+    }
+  )
 }
 
 export function SourcePreview({

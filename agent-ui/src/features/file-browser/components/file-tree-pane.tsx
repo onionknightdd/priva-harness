@@ -32,6 +32,7 @@ export function FileTreePane({
   onItemSelect,
   onRefresh,
   onRetry,
+  onTreeStructureChange,
   onUpload,
   onVisibleContentOverflow,
   rootPath,
@@ -50,6 +51,7 @@ export function FileTreePane({
   ) => Promise<void>
   onRefresh: () => Promise<void>
   onRetry: () => Promise<void>
+  onTreeStructureChange?: () => void
   onUpload: (directory: string) => void
   onVisibleContentOverflow?: (overflowPx: number) => void
   rootPath: string | null
@@ -59,6 +61,9 @@ export function FileTreePane({
   const refreshIconRef = React.useRef<SVGSVGElement>(null)
   const treeScrollRef = React.useRef<HTMLDivElement>(null)
   const announcementTimerRef = React.useRef<number | null>(null)
+  const reportVisibleOverflowRef = React.useRef<() => void>(
+    () => undefined
+  )
   const [query, setQuery] = React.useState("")
   const [refreshing, setRefreshing] = React.useState(false)
   const [announcement, setAnnouncement] = React.useState("")
@@ -73,13 +78,112 @@ export function FileTreePane({
     []
   )
 
-  const reportVisibleContentOverflow = React.useCallback(() => {
+  const handleVisibleRowsChange = React.useCallback(() => {
+    onTreeStructureChange?.()
+    reportVisibleOverflowRef.current()
+  }, [onTreeStructureChange])
+
+  React.useEffect(() => {
     const root = treeScrollRef.current
+
     if (!root || !onVisibleContentOverflow) {
+      reportVisibleOverflowRef.current = () => undefined
       return
     }
 
-    onVisibleContentOverflow(measureFileTreeNameOverflow(root))
+    let reportFrame = 0
+    const visibleSlots = new Set<HTMLElement>()
+    const observedSlots = new Set<HTMLElement>()
+
+    const reportVisibleOverflow = () => {
+      window.cancelAnimationFrame(reportFrame)
+      reportFrame = window.requestAnimationFrame(() => {
+        const connectedSlots = [...visibleSlots].filter(
+          (slot) => slot.isConnected
+        )
+
+        if (connectedSlots.length > 0) {
+          onVisibleContentOverflow(
+            measureFileTreeNameOverflow(connectedSlots)
+          )
+        }
+      })
+    }
+
+    reportVisibleOverflowRef.current = reportVisibleOverflow
+
+    if (typeof IntersectionObserver === "undefined") {
+      const reportAllRows = () => {
+        const slots = root.querySelectorAll<HTMLElement>(
+          "[data-file-tree-name]"
+        )
+
+        if (slots.length > 0) {
+          onVisibleContentOverflow(measureFileTreeNameOverflow(slots))
+        }
+      }
+
+      reportVisibleOverflowRef.current = reportAllRows
+      reportAllRows()
+
+      return () => {
+        reportVisibleOverflowRef.current = () => undefined
+      }
+    }
+
+    const intersectionObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const slot = entry.target
+
+          if (!(slot instanceof HTMLElement)) {
+            continue
+          }
+
+          if (entry.isIntersecting) {
+            visibleSlots.add(slot)
+          } else {
+            visibleSlots.delete(slot)
+          }
+        }
+
+        reportVisibleOverflow()
+      },
+      {
+        root,
+        rootMargin: "64px 0px",
+      }
+    )
+
+    const observeRows = () => {
+      for (const slot of observedSlots) {
+        if (!slot.isConnected) {
+          intersectionObserver.unobserve(slot)
+          observedSlots.delete(slot)
+          visibleSlots.delete(slot)
+        }
+      }
+
+      for (const slot of root.querySelectorAll<HTMLElement>(
+        "[data-file-tree-name]"
+      )) {
+        if (!observedSlots.has(slot)) {
+          observedSlots.add(slot)
+          intersectionObserver.observe(slot)
+        }
+      }
+    }
+
+    const mutationObserver = new MutationObserver(observeRows)
+    mutationObserver.observe(root, { childList: true, subtree: true })
+    observeRows()
+
+    return () => {
+      window.cancelAnimationFrame(reportFrame)
+      mutationObserver.disconnect()
+      intersectionObserver.disconnect()
+      reportVisibleOverflowRef.current = () => undefined
+    }
   }, [onVisibleContentOverflow])
 
   const announceAction = React.useCallback((message: string) => {
@@ -217,7 +321,7 @@ export function FileTreePane({
             onDownload={onDownload}
             onItemSelect={onItemSelect}
             onUpload={onUpload}
-            onVisibleRowsChange={reportVisibleContentOverflow}
+            onVisibleRowsChange={handleVisibleRowsChange}
           />
         )}
       </div>
