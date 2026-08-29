@@ -315,12 +315,12 @@ export function ToolResult({
           {icon ?? <KindIcon kind={kind} />}
         </span>
         <span className="flex min-w-0 flex-none items-baseline gap-2">
-          <span className="shrink-0 font-medium text-muted-foreground/70">
+          <span className="shrink-0 font-normal text-muted-foreground/70">
             <ActionSwapRollText value={toolKey}>
               {tool}
             </ActionSwapRollText>
           </span>
-          <span className="min-w-0 truncate font-medium text-muted-foreground/70">
+          <span className="min-w-0 truncate font-normal text-muted-foreground/70">
             <ActionSwapRollText value={titleKey}>
               {title}
             </ActionSwapRollText>

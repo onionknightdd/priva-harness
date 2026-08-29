@@ -146,7 +146,7 @@ export function FileRead({
           />
           <span className="flex min-w-0 flex-none items-center gap-2 leading-none">
             {tool ? (
-              <span className="shrink-0 font-medium text-muted-foreground/70">
+              <span className="shrink-0 font-normal text-muted-foreground/70">
                 {typeof tool === "string" || typeof tool === "number" ? (
                   <ActionSwapRollText value={String(tool)}>
                     {tool}
@@ -156,7 +156,7 @@ export function FileRead({
                 )}
               </span>
             ) : null}
-            <span className="min-w-0 truncate font-medium text-muted-foreground/70">
+            <span className="min-w-0 truncate font-normal text-muted-foreground/70">
               {file}
             </span>
           </span>

@@ -785,7 +785,7 @@ function ProcessRow({
         </ItemMedia>
       ) : null}
       <ItemContent className="min-w-0 flex-none">
-        <ItemTitle className="text-base">{title}</ItemTitle>
+        <ItemTitle className="text-base font-normal">{title}</ItemTitle>
       </ItemContent>
       {showActions ? (
         <ItemActions>

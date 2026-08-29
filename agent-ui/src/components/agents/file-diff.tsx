@@ -230,7 +230,7 @@ export function FileDiff({
               className="block size-[1em] shrink-0 text-muted-foreground/70"
             />
           )}
-          <span className="flex min-w-0 items-center gap-1 font-medium leading-none text-muted-foreground/70">
+          <span className="flex min-w-0 items-center gap-1 font-normal leading-none text-muted-foreground/70">
             {tool ? (
               typeof tool === "string" || typeof tool === "number" ? (
                 <ActionSwapRollText value={String(tool)}>
