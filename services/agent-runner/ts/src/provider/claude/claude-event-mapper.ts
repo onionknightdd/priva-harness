@@ -22,6 +22,7 @@ import {
 } from '../../core/event/tool-names.js'
 import { unifiedDiffFromStructuredPatch } from '../../core/event/tool-patch.js'
 import { encodeReadView } from '../../core/event/tool-read.js'
+import { isSyntheticNoResponseAssistant } from './session/claude-transcript.js'
 
 export interface ClaudeSdkMessage {
   readonly type: string
@@ -74,6 +75,7 @@ export class ClaudeEventMapper {
       case 'stream_event':
         return this.mapStreamEvent(message.event, channel)
       case 'assistant':
+        if (isSyntheticNoResponseAssistant(message.message ?? message)) return []
         return this.mapAssistant(message.message, channel)
       case 'user':
         return this.mapUser(message, channel)

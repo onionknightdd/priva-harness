@@ -196,6 +196,7 @@ function isNoResponseAssistant(message: FoldableMessage): boolean {
     message.role === "assistant" &&
     message.status !== "error" &&
     message.content.trim() === "No response requested." &&
+    (message.blocks?.length ?? 0) === 0 &&
     (message.nestedAgents?.length ?? 0) === 0 &&
     (message.workflows?.length ?? 0) === 0
   )

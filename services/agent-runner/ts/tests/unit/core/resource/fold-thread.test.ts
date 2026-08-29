@@ -145,6 +145,27 @@ describe('foldThread', () => {
       expect.objectContaining({ role: 'user', content: '/compact' }),
     ])
   })
+
+  it('keeps the real last answer when a No response requested trailer is folded in', () => {
+    const thread = foldThread([
+      user('u1', '写完了吗'),
+      frame({
+        type: 'assistant.message',
+        messageId: 'a1',
+        blocks: [textBlock('已经写完。', 'a1:0', 0)],
+      }),
+      frame({
+        type: 'assistant.message',
+        messageId: 'a2',
+        blocks: [textBlock('No response requested.', 'a2:0', 0)],
+      }),
+    ])
+
+    expect(thread.at(-1)).toMatchObject({
+      role: 'assistant',
+      content: '已经写完。',
+    })
+  })
 })
 
 function user(id: string, content: string): ThreadReplayItem {

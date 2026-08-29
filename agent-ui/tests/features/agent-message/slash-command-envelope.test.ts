@@ -152,6 +152,19 @@ describe("foldCommandSurfaces", () => {
     assert.equal(folded[0]?.compact?.phase, "compacting")
   })
 
+  it("keeps the last assistant when No response requested is only a trailer", () => {
+    const user = message("u1", "user", "写完了吗")
+    const last = {
+      ...message("a1", "assistant", "No response requested."),
+      blocks: [{ type: "text", blockId: "t1", index: 0, text: "已经写完。" }],
+    }
+    const folded = foldCommandSurfaces([user, last])
+
+    assert.equal(folded.length, 2)
+    assert.equal(folded[1]?.id, "a1")
+    assert.equal(folded[1]?.content, "No response requested.")
+  })
+
   it("pairs a nearby continuation summary and marks the compact done", () => {
     const summary = message("s1", "user", COMPACT_SUMMARY)
     const compact = message("c1", "user", COMPACT_ENVELOPE)

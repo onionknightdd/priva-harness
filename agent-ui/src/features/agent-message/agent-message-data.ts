@@ -110,13 +110,20 @@ export function createAgentThreadMessage(
   }
 }
 
+const NO_RESPONSE_REQUESTED = "No response requested."
+
+function isVisibleAnswerText(text: string): boolean {
+  const trimmed = text.trim()
+  return trimmed !== "" && trimmed !== NO_RESPONSE_REQUESTED
+}
+
 export function answerTextBlock(
   blocks: readonly StreamBlock[]
 ): Extract<StreamBlock, { type: "text" }> | undefined {
   const texts = [...blocks]
     .filter(
       (block): block is Extract<StreamBlock, { type: "text" }> =>
-        block.type === "text" && block.text.trim() !== ""
+        block.type === "text" && isVisibleAnswerText(block.text)
     )
     .sort((left, right) => left.index - right.index)
   const last = texts.at(-1)
@@ -133,8 +140,11 @@ export function answerTextBlock(
 }
 
 function blockHasVisibleContent(block: StreamBlock): boolean {
-  if (block.type === "thinking" || block.type === "text") {
+  if (block.type === "thinking") {
     return block.text.trim() !== ""
+  }
+  if (block.type === "text") {
+    return isVisibleAnswerText(block.text)
   }
   if (block.type === "tool_use") {
     return !isTaskBoardTool(block.name)

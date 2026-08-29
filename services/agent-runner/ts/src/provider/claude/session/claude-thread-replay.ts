@@ -2,6 +2,7 @@ import { ClaudeEventMapper, type ClaudeSdkMessage } from '../claude-event-mapper
 import { asRecord, isRecord, stringField } from '../../../core/event/json-record.js'
 import type { SessionMessage } from '../../../core/resource/session.js'
 import type { ThreadReplayItem } from '../../../core/resource/thread.js'
+import { isSyntheticNoResponseAssistant } from './claude-transcript.js'
 
 export function replayClaudeSessionMessages(
   messages: readonly SessionMessage[],
@@ -19,6 +20,15 @@ export function replayClaudeSessionMessages(
         content,
         createdAt: isoFromTimestamp(message.timestamp),
       })
+      continue
+    }
+
+    if (
+      isSyntheticNoResponseAssistant({
+        type: message.type,
+        message: message.message,
+      })
+    ) {
       continue
     }
 

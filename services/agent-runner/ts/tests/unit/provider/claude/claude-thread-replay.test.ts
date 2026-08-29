@@ -292,6 +292,30 @@ describe('replayClaudeSessionMessages', () => {
     })
   })
 
+  it('does not let a trailing No response requested assistant hide the last answer', () => {
+    const messages: SessionMessage[] = [
+      session('user', 'u1', { role: 'user', content: '写完了吗' }),
+      session('assistant', 'a1', {
+        role: 'assistant',
+        id: 'a1',
+        content: [{ type: 'text', text: '已经写完。' }],
+      }),
+      session('assistant', 'syn', {
+        role: 'assistant',
+        id: 'syn',
+        model: '<synthetic>',
+        content: [{ type: 'text', text: 'No response requested.' }],
+      }),
+    ]
+
+    const thread = foldThread(replayClaudeSessionMessages(messages))
+    expect(thread).toHaveLength(2)
+    expect(thread[1]).toMatchObject({
+      role: 'assistant',
+      content: '已经写完。',
+    })
+  })
+
   it('replays Read FileReadOutput text as a $read envelope', () => {
     const messages: SessionMessage[] = [
       session('assistant', 'a1', {

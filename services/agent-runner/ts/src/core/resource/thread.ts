@@ -115,13 +115,20 @@ export function threadBlocksFromContent(blocks: readonly ContentBlock[]): Thread
   })
 }
 
+const NO_RESPONSE_REQUESTED = 'No response requested.'
+
+function isVisibleAnswerText(text: string): boolean {
+  const trimmed = text.trim()
+  return trimmed !== '' && trimmed !== NO_RESPONSE_REQUESTED
+}
+
 export function answerTextBlock(
   blocks: readonly ThreadBlock[],
 ): Extract<ThreadBlock, { type: 'text' }> | undefined {
   const texts = [...blocks]
     .filter(
       (block): block is Extract<ThreadBlock, { type: 'text' }> =>
-        block.type === 'text' && block.text.trim() !== '',
+        block.type === 'text' && isVisibleAnswerText(block.text),
     )
     .sort((left, right) => left.index - right.index)
   const last = texts.at(-1)
@@ -134,15 +141,14 @@ export function answerTextBlock(
 }
 
 function blockHasVisibleContent(block: ThreadBlock): boolean {
-  if (block.type === 'thinking' || block.type === 'text') return block.text.trim() !== ''
+  if (block.type === 'thinking') return block.text.trim() !== ''
+  if (block.type === 'text') return isVisibleAnswerText(block.text)
   return block.type === 'tool_use' || block.type === 'image'
 }
 
 export function textFromThreadBlocks(blocks: readonly ThreadBlock[]): string {
   return answerTextBlock(blocks)?.text ?? ''
 }
-
-const NO_RESPONSE_REQUESTED = 'No response requested.'
 
 export function threadHasVisibleContent(message: ThreadMessage): boolean {
   if (message.role === 'user') return message.content.trim() !== ''

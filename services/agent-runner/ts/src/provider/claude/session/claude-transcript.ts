@@ -79,6 +79,7 @@ export function mergeSdkAndTranscriptMessages(
   for (const raw of sdkMessages) {
     const uuid = recordUuid(raw)
     if (uuid !== undefined && used.has(uuid)) continue
+    if (isSyntheticNoResponseAssistant(raw)) continue
     merged.push(raw)
   }
   return merged
@@ -120,13 +121,18 @@ function isMainThreadRecord(record: JsonRecord): boolean {
   if (type !== 'user' && type !== 'assistant') return false
   if (isSidechain(record)) return false
   if (record['isMeta'] === true) return false
-  if (type === 'assistant' && isNoResponseRequested(record)) return false
+  if (isSyntheticNoResponseAssistant(record)) return false
   return true
 }
 
-function isNoResponseRequested(record: JsonRecord): boolean {
+export function isSyntheticNoResponseAssistant(raw: unknown): boolean {
+  const record = asRecord(raw)
+  if (record === undefined) return false
+  const type = stringField(record, 'type')
+  if (type !== undefined && type !== 'assistant') return false
   const message = asRecord(record['message']) ?? record
-  return assistantText(message) === 'No response requested.'
+  if (assistantText(message) !== 'No response requested.') return false
+  return !hasToolUseBlocks(message)
 }
 
 function assistantText(message: JsonRecord): string {
@@ -142,6 +148,15 @@ function assistantText(message: JsonRecord): string {
     })
     .join('')
     .trim()
+}
+
+function hasToolUseBlocks(message: JsonRecord): boolean {
+  const content = message['content']
+  if (!Array.isArray(content)) return false
+  return content.some((part) => {
+    const item = asRecord(part)
+    return item !== undefined && stringField(item, 'type') === 'tool_use'
+  })
 }
 
 function recordUuid(raw: unknown): string | undefined {

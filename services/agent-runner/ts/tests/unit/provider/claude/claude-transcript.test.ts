@@ -212,4 +212,29 @@ describe('mergeSdkAndTranscriptMessages', () => {
     ])
     expect(merged[2]).toBe(sdkTail)
   })
+
+  it('does not append a synthetic No response requested leftover from the SDK', () => {
+    const user = { type: 'user', uuid: 'u1', message: { role: 'user', content: '写完了吗' } }
+    const answer = {
+      type: 'assistant',
+      uuid: 'a1',
+      message: { role: 'assistant', content: [{ type: 'text', text: '已经写完。' }] },
+    }
+    const synthetic = {
+      type: 'assistant',
+      uuid: 'syn',
+      message: {
+        role: 'assistant',
+        model: '<synthetic>',
+        content: [{ type: 'text', text: 'No response requested.' }],
+      },
+    }
+
+    const merged = mergeSdkAndTranscriptMessages(
+      [user, answer, synthetic],
+      [user, answer],
+    )
+
+    expect(merged.map((record) => (record as { uuid: string }).uuid)).toEqual(['u1', 'a1'])
+  })
 })
