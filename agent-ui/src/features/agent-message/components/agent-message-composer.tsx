@@ -24,6 +24,7 @@ import {
   filterSlashCommands,
   parseSlashTrigger,
   shouldDeleteSlashChip,
+  visibleSlashCommands,
 } from "../composer-slash-command"
 import { useSlashCommandCatalog } from "../use-slash-command-catalog"
 import { ComposerAttachMenu } from "./composer-attach-menu"
@@ -299,7 +300,7 @@ export function AgentMessageComposer({
     () =>
       slashQuery === null
         ? []
-        : filterSlashCommands(catalog, slashQuery),
+        : visibleSlashCommands(filterSlashCommands(catalog, slashQuery)),
     [catalog, slashQuery]
   )
   const slashMenuOpen =

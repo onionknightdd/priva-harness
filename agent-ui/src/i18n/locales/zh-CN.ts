@@ -45,6 +45,7 @@ export const zhCN = {
     slashOriginUser: "用户",
     slashOriginProject: "项目",
     slashEmpty: "没有匹配的斜杠命令",
+    slashHint: "输入以搜索，按 <tab>Tab</tab> 补全",
     removeSlashCommand: "移除 /{{name}}",
     sessionReset: "会话已重置",
     conversationCompacting: "会话压缩中",

@@ -17,6 +17,8 @@ export function parseSlashTrigger(draft: string): SlashTrigger | null {
   return { query: firstLine.slice(1) }
 }
 
+const DESCRIPTION_NEEDLE_MIN = 3
+
 export function filterSlashCommands(
   commands: readonly SlashCommand[],
   query: string
@@ -26,17 +28,53 @@ export function filterSlashCommands(
     return [...commands]
   }
 
-  return commands.filter((command) => {
-    if (command.name.toLocaleLowerCase().includes(needle)) {
-      return true
-    }
-    if (command.description.toLocaleLowerCase().includes(needle)) {
-      return true
-    }
-    return command.aliases?.some((alias) =>
-      alias.toLocaleLowerCase().includes(needle)
+  return commands
+    .flatMap((command) => {
+      const rank = slashMatchRank(command, needle)
+      return rank === null ? [] : [{ command, rank }]
+    })
+    .sort(
+      (left, right) =>
+        left.rank - right.rank ||
+        slashKindRank(left.command.kind) - slashKindRank(right.command.kind) ||
+        left.command.name.localeCompare(right.command.name)
     )
-  })
+    .map((item) => item.command)
+}
+
+function slashKindRank(kind: SlashKind): number {
+  return kind === "command" ? 0 : 1
+}
+
+function slashMatchRank(command: SlashCommand, needle: string): number | null {
+  const name = command.name.toLocaleLowerCase()
+  const aliases = (command.aliases ?? []).map((alias) =>
+    alias.toLocaleLowerCase()
+  )
+  if (name.startsWith(needle)) {
+    return 0
+  }
+  if (aliases.some((alias) => alias.startsWith(needle))) {
+    return 1
+  }
+  if (name.includes(needle)) {
+    return 2
+  }
+  if (aliases.some((alias) => alias.includes(needle))) {
+    return 3
+  }
+  if (descriptionMatches(command.description, needle)) {
+    return 4
+  }
+  return null
+}
+
+function descriptionMatches(description: string, needle: string): boolean {
+  if (needle.length < DESCRIPTION_NEEDLE_MIN) {
+    return false
+  }
+  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  return new RegExp(`(?:^|[^\\p{L}\\p{N}])${escaped}`, "iu").test(description)
 }
 
 export function groupSlashCommands(commands: readonly SlashCommand[]): {
@@ -54,6 +92,22 @@ export function groupSlashCommands(commands: readonly SlashCommand[]): {
   }
 
   return grouped.filter((group) => group.commands.length > 0)
+}
+
+export function visibleSlashCommands(
+  commands: readonly SlashCommand[]
+): SlashCommand[] {
+  return groupSlashCommands(commands).flatMap((group) => group.commands)
+}
+
+export function slashMenuHoverMoved(
+  origin: { x: number; y: number } | null,
+  point: { x: number; y: number }
+): boolean {
+  if (origin === null) {
+    return false
+  }
+  return origin.x !== point.x || origin.y !== point.y
 }
 
 export function composeSlashMessage(name: string, draft: string): string {
@@ -75,6 +129,25 @@ const SLASH_MENU_VIEWPORT_INSET_PX = 8
 
 export function slashOptionId(menuId: string, index: number) {
   return `${menuId}-option-${index}`
+}
+
+export function slashGroupId(menuId: string, kind: SlashKind) {
+  return `${menuId}-group-${kind}`
+}
+
+export function slashRevealTargetId(
+  menuId: string,
+  highlightedIndex: number,
+  groups: readonly { kind: SlashKind; commands: readonly unknown[] }[]
+): string {
+  let index = 0
+  for (const group of groups) {
+    if (highlightedIndex === index) {
+      return slashGroupId(menuId, group.kind)
+    }
+    index += group.commands.length
+  }
+  return slashOptionId(menuId, highlightedIndex)
 }
 
 export function slashKindLabelKey(kind: SlashKind) {

@@ -10,8 +10,12 @@ import {
   parseSlashTrigger,
   positionSlashMenuPanel,
   shouldDeleteSlashChip,
+  slashGroupId,
   slashKindLabelKey,
+  slashMenuHoverMoved,
   slashOriginLabelKey,
+  slashRevealTargetId,
+  visibleSlashCommands,
 } from "../../../src/features/agent-message/composer-slash-command.ts"
 
 const compact: SlashCommand = {
@@ -29,6 +33,28 @@ const review: SlashCommand = {
   origin: "project",
 }
 
+const clear: SlashCommand = {
+  name: "clear",
+  description:
+    "Start a new session with empty context; previous session stays on disk",
+  kind: "command",
+  origin: "builtin",
+}
+
+const context: SlashCommand = {
+  name: "context",
+  description: "Show current context usage",
+  kind: "command",
+  origin: "builtin",
+}
+
+const codeReview: SlashCommand = {
+  name: "code-review",
+  description: "Review the current diff",
+  kind: "skill",
+  origin: "builtin",
+}
+
 describe("composer slash command helpers", () => {
   it("parses a leading slash token without whitespace as a trigger", () => {
     assert.deepEqual(parseSlashTrigger("/"), { query: "" })
@@ -42,6 +68,41 @@ describe("composer slash command helpers", () => {
     assert.deepEqual(filterSlashCommands([compact, review], "cost"), [compact])
     assert.deepEqual(filterSlashCommands([compact, review], "change"), [review])
     assert.equal(filterSlashCommands([compact, review], "").length, 2)
+  })
+
+  it("ranks /co by name prefix and ignores short description hits", () => {
+    const matches = filterSlashCommands(
+      [clear, compact, context, codeReview, review],
+      "co"
+    )
+    assert.deepEqual(
+      matches.map((command) => command.name),
+      ["compact", "context", "code-review"]
+    )
+    assert.deepEqual(
+      visibleSlashCommands(matches).map((command) => command.name),
+      ["compact", "context", "code-review"]
+    )
+  })
+
+  it("lists commands before skills so Tab completes the first visible row", () => {
+    assert.deepEqual(visibleSlashCommands([review, compact]), [compact, review])
+    assert.deepEqual(
+      visibleSlashCommands(filterSlashCommands([review, compact], "")),
+      [compact, review]
+    )
+  })
+
+  it("does not treat a still pointer as a hover move", () => {
+    assert.equal(slashMenuHoverMoved(null, { x: 10, y: 20 }), false)
+    assert.equal(
+      slashMenuHoverMoved({ x: 10, y: 20 }, { x: 10, y: 20 }),
+      false
+    )
+    assert.equal(
+      slashMenuHoverMoved({ x: 10, y: 20 }, { x: 11, y: 20 }),
+      true
+    )
   })
 
   it("groups commands before skills and composes the send payload", () => {
@@ -61,6 +122,12 @@ describe("composer slash command helpers", () => {
     assert.equal(shouldDeleteSlashChip(0, 0), true)
     assert.equal(shouldDeleteSlashChip(1, 1), false)
     assert.equal(shouldDeleteSlashChip(0, 3), false)
+  })
+
+  it("reveals the group title when the first row of a group is highlighted", () => {
+    const groups = groupSlashCommands([compact, review])
+    assert.equal(slashRevealTargetId("m", 0, groups), slashGroupId("m", "command"))
+    assert.equal(slashRevealTargetId("m", 1, groups), slashGroupId("m", "skill"))
   })
 
   it("maps kind and origin to hover-card badge labels", () => {

@@ -1,17 +1,21 @@
 import * as React from "react"
 import { createPortal } from "react-dom"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 
 import type { SlashCommand } from "@/lib/api/slash-commands"
+import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 
 import {
   groupSlashCommands,
   positionSlashMenuPanel,
+  slashGroupId,
   slashKindLabelKey,
+  slashMenuHoverMoved,
   slashOptionId,
   slashOriginLabelKey,
+  slashRevealTargetId,
 } from "../composer-slash-command"
 
 const COMPOSER_SLASH_LABEL_CLASS =
@@ -48,8 +52,29 @@ export function ComposerSlashMenu({
     bottom: number
     width: number
   } | null>(null)
-  const groups = groupSlashCommands(commands)
+  const groups = React.useMemo(
+    () => groupSlashCommands(commands),
+    [commands]
+  )
+  const hoverOriginRef = React.useRef<{ x: number; y: number } | null>(null)
+  const listRef = React.useRef<HTMLDivElement>(null)
   let itemIndex = -1
+
+  React.useEffect(() => {
+    if (!open) {
+      hoverOriginRef.current = null
+      return
+    }
+
+    const onPointerMove = (event: PointerEvent) => {
+      if (hoverOriginRef.current === null) {
+        hoverOriginRef.current = { x: event.clientX, y: event.clientY }
+      }
+    }
+
+    window.addEventListener("pointermove", onPointerMove)
+    return () => window.removeEventListener("pointermove", onPointerMove)
+  }, [open])
 
   React.useLayoutEffect(() => {
     if (!open) {
@@ -125,10 +150,23 @@ export function ComposerSlashMenu({
       return
     }
 
-    document
-      .getElementById(slashOptionId(menuId, highlightedIndex))
-      ?.scrollIntoView({ block: "nearest" })
-  }, [highlightedIndex, menuId, open])
+    const list = listRef.current
+    if (!list) {
+      return
+    }
+
+    if (highlightedIndex === 0) {
+      list.scrollTop = 0
+      return
+    }
+
+    const target = document.getElementById(
+      slashRevealTargetId(menuId, highlightedIndex, groups)
+    )
+    if (target) {
+      scrollChildIntoList(list, target)
+    }
+  }, [groups, highlightedIndex, menuId, open])
 
   if (typeof document === "undefined") {
     return null
@@ -154,77 +192,116 @@ export function ComposerSlashMenu({
           }}
           className="bg-popover text-popover-foreground relative origin-bottom overflow-hidden rounded-md border text-sm shadow-md outline-none"
         >
-          <div
-            className="max-h-72 overflow-x-hidden overflow-y-auto overscroll-contain p-1"
-            onWheel={(event) => event.stopPropagation()}
-            onMouseDown={(event) => {
-              if (isVerticalScrollbarClick(event)) {
-                return
-              }
-              event.preventDefault()
-            }}
-          >
-            {groups.length === 0 ? (
-              <div className="px-2 py-3 text-sm text-muted-foreground">
-                {t("agentMessage.slashEmpty")}
-              </div>
-            ) : (
-              groups.map((group, groupIndex) => (
-                <React.Fragment key={group.kind}>
-                  {groupIndex > 0 ? (
-                    <div className="bg-border -mx-1 my-1 h-px" />
-                  ) : null}
-                  <div>
-                    <div className={COMPOSER_SLASH_LABEL_CLASS}>
-                      {t(slashKindLabelKey(group.kind))}
+          <div className="relative">
+            <div
+              ref={listRef}
+              className="max-h-72 overflow-x-hidden overflow-y-auto overscroll-contain p-1"
+              onWheel={(event) => event.stopPropagation()}
+              onMouseDown={(event) => {
+                if (isVerticalScrollbarClick(event)) {
+                  return
+                }
+                event.preventDefault()
+              }}
+            >
+              {groups.length === 0 ? (
+                <div className="px-2 py-3 text-sm text-muted-foreground">
+                  {t("agentMessage.slashEmpty")}
+                </div>
+              ) : (
+                groups.map((group, groupIndex) => (
+                  <React.Fragment key={group.kind}>
+                    {groupIndex > 0 ? (
+                      <div className="mx-2 my-1 h-px bg-border" />
+                    ) : null}
+                    <div>
+                      <div
+                        id={slashGroupId(menuId, group.kind)}
+                        className={COMPOSER_SLASH_LABEL_CLASS}
+                      >
+                        {t(slashKindLabelKey(group.kind))}
+                      </div>
+                      {group.commands.map((command) => {
+                        itemIndex += 1
+                        const index = itemIndex
+                        const highlighted = index === highlightedIndex
+                        return (
+                          <div
+                            key={`${command.kind}:${command.name}`}
+                            id={slashOptionId(menuId, index)}
+                            className={cn(
+                              COMPOSER_SLASH_ITEM_CLASS,
+                              highlighted && "bg-accent"
+                            )}
+                            onMouseMove={(event) => {
+                              if (
+                                !slashMenuHoverMoved(hoverOriginRef.current, {
+                                  x: event.clientX,
+                                  y: event.clientY,
+                                })
+                              ) {
+                                return
+                              }
+                              onHighlight(index)
+                            }}
+                            onClick={() => onSelect(command)}
+                          >
+                            <span className="flex min-w-0 flex-1 items-center gap-2">
+                              <span className="shrink-0">
+                                {command.name}
+                              </span>
+                              <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground/70">
+                                {command.description}
+                              </span>
+                            </span>
+                            <span className="text-muted-foreground ml-auto text-xs tracking-normal normal-case">
+                              {t(slashOriginLabelKey(command.origin))}
+                            </span>
+                          </div>
+                        )
+                      })}
                     </div>
-                    {group.commands.map((command) => {
-                      itemIndex += 1
-                      const index = itemIndex
-                      const highlighted = index === highlightedIndex
-                      return (
-                        <div
-                          key={`${command.kind}:${command.name}`}
-                          id={slashOptionId(menuId, index)}
-                          className={cn(
-                            COMPOSER_SLASH_ITEM_CLASS,
-                            highlighted && "bg-accent"
-                          )}
-                          onMouseMove={() => onHighlight(index)}
-                          onClick={() => onSelect(command)}
-                        >
-                          <span className="flex min-w-0 flex-1 items-center gap-2">
-                            <span className="shrink-0">
-                              {command.name}
-                            </span>
-                            <span className="min-w-0 flex-1 truncate text-muted-foreground">
-                              {command.description}
-                            </span>
-                          </span>
-                          <span className="text-muted-foreground ml-auto text-xs tracking-normal normal-case">
-                            {t(slashOriginLabelKey(command.origin))}
-                          </span>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </React.Fragment>
-              ))
-            )}
+                  </React.Fragment>
+                ))
+              )}
+            </div>
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 top-0 z-10 h-3 bg-gradient-to-b from-popover to-transparent"
+            />
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-3 bg-gradient-to-t from-popover to-transparent"
+            />
           </div>
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 top-0 z-10 h-3 bg-gradient-to-b from-popover to-transparent"
-          />
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-3 bg-gradient-to-t from-popover to-transparent"
-          />
+          <Separator />
+          <div className="px-3 py-2 text-xs text-muted-foreground/70">
+            <Trans
+              i18nKey="agentMessage.slashHint"
+              components={{
+                tab: (
+                  <kbd className="rounded-sm border border-border bg-muted/50 px-1 py-px font-sans text-[0.7rem] text-muted-foreground" />
+                ),
+              }}
+            />
+          </div>
         </motion.div>
       ) : null}
     </AnimatePresence>,
     document.body
   )
+}
+
+function scrollChildIntoList(list: HTMLElement, child: HTMLElement) {
+  const listRect = list.getBoundingClientRect()
+  const childRect = child.getBoundingClientRect()
+  if (childRect.top < listRect.top) {
+    list.scrollTop -= listRect.top - childRect.top
+    return
+  }
+  if (childRect.bottom > listRect.bottom) {
+    list.scrollTop += childRect.bottom - listRect.bottom
+  }
 }
 
 function isVerticalScrollbarClick(event: React.MouseEvent<HTMLElement>) {

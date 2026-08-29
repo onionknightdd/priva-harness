@@ -45,6 +45,7 @@ export const en = {
     slashOriginUser: "user",
     slashOriginProject: "project",
     slashEmpty: "No matching slash commands",
+    slashHint: "Type to search, press <tab>Tab</tab> to fill in",
     removeSlashCommand: "Remove /{{name}}",
     sessionReset: "Session reset",
     conversationCompacting: "Compacting conversation",
