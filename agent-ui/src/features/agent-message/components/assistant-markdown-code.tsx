@@ -10,6 +10,9 @@ import { StreamdownMarkdownCode } from "@/components/ai-elements/streamdown-mark
 import { FilePathLink } from "@/features/files/file-path-link"
 import { useChatSession } from "@/features/chat-session"
 import { looksLikeFilePath, resolveAgainstCwd } from "@/lib/file-path"
+import { cn } from "@/lib/utils"
+
+const assistantInlineCodeClassName = "bg-[rgb(236,236,236)] dark:bg-muted"
 
 function collectText(node: ReactNode): string {
   if (node == null || typeof node === "boolean") {
@@ -52,14 +55,17 @@ export function AssistantMarkdownCode({
           label={text}
           showIcon
           variant="code"
-          className={className}
+          className={cn(assistantInlineCodeClassName, className)}
         />
       )
     }
   }
 
   return (
-    <StreamdownMarkdownCode className={className} {...props}>
+    <StreamdownMarkdownCode
+      className={cn(!isBlock && assistantInlineCodeClassName, className)}
+      {...props}
+    >
       {children}
     </StreamdownMarkdownCode>
   )
