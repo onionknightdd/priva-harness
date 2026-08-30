@@ -1,4 +1,5 @@
 import type { AgentEvent } from '../event/agent-event.js'
+import type { ContextUsage } from '../resource/context-usage.js'
 import type { SlashCommand } from '../resource/slash-command.js'
 import type { UserTurn } from '../run/user-turn.js'
 import type { ImageToolProfile } from '../tool/define-tool.js'
@@ -56,6 +57,7 @@ export interface AgentRuntime {
   run(turn: UserTurn, context: TurnContext): AsyncIterable<AgentEvent>
   applyRunSpec(spec: ProviderRunSpec): Promise<void>
   abort(reason?: string): Promise<void>
+  getContextUsage(): Promise<ContextUsage>
   release(retention: 'warm' | 'dispose'): Promise<void>
 }
 

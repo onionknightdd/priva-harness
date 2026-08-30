@@ -177,6 +177,10 @@ class SdkPiAgentSession implements PiAgentSession {
     return this.session.abort()
   }
 
+  getContextUsage(): { tokens: number | null; contextWindow: number } | undefined {
+    return this.session.getContextUsage()
+  }
+
   dispose(): void {
     this.session.dispose()
     void rm(this.runDir, { recursive: true, force: true })

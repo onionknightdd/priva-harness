@@ -419,6 +419,17 @@ function mapWorkflows(raw: unknown) {
   })
 }
 
+export function fetchSessionContextUsage(
+  harness: AgentRunHarness,
+  sessionId: string,
+  signal?: AbortSignal
+) {
+  return requestJson<unknown>(
+    `${sessionPath(sessionId, "/context-usage")}?${harnessQuery(harness)}`,
+    { signal }
+  )
+}
+
 export function forkSession(
   harness: AgentRunHarness,
   sessionId: string,

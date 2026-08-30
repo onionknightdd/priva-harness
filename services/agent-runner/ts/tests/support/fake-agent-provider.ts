@@ -3,11 +3,14 @@ import type {
   AgentRuntime,
   ProviderId,
   ProviderRunSpec,
+  SessionRef,
   SessionTarget,
   SlashCommandListRequest,
   TurnContext,
 } from '../../src/core/contract/agent-provider.js'
 import type { AgentEvent } from '../../src/core/event/agent-event.js'
+import { emptyContextUsage } from '../../src/core/resource/context-usage.js'
+import type { ContextUsage } from '../../src/core/resource/context-usage.js'
 import type { SlashCommand } from '../../src/core/resource/slash-command.js'
 import type { UserTurn } from '../../src/core/run/user-turn.js'
 import { FakeSessionStore } from './fake-session-store.js'
@@ -25,6 +28,9 @@ export class FakeAgentProvider implements AgentProvider {
   afterEventsGate: Promise<void> | undefined
   lastRuntime: FakeAgentRuntime | undefined
   delayMs = 0
+  contextUsage: ContextUsage = emptyContextUsage()
+  measureContextUsage: ((session: SessionRef, spec: ProviderRunSpec) => Promise<ContextUsage>) | undefined =
+    undefined
 
   constructor(id: ProviderId, events: readonly AgentEvent[], sessions = new FakeSessionStore()) {
     this.id = id
@@ -95,6 +101,10 @@ export class FakeAgentRuntime implements AgentRuntime {
 
   abort(): Promise<void> {
     return Promise.resolve()
+  }
+
+  getContextUsage(): Promise<ContextUsage> {
+    return Promise.resolve(this.provider.contextUsage)
   }
 
   release(retention: 'warm' | 'dispose'): Promise<void> {

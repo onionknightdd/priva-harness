@@ -158,6 +158,39 @@ describe('PiRuntime stream input', () => {
       .rejects.toThrow('Pi session cannot change model in place')
     await runtime.release('dispose')
   })
+
+  it('maps session context usage without inventing categories', async () => {
+    const session = new FakePiAgentSession()
+    session.contextUsage = { tokens: 1844, contextWindow: 1_000_000 }
+    const runtime = new PiRuntime(session)
+    expect(await runtime.getContextUsage()).toEqual({
+      used: 1844,
+      limit: 1_000_000,
+      categories: [
+        { id: 'systemPrompt', tokens: null },
+        { id: 'toolDefinitions', tokens: null },
+        { id: 'skills', tokens: null },
+        { id: 'mcpTools', tokens: null },
+        { id: 'subagentDefinitions', tokens: null },
+        { id: 'memory', tokens: null },
+        { id: 'conversation', tokens: null },
+      ],
+    })
+    await runtime.release('dispose')
+    expect(await runtime.getContextUsage()).toEqual({
+      used: null,
+      limit: null,
+      categories: [
+        { id: 'systemPrompt', tokens: null },
+        { id: 'toolDefinitions', tokens: null },
+        { id: 'skills', tokens: null },
+        { id: 'mcpTools', tokens: null },
+        { id: 'subagentDefinitions', tokens: null },
+        { id: 'memory', tokens: null },
+        { id: 'conversation', tokens: null },
+      ],
+    })
+  })
 })
 
 class FakePiAgentSession implements PiAgentSession {
@@ -172,6 +205,7 @@ class FakePiAgentSession implements PiAgentSession {
   readonly steers: string[] = []
   readonly compacts: string[] = []
   aborts = 0
+  contextUsage: { tokens: number | null; contextWindow: number } | undefined
   private listener: ((event: PiSessionEvent) => void) | undefined
 
   get isStreaming(): boolean {
@@ -228,6 +262,10 @@ class FakePiAgentSession implements PiAgentSession {
   abort(): Promise<void> {
     this.aborts += 1
     return Promise.resolve()
+  }
+
+  getContextUsage(): { tokens: number | null; contextWindow: number } | undefined {
+    return this.contextUsage
   }
 
   setRunModel?: (modelId: string) => Promise<void> = (modelId) => {

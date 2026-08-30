@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { AgentRuntime, ProviderRunSpec, SessionRef } from '../../../../src/core/contract/agent-provider.js'
 import type { AgentEvent } from '../../../../src/core/event/agent-event.js'
+import { emptyContextUsage } from '../../../../src/core/resource/context-usage.js'
 import {
   canApplyWarmRunSpec,
   identityFingerprint,
@@ -27,6 +28,7 @@ function fakeRuntime(
       return Promise.resolve()
     },
     abort: () => Promise.resolve(),
+    getContextUsage: () => Promise.resolve(emptyContextUsage()),
     release: (retention) => {
       released.push(retention)
       return Promise.resolve()
@@ -192,6 +194,18 @@ describe('warm run spec reuse', () => {
     expect(canApplyWarmRunSpec(spec, { ...spec, model: 'other' })).toBe(true)
   })
 
+  it('peeks a busy runtime and an idle runtime by session', async () => {
+    const pool = new WarmRuntimePool({ limit: 2 })
+    const busy = fakeRuntime('busy')
+    const idle = fakeRuntime('idle')
+    await pool.acquire({ provider: 'claude', id: 'busy' }, spec, () => Promise.resolve(busy))
+    await pool.acquire({ provider: 'claude', id: 'idle' }, spec, () => Promise.resolve(idle))
+    await pool.recycle(idle, spec, idle.session)
+    expect(pool.peek({ provider: 'claude', id: 'busy' })).toBe(busy)
+    expect(pool.peek({ provider: 'claude', id: 'idle' })).toBe(idle)
+    expect(pool.peek({ provider: 'claude', id: 'missing' })).toBeUndefined()
+  })
+
   it('rejects a change that needs a new process', () => {
     expect(canApplyWarmRunSpec(spec, { ...spec, profileId: 'p2' })).toBe(false)
     expect(canApplyWarmRunSpec(spec, { ...spec, effort: 'high' })).toBe(false)
@@ -213,6 +227,7 @@ describe('WarmRuntimePool idle inbound', () => {
       run: () => ({ [Symbol.asyncIterator]: () => ({ next: () => Promise.resolve({ done: true, value: undefined }) }) }),
       abort: () => Promise.resolve(),
       applyRunSpec: () => Promise.resolve(),
+      getContextUsage: () => Promise.resolve(emptyContextUsage()),
       release: () => Promise.resolve(),
       listenIdle: (next) => {
         listener = next

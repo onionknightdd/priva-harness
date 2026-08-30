@@ -95,6 +95,7 @@ export async function startServer(): Promise<void> {
     sessions: sessionService,
   })
   sessionService.bindWarmListing((harness) => agentHarness.listWarm(harness))
+  sessionService.bindContextUsageReader((ref, spec) => agentHarness.readContextUsage(ref, spec))
   const configDistributor = new ConfigDistributor([
     new ClaudeConfigAdapter(),
     new PiConfigAdapter(),

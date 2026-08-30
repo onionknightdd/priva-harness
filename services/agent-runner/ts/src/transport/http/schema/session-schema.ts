@@ -222,6 +222,45 @@ export const sessionMessagesSchema = {
 
 export const sessionThreadSchema = sessionMessagesSchema
 
+export const sessionContextUsageSchema = {
+  params: sessionIdParams,
+  querystring: harnessQueryObject,
+  response: {
+    200: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['used', 'limit', 'categories'],
+      properties: {
+        used: nullableNumber,
+        limit: nullableNumber,
+        categories: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['id', 'tokens'],
+            properties: {
+              id: {
+                type: 'string',
+                enum: [
+                  'systemPrompt',
+                  'toolDefinitions',
+                  'skills',
+                  'mcpTools',
+                  'subagentDefinitions',
+                  'memory',
+                  'conversation',
+                ],
+              },
+              tokens: nullableNumber,
+            },
+          },
+        },
+      },
+    },
+  },
+} as const
+
 export const sessionRecapSchema = {
   params: sessionIdParams,
   querystring: harnessQueryObject,

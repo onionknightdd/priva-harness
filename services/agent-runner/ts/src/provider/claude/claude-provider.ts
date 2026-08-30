@@ -2,12 +2,15 @@ import type {
   AgentProvider,
   AgentRuntime,
   ProviderRunSpec,
+  SessionRef,
   SessionTarget,
   SlashCommandListRequest,
 } from '../../core/contract/agent-provider.js'
 import type { ProviderSessionStore } from '../../core/contract/provider-session-store.js'
+import type { ContextUsage } from '../../core/resource/context-usage.js'
 import type { SlashCommand } from '../../core/resource/slash-command.js'
 import type { ToolDefinition } from '../../core/tool/define-tool.js'
+import { measureClaudeContextUsage } from './claude-context-usage.js'
 import { ClaudeRuntime } from './claude-runtime.js'
 import { ClaudeSessionStore } from './session/claude-session-store.js'
 import {
@@ -59,6 +62,18 @@ export class ClaudeProvider implements AgentProvider {
       globalConfigDir: this.options.globalConfigDir,
       tools: this.options.tools ?? [],
       ...(this.options.startQuery === undefined ? {} : { startQuery: this.options.startQuery }),
+    })
+  }
+
+  measureContextUsage(session: SessionRef, spec: ProviderRunSpec): Promise<ContextUsage> {
+    if (session.provider !== 'claude') {
+      return Promise.reject(new Error('Claude provider cannot measure a non-claude session'))
+    }
+    return measureClaudeContextUsage({
+      spec,
+      sessionId: session.id,
+      globalConfigDir: this.options.globalConfigDir,
+      tools: this.options.tools ?? [],
     })
   }
 }

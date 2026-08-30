@@ -7,21 +7,13 @@ import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button"
 import {
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemGroup,
-  ItemMedia,
-  ItemTitle,
-} from "@/components/ui/item"
-import {
   Popover,
   PopoverContent,
+  PopoverDescription,
   PopoverHeader,
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { Progress } from "@/components/ui/progress"
 import {
   Tooltip,
   TooltipContent,
@@ -38,6 +30,7 @@ import {
   contextUsageTone,
   emptyContextUsage,
   formatTokenCount,
+  shouldSpringContextUsageFill,
   type ContextUsage,
   type ContextUsageCategoryId,
   type ContextUsageTone,
@@ -57,18 +50,28 @@ const TONE_CLASS: Record<ContextUsageTone, string> = {
 
 export function ComposerContextRing({
   usage = emptyContextUsage(),
+  anchorRef,
   className,
 }: {
   usage?: ContextUsage
+  anchorRef: React.RefObject<HTMLElement | null>
   className?: string
 }) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
   const [open, setOpen] = React.useState(false)
   const percent = contextUsagePercent(usage)
+  const displayedPercentRef = React.useRef<number | null>(null)
+  const springFill = shouldSpringContextUsageFill(
+    displayedPercentRef.current,
+    percent
+  )
+  displayedPercentRef.current = percent
   const tone = contextUsageTone(percent)
   const fill = percent === null ? 0 : Math.min(percent, 100) / 100
   const dashOffset = RING_CIRCUMFERENCE * (1 - fill)
+  const fillTransition =
+    shouldReduceMotion || !springFill ? { duration: 0 } : SPRING_LAYOUT
   const unavailable = t("agentMessage.contextUsage.unavailable")
   const usedLabel =
     usage.used === null ? unavailable : formatTokenCount(usage.used)
@@ -122,7 +125,7 @@ export function ComposerContextRing({
               <ContextRingGraphic
                 tone={tone}
                 dashOffset={dashOffset}
-                reduceMotion={shouldReduceMotion}
+                transition={fillTransition}
               />
             </TooltipTrigger>
             <TooltipContent side="top" sideOffset={4}>
@@ -131,13 +134,20 @@ export function ComposerContextRing({
           </Tooltip>
         </TooltipProvider>
         <PopoverContent
-          align="end"
+          anchor={anchorRef}
+          align="start"
           side="top"
-          sideOffset={6}
-          className="w-72 gap-2 p-2.5 text-[13px] motion-reduce:animate-none"
+          sideOffset={8}
+          positionMethod="fixed"
+          collisionAvoidance={{
+            side: "none",
+            align: "none",
+            fallbackAxisSide: "none",
+          }}
+          className="w-(--anchor-width) max-w-(--anchor-width) gap-2 p-2.5 text-[13px] motion-reduce:animate-none"
         >
-          <PopoverHeader className="flex-row items-center justify-between gap-1">
-            <PopoverTitle className="text-[13px]">
+          <PopoverHeader className="flex-row items-center justify-between gap-2">
+            <PopoverTitle className="text-[13px] font-normal text-muted-foreground">
               {t("agentMessage.contextUsage.title")}
             </PopoverTitle>
             <Button
@@ -150,66 +160,85 @@ export function ComposerContextRing({
               <XIcon />
             </Button>
           </PopoverHeader>
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center justify-between gap-2">
-              <p className="font-medium">{fullLabel}</p>
-              <p className="text-muted-foreground tabular-nums">
-                {tokensLabel}
-              </p>
-            </div>
-            {segments.length > 0 ? (
-              <div
-                className="flex h-1 overflow-hidden rounded-full bg-muted"
-                aria-hidden="true"
-              >
-                {segments.map((segment) => (
-                  <span
-                    key={segment.id}
-                    className={cn(
-                      "h-full min-w-0",
-                      CONTEXT_USAGE_CATEGORY_SWATCH[segment.id]
-                    )}
-                    style={{ width: `${segment.fraction * 100}%` }}
-                  />
-                ))}
-              </div>
-            ) : (
-              <Progress value={percent ?? 0} className="gap-0 [&_[data-slot=progress-track]]:h-1" />
-            )}
+          <div className="flex items-center justify-between gap-2">
+            <PopoverDescription className="text-[13px]">
+              {fullLabel}
+            </PopoverDescription>
+            <p className="text-[13px] tabular-nums">
+              {tokensLabel}
+            </p>
           </div>
-          <ItemGroup className="gap-0 has-data-[size=xs]:gap-0.5">
+          <ContextUsageBar
+            segments={segments}
+            percent={percent}
+            transition={fillTransition}
+          />
+          <ul className="m-0 flex list-none flex-col gap-4 p-0">
             {usage.categories.map((category) => (
-              <Item
+              <li
                 key={category.id}
-                size="xs"
-                className="gap-1.5 px-0 py-px text-[13px]"
+                className="flex items-center gap-2 text-xs leading-none"
               >
-                <ItemMedia>
-                  <span
-                    className={cn(
-                      "size-1.5 rounded-sm",
-                      CONTEXT_USAGE_CATEGORY_SWATCH[category.id]
-                    )}
-                    aria-hidden="true"
-                  />
-                </ItemMedia>
-                <ItemContent>
-                  <ItemTitle className="text-[13px] leading-none font-normal">
-                    {t(categoryLabelKey(category.id))}
-                  </ItemTitle>
-                </ItemContent>
-                <ItemActions>
-                  <span className="text-muted-foreground tabular-nums">
-                    {category.tokens === null
-                      ? unavailable
-                      : formatTokenCount(category.tokens)}
-                  </span>
-                </ItemActions>
-              </Item>
+                <span
+                  className={cn(
+                    "size-2 shrink-0 rounded-[2px]",
+                    CONTEXT_USAGE_CATEGORY_SWATCH[category.id]
+                  )}
+                  aria-hidden="true"
+                />
+                <span className="min-w-0 flex-1 truncate">
+                  {t(categoryLabelKey(category.id))}
+                </span>
+                <span className="shrink-0 tabular-nums text-muted-foreground">
+                  {category.tokens === null
+                    ? unavailable
+                    : formatTokenCount(category.tokens)}
+                </span>
+              </li>
             ))}
-          </ItemGroup>
+          </ul>
         </PopoverContent>
       </Popover>
+    </div>
+  )
+}
+
+function ContextUsageBar({
+  segments,
+  percent,
+  transition,
+}: {
+  segments: ReturnType<typeof contextUsageSegments>
+  percent: number | null
+  transition: typeof SPRING_LAYOUT | { duration: number }
+}) {
+  const fills =
+    segments.length > 0
+      ? segments
+      : [{ id: "conversation" as const, fraction: (percent ?? 0) / 100 }]
+
+  return (
+    <div
+      className={cn(
+        "flex h-1 overflow-hidden rounded-full bg-muted",
+        segments.length > 0 && "gap-0.5"
+      )}
+      aria-hidden="true"
+    >
+      {fills.map((segment) => (
+        <motion.span
+          key={segment.id}
+          className={cn(
+            "h-full min-w-0 rounded-[1px]",
+            segments.length > 0
+              ? CONTEXT_USAGE_CATEGORY_SWATCH[segment.id]
+              : "bg-primary"
+          )}
+          initial={false}
+          animate={{ width: `${segment.fraction * 100}%` }}
+          transition={transition}
+        />
+      ))}
     </div>
   )
 }
@@ -221,11 +250,11 @@ function categoryLabelKey(id: ContextUsageCategoryId) {
 function ContextRingGraphic({
   tone,
   dashOffset,
-  reduceMotion,
+  transition,
 }: {
   tone: ContextUsageTone
   dashOffset: number
-  reduceMotion: boolean
+  transition: typeof SPRING_LAYOUT | { duration: number }
 }) {
   return (
     <svg
@@ -251,11 +280,12 @@ function ContextRingGraphic({
         strokeWidth={RING_STROKE}
         strokeLinecap="round"
         strokeDasharray={RING_CIRCUMFERENCE}
+        strokeDashoffset={dashOffset}
         transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
         className={TONE_CLASS[tone]}
         initial={false}
         animate={{ strokeDashoffset: dashOffset }}
-        transition={reduceMotion ? { duration: 0 } : SPRING_LAYOUT}
+        transition={transition}
       />
     </svg>
   )

@@ -14,6 +14,7 @@ import {
   pinSessionSchema,
   renameSessionSchema,
   sessionMessagesSchema,
+  sessionContextUsageSchema,
   sessionRecapSchema,
   sessionThreadSchema,
   tagSessionSchema,
@@ -161,6 +162,15 @@ export const sessionRoutes: FastifyPluginCallback<SessionRoutesOptions> = (
         live_run_id: result.liveRunId,
       }
     },
+  )
+
+  fastify.get<{ Params: SessionParams; Querystring: HarnessQuery }>(
+    `${SESSION_ROUTE_PREFIX}/:session_id/context-usage`,
+    { schema: sessionContextUsageSchema },
+    async (request) => sessionService.contextUsage(
+      request.query.harness,
+      request.params.session_id,
+    ),
   )
 
   fastify.get<{ Params: SessionParams; Querystring: HarnessQuery }>(

@@ -9,6 +9,8 @@ import type {
   TurnContext,
 } from '../../core/contract/agent-provider.js'
 import type { AgentEvent } from '../../core/event/agent-event.js'
+import { emptyContextUsage, mapClaudeContextUsage } from '../../core/resource/context-usage.js'
+import type { ContextUsage } from '../../core/resource/context-usage.js'
 import {
   mergeProviderProcessEnv,
   profileEnvKeys,
@@ -47,7 +49,8 @@ export const CLAUDE_DISABLED_SKILLS = [
   'run-skill-generator',
 ] as const
 
-export type ClaudeQuery = Pick<Query, 'interrupt' | 'close' | 'setModel'> & AsyncIterable<SDKMessage>
+export type ClaudeQuery = Pick<Query, 'interrupt' | 'close' | 'setModel' | 'getContextUsage'>
+  & AsyncIterable<SDKMessage>
 
 export type ClaudeQueryStart = (args: {
   prompt: AsyncIterable<SDKUserMessage>
@@ -121,6 +124,15 @@ export class ClaudeRuntime implements AgentRuntime {
 
   async abort(): Promise<void> {
     await this.query?.interrupt()
+  }
+
+  async getContextUsage(): Promise<ContextUsage> {
+    if (this.query === undefined) return emptyContextUsage()
+    try {
+      return mapClaudeContextUsage(await this.query.getContextUsage())
+    } catch {
+      return emptyContextUsage()
+    }
   }
 
   release(retention: 'warm' | 'dispose'): Promise<void> {

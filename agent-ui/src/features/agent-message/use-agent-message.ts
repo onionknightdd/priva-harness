@@ -5,6 +5,7 @@ import { useAgentPreferences } from "@/features/settings/agent-preferences-conte
 import type { QueueBehavior } from "@/features/settings/agent-preferences"
 import { useChatSession, useLiveSessions } from "@/features/chat-session"
 import { useHarness } from "@/features/sidebar/header/harness-context"
+import { fetchSessionContextUsage } from "@/lib/api/sandbox-sessions"
 import type { SlashCommand } from "@/lib/api/slash-commands"
 
 import {
@@ -20,6 +21,11 @@ import {
   type AgentRunEffort,
 } from "./run-agent-session"
 import { isCompactCommandUserMessage } from "./slash-command-envelope"
+import {
+  contextUsageFromApi,
+  emptyContextUsage,
+  type ContextUsage,
+} from "./context-usage"
 import { applyThreadStreamFrame, type StreamFrame } from "./run-stream-reducer"
 import { freezeMessageThinking } from "./thinking-time"
 
@@ -69,6 +75,11 @@ export function useAgentMessage() {
   const [effort, setEffort] = React.useState<AgentRunEffort>("medium")
   const [messages, setMessages] = React.useState<AgentThreadMessage[]>([])
   const [attached, setAttached] = React.useState(false)
+  const [contextUsage, setContextUsage] = React.useState<ContextUsage>(
+    emptyContextUsage
+  )
+  const contextUsageRequestRef = React.useRef(0)
+  const contextUsageCacheRef = React.useRef(new Map<string, ContextUsage>())
   const activeStreamRef = React.useRef<ActiveStream | null>(null)
   const submitChainRef = React.useRef(Promise.resolve())
   const submitGenerationRef = React.useRef(0)
@@ -96,6 +107,9 @@ export function useAgentMessage() {
     bumpSubmitGeneration()
     setDraft("")
     setSlashCommand(null)
+    contextUsageRequestRef.current += 1
+    contextUsageCacheRef.current.clear()
+    setContextUsage(emptyContextUsage())
   }, [bumpSubmitGeneration, runHarnessId])
 
   React.useEffect(() => {
@@ -115,17 +129,60 @@ export function useAgentMessage() {
     setMessages(threadMessages)
   }, [messagesStatus, threadMessages, transcriptEpoch])
 
+  const refreshContextUsage = React.useCallback(
+    (sessionId: string) => {
+      if (!runHarnessId || sessionId.trim() === "") {
+        return
+      }
+
+      const requestId = contextUsageRequestRef.current + 1
+      contextUsageRequestRef.current = requestId
+      const cacheKey = contextUsageCacheKey(runHarnessId, sessionId)
+      void fetchSessionContextUsage(runHarnessId, sessionId)
+        .then((payload) => {
+          const usage = contextUsageFromApi(payload)
+          contextUsageCacheRef.current.set(cacheKey, usage)
+          if (contextUsageRequestRef.current === requestId) {
+            setContextUsage(usage)
+          }
+        })
+        .catch(() => {
+          if (
+            contextUsageRequestRef.current === requestId &&
+            !contextUsageCacheRef.current.has(cacheKey)
+          ) {
+            setContextUsage(emptyContextUsage())
+          }
+        })
+    },
+    [runHarnessId]
+  )
+
   const previousSessionIdRef = React.useRef(runSessionId)
   const liveAttachKeyRef = React.useRef<string | null>(null)
   React.useEffect(() => {
     const previous = previousSessionIdRef.current
     previousSessionIdRef.current = runSessionId
-    if (previous === runSessionId || previous === null) {
+    if (previous === runSessionId) {
       return
     }
-    liveAttachKeyRef.current = null
-    bumpSubmitGeneration()
-  }, [bumpSubmitGeneration, runSessionId])
+    if (previous !== null) {
+      liveAttachKeyRef.current = null
+      bumpSubmitGeneration()
+    }
+    contextUsageRequestRef.current += 1
+    if (!runSessionId) {
+      setContextUsage(emptyContextUsage())
+      return
+    }
+    const cached = runHarnessId
+      ? contextUsageCacheRef.current.get(
+          contextUsageCacheKey(runHarnessId, runSessionId)
+        )
+      : undefined
+    setContextUsage(cached ?? emptyContextUsage())
+    refreshContextUsage(runSessionId)
+  }, [bumpSubmitGeneration, refreshContextUsage, runHarnessId, runSessionId])
 
   React.useEffect(() => {
     return () => {
@@ -276,6 +333,12 @@ export function useAgentMessage() {
         setMessages((currentMessages) =>
           applyThreadStreamFrame(currentMessages, assistantMessage.id, frame)
         )
+        if (
+          (frame.type === "run.completed" || frame.type === "run.failed") &&
+          (stream?.sessionId ?? frame.sessionId)
+        ) {
+          refreshContextUsage(stream?.sessionId ?? frame.sessionId ?? "")
+        }
       },
       onToolStarted: (id: string) => {
         activeStreamRef.current?.inFlightTools.add(id)
@@ -311,7 +374,7 @@ export function useAgentMessage() {
         void reloadThread()
       },
     }),
-    [bindLive, reloadThread]
+    [bindLive, refreshContextUsage, reloadThread]
   )
 
   const submit = React.useCallback(() => {
@@ -541,6 +604,7 @@ export function useAgentMessage() {
   return {
     draft,
     messages,
+    contextUsage,
     modelReference,
     isStreaming,
     canSubmit: Boolean(
@@ -579,6 +643,10 @@ async function waitToSend(
 
   previousStream.connection.abort()
   await previousStream.connection.finished.catch(() => undefined)
+}
+
+function contextUsageCacheKey(harness: string, sessionId: string) {
+  return `${harness}:${sessionId}`
 }
 
 function lastAssistantMessage(messages: readonly AgentThreadMessage[]) {

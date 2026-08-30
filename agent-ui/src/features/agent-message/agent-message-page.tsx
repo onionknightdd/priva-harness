@@ -8,6 +8,7 @@ export function AgentMessagePage() {
     <AgentMessage
       draft={agentMessage.draft}
       messages={agentMessage.messages}
+      contextUsage={agentMessage.contextUsage}
       canSubmit={agentMessage.canSubmit}
       isStreaming={agentMessage.isStreaming}
       modelReady={agentMessage.modelReady}

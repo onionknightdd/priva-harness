@@ -1,3 +1,4 @@
+import { useRef } from "react"
 import {
   AnimatePresence,
   motion,
@@ -10,6 +11,7 @@ import type { SlashCommand } from "@/lib/api/slash-commands"
 import { cn } from "@/lib/utils"
 
 import type { AgentThreadMessage } from "../agent-message-data"
+import type { ContextUsage } from "../context-usage"
 import {
   appendQuotedDraft,
   focusAgentComposer,
@@ -34,6 +36,7 @@ const agentColumnClassName = "mx-auto w-full max-w-3xl"
 export function AgentMessage({
   draft,
   messages,
+  contextUsage,
   canSubmit,
   isStreaming,
   modelReady,
@@ -47,6 +50,7 @@ export function AgentMessage({
 }: {
   draft: string
   messages: AgentThreadMessage[]
+  contextUsage: ContextUsage
   canSubmit: boolean
   isStreaming: boolean
   modelReady: boolean
@@ -59,6 +63,7 @@ export function AgentMessage({
   onStop: () => void
 }) {
   const { t } = useTranslation()
+  const composerShellRef = useRef<HTMLDivElement>(null)
   const { activeSession, forkError, runCwd } = useChatSession()
   const shouldReduceMotion = Boolean(useReducedMotion())
   const isEmpty = messages.length === 0 && activeSession === null
@@ -127,6 +132,7 @@ export function AgentMessage({
           isStreaming={isStreaming}
           modelReady={modelReady}
           slashCommand={slashCommand}
+          shellRef={composerShellRef}
           onDraftChange={onDraftChange}
           onSlashCommandChange={onSlashCommandChange}
           onModelReferenceChange={onModelReferenceChange}
@@ -142,9 +148,23 @@ export function AgentMessage({
               className="min-w-0"
             />
           ) : null}
-          <div className="ml-auto flex items-center pr-2.5">
-            <ComposerContextRing />
-          </div>
+          <AnimatePresence initial={false}>
+            {isEmpty ? null : (
+              <motion.div
+                key="composer-context-ring"
+                className="ml-auto flex items-center pr-2.5"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={overlayTransition}
+              >
+                <ComposerContextRing
+                  usage={contextUsage}
+                  anchorRef={composerShellRef}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
         {forkError ? (
           <p className="mt-2 text-xs text-destructive" role="alert">

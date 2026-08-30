@@ -6,6 +6,8 @@ import type {
   TurnContext,
 } from '../../core/contract/agent-provider.js'
 import type { AgentEvent } from '../../core/event/agent-event.js'
+import { emptyContextUsage, mapPiContextUsage } from '../../core/resource/context-usage.js'
+import type { ContextUsage } from '../../core/resource/context-usage.js'
 import type { ToolImageDelta } from '../../core/tool/define-tool.js'
 import { isRunResultEvent } from '../../core/event/agent-event.js'
 import {
@@ -25,6 +27,7 @@ export interface PiAgentSession {
   followUp(text: string): Promise<void>
   steer(text: string): Promise<void>
   compact?(customInstructions?: string): Promise<void>
+  getContextUsage?(): { tokens: number | null; contextWindow: number } | undefined
   abort(): Promise<void>
   dispose(): void
   bindImageEmit?(emit: ((image: ToolImageDelta) => void) | undefined): void
@@ -114,6 +117,11 @@ export class PiRuntime implements AgentRuntime {
 
   async abort(): Promise<void> {
     await this.sessionHandle?.abort()
+  }
+
+  getContextUsage(): Promise<ContextUsage> {
+    if (this.sessionHandle === undefined) return Promise.resolve(emptyContextUsage())
+    return Promise.resolve(mapPiContextUsage(this.sessionHandle.getContextUsage?.()))
   }
 
   release(retention: 'warm' | 'dispose'): Promise<void> {

@@ -64,6 +64,22 @@ API：
 - `GET /api/sandbox/agent/sessions`。
 - `GET /api/sandbox/agent/sessions/{session_id}/messages`。
 - `GET /api/sandbox/agent/sessions/{session_id}/thread`（把 provider transcript 折叠成与 live stream 相同的 assistant 回合快照；`/messages` 仍返回 provider 原生记录）。
+- `GET /api/sandbox/agent/sessions/{session_id}/context-usage`（读活/warm runtime 上的 `getContextUsage()`；冷 Claude 开短暂 Query：`initializationResult` → `getContextUsage` → `close`，不入池、不 warm；冷 Pi 用已有 `openSession` + `getContextUsage` + `release('dispose')`。不写入 WS 会话帧）。
+
+```text
+GET /context-usage
+        │
+        ▼
+  pool.peek(session)
+        │
+   warm/busy? ──yes──► runtime.getContextUsage()
+        │
+        no
+        ▼
+   Claude: resume Query (persistSession=false)
+           init → getContextUsage → close
+   Pi:     openSession → getContextUsage → dispose
+```
 
 范围：
 

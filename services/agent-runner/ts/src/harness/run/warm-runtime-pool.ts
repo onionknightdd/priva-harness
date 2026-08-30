@@ -178,6 +178,17 @@ export class WarmRuntimePool {
     return [...this.idle.values()].map((lease) => lease.session)
   }
 
+  peek(session: SessionRef): AgentRuntime | undefined {
+    if (session.id === '') return undefined
+    const key = sessionRefKey(session)
+    const idle = this.idle.get(key)
+    if (idle !== undefined) return idle.runtime
+    for (const runtime of this.busy) {
+      if (sessionRefKey(runtime.session) === key) return runtime
+    }
+    return undefined
+  }
+
   get idleCount(): number {
     return this.idle.size
   }

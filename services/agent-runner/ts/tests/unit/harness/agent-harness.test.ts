@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { emptyContextUsage } from '../../../src/core/resource/context-usage.js'
 import type { StreamFrame } from '../../../src/core/event/agent-event.js'
 import { AgentHarness } from '../../../src/harness/agent-harness.js'
 import { DRAIN_SETTLE_MS } from '../../../src/harness/run/background-drain.js'
@@ -285,6 +286,117 @@ describe('AgentHarness', () => {
       commands: claude.slashCommands,
     })
     expect(claude.slashRequests).toEqual([{ cwd: '/work/repo', spec }])
+  })
+
+  it('reads context usage from a warm runtime without opening another session', async () => {
+    const usage = {
+      used: 22998,
+      limit: 200000,
+      categories: emptyContextUsage().categories.map((category) => (
+        category.id === 'systemPrompt' ? { ...category, tokens: 2089 } : category
+      )),
+    }
+    const provider = new FakeAgentProvider('claude', [
+      { type: 'run.completed', sessionId: 'session-1', model: 'm', durationMs: 1 },
+    ])
+    provider.contextUsage = usage
+    const harness = new AgentHarness({
+      providers: {
+        claude: provider,
+        pi: new FakeAgentProvider('pi', []),
+      },
+      cwd: '/tmp',
+      liveRuns: new LiveRunRegistry(),
+    })
+    for await (const _event of harness.run(
+      { text: 'hi' },
+      { signal: new AbortController().signal },
+      testRunSpec({ cwd: '/tmp' }),
+    )) {
+      void _event
+    }
+    expect(await harness.readContextUsage({ provider: 'claude', id: 'session-1' })).toEqual(usage)
+    expect(await harness.readContextUsage({ provider: 'claude', id: 'missing' })).toEqual(
+      emptyContextUsage(),
+    )
+    expect(provider.targets).toHaveLength(1)
+  })
+
+  it('measures a cold Claude session without parking the query', async () => {
+    const usage = {
+      ...emptyContextUsage(),
+      used: 40,
+      limit: 200000,
+    }
+    const provider = new FakeAgentProvider('claude', [])
+    const measured: { sessionId: string; cwd: string }[] = []
+    provider.measureContextUsage = (session, spec) => {
+      measured.push({ sessionId: session.id, cwd: spec.cwd })
+      return Promise.resolve(usage)
+    }
+    const harness = new AgentHarness({
+      providers: {
+        claude: provider,
+        pi: new FakeAgentProvider('pi', []),
+      },
+      cwd: '/tmp',
+      liveRuns: new LiveRunRegistry(),
+    })
+    const spec = testRunSpec({ cwd: '/work/repo', provider: 'claude' })
+
+    expect(await harness.readContextUsage({ provider: 'claude', id: 'cold-1' }, spec)).toEqual(usage)
+    expect(measured).toEqual([{ sessionId: 'cold-1', cwd: '/work/repo' }])
+    expect(provider.targets).toEqual([])
+    expect(provider.released).toEqual([])
+    expect(harness.listWarm('claude')).toEqual([])
+  })
+
+  it('opens a cold Pi session only long enough to read usage, then disposes it', async () => {
+    const usage = {
+      ...emptyContextUsage(),
+      used: 12,
+      limit: 128000,
+    }
+    const provider = new FakeAgentProvider('pi', [])
+    provider.contextUsage = usage
+    const harness = new AgentHarness({
+      providers: {
+        claude: new FakeAgentProvider('claude', []),
+        pi: provider,
+      },
+      cwd: '/tmp',
+      liveRuns: new LiveRunRegistry(),
+    })
+    const spec = testRunSpec({ cwd: '/work/repo', provider: 'pi' })
+
+    expect(await harness.readContextUsage({ provider: 'pi', id: 'pi-cold' }, spec)).toEqual(usage)
+    expect(provider.targets).toEqual([{
+      kind: 'resume',
+      session: { provider: 'pi', id: 'pi-cold' },
+    }])
+    expect(provider.released).toEqual(['dispose'])
+    expect(harness.listWarm('pi')).toEqual([])
+  })
+
+  it('does not open a detached query when the session is still running', async () => {
+    const { provider, harness } = await warmAfterLaunch('running-1')
+    const measured: string[] = []
+    provider.measureContextUsage = (session) => {
+      measured.push(session.id)
+      return Promise.resolve({ ...emptyContextUsage(), used: 1, limit: 2 })
+    }
+    const live = harness.launch(
+      { text: 'again' },
+      testRunSpec({ cwd: '/tmp' }),
+      { session: { kind: 'resume', session: { provider: 'claude', id: 'running-1' } } },
+    )
+    expect(await harness.readContextUsage(
+      { provider: 'claude', id: 'running-1' },
+      testRunSpec({ cwd: '/tmp' }),
+    )).toEqual(provider.contextUsage)
+    expect(measured).toEqual([])
+    live.abort.abort()
+    await live.waitForComplete()
   })
 })
 

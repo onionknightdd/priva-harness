@@ -11,6 +11,8 @@ import type {
 } from '../core/contract/agent-provider.js'
 import type { AgentEvent } from '../core/event/agent-event.js'
 import type { StreamFrame } from '../core/event/agent-event.js'
+import { emptyContextUsage } from '../core/resource/context-usage.js'
+import type { ContextUsage } from '../core/resource/context-usage.js'
 import { isRunResultEvent } from '../core/event/agent-event.js'
 import type { SlashCommand } from '../core/resource/slash-command.js'
 import type { UserTurn } from '../core/run/user-turn.js'
@@ -97,6 +99,46 @@ export class AgentHarness {
 
   listWarm(harness: ProviderId): readonly SessionRef[] {
     return this.pool?.listIdle().filter((session) => session.provider === harness) ?? []
+  }
+
+  async readContextUsage(ref: SessionRef, spec?: ProviderRunSpec): Promise<ContextUsage> {
+    if (ref.id === '') return emptyContextUsage()
+    const runtime = this.pool?.peek(ref)
+    if (runtime !== undefined) {
+      try {
+        return await runtime.getContextUsage()
+      } catch {
+        return emptyContextUsage()
+      }
+    }
+    if (this.liveRuns?.liveRunningForSession(ref) !== undefined) {
+      return emptyContextUsage()
+    }
+    if (spec === undefined) return emptyContextUsage()
+    return await this.measureDetachedContextUsage(ref, spec)
+  }
+
+  private async measureDetachedContextUsage(
+    ref: SessionRef,
+    spec: ProviderRunSpec,
+  ): Promise<ContextUsage> {
+    const provider = this.options.providers[ref.provider]
+    const measure = contextUsageMeasureOf(provider)
+    if (measure !== undefined) {
+      try {
+        return await measure(ref, spec)
+      } catch {
+        return emptyContextUsage()
+      }
+    }
+    const runtime = await provider.openSession({ kind: 'resume', session: ref }, spec)
+    try {
+      return await runtime.getContextUsage()
+    } catch {
+      return emptyContextUsage()
+    } finally {
+      await runtime.release('dispose')
+    }
   }
 
   async listSlashCommands(options: ListSlashCommandsOptions): Promise<SlashCommandCatalog> {
@@ -406,6 +448,15 @@ function hasActiveInboundWork(events: readonly AgentEvent[]): boolean {
         return false
     }
   })
+}
+
+function contextUsageMeasureOf(
+  provider: AgentProvider,
+): ((session: SessionRef, spec: ProviderRunSpec) => Promise<ContextUsage>) | undefined {
+  const measure = (provider as {
+    measureContextUsage?: (session: SessionRef, spec: ProviderRunSpec) => Promise<ContextUsage>
+  }).measureContextUsage
+  return typeof measure === 'function' ? measure.bind(provider) : undefined
 }
 
 function sessionRefOf(session: SessionTarget): SessionRef | undefined {

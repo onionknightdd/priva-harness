@@ -1,8 +1,9 @@
-import type { SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+import type { SDKControlGetContextUsageResponse, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { describe, expect, it } from 'vitest'
 
 import type { AgentEvent } from '../../../../src/core/event/agent-event.js'
 import { consumeRunEvents } from '../../../../src/harness/run/consume-run-events.js'
+import { emptyContextUsage } from '../../../../src/core/resource/context-usage.js'
 import {
   ClaudeRuntime,
   type ClaudeQuery,
@@ -117,6 +118,39 @@ describe('ClaudeRuntime stream input', () => {
     expect(started).toBe(1)
     await runtime.release('dispose')
   })
+
+  it('reads context usage from the live query after a turn', async () => {
+    let query: FakeClaudeQuery | undefined
+    const runtime = new ClaudeRuntime(
+      testRunSpec(),
+      { kind: 'new', provider: 'claude' },
+      '/tmp/claude',
+      ({ prompt }) => {
+        query = new FakeClaudeQuery(prompt)
+        return query
+      },
+    )
+    expect(await runtime.getContextUsage()).toEqual(emptyContextUsage())
+    await collect(runtime.run(
+      { text: 'hello' },
+      { signal: new AbortController().signal },
+    ))
+    await query?.turnReady
+    expect(await runtime.getContextUsage()).toEqual({
+      used: 20,
+      limit: 200,
+      categories: [
+        { id: 'systemPrompt', tokens: 5 },
+        { id: 'toolDefinitions', tokens: 10 },
+        { id: 'skills', tokens: null },
+        { id: 'mcpTools', tokens: null },
+        { id: 'subagentDefinitions', tokens: null },
+        { id: 'memory', tokens: null },
+        { id: 'conversation', tokens: 5 },
+      ],
+    })
+    await runtime.release('dispose')
+  })
 })
 
 async function collect(events: AsyncIterable<AgentEvent>): Promise<AgentEvent[]> {
@@ -145,6 +179,24 @@ class FakeClaudeQuery implements ClaudeQuery {
     this.models.push(model ?? '')
     return Promise.resolve()
   }
+  readonly getContextUsage = (): Promise<SDKControlGetContextUsageResponse> => Promise.resolve({
+    categories: [
+      { name: 'System prompt', tokens: 5, color: '' },
+      { name: 'System tools', tokens: 10, color: '' },
+      { name: 'Messages', tokens: 5, color: '' },
+    ],
+    totalTokens: 20,
+    maxTokens: 200,
+    rawMaxTokens: 200,
+    percentage: 10,
+    gridRows: [],
+    model: 'm',
+    memoryFiles: [],
+    mcpTools: [],
+    agents: [],
+    isAutoCompactEnabled: true,
+    apiUsage: null,
+  })
 
   private readonly resolveTurnReady: () => void
   private readonly resolvePromptEnded: () => void

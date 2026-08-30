@@ -56,10 +56,10 @@
     --color-tool-output: var(--tool-output);
     --color-context-system: var(--context-system);
     --color-context-tools: var(--context-tools);
-    --color-context-rules: var(--context-rules);
     --color-context-skills: var(--context-skills);
     --color-context-mcp: var(--context-mcp);
     --color-context-subagent: var(--context-subagent);
+    --color-context-memory: var(--context-memory);
     --color-context-conversation: var(--context-conversation);
     --radius-sm: calc(var(--radius) * 0.6);
     --radius-md: calc(var(--radius) * 0.8);
@@ -109,13 +109,13 @@
     --status-running: oklch(0.541 0.217 293.01);
     --status-warm: oklch(0.75 0.1 232);
     --tool-output: rgb(243 243 243);
-    --context-system: oklch(0.7 0 0);
-    --context-tools: oklch(0.62 0.2 305);
-    --context-rules: oklch(0.68 0.16 150);
-    --context-skills: oklch(0.72 0.16 55);
-    --context-mcp: oklch(0.68 0.18 350);
-    --context-subagent: oklch(0.62 0.14 250);
-    --context-conversation: oklch(0.68 0.14 25);
+    --context-system: rgb(113 113 113);
+    --context-tools: oklch(0.48 0.22 305);
+    --context-skills: oklch(0.52 0.16 70);
+    --context-mcp: oklch(0.5 0.2 350);
+    --context-subagent: oklch(0.46 0.16 250);
+    --context-memory: oklch(0.46 0.14 155);
+    --context-conversation: oklch(0.5 0.17 30);
 }
 
 .dark {
@@ -156,13 +156,13 @@
     --status-running: oklch(0.702 0.161 293.54);
     --status-warm: oklch(0.78 0.1 232);
     --tool-output: oklch(0.24 0 0);
-    --context-system: oklch(0.62 0 0);
-    --context-tools: oklch(0.7 0.18 305);
-    --context-rules: oklch(0.74 0.15 150);
-    --context-skills: oklch(0.76 0.15 55);
-    --context-mcp: oklch(0.74 0.16 350);
-    --context-subagent: oklch(0.7 0.13 250);
-    --context-conversation: oklch(0.74 0.13 25);
+    --context-system: rgb(196 196 196);
+    --context-tools: oklch(0.78 0.18 305);
+    --context-skills: oklch(0.82 0.15 70);
+    --context-mcp: oklch(0.8 0.16 350);
+    --context-subagent: oklch(0.78 0.14 250);
+    --context-memory: oklch(0.78 0.13 155);
+    --context-conversation: oklch(0.8 0.14 30);
 }
 
 @utility scrollbar-hide {

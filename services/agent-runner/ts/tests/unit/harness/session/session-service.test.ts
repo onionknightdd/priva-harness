@@ -4,6 +4,8 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { emptyContextUsage } from '../../../../src/core/resource/context-usage.js'
+import { SessionError } from '../../../../src/core/resource/session.js'
 import { LiveRunRegistry } from '../../../../src/harness/run/live-run-registry.js'
 import { SessionService } from '../../../../src/harness/session/session-service.js'
 import { FakeAgentProvider } from '../../../support/fake-agent-provider.js'
@@ -178,3 +180,94 @@ describe('SessionService warm listing', () => {
     await rm(runtimeHome, { recursive: true, force: true })
   })
 })
+
+describe('SessionService context usage', () => {
+  it('returns an empty snapshot unless a live reader is bound', async () => {
+    const runtimeHome = await mkdtemp(join(tmpdir(), 'priva-session-usage-'))
+    const claude = new FakeAgentProvider('claude', [])
+    seedSession(claude, 'cold-1')
+    seedSession(claude, 'warm-1')
+    const service = new SessionService({
+      providers: {
+        claude,
+        pi: new FakeAgentProvider('pi', []),
+      },
+      metadata: new MemorySessionMetadataRepository(),
+      liveRuns: new LiveRunRegistry(),
+      modelProfiles: createTestModelProfileService(runtimeHome),
+      activeCwd: '/work',
+    })
+    expect(await service.contextUsage('claude', 'cold-1')).toEqual(emptyContextUsage())
+    service.bindContextUsageReader((ref) => Promise.resolve({
+      ...emptyContextUsage(),
+      used: ref.id === 'warm-1' ? 20 : null,
+      limit: ref.id === 'warm-1' ? 200 : null,
+    }))
+    expect(await service.contextUsage('claude', 'warm-1')).toEqual({
+      ...emptyContextUsage(),
+      used: 20,
+      limit: 200,
+    })
+    await expect(service.contextUsage('claude', '  ')).rejects.toThrow(SessionError)
+    await expect(service.contextUsage('claude', 'missing')).rejects.toThrow(SessionError)
+    await rm(runtimeHome, { recursive: true, force: true })
+  })
+
+  it('resolves a detached run spec from the last response model', async () => {
+    const runtimeHome = await mkdtemp(join(tmpdir(), 'priva-session-usage-spec-'))
+    const modelProfiles = createTestModelProfileService(runtimeHome)
+    const profile = await modelProfiles.createProfile({
+      label: 'Gateway',
+      baseUrl: 'https://api.example.com/v1',
+      authToken: 'secret',
+      defaultModel: 'owned',
+    })
+    const claude = new FakeAgentProvider('claude', [])
+    seedSession(claude, 'cold-1', '/repo')
+    const metadata = new MemorySessionMetadataRepository()
+    await metadata.upsert({ provider: 'claude', id: 'cold-1' }, {
+      lastResponseModel: {
+        profileId: profile.id,
+        model: { id: 'owned', capabilities: { context: '1m' } },
+        modelSource: 'profile',
+        observedAt: 8,
+      },
+    })
+    const service = new SessionService({
+      providers: {
+        claude,
+        pi: new FakeAgentProvider('pi', []),
+      },
+      metadata,
+      liveRuns: new LiveRunRegistry(),
+      modelProfiles,
+      activeCwd: '/work',
+    })
+    const seen: { id: string; cwd?: string | undefined; model?: string | undefined }[] = []
+    service.bindContextUsageReader((ref, spec) => {
+      seen.push({ id: ref.id, cwd: spec?.cwd, model: spec?.model })
+      return Promise.resolve(emptyContextUsage())
+    })
+    await service.contextUsage('claude', 'cold-1')
+    expect(seen).toEqual([{
+      id: 'cold-1',
+      cwd: '/repo',
+      model: 'owned[1m]',
+    }])
+    await rm(runtimeHome, { recursive: true, force: true })
+  })
+})
+
+function seedSession(provider: FakeAgentProvider, id: string, cwd = '/work'): void {
+  provider.sessions.seed({
+    ref: { provider: provider.id, id },
+    summary: id,
+    lastModified: 1,
+    fileSize: 1,
+    customTitle: null,
+    firstPrompt: id,
+    gitBranch: null,
+    cwd,
+    tag: null,
+  })
+}

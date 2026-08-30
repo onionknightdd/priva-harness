@@ -1,6 +1,15 @@
 import { realpath, stat } from 'node:fs/promises'
 
-import type { AgentProvider, ProviderId, SessionRef } from '../../core/contract/agent-provider.js'
+import type {
+  AgentProvider,
+  ProviderId,
+  ProviderRunSpec,
+  SessionRef,
+} from '../../core/contract/agent-provider.js'
+import { emptyContextUsage } from '../../core/resource/context-usage.js'
+import type { ContextUsage } from '../../core/resource/context-usage.js'
+import { applyModelContext } from '../../core/resource/model-profile.js'
+import { rewriteProviderBaseUrl } from '../../core/resource/run-harness.js'
 import type { SessionMetadataRepository } from '../../core/contract/session-metadata-repository.js'
 import {
   DEFAULT_SESSION_LIST_LIMIT,
@@ -126,11 +135,26 @@ export interface RecordRunCompletedInput {
 
 export class SessionService {
   private warmListing: ((harness: ProviderId) => readonly SessionRef[]) | undefined
+  private contextUsageReader:
+    | ((ref: SessionRef, spec?: ProviderRunSpec) => Promise<ContextUsage>)
+    | undefined
 
   constructor(private readonly options: SessionServiceOptions) {}
 
   bindWarmListing(listWarm: (harness: ProviderId) => readonly SessionRef[]): void {
     this.warmListing = listWarm
+  }
+
+  bindContextUsageReader(
+    read: (ref: SessionRef, spec?: ProviderRunSpec) => Promise<ContextUsage>,
+  ): void {
+    this.contextUsageReader = read
+  }
+
+  async contextUsage(harness: ProviderId, sessionId: string): Promise<ContextUsage> {
+    const ref = this.ref(harness, sessionId)
+    const spec = await this.resolveContextUsageSpec(ref)
+    return this.contextUsageReader?.(ref, spec) ?? Promise.resolve(emptyContextUsage())
   }
 
   async list(query: SessionListQuery): Promise<SessionListResult> {
@@ -381,6 +405,50 @@ export class SessionService {
   private rejectIfLive(ref: SessionRef): void {
     if (this.options.liveRuns.liveRunningForSession(ref) !== undefined) {
       throw new SessionError('session-busy', 'Session has a live run')
+    }
+  }
+
+  private async resolveContextUsageSpec(ref: SessionRef): Promise<ProviderRunSpec | undefined> {
+    const info = await this.provider(ref.provider).sessions.read(ref)
+    const cwd = info.cwd !== null && info.cwd !== '' ? info.cwd : this.options.activeCwd
+    const reference = await this.contextUsageModelReference(ref)
+    if (reference === undefined) return undefined
+    try {
+      const resolved = await this.options.modelProfiles.resolve(reference)
+      return {
+        cwd,
+        provider: ref.provider,
+        model: resolved.model,
+        baseUrl: rewriteProviderBaseUrl(resolved.profile.baseUrl, ref.provider),
+        authToken: resolved.profile.authToken,
+        profileId: resolved.profile.id,
+        modelContext: resolved.capabilities.context,
+      }
+    } catch {
+      return undefined
+    }
+  }
+
+  private async contextUsageModelReference(ref: SessionRef): Promise<string | undefined> {
+    const metadata = await this.options.metadata.get(ref)
+    const stored = metadata.lastResponseModel
+    if (stored !== null) {
+      const model = applyModelContext(stored.model.id, stored.model.capabilities.context)
+      if (stored.profileId !== null && stored.profileId !== '') {
+        return `${stored.profileId}:${model}`
+      }
+      return model
+    }
+    const transcript = await this.provider(ref.provider).sessions.lastAssistantModel(ref)
+    if (transcript !== undefined) return transcript.modelId
+    const listed = await this.options.modelProfiles.listProfiles()
+    if (listed.defaultProfileId === null) return undefined
+    try {
+      const profile = await this.options.modelProfiles.getProfile(listed.defaultProfileId)
+      if (profile.defaultModel === null || profile.defaultModel === '') return undefined
+      return `${profile.id}:${profile.defaultModel}`
+    } catch {
+      return undefined
     }
   }
 

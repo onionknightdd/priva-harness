@@ -2,11 +2,13 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import {
+  contextUsageFromApi,
   contextUsagePercent,
   contextUsageSegments,
   contextUsageTone,
   emptyContextUsage,
   formatTokenCount,
+  shouldSpringContextUsageFill,
 } from "../../../src/features/agent-message/context-usage.ts"
 
 describe("context usage helpers", () => {
@@ -20,10 +22,10 @@ describe("context usage helpers", () => {
       [
         "systemPrompt",
         "toolDefinitions",
-        "rules",
         "skills",
         "mcpTools",
         "subagentDefinitions",
+        "memory",
         "conversation",
       ]
     )
@@ -42,6 +44,15 @@ describe("context usage helpers", () => {
     )
   })
 
+  it("springs the ring only between known percents", () => {
+    assert.equal(shouldSpringContextUsageFill(null, 9), false)
+    assert.equal(shouldSpringContextUsageFill(9, null), false)
+    assert.equal(shouldSpringContextUsageFill(null, null), false)
+    assert.equal(shouldSpringContextUsageFill(9, 9), false)
+    assert.equal(shouldSpringContextUsageFill(9, 12), true)
+  })
+
+
   it("maps percent to ring tone", () => {
     assert.equal(contextUsageTone(null), "empty")
     assert.equal(contextUsageTone(24), "normal")
@@ -58,6 +69,35 @@ describe("context usage helpers", () => {
     assert.equal(formatTokenCount(1_000_000), "1M")
   })
 
+  it("maps an API snapshot onto the ring model", () => {
+    assert.deepEqual(contextUsageFromApi(null), emptyContextUsage())
+    assert.deepEqual(
+      contextUsageFromApi({
+        used: 22998,
+        limit: 200000,
+        categories: [
+          { id: "systemPrompt", tokens: 2089 },
+          { id: "toolDefinitions", tokens: 20825 },
+          { id: "conversation", tokens: 84 },
+          { id: "freeSpace", tokens: 144002 },
+        ],
+      }),
+      {
+        used: 22998,
+        limit: 200000,
+        categories: [
+          { id: "systemPrompt", tokens: 2089 },
+          { id: "toolDefinitions", tokens: 20825 },
+          { id: "skills", tokens: null },
+          { id: "mcpTools", tokens: null },
+          { id: "subagentDefinitions", tokens: null },
+          { id: "memory", tokens: null },
+          { id: "conversation", tokens: 84 },
+        ],
+      }
+    )
+  })
+
   it("builds bar segments from category tokens against the window", () => {
     assert.deepEqual(contextUsageSegments(emptyContextUsage()), [])
     assert.deepEqual(
@@ -67,7 +107,6 @@ describe("context usage helpers", () => {
         categories: [
           { id: "systemPrompt", tokens: 10 },
           { id: "conversation", tokens: 40 },
-          { id: "rules", tokens: null },
         ],
       }),
       [

@@ -1,10 +1,10 @@
 export const CONTEXT_USAGE_CATEGORY_IDS = [
   "systemPrompt",
   "toolDefinitions",
-  "rules",
   "skills",
   "mcpTools",
   "subagentDefinitions",
+  "memory",
   "conversation",
 ] as const
 
@@ -29,11 +29,45 @@ export const CONTEXT_USAGE_CATEGORY_SWATCH: Record<
 > = {
   systemPrompt: "bg-context-system",
   toolDefinitions: "bg-context-tools",
-  rules: "bg-context-rules",
   skills: "bg-context-skills",
   mcpTools: "bg-context-mcp",
   subagentDefinitions: "bg-context-subagent",
+  memory: "bg-context-memory",
   conversation: "bg-context-conversation",
+}
+
+export function contextUsageFromApi(raw: unknown): ContextUsage {
+  if (typeof raw !== "object" || raw === null) {
+    return emptyContextUsage()
+  }
+
+  const record = raw as Record<string, unknown>
+  const used = asNullableNumber(record.used)
+  const limit = asNullableNumber(record.limit)
+  const listed = Array.isArray(record.categories) ? record.categories : []
+  const tokensById = new Map<ContextUsageCategoryId, number | null>()
+
+  for (const item of listed) {
+    if (typeof item !== "object" || item === null) {
+      continue
+    }
+
+    const row = item as Record<string, unknown>
+    if (!isContextUsageCategoryId(row.id)) {
+      continue
+    }
+
+    tokensById.set(row.id, asNullableNumber(row.tokens))
+  }
+
+  return {
+    used,
+    limit,
+    categories: CONTEXT_USAGE_CATEGORY_IDS.map((id) => ({
+      id,
+      tokens: tokensById.get(id) ?? null,
+    })),
+  }
 }
 
 export function emptyContextUsage(): ContextUsage {
@@ -53,6 +87,17 @@ export function contextUsagePercent(usage: ContextUsage): number | null {
   }
 
   return Math.round((usage.used / usage.limit) * 100)
+}
+
+export function shouldSpringContextUsageFill(
+  previousPercent: number | null,
+  nextPercent: number | null
+): boolean {
+  return (
+    previousPercent !== null &&
+    nextPercent !== null &&
+    previousPercent !== nextPercent
+  )
 }
 
 export function contextUsageTone(percent: number | null): ContextUsageTone {
@@ -106,4 +151,17 @@ export function contextUsageSegments(usage: ContextUsage): Array<{
 
 function trimTokenUnit(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1)
+}
+
+function asNullableNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null
+}
+
+function isContextUsageCategoryId(
+  value: unknown
+): value is ContextUsageCategoryId {
+  return (
+    typeof value === "string" &&
+    (CONTEXT_USAGE_CATEGORY_IDS as readonly string[]).includes(value)
+  )
 }

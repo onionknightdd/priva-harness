@@ -258,6 +258,7 @@ export function AgentMessageComposer({
   isStreaming = false,
   modelReady,
   slashCommand,
+  shellRef: shellRefProp,
   onDraftChange,
   onSlashCommandChange,
   onModelReferenceChange,
@@ -271,6 +272,7 @@ export function AgentMessageComposer({
   isStreaming?: boolean
   modelReady: boolean
   slashCommand: SlashCommand | null
+  shellRef?: React.RefObject<HTMLDivElement | null>
   onDraftChange: (draft: string) => void
   onSlashCommandChange: (command: SlashCommand | null) => void
   onModelReferenceChange: (model: string | null) => void
@@ -280,7 +282,8 @@ export function AgentMessageComposer({
 }) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
-  const shellRef = React.useRef<HTMLDivElement>(null)
+  const localShellRef = React.useRef<HTMLDivElement>(null)
+  const shellRef = shellRefProp ?? localShellRef
   const leftRef = React.useRef<HTMLDivElement>(null)
   const rightRef = React.useRef<HTMLDivElement>(null)
   const textareaRef = React.useRef<HTMLTextAreaElement>(null)

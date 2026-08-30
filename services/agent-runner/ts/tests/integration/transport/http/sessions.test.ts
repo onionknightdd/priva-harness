@@ -23,6 +23,7 @@ describe('/api/sandbox/agent/sessions', () => {
   let liveRuns: LiveRunRegistry
   let metadata: MemorySessionMetadataRepository
   let extraDir: string
+  let sessionService: SessionService
 
   beforeEach(async () => {
     testRoot = await mkdtemp(join(tmpdir(), 'priva-sessions-http-test-'))
@@ -55,7 +56,7 @@ describe('/api/sandbox/agent/sessions', () => {
       archived: true,
     })
     const providers = { claude, pi }
-    const sessionService = new SessionService({
+    sessionService = new SessionService({
       providers,
       metadata,
       liveRuns,
@@ -69,6 +70,7 @@ describe('/api/sandbox/agent/sessions', () => {
       sessions: sessionService,
     })
     sessionService.bindWarmListing((harness) => agentHarness.listWarm(harness))
+    sessionService.bindContextUsageReader((ref, spec) => agentHarness.readContextUsage(ref, spec))
     server = buildHttpServer({
       userFileSystem: new NodeUserFileSystem({ initialDirectory: testRoot }),
       modelProfileService,
@@ -419,6 +421,72 @@ describe('/api/sandbox/agent/sessions', () => {
     })
     expect(response.statusCode).toBe(400)
     expect(parseJson(response)).toEqual({ detail: 'Pi does not support fork' })
+  })
+
+  it('measures a cold session without parking a warm runtime', async () => {
+    claude.contextUsage = {
+      used: 40,
+      limit: 200000,
+      categories: [
+        { id: 'systemPrompt', tokens: 8 },
+        { id: 'toolDefinitions', tokens: 20 },
+        { id: 'skills', tokens: null },
+        { id: 'mcpTools', tokens: null },
+        { id: 'subagentDefinitions', tokens: null },
+        { id: 'memory', tokens: null },
+        { id: 'conversation', tokens: 12 },
+      ],
+    }
+    const response = await server.inject({
+      method: 'GET',
+      url: '/api/sandbox/agent/sessions/claude-1/context-usage?harness=claude',
+    })
+    expect(response.statusCode).toBe(200)
+    expect(parseJson(response)).toEqual(claude.contextUsage)
+    expect(claude.targets).toEqual([{
+      kind: 'resume',
+      session: { provider: 'claude', id: 'claude-1' },
+    }])
+    expect(claude.released).toEqual(['dispose'])
+    const running = parseJson(await server.inject({
+      method: 'GET',
+      url: '/api/sandbox/agent/sessions/running?harness=claude',
+    }))
+    expect(running['warm']).toEqual([])
+  })
+
+  it('returns the bound context usage snapshot for a live session', async () => {
+    sessionService.bindContextUsageReader((ref) => Promise.resolve({
+      used: ref.id === 'claude-1' ? 22998 : null,
+      limit: ref.id === 'claude-1' ? 200000 : null,
+      categories: [
+        { id: 'systemPrompt', tokens: 2089 },
+        { id: 'toolDefinitions', tokens: 20825 },
+        { id: 'skills', tokens: null },
+        { id: 'mcpTools', tokens: null },
+        { id: 'subagentDefinitions', tokens: null },
+        { id: 'memory', tokens: null },
+        { id: 'conversation', tokens: 84 },
+      ],
+    }))
+    const response = await server.inject({
+      method: 'GET',
+      url: '/api/sandbox/agent/sessions/claude-1/context-usage?harness=claude',
+    })
+    expect(response.statusCode).toBe(200)
+    expect(parseJson(response)).toEqual({
+      used: 22998,
+      limit: 200000,
+      categories: [
+        { id: 'systemPrompt', tokens: 2089 },
+        { id: 'toolDefinitions', tokens: 20825 },
+        { id: 'skills', tokens: null },
+        { id: 'mcpTools', tokens: null },
+        { id: 'subagentDefinitions', tokens: null },
+        { id: 'memory', tokens: null },
+        { id: 'conversation', tokens: 84 },
+      ],
+    })
   })
 })
 
