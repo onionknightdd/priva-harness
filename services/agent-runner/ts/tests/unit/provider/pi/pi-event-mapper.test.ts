@@ -323,4 +323,36 @@ describe('PiEventMapper', () => {
       ],
     })
   })
+
+  it('maps compaction start and a successful compact result', () => {
+    const mapper = new PiEventMapper({ sessionId: 'pi-sess', model: 'm' })
+    expect(mapper.push({ type: 'compaction_start', reason: 'manual' })).toEqual([
+      { type: 'session.compacting' },
+    ])
+    expect(mapper.push({
+      type: 'compaction_end',
+      reason: 'manual',
+      result: { summary: 'Kept COMPACT-PROBE tokens.', firstKeptEntryId: 'abc' },
+      aborted: false,
+    })).toEqual([
+      { type: 'session.compacted', summary: 'Kept COMPACT-PROBE tokens.' },
+    ])
+  })
+
+  it('maps a failed compact to run.failed', () => {
+    const mapper = new PiEventMapper({ sessionId: 'pi-sess', model: 'm' })
+    expect(mapper.push({
+      type: 'compaction_end',
+      reason: 'manual',
+      aborted: false,
+      errorMessage: 'Nothing to compact (session too small)',
+    })).toEqual([
+      expect.objectContaining({
+        type: 'run.failed',
+        message: 'Nothing to compact (session too small)',
+        sessionId: 'pi-sess',
+        model: 'm',
+      }),
+    ])
+  })
 })

@@ -8,6 +8,10 @@ import type {
 import type { AgentEvent } from '../../core/event/agent-event.js'
 import type { ToolImageDelta } from '../../core/tool/define-tool.js'
 import { isRunResultEvent } from '../../core/event/agent-event.js'
+import {
+  compactInstructionsOf,
+  isCompactCommandContent,
+} from '../../core/resource/compact-command.js'
 import type { UserTurn } from '../../core/run/user-turn.js'
 import { AsyncQueue } from '../../core/stream/async-queue.js'
 import { PiEventMapper, type PiSessionEvent } from './pi-event-mapper.js'
@@ -20,6 +24,7 @@ export interface PiAgentSession {
   prompt(text: string): Promise<void>
   followUp(text: string): Promise<void>
   steer(text: string): Promise<void>
+  compact?(customInstructions?: string): Promise<void>
   abort(): Promise<void>
   dispose(): void
   bindImageEmit?(emit: ((image: ToolImageDelta) => void) | undefined): void
@@ -153,10 +158,23 @@ export class PiRuntime implements AgentRuntime {
   }
 
   private send(text: string): Promise<void> {
+    if (isCompactCommandContent(text) && this.agentSession.compact !== undefined) {
+      return this.compactSession(text)
+    }
     if (!this.agentSession.isStreaming) return this.agentSession.prompt(text)
     if (this.queueBehavior === 'steer') return this.agentSession.steer(text)
     if (this.queueBehavior === 'interrupt') return this.interruptThenPrompt(text)
     return this.agentSession.followUp(text)
+  }
+
+  private async compactSession(text: string): Promise<void> {
+    await this.agentSession.compact?.(compactInstructionsOf(text))
+    this.events?.push({
+      type: 'run.completed',
+      sessionId: this.agentSession.sessionId,
+      model: this.agentSession.modelId,
+      durationMs: 0,
+    })
   }
 
   private async interruptThenPrompt(text: string): Promise<void> {

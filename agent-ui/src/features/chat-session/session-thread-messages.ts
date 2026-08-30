@@ -10,6 +10,7 @@ type ThreadApiMessage = {
   blocks?: unknown
   nestedAgents?: unknown
   workflows?: unknown
+  compact?: AgentThreadMessage["compact"]
 }
 
 export function threadMessagesFromApi(
@@ -22,6 +23,7 @@ export function threadMessagesFromApi(
     createdAt: item.createdAt,
     status: item.status,
     ...(item.transcriptUuid ? { transcriptUuid: item.transcriptUuid } : {}),
+    ...(item.compact === undefined ? {} : { compact: item.compact }),
     ...(item.role === "assistant"
       ? {
           blocks: snapshotBlocks(item.blocks),

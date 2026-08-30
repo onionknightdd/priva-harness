@@ -19,7 +19,8 @@ import {
   type AgentRunConnection,
   type AgentRunEffort,
 } from "./run-agent-session"
-import { applyStreamFrame, type StreamFrame } from "./run-stream-reducer"
+import { isCompactCommandUserMessage } from "./slash-command-envelope"
+import { applyThreadStreamFrame, type StreamFrame } from "./run-stream-reducer"
 import { freezeMessageThinking } from "./thinking-time"
 
 type ActiveStream = {
@@ -273,11 +274,7 @@ export function useAgentMessage() {
           return
         }
         setMessages((currentMessages) =>
-          currentMessages.map((message) =>
-            message.id === assistantMessage.id
-              ? applyStreamFrame(message, frame)
-              : message
-          )
+          applyThreadStreamFrame(currentMessages, assistantMessage.id, frame)
         )
       },
       onToolStarted: (id: string) => {
@@ -332,7 +329,12 @@ export function useAgentMessage() {
       return
     }
 
-    const userMessage = createAgentThreadMessage("user", content)
+    const userMessage = {
+      ...createAgentThreadMessage("user", content),
+      ...(isCompactCommandUserMessage(content)
+        ? { compact: { phase: "compacting" as const } }
+        : {}),
+    }
     const assistantMessage = createAgentThreadMessage(
       "assistant",
       "",

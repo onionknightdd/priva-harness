@@ -22,6 +22,10 @@ import {
 } from '../../core/event/tool-names.js'
 import { unifiedDiffFromStructuredPatch } from '../../core/event/tool-patch.js'
 import { encodeReadView } from '../../core/event/tool-read.js'
+import {
+  compactSummaryBody,
+  isCompactContinuationContent,
+} from '../../core/resource/compact-command.js'
 import { isSyntheticNoResponseAssistant } from './session/claude-transcript.js'
 
 export interface ClaudeSdkMessage {
@@ -39,6 +43,9 @@ export interface ClaudeSdkMessage {
   readonly is_error?: boolean
   readonly result?: string
   readonly errors?: readonly string[]
+  readonly status?: string | null
+  readonly compact_result?: string
+  readonly compact_error?: string
 }
 
 interface PendingTool {
@@ -324,6 +331,14 @@ export class ClaudeEventMapper {
     }
 
     const events: AgentEvent[] = []
+    if (!hasToolResult && channel.parentToolUseId === undefined) {
+      const text = blocks
+        .map((block) => stringField(block, 'text') ?? '')
+        .join('')
+      if (isCompactContinuationContent(text)) {
+        return [{ type: 'session.compacted', summary: compactSummaryBody(text) }]
+      }
+    }
     for (const block of blocks) {
       if (stringField(block, 'type') !== 'tool_result') continue
       const id = stringField(block, 'tool_use_id') ?? stringField(block, 'id')
@@ -369,9 +384,14 @@ export class ClaudeEventMapper {
   private mapSystem(message: ClaudeSdkMessage): AgentEvent[] {
     const record = message as unknown as JsonRecord
     const subtype = message.subtype ?? stringField(record, 'subtype')
+    if (subtype === 'status') {
+      return this.mapCompactStatus(record)
+    }
+    if (subtype === 'compact_boundary') {
+      return [{ type: 'session.compacted' }]
+    }
     if (
       subtype === 'init' ||
-      subtype === 'status' ||
       subtype === 'thinking_tokens' ||
       subtype === undefined
     ) {
@@ -451,6 +471,29 @@ export class ClaudeEventMapper {
           },
         ]
       }
+    }
+    return []
+  }
+
+  private mapCompactStatus(record: JsonRecord): AgentEvent[] {
+    const status = stringField(record, 'status')
+    const compactResult = stringField(record, 'compact_result')
+    if (status === 'compacting') {
+      return [{ type: 'session.compacting' }]
+    }
+    if (compactResult === 'success') {
+      return [{ type: 'session.compacted' }]
+    }
+    if (compactResult === 'failed') {
+      const sessionId = omitEmpty(stringField(record, 'session_id') ?? this.sessionId)
+      return [
+        {
+          type: 'run.failed',
+          message: stringField(record, 'compact_error') ?? 'Conversation compaction failed',
+          ...(sessionId === undefined ? {} : { sessionId }),
+          ...(this.model === undefined ? {} : { model: this.model }),
+        },
+      ]
     }
     return []
   }

@@ -131,6 +131,76 @@ describe('foldThread', () => {
     })
   })
 
+  it('pairs a Claude continuation summary onto the compact command', () => {
+    const thread = foldThread([
+      user(
+        's1',
+        'This session is being continued from a previous conversation that ran out of context.\n\nSummary:\nKept the tokens.',
+      ),
+      user('c1', '/compact'),
+      user('o1', '<local-command-stdout>Compacted </local-command-stdout>'),
+    ])
+
+    expect(thread).toEqual([
+      expect.objectContaining({
+        role: 'user',
+        content: '/compact',
+        compact: { phase: 'compacted', summary: 'Kept the tokens.' },
+      }),
+    ])
+  })
+
+  it('applies live compact events onto the compact user', () => {
+    const thread = foldThread([
+      user('c1', '/compact'),
+      frame({ type: 'session.compacting' }),
+      frame({ type: 'session.compacted', summary: 'Probe tokens confirmed.' }),
+    ])
+
+    expect(thread[0]).toMatchObject({
+      compact: { phase: 'compacted', summary: 'Probe tokens confirmed.' },
+    })
+  })
+
+  it('marks the compact user failed when the run fails', () => {
+    const thread = foldThread([
+      user('c1', '/compact'),
+      frame({ type: 'session.compacting' }),
+      frame({ type: 'run.failed', message: 'Nothing to compact (session too small)' }),
+    ])
+
+    expect(thread).toEqual([
+      expect.objectContaining({
+        role: 'user',
+        content: '/compact',
+        compact: { phase: 'failed' },
+      }),
+      expect.objectContaining({
+        role: 'assistant',
+        status: 'error',
+        content: 'Nothing to compact (session too small)',
+      }),
+    ])
+  })
+
+  it('does not fail an already compacted user on a later error', () => {
+    const thread = foldThread([
+      user('c1', '/compact'),
+      frame({ type: 'session.compacted', summary: 'Kept the tokens.' }),
+      user('u2', 'what next'),
+      frame({ type: 'run.failed', message: 'later blowup' }),
+    ])
+
+    expect(thread[0]).toMatchObject({
+      compact: { phase: 'compacted', summary: 'Kept the tokens.' },
+    })
+    expect(thread.at(-1)).toMatchObject({
+      role: 'assistant',
+      status: 'error',
+      content: 'later blowup',
+    })
+  })
+
   it('drops the synthetic No response requested assistant', () => {
     const thread = foldThread([
       user('u1', '/compact'),

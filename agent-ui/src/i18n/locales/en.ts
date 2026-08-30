@@ -148,6 +148,27 @@ export const en = {
     mockAssistantReply:
       "Sure. This is a local preview reply. I'll stream it in so you can check scrolling, the caret, and message layout. A live model will replace this mock once streaming is connected.",
     testSessionTitle: "How should I design Agent Message?",
+    contextUsage: {
+      title: "Context Usage",
+      aria: "Context usage",
+      ariaPercent: "Context {{percent}}% used",
+      tooltip: "Context  {{percent}}% · {{used}}/{{limit}}",
+      tooltipEmpty: "Context usage appears after the first reply",
+      full: "{{percent}}% Full",
+      empty: "No usage yet",
+      tokens: "~{{used}} / {{limit}}",
+      tokensEmpty: "— / —",
+      unavailable: "—",
+      category: {
+        systemPrompt: "System prompt",
+        toolDefinitions: "Tool definitions",
+        rules: "Rules",
+        skills: "Skills",
+        mcpTools: "MCP & dynamic tools",
+        subagentDefinitions: "Subagent definitions",
+        conversation: "Conversation",
+      },
+    },
   },
   fileBrowser: {
     searchLabel: "Search files and folders",

@@ -747,4 +747,47 @@ describe('ClaudeEventMapper', () => {
       }),
     ]))
   })
+
+  it('maps compact status, boundary, continuation, and failure', () => {
+    const mapper = new ClaudeEventMapper()
+    expect(mapper.push({
+      type: 'system',
+      subtype: 'status',
+      status: 'compacting',
+      session_id: 'sess-1',
+    })).toEqual([{ type: 'session.compacting' }])
+    expect(mapper.push({
+      type: 'system',
+      subtype: 'status',
+      status: null,
+      compact_result: 'success',
+      session_id: 'sess-1',
+    })).toEqual([{ type: 'session.compacted' }])
+    expect(mapper.push({
+      type: 'system',
+      subtype: 'compact_boundary',
+      session_id: 'sess-1',
+    })).toEqual([{ type: 'session.compacted' }])
+    expect(mapper.push({
+      type: 'user',
+      session_id: 'sess-1',
+      message: {
+        role: 'user',
+        content: 'This session is being continued from a previous conversation.\n\nSummary:\nTokens kept.',
+      },
+    })).toEqual([{ type: 'session.compacted', summary: 'Tokens kept.' }])
+    expect(mapper.push({
+      type: 'system',
+      subtype: 'status',
+      compact_result: 'failed',
+      compact_error: 'summarizer exploded',
+      session_id: 'sess-1',
+    })).toEqual([
+      expect.objectContaining({
+        type: 'run.failed',
+        message: 'summarizer exploded',
+        sessionId: 'sess-1',
+      }),
+    ])
+  })
 })

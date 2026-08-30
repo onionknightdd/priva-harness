@@ -3,6 +3,7 @@ import { describe, it } from "node:test"
 
 import type { AgentThreadMessage } from "../../../src/features/agent-message/agent-message-data.ts"
 import {
+  applyThreadCompactFrame,
   compactSummaryBody,
   foldCommandSurfaces,
   isClearCommandUserMessage,
@@ -165,6 +166,37 @@ describe("foldCommandSurfaces", () => {
     assert.equal(folded[1]?.content, "No response requested.")
   })
 
+  it("stays compacting when no summary has arrived yet", () => {
+    const folded = foldCommandSurfaces([message("c1", "user", "/compact")])
+    assert.equal(folded[0]?.compact?.phase, "compacting")
+  })
+
+  it("keeps an explicit failed compact as a user bubble", () => {
+    const failed = {
+      ...message("c1", "user", "/compact"),
+      compact: { phase: "failed" as const },
+    }
+    const error = message("a1", "assistant", "Nothing to compact", "error")
+    const folded = foldCommandSurfaces([failed, error])
+    assert.equal(folded.length, 2)
+    assert.equal(folded[0]?.compact?.phase, "failed")
+    assert.equal(userMessageSurface(failed.content, failed.compact), "bubble")
+    assert.equal(folded[1]?.status, "error")
+  })
+
+  it("infers a failed compact from the following error assistant", () => {
+    const folded = foldCommandSurfaces([
+      message("c1", "user", "/compact"),
+      message("a1", "assistant", "Nothing to compact", "error"),
+    ])
+    assert.equal(folded[0]?.compact?.phase, "failed")
+    assert.equal(
+      userMessageSurface(folded[0]?.content ?? "", folded[0]?.compact),
+      "bubble"
+    )
+    assert.equal(folded[1]?.status, "error")
+  })
+
   it("pairs a nearby continuation summary and marks the compact done", () => {
     const summary = message("s1", "user", COMPACT_SUMMARY)
     const compact = message("c1", "user", COMPACT_ENVELOPE)
@@ -182,5 +214,38 @@ describe("foldCommandSurfaces", () => {
       folded[0]?.compact?.summary,
       "1. Primary Request and Intent:\n   - Write a mock SRE dashboard."
     )
+  })
+})
+
+describe("applyThreadCompactFrame", () => {
+  it("marks the compact user compacting then compacted with a summary", () => {
+    const start = [
+      { ...message("c1", "user", "/compact"), compact: { phase: "compacting" as const } },
+      message("a1", "assistant", "", "streaming"),
+    ]
+    const compacting = applyThreadCompactFrame(start, "a1", { type: "session.compacting" })
+    assert.equal(compacting[0]?.compact?.phase, "compacting")
+
+    const compacted = applyThreadCompactFrame(compacting, "a1", {
+      type: "session.compacted",
+      summary: "Kept the probe tokens.",
+    })
+    assert.equal(compacted[0]?.compact?.phase, "compacted")
+    assert.equal(compacted[0]?.compact?.summary, "Kept the probe tokens.")
+    assert.equal(compacted[1]?.status, "complete")
+  })
+
+  it("marks the active compact user failed without touching an earlier compact", () => {
+    const start = [
+      {
+        ...message("c1", "user", "/compact"),
+        compact: { phase: "compacted" as const, summary: "old" },
+      },
+      { ...message("c2", "user", "/compact"), compact: { phase: "compacting" as const } },
+      message("a2", "assistant", "", "streaming"),
+    ]
+    const next = applyThreadCompactFrame(start, "a2", { type: "run.failed" })
+    assert.equal(next[0]?.compact?.phase, "compacted")
+    assert.equal(next[1]?.compact?.phase, "failed")
   })
 })

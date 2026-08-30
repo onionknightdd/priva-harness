@@ -203,7 +203,7 @@ export function AgentMessageItem({
   const isError = message.status === "error"
 
   if (message.role === "user") {
-    const surface = userMessageSurface(message.content)
+    const surface = userMessageSurface(message.content, message.compact)
     if (surface === "hidden") {
       return null
     }
@@ -212,7 +212,7 @@ export function AgentMessageItem({
         <CompactSessionMarker
           compact={
             message.compact ?? {
-              phase: "compacted",
+              phase: "compacting",
             }
           }
         />

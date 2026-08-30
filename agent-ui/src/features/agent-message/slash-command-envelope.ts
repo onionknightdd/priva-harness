@@ -4,7 +4,7 @@ export type UserMessageSurface =
   | "conversation-compacted"
   | "hidden"
 
-export type CompactPhase = "compacting" | "compacted"
+export type CompactPhase = "compacting" | "compacted" | "failed"
 
 export type CompactMarker = {
   phase: CompactPhase
@@ -48,7 +48,10 @@ export function compactSummaryBody(content: string): string {
   return body && body !== "" ? body : text
 }
 
-export function userMessageSurface(content: string): UserMessageSurface {
+export function userMessageSurface(
+  content: string,
+  compact?: CompactMarker
+): UserMessageSurface {
   const text = content.trim()
   if (
     LOCAL_COMMAND_STDOUT.test(text) ||
@@ -58,6 +61,7 @@ export function userMessageSurface(content: string): UserMessageSurface {
     return "hidden"
   }
   if (isClearCommandUserMessage(text)) return "session-reset"
+  if (compact?.phase === "failed") return "bubble"
   if (isCompactCommandUserMessage(text)) return "conversation-compacted"
   return "bubble"
 }
@@ -73,16 +77,13 @@ export function foldCommandSurfaces<T extends FoldableMessage>(
     if (message === undefined) continue
 
     if (message.role === "user") {
-      const surface = userMessageSurface(message.content)
+      const surface = userMessageSurface(message.content, message.compact)
       if (surface === "hidden") continue
       if (surface === "conversation-compacted") {
-        const summary = summaries.get(message.id)
+        const summary = summaries.get(message.id) ?? message.compact?.summary
         folded.push({
           ...message,
-          compact: {
-            phase: compactPhase(summary, messages, index),
-            ...(summary === undefined ? {} : { summary }),
-          },
+          compact: resolveCompactMarker(message, summary, messages, index),
         })
         continue
       }
@@ -145,29 +146,45 @@ function pairCompactSummaries(
   return paired
 }
 
-function compactPhase(
+function resolveCompactMarker(
+  message: FoldableMessage,
   summary: string | undefined,
   messages: readonly FoldableMessage[],
   compactIndex: number
-): CompactPhase {
-  if (summary !== undefined && summary.trim() !== "") return "compacted"
+): CompactMarker {
+  if (message.compact?.phase === "failed") {
+    return { phase: "failed" }
+  }
+  const merged = summary?.trim() || message.compact?.summary?.trim()
+  if (merged) {
+    return { phase: "compacted", summary: merged }
+  }
+  if (message.compact?.phase === "compacting" || message.compact?.phase === "compacted") {
+    return { phase: message.compact.phase }
+  }
+  return { phase: compactPhase(messages, compactIndex) }
+}
 
+function compactPhase(
+  messages: readonly FoldableMessage[],
+  compactIndex: number
+): CompactPhase {
   for (let index = compactIndex + 1; index < messages.length; index += 1) {
     const message = messages[index]
     if (message === undefined) continue
     if (message.role === "user") {
-      const surface = userMessageSurface(message.content)
+      const surface = userMessageSurface(message.content, message.compact)
       if (surface === "hidden") continue
       break
     }
-    if (message.status === "error") break
+    if (message.status === "error") return "failed"
     if (isPlaceholderAssistant(message) || message.status === "streaming") {
       return "compacting"
     }
     break
   }
 
-  return "compacted"
+  return "compacting"
 }
 
 function isCompactPlaceholderAssistant(
@@ -181,7 +198,7 @@ function isCompactPlaceholderAssistant(
     const previous = messages[cursor]
     if (previous === undefined) continue
     if (previous.role === "user") {
-      const surface = userMessageSurface(previous.content)
+      const surface = userMessageSurface(previous.content, previous.compact)
       if (surface === "hidden") continue
       return surface === "conversation-compacted"
     }
@@ -215,6 +232,94 @@ function isPlaceholderAssistant(message: FoldableMessage): boolean {
     (message.nestedAgents?.length ?? 0) === 0 &&
     (message.workflows?.length ?? 0) === 0
   )
+}
+
+export function applyThreadCompactFrame<T extends FoldableMessage>(
+  messages: readonly T[],
+  assistantId: string,
+  frame: { type?: string; summary?: string; message?: string }
+): T[] {
+  if (frame.type === "session.compacting") {
+    return patchCompactUser(messages, { phase: "compacting" })
+  }
+  if (frame.type === "session.compacted") {
+    const summary = frame.summary?.trim()
+    return patchCompactUser(
+      messages.map((message) =>
+        message.id === assistantId && message.status === "streaming"
+          ? { ...message, status: "complete" as const }
+          : message
+      ),
+      summary ? { phase: "compacted", summary } : { phase: "compacted" }
+    )
+  }
+  if (frame.type === "error" || frame.type === "run.failed") {
+    return failActiveCompact(messages, assistantId)
+  }
+  return [...messages]
+}
+
+function patchCompactUser<T extends FoldableMessage>(
+  messages: readonly T[],
+  patch: CompactMarker
+): T[] {
+  const index = lastCompactUserIndex(messages)
+  if (index === undefined) return [...messages]
+  return messages.map((message, position) =>
+    position === index
+      ? { ...message, compact: mergeCompact(message.compact, patch) }
+      : message
+  )
+}
+
+function failActiveCompact<T extends FoldableMessage>(
+  messages: readonly T[],
+  assistantId: string
+): T[] {
+  const assistantIndex = messages.findIndex((message) => message.id === assistantId)
+  if (assistantIndex < 0) return [...messages]
+  for (let index = assistantIndex - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (message === undefined || message.role !== "user") continue
+    if (message.compact?.phase === "compacted") return [...messages]
+    if (
+      message.compact?.phase === "compacting" ||
+      isCompactCommandUserMessage(message.content)
+    ) {
+      return messages.map((item, position) =>
+        position === index ? { ...item, compact: { phase: "failed" } } : item
+      )
+    }
+    return [...messages]
+  }
+  return [...messages]
+}
+
+function lastCompactUserIndex(
+  messages: readonly FoldableMessage[]
+): number | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (message === undefined || message.role !== "user") continue
+    if (message.compact !== undefined || isCompactCommandUserMessage(message.content)) {
+      return index
+    }
+  }
+  return undefined
+}
+
+function mergeCompact(
+  previous: CompactMarker | undefined,
+  patch: CompactMarker
+): CompactMarker {
+  if (patch.phase === "failed" || previous?.phase === "failed") {
+    return { phase: "failed" }
+  }
+  const summary = patch.summary?.trim() || previous?.summary?.trim()
+  if (patch.phase === "compacted" || summary) {
+    return summary ? { phase: "compacted", summary } : { phase: "compacted" }
+  }
+  return summary ? { phase: "compacting", summary } : { phase: "compacting" }
 }
 
 function isSlashCommandUserMessage(content: string, name: string): boolean {

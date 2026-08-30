@@ -27,6 +27,9 @@ export interface PiSessionEvent {
   readonly partialResult?: unknown
   readonly result?: unknown
   readonly isError?: boolean
+  readonly reason?: string
+  readonly aborted?: boolean
+  readonly errorMessage?: string
 }
 
 export interface PiEventMapperOptions {
@@ -82,6 +85,10 @@ export class PiEventMapper {
         return this.mapToolExecutionEnd(event)
       case 'agent_end':
         return [this.mapAgentEnd(event.messages)]
+      case 'compaction_start':
+        return [{ type: 'session.compacting' }]
+      case 'compaction_end':
+        return this.mapCompactionEnd(event)
       default:
         return []
     }
@@ -301,6 +308,26 @@ export class PiEventMapper {
         ...(this.lastMessageId === undefined ? {} : { messageId: this.lastMessageId }),
         blockId: id,
         ...(index === undefined ? {} : { index }),
+      },
+    ]
+  }
+
+  private mapCompactionEnd(event: PiSessionEvent): AgentEvent[] {
+    const record = asRecord(event.result)
+    const summary = record === undefined ? undefined : stringField(record, 'summary')
+    if (summary !== undefined && summary.trim() !== '') {
+      return [{ type: 'session.compacted', summary }]
+    }
+    if (event.result !== undefined && event.result !== null && event.aborted !== true) {
+      return [{ type: 'session.compacted' }]
+    }
+    const sessionId = this.options.sessionId === '' ? undefined : this.options.sessionId
+    return [
+      {
+        type: 'run.failed',
+        message: event.errorMessage ?? 'Conversation compaction failed',
+        ...(sessionId === undefined ? {} : { sessionId }),
+        model: this.model === '' ? this.options.model : this.model,
       },
     ]
   }

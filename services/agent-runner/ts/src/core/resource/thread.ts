@@ -1,3 +1,4 @@
+import type { CompactMarker } from './compact-command.js'
 import type { AgentEvent, ContentBlock } from '../event/agent-event.js'
 
 export type ThreadToolStatus = 'started' | 'running' | 'completed'
@@ -86,6 +87,7 @@ export interface ThreadMessage {
   readonly blocks?: readonly ThreadBlock[]
   readonly nestedAgents?: readonly ThreadNestedAgent[]
   readonly workflows?: readonly ThreadWorkflowCard[]
+  readonly compact?: CompactMarker
 }
 
 export type ThreadReplayItem =

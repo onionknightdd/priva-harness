@@ -147,6 +147,27 @@ export const zhCN = {
     mockAssistantReply:
       "好的。这是一条本地预览回复，我会用流式输出把内容逐字写出来，方便你检查滚动、光标和消息布局。实时模型接入后会换成真实回答。",
     testSessionTitle: "我要怎么设计 Agent Message？",
+    contextUsage: {
+      title: "Context Usage",
+      aria: "上下文用量",
+      ariaPercent: "已使用上下文 {{percent}}%",
+      tooltip: "Context  {{percent}}% · {{used}}/{{limit}}",
+      tooltipEmpty: "首次回复后显示上下文用量",
+      full: "{{percent}}% Full",
+      empty: "暂无用量",
+      tokens: "~{{used}} / {{limit}}",
+      tokensEmpty: "— / —",
+      unavailable: "—",
+      category: {
+        systemPrompt: "System prompt",
+        toolDefinitions: "Tool definitions",
+        rules: "Rules",
+        skills: "Skills",
+        mcpTools: "MCP & dynamic tools",
+        subagentDefinitions: "Subagent definitions",
+        conversation: "Conversation",
+      },
+    },
   },
   fileBrowser: {
     searchLabel: "搜索文件和文件夹",

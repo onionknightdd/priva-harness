@@ -91,7 +91,7 @@ export type AgentThreadMessage = {
   nestedAgents?: NestedAgent[]
   workflows?: WorkflowCard[]
   compact?: {
-    phase: "compacting" | "compacted"
+    phase: "compacting" | "compacted" | "failed"
     summary?: string
   }
 }

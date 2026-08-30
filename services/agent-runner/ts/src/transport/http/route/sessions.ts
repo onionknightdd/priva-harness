@@ -326,6 +326,14 @@ function toThreadMessageResponse(message: ThreadMessage): Record<string, unknown
             ...(workflow.summary === undefined ? {} : { summary: workflow.summary }),
           })),
         }),
+    ...(message.compact === undefined
+      ? {}
+      : {
+          compact: {
+            phase: message.compact.phase,
+            ...(message.compact.summary === undefined ? {} : { summary: message.compact.summary }),
+          },
+        }),
   }
 }
 

@@ -18,6 +18,10 @@ export const STREAM_PROTOCOL_VERSION = 1 as const
 // Pi tool_execution_start/update/end               → tool.running / tool.progress / tool.completed
 // Pi message_end assistant                         → assistant.message
 // Pi agent_end                                     → run.completed | run.failed | run.aborted
+// Claude system.status compacting                  → session.compacting
+// Claude system.status compact_result              → session.compacted | run.failed
+// Claude compact continuation user                 → session.compacted { summary }
+// Pi compaction_start / compaction_end             → session.compacting / session.compacted | run.failed
 
 
 export interface TokenUsage {
@@ -232,6 +236,7 @@ export type AgentEvent =
       readonly input?: unknown
     }
   | { readonly type: 'permission.resolved'; readonly requestId: string; readonly decision: string }
+  | { readonly type: 'session.compacting' }
   | { readonly type: 'session.compacted'; readonly summary?: string }
   | { readonly type: 'suggestion.prompts'; readonly prompts: readonly string[] }
   | { readonly type: 'run.usage'; readonly usage: TokenUsage }

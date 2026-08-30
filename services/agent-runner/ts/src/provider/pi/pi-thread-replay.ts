@@ -10,6 +10,27 @@ export function replayPiSessionMessages(messages: readonly SessionMessage[]): Th
   const items: ThreadReplayItem[] = []
 
   for (const message of messages) {
+    if (message.type === 'compaction') {
+      const createdAt = isoFromTimestamp(message.timestamp)
+      const id = message.uuid === '' ? `compact-${String(items.length)}` : message.uuid
+      const summary = compactionSummary(message.message)
+      items.push({
+        kind: 'user',
+        id,
+        content: '/compact',
+        createdAt,
+      })
+      items.push({
+        kind: 'frame',
+        event: {
+          type: 'session.compacted',
+          ...(summary === undefined ? {} : { summary }),
+        },
+        createdAt,
+      })
+      continue
+    }
+
     if (message.type === 'user') {
       const content = userContent(message.message)
       if (content.trim() === '') continue
@@ -68,6 +89,13 @@ export function replayPiSessionMessages(messages: readonly SessionMessage[]): Th
   }
 
   return items
+}
+
+function compactionSummary(raw: unknown): string | undefined {
+  const record = asRecord(raw)
+  const summary = record === undefined ? undefined : stringField(record, 'summary')
+  const trimmed = summary?.trim()
+  return trimmed === undefined || trimmed === '' ? undefined : trimmed
 }
 
 function userContent(raw: unknown): string {

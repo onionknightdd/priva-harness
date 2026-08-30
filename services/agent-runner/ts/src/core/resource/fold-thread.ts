@@ -1,5 +1,13 @@
 import type { AgentEvent } from '../event/agent-event.js'
 import { applyStreamFrame, emptyAssistantMessage } from './apply-stream-frame.js'
+import {
+  compactSummaryBody,
+  isCompactCommandContent,
+  isCompactContinuationContent,
+  isHiddenCompactUserContent,
+  mergeCompactMarker,
+  type CompactMarker,
+} from './compact-command.js'
 import { freezeMessageThinking, stampMessageThinkingTimes } from './thinking-time.js'
 import {
   threadHasVisibleContent,
@@ -14,12 +22,12 @@ const PASS_THROUGH_TYPES = new Set<AgentEvent['type']>([
   'suggestion.prompts',
   'permission.requested',
   'permission.resolved',
-  'session.compacted',
   'ext',
 ])
 
 export function foldThread(items: readonly ThreadReplayItem[]): ThreadMessage[] {
   const messages: ThreadMessage[] = []
+  const pendingSummaries: string[] = []
   let current: ThreadMessage | undefined
   let lastAtMs: number | undefined
 
@@ -42,6 +50,13 @@ export function foldThread(items: readonly ThreadReplayItem[]): ThreadMessage[] 
     if (item.kind === 'user') {
       finishAssistant()
       if (item.content.trim() === '') continue
+      if (isHiddenCompactUserContent(item.content)) {
+        if (isCompactContinuationContent(item.content)) {
+          pendingSummaries.push(compactSummaryBody(item.content))
+        }
+        continue
+      }
+      const compact = compactForUser(item.content, pendingSummaries)
       messages.push({
         id: item.id,
         role: 'user',
@@ -49,7 +64,25 @@ export function foldThread(items: readonly ThreadReplayItem[]): ThreadMessage[] 
         createdAt: item.createdAt,
         status: 'complete',
         transcriptUuid: item.id,
+        ...(compact === undefined ? {} : { compact }),
       })
+      continue
+    }
+
+    if (item.event.type === 'session.compacting') {
+      finishAssistant()
+      patchLastCompactUser(messages, { phase: 'compacting' })
+      continue
+    }
+    if (item.event.type === 'session.compacted') {
+      finishAssistant()
+      const summary = item.event.summary ?? pendingSummaries.shift()
+      patchLastCompactUser(
+        messages,
+        summary === undefined
+          ? { phase: 'compacted' }
+          : { phase: 'compacted', summary },
+      )
       continue
     }
 
@@ -83,6 +116,9 @@ export function foldThread(items: readonly ThreadReplayItem[]): ThreadMessage[] 
     current = applyStreamFrame(current, item.event)
     if (atMs !== undefined) {
       current = stampMessageThinkingTimes(previous, current, item.event, atMs)
+    }
+    if (item.event.type === 'error' || item.event.type === 'run.failed') {
+      failLastCompactUser(messages)
     }
   }
 
@@ -132,6 +168,46 @@ function assistantIdOf(event: AgentEvent): string {
 
 function createdAtNow(): string {
   return new Date(0).toISOString()
+}
+
+function compactForUser(
+  content: string,
+  pendingSummaries: string[],
+): CompactMarker | undefined {
+  if (!isCompactCommandContent(content)) return undefined
+  const summary = pendingSummaries.shift()
+  if (summary === undefined) return { phase: 'compacting' }
+  return { phase: 'compacted', summary }
+}
+
+function patchLastCompactUser(
+  messages: ThreadMessage[],
+  patch: CompactMarker,
+): void {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (message?.role !== 'user') continue
+    if (message.compact === undefined && !isCompactCommandContent(message.content)) {
+      continue
+    }
+    messages[index] = {
+      ...message,
+      compact: mergeCompactMarker(message.compact, patch),
+    }
+    return
+  }
+}
+
+function failLastCompactUser(messages: ThreadMessage[]): void {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (message?.role !== 'user') continue
+    if (message.compact?.phase === 'compacted') return
+    if (message.compact !== undefined || isCompactCommandContent(message.content)) {
+      messages[index] = { ...message, compact: { phase: 'failed' } }
+    }
+    return
+  }
 }
 
 function atMsOf(value: string | undefined): number | undefined {

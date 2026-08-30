@@ -130,6 +130,26 @@ describe('PiRuntime stream input', () => {
     await runtime.release('dispose')
   })
 
+  it('dispatches /compact to session.compact instead of prompt', async () => {
+    const session = new FakePiAgentSession()
+    const runtime = new PiRuntime(session)
+    const events: AgentEvent[] = []
+    for await (const event of consumeRunEvents(runtime.run(
+      { text: '/compact keep the tokens' },
+      { signal: new AbortController().signal },
+    ))) {
+      events.push(event)
+    }
+    expect(session.prompts).toEqual([])
+    expect(session.compacts).toEqual(['keep the tokens'])
+    expect(events).toEqual([
+      { type: 'session.compacting' },
+      { type: 'session.compacted', summary: 'Kept the tokens.' },
+      expect.objectContaining({ type: 'run.completed', sessionId: 'pi-1' }),
+    ])
+    await runtime.release('dispose')
+  })
+
   it('throws when the session cannot change model in place', async () => {
     const session = new FakePiAgentSession()
     Reflect.deleteProperty(session, 'setRunModel')
@@ -150,6 +170,7 @@ class FakePiAgentSession implements PiAgentSession {
   readonly prompts: string[] = []
   readonly followUps: string[] = []
   readonly steers: string[] = []
+  readonly compacts: string[] = []
   aborts = 0
   private listener: ((event: PiSessionEvent) => void) | undefined
 
@@ -188,6 +209,18 @@ class FakePiAgentSession implements PiAgentSession {
     this.listener?.({
       type: 'agent_end',
       messages: [{ role: 'assistant', model: this.modelId, content: [{ type: 'text', text: 'ok' }] }],
+    })
+    return Promise.resolve()
+  }
+
+  compact(customInstructions?: string): Promise<void> {
+    this.compacts.push(customInstructions ?? '')
+    this.listener?.({ type: 'compaction_start', reason: 'manual' })
+    this.listener?.({
+      type: 'compaction_end',
+      reason: 'manual',
+      result: { summary: 'Kept the tokens.' },
+      aborted: false,
     })
     return Promise.resolve()
   }

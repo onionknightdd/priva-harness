@@ -5,7 +5,7 @@ import { replayPiSessionMessages } from '../../../../src/provider/pi/pi-thread-r
 import type { SessionMessage } from '../../../../src/core/resource/session.js'
 
 describe('replayPiSessionMessages', () => {
-  it('keeps tool results on the assistant turn and skips compaction', () => {
+  it('keeps tool results on the assistant turn and surfaces compaction', () => {
     const messages: SessionMessage[] = [
       {
         type: 'user',
@@ -57,7 +57,12 @@ describe('replayPiSessionMessages', () => {
     ]
 
     const thread = foldThread(replayPiSessionMessages(messages))
-    expect(thread.map((message) => message.role)).toEqual(['user', 'assistant'])
+    expect(thread.map((message) => message.role)).toEqual(['user', 'assistant', 'user'])
+    expect(thread[2]).toMatchObject({
+      role: 'user',
+      content: '/compact',
+      compact: { phase: 'compacted', summary: 'compacted' },
+    })
     expect(thread[1]?.content).toBe('')
     expect(
       thread[1]?.blocks?.find((block) => block.type === 'text' && block.text === 'running'),

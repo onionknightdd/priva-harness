@@ -231,6 +231,11 @@ describe('/api/sandbox/agent/sessions', () => {
             }),
           ],
         }),
+        expect.objectContaining({
+          role: 'user',
+          content: '/compact',
+          compact: { phase: 'compacted', summary: 'compacted' },
+        }),
       ],
     })
 

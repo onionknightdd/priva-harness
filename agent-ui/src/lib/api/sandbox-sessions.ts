@@ -302,6 +302,10 @@ export function listSessionThread(
       blocks?: unknown
       nested_agents?: unknown
       workflows?: unknown
+      compact?: {
+        phase: "compacting" | "compacted" | "failed"
+        summary?: string
+      }
     }>
     add_dirs: string[]
     run_mode: SessionRunMode
@@ -326,6 +330,7 @@ export function listSessionThread(
       ...(item.workflows === undefined
         ? {}
         : { workflows: mapWorkflows(item.workflows) }),
+      ...(item.compact === undefined ? {} : { compact: item.compact }),
     })),
   }))
 }

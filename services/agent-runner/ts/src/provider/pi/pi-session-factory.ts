@@ -169,6 +169,10 @@ class SdkPiAgentSession implements PiAgentSession {
     return this.session.steer(text)
   }
 
+  compact(customInstructions?: string): Promise<void> {
+    return this.session.compact(customInstructions).then(() => undefined)
+  }
+
   abort(): Promise<void> {
     return this.session.abort()
   }

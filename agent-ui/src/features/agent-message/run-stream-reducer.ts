@@ -6,6 +6,7 @@ import {
   type ToolCard,
   type WorkflowCard,
 } from "./agent-message-data"
+import { applyThreadCompactFrame } from "./slash-command-envelope"
 import { frameAtMs, stampMessageThinkingTimes } from "./thinking-time"
 
 const STREAM_PROTOCOL_VERSION = 1
@@ -61,6 +62,21 @@ export function parseStreamFrame(raw: unknown): StreamFrame | undefined {
     return undefined
   }
   return frame
+}
+
+export function applyThreadStreamFrame(
+  messages: readonly AgentThreadMessage[],
+  assistantId: string,
+  frame: StreamFrame
+): AgentThreadMessage[] {
+  const withAssistant = messages.map((message) =>
+    message.id === assistantId &&
+    frame.type !== "session.compacting" &&
+    frame.type !== "session.compacted"
+      ? applyStreamFrame(message, frame)
+      : message
+  )
+  return applyThreadCompactFrame(withAssistant, assistantId, frame)
 }
 
 export function applyStreamFrame(

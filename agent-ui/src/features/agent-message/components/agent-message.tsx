@@ -21,6 +21,7 @@ import {
 import { AgentMessageEmptyState } from "./agent-message-empty-state"
 import { AgentMessageThread } from "./agent-message-thread"
 import type { ComposerEffort } from "./composer-model-selector"
+import { ComposerContextRing } from "./composer-context-ring"
 import { SessionCwdIndicator } from "./session-cwd-indicator"
 import { TaskPlanPopover } from "./task-plan-popover"
 
@@ -139,13 +140,18 @@ export function AgentMessage({
           onSubmit={onSubmit}
           onStop={onStop}
         />
-        {runCwd ? (
-          <SessionCwdIndicator
-            key={runCwd}
-            cwd={runCwd}
-            className="mt-2"
-          />
-        ) : null}
+        <div className="mt-2 flex items-center gap-2">
+          {runCwd ? (
+            <SessionCwdIndicator
+              key={runCwd}
+              cwd={runCwd}
+              className="min-w-0"
+            />
+          ) : null}
+          <div className="ml-auto flex h-6 items-center pr-2.5">
+            <ComposerContextRing />
+          </div>
+        </div>
         {forkError ? (
           <p className="mt-2 text-xs text-destructive" role="alert">
             {forkError === "needs_transcript"
