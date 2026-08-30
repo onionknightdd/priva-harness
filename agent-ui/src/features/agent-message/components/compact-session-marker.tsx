@@ -54,7 +54,7 @@ export function CompactSessionMarker({ compact }: { compact: CompactMarker }) {
             <div className="pt-3 text-sm text-muted-foreground">
               <QuoteSelectable>
                 <MessageResponse
-                  className="text-muted-foreground [&_p]:[line-height:calc(1.5em+2px)] [&_p+p]:mt-[2px] [&_*]:text-muted-foreground"
+                  className="text-muted-foreground [&_p]:[line-height:1.5em] [&_p+p]:mt-[2px] [&_*]:text-muted-foreground"
                   animated={false}
                 >
                   {summary}

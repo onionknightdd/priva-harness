@@ -320,7 +320,7 @@ function AssistantStreamBody({
       {text.trim() !== "" ? (
         <QuoteSelectable>
           <MessageResponse
-            className="[&_p]:[line-height:calc(1.5em+2px)] [&_p+p]:mt-[2px]"
+            className="[&_p]:[line-height:1.5em] [&_p+p]:mt-[2px]"
             animated={isStreaming && !shouldReduceMotion}
             isAnimating={isStreaming}
             mode={isStreaming ? "streaming" : "static"}

@@ -71,7 +71,7 @@ import { VisualizeToolItem } from "./visualize-tool-item"
 import { isCanvasTool } from "../canvas-html"
 import { isVisualizeTool } from "../visualize-jsx"
 
-const TEXT_LINE_GAP_CLASS = "[line-height:calc(1.5em+2px)]"
+const TEXT_LINE_GAP_CLASS = "[line-height:1.5em]"
 
 export function AssistantProcess({
   message,
@@ -171,7 +171,7 @@ export function AssistantProcess({
           }
         }}
       >
-        <CollapsibleTrigger className="group/process-trigger flex max-w-full min-w-0 items-center gap-1 rounded-md bg-transparent px-0 py-0.5 text-left text-base leading-snug font-medium text-muted-foreground/70 outline-none hover:text-muted-foreground/70 focus-visible:ring-2 focus-visible:ring-ring">
+        <CollapsibleTrigger className="group/process-trigger flex max-w-full min-w-0 items-center gap-1 rounded-md bg-transparent px-0 py-0.5 text-left text-sm leading-snug font-medium text-muted-foreground/70 outline-none hover:text-muted-foreground/70 focus-visible:ring-2 focus-visible:ring-ring">
           <span
             className={cn(
               "min-w-0 whitespace-normal",
@@ -194,12 +194,12 @@ export function AssistantProcess({
 
 function TextItem({ text }: { text: string }) {
   return (
-    <div className="w-full min-w-0 px-0 py-0.5 text-base text-foreground">
+    <div className="w-full min-w-0 px-0 py-0.5 text-sm text-foreground">
       <QuoteSelectable>
         <MessageResponse
           className={cn(
             "text-foreground [&_p]:my-0",
-            "[&_p]:[line-height:calc(1.5em+2px)] [&_p+p]:mt-[2px]"
+            "[&_p]:[line-height:1.5em] [&_p+p]:mt-[2px]"
           )}
           mode="static"
         >
@@ -247,7 +247,7 @@ function ThinkingItem({
       }
       defaultOpen={defaultOpen}
     >
-      <p className={cn("whitespace-pre-wrap text-base", TEXT_LINE_GAP_CLASS)}>
+      <p className={cn("whitespace-pre-wrap text-sm", TEXT_LINE_GAP_CLASS)}>
         {text}
       </p>
     </ProcessRow>
@@ -674,7 +674,7 @@ function NestedAgentItem({ agent }: { agent: NestedAgent }) {
             <QuoteSelectable>
               <p
                 className={cn(
-                  "whitespace-pre-wrap text-base text-muted-foreground",
+                  "whitespace-pre-wrap text-sm text-muted-foreground",
                   TEXT_LINE_GAP_CLASS
                 )}
               >
@@ -783,7 +783,7 @@ function ProcessRow({
         </ItemMedia>
       ) : null}
       <ItemContent className="min-w-0 flex-none">
-        <ItemTitle className="text-base font-normal">{title}</ItemTitle>
+        <ItemTitle className="text-sm font-normal">{title}</ItemTitle>
       </ItemContent>
       {showActions ? (
         <ItemActions>
@@ -800,7 +800,7 @@ function ProcessRow({
     return (
       <Item
         size="sm"
-        className="w-fit max-w-full bg-transparent px-0 py-0.5 text-base hover:bg-transparent"
+        className="w-fit max-w-full bg-transparent px-0 py-0.5 text-sm hover:bg-transparent"
       >
         {header}
       </Item>
@@ -815,7 +815,7 @@ function ProcessRow({
     >
       <Item
         size="sm"
-        className="w-fit max-w-full cursor-pointer bg-transparent px-0 py-0.5 text-left text-base hover:bg-transparent aria-expanded:bg-transparent"
+        className="w-fit max-w-full cursor-pointer bg-transparent px-0 py-0.5 text-left text-sm hover:bg-transparent aria-expanded:bg-transparent"
         render={<CollapsibleTrigger />}
       >
         {header}
