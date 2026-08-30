@@ -1,4 +1,5 @@
-const LOCK_MS = 400
+export const EXPAND_LOCK_MS = 400
+
 const MIN_DELTA_PX = 0.5
 
 type ExpandAnchor = {
@@ -30,7 +31,7 @@ export function captureExpandTrigger(target: EventTarget | null) {
   anchor = {
     element: trigger,
     top: trigger.getBoundingClientRect().top,
-    until: performance.now() + LOCK_MS,
+    until: performance.now() + EXPAND_LOCK_MS,
   }
 }
 
@@ -43,6 +44,16 @@ export function isExpandScrollLocked() {
     return false
   }
   return true
+}
+
+/** Leave stick-to-bottom follow so panel growth is not pinned to the thread end. */
+export function releaseThreadFollow(viewport: HTMLElement) {
+  viewport.dispatchEvent(
+    new Event("wheel", {
+      bubbles: true,
+      cancelable: true,
+    })
+  )
 }
 
 export function keepExpandTriggerInPlace(viewport: HTMLElement) {

@@ -27,7 +27,6 @@ import { useChatSession } from "@/features/chat-session"
 import { fileNameFromPath, resolveAgainstCwd } from "@/lib/file-path"
 import {
   Collapsible,
-  CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import {
@@ -65,14 +64,12 @@ import {
   isWriteTool,
   toolItemStatusLabel,
 } from "../tool-activity"
+import { MotionCollapsePanel } from "./motion-collapse-panel"
 import { QuoteSelectable } from "./quote-selectable"
 import { CanvasToolItem } from "./canvas-tool-item"
 import { VisualizeToolItem } from "./visualize-tool-item"
 import { isCanvasTool } from "../canvas-html"
 import { isVisualizeTool } from "../visualize-jsx"
-
-const PANEL_CLASS =
-  "h-[var(--collapsible-panel-height)] overflow-hidden [overflow-anchor:none] transition-[height,opacity] duration-200 ease-out data-[ending-style]:h-0 data-[ending-style]:opacity-0 data-[starting-style]:h-0 data-[starting-style]:opacity-0 motion-reduce:transition-none"
 
 const TEXT_LINE_GAP_CLASS = "[line-height:calc(1.5em+2px)]"
 
@@ -187,9 +184,9 @@ export function AssistantProcess({
             className="size-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-200 group-hover/process-trigger:opacity-100 group-focus-visible/process-trigger:opacity-100 group-data-open/process:rotate-180 motion-reduce:transition-none"
           />
         </CollapsibleTrigger>
-        <CollapsibleContent className={PANEL_CLASS}>
+        <MotionCollapsePanel open={isStreaming || open}>
           {rows.length > 0 ? <ProcessItemGroup>{rows}</ProcessItemGroup> : null}
-        </CollapsibleContent>
+        </MotionCollapsePanel>
       </Collapsible>
     </motion.div>
   )
@@ -776,6 +773,7 @@ function ProcessRow({
 }) {
   const hasBody = Boolean(children)
   const showActions = Boolean(badge || hasBody)
+  const [open, setOpen] = React.useState(defaultOpen)
 
   const header = (
     <>
@@ -810,7 +808,11 @@ function ProcessRow({
   }
 
   return (
-    <Collapsible className="group/process-item" defaultOpen={defaultOpen}>
+    <Collapsible
+      className="group/process-item"
+      open={open}
+      onOpenChange={setOpen}
+    >
       <Item
         size="sm"
         className="w-fit max-w-full cursor-pointer bg-transparent px-0 py-0.5 text-left text-base hover:bg-transparent aria-expanded:bg-transparent"
@@ -818,7 +820,7 @@ function ProcessRow({
       >
         {header}
       </Item>
-      <CollapsibleContent className={PANEL_CLASS}>
+      <MotionCollapsePanel open={open}>
         <div
           className={cn(
             Icon ? "pb-2 pl-6" : "pb-2",
@@ -827,7 +829,7 @@ function ProcessRow({
         >
           {children}
         </div>
-      </CollapsibleContent>
+      </MotionCollapsePanel>
     </Collapsible>
   )
 }

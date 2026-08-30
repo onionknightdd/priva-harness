@@ -1,12 +1,9 @@
 "use client";
 
-import { motion, type HTMLMotionProps, useReducedMotion } from "motion/react";
-import type { CSSProperties } from "react";
-import { EASE_OUT } from "@/lib/ease";
+import type { CSSProperties, HTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
-export interface AgentDisclosureProps
-  extends Omit<HTMLMotionProps<"div">, "animate" | "initial"> {
+export interface AgentDisclosureProps extends HTMLAttributes<HTMLDivElement> {
   open: boolean;
   openHeight?: CSSProperties["height"];
 }
@@ -17,35 +14,31 @@ export function AgentDisclosure({
   openHeight = "auto",
   className,
   style,
-  transition,
+  children,
   ...props
 }: AgentDisclosureProps) {
-  const reduce = useReducedMotion() ?? false;
-
   return (
-    <motion.div
+    <div
       {...props}
       aria-hidden={!open}
       inert={!open}
-      initial={false}
-      animate={{
-        opacity: open ? 1 : 0,
-        height: open ? openHeight : 0,
-      }}
-      transition={
-        transition ?? {
-          duration: reduce ? 0 : open ? 0.22 : 0.14,
-          ease: EASE_OUT,
-        }
-      }
       className={cn(
-        "origin-top overflow-hidden [overflow-anchor:none]",
+        "grid origin-top overflow-hidden [overflow-anchor:none]",
+        "transition-[grid-template-rows,opacity] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none",
+        open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
         className
       )}
       style={{
         ...style,
         pointerEvents: open ? undefined : "none",
       }}
-    />
+    >
+      <div
+        className="min-h-0 overflow-hidden [overflow-anchor:none]"
+        style={openHeight === "auto" ? undefined : { maxHeight: openHeight }}
+      >
+        {children}
+      </div>
+    </div>
   );
 }

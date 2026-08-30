@@ -6,6 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react"
+import { flushSync } from "react-dom"
 import { ArrowDownIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
@@ -26,9 +27,11 @@ import { cn } from "@/lib/utils"
 
 import type { AgentThreadMessage } from "../agent-message-data"
 import {
+  EXPAND_LOCK_MS,
   captureExpandTrigger,
   isExpandScrollLocked,
   keepExpandTriggerInPlace,
+  releaseThreadFollow,
 } from "../expand-down-anchor"
 import { foldCommandSurfaces } from "../slash-command-envelope"
 import {
@@ -58,6 +61,7 @@ export function AgentMessageThread({
     runSessionId,
   } = useChatSession()
   const now = useTickingNow()
+  const [followPaused, setFollowPaused] = useState(false)
   const untitled = t("sidebar.projects.untitledSession")
   const locale = i18n.resolvedLanguage ?? i18n.language
   const justNow = t("agentMessage.justNow")
@@ -108,7 +112,7 @@ export function AgentMessageThread({
   )
 
   return (
-    <MessageScrollerProvider autoScroll>
+    <MessageScrollerProvider autoScroll={!followPaused}>
       <MessageScroller>
         <MessageScrollerViewport>
           <MessageScrollerContent className="mx-auto w-full max-w-3xl gap-6 pt-6">
@@ -123,7 +127,7 @@ export function AgentMessageThread({
             <ThreadEndSpacer />
           </MessageScrollerContent>
         </MessageScrollerViewport>
-        <KeepExpandAnchor />
+        <KeepExpandAnchor onFollowPausedChange={setFollowPaused} />
         <PinLatestAtCenter messages={messages} />
         <MessageScrollerButton className="data-[direction=end]:bottom-2">
           <ArrowDownIcon />
@@ -247,7 +251,11 @@ function ThreadEndSpacer() {
   )
 }
 
-function KeepExpandAnchor() {
+function KeepExpandAnchor({
+  onFollowPausedChange,
+}: {
+  onFollowPausedChange: (paused: boolean) => void
+}) {
   useLayoutEffect(() => {
     const viewport = document.querySelector<HTMLElement>(
       '[data-slot="message-scroller-viewport"]'
@@ -256,23 +264,38 @@ function KeepExpandAnchor() {
       return
     }
 
+    let resumeTimer = 0
+    const start = (target: EventTarget | null) => {
+      captureExpandTrigger(target)
+      if (!isExpandScrollLocked()) {
+        return
+      }
+      flushSync(() => {
+        onFollowPausedChange(true)
+      })
+      captureExpandTrigger(target)
+      releaseThreadFollow(viewport)
+      window.clearTimeout(resumeTimer)
+      resumeTimer = window.setTimeout(() => {
+        onFollowPausedChange(false)
+      }, EXPAND_LOCK_MS)
+    }
+    const restore = () => {
+      if (!keepExpandTriggerInPlace(viewport)) {
+        return
+      }
+      requestAnimationFrame(() => {
+        keepExpandTriggerInPlace(viewport)
+      })
+    }
+
     const onPointerDown = (event: PointerEvent) => {
-      captureExpandTrigger(event.target)
+      start(event.target)
     }
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Enter" || event.key === " ") {
-        captureExpandTrigger(event.target)
+        start(event.target)
       }
-    }
-
-    const restore = () => {
-      keepExpandTriggerInPlace(viewport)
-      requestAnimationFrame(() => {
-        keepExpandTriggerInPlace(viewport)
-        requestAnimationFrame(() => {
-          keepExpandTriggerInPlace(viewport)
-        })
-      })
     }
 
     viewport.addEventListener("pointerdown", onPointerDown, true)
@@ -287,11 +310,12 @@ function KeepExpandAnchor() {
     }
 
     return () => {
+      window.clearTimeout(resumeTimer)
       viewport.removeEventListener("pointerdown", onPointerDown, true)
       viewport.removeEventListener("keydown", onKeyDown, true)
       observer.disconnect()
     }
-  }, [])
+  }, [onFollowPausedChange])
 
   return null
 }
@@ -344,7 +368,7 @@ function PinLatestAtCenter({
     }
 
     const onScroll = () => {
-      if (programmaticRef.current || isExpandScrollLocked()) {
+      if (programmaticRef.current) {
         return
       }
 

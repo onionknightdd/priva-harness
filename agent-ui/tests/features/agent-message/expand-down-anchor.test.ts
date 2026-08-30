@@ -5,6 +5,7 @@ import {
   captureExpandTrigger,
   isExpandScrollLocked,
   keepExpandTriggerInPlace,
+  releaseThreadFollow,
   resetExpandAnchor,
 } from "../../../src/features/agent-message/expand-down-anchor.ts"
 
@@ -36,5 +37,19 @@ describe("expand-down-anchor", () => {
     resetExpandAnchor()
     captureExpandTrigger(null)
     assert.equal(isExpandScrollLocked(), false)
+  })
+
+  it("releases stick-to-bottom follow with a wheel event", () => {
+    const types: string[] = []
+    const viewport = {
+      dispatchEvent(event: Event) {
+        types.push(event.type)
+        return true
+      },
+    }
+
+    releaseThreadFollow(viewport as HTMLElement)
+
+    assert.deepEqual(types, ["wheel"])
   })
 })
