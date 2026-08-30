@@ -94,7 +94,7 @@ function TaskPlanPopoverCard({ plan }: { plan: TaskPlan }) {
         />
       </PopoverTrigger>
       <PopoverContent
-        align="start"
+        align="center"
         side="top"
         sideOffset={8}
         className="w-80 gap-3 p-3 shadow-none motion-reduce:animate-none motion-reduce:transition-none data-closed:zoom-out-100"
