@@ -194,7 +194,7 @@ export function AssistantProcess({
 
 function TextItem({ text }: { text: string }) {
   return (
-    <div className="w-full min-w-0 px-0 py-0.5 text-[15px] text-foreground">
+    <div className="w-full min-w-0 px-0 py-0.5 text-sm text-foreground">
       <QuoteSelectable>
         <MessageResponse
           className={cn(
@@ -247,7 +247,7 @@ function ThinkingItem({
       }
       defaultOpen={defaultOpen}
     >
-      <p className={cn("whitespace-pre-wrap text-[15px]", TEXT_LINE_GAP_CLASS)}>
+      <p className={cn("whitespace-pre-wrap text-sm", TEXT_LINE_GAP_CLASS)}>
         {text}
       </p>
     </ProcessRow>
@@ -335,7 +335,7 @@ function GenericToolItem({
         <QuoteSelectable>
           <pre
             className={cn(
-              "max-h-40 overflow-auto whitespace-pre-wrap text-[15px] text-muted-foreground",
+              "max-h-40 overflow-auto whitespace-pre-wrap text-sm text-muted-foreground",
               TEXT_LINE_GAP_CLASS
             )}
           >
@@ -377,7 +377,7 @@ function BashToolItem({
     <div className="flex flex-col gap-2">
       <BashCommandLine text={typedCommand} caret={commandCaret} />
       {showOutput ? (
-        <pre className="m-0 whitespace-pre-wrap break-words font-mono text-[15px] leading-5 text-muted-foreground">
+        <pre className="m-0 whitespace-pre-wrap break-words font-mono text-sm leading-5 text-muted-foreground">
           {output}
           {awaitingOutput && !shouldReduceMotion ? (
             <CommandCaret className="bg-muted-foreground" />
@@ -420,11 +420,11 @@ function BashCommandLine({
 }) {
   return (
     <div className="flex items-start">
-      <span className="shrink-0 select-none whitespace-pre font-mono text-[15px] leading-none">
+      <span className="shrink-0 select-none whitespace-pre font-mono text-sm leading-none">
         {"$ "}
       </span>
       {caret ? (
-        <span className="min-w-0 flex-1 whitespace-pre-wrap break-words font-mono text-[15px] leading-none text-foreground/80">
+        <span className="min-w-0 flex-1 whitespace-pre-wrap break-words font-mono text-sm leading-none text-foreground/80">
           {text}
           <CommandCaret />
         </span>
@@ -674,7 +674,7 @@ function NestedAgentItem({ agent }: { agent: NestedAgent }) {
             <QuoteSelectable>
               <p
                 className={cn(
-                  "whitespace-pre-wrap text-[15px] text-muted-foreground",
+                  "whitespace-pre-wrap text-sm text-muted-foreground",
                   TEXT_LINE_GAP_CLASS
                 )}
               >
@@ -694,7 +694,7 @@ function NestedAgentItem({ agent }: { agent: NestedAgent }) {
                     </ItemTitle>
                     <p
                       className={cn(
-                        "whitespace-pre-wrap text-[15px] text-muted-foreground",
+                        "whitespace-pre-wrap text-sm text-muted-foreground",
                         TEXT_LINE_GAP_CLASS
                       )}
                       data-assistant-selectable=""
@@ -824,6 +824,7 @@ function ProcessRow({
         <div
           className={cn(
             Icon ? "pb-2 pl-6" : "pb-2",
+            "text-sm",
             TEXT_LINE_GAP_CLASS
           )}
         >

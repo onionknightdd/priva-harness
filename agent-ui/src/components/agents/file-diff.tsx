@@ -279,7 +279,7 @@ export function FileDiff({
         aria-labelledby={triggerId}
         open={currentOpen}
       >
-        <div className="pt-[10px] pl-[calc(1em+0.25rem)]">
+        <div className="pt-[10px] pl-[calc(1em+0.25rem)] text-sm">
           <div className={TOOL_OUTPUT_FRAME_CLASS}>
             <div className={TOOL_OUTPUT_INSET_CLASS}>
               <div

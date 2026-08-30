@@ -187,7 +187,7 @@ export function FileRead({
         aria-labelledby={triggerId}
         open={currentOpen && hasBody}
       >
-        <div className="pt-[10px] pl-[calc(1em+0.25rem)]">
+        <div className="pt-[10px] pl-[calc(1em+0.25rem)] text-sm">
           {view?.kind === "text" ? (
             <div className="pl-[4px]" data-assistant-selectable="">
               <CodeBlock
