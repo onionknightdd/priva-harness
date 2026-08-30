@@ -100,9 +100,7 @@ export function ComposerContextRing({
   const segments = contextUsageSegments(usage)
 
   return (
-    <div
-      className={cn("flex size-6 items-center justify-center", className)}
-    >
+    <div className={cn("flex size-6 items-center justify-center", className)}>
       <Popover open={open} onOpenChange={setOpen}>
         <TooltipProvider delay={300}>
           <Tooltip disabled={open}>
@@ -127,7 +125,7 @@ export function ComposerContextRing({
                 reduceMotion={shouldReduceMotion}
               />
             </TooltipTrigger>
-            <TooltipContent side="top" sideOffset={6}>
+            <TooltipContent side="top" sideOffset={4}>
               {tooltip}
             </TooltipContent>
           </Tooltip>
@@ -135,11 +133,13 @@ export function ComposerContextRing({
         <PopoverContent
           align="end"
           side="top"
-          sideOffset={8}
-          className="w-72 gap-3 p-3 motion-reduce:animate-none"
+          sideOffset={6}
+          className="w-72 gap-2 p-2.5 text-[13px] motion-reduce:animate-none"
         >
-          <PopoverHeader className="flex-row items-center justify-between gap-2">
-            <PopoverTitle>{t("agentMessage.contextUsage.title")}</PopoverTitle>
+          <PopoverHeader className="flex-row items-center justify-between gap-1">
+            <PopoverTitle className="text-[13px]">
+              {t("agentMessage.contextUsage.title")}
+            </PopoverTitle>
             <Button
               type="button"
               variant="ghost"
@@ -150,16 +150,16 @@ export function ComposerContextRing({
               <XIcon />
             </Button>
           </PopoverHeader>
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-medium">{fullLabel}</p>
-              <p className="text-xs text-muted-foreground tabular-nums">
+              <p className="font-medium">{fullLabel}</p>
+              <p className="text-muted-foreground tabular-nums">
                 {tokensLabel}
               </p>
             </div>
             {segments.length > 0 ? (
               <div
-                className="flex h-1.5 overflow-hidden rounded-full bg-muted"
+                className="flex h-1 overflow-hidden rounded-full bg-muted"
                 aria-hidden="true"
               >
                 {segments.map((segment) => (
@@ -174,23 +174,27 @@ export function ComposerContextRing({
                 ))}
               </div>
             ) : (
-              <Progress value={percent ?? 0} className="gap-0" />
+              <Progress value={percent ?? 0} className="gap-0 [&_[data-slot=progress-track]]:h-1" />
             )}
           </div>
-          <ItemGroup className="gap-1">
+          <ItemGroup className="gap-0 has-data-[size=xs]:gap-0.5">
             {usage.categories.map((category) => (
-              <Item key={category.id} size="xs" className="px-0 py-1">
+              <Item
+                key={category.id}
+                size="xs"
+                className="gap-1.5 px-0 py-px text-[13px]"
+              >
                 <ItemMedia>
                   <span
                     className={cn(
-                      "size-2 rounded-sm",
+                      "size-1.5 rounded-sm",
                       CONTEXT_USAGE_CATEGORY_SWATCH[category.id]
                     )}
                     aria-hidden="true"
                   />
                 </ItemMedia>
                 <ItemContent>
-                  <ItemTitle>
+                  <ItemTitle className="text-[13px] leading-none font-normal">
                     {t(categoryLabelKey(category.id))}
                   </ItemTitle>
                 </ItemContent>

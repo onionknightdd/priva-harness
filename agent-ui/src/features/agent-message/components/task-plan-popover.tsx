@@ -75,7 +75,7 @@ function TaskPlanPopoverCard({ plan }: { plan: TaskPlan }) {
             type="button"
             className={cn(
               buttonVariants({ variant: "outline", size: "sm" }),
-              "rounded-full bg-background shadow-none"
+              "rounded-full bg-background shadow-none dark:bg-background dark:hover:bg-muted dark:aria-expanded:bg-muted"
             )}
             aria-label={`${title}, ${progress}`}
           />

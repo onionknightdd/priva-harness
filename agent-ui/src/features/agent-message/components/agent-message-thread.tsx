@@ -42,6 +42,7 @@ import {
 import { AgentMessageItem } from "./agent-message-item"
 import { AssistantQuoteMenu } from "./assistant-quote-menu"
 import { StickyFreeze } from "./sticky-freeze"
+import { TaskPlanPopover } from "./task-plan-popover"
 import { WorkingStatusLine } from "./working-status-line"
 
 export function AgentMessageThread({
@@ -129,10 +130,15 @@ export function AgentMessageThread({
         </MessageScrollerViewport>
         <KeepExpandAnchor onFollowPausedChange={setFollowPaused} />
         <PinLatestAtCenter messages={messages} />
-        <MessageScrollerButton className="data-[direction=end]:bottom-2">
-          <ArrowDownIcon />
-          <span className="sr-only">{t("agentMessage.scrollToLatest")}</span>
-        </MessageScrollerButton>
+        <div className="pointer-events-none absolute inset-x-0 bottom-2 z-20 flex justify-center">
+          <div className="pointer-events-auto flex items-center gap-2">
+            <TaskPlanPopover messages={messages} />
+            <MessageScrollerButton className="relative inset-s-auto translate-x-0 rtl:translate-x-0 data-[direction=end]:bottom-auto data-[direction=end]:data-[active=false]:translate-y-0 data-[active=false]:hidden">
+              <ArrowDownIcon />
+              <span className="sr-only">{t("agentMessage.scrollToLatest")}</span>
+            </MessageScrollerButton>
+          </div>
+        </div>
       </MessageScroller>
       {onQuote ? <AssistantQuoteMenu onQuote={onQuote} /> : null}
     </MessageScrollerProvider>
