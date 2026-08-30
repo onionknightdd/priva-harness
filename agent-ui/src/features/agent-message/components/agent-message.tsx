@@ -23,7 +23,6 @@ import { AgentMessageThread } from "./agent-message-thread"
 import type { ComposerEffort } from "./composer-model-selector"
 import { ComposerContextRing } from "./composer-context-ring"
 import { SessionCwdIndicator } from "./session-cwd-indicator"
-import { TaskPlanPopover } from "./task-plan-popover"
 
 const fadeTransition = {
   duration: 0.2,
@@ -112,11 +111,6 @@ export function AgentMessage({
             </motion.div>
           )}
         </AnimatePresence>
-        <div className="pointer-events-none absolute inset-x-0 bottom-1.5 z-20">
-          <div className="mx-auto w-full max-w-3xl">
-            <TaskPlanPopover messages={messages} />
-          </div>
-        </div>
       </div>
 
       <div
@@ -140,7 +134,7 @@ export function AgentMessage({
           onSubmit={onSubmit}
           onStop={onStop}
         />
-        <div className="mt-2 flex items-center gap-2">
+        <div className="mt-1 flex items-center gap-1.5">
           {runCwd ? (
             <SessionCwdIndicator
               key={runCwd}
@@ -148,7 +142,7 @@ export function AgentMessage({
               className="min-w-0"
             />
           ) : null}
-          <div className="ml-auto flex h-6 items-center pr-2.5">
+          <div className="ml-auto flex items-center pr-2.5">
             <ComposerContextRing />
           </div>
         </div>
