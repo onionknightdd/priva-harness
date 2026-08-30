@@ -62,7 +62,7 @@ export function CanvasToolItem({
         }
         transition={shouldReduceMotion ? { duration: 0 } : SPRING_PRESS}
         className={cn(
-          "flex w-fit max-w-full items-center gap-2 rounded-md bg-transparent px-0 py-0.5 text-left text-sm text-muted-foreground/70 outline-none",
+          "flex w-fit max-w-full items-center gap-2 rounded-md bg-transparent px-0 py-0.5 text-left text-[15px] text-muted-foreground/70 outline-none",
           canOpen &&
             "cursor-pointer hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring",
           !canOpen && "cursor-default"
@@ -84,7 +84,7 @@ export function CanvasToolItem({
         ) : null}
       </motion.button>
       {status === "error" ? (
-        <p className="max-w-full text-sm text-destructive">
+        <p className="max-w-full text-[15px] text-destructive">
           {tool?.output?.trim() || t("agentMessage.toolFailed")}
         </p>
       ) : null}

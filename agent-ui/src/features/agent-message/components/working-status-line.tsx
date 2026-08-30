@@ -16,7 +16,7 @@ export function WorkingStatusLine({
       data-slot="working-status-line"
       className="flex w-full min-w-0 pl-1.5"
     >
-      <div className="flex max-w-full min-w-0 items-center py-0.5 text-left text-sm leading-snug font-medium text-muted-foreground/70">
+      <div className="flex max-w-full min-w-0 items-center py-0.5 text-left text-[15px] leading-snug font-medium text-muted-foreground/70">
         <span className="min-w-0 whitespace-normal shimmer">{statusText}</span>
       </div>
     </div>

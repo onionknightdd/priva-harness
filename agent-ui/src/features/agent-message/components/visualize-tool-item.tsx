@@ -67,7 +67,7 @@ function VisualizePreviewBody({
 }) {
   if (failed && jsx === "") {
     return (
-      <p className="text-sm text-destructive">{errorText}</p>
+      <p className="text-[15px] text-destructive">{errorText}</p>
     )
   }
   if (jsx === "") {

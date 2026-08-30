@@ -171,7 +171,7 @@ export function AssistantProcess({
           }
         }}
       >
-        <CollapsibleTrigger className="group/process-trigger flex max-w-full min-w-0 items-center gap-1 rounded-md bg-transparent px-0 py-0.5 text-left text-sm leading-snug font-medium text-muted-foreground/70 outline-none hover:text-muted-foreground/70 focus-visible:ring-2 focus-visible:ring-ring">
+        <CollapsibleTrigger className="group/process-trigger flex max-w-full min-w-0 items-center gap-1 rounded-md bg-transparent px-0 py-0.5 text-left text-[15px] leading-snug font-medium text-muted-foreground/70 outline-none hover:text-muted-foreground/70 focus-visible:ring-2 focus-visible:ring-ring">
           <span
             className={cn(
               "min-w-0 whitespace-normal",
@@ -194,7 +194,7 @@ export function AssistantProcess({
 
 function TextItem({ text }: { text: string }) {
   return (
-    <div className="w-full min-w-0 px-0 py-0.5 text-sm text-foreground">
+    <div className="w-full min-w-0 px-0 py-0.5 text-[15px] text-foreground">
       <QuoteSelectable>
         <MessageResponse
           className={cn(
@@ -247,7 +247,7 @@ function ThinkingItem({
       }
       defaultOpen={defaultOpen}
     >
-      <p className={cn("whitespace-pre-wrap text-sm", TEXT_LINE_GAP_CLASS)}>
+      <p className={cn("whitespace-pre-wrap text-[15px]", TEXT_LINE_GAP_CLASS)}>
         {text}
       </p>
     </ProcessRow>
@@ -335,7 +335,7 @@ function GenericToolItem({
         <QuoteSelectable>
           <pre
             className={cn(
-              "max-h-40 overflow-auto whitespace-pre-wrap text-sm text-muted-foreground",
+              "max-h-40 overflow-auto whitespace-pre-wrap text-[15px] text-muted-foreground",
               TEXT_LINE_GAP_CLASS
             )}
           >
@@ -377,7 +377,7 @@ function BashToolItem({
     <div className="flex flex-col gap-2">
       <BashCommandLine text={typedCommand} caret={commandCaret} />
       {showOutput ? (
-        <pre className="m-0 whitespace-pre-wrap break-words font-mono text-sm leading-5 text-muted-foreground">
+        <pre className="m-0 whitespace-pre-wrap break-words font-mono text-[15px] leading-5 text-muted-foreground">
           {output}
           {awaitingOutput && !shouldReduceMotion ? (
             <CommandCaret className="bg-muted-foreground" />
@@ -420,11 +420,11 @@ function BashCommandLine({
 }) {
   return (
     <div className="flex items-start">
-      <span className="shrink-0 select-none whitespace-pre font-mono text-sm leading-none">
+      <span className="shrink-0 select-none whitespace-pre font-mono text-[15px] leading-none">
         {"$ "}
       </span>
       {caret ? (
-        <span className="min-w-0 flex-1 whitespace-pre-wrap break-words font-mono text-sm leading-none text-foreground/80">
+        <span className="min-w-0 flex-1 whitespace-pre-wrap break-words font-mono text-[15px] leading-none text-foreground/80">
           {text}
           <CommandCaret />
         </span>
@@ -674,7 +674,7 @@ function NestedAgentItem({ agent }: { agent: NestedAgent }) {
             <QuoteSelectable>
               <p
                 className={cn(
-                  "whitespace-pre-wrap text-sm text-muted-foreground",
+                  "whitespace-pre-wrap text-[15px] text-muted-foreground",
                   TEXT_LINE_GAP_CLASS
                 )}
               >
@@ -694,7 +694,7 @@ function NestedAgentItem({ agent }: { agent: NestedAgent }) {
                     </ItemTitle>
                     <p
                       className={cn(
-                        "whitespace-pre-wrap text-sm text-muted-foreground",
+                        "whitespace-pre-wrap text-[15px] text-muted-foreground",
                         TEXT_LINE_GAP_CLASS
                       )}
                       data-assistant-selectable=""
@@ -783,7 +783,7 @@ function ProcessRow({
         </ItemMedia>
       ) : null}
       <ItemContent className="min-w-0 flex-none">
-        <ItemTitle className="text-sm font-normal">{title}</ItemTitle>
+        <ItemTitle className="text-[15px] font-normal">{title}</ItemTitle>
       </ItemContent>
       {showActions ? (
         <ItemActions>
@@ -800,7 +800,7 @@ function ProcessRow({
     return (
       <Item
         size="sm"
-        className="w-fit max-w-full bg-transparent px-0 py-0.5 text-sm hover:bg-transparent"
+        className="w-fit max-w-full bg-transparent px-0 py-0.5 text-[15px] hover:bg-transparent"
       >
         {header}
       </Item>
@@ -815,7 +815,7 @@ function ProcessRow({
     >
       <Item
         size="sm"
-        className="w-fit max-w-full cursor-pointer bg-transparent px-0 py-0.5 text-left text-sm hover:bg-transparent aria-expanded:bg-transparent"
+        className="w-fit max-w-full cursor-pointer bg-transparent px-0 py-0.5 text-left text-[15px] hover:bg-transparent aria-expanded:bg-transparent"
         render={<CollapsibleTrigger />}
       >
         {header}

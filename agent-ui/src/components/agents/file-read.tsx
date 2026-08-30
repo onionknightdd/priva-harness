@@ -126,7 +126,7 @@ export function FileRead({
     <div
       data-state={status}
       aria-busy={streaming}
-      className={cn("w-full text-base", className)}
+      className={cn("w-full text-[15px]", className)}
     >
       <div className="group/item relative flex w-fit max-w-full min-h-0 items-center gap-1">
         <button

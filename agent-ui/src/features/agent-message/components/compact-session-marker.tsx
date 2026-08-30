@@ -51,7 +51,7 @@ export function CompactSessionMarker({ compact }: { compact: CompactMarker }) {
             </CollapsibleTrigger>
           </Marker>
           <MotionCollapsePanel open={open}>
-            <div className="pt-3 text-sm text-muted-foreground">
+            <div className="pt-3 text-[15px] text-muted-foreground">
               <QuoteSelectable>
                 <MessageResponse
                   className="text-muted-foreground [&_p]:[line-height:1.5em] [&_p+p]:mt-[2px] [&_*]:text-muted-foreground"
