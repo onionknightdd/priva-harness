@@ -58,6 +58,11 @@ describe('measureClaudeContextUsage', () => {
         contextSnapshot([
           { name: 'System prompt', tokens: 5 },
           { name: 'System tools', tokens: 10 },
+          { name: 'Messages', tokens: 44 },
+        ]),
+        contextSnapshot([
+          { name: 'System prompt', tokens: 5 },
+          { name: 'System tools', tokens: 10 },
           { name: 'MCP tools', tokens: 862 },
           { name: 'Messages', tokens: 44 },
         ]),
@@ -75,7 +80,7 @@ describe('measureClaudeContextUsage', () => {
     })
 
     expect(query.mcpStatusCalls).toBe(2)
-    expect(query.usageCalls).toBe(1)
+    expect(query.usageCalls).toBe(2)
     expect(usage).toEqual({
       used: 921,
       limit: 200,
@@ -87,6 +92,48 @@ describe('measureClaudeContextUsage', () => {
         return category
       }),
     })
+  })
+
+  it('keeps the first snapshot when MCP status never settles', async () => {
+    const query = new FakeClaudeContextQuery(undefined, { hangMcp: true })
+    const usage = await measureClaudeContextUsage({
+      spec: testRunSpec(),
+      sessionId: 'sess-cold',
+      globalConfigDir: '/cfg/.claude',
+      tools: [stubProductTool],
+      startQuery: ({ prompt }) => {
+        query.bind(prompt)
+        return query
+      },
+    })
+
+    expect(query.usageCalls).toBe(1)
+    expect(usage.categories).toEqual(emptyContextUsage().categories.map((category) => {
+      if (category.id === 'systemPrompt') return { ...category, tokens: 5 }
+      if (category.id === 'toolDefinitions') return { ...category, tokens: 10 }
+      if (category.id === 'conversation') return { ...category, tokens: 5 }
+      return category
+    }))
+  })
+
+  it('keeps the first snapshot when the second usage read fails', async () => {
+    const query = new FakeClaudeContextQuery(undefined, {
+      mcp: [[{ name: 'agentWorkshop', status: 'connected' }]],
+      failSecondUsage: true,
+    })
+    const usage = await measureClaudeContextUsage({
+      spec: testRunSpec(),
+      sessionId: 'sess-cold',
+      globalConfigDir: '/cfg/.claude',
+      tools: [stubProductTool],
+      startQuery: ({ prompt }) => {
+        query.bind(prompt)
+        return query
+      },
+    })
+
+    expect(query.usageCalls).toBe(2)
+    expect(usage.categories.find((category) => category.id === 'systemPrompt')?.tokens).toBe(5)
   })
 
   it('returns an empty snapshot when the query fails to initialize', async () => {
@@ -140,6 +187,8 @@ class FakeClaudeContextQuery implements ClaudeContextQuery {
     prompt?: AsyncIterable<SDKUserMessage>,
     private readonly flags: {
       readonly failInit?: boolean
+      readonly hangMcp?: boolean
+      readonly failSecondUsage?: boolean
       readonly mcp?: { name: string; status: 'connected' | 'pending' }[][]
       readonly usage?: Awaited<ReturnType<Query['getContextUsage']>>[]
     } = {},
@@ -166,14 +215,20 @@ class FakeClaudeContextQuery implements ClaudeContextQuery {
   }
 
   mcpServerStatus(): ReturnType<Query['mcpServerStatus']> {
+    if (this.flags.hangMcp === true) {
+      return new Promise(() => undefined)
+    }
     const snapshot = this.mcp[Math.min(this.mcpStatusCalls, Math.max(this.mcp.length - 1, 0))]
     this.mcpStatusCalls += 1
     return Promise.resolve((snapshot ?? []) as Awaited<ReturnType<Query['mcpServerStatus']>>)
   }
 
   getContextUsage(): ReturnType<Query['getContextUsage']> {
-    const snapshot = this.usage[Math.min(this.usageCalls, this.usage.length - 1)]
     this.usageCalls += 1
+    if (this.flags.failSecondUsage === true && this.usageCalls === 2) {
+      return Promise.reject(new Error('usage failed'))
+    }
+    const snapshot = this.usage[Math.min(this.usageCalls - 1, this.usage.length - 1)]
     if (snapshot === undefined) {
       return Promise.reject(new Error('missing usage snapshot'))
     }

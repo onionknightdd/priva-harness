@@ -8,8 +8,9 @@ import { PushableStream } from '../../core/stream/pushable-stream.js'
 import type { ToolDefinition } from '../../core/tool/define-tool.js'
 import { resolveClaudeQueryOptions } from './claude-runtime.js'
 
-const MCP_CONTEXT_READY_TIMEOUT_MS = 8_000
+const MCP_CONTEXT_READY_TIMEOUT_MS = 2_000
 const MCP_CONTEXT_READY_POLL_MS = 100
+const MCP_STATUS_CALL_TIMEOUT_MS = 400
 
 export type ClaudeContextQuery = Pick<Query, 'initializationResult' | 'getContextUsage' | 'close'>
   & Partial<Pick<Query, 'mcpServerStatus'>>
@@ -63,10 +64,15 @@ export async function measureClaudeContextUsage(options: {
   const drained = drainQuery(active)
   try {
     await active.initializationResult()
-    // SDK MCP servers connect after initialize. getContextUsage() before that
-    // omits the "MCP tools" category; Claude then folds those tokens into Messages.
-    await waitForConfiguredMcp(active, tools.length > 0)
-    return mapClaudeContextUsage(await active.getContextUsage())
+    const initial = mapClaudeContextUsage(await active.getContextUsage())
+    if (tools.length === 0) return initial
+    const mcpReady = await waitForConfiguredMcp(active, true)
+    if (!mcpReady) return initial
+    try {
+      return mapClaudeContextUsage(await active.getContextUsage())
+    } catch {
+      return initial
+    }
   } catch {
     return emptyContextUsage()
   } finally {
@@ -80,18 +86,25 @@ export async function measureClaudeContextUsage(options: {
 async function waitForConfiguredMcp(
   active: Pick<ClaudeContextQuery, 'mcpServerStatus'>,
   configured: boolean,
-): Promise<void> {
-  if (!configured || active.mcpServerStatus === undefined) return
+): Promise<boolean> {
+  if (!configured || active.mcpServerStatus === undefined) return false
   const deadline = Date.now() + MCP_CONTEXT_READY_TIMEOUT_MS
   try {
     while (Date.now() < deadline) {
-      const status = await active.mcpServerStatus()
-      if (mcpServersSettled(status)) return
+      const remaining = deadline - Date.now()
+      if (remaining <= 0) return false
+      const status = await raceTimeout(
+        active.mcpServerStatus(),
+        Math.min(remaining, MCP_STATUS_CALL_TIMEOUT_MS),
+      )
+      if (status === undefined) return false
+      if (mcpServersSettled(status)) return true
       await delay(MCP_CONTEXT_READY_POLL_MS)
     }
   } catch {
-    return
+    return false
   }
+  return false
 }
 
 function mcpServersSettled(status: readonly McpServerStatus[]): boolean {
@@ -102,6 +115,22 @@ function mcpServersSettled(status: readonly McpServerStatus[]): boolean {
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms)
+  })
+}
+
+function raceTimeout<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => resolve(undefined), ms)
+    promise.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      (error: unknown) => {
+        clearTimeout(timer)
+        reject(error instanceof Error ? error : new Error(String(error)))
+      },
+    )
   })
 }
 
