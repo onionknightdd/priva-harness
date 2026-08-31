@@ -130,6 +130,91 @@ describe('context usage mapping', () => {
     })
   })
 
+  it('peels tool schemas out of Messages when a compatible endpoint folds them there', () => {
+    expect(mapClaudeContextUsage({
+      totalTokens: 16250,
+      maxTokens: 200000,
+      categories: [
+        { name: 'System prompt', tokens: 1974 },
+        { name: 'Skills', tokens: 548 },
+        { name: 'Messages', tokens: 13728 },
+      ],
+      messageBreakdown: {
+        userMessageTokens: 20,
+        assistantMessageTokens: 24,
+        toolCallTokens: 0,
+        toolResultTokens: 0,
+        attachmentTokens: 0,
+        redirectedContextTokens: 0,
+        unattributedTokens: 13684,
+      },
+    })).toEqual({
+      used: 16250,
+      limit: 200000,
+      categories: [
+        { id: 'systemPrompt', tokens: 1974 },
+        { id: 'toolDefinitions', tokens: 13684 },
+        { id: 'skills', tokens: 548 },
+        { id: 'mcpTools', tokens: null },
+        { id: 'subagentDefinitions', tokens: null },
+        { id: 'memory', tokens: null },
+        { id: 'conversation', tokens: 44 },
+      ],
+    })
+    expect(mapClaudeContextUsage({
+      total_tokens: 16250,
+      raw_max_tokens: 200000,
+      categories: [
+        { name: 'System prompt', tokens: 1974 },
+        { name: 'Skills', tokens: 548 },
+        { name: 'Messages', tokens: 13728 },
+      ],
+      message_breakdown: {
+        user_message_tokens: 20,
+        assistant_message_tokens: 24,
+        tool_call_tokens: 0,
+        tool_result_tokens: 0,
+        attachment_tokens: 0,
+        redirected_context_tokens: 0,
+        unattributed_tokens: 13684,
+      },
+    }).categories).toEqual([
+      { id: 'systemPrompt', tokens: 1974 },
+      { id: 'toolDefinitions', tokens: 13684 },
+      { id: 'skills', tokens: 548 },
+      { id: 'mcpTools', tokens: null },
+      { id: 'subagentDefinitions', tokens: null },
+      { id: 'memory', tokens: null },
+      { id: 'conversation', tokens: 44 },
+    ])
+  })
+
+  it('does not steal unattributed Messages when System tools already has its own row', () => {
+    expect(mapClaudeContextUsage({
+      totalTokens: 16292,
+      maxTokens: 200000,
+      categories: [
+        { name: 'System prompt', tokens: 1976 },
+        { name: 'System tools', tokens: 13684 },
+        { name: 'Skills', tokens: 548 },
+        { name: 'Messages', tokens: 84 },
+      ],
+      messageBreakdown: {
+        userMessageTokens: 0,
+        assistantMessageTokens: 0,
+        unattributedTokens: 84,
+      },
+    }).categories).toEqual([
+      { id: 'systemPrompt', tokens: 1976 },
+      { id: 'toolDefinitions', tokens: 13684 },
+      { id: 'skills', tokens: 548 },
+      { id: 'mcpTools', tokens: null },
+      { id: 'subagentDefinitions', tokens: null },
+      { id: 'memory', tokens: null },
+      { id: 'conversation', tokens: 84 },
+    ])
+  })
+
   it('maps unknown tool-like category names onto tool definitions', () => {
     expect(mapClaudeContextUsage({
       totalTokens: 30,

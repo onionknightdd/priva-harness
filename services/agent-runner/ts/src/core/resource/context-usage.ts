@@ -72,6 +72,7 @@ export function mapClaudeContextUsage(raw: unknown): ContextUsage {
   }
   assignFallback(tokensById, 'toolDefinitions', record['systemTools'] ?? record['system_tools'])
   assignFallback(tokensById, 'mcpTools', record['mcpTools'] ?? record['mcp_tools'])
+  assignFoldedToolSchemas(tokensById, record)
   assignUnaccountedTools(tokensById, used)
   return {
     used,
@@ -112,6 +113,41 @@ function assignUnaccountedTools(
   // endpoints often fail that call, omit the System tools row, but still
   // report used from the last request's input_tokens which includes them.
   tokensById.set('toolDefinitions', remainder)
+}
+
+function assignFoldedToolSchemas(
+  tokensById: Map<ContextUsageCategoryId, number>,
+  record: JsonRecord,
+): void {
+  if (tokensById.has('toolDefinitions')) return
+  const conversation = tokensById.get('conversation')
+  if (conversation === undefined || conversation <= 0) return
+  const breakdown = asRecord(record['messageBreakdown']) ?? asRecord(record['message_breakdown'])
+  if (breakdown === undefined) return
+  const attributed = attributedMessageTokens(breakdown)
+  if (attributed <= 0) return
+  // Compatible endpoints that skip count_tokens(tools=...) omit System tools
+  // and dump those schemas into Messages as unattributed tokens.
+  const unattributed = breakdownNumber(breakdown, 'unattributedTokens', 'unattributed_tokens')
+  const folded = unattributed > 0 ? unattributed : conversation - attributed
+  if (folded <= 0) return
+  const nextConversation = Math.max(0, conversation - folded)
+  if (nextConversation === conversation) return
+  tokensById.set('toolDefinitions', folded)
+  tokensById.set('conversation', nextConversation)
+}
+
+function attributedMessageTokens(breakdown: JsonRecord): number {
+  return breakdownNumber(breakdown, 'userMessageTokens', 'user_message_tokens')
+    + breakdownNumber(breakdown, 'assistantMessageTokens', 'assistant_message_tokens')
+    + breakdownNumber(breakdown, 'toolCallTokens', 'tool_call_tokens')
+    + breakdownNumber(breakdown, 'toolResultTokens', 'tool_result_tokens')
+    + breakdownNumber(breakdown, 'attachmentTokens', 'attachment_tokens')
+    + breakdownNumber(breakdown, 'redirectedContextTokens', 'redirected_context_tokens')
+}
+
+function breakdownNumber(breakdown: JsonRecord, camel: string, snake: string): number {
+  return numberField(breakdown, camel) ?? numberField(breakdown, snake) ?? 0
 }
 
 function assignFallback(
