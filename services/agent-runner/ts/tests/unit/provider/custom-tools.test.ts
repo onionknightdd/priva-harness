@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import { productTools } from '../../../src/core/tool/product-tools.js'
-import { compileClaudeCustomTools } from '../../../src/provider/claude/tools/compile-custom-tools.js'
+import {
+  PRODUCT_MCP_TOOL_TIMEOUT_MS,
+  compileClaudeCustomTools,
+} from '../../../src/provider/claude/tools/compile-custom-tools.js'
 import { compilePiCustomTools } from '../../../src/provider/pi/tools/compile-custom-tools.js'
 
 const context = {
@@ -21,7 +24,11 @@ describe('compile custom tools', () => {
       image_edit: 'mcp__agentWorkshop__image_edit',
     })
     expect(compiled.mcpServers).toMatchObject({
-      agentWorkshop: { type: 'sdk', name: 'agentWorkshop' },
+      agentWorkshop: {
+        type: 'sdk',
+        name: 'agentWorkshop',
+        timeout: PRODUCT_MCP_TOOL_TIMEOUT_MS,
+      },
     })
   })
 

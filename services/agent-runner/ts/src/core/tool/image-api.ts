@@ -49,29 +49,19 @@ export class CompatibleImageApi {
     },
   ): Promise<ImageBytes> {
     const size = normalizeSize(input.size)
-    const attempt = async (includeQuality: boolean) => {
-      const body = new FormData()
-      body.set('model', model)
-      body.set('prompt', input.prompt)
-      body.set('n', '1')
-      body.set('size', size)
-      if (includeQuality) body.set('quality', 'high')
-      for (const image of input.images) {
-        body.append(
-          input.images.length === 1 ? 'image' : 'image[]',
-          new Blob([image.bytes], { type: image.mime }),
-          image.name,
-        )
-      }
-      return await this.requestFormImage(profile, body, input.signal)
+    const body = new FormData()
+    body.set('model', model)
+    body.set('prompt', input.prompt)
+    body.set('n', '1')
+    body.set('size', size)
+    for (const image of input.images) {
+      body.append(
+        input.images.length === 1 ? 'image' : 'image[]',
+        new Blob([image.bytes], { type: image.mime }),
+        image.name,
+      )
     }
-
-    try {
-      return await attempt(true)
-    } catch (error) {
-      if (!isUnknownQualityError(error)) throw error
-      return await attempt(false)
-    }
+    return await this.requestFormImage(profile, body, input.signal)
   }
 
   async read(
@@ -328,7 +318,3 @@ function isRetryableStreamError(error: unknown): boolean {
     || message.includes('stream')
 }
 
-function isUnknownQualityError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message.toLowerCase() : ''
-  return message.includes('quality')
-}

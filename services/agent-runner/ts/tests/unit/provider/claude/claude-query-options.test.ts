@@ -6,6 +6,7 @@ import {
   resolveClaudeQuerySettings,
 } from '../../../../src/provider/claude/claude-runtime.js'
 import { productTools } from '../../../../src/core/tool/product-tools.js'
+import { PRODUCT_MCP_TOOL_TIMEOUT_MS } from '../../../../src/provider/claude/tools/compile-custom-tools.js'
 
 const spec = {
   cwd: '/work/repo',
@@ -174,7 +175,11 @@ describe('resolveClaudeQueryOptions', () => {
       image_edit: 'mcp__agentWorkshop__image_edit',
     })
     expect(options.mcpServers).toMatchObject({
-      agentWorkshop: { type: 'sdk', name: 'agentWorkshop' },
+      agentWorkshop: {
+        type: 'sdk',
+        name: 'agentWorkshop',
+        timeout: PRODUCT_MCP_TOOL_TIMEOUT_MS,
+      },
     })
   })
 })

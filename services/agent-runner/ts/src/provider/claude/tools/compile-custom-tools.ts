@@ -5,6 +5,7 @@ import type { ToolContext, ToolDefinition, ToolJsonSchema } from '../../../core/
 import { isRecord } from '../../../core/event/json-record.js'
 
 export const PRODUCT_MCP_SERVER_NAME = 'agentWorkshop'
+export const PRODUCT_MCP_TOOL_TIMEOUT_MS = 600_000
 
 export function compileClaudeCustomTools(
   tools: readonly ToolDefinition[],
@@ -17,6 +18,7 @@ export function compileClaudeCustomTools(
         name: PRODUCT_MCP_SERVER_NAME,
         version: '1.0.0',
         alwaysLoad: true,
+        timeout: PRODUCT_MCP_TOOL_TIMEOUT_MS,
         tools: tools.map((definition) => toClaudeTool(definition, context)),
       }),
     },

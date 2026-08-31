@@ -39,7 +39,7 @@ describe('compatible image API', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1)
   })
 
-  it('retries image edit without quality when the gateway rejects it', async () => {
+  it('edits an image without requesting a stream or quality', async () => {
     const fetchImpl = vi.fn((_url: string, init?: RequestInit) => {
       const body = init?.body
       if (!(body instanceof FormData)) {
@@ -47,9 +47,7 @@ describe('compatible image API', () => {
       }
       expect(body.get('stream')).toBeNull()
       expect(body.get('partial_images')).toBeNull()
-      if (body.get('quality') === 'high') {
-        return Promise.resolve(new Response('unknown field quality', { status: 400 }))
-      }
+      expect(body.get('quality')).toBeNull()
       return imageResponse()
     })
     const api = new CompatibleImageApi({ fetch: fetchImpl })
@@ -58,7 +56,7 @@ describe('compatible image API', () => {
       images: [{ bytes: Uint8Array.from([1]), mime: 'image/png', name: 'a.png' }],
     })
     expect(Buffer.from(image.bytes).toString()).toBe('png-bytes')
-    expect(fetchImpl).toHaveBeenCalledTimes(2)
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
   })
 
   it('sends multiple edit images as image[]', async () => {
