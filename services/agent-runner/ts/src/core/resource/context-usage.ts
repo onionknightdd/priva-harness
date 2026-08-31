@@ -72,6 +72,7 @@ export function mapClaudeContextUsage(raw: unknown): ContextUsage {
   }
   assignFallback(tokensById, 'toolDefinitions', record['systemTools'] ?? record['system_tools'])
   assignFallback(tokensById, 'mcpTools', record['mcpTools'] ?? record['mcp_tools'])
+  assignUnaccountedTools(tokensById, used)
   return {
     used,
     limit: maxTokens !== undefined && maxTokens > 0 ? maxTokens : null,
@@ -85,14 +86,32 @@ export function mapClaudeContextUsage(raw: unknown): ContextUsage {
 function claudeCategoryIdOf(name: string, row: JsonRecord): ContextUsageCategoryId | undefined {
   const kind = stringField(row, 'kind')
   if (kind === 'free' || kind === 'buffer') return undefined
-  // Tool Search lists withheld schemas as "System tools (deferred)" / "MCP tools (deferred)".
-  // Exact name match dropped those rows, so Tool definitions stayed empty.
   const normalized = name
     .trim()
     .toLowerCase()
     .replace(/^\[ant-only\]\s+/, '')
     .replace(/\s*\(deferred\)\s*$/, '')
-  return CLAUDE_CATEGORY_IDS[normalized]
+  const mapped = CLAUDE_CATEGORY_IDS[normalized]
+  if (mapped !== undefined) return mapped
+  if (normalized.includes('mcp')) return 'mcpTools'
+  if (/\btools?\b/.test(normalized)) return 'toolDefinitions'
+  return undefined
+}
+
+function assignUnaccountedTools(
+  tokensById: Map<ContextUsageCategoryId, number>,
+  used: number | null,
+): void {
+  if (used === null || used <= 0 || tokensById.size === 0) return
+  if (tokensById.has('toolDefinitions')) return
+  let accounted = 0
+  for (const tokens of tokensById.values()) accounted += tokens
+  const remainder = used - accounted
+  if (remainder <= 0) return
+  // Claude counts tool schemas via count_tokens(tools=...). Compatible
+  // endpoints often fail that call, omit the System tools row, but still
+  // report used from the last request's input_tokens which includes them.
+  tokensById.set('toolDefinitions', remainder)
 }
 
 function assignFallback(

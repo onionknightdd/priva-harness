@@ -15,6 +15,7 @@ describe('measureClaudeContextUsage', () => {
     const options = resolveClaudeContextQueryOptions(spec, 'sess-cold', '/cfg/.claude')
     expect(options.resume).toBe('sess-cold')
     expect(options.persistSession).toBe(false)
+    expect(options.tools).toEqual({ type: 'preset', preset: 'claude_code' })
 
     const started: Options[] = []
     const query = new FakeClaudeContextQuery()

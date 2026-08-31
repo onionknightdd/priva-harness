@@ -105,6 +105,50 @@ describe('context usage mapping', () => {
     })
   })
 
+  it('attributes leftover used tokens to tool definitions when Claude omits the tools row', () => {
+    expect(mapClaudeContextUsage({
+      totalTokens: 25867,
+      maxTokens: 200000,
+      categories: [
+        { name: 'System prompt', tokens: 2089 },
+        { name: 'Memory files', tokens: 134 },
+        { name: 'Skills', tokens: 1821 },
+        { name: 'Messages', tokens: 84 },
+      ],
+    })).toEqual({
+      used: 25867,
+      limit: 200000,
+      categories: [
+        { id: 'systemPrompt', tokens: 2089 },
+        { id: 'toolDefinitions', tokens: 21739 },
+        { id: 'skills', tokens: 1821 },
+        { id: 'mcpTools', tokens: null },
+        { id: 'subagentDefinitions', tokens: null },
+        { id: 'memory', tokens: 134 },
+        { id: 'conversation', tokens: 84 },
+      ],
+    })
+  })
+
+  it('maps unknown tool-like category names onto tool definitions', () => {
+    expect(mapClaudeContextUsage({
+      totalTokens: 30,
+      maxTokens: 200000,
+      categories: [
+        { name: 'Built-in tools', tokens: 20 },
+        { name: 'Messages', tokens: 10 },
+      ],
+    }).categories).toEqual([
+      { id: 'systemPrompt', tokens: null },
+      { id: 'toolDefinitions', tokens: 20 },
+      { id: 'skills', tokens: null },
+      { id: 'mcpTools', tokens: null },
+      { id: 'subagentDefinitions', tokens: null },
+      { id: 'memory', tokens: null },
+      { id: 'conversation', tokens: 10 },
+    ])
+  })
+
   it('returns an empty snapshot for invalid Claude payloads', () => {
     expect(mapClaudeContextUsage(undefined)).toEqual(emptyContextUsage())
     expect(mapClaudeContextUsage({ totalTokens: 'nope' })).toEqual({

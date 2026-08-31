@@ -32,6 +32,7 @@ export function resolveClaudeContextQueryOptions(
       tools,
     ),
     persistSession: false,
+    tools: { type: 'preset', preset: 'claude_code' },
   }
 }
 
