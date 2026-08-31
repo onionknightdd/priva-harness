@@ -73,7 +73,6 @@ export class ClaudeProvider implements AgentProvider {
       spec,
       sessionId: session.id,
       globalConfigDir: this.options.globalConfigDir,
-      tools: this.options.tools ?? [],
     })
   }
 }
