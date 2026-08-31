@@ -2,12 +2,20 @@ import type { Options, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/c
 import { describe, expect, it } from 'vitest'
 
 import { emptyContextUsage } from '../../../../src/core/resource/context-usage.js'
+import type { ToolDefinition } from '../../../../src/core/tool/define-tool.js'
 import {
   measureClaudeContextUsage,
   resolveClaudeContextQueryOptions,
   type ClaudeContextQuery,
 } from '../../../../src/provider/claude/claude-context-usage.js'
 import { testRunSpec } from '../../../support/run-spec.js'
+
+const probeTool: ToolDefinition = {
+  name: 'probe',
+  description: 'probe tool',
+  inputSchema: { type: 'object', properties: {} },
+  execute: () => Promise.resolve({ ok: true, text: 'ok' }),
+}
 
 describe('measureClaudeContextUsage', () => {
   it('resumes the session without persisting, then closes the query', async () => {
@@ -48,6 +56,66 @@ describe('measureClaudeContextUsage', () => {
     expect(query.initialized).toBe(true)
     expect(query.closed).toBe(true)
     expect(query.aborted).toBe(true)
+    expect(query.usageReads).toBe(1)
+  })
+
+  it('attaches product tools and re-reads once the MCP server connects', async () => {
+    const query = new FakeClaudeContextQuery(undefined, { mcpStatus: 'connected' })
+    const started: Options[] = []
+    const usage = await measureClaudeContextUsage({
+      spec: testRunSpec(),
+      sessionId: 'sess-mcp',
+      globalConfigDir: '/cfg/.claude',
+      tools: [probeTool],
+      startQuery: ({ prompt, options: next }) => {
+        started.push(next)
+        query.bind(prompt)
+        return query
+      },
+    })
+    expect(started[0]?.mcpServers).toBeDefined()
+    expect(query.usageReads).toBe(2)
+    const mcpRow = usage.categories.find((category) => category.id === 'mcpTools')
+    expect(mcpRow?.tokens).toBe(7)
+  })
+
+  it('keeps the initial snapshot when the MCP server never connects', async () => {
+    const query = new FakeClaudeContextQuery(undefined, { mcpStatus: 'failed' })
+    const usage = await measureClaudeContextUsage({
+      spec: testRunSpec(),
+      sessionId: 'sess-mcp-down',
+      globalConfigDir: '/cfg/.claude',
+      tools: [probeTool],
+      startQuery: ({ prompt }) => {
+        query.bind(prompt)
+        return query
+      },
+    })
+    expect(query.usageReads).toBe(1)
+    const systemPrompt = usage.categories.find((category) => category.id === 'systemPrompt')
+    expect(systemPrompt?.tokens).toBe(5)
+  })
+
+  it('keeps the initial snapshot when the second usage read fails', async () => {
+    const query = new FakeClaudeContextQuery(undefined, {
+      mcpStatus: 'connected',
+      failSecondUsage: true,
+    })
+    const usage = await measureClaudeContextUsage({
+      spec: testRunSpec(),
+      sessionId: 'sess-second-read',
+      globalConfigDir: '/cfg/.claude',
+      tools: [probeTool],
+      startQuery: ({ prompt }) => {
+        query.bind(prompt)
+        return query
+      },
+    })
+    expect(query.usageReads).toBe(2)
+    const systemPrompt = usage.categories.find((category) => category.id === 'systemPrompt')
+    expect(systemPrompt?.tokens).toBe(5)
+    const mcpRow = usage.categories.find((category) => category.id === 'mcpTools')
+    expect(mcpRow?.tokens).toBeNull()
   })
 
   it('returns an empty snapshot when the query fails to initialize', async () => {
@@ -61,15 +129,22 @@ describe('measureClaudeContextUsage', () => {
   })
 })
 
+interface FakeFlags {
+  readonly failInit?: boolean
+  readonly failSecondUsage?: boolean
+  readonly mcpStatus?: 'connected' | 'failed'
+}
+
 class FakeClaudeContextQuery implements ClaudeContextQuery {
   initialized = false
   closed = false
   aborted = false
+  usageReads = 0
   private prompt: AsyncIterable<SDKUserMessage> | undefined
 
   constructor(
     prompt?: AsyncIterable<SDKUserMessage>,
-    private readonly flags: { readonly failInit?: boolean } = {},
+    private readonly flags: FakeFlags = {},
   ) {
     this.prompt = prompt
   }
@@ -86,14 +161,27 @@ class FakeClaudeContextQuery implements ClaudeContextQuery {
     return Promise.resolve({} as Awaited<ReturnType<Query['initializationResult']>>)
   }
 
+  mcpServerStatus(): ReturnType<Query['mcpServerStatus']> {
+    const status = this.flags.mcpStatus ?? 'failed'
+    return Promise.resolve([
+      { name: 'agentWorkshop', status },
+    ] as Awaited<ReturnType<Query['mcpServerStatus']>>)
+  }
+
   getContextUsage(): ReturnType<Query['getContextUsage']> {
+    this.usageReads += 1
+    if (this.usageReads > 1 && this.flags.failSecondUsage === true) {
+      return Promise.reject(new Error('second read failed'))
+    }
+    const mcpConnected = this.usageReads > 1 && this.flags.mcpStatus === 'connected'
     return Promise.resolve({
       categories: [
         { name: 'System prompt', tokens: 5, color: '' },
         { name: 'System tools', tokens: 10, color: '' },
+        ...(mcpConnected ? [{ name: 'MCP tools', tokens: 7, color: '' }] : []),
         { name: 'Messages', tokens: 5, color: '' },
       ],
-      totalTokens: 20,
+      totalTokens: mcpConnected ? 27 : 20,
       maxTokens: 200,
       rawMaxTokens: 200,
       percentage: 10,
