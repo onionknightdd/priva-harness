@@ -55,9 +55,16 @@ describe('image tools', () => {
   })
 
   it('writes a generated image under .images and returns the path', async () => {
-    const fetchImpl = vi.fn(() => Promise.resolve(Response.json({ data: [{ b64_json: pngB64 }] })))
+    const fetchImpl = vi.fn((_url: string, init?: RequestInit) => {
+      const raw = init?.body
+      expect(typeof raw).toBe('string')
+      if (typeof raw === 'string') {
+        expect(JSON.parse(raw)).not.toMatchObject({ stream: true })
+      }
+      return Promise.resolve(Response.json({ data: [{ b64_json: pngB64 }] }))
+    })
     const originalFetch = globalThis.fetch
-    globalThis.fetch = fetchImpl
+    globalThis.fetch = fetchImpl as typeof fetch
     try {
       const toolContext = await context({
         profile: profile({
@@ -71,9 +78,6 @@ describe('image tools', () => {
       expect(result.ok).toBe(true)
       expect(result.text).toMatch(/\.images\/[a-z2-7]+\.png$/)
       await expect(readFile(result.text)).resolves.toEqual(Buffer.from('generated-png'))
-      expect(JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body))).not.toMatchObject({
-        stream: true,
-      })
       expect(fetchImpl).toHaveBeenCalledTimes(1)
     } finally {
       globalThis.fetch = originalFetch
