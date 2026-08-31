@@ -45,7 +45,6 @@ export interface ProviderRunSpec {
   readonly queueBehavior?: QueueBehavior
   readonly promptSuggestions?: boolean
   readonly imageTools?: ImageToolProfile
-  readonly streamImages?: boolean
 }
 
 export interface TurnContext {

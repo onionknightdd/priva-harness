@@ -7,12 +7,6 @@ export interface ImageBytes {
   readonly name: string
 }
 
-export type ImageDeltaHandler = (image: {
-  readonly mime: string
-  readonly b64: string
-  readonly final: boolean
-}) => void
-
 export interface ImageApiOptions {
   readonly fetch?: (input: string, init?: RequestInit) => Promise<Response>
 }
@@ -32,37 +26,14 @@ export class CompatibleImageApi {
     input: {
       readonly prompt: string
       readonly size?: string
-      readonly stream?: boolean
-      readonly onImage?: ImageDeltaHandler
       readonly signal?: AbortSignal
     },
   ): Promise<ImageBytes> {
     const size = normalizeSize(input.size)
-    const body = {
-      model,
-      prompt: input.prompt,
-      n: 1,
-      size,
-      ...(input.stream === true ? { stream: true, partial_images: 3 } : {}),
-    }
-    if (input.stream === true) {
-      try {
-        return await this.requestJsonImage(
-          profile,
-          'images/generations',
-          body,
-          input.onImage,
-          input.signal,
-        )
-      } catch (error) {
-        if (!isRetryableStreamError(error)) throw error
-      }
-    }
     return await this.requestJsonImage(
       profile,
       'images/generations',
       { model, prompt: input.prompt, n: 1, size },
-      input.onImage,
       input.signal,
     )
   }
@@ -74,23 +45,17 @@ export class CompatibleImageApi {
       readonly prompt: string
       readonly images: readonly ImageBytes[]
       readonly size?: string
-      readonly stream?: boolean
-      readonly onImage?: ImageDeltaHandler
       readonly signal?: AbortSignal
     },
   ): Promise<ImageBytes> {
     const size = normalizeSize(input.size)
-    const attempt = async (includeQuality: boolean, stream: boolean) => {
+    const attempt = async (includeQuality: boolean) => {
       const body = new FormData()
       body.set('model', model)
       body.set('prompt', input.prompt)
       body.set('n', '1')
       body.set('size', size)
       if (includeQuality) body.set('quality', 'high')
-      if (stream) {
-        body.set('stream', 'true')
-        body.set('partial_images', '3')
-      }
       for (const image of input.images) {
         body.append(
           input.images.length === 1 ? 'image' : 'image[]',
@@ -98,21 +63,14 @@ export class CompatibleImageApi {
           image.name,
         )
       }
-      return await this.requestFormImage(profile, body, input.onImage, input.signal)
+      return await this.requestFormImage(profile, body, input.signal)
     }
 
-    if (input.stream === true) {
-      try {
-        return await attempt(true, true)
-      } catch (error) {
-        if (!isRetryableStreamError(error) && !isUnknownQualityError(error)) throw error
-      }
-    }
     try {
-      return await attempt(true, false)
+      return await attempt(true)
     } catch (error) {
       if (!isUnknownQualityError(error)) throw error
-      return await attempt(false, false)
+      return await attempt(false)
     }
   }
 
@@ -162,17 +120,15 @@ export class CompatibleImageApi {
     profile: Pick<ModelProfile, 'baseUrl' | 'authToken'>,
     pathSuffix: string,
     body: Record<string, unknown>,
-    onImage: ImageDeltaHandler | undefined,
     signal?: AbortSignal,
   ): Promise<ImageBytes> {
     const response = await this.postJson(profile, pathSuffix, body, signal)
-    return await readImageResponse(response, onImage)
+    return await readImageResponse(response)
   }
 
   private async requestFormImage(
     profile: Pick<ModelProfile, 'baseUrl' | 'authToken'>,
     body: FormData,
-    onImage: ImageDeltaHandler | undefined,
     signal?: AbortSignal,
   ): Promise<ImageBytes> {
     const response = await this.perform(
@@ -185,7 +141,7 @@ export class CompatibleImageApi {
         ...(signal === undefined ? {} : { signal }),
       },
     )
-    return await readImageResponse(response, onImage)
+    return await readImageResponse(response)
   }
 
   private async postJson(
@@ -240,10 +196,7 @@ function authHeaders(profile: Pick<ModelProfile, 'authToken'>): Record<string, s
   }
 }
 
-async function readImageResponse(
-  response: Response,
-  onImage: ImageDeltaHandler | undefined,
-): Promise<ImageBytes> {
+async function readImageResponse(response: Response): Promise<ImageBytes> {
   if (!response.ok) {
     const detail = await response.text()
     const error = new Error(detail === '' ? `image request failed (${response.status})` : detail)
@@ -252,30 +205,15 @@ async function readImageResponse(
   }
   const contentType = response.headers.get('content-type') ?? ''
   if (contentType.includes('text/event-stream') && response.body !== null) {
-    return await readImageSse(response.body, onImage)
+    return await readImageSse(response.body)
   }
-  const payload: unknown = JSON.parse(await response.text())
-  const image = imageFromPayload(payload)
-  onImage?.({ mime: image.mime, b64: Buffer.from(image.bytes).toString('base64'), final: true })
-  return image
+  return imageFromPayload(JSON.parse(await response.text()))
 }
 
-async function readImageSse(
-  body: ReadableStream<Uint8Array>,
-  onImage: ImageDeltaHandler | undefined,
-): Promise<ImageBytes> {
+async function readImageSse(body: ReadableStream<Uint8Array>): Promise<ImageBytes> {
   let latest: ImageBytes | undefined
   await forEachSseEvent(body, (event) => {
-    const parsed: unknown = JSON.parse(event)
-    const image = imageFromPayload(parsed)
-    const final = eventType(parsed) === 'image_generation.completed'
-      || eventType(parsed) === 'image_edit.completed'
-    onImage?.({
-      mime: image.mime,
-      b64: Buffer.from(image.bytes).toString('base64'),
-      final,
-    })
-    latest = image
+    latest = imageFromPayload(JSON.parse(event))
   })
   if (latest === undefined) {
     throw new Error('image stream ended without an image')
@@ -362,10 +300,6 @@ function imageFromPayload(payload: unknown): ImageBytes {
 function firstData(record: Record<string, unknown> | undefined): unknown {
   const data = record?.['data']
   return Array.isArray(data) ? data[0] : undefined
-}
-
-function eventType(payload: unknown): string {
-  return stringField(asRecord(payload), 'type') ?? ''
 }
 
 function chatDeltaText(payload: unknown): string {

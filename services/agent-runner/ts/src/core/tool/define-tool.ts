@@ -12,12 +12,6 @@ export interface ImageToolProfile {
   readonly modelCapabilities: ModelCapabilityCatalog
 }
 
-export interface ToolImageDelta {
-  readonly mime: string
-  readonly b64: string
-  readonly final: boolean
-}
-
 export interface ToolJsonProperty {
   readonly type: 'string'
   readonly description?: string
@@ -34,8 +28,6 @@ export interface ToolContext {
   readonly session: SessionRef
   readonly signal: AbortSignal
   readonly profile?: ImageToolProfile
-  readonly streamImages?: boolean
-  readonly emitImage?: (image: ToolImageDelta) => void
   readonly emitProgress?: (chunk: string) => void
 }
 

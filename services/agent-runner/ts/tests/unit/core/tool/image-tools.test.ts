@@ -71,6 +71,10 @@ describe('image tools', () => {
       expect(result.ok).toBe(true)
       expect(result.text).toMatch(/\.images\/[a-z2-7]+\.png$/)
       await expect(readFile(result.text)).resolves.toEqual(Buffer.from('generated-png'))
+      expect(JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body))).not.toMatchObject({
+        stream: true,
+      })
+      expect(fetchImpl).toHaveBeenCalledTimes(1)
     } finally {
       globalThis.fetch = originalFetch
     }
@@ -100,6 +104,8 @@ describe('image tools', () => {
       const body = init?.body
       if (body instanceof FormData) {
         expect(body.getAll('image[]')).toHaveLength(2)
+        expect(body.get('stream')).toBeNull()
+        expect(body.get('partial_images')).toBeNull()
       }
       return Promise.resolve(Response.json({ data: [{ b64_json: pngB64 }] }))
     })

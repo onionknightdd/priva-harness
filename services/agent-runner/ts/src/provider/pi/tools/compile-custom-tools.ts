@@ -31,8 +31,6 @@ async function executePiTool(
     session: context.session,
     signal: signal ?? context.signal,
     ...(context.profile === undefined ? {} : { profile: context.profile }),
-    ...(context.streamImages === undefined ? {} : { streamImages: context.streamImages }),
-    ...(context.emitImage === undefined ? {} : { emitImage: context.emitImage }),
     ...(context.emitProgress === undefined ? {} : { emitProgress: context.emitProgress }),
   })
   return {

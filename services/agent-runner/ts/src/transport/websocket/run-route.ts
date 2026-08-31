@@ -205,7 +205,6 @@ async function buildRunSpec(
       imageEditModel: resolved.profile.imageEditModel,
       modelCapabilities: resolved.profile.modelCapabilities,
     },
-    streamImages: true,
   }
 }
 

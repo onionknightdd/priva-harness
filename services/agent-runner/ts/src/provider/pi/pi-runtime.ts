@@ -8,7 +8,6 @@ import type {
 import type { AgentEvent } from '../../core/event/agent-event.js'
 import { emptyContextUsage, mapPiContextUsage } from '../../core/resource/context-usage.js'
 import type { ContextUsage } from '../../core/resource/context-usage.js'
-import type { ToolImageDelta } from '../../core/tool/define-tool.js'
 import { isRunResultEvent } from '../../core/event/agent-event.js'
 import {
   compactInstructionsOf,
@@ -30,7 +29,6 @@ export interface PiAgentSession {
   getContextUsage?(): { tokens: number | null; contextWindow: number } | undefined
   abort(): Promise<void>
   dispose(): void
-  bindImageEmit?(emit: ((image: ToolImageDelta) => void) | undefined): void
   bindProgressEmit?(emit: ((chunk: string) => void) | undefined): void
   setRunModel?(modelId: string): Promise<void>
 }
@@ -40,7 +38,6 @@ export class PiRuntime implements AgentRuntime {
   private readonly unsubscribe: () => void
   private mapper: PiEventMapper | undefined
   private events: AsyncQueue<AgentEvent> | undefined
-  private toolImageBlockId: string | undefined
 
   constructor(
     private readonly agentSession: PiAgentSession,
@@ -65,7 +62,6 @@ export class PiRuntime implements AgentRuntime {
       model: this.agentSession.modelId,
     })
     this.events = new AsyncQueue<AgentEvent>()
-    this.agentSession.bindImageEmit?.((image) => this.emitToolImage(image))
     this.agentSession.bindProgressEmit?.((chunk) => this.emitToolProgress(chunk))
     let finished = false
 
@@ -97,7 +93,6 @@ export class PiRuntime implements AgentRuntime {
       }
       await sending
     } finally {
-      this.agentSession.bindImageEmit?.(undefined)
       this.agentSession.bindProgressEmit?.(undefined)
       context.signal.removeEventListener('abort', onAbort)
       this.events.close()
@@ -133,23 +128,6 @@ export class PiRuntime implements AgentRuntime {
     this.sessionHandle?.dispose()
     this.sessionHandle = undefined
     return Promise.resolve()
-  }
-
-  private emitToolImage(image: ToolImageDelta): void {
-    const mapper = this.mapper
-    const events = this.events
-    if (mapper === undefined || events === undefined) return
-    this.toolImageBlockId ??= `img_${crypto.randomUUID()}`
-    const blockId = this.toolImageBlockId
-    events.push({
-      type: 'assistant.image_delta',
-      messageId: mapper.activeMessageId(),
-      blockId,
-      mime: image.mime,
-      b64: image.b64,
-      final: image.final,
-    })
-    if (image.final) this.toolImageBlockId = undefined
   }
 
   private emitToolProgress(chunk: string): void {

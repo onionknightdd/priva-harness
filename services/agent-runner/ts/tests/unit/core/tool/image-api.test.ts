@@ -26,17 +26,17 @@ describe('compatible image API', () => {
     expect(() => normalizeSize('1024*1024')).toThrow('size must look like 1024x1024')
   })
 
-  it('falls back from a rejected stream to a one-shot generation', async () => {
+  it('generates a one-shot image without requesting a stream', async () => {
     const fetchImpl = vi.fn((_url: string, init?: RequestInit) => {
-      if (jsonBody(init).stream === true) {
-        return Promise.resolve(new Response('stream not supported', { status: 400 }))
-      }
+      const body = jsonBody(init)
+      expect(body.stream).toBeUndefined()
+      expect((body as { partial_images?: number }).partial_images).toBeUndefined()
       return imageResponse()
     })
     const api = new CompatibleImageApi({ fetch: fetchImpl })
-    const image = await api.generate(profile, 'gen-a', { prompt: 'a cat', stream: true })
+    const image = await api.generate(profile, 'gen-a', { prompt: 'a cat' })
     expect(Buffer.from(image.bytes).toString()).toBe('png-bytes')
-    expect(fetchImpl).toHaveBeenCalledTimes(2)
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
   })
 
   it('retries image edit without quality when the gateway rejects it', async () => {
@@ -45,6 +45,8 @@ describe('compatible image API', () => {
       if (!(body instanceof FormData)) {
         return Promise.resolve(new Response('expected form', { status: 400 }))
       }
+      expect(body.get('stream')).toBeNull()
+      expect(body.get('partial_images')).toBeNull()
       if (body.get('quality') === 'high') {
         return Promise.resolve(new Response('unknown field quality', { status: 400 }))
       }

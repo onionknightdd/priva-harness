@@ -19,7 +19,7 @@ import {
 import type { UserTurn } from '../../core/run/user-turn.js'
 import { AsyncQueue } from '../../core/stream/async-queue.js'
 import { PushableStream } from '../../core/stream/pushable-stream.js'
-import type { ToolDefinition, ToolImageDelta } from '../../core/tool/define-tool.js'
+import type { ToolDefinition } from '../../core/tool/define-tool.js'
 import { imageToolsFromSpec } from '../../core/tool/image-tool-shared.js'
 import { ClaudeEventMapper } from './claude-event-mapper.js'
 import { claudeUserMessage } from './claude-user-message.js'
@@ -68,7 +68,6 @@ export class ClaudeRuntime implements AgentRuntime {
   private inTurn = false
   private idleListener: ((events: readonly AgentEvent[]) => void) | undefined
   private readonly startQuery: ClaudeQueryStart
-  private toolImageBlockId: string | undefined
 
   constructor(
     private spec: ProviderRunSpec,
@@ -167,7 +166,6 @@ export class ClaudeRuntime implements AgentRuntime {
         abortController,
         this.tools,
         {
-          emitImage: (image) => this.emitToolImage(image),
           emitProgress: (chunk) => this.emitToolProgress(chunk),
         },
       ),
@@ -206,23 +204,6 @@ export class ClaudeRuntime implements AgentRuntime {
     }
   }
 
-  private emitToolImage(image: ToolImageDelta): void {
-    const mapper = this.mapper
-    const events = this.events
-    if (mapper === undefined || events === undefined) return
-    this.toolImageBlockId ??= `img_${crypto.randomUUID()}`
-    const blockId = this.toolImageBlockId
-    events.push({
-      type: 'assistant.image_delta',
-      messageId: mapper.activeMessageId(),
-      blockId,
-      mime: image.mime,
-      b64: image.b64,
-      final: image.final,
-    })
-    if (image.final) this.toolImageBlockId = undefined
-  }
-
   private emitToolProgress(chunk: string): void {
     const mapper = this.mapper
     const events = this.events
@@ -248,7 +229,6 @@ export class ClaudeRuntime implements AgentRuntime {
 }
 
 export interface ClaudeToolEmitters {
-  readonly emitImage?: (image: ToolImageDelta) => void
   readonly emitProgress?: (chunk: string) => void
 }
 
@@ -290,8 +270,6 @@ export function resolveClaudeQueryOptions(
     session: { provider: 'claude', id: initialSessionId(target) },
     signal: abortController?.signal ?? new AbortController().signal,
     profile: imageToolsFromSpec(spec),
-    streamImages: spec.streamImages === true,
-    ...(emitters.emitImage === undefined ? {} : { emitImage: emitters.emitImage }),
     ...(emitters.emitProgress === undefined ? {} : { emitProgress: emitters.emitProgress }),
   })
   if (compiled.mcpServers !== undefined) {

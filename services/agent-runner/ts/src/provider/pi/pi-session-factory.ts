@@ -10,7 +10,7 @@ import {
 } from '@earendil-works/pi-coding-agent'
 
 import type { ProviderRunSpec, SessionTarget } from '../../core/contract/agent-provider.js'
-import type { ToolDefinition, ToolImageDelta } from '../../core/tool/define-tool.js'
+import type { ToolDefinition } from '../../core/tool/define-tool.js'
 import { imageToolsFromSpec } from '../../core/tool/image-tool-shared.js'
 import { piSessionNeedsModelSwitch, resolvePiSessionOptions } from './pi-models-config.js'
 import { piSessionBucketDir } from './pi-paths.js'
@@ -42,7 +42,6 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
     const sessionDir = piSessionBucketDir(this.agentDir, spec.cwd)
     await mkdir(sessionDir, { recursive: true, mode: 0o700 })
 
-    const imageSink: { emit?: (image: ToolImageDelta) => void } = {}
     const progressSink: { emit?: (chunk: string) => void } = {}
 
     try {
@@ -68,8 +67,6 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
                 session: { provider: 'pi', id: '' },
                 signal: new AbortController().signal,
                 profile: imageToolsFromSpec(spec),
-                streamImages: spec.streamImages === true,
-                emitImage: (image) => imageSink.emit?.(image),
                 emitProgress: (chunk) => progressSink.emit?.(chunk),
               }),
             }),
@@ -86,7 +83,6 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
         session,
         options.modelId,
         runDir,
-        imageSink,
         progressSink,
         modelRuntime,
         options.providerId,
@@ -105,7 +101,6 @@ class SdkPiAgentSession implements PiAgentSession {
     private readonly session: Awaited<ReturnType<typeof createAgentSession>>['session'],
     modelId: string,
     private readonly runDir: string,
-    private readonly imageSink: { emit?: (image: ToolImageDelta) => void } = {},
     private readonly progressSink: { emit?: (chunk: string) => void } = {},
     private readonly modelRuntime: ModelRuntime,
     private readonly providerId: string,
@@ -125,14 +120,6 @@ class SdkPiAgentSession implements PiAgentSession {
     }
     await this.session.setModel(model)
     this.currentModelId = modelId
-  }
-
-  bindImageEmit(emit: ((image: ToolImageDelta) => void) | undefined): void {
-    if (emit === undefined) {
-      delete this.imageSink.emit
-      return
-    }
-    this.imageSink.emit = emit
   }
 
   bindProgressEmit(emit: ((chunk: string) => void) | undefined): void {

@@ -41,10 +41,8 @@ export const imageGenTool = defineTool({
         resolved.model,
         {
           prompt,
-          stream: context.streamImages === true,
           signal: context.signal,
           ...(size === '' ? {} : { size }),
-          ...(context.emitImage === undefined ? {} : { onImage: context.emitImage }),
         },
       )
       const filePath = await writeGeneratedImage({
