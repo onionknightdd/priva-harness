@@ -57,6 +57,45 @@ describe('consumeRunEvents', () => {
     ])
   })
 
+  it('holds run.completed until a late image trail arrives', async () => {
+    const drain = new BackgroundDrainTracker({
+      imageTrailWaitMs: 80,
+      imageTrailSettleMs: 20,
+    })
+    const events = await collect(
+      consumeRunEvents(
+        fromEvents(
+          [
+            {
+              type: 'tool.started',
+              id: 'img-1',
+              name: 'mcp__agentWorkshop__image_gen',
+              messageId: 'm',
+              blockId: 'img-1',
+              index: 0,
+            },
+            { type: 'run.completed', model: 'm', durationMs: 1 },
+            {
+              type: 'assistant.image_delta',
+              messageId: 'm',
+              blockId: 'img',
+              index: 1,
+              b64: 'abc',
+              final: true,
+            },
+          ],
+          2,
+        ),
+        { drain },
+      ),
+    )
+    expect(events.map((event) => event.type)).toEqual([
+      'tool.started',
+      'assistant.image_delta',
+      'run.completed',
+    ])
+  })
+
   it('closes immediately on run.failed', async () => {
     const events = await collect(
       consumeRunEvents(

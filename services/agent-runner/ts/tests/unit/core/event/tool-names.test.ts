@@ -4,6 +4,7 @@ import {
   isAgentName,
   isImageEditToolName,
   isImageGenToolName,
+  isImageOutputToolName,
   isImageReadToolName,
   isTaskBoardName,
 } from '../../../../src/core/event/tool-names.js'
@@ -26,6 +27,7 @@ describe('task board tool names', () => {
     expect(isImageGenToolName('mcp__agentWorkshop__image_gen')).toBe(true)
     expect(isImageReadToolName('Image_Read')).toBe(true)
     expect(isImageEditToolName('image_edit')).toBe(true)
+    expect(isImageOutputToolName('mcp__agentWorkshop__image_edit')).toBe(true)
     expect(isImageGenToolName('canvas')).toBe(false)
   })
 })

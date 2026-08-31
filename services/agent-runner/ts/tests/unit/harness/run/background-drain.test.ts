@@ -34,6 +34,36 @@ describe('BackgroundDrainTracker', () => {
     expect(drain.shouldClose(true)).toBe(false)
   })
 
+  it('holds the stream after run.completed until an image trail settles', () => {
+    let now = 0
+    const drain = new BackgroundDrainTracker({
+      imageTrailWaitMs: 40,
+      imageTrailSettleMs: 10,
+      now: () => now,
+    })
+    drain.observe({
+      type: 'tool.started',
+      id: 'img-1',
+      name: 'image_gen',
+      messageId: 'm',
+      blockId: 'img-1',
+      index: 0,
+    })
+    expect(drain.shouldClose(true)).toBe(false)
+    expect(drain.remainingWaitMs(true)).toBe(40)
+    drain.observe({
+      type: 'assistant.image_delta',
+      messageId: 'm',
+      blockId: 'img',
+      index: 1,
+      b64: 'abc',
+      final: true,
+    })
+    expect(drain.remainingWaitMs(true)).toBe(10)
+    now = 10
+    expect(drain.shouldClose(true)).toBe(true)
+  })
+
   it('closes after settle once background work is gone', () => {
     let now = 0
     const drain = new BackgroundDrainTracker({ idleMs: 1_000, settleMs: 15, now: () => now })

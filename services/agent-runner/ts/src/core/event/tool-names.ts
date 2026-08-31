@@ -53,6 +53,10 @@ export function isImageEditToolName(name: string): boolean {
   return canonicalProductToolName(name) === IMAGE_EDIT_TOOL_NAME
 }
 
+export function isImageOutputToolName(name: string): boolean {
+  return isImageGenToolName(name) || isImageEditToolName(name)
+}
+
 function stripMcpToolPrefix(name: string): string {
   const match = MCP_TOOL_NAME.exec(name)
   const bare = match?.[1]

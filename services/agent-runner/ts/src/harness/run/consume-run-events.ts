@@ -14,6 +14,7 @@ export async function* consumeRunEvents(
   const iterator = source[Symbol.asyncIterator]()
   let pending: Promise<IteratorResult<AgentEvent>> | undefined
   let seenResult = false
+  let heldCompleted: Extract<AgentEvent, { type: 'run.completed' }> | undefined
 
   try {
     for (;;) {
@@ -26,31 +27,51 @@ export async function* consumeRunEvents(
         result = await pending
         pending = undefined
       } else if (waitMs <= 0) {
-        if (drain.shouldClose(seenResult)) return
+        if (drain.shouldClose(seenResult)) {
+          if (heldCompleted !== undefined) yield heldCompleted
+          return
+        }
         result = await pending
         pending = undefined
       } else {
         const raced = await raceTimeout(pending, waitMs)
         if (raced === undefined) {
-          if (drain.shouldClose(seenResult)) return
+          if (drain.shouldClose(seenResult)) {
+            if (heldCompleted !== undefined) yield heldCompleted
+            return
+          }
           continue
         }
         result = raced
         pending = undefined
       }
 
-      if (result.done) return
+      if (result.done) {
+        if (heldCompleted !== undefined) yield heldCompleted
+        return
+      }
       const event = result.value
       drain.observe(event)
-      yield event
 
       if (event.type === 'run.failed' || event.type === 'run.aborted' || event.type === 'error') {
+        yield event
         return
       }
       if (event.type === 'run.completed') {
         seenResult = true
-        if (drain.shouldClose(true)) return
+        if (drain.hadBackgroundWork()) {
+          yield event
+          if (drain.shouldClose(true)) return
+          continue
+        }
+        if (drain.shouldClose(true)) {
+          yield event
+          return
+        }
+        heldCompleted = event
+        continue
       }
+      yield event
     }
   } finally {
     await iterator.return?.()
