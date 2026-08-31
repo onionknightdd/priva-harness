@@ -40,6 +40,71 @@ describe('context usage mapping', () => {
     })
   })
 
+  it('maps deferred and aliased Claude tool rows onto the same categories', () => {
+    const usage = mapClaudeContextUsage({
+      totalTokens: 5000,
+      maxTokens: 200000,
+      categories: [
+        { name: 'System prompt', tokens: 1000 },
+        { name: 'System tools (deferred)', tokens: 18000, isDeferred: true },
+        { name: 'MCP tools (deferred)', tokens: 4000, isDeferred: true, kind: 'deferred' },
+        { name: 'Messages', tokens: 500 },
+        { name: 'Free space', tokens: 176500, kind: 'free' },
+      ],
+    })
+    expect(usage).toEqual({
+      used: 5000,
+      limit: 200000,
+      categories: [
+        { id: 'systemPrompt', tokens: 1000 },
+        { id: 'toolDefinitions', tokens: 18000 },
+        { id: 'skills', tokens: null },
+        { id: 'mcpTools', tokens: 4000 },
+        { id: 'subagentDefinitions', tokens: null },
+        { id: 'memory', tokens: null },
+        { id: 'conversation', tokens: 500 },
+      ],
+    })
+  })
+
+  it('sums loaded and deferred tool rows and falls back to detail arrays', () => {
+    expect(mapClaudeContextUsage({
+      total_tokens: 22000,
+      raw_max_tokens: 200000,
+      categories: [
+        { name: '[ANT-ONLY] System tools', tokens: 2000 },
+        { name: 'System tools (deferred)', tokens: 18000 },
+      ],
+    }).categories).toEqual([
+      { id: 'systemPrompt', tokens: null },
+      { id: 'toolDefinitions', tokens: 20000 },
+      { id: 'skills', tokens: null },
+      { id: 'mcpTools', tokens: null },
+      { id: 'subagentDefinitions', tokens: null },
+      { id: 'memory', tokens: null },
+      { id: 'conversation', tokens: null },
+    ])
+    expect(mapClaudeContextUsage({
+      totalTokens: 12,
+      maxTokens: 200000,
+      categories: [{ name: 'Messages', tokens: 12 }],
+      systemTools: [{ name: 'Read', tokens: 8 }, { name: 'Bash', tokens: 4 }],
+      mcp_tools: [{ name: 'mcp__agentWorkshop__visualize', tokens: 30 }],
+    })).toEqual({
+      used: 12,
+      limit: 200000,
+      categories: [
+        { id: 'systemPrompt', tokens: null },
+        { id: 'toolDefinitions', tokens: 12 },
+        { id: 'skills', tokens: null },
+        { id: 'mcpTools', tokens: 30 },
+        { id: 'subagentDefinitions', tokens: null },
+        { id: 'memory', tokens: null },
+        { id: 'conversation', tokens: 12 },
+      ],
+    })
+  })
+
   it('returns an empty snapshot for invalid Claude payloads', () => {
     expect(mapClaudeContextUsage(undefined)).toEqual(emptyContextUsage())
     expect(mapClaudeContextUsage({ totalTokens: 'nope' })).toEqual({
