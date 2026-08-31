@@ -10,48 +10,41 @@ export { isAgentName, isTerminalStatus, isWorkflowName } from '../../core/event/
 
 export const DRAIN_IDLE_MS = 600_000
 export const DRAIN_SETTLE_MS = 15_000
-export const IMAGE_TRAIL_WAIT_MS = 2_000
-export const IMAGE_TRAIL_SETTLE_MS = 400
+export const IMAGE_FOLLOW_UP_SETTLE_MS = 500
 
 export interface BackgroundDrainOptions {
   readonly idleMs?: number
   readonly settleMs?: number
-  readonly imageTrailWaitMs?: number
-  readonly imageTrailSettleMs?: number
+  readonly imageFollowUpSettleMs?: number
   readonly now?: () => number
 }
 
 export class BackgroundDrainTracker {
   private readonly idleMs: number
   private readonly settleMs: number
-  private readonly imageTrailWaitMs: number
-  private readonly imageTrailSettleMs: number
+  private readonly imageFollowUpSettleMs: number
   private readonly now: () => number
   private readonly workflows = new Set<string>()
   private readonly agents = new Set<string>()
+  private readonly imageTools = new Set<string>()
   private lastEventAt = 0
   private seenBackground = false
-  private seenImageTrail = false
-  private seenImagePayload = false
+  private usedImageOutputTool = false
 
   constructor(options: BackgroundDrainOptions = {}) {
     this.idleMs = options.idleMs ?? DRAIN_IDLE_MS
     this.settleMs = options.settleMs ?? DRAIN_SETTLE_MS
-    this.imageTrailWaitMs = options.imageTrailWaitMs ?? IMAGE_TRAIL_WAIT_MS
-    this.imageTrailSettleMs = options.imageTrailSettleMs ?? IMAGE_TRAIL_SETTLE_MS
+    this.imageFollowUpSettleMs = options.imageFollowUpSettleMs ?? IMAGE_FOLLOW_UP_SETTLE_MS
     this.now = options.now ?? Date.now
   }
 
   observe(event: AgentEvent): void {
     this.lastEventAt = this.now()
-    if (event.type === 'assistant.image_delta' || hasImageBlock(event)) {
-      this.seenImageTrail = true
-      this.seenImagePayload = true
-    }
     switch (event.type) {
       case 'tool.started':
         if (isImageOutputToolName(event.name)) {
-          this.seenImageTrail = true
+          this.usedImageOutputTool = true
+          this.imageTools.add(event.id)
         }
         if (isWorkflowName(event.name)) {
           this.seenBackground = true
@@ -66,6 +59,9 @@ export class BackgroundDrainTracker {
         this.workflows.add(event.workflowToolUseId)
         return
       case 'tool.completed':
+        if (isImageOutputToolName(event.name)) {
+          this.imageTools.delete(event.id)
+        }
         if (isWorkflowName(event.name) && !event.ok) {
           this.workflows.delete(event.id)
         }
@@ -103,7 +99,7 @@ export class BackgroundDrainTracker {
   }
 
   hasOutstanding(): boolean {
-    return this.workflows.size > 0 || this.agents.size > 0
+    return this.workflows.size > 0 || this.agents.size > 0 || this.imageTools.size > 0
   }
 
   hadBackgroundWork(): boolean {
@@ -112,36 +108,29 @@ export class BackgroundDrainTracker {
 
   remainingWaitMs(seenResult: boolean): number | undefined {
     if (!seenResult) return undefined
+    if (this.imageTools.size > 0) return undefined
     const idle = this.now() - this.lastEventAt
     if (this.seenBackground) {
       if (this.hasOutstanding()) return Math.max(0, this.idleMs - idle)
       return Math.max(0, this.settleMs - idle)
     }
-    if (this.seenImageTrail) {
-      return Math.max(0, this.imageTrailBudgetMs() - idle)
+    if (this.usedImageOutputTool) {
+      return Math.max(0, this.imageFollowUpSettleMs - idle)
     }
     return 0
   }
 
   shouldClose(seenResult: boolean): boolean {
     if (!seenResult) return false
+    if (this.imageTools.size > 0) return false
     const idle = this.now() - this.lastEventAt
     if (this.seenBackground) {
       if (this.hasOutstanding()) return idle >= this.idleMs
       return idle >= this.settleMs
     }
-    if (this.seenImageTrail) {
-      return idle >= this.imageTrailBudgetMs()
+    if (this.usedImageOutputTool) {
+      return idle >= this.imageFollowUpSettleMs
     }
     return true
   }
-
-  private imageTrailBudgetMs(): number {
-    return this.seenImagePayload ? this.imageTrailSettleMs : this.imageTrailWaitMs
-  }
-}
-
-function hasImageBlock(event: AgentEvent): boolean {
-  if (event.type !== 'assistant.message') return false
-  return event.blocks.some((block) => block.type === 'image')
 }

@@ -34,11 +34,10 @@ describe('BackgroundDrainTracker', () => {
     expect(drain.shouldClose(true)).toBe(false)
   })
 
-  it('holds the stream after run.completed until an image trail settles', () => {
+  it('does not close while an image_gen or image_edit call is still running', () => {
     let now = 0
     const drain = new BackgroundDrainTracker({
-      imageTrailWaitMs: 40,
-      imageTrailSettleMs: 10,
+      imageFollowUpSettleMs: 10,
       now: () => now,
     })
     drain.observe({
@@ -49,17 +48,18 @@ describe('BackgroundDrainTracker', () => {
       blockId: 'img-1',
       index: 0,
     })
+    expect(drain.hasOutstanding()).toBe(true)
     expect(drain.shouldClose(true)).toBe(false)
-    expect(drain.remainingWaitMs(true)).toBe(40)
+    expect(drain.remainingWaitMs(true)).toBeUndefined()
     drain.observe({
-      type: 'assistant.image_delta',
-      messageId: 'm',
-      blockId: 'img',
-      index: 1,
-      b64: 'abc',
-      final: true,
+      type: 'tool.completed',
+      id: 'img-1',
+      name: 'image_gen',
+      ok: true,
+      output: '/work/.images/a.png',
     })
-    expect(drain.remainingWaitMs(true)).toBe(10)
+    expect(drain.hasOutstanding()).toBe(false)
+    expect(drain.shouldClose(true)).toBe(false)
     now = 10
     expect(drain.shouldClose(true)).toBe(true)
   })

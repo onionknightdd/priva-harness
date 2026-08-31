@@ -57,11 +57,8 @@ describe('consumeRunEvents', () => {
     ])
   })
 
-  it('holds run.completed until a late image trail arrives', async () => {
-    const drain = new BackgroundDrainTracker({
-      imageTrailWaitMs: 80,
-      imageTrailSettleMs: 20,
-    })
+  it('holds run.completed until the one-shot image tool returns', async () => {
+    const drain = new BackgroundDrainTracker({ imageFollowUpSettleMs: 20 })
     const events = await collect(
       consumeRunEvents(
         fromEvents(
@@ -76,12 +73,11 @@ describe('consumeRunEvents', () => {
             },
             { type: 'run.completed', model: 'm', durationMs: 1 },
             {
-              type: 'assistant.image_delta',
-              messageId: 'm',
-              blockId: 'img',
-              index: 1,
-              b64: 'abc',
-              final: true,
+              type: 'tool.completed',
+              id: 'img-1',
+              name: 'mcp__agentWorkshop__image_gen',
+              ok: true,
+              output: '/work/.images/a.png',
             },
           ],
           2,
@@ -91,7 +87,44 @@ describe('consumeRunEvents', () => {
     )
     expect(events.map((event) => event.type)).toEqual([
       'tool.started',
-      'assistant.image_delta',
+      'tool.completed',
+      'run.completed',
+    ])
+  })
+
+  it('holds run.completed for same-turn text after the image tool returns', async () => {
+    const drain = new BackgroundDrainTracker({ imageFollowUpSettleMs: 80 })
+    const events = await collect(
+      consumeRunEvents(
+        fromEvents(
+          [
+            {
+              type: 'tool.started',
+              id: 'img-1',
+              name: 'image_edit',
+              messageId: 'm',
+              blockId: 'img-1',
+              index: 0,
+            },
+            {
+              type: 'tool.completed',
+              id: 'img-1',
+              name: 'image_edit',
+              ok: true,
+              output: '/work/.images/b.png',
+            },
+            { type: 'run.completed', model: 'm', durationMs: 1 },
+            { type: 'assistant.delta', messageId: 'm', blockId: 'b', index: 0, text: 'done' },
+          ],
+          3,
+        ),
+        { drain },
+      ),
+    )
+    expect(events.map((event) => event.type)).toEqual([
+      'tool.started',
+      'tool.completed',
+      'assistant.delta',
       'run.completed',
     ])
   })
