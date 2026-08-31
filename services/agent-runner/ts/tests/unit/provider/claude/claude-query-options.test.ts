@@ -102,7 +102,6 @@ describe('resolveClaudeQueryOptions', () => {
     expect(resume.settings).toEqual(
       resolveClaudeQuerySettings({
         ...spec,
-        effort: 'high',
         baseUrl: '  ',
         authToken: '',
       }),
