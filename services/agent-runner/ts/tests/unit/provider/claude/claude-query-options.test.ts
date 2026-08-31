@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  CLAUDE_DISABLED_SKILLS,
   CLAUDE_DISALLOWED_TOOLS,
   resolveClaudeQueryOptions,
+  resolveClaudeQuerySettings,
 } from '../../../../src/provider/claude/claude-runtime.js'
 import { productTools } from '../../../../src/core/tool/product-tools.js'
 
@@ -14,6 +14,26 @@ const spec = {
   baseUrl: 'https://api.deepseek.com/anthropic',
   authToken: 'secret',
 }
+
+describe('resolveClaudeQuerySettings', () => {
+  it('puts the profile overlay on flag-tier settings.env', () => {
+    expect(resolveClaudeQuerySettings(spec).env).toEqual({
+      ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic',
+      ANTHROPIC_API_KEY: 'secret',
+      ANTHROPIC_AUTH_TOKEN: 'secret',
+      ANTHROPIC_MODEL: 'deepseek-v4-flash',
+    })
+    expect(
+      resolveClaudeQuerySettings({
+        ...spec,
+        baseUrl: '  ',
+        authToken: '',
+      }).env,
+    ).toEqual({
+      ANTHROPIC_MODEL: 'deepseek-v4-flash',
+    })
+  })
+})
 
 describe('resolveClaudeQueryOptions', () => {
   it('resolves run spec fields onto Claude SDK options', () => {
@@ -53,11 +73,14 @@ describe('resolveClaudeQueryOptions', () => {
     expect(options.env?.['ANTHROPIC_AUTH_TOKEN']).toBe('secret')
     expect(options.env?.['ANTHROPIC_MODEL']).toBe('deepseek-v4-flash')
     expect(options.env?.['CLAUDE_CODE_HARBOR_KITE']).toBe('1')
-    expect(options.settings).toEqual({
-      crossSessionInbound: 'accept',
-      skillOverrides: Object.fromEntries(
-        CLAUDE_DISABLED_SKILLS.map((name) => [name, 'off']),
-      ),
+    expect(options.settings).toEqual(resolveClaudeQuerySettings(spec))
+    expect(options.settings).toMatchObject({
+      env: {
+        ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic',
+        ANTHROPIC_API_KEY: 'secret',
+        ANTHROPIC_AUTH_TOKEN: 'secret',
+        ANTHROPIC_MODEL: 'deepseek-v4-flash',
+      },
     })
     expect(options.extraArgs).toBeUndefined()
     expect(options.env?.['PATH'] ?? process.env['PATH']).toBe(process.env['PATH'])
@@ -76,6 +99,14 @@ describe('resolveClaudeQueryOptions', () => {
     expect(resume.env?.['ANTHROPIC_API_KEY']).toBeUndefined()
     expect(resume.env?.['ANTHROPIC_MODEL']).toBe('deepseek-v4-flash')
     expect(resume.env?.['CLAUDE_CONFIG_DIR']).toBe('/cfg')
+    expect(resume.settings).toEqual(
+      resolveClaudeQuerySettings({
+        ...spec,
+        effort: 'high',
+        baseUrl: '  ',
+        authToken: '',
+      }),
+    )
 
     const forked = resolveClaudeQueryOptions(
       spec,

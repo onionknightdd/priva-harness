@@ -1,5 +1,5 @@
 import type { SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
-import { query, type Options, type Query } from '@anthropic-ai/claude-agent-sdk'
+import { query, type Options, type Query, type Settings } from '@anthropic-ai/claude-agent-sdk'
 
 import type {
   AgentRuntime,
@@ -272,12 +272,7 @@ export function resolveClaudeQueryOptions(
     permissionMode: 'bypassPermissions',
     promptSuggestions: spec.promptSuggestions !== false,
     systemPrompt: { type: 'preset', preset: 'claude_code' },
-    settings: {
-      crossSessionInbound: 'accept',
-      skillOverrides: Object.fromEntries(
-        CLAUDE_DISABLED_SKILLS.map((name) => [name, 'off' as const]),
-      ),
-    },
+    settings: resolveClaudeQuerySettings(spec),
     env: resolveClaudeQueryEnv(spec, globalConfigDir),
     ...(abortController === undefined ? {} : { abortController }),
   }
@@ -319,6 +314,19 @@ export function resolveClaudeQueryOptions(
   }
 
   return options
+}
+
+export function resolveClaudeQuerySettings(
+  spec: Pick<ProviderRunSpec, 'provider' | 'model' | 'baseUrl' | 'authToken'>,
+): Settings {
+  return {
+    crossSessionInbound: 'accept',
+    skillOverrides: Object.fromEntries(
+      CLAUDE_DISABLED_SKILLS.map((name) => [name, 'off' as const]),
+    ),
+    // Flag-tier env beats project/user settings.json env. See Claude Code settings precedence.
+    env: resolveProviderRunEnv(spec),
+  }
 }
 
 export function resolveClaudeQueryEnv(

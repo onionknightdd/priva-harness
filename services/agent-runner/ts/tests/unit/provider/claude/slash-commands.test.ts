@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import type { Query, SDKMessage, SDKUserMessage, SlashCommand as SdkSlashCommand } from '@anthropic-ai/claude-agent-sdk'
 import { describe, expect, it } from 'vitest'
 
-import { CLAUDE_DISABLED_SKILLS } from '../../../../src/provider/claude/claude-runtime.js'
+import { resolveClaudeQuerySettings } from '../../../../src/provider/claude/claude-runtime.js'
 import {
   assembleClaudeSlashCommands,
   classifyClaudeSlashOrigin,
@@ -79,10 +79,7 @@ describe('Claude slash command catalog', () => {
     const spec = testRunSpec({ cwd: '/work/repo' })
     const options = resolveClaudeListingQueryOptions(spec, '/cfg/.claude')
     expect(options.persistSession).toBe(false)
-    expect(options.settings).toEqual({
-      crossSessionInbound: 'accept',
-      skillOverrides: Object.fromEntries(CLAUDE_DISABLED_SKILLS.map((name) => [name, 'off'])),
-    })
+    expect(options.settings).toEqual(resolveClaudeQuerySettings(spec))
 
     const listed = await listClaudeSlashCommands({
       spec,
