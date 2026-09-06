@@ -18,6 +18,7 @@ import {
   sessionRecapSchema,
   sessionThreadSchema,
   tagSessionSchema,
+  workflowAgentSchema,
 } from '../schema/session-schema.js'
 
 const SESSION_ROUTE_PREFIX = '/api/sandbox/agent/sessions'
@@ -106,6 +107,16 @@ export const sessionRoutes: FastifyPluginCallback<SessionRoutesOptions> = (
         harness: item.harness,
       })),
     }),
+  )
+
+  fastify.get<{
+    Params: SessionParams & { workflow_id: string; agent_id: string }
+    Querystring: HarnessQuery
+  }>(
+    `${SESSION_ROUTE_PREFIX}/:session_id/workflows/:workflow_id/agents/:agent_id`,
+    { schema: workflowAgentSchema },
+    async (request) => sessionService.workflowAgent(request.query.harness,
+      request.params.session_id, request.params.workflow_id, request.params.agent_id),
   )
 
   fastify.get<{ Params: SessionParams; Querystring: HarnessQuery }>(
@@ -329,12 +340,7 @@ function toThreadMessageResponse(message: ThreadMessage): Record<string, unknown
     ...(message.workflows === undefined
       ? {}
       : {
-          workflows: message.workflows.map((workflow) => ({
-            workflow_tool_use_id: workflow.workflowToolUseId,
-            ...(workflow.name === undefined ? {} : { name: workflow.name }),
-            status: workflow.status,
-            ...(workflow.summary === undefined ? {} : { summary: workflow.summary }),
-          })),
+          workflows: message.workflows,
         }),
     ...(message.compact === undefined
       ? {}

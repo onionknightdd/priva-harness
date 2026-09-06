@@ -25,17 +25,20 @@ import {
   useRef,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import {
   AgentCode,
   type AgentCodeLanguage,
 } from "@/components/agents/agent-code";
 import { ActionSwapRollText } from "@/components/motion/action-swap-roll";
 import { AgentDisclosure } from "@/components/agents/agent-disclosure";
+import { StatusGlyphSwap } from "@/components/agents/status-glyph-swap";
 import {
   TOOL_OUTPUT_FRAME_CLASS,
-  TOOL_OUTPUT_INSET_X_CLASS,
+  TOOL_OUTPUT_INSET_CLASS,
 } from "@/components/agents/tool-output-frame";
 import { SPRING_PRESS, SPRING_SWAP } from "@/lib/ease";
+import { focusRing } from "@/lib/surfaces";
 import { cn } from "@/lib/utils";
 
 export type ToolResultStatus = "running" | "success" | "error" | "cancelled";
@@ -69,30 +72,33 @@ export interface ToolResultOutputProps {
   className?: string;
 }
 
-function getStatusLabel(status: ToolResultStatus) {
-  if (status === "running") return "Running";
-  if (status === "success") return "Completed";
-  if (status === "error") return "Failed";
-  return "Cancelled";
-}
+const STATUS_LABEL_KEY = {
+  running: "toolCard.running",
+  success: "toolCard.completed",
+  error: "toolCard.failed",
+  cancelled: "toolCard.cancelled",
+} as const satisfies Record<ToolResultStatus, string>;
+
+// Status colours come from the shared `status-*` tokens so tool cards, the
+// sidebar status dot and diff gutters all speak the same colour language.
+const STATUS_CLASS = {
+  running: "text-status-running",
+  success: "text-status-success",
+  error: "text-status-error",
+  cancelled: "text-muted-foreground",
+} as const satisfies Record<ToolResultStatus, string>;
+
+const STATUS_ICON = {
+  running: LoaderCircle,
+  success: CircleCheck,
+  error: CircleX,
+  cancelled: Ban,
+} as const satisfies Record<ToolResultStatus, typeof LoaderCircle>;
 
 function getSwapKey(value: ReactNode, fallback: string) {
   return typeof value === "string" || typeof value === "number"
     ? String(value)
     : fallback;
-}
-
-function getStatusClass(status: ToolResultStatus) {
-  if (status === "running") {
-    return "text-blue-600 dark:text-blue-400";
-  }
-  if (status === "success") {
-    return "text-emerald-600 dark:text-emerald-400";
-  }
-  if (status === "error") {
-    return "text-rose-600 dark:text-rose-400";
-  }
-  return "text-muted-foreground";
 }
 
 function KindIcon({ kind }: { kind: ToolResultKind }) {
@@ -103,17 +109,26 @@ function KindIcon({ kind }: { kind: ToolResultKind }) {
 
 function StatusIcon({
   status,
+  settled,
   reduce,
 }: {
   status: ToolResultStatus;
+  /** True only on the render where the tool just left `running`, so historical
+   * cards mount their final icon without a pop. */
+  settled: boolean;
   reduce: boolean;
 }) {
-  if (status === "running") {
-    return <LoaderCircle className={cn("size-3", !reduce && "animate-spin")} />;
-  }
-  if (status === "success") return <CircleCheck className="size-3" />;
-  if (status === "error") return <CircleX className="size-3" />;
-  return <Ban className="size-3" />;
+  const Icon = STATUS_ICON[status];
+  return (
+    <StatusGlyphSwap swapKey={status} pop={settled && !reduce}>
+      <Icon
+        className={cn(
+          "size-3",
+          status === "running" && !reduce && "animate-spin-fast",
+        )}
+      />
+    </StatusGlyphSwap>
+  );
 }
 
 function ToolResultAction({
@@ -135,9 +150,15 @@ function ToolResultAction({
       onClick={onClick}
       whileTap={reduce ? undefined : { scale: 0.9 }}
       transition={SPRING_PRESS}
-      className="grid size-7 place-items-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+      className={cn(
+        "grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground",
+        focusRing,
+      )}
     >
-      {children}
+      {/* Keyed on the label so the copied check pops in instead of swapping flat. */}
+      <StatusGlyphSwap swapKey={label} pop={!reduce}>
+        {children}
+      </StatusGlyphSwap>
     </motion.button>
   );
 }
@@ -208,6 +229,7 @@ export function ToolResult({
   className,
   contentClassName,
 }: ToolResultProps) {
+  const { t } = useTranslation();
   const reduce = useReducedMotion() ?? false;
   const baseId = useId();
   const triggerId = `${baseId}-trigger`;
@@ -219,12 +241,15 @@ export function ToolResult({
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
   const currentOpen = open ?? internalOpen;
   const running = status === "running";
+  // `previousStatus` is committed in an effect, so during the render where the
+  // status flips it still reads "running" — exactly the frame the icon swaps.
+  const settled = previousStatus.current === "running" && !running;
   const canCopy = Boolean(copyText || onCopy);
   const hasActions = canCopy || Boolean(onRetry);
   const titleKey = getSwapKey(title, status);
   const metaKey = getSwapKey(meta, `${status}-meta`);
   const toolKey = getSwapKey(tool, `${status}-tool`);
-  const statusLabel = getStatusLabel(status);
+  const statusLabel = t(STATUS_LABEL_KEY[status]);
 
   const setOpen = useCallback(
     (next: boolean) => {
@@ -298,7 +323,7 @@ export function ToolResult({
     <div
       data-state={status}
       aria-busy={running}
-      className={cn("w-full text-[15px]", className)}
+      className={cn("w-full text-ui", className)}
     >
       <button
         id={triggerId}
@@ -306,7 +331,10 @@ export function ToolResult({
         aria-expanded={currentOpen}
         aria-controls={contentId}
         onClick={() => setOpen(!currentOpen)}
-        className="group/item flex w-fit max-w-full min-h-0 items-center gap-1 rounded-md py-0.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        className={cn(
+          "group/item flex w-fit max-w-full min-h-0 items-center gap-1 rounded-md py-0.5 text-left",
+          focusRing,
+        )}
       >
         <span
           aria-hidden="true"
@@ -337,10 +365,10 @@ export function ToolResult({
           aria-label={statusLabel}
           className={cn(
             "inline-flex shrink-0 items-center",
-            getStatusClass(status),
+            STATUS_CLASS[status],
           )}
         >
-          <StatusIcon status={status} reduce={reduce} />
+          <StatusIcon status={status} settled={settled} reduce={reduce} />
         </span>
         <motion.span
           aria-hidden="true"
@@ -361,14 +389,8 @@ export function ToolResult({
         >
           <div className="pt-1.5 pl-[calc(1em+0.25rem)] text-sm">
             {framed ? (
-              <div className={TOOL_OUTPUT_FRAME_CLASS}>
-                <div
-                  className={cn(
-                    TOOL_OUTPUT_INSET_X_CLASS,
-                    "pt-[var(--tool-output-inset)]",
-                    !hasActions && "pb-[var(--tool-output-inset)]"
-                  )}
-                >
+              <div className={cn(TOOL_OUTPUT_FRAME_CLASS, "group/frame relative")}>
+                <div className={TOOL_OUTPUT_INSET_CLASS}>
                   <ToolResultViewport
                     viewportRef={viewportRef}
                     maxHeight={maxHeight}
@@ -379,16 +401,18 @@ export function ToolResult({
                   </ToolResultViewport>
                 </div>
                 {hasActions ? (
+                  // Actions float over the top-right corner instead of taking a
+                  // footer row: the output keeps its full height and the buttons
+                  // only surface on hover/focus (always on touch, which has no hover).
                   <div
                     className={cn(
-                      "flex items-center gap-0.5",
-                      TOOL_OUTPUT_INSET_X_CLASS,
-                      "py-[var(--tool-output-inset)]"
+                      "absolute top-1.5 right-1.5 flex items-center gap-0.5 rounded-lg bg-tool-output/90 p-0.5 opacity-0 transition-opacity duration-150 ease-out group-hover/frame:opacity-100 group-focus-within/frame:opacity-100 pointer-coarse:opacity-100 motion-reduce:transition-none",
+                      copied && "opacity-100",
                     )}
                   >
                     {canCopy ? (
                       <ToolResultAction
-                        label={copied ? "Copied" : "Copy result"}
+                        label={copied ? t("common.copied") : t("toolCard.copyResult")}
                         onClick={handleCopy}
                       >
                         {copied ? (
@@ -399,7 +423,10 @@ export function ToolResult({
                       </ToolResultAction>
                     ) : null}
                     {onRetry ? (
-                      <ToolResultAction label="Run again" onClick={onRetry}>
+                      <ToolResultAction
+                        label={t("toolCard.runAgain")}
+                        onClick={onRetry}
+                      >
                         <RotateCcw className="size-3.5" />
                       </ToolResultAction>
                     ) : null}

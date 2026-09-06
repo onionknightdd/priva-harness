@@ -19,6 +19,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import type { AgentCodeLanguage } from "@/components/agents/agent-code";
 import { AgentDisclosure } from "@/components/agents/agent-disclosure";
 import {
@@ -26,6 +27,7 @@ import {
   useAgentShikiHighlight,
 } from "@/components/agents/agent-shiki";
 import { toNotationDiffSource } from "@/components/agents/notation-diff";
+import { StatusGlyphSwap } from "@/components/agents/status-glyph-swap";
 import {
   TOOL_OUTPUT_FRAME_CLASS,
   TOOL_OUTPUT_INSET_CLASS,
@@ -33,6 +35,7 @@ import {
 import { ActionSwapRollText } from "@/components/motion/action-swap-roll";
 import { writeClipboardText } from "@/lib/clipboard";
 import { SPRING_PRESS, SPRING_SWAP } from "@/lib/ease";
+import { focusRing } from "@/lib/surfaces";
 import { cn } from "@/lib/utils";
 
 export type FileDiffStatus = "streaming" | "complete";
@@ -109,6 +112,7 @@ export function FileDiff({
   onCopy,
   className,
 }: FileDiffProps) {
+  const { t } = useTranslation();
   const reduce = useReducedMotion() ?? false;
   const baseId = useId();
   const triggerId = `${baseId}-trigger`;
@@ -120,6 +124,9 @@ export function FileDiff({
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
   const currentOpen = open ?? internalOpen;
   const streaming = status === "streaming";
+  // `previousStatus` is committed in an effect, so this is true only on the
+  // render where streaming ends — the one frame the check should pop in.
+  const settled = previousStatus.current === "streaming" && !streaming;
   const additions = lines.filter((line) => line.type === "added").length;
   const deletions = lines.filter((line) => line.type === "removed").length;
   const canCopy = Boolean(copyText || onCopy);
@@ -210,7 +217,7 @@ export function FileDiff({
     <div
       data-state={status}
       aria-busy={streaming}
-      className={cn("w-full text-[15px]", className)}
+      className={cn("w-full text-ui", className)}
     >
       <div className="group/item relative flex w-fit max-w-full min-h-0 items-center gap-1">
         <button
@@ -219,9 +226,14 @@ export function FileDiff({
           aria-expanded={currentOpen}
           aria-controls={contentId}
           onClick={() => setOpen(!currentOpen)}
-          className="absolute inset-0 z-0 cursor-pointer rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          className={cn(
+            "absolute inset-0 z-0 cursor-pointer rounded-md",
+            focusRing,
+          )}
         >
-          <span className="sr-only">{currentOpen ? "Collapse" : "Expand"}</span>
+          <span className="sr-only">
+            {currentOpen ? t("common.collapse") : t("common.expand")}
+          </span>
         </button>
         <div className="pointer-events-none relative z-10 flex min-w-0 items-center gap-1 py-0.5">
           {icon ?? (
@@ -242,26 +254,33 @@ export function FileDiff({
             ) : null}
             {file}
             {additions > 0 ? (
-              <span className="font-normal text-emerald-600 tabular-nums lining-nums dark:text-emerald-400">
+              <span className="font-normal text-status-success tabular-nums lining-nums">
                 {`+${String(additions)}`}
               </span>
             ) : null}
             {deletions > 0 ? (
-              <span className="font-normal text-rose-600 tabular-nums lining-nums dark:text-rose-400">
+              <span className="font-normal text-status-error tabular-nums lining-nums">
                 {`−${String(deletions)}`}
               </span>
             ) : null}
           </span>
-          <span className="grid size-[1em] shrink-0 place-items-center text-muted-foreground/60">
+          <StatusGlyphSwap
+            swapKey={status}
+            pop={settled && !reduce}
+            className="size-[1em] shrink-0 text-muted-foreground/60"
+          >
             {streaming ? (
               <LoaderCircle
-                aria-label="Applying changes"
-                className={cn("size-[1em]", !reduce && "animate-spin")}
+                aria-label={t("toolCard.applyingChanges")}
+                className={cn("size-[1em]", !reduce && "animate-spin-fast")}
               />
             ) : (
-              <Check aria-label="Changes applied" className="size-[1em]" />
+              <Check
+                aria-label={t("toolCard.changesApplied")}
+                className="size-[1em]"
+              />
             )}
-          </span>
+          </StatusGlyphSwap>
           <motion.span
             aria-hidden="true"
             animate={{ rotate: currentOpen ? 180 : 0 }}
@@ -280,7 +299,7 @@ export function FileDiff({
         open={currentOpen}
       >
         <div className="pt-[10px] pl-[calc(1em+0.25rem)] text-sm">
-          <div className={TOOL_OUTPUT_FRAME_CLASS}>
+          <div className={cn(TOOL_OUTPUT_FRAME_CLASS, "group/frame relative")}>
             <div className={TOOL_OUTPUT_INSET_CLASS}>
               <div
                 ref={viewportRef}
@@ -292,7 +311,7 @@ export function FileDiff({
               >
                 <pre className="agent-shiki shiki has-diff m-0 inline-block min-w-full whitespace-normal font-mono text-sm leading-5">
                   <code className="block">
-                    <span className="sr-only">File changes</span>
+                    <span className="sr-only">{t("toolCard.fileChanges")}</span>
                     {lines.map((line, index) => {
                       const type = line.type ?? "context";
                       return (
@@ -300,8 +319,8 @@ export function FileDiff({
                           key={line.id}
                           className={cn(
                             "flex min-w-full",
-                            type === "added" && "bg-emerald-500/[0.07]",
-                            type === "removed" && "bg-rose-500/[0.07]",
+                            type === "added" && "bg-status-success/[0.08]",
+                            type === "removed" && "bg-status-error/[0.08]",
                           )}
                         >
                           {lineDigits > 0 ? (
@@ -332,26 +351,38 @@ export function FileDiff({
                 </pre>
               </div>
 
-              {canCopy ? (
-                <div className="flex items-center justify-end pt-[var(--tool-output-inset)]">
-                  <motion.button
-                    type="button"
-                    aria-label={copied ? "Copied" : "Copy diff"}
-                    title={copied ? "Copied" : "Copy diff"}
-                    onClick={handleCopy}
-                    whileTap={reduce ? undefined : { scale: 0.9 }}
-                    transition={SPRING_PRESS}
-                    className="grid size-7 place-items-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-background/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                  >
+            </div>
+            {canCopy ? (
+              // Floats over the top-right corner and surfaces on hover/focus
+              // (always on touch) instead of reserving a footer row.
+              <div
+                className={cn(
+                  "absolute top-1.5 right-1.5 rounded-lg bg-tool-output/90 p-0.5 opacity-0 transition-opacity duration-150 ease-out group-hover/frame:opacity-100 group-focus-within/frame:opacity-100 pointer-coarse:opacity-100 motion-reduce:transition-none",
+                  copied && "opacity-100",
+                )}
+              >
+                <motion.button
+                  type="button"
+                  aria-label={copied ? t("common.copied") : t("toolCard.copyDiff")}
+                  title={copied ? t("common.copied") : t("toolCard.copyDiff")}
+                  onClick={handleCopy}
+                  whileTap={reduce ? undefined : { scale: 0.9 }}
+                  transition={SPRING_PRESS}
+                  className={cn(
+                    "grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground",
+                    focusRing,
+                  )}
+                >
+                  <StatusGlyphSwap swapKey={copied ? "copied" : "copy"} pop={!reduce}>
                     {copied ? (
                       <Check className="size-3.5" />
                     ) : (
                       <Copy className="size-3.5" />
                     )}
-                  </motion.button>
-                </div>
-              ) : null}
-            </div>
+                  </StatusGlyphSwap>
+                </motion.button>
+              </div>
+            ) : null}
           </div>
         </div>
       </AgentDisclosure>

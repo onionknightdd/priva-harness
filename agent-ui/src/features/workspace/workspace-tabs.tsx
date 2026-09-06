@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 
 import { ExpandableTabs } from "@/components/motion/expandable-tabs"
 
+import { WorkspaceWorkflowView } from "./views/workspace-workflow-view"
 import { WorkspaceFileView } from "./views/workspace-file-view"
 import { WorkspacePlaceholderView } from "./views/workspace-placeholder-view"
 import {
@@ -17,6 +18,7 @@ function WorkspaceModuleContent({
 }: {
   moduleId: WorkspaceModuleId
 }) {
+  if (moduleId === "tasks") return <WorkspaceWorkflowView />
   if (moduleId === "files") {
     return <WorkspaceFileView />
   }
@@ -39,6 +41,7 @@ export function WorkspaceTabs({
 
     return {
       id: module.id,
+      keepMounted: module.id === "files",
       label,
       icon: <Icon aria-hidden="true" />,
       content: (

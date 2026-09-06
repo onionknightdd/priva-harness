@@ -157,6 +157,7 @@ function replaceMessage(messages: ThreadMessage[], next: ThreadMessage): void {
 }
 
 function parentToolUseIdOf(event: AgentEvent): string | undefined {
+  if ('workflowToolUseId' in event) return event.workflowToolUseId
   return 'parentToolUseId' in event ? event.parentToolUseId : undefined
 }
 

@@ -329,7 +329,7 @@ export function listSessionThread(
         : { nestedAgents: mapNestedAgents(item.nested_agents) }),
       ...(item.workflows === undefined
         ? {}
-        : { workflows: mapWorkflows(item.workflows) }),
+        : { workflows: item.workflows }),
       ...(item.compact === undefined ? {} : { compact: item.compact }),
     })),
   }))
@@ -390,35 +390,6 @@ function mapInbox(raw: unknown) {
   }
 }
 
-function mapWorkflows(raw: unknown) {
-  if (!Array.isArray(raw)) {
-    return []
-  }
-  return raw.flatMap((item) => {
-    if (typeof item !== "object" || item === null) {
-      return []
-    }
-    const record = item as Record<string, unknown>
-    const workflowToolUseId =
-      typeof record.workflow_tool_use_id === "string"
-        ? record.workflow_tool_use_id
-        : typeof record.workflowToolUseId === "string"
-          ? record.workflowToolUseId
-          : ""
-    if (workflowToolUseId === "") {
-      return []
-    }
-    return [
-      {
-        workflowToolUseId,
-        status: typeof record.status === "string" ? record.status : "running",
-        ...(typeof record.name === "string" ? { name: record.name } : {}),
-        ...(typeof record.summary === "string" ? { summary: record.summary } : {}),
-      },
-    ]
-  })
-}
-
 export function fetchSessionContextUsage(
   harness: AgentRunHarness,
   sessionId: string,
@@ -448,4 +419,14 @@ export function forkSession(
       }),
     }
   ).then(mapSession)
+}
+
+export function fetchWorkflowAgentDetail(
+  harness: AgentRunHarness,
+  sessionId: string,
+  workflowRunId: string,
+  agentId: string,
+  signal?: AbortSignal,
+): Promise<import("@/features/agent-message/workflow-data").WorkflowAgentDetail> {
+  return requestJson(`${sessionPath(sessionId, `/workflows/${encodeURIComponent(workflowRunId)}/agents/${encodeURIComponent(agentId)}`)}?${harnessQuery(harness)}`, { signal })
 }

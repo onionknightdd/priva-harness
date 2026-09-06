@@ -1,3 +1,5 @@
+import { workflowLaunch, workflowSnapshot, workflowTranscript } from '../../../fixtures/claude-workflow.js'
+import { mapClaudeMessage } from '../../../../src/provider/claude/session/claude-session-store.js'
 import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -256,6 +258,33 @@ describe('/api/sandbox/agent/sessions', () => {
       expect.objectContaining({ role: 'user', content: 'hello', transcript_uuid: 'u1' }),
       expect.objectContaining({ role: 'assistant', content: 'hi', transcript_uuid: 'a1' }),
     ])
+  })
+
+  it('preserves workflow phases, agents, and identity through the HTTP response', async () => {
+    claude.sessions.messageLists.set('claude-1', workflowTranscript.map((raw) =>
+      mapClaudeMessage(raw.uuid === 'r1'
+        ? { ...raw, toolUseResult: { ...workflowLaunch, workflowSnapshot } }
+        : raw, 'claude-1')))
+    const response = await server.inject({ method: 'GET',
+      url: '/api/sandbox/agent/sessions/claude-1/thread?harness=claude' })
+    expect(response.statusCode).toBe(200)
+    const payload = parseJson(response)
+    expect(payload['messages']).toEqual(expect.arrayContaining([
+      expect.objectContaining({ role: 'assistant', workflows: [expect.objectContaining({
+        workflowToolUseId: 'tool-one', workflowRunId: 'wf_test', status: 'completed',
+        phases: expect.arrayContaining([expect.objectContaining({ title: 'Generate' }), expect.objectContaining({ title: 'Verify' })]) as unknown,
+        agents: expect.arrayContaining([expect.objectContaining({ index: 4, agentId: 'agent4', state: 'completed' })]) as unknown,
+      })] }),
+    ]))
+  })
+
+  it('validates workflow detail identifiers and reports unsupported providers', async () => {
+    const invalid = await server.inject({ method: 'GET',
+      url: '/api/sandbox/agent/sessions/claude-1/workflows/not-a-run/agents/agent1?harness=claude' })
+    expect(invalid.statusCode).toBe(422)
+    const unsupported = await server.inject({ method: 'GET',
+      url: '/api/sandbox/agent/sessions/bb-1/workflows/wf_test/agents/agent1?harness=pi' })
+    expect(unsupported.statusCode).toBe(400)
   })
 
   it('returns a stored recap without generating one', async () => {

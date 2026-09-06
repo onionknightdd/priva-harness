@@ -1,3 +1,5 @@
+import type { WorkflowCard } from "./workflow-data"
+export type { WorkflowCard } from "./workflow-data"
 import { isTaskBoardTool } from "./task-plan"
 
 export type AgentMessageRole = "user" | "assistant"
@@ -71,13 +73,6 @@ export type NestedAgent = {
   status: "running" | "completed"
   blocks: StreamBlock[]
   inbox: NestedInboxMessage[]
-}
-
-export type WorkflowCard = {
-  workflowToolUseId: string
-  name?: string
-  status: string
-  summary?: string
 }
 
 export type AgentThreadMessage = {

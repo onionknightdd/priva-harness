@@ -69,6 +69,7 @@ export function FileBrowserPage({
     const page = pageRef.current
 
     if (
+      compact ||
       !page ||
       window.matchMedia("(prefers-reduced-motion: reduce)").matches
     ) {
@@ -91,7 +92,7 @@ export function FileBrowserPage({
     }, page)
 
     return () => context.revert()
-  }, [])
+  }, [compact])
 
   React.useEffect(() => {
     if (!compact) {

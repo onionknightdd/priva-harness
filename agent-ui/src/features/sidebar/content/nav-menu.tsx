@@ -20,6 +20,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import type { AppView } from "@/lib/app-view"
+import { collapsePanel } from "@/lib/surfaces"
 
 import type {
   SidebarAnimatedIconHandle,
@@ -109,7 +110,6 @@ function NavMenuItem({
         <SidebarMenuButton
           isActive={isItemActive}
           tooltip={title}
-          className="text-base"
           onClick={selectItem}
           {...iconAnimationHandlers}
         >
@@ -131,20 +131,19 @@ function NavMenuItem({
           <SidebarMenuButton
             isActive={hasActiveSubmenuItem}
             tooltip={title}
-            className="text-base"
             {...iconAnimationHandlers}
           />
         }
       >
         {content}
       </CollapsibleTrigger>
-      <CollapsibleContent className="h-[var(--collapsible-panel-height)] overflow-hidden transition-[height,opacity] duration-200 ease-out data-[ending-style]:h-0 data-[ending-style]:opacity-0 data-[starting-style]:h-0 data-[starting-style]:opacity-0">
+      <CollapsibleContent className={collapsePanel}>
         <SidebarMenuSub>
           {item.items?.map((subItem) => (
             <SidebarMenuSubItem key={subItem.titleKey}>
               <SidebarMenuSubButton
                 render={<button type="button" />}
-                className="w-full text-left data-[size=md]:text-base"
+                className="w-full text-left"
                 isActive={subItem.view === activeView}
                 onClick={() => selectView(subItem.view)}
               >

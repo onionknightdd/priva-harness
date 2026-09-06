@@ -25,6 +25,7 @@ import {
 } from "@/components/agents/tool-output-frame"
 import { writeClipboardText } from "@/lib/clipboard"
 import { SPRING_PRESS } from "@/lib/ease"
+import { focusRing } from "@/lib/surfaces"
 import { cn } from "@/lib/utils"
 
 export type CodeBlockStatus = "streaming" | "complete"
@@ -154,7 +155,10 @@ export function CodeBlock({
       }}
       whileTap={reduce ? undefined : { scale: 0.9 }}
       transition={SPRING_PRESS}
-      className="grid size-8 shrink-0 place-items-center rounded-full text-foreground outline-none transition-colors hover:bg-background/70 focus-visible:ring-2 focus-visible:ring-ring"
+      className={cn(
+        "grid size-8 shrink-0 place-items-center rounded-full text-foreground transition-colors hover:bg-background/70",
+        focusRing
+      )}
     >
       {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
     </motion.button>
@@ -191,13 +195,13 @@ export function CodeBlock({
           <span
             className={cn(
               "ml-auto inline-flex shrink-0 items-center gap-1.5 text-sm",
-              streaming
-                ? "text-blue-600 dark:text-blue-400"
-                : "text-emerald-600 dark:text-emerald-400"
+              streaming ? "text-status-running" : "text-status-success"
             )}
           >
             {streaming ? (
-              <LoaderCircle className={cn("size-3.5", !reduce && "animate-spin")} />
+              <LoaderCircle
+                className={cn("size-3.5", !reduce && "animate-spin-fast")}
+              />
             ) : (
               <Check className="size-3.5" />
             )}

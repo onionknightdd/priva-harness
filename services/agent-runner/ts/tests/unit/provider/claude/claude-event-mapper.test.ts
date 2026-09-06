@@ -269,6 +269,8 @@ describe('ClaudeEventMapper', () => {
     } as Parameters<ClaudeEventMapper['push']>[0])
     expect(workflow).toEqual([
       expect.objectContaining({ type: 'workflow.started', workflowToolUseId: 'wf-1', name: 'ship' }),
+      expect.objectContaining({ type: 'workflow.progress', workflowToolUseId: 'wf-1',
+        workflow: expect.objectContaining({ name: 'ship', status: 'running', phases: [], agents: [] }) as unknown }),
     ])
     expect(agent).toEqual([
       expect.objectContaining({ type: 'agent.started', agentId: 'ag-1', name: 'Explore' }),

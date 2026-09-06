@@ -1,3 +1,4 @@
+import { hydrateWorkflowResult, readWorkflowAgentDetail } from './claude-workflow-files.js'
 import { readFile, readdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 
@@ -131,7 +132,21 @@ export class ClaudeSessionStore implements ProviderSessionStore {
 
   async replay(ref: SessionRef, page?: SessionMessagePage): Promise<readonly ThreadReplayItem[]> {
     const messages = await this.messages(ref, page)
-    return replayClaudeSessionMessages(messages)
+    const info = await this.read(ref)
+    const path = await this.findTranscriptPath(ref.id, info.cwd)
+    if (path === undefined) return replayClaudeSessionMessages(messages)
+    const hydrated = await Promise.all(messages.map(async (message) => ({
+      ...message,
+      message: await hydrateWorkflowResult(message.message, path),
+    })))
+    return replayClaudeSessionMessages(hydrated)
+  }
+
+  async workflowAgent(ref: SessionRef, runId: string, agentId: string) {
+    const info = await this.read(ref)
+    const path = await this.findTranscriptPath(ref.id, info.cwd)
+    if (path === undefined) throw new SessionError('session-not-found', 'Session transcript is not available')
+    return readWorkflowAgentDetail(path, runId, agentId)
   }
 
   async delete(ref: SessionRef): Promise<void> {

@@ -24,6 +24,7 @@ import {
 import { useChatSession } from "@/features/chat-session"
 import { useHarness } from "@/features/sidebar/header/harness-context"
 import type { SessionInfo } from "@/lib/api/sandbox-sessions"
+import { collapsePanel } from "@/lib/surfaces"
 
 import { ProjectHeader } from "./project-header"
 import { ProjectSessionItem } from "./project-session-item"
@@ -74,8 +75,6 @@ function ProjectMenuItem({
   reduceMotion,
   untitled,
   onLoadMore,
-  onArchive,
-  onDelete,
   onRename,
   onSaveTags,
   onSelect,
@@ -94,8 +93,6 @@ function ProjectMenuItem({
   reduceMotion: boolean
   untitled: string
   onLoadMore: (cwd: string) => Promise<void>
-  onArchive: (session: SessionInfo) => void
-  onDelete: (session: SessionInfo) => void
   onRename: (session: SessionInfo, title: string) => Promise<void>
   onSaveTags: (sessionId: string, tags: string[]) => Promise<void>
   onSelect: (session: SessionInfo) => void
@@ -128,7 +125,7 @@ function ProjectMenuItem({
           render={
             <SidebarMenuButton
               tooltip={cwd || name}
-              className="pr-12 text-base"
+              className="pr-12"
             />
           }
         >
@@ -155,7 +152,7 @@ function ProjectMenuItem({
           </RowHoverAction>
         </div>
       </div>
-      <CollapsibleContent className="overflow-hidden data-closed:hidden">
+      <CollapsibleContent className={collapsePanel}>
         <SidebarMenuSub className="ml-3.5 mr-0 pr-0">
           {visibleSessions.map((session) => (
             <ProjectSessionItem
@@ -163,8 +160,6 @@ function ProjectMenuItem({
               session={session}
               isMobile={isMobile}
               untitled={untitled}
-              onArchive={onArchive}
-              onDelete={onDelete}
               onRename={onRename}
               onSaveTags={onSaveTags}
               onSelect={onSelect}
@@ -252,10 +247,8 @@ export function NavProjects({
     refreshing,
     refresh,
     loadMore,
-    archive,
     setTags,
     rename,
-    remove,
     highlightedSessionId,
   } = useChatSession()
 
@@ -390,12 +383,6 @@ export function NavProjects({
         reduceMotion={shouldReduceMotion}
         untitled={untitled}
         onLoadMore={loadMore}
-        onArchive={(session) => {
-          void archive(session.sessionId)
-        }}
-        onDelete={(session) => {
-          void remove(session.sessionId)
-        }}
         onRename={(session, title) => rename(session.sessionId, title)}
         onSaveTags={setTags}
         onSelect={onSelectSession}
@@ -427,10 +414,7 @@ export function NavProjects({
           onRefresh={refresh}
           refreshing={refreshing && status === "ready"}
         />
-        <CollapsibleContent
-          id={projectListId}
-          className="overflow-hidden data-closed:hidden"
-        >
+        <CollapsibleContent id={projectListId} className={collapsePanel}>
           <SidebarMenu aria-busy={status === "loading" || refreshing}>
             {listBody}
           </SidebarMenu>

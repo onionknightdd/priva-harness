@@ -1,3 +1,4 @@
+import type { WorkflowState } from './workflow.js'
 import type { CompactMarker } from './compact-command.js'
 import type { AgentEvent, ContentBlock } from '../event/agent-event.js'
 
@@ -70,12 +71,7 @@ export interface ThreadNestedAgent {
   readonly inbox: readonly ThreadInboxMessage[]
 }
 
-export interface ThreadWorkflowCard {
-  readonly workflowToolUseId: string
-  readonly name?: string
-  readonly status: string
-  readonly summary?: string
-}
+export type ThreadWorkflowCard = WorkflowState
 
 export interface ThreadMessage {
   readonly id: string

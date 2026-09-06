@@ -30,7 +30,7 @@ import {
 } from './runtime-config.js'
 import { buildHttpServer } from './transport/http/server.js'
 
-const DEFAULT_PORT = 8000
+const DEFAULT_PORT = 8001
 
 export async function startServer(): Promise<void> {
   const runtimeConfig = createRuntimeConfig(

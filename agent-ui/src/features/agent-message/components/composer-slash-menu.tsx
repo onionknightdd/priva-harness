@@ -4,8 +4,9 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { Trans, useTranslation } from "react-i18next"
 
 import type { SlashCommand } from "@/lib/api/slash-commands"
+import { menuHighlightTransition } from "@/components/motion/menu-highlight-transition"
 import { Separator } from "@/components/ui/separator"
-import { cn } from "@/lib/utils"
+import { EASE_OUT } from "@/lib/ease"
 
 import {
   groupSlashCommands,
@@ -22,6 +23,11 @@ const COMPOSER_SLASH_LABEL_CLASS =
   "px-2 py-1.5 text-xs font-medium text-muted-foreground"
 const COMPOSER_SLASH_ITEM_CLASS =
   "relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none"
+
+// Enter slower than exit, both on the strong curve; the panel is anchored
+// above the composer so it also lifts off from the bottom edge.
+const SLASH_MENU_ENTER = { duration: 0.18, ease: EASE_OUT } as const
+const SLASH_MENU_EXIT = { duration: 0.12, ease: EASE_OUT } as const
 
 export function ComposerSlashMenu({
   open,
@@ -58,6 +64,12 @@ export function ComposerSlashMenu({
   )
   const hoverOriginRef = React.useRef<{ x: number; y: number } | null>(null)
   const listRef = React.useRef<HTMLDivElement>(null)
+  // Highlight bounds are measured from the list (its offsetParent), so the
+  // pill scrolls with the options and glides between them on the menu spring.
+  const [highlightBounds, setHighlightBounds] = React.useState<{
+    top: number
+    height: number
+  } | null>(null)
   let itemIndex = -1
 
   React.useEffect(() => {
@@ -168,6 +180,21 @@ export function ComposerSlashMenu({
     }
   }, [groups, highlightedIndex, menuId, open])
 
+  // The panel only mounts once `box` is measured, so re-measure on that too.
+  const panelMounted = open && box !== null
+  React.useLayoutEffect(() => {
+    if (!panelMounted) {
+      setHighlightBounds(null)
+      return
+    }
+    const option = document.getElementById(slashOptionId(menuId, highlightedIndex))
+    if (!option) {
+      setHighlightBounds(null)
+      return
+    }
+    setHighlightBounds({ top: option.offsetTop, height: option.offsetHeight })
+  }, [groups, highlightedIndex, menuId, panelMounted])
+
   if (typeof document === "undefined") {
     return null
   }
@@ -177,12 +204,18 @@ export function ComposerSlashMenu({
       {open && box ? (
         <motion.div
           ref={panelRef}
-          id={menuId}
-          aria-hidden="true"
-          initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.95 }}
-          transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.2 }}
+          initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.96, y: 4 }}
+          animate={{
+            opacity: 1,
+            scale: 1,
+            y: 0,
+            transition: shouldReduceMotion ? { duration: 0 } : SLASH_MENU_ENTER,
+          }}
+          exit={
+            shouldReduceMotion
+              ? { opacity: 0, transition: { duration: 0 } }
+              : { opacity: 0, scale: 0.96, y: 4, transition: SLASH_MENU_EXIT }
+          }
           style={{
             position: "fixed",
             left: box.left,
@@ -195,7 +228,10 @@ export function ComposerSlashMenu({
           <div className="relative">
             <div
               ref={listRef}
-              className="max-h-72 overflow-x-hidden overflow-y-auto overscroll-contain p-1"
+              id={menuId}
+              role="listbox"
+              aria-label={t("agentMessage.slashMenuLabel")}
+              className="relative max-h-72 overflow-x-hidden overflow-y-auto overscroll-contain p-1"
               onWheel={(event) => event.stopPropagation()}
               onMouseDown={(event) => {
                 if (isVerticalScrollbarClick(event)) {
@@ -204,6 +240,17 @@ export function ComposerSlashMenu({
                 event.preventDefault()
               }}
             >
+              {highlightBounds ? (
+                <motion.div
+                  aria-hidden="true"
+                  initial={false}
+                  animate={highlightBounds}
+                  transition={
+                    shouldReduceMotion ? { duration: 0 } : menuHighlightTransition
+                  }
+                  className="pointer-events-none absolute inset-x-1 rounded-sm bg-accent"
+                />
+              ) : null}
               {groups.length === 0 ? (
                 <div className="px-2 py-3 text-sm text-muted-foreground">
                   {t("agentMessage.slashEmpty")}
@@ -214,7 +261,10 @@ export function ComposerSlashMenu({
                     {groupIndex > 0 ? (
                       <div className="mx-2 my-1 h-px bg-border" />
                     ) : null}
-                    <div>
+                    <div
+                      role="group"
+                      aria-labelledby={slashGroupId(menuId, group.kind)}
+                    >
                       <div
                         id={slashGroupId(menuId, group.kind)}
                         className={COMPOSER_SLASH_LABEL_CLASS}
@@ -229,10 +279,9 @@ export function ComposerSlashMenu({
                           <div
                             key={`${command.kind}:${command.name}`}
                             id={slashOptionId(menuId, index)}
-                            className={cn(
-                              COMPOSER_SLASH_ITEM_CLASS,
-                              highlighted && "bg-accent"
-                            )}
+                            role="option"
+                            aria-selected={highlighted}
+                            className={COMPOSER_SLASH_ITEM_CLASS}
                             onMouseMove={(event) => {
                               if (
                                 !slashMenuHoverMoved(hoverOriginRef.current, {

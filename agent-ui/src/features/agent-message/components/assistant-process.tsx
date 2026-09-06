@@ -1,3 +1,5 @@
+import { isWorkflowTool } from "../workflow-data"
+import { WorkflowToolItem } from "./workflow-tool-item"
 import * as React from "react"
 import {
   BotIcon,
@@ -5,13 +7,13 @@ import {
   FilePenLineIcon,
   FilePlusCornerIcon,
   ImageIcon,
-  WorkflowIcon,
   WrenchIcon,
   type LucideIcon,
 } from "lucide-react"
 import { motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
+import { AgentDisclosure } from "@/components/agents/agent-disclosure"
 import { FileDiff } from "@/components/agents/file-diff"
 import { FileRead } from "@/components/agents/file-read"
 import {
@@ -38,6 +40,7 @@ import {
   ItemTitle,
 } from "@/components/ui/item"
 import { languageFromPath } from "@/lib/language-from-path"
+import { focusRing } from "@/lib/surfaces"
 import { cn } from "@/lib/utils"
 
 import {
@@ -46,7 +49,6 @@ import {
   type NestedAgent,
   type StreamBlock,
   type ToolCard,
-  type WorkflowCard,
 } from "../agent-message-data"
 import {
   fileDiffCopyText,
@@ -64,7 +66,6 @@ import {
   isWriteTool,
   toolItemStatusLabel,
 } from "../tool-activity"
-import { MotionCollapsePanel } from "./motion-collapse-panel"
 import { QuoteSelectable } from "./quote-selectable"
 import { CanvasToolItem } from "./canvas-tool-item"
 import { VisualizeToolItem } from "./visualize-tool-item"
@@ -94,6 +95,7 @@ export function AssistantProcess({
   }, [isStreaming])
 
   const rows: React.ReactNode[] = []
+  const renderedWorkflows = new Set<string>()
   for (const block of blocks) {
     if (!isProcessBlock(block, blocks)) {
       continue
@@ -126,16 +128,26 @@ export function AssistantProcess({
       continue
     }
     if (block.type === "tool_use") {
-      rows.push(<ToolItem key={block.id} block={block} />)
+      if (isWorkflowTool(block.name)) {
+        const workflow = message.workflows?.find((item) => item.workflowToolUseId === block.id) ?? {
+          workflowToolUseId: block.id,
+          status: block.tool?.ok === false ? "failed" as const : isStreaming ? "running" as const : "unknown" as const,
+          phases: [], agents: [],
+        }
+        rows.push(<WorkflowToolItem key={block.id} workflow={workflow} />)
+        renderedWorkflows.add(workflow.workflowToolUseId)
+      } else {
+        rows.push(<ToolItem key={block.id} block={block} />)
+      }
     }
   }
   for (const agent of message.nestedAgents ?? []) {
     rows.push(<NestedAgentItem key={agent.parentToolUseId} agent={agent} />)
   }
   for (const workflow of message.workflows ?? []) {
-    rows.push(
-      <WorkflowItem key={workflow.workflowToolUseId} workflow={workflow} />
-    )
+    if (!renderedWorkflows.has(workflow.workflowToolUseId)) {
+      rows.push(<WorkflowToolItem key={workflow.workflowToolUseId} workflow={workflow} />)
+    }
   }
 
   if (hideHeader) {
@@ -171,7 +183,12 @@ export function AssistantProcess({
           }
         }}
       >
-        <CollapsibleTrigger className="group/process-trigger flex max-w-full min-w-0 items-center gap-1 rounded-md bg-transparent px-0 py-0.5 text-left text-[15px] leading-snug font-medium text-muted-foreground/70 outline-none hover:text-muted-foreground/70 focus-visible:ring-2 focus-visible:ring-ring">
+        <CollapsibleTrigger
+          className={cn(
+            "group/process-trigger flex max-w-full min-w-0 items-center gap-1 rounded-md bg-transparent px-0 py-0.5 text-left text-ui leading-snug font-medium text-muted-foreground/70 hover:text-muted-foreground/70",
+            focusRing
+          )}
+        >
           <span
             className={cn(
               "min-w-0 whitespace-normal",
@@ -184,9 +201,9 @@ export function AssistantProcess({
             className="size-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-200 group-hover/process-trigger:opacity-100 group-focus-visible/process-trigger:opacity-100 group-data-open/process:rotate-180 motion-reduce:transition-none"
           />
         </CollapsibleTrigger>
-        <MotionCollapsePanel open={isStreaming || open}>
+        <AgentDisclosure open={isStreaming || open} unmountOnClose>
           {rows.length > 0 ? <ProcessItemGroup>{rows}</ProcessItemGroup> : null}
-        </MotionCollapsePanel>
+        </AgentDisclosure>
       </Collapsible>
     </motion.div>
   )
@@ -719,24 +736,6 @@ function NestedAgentItem({ agent }: { agent: NestedAgent }) {
   )
 }
 
-function WorkflowItem({ workflow }: { workflow: WorkflowCard }) {
-  const { t } = useTranslation()
-  const running =
-    workflow.status !== "completed" &&
-    workflow.status !== "complete" &&
-    workflow.status !== "failed" &&
-    workflow.status !== "error"
-
-  return (
-    <ProcessRow
-      icon={WorkflowIcon}
-      title={workflow.name ?? t("agentMessage.workflow")}
-      badge={workflow.summary ?? workflow.status}
-      badgeVariant={running ? "secondary" : "outline"}
-    />
-  )
-}
-
 function ProcessItemGroup({
   className,
   children,
@@ -783,7 +782,7 @@ function ProcessRow({
         </ItemMedia>
       ) : null}
       <ItemContent className="min-w-0 flex-none">
-        <ItemTitle className="text-[15px] font-normal">{title}</ItemTitle>
+        <ItemTitle className="text-ui font-normal">{title}</ItemTitle>
       </ItemContent>
       {showActions ? (
         <ItemActions>
@@ -800,7 +799,7 @@ function ProcessRow({
     return (
       <Item
         size="sm"
-        className="w-fit max-w-full bg-transparent px-0 py-0.5 text-[15px] hover:bg-transparent"
+        className="w-fit max-w-full bg-transparent px-0 py-0.5 text-ui hover:bg-transparent"
       >
         {header}
       </Item>
@@ -815,12 +814,12 @@ function ProcessRow({
     >
       <Item
         size="sm"
-        className="w-fit max-w-full cursor-pointer bg-transparent px-0 py-0.5 text-left text-[15px] hover:bg-transparent aria-expanded:bg-transparent"
+        className="w-fit max-w-full cursor-pointer bg-transparent px-0 py-0.5 text-left text-ui hover:bg-transparent aria-expanded:bg-transparent"
         render={<CollapsibleTrigger />}
       >
         {header}
       </Item>
-      <MotionCollapsePanel open={open}>
+      <AgentDisclosure open={open}>
         <div
           className={cn(
             Icon ? "pb-2 pl-6" : "pb-2",
@@ -830,7 +829,7 @@ function ProcessRow({
         >
           {children}
         </div>
-      </MotionCollapsePanel>
+      </AgentDisclosure>
     </Collapsible>
   )
 }

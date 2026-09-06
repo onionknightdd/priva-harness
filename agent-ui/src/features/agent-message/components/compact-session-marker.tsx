@@ -3,6 +3,7 @@ import { motion, useReducedMotion } from "motion/react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
+import { AgentDisclosure } from "@/components/agents/agent-disclosure"
 import { MessageResponse } from "@/components/ai-elements/message"
 import {
   Collapsible,
@@ -10,10 +11,10 @@ import {
 } from "@/components/ui/collapsible"
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker"
 import { Spinner } from "@/components/ui/spinner"
+import { focusRing } from "@/lib/surfaces"
 import { cn } from "@/lib/utils"
 
 import type { CompactMarker } from "../slash-command-envelope"
-import { MotionCollapsePanel } from "./motion-collapse-panel"
 import { QuoteSelectable } from "./quote-selectable"
 
 export function CompactSessionMarker({ compact }: { compact: CompactMarker }) {
@@ -37,7 +38,12 @@ export function CompactSessionMarker({ compact }: { compact: CompactMarker }) {
           onOpenChange={setOpen}
         >
           <Marker variant="separator">
-            <CollapsibleTrigger className="inline-flex items-center gap-1 rounded-md text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
+            <CollapsibleTrigger
+              className={cn(
+                "inline-flex items-center gap-1 rounded-md text-sm text-muted-foreground hover:text-foreground",
+                focusRing
+              )}
+            >
               <MarkerContent>
                 {t("agentMessage.conversationCompacted")}
               </MarkerContent>
@@ -50,8 +56,8 @@ export function CompactSessionMarker({ compact }: { compact: CompactMarker }) {
               </span>
             </CollapsibleTrigger>
           </Marker>
-          <MotionCollapsePanel open={open}>
-            <div className="pt-3 text-[15px] text-muted-foreground">
+          <AgentDisclosure open={open} unmountOnClose>
+            <div className="pt-3 text-ui text-muted-foreground">
               <QuoteSelectable>
                 <MessageResponse
                   className="text-muted-foreground [&_p]:[line-height:1.5em] [&_p+p]:mt-[2px] [&_*]:text-muted-foreground"
@@ -61,7 +67,7 @@ export function CompactSessionMarker({ compact }: { compact: CompactMarker }) {
                 </MessageResponse>
               </QuoteSelectable>
             </div>
-          </MotionCollapsePanel>
+          </AgentDisclosure>
         </Collapsible>
       ) : (
         <Marker variant="separator" role={compacting ? "status" : undefined}>

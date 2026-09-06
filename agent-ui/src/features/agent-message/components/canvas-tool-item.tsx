@@ -8,6 +8,7 @@ import { rememberFileExists } from "@/features/files/file-existence"
 import { useOptionalWorkspaceFiles } from "@/features/workspace"
 import { SPRING_PRESS } from "@/lib/ease"
 import { fileNameFromPath, resolveAgainstCwd } from "@/lib/file-path"
+import { focusRing } from "@/lib/surfaces"
 import { cn } from "@/lib/utils"
 
 import type { StreamBlock } from "../agent-message-data"
@@ -62,9 +63,8 @@ export function CanvasToolItem({
         }
         transition={shouldReduceMotion ? { duration: 0 } : SPRING_PRESS}
         className={cn(
-          "flex w-fit max-w-full items-center gap-2 rounded-md bg-transparent px-0 py-0.5 text-left text-[15px] text-muted-foreground/70 outline-none",
-          canOpen &&
-            "cursor-pointer hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring",
+          "flex w-fit max-w-full items-center gap-2 rounded-md bg-transparent px-0 py-0.5 text-left text-ui text-muted-foreground/70 outline-none",
+          canOpen && cn("cursor-pointer hover:text-muted-foreground", focusRing),
           !canOpen && "cursor-default"
         )}
       >
@@ -84,7 +84,7 @@ export function CanvasToolItem({
         ) : null}
       </motion.button>
       {status === "error" ? (
-        <p className="max-w-full text-[15px] text-destructive">
+        <p className="max-w-full text-ui text-destructive">
           {tool?.output?.trim() || t("agentMessage.toolFailed")}
         </p>
       ) : null}

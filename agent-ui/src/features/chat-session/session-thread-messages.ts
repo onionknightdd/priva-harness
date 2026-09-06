@@ -1,3 +1,4 @@
+import { workflowFromSnapshot } from "@/features/agent-message/workflow-data"
 import type { AgentThreadMessage, NestedAgent, StreamBlock, ToolCard, WorkflowCard } from "@/features/agent-message/agent-message-data"
 
 type ThreadApiMessage = {
@@ -165,26 +166,9 @@ function snapshotNested(raw: unknown): NestedAgent[] {
 }
 
 function snapshotWorkflows(raw: unknown): WorkflowCard[] {
-  if (!Array.isArray(raw)) {
-    return []
-  }
+  if (!Array.isArray(raw)) return []
   return raw.flatMap((item) => {
-    if (typeof item !== "object" || item === null) {
-      return []
-    }
-    const record = item as Record<string, unknown>
-    const workflowToolUseId =
-      typeof record.workflowToolUseId === "string" ? record.workflowToolUseId : ""
-    if (workflowToolUseId === "") {
-      return []
-    }
-    return [
-      {
-        workflowToolUseId,
-        status: typeof record.status === "string" ? record.status : "running",
-        ...(typeof record.name === "string" ? { name: record.name } : {}),
-        ...(typeof record.summary === "string" ? { summary: record.summary } : {}),
-      },
-    ]
+    const workflow = workflowFromSnapshot(item)
+    return workflow ? [workflow] : []
   })
 }

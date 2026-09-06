@@ -1,3 +1,4 @@
+import { ClaudeWorkflows } from './claude-workflow.js'
 import type {
   AgentEvent,
   BlockKind,
@@ -66,6 +67,7 @@ export class ClaudeEventMapper {
   private readonly blocksByMessage = new Map<string, Map<number, ContentBlock>>()
   private readonly agentIdByParent = new Map<string, string>()
   private lastToolId: string | undefined
+  private readonly workflows = new ClaudeWorkflows()
 
   activeMessageId(): string {
     return this.ensureMessageId()
@@ -371,6 +373,13 @@ export class ClaudeEventMapper {
           },
         ),
       )
+      if (isWorkflowName(name)) {
+        const result = asRecord(envelope['tool_use_result'] ?? envelope['toolUseResult'] ?? inner['tool_use_result'] ?? block['toolUseResult']) ?? {}
+        const snapshot = asRecord(result['workflowSnapshot'])
+        const workflow = this.workflows.update(id, { ...result, ...snapshot,
+          ...(block['is_error'] === true ? { status: 'failed' } : {}) })
+        events.push({ type: 'workflow.progress', workflowToolUseId: id, workflow })
+      }
       if (isWorkflowName(name) && block['is_error'] === true) {
         events.push({ type: 'workflow.completed', workflowToolUseId: id, status: 'failed' })
       }
@@ -401,54 +410,25 @@ export class ClaudeEventMapper {
     const taskType = (stringField(data, 'subtype') ?? subtype).toLowerCase()
     const taskId = stringField(data, 'task_id') ?? stringField(data, 'taskId') ?? ''
     const workflowToolUseId =
-      stringField(data, 'tool_use_id') ?? stringField(data, 'workflow_tool_use_id')
+      stringField(data, 'tool_use_id') ?? stringField(data, 'workflow_tool_use_id') ??
+      this.workflows.toolForTask(taskId)
     const status = stringField(data, 'status') ?? stringField(data, 'state') ?? ''
 
-    if (isWorkflowTask(data, taskType)) {
-      if (taskType.includes('started')) {
-        const name = stringField(data, 'workflow_name')
-        return [
-          {
-            type: 'workflow.started',
-            workflowToolUseId: workflowToolUseId ?? taskId,
-            ...(name === undefined ? {} : { name }),
-          },
-        ]
+    if (isWorkflowTask(data, taskType) || this.workflows.toolForTask(taskId) !== undefined ||
+      (workflowToolUseId !== undefined && isWorkflowName(this.tools.get(workflowToolUseId) ?? ''))) {
+      const id = workflowToolUseId ?? taskId
+      if (id === '') return []
+      const workflow = this.workflows.update(id, data)
+      const events: AgentEvent[] = []
+      if (taskType.includes('started') && workflowToolUseId !== undefined) {
+        events.push({ type: 'workflow.started', workflowToolUseId: id,
+          ...(workflow.name === undefined ? {} : { name: workflow.name }) })
       }
-      if (taskType.includes('progress')) {
-        return [
-          {
-            type: 'workflow.progress',
-            workflowToolUseId: workflowToolUseId ?? taskId,
-            ...(taskId === '' ? {} : { taskId }),
-            ...(data['phases'] === undefined ? {} : { phases: data['phases'] }),
-            ...(data['agents'] === undefined ? {} : { agents: data['agents'] }),
-            ...(data['workflow_progress'] === undefined
-              ? {}
-              : { workflowProgress: data['workflow_progress'] }),
-          },
-        ]
+      events.push({ type: 'workflow.progress', workflowToolUseId: id, workflow })
+      if (['completed', 'failed', 'cancelled'].includes(workflow.status)) {
+        events.push({ type: 'workflow.completed', workflowToolUseId: id, status: workflow.status })
       }
-      if (taskType.includes('updated')) {
-        return [{ type: 'workflow.updated', taskId: taskId || 'unknown', patch: data['patch'] ?? data }]
-      }
-      if (taskType.includes('notification')) {
-        const summary = stringField(data, 'summary')
-        const events: AgentEvent[] = [
-          {
-            type: 'workflow.notification',
-            taskId: taskId || 'unknown',
-            ...(workflowToolUseId === undefined ? {} : { workflowToolUseId }),
-            status: status || 'unknown',
-            ...(summary === undefined ? {} : { summary }),
-          },
-        ]
-        if (isTerminalStatus(status) && workflowToolUseId !== undefined) {
-          events.push({ type: 'workflow.completed', workflowToolUseId, status })
-        }
-        return events
-      }
-      return []
+      return events
     }
 
     if (isAgentTask(data, taskType)) {
@@ -831,9 +811,11 @@ function flattenTaskPayload(record: JsonRecord): JsonRecord {
 
 function isWorkflowTask(data: JsonRecord, taskType: string): boolean {
   return (
+    stringField(data, 'workflowName') !== undefined ||
+    data['workflowProgress'] !== undefined ||
     stringField(data, 'workflow_name') !== undefined ||
     data['workflow_progress'] !== undefined ||
-    stringField(data, 'task_type') === 'workflow' ||
+    (stringField(data, 'task_type') ?? stringField(data, 'taskType') ?? '').includes('workflow') ||
     taskType.includes('workflow')
   )
 }

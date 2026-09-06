@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next"
 import type { SlashCommand } from "@/lib/api/slash-commands"
 import { SPRING_LAYOUT } from "@/lib/ease"
 import { cn } from "@/lib/utils"
+import { ActionSwapRollIcon } from "@/components/motion/action-swap-roll"
 import { Field, FieldLabel } from "@/components/ui/field"
 import {
   InputGroupButton,
@@ -24,6 +25,7 @@ import {
   filterSlashCommands,
   parseSlashTrigger,
   shouldDeleteSlashChip,
+  slashOptionId,
   visibleSlashCommands,
 } from "../composer-slash-command"
 import { useSlashCommandCatalog } from "../use-slash-command-catalog"
@@ -188,7 +190,6 @@ function ComposerControls({
   onModelReferenceChange: (model: string | null) => void
   onEffortChange: (effort: ComposerEffort) => void
 }) {
-  const shouldReduceMotion = Boolean(useReducedMotion())
   const stopping = action === "stop"
   const actionLabel = stopping ? stopLabel : sendLabel
 
@@ -228,24 +229,15 @@ function ComposerControls({
             : undefined
         }
       >
-        <span className="relative flex size-4 items-center justify-center">
-          <AnimatePresence initial={false} mode="wait">
-            <motion.span
-              key={action}
-              initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.72 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.72 }}
-              transition={{ duration: shouldReduceMotion ? 0 : 0.16 }}
-              className="flex items-center justify-center"
-            >
-              {stopping ? (
-                <SquareIcon className="size-2.5 fill-current" />
-              ) : (
-                <ArrowUpIcon />
-              )}
-            </motion.span>
-          </AnimatePresence>
-        </span>
+        {/* Roll swap (same language as tool-card titles) — the leaving and
+            arriving glyphs overlap, so the button is never empty mid-swap. */}
+        <ActionSwapRollIcon value={action} className="size-4">
+          {stopping ? (
+            <SquareIcon className="size-2.5 fill-current" />
+          ) : (
+            <ArrowUpIcon />
+          )}
+        </ActionSwapRollIcon>
       </InputGroupButton>
     </div>
   )
@@ -416,6 +408,8 @@ export function AgentMessageComposer({
           data-composer-line={singleLine ? "single" : "multi"}
           className={cn(
             "group/input-group relative w-full min-w-0 overflow-hidden rounded-3xl border border-input shadow-xs dark:bg-input/30",
+            // The focus ring eases in like shadcn's InputGroup instead of snapping.
+            "transition-[border-color,box-shadow] duration-150 ease-out motion-reduce:transition-none",
             "has-[[data-slot=input-group-control]:focus-visible]:border-ring has-[[data-slot=input-group-control]:focus-visible]:ring-3 has-[[data-slot=input-group-control]:focus-visible]:ring-ring/50"
           )}
           onClick={(event) => {
@@ -497,6 +491,15 @@ export function AgentMessageComposer({
                     t("agentMessage.promptPlaceholder")
                   }
                   data-agent-composer="prompt"
+                  // Screen readers learn about the slash listbox and follow the
+                  // highlighted option; keyboard handling below already exists.
+                  aria-autocomplete="list"
+                  aria-controls={slashMenuOpen ? slashMenuId : undefined}
+                  aria-activedescendant={
+                    slashMenuOpen && filteredCommands.length > 0
+                      ? slashOptionId(slashMenuId, highlightedIndex)
+                      : undefined
+                  }
                   style={
                     chipOccupy > 0 ? { textIndent: chipOccupy } : undefined
                   }
@@ -582,15 +585,22 @@ export function AgentMessageComposer({
               singleLine ? "inset-0" : "inset-x-0 bottom-0 h-10"
             )}
           >
-            <div
+            {/* The bar itself snaps between the inline row and the footer; the
+                controls glide there on the same spring as the textarea padding,
+                so nothing teleports when the draft wraps to a second line. */}
+            <motion.div
               ref={leftRef}
+              layout="position"
+              transition={transition}
               className="pointer-events-auto flex h-8 items-center pr-1 pl-2.5"
             >
               <ComposerAttachMenu onFilesSelected={addAttachments} />
-            </div>
+            </motion.div>
             <div className="min-w-0 flex-1" />
-            <div
+            <motion.div
               ref={rightRef}
+              layout="position"
+              transition={transition}
               className="pointer-events-auto flex h-8 min-w-0 shrink-0 items-center pr-2.5"
             >
               <ComposerControls
@@ -604,7 +614,7 @@ export function AgentMessageComposer({
                 onModelReferenceChange={onModelReferenceChange}
                 onEffortChange={onEffortChange}
               />
-            </div>
+            </motion.div>
           </div>
         </div>
       </Field>

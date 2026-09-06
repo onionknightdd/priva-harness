@@ -1,12 +1,7 @@
 "use client"
 
 import * as React from "react"
-import {
-  ArchiveIcon,
-  MoreHorizontalIcon,
-  PinIcon,
-  Trash2Icon,
-} from "lucide-react"
+import { MoreHorizontalIcon, PinIcon } from "lucide-react"
 import { motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
@@ -14,7 +9,6 @@ import { StatusDot } from "@/components/kibo-ui/status"
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -22,7 +16,7 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
-import { useLiveSessionStatus } from "@/features/chat-session"
+import { SessionMenuItems, useLiveSessionStatus } from "@/features/chat-session"
 import type { SessionInfo } from "@/lib/api/sandbox-sessions"
 
 import {
@@ -65,8 +59,6 @@ export function ProjectSessionItem({
   session,
   isMobile,
   untitled,
-  onArchive,
-  onDelete,
   onRename,
   onSaveTags,
   onSelect,
@@ -76,8 +68,6 @@ export function ProjectSessionItem({
   session: SessionInfo
   isMobile: boolean
   untitled: string
-  onArchive: (session: SessionInfo) => void
-  onDelete: (session: SessionInfo) => void
   onRename: (session: SessionInfo, title: string) => Promise<void>
   onSaveTags: (sessionId: string, tags: string[]) => Promise<void>
   onSelect: (session: SessionInfo) => void
@@ -139,7 +129,7 @@ export function ProjectSessionItem({
             ref={inputRef}
             value={draft}
             aria-label={t("sidebar.projects.renameSession")}
-            className="h-7 border-0 bg-[color-mix(in_oklch,var(--sidebar-accent),black_6%)] px-2 text-base shadow-none focus-visible:border-0 focus-visible:ring-0 md:text-base dark:bg-[color-mix(in_oklch,var(--sidebar-accent),black_12%)]"
+            className="h-7 border-0 bg-[color-mix(in_oklch,var(--sidebar-accent),black_6%)] px-2 shadow-none focus-visible:border-0 focus-visible:ring-0 dark:bg-[color-mix(in_oklch,var(--sidebar-accent),black_12%)]"
             onChange={(event) => setDraft(event.target.value)}
             onClick={(event) => event.stopPropagation()}
             onPointerDown={(event) => event.stopPropagation()}
@@ -166,7 +156,7 @@ export function ProjectSessionItem({
       ) : (
         <SidebarMenuSubButton
           render={<button type="button" />}
-          className="w-full pr-12 text-left data-[size=md]:text-base"
+          className="w-full pr-12 text-left"
           title={title}
           isActive={isActive}
           onClick={() => onSelect(session)}
@@ -206,13 +196,15 @@ export function ProjectSessionItem({
           </div>
           <div className={sessionHoverRevealClassName}>
             <DropdownMenu>
+              {/* No press scale here: Base UI opens the menu on pointerdown and
+                  anchors to this button, so shrinking it would drag the popup
+                  along and back (the "jitter" on open). */}
               <DropdownMenuTrigger
                 render={
-                  <motion.button
+                  <button
                     type="button"
                     className={rowHoverActionButtonClassName}
                     aria-label={t("common.more")}
-                    whileTap={shouldReduceMotion ? undefined : { scale: 0.8 }}
                     onPointerDown={(event) => event.stopPropagation()}
                   />
                 }
@@ -224,21 +216,7 @@ export function ProjectSessionItem({
                 side={isMobile ? "bottom" : "right"}
                 align={isMobile ? "end" : "start"}
               >
-                <DropdownMenuItem
-                  className="text-base"
-                  onClick={() => onArchive(session)}
-                >
-                  <ArchiveIcon />
-                  <span>{t("sidebar.projects.archive")}</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  variant="destructive"
-                  className="text-base"
-                  onClick={() => onDelete(session)}
-                >
-                  <Trash2Icon />
-                  <span>{t("sidebar.projects.delete")}</span>
-                </DropdownMenuItem>
+                <SessionMenuItems session={session} />
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

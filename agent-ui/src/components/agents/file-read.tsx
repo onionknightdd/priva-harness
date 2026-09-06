@@ -16,13 +16,16 @@ import {
   useRef,
   useState,
 } from "react"
+import { useTranslation } from "react-i18next"
 
 import { AgentDisclosure } from "@/components/agents/agent-disclosure"
 import { ActionSwapRollText } from "@/components/motion/action-swap-roll"
 import { CodeBlock } from "@/components/agents/code-block"
 import type { AgentCodeLanguage } from "@/components/agents/agent-code"
+import { StatusGlyphSwap } from "@/components/agents/status-glyph-swap"
 import { Lightbox } from "@/components/interior/lightbox"
 import { SPRING_SWAP } from "@/lib/ease"
+import { focusRing } from "@/lib/surfaces"
 import { cn } from "@/lib/utils"
 
 export type FileReadStatus = "streaming" | "complete"
@@ -68,6 +71,7 @@ export function FileRead({
   maxHeight = 220,
   className,
 }: FileReadProps) {
+  const { t } = useTranslation()
   const reduce = useReducedMotion() ?? false
   const baseId = useId()
   const triggerId = `${baseId}-trigger`
@@ -78,6 +82,9 @@ export function FileRead({
   const [internalOpen, setInternalOpen] = useState(defaultOpen)
   const currentOpen = open ?? internalOpen
   const streaming = status === "streaming"
+  // `previousStatus` is committed in an effect, so this is true only on the
+  // render where streaming ends — the one frame the check should pop in.
+  const settled = previousStatus.current === "streaming" && !streaming
   const kind = view?.kind ?? (imageHint ? "image" : "text")
   const imageSrc =
     view?.kind === "image" ? `data:${view.mime};base64,${view.b64}` : undefined
@@ -126,7 +133,7 @@ export function FileRead({
     <div
       data-state={status}
       aria-busy={streaming}
-      className={cn("w-full text-[15px]", className)}
+      className={cn("w-full text-ui", className)}
     >
       <div className="group/item relative flex w-fit max-w-full min-h-0 items-center gap-1">
         <button
@@ -135,9 +142,11 @@ export function FileRead({
           aria-expanded={currentOpen}
           aria-controls={contentId}
           onClick={() => setOpen(!currentOpen)}
-          className="absolute inset-0 z-0 cursor-pointer rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          className={cn("absolute inset-0 z-0 cursor-pointer rounded-md", focusRing)}
         >
-          <span className="sr-only">{currentOpen ? "Collapse" : "Expand"}</span>
+          <span className="sr-only">
+            {currentOpen ? t("common.collapse") : t("common.expand")}
+          </span>
         </button>
         <div className="pointer-events-none relative z-10 flex min-w-0 items-center gap-1 py-0.5">
           <Icon
@@ -160,16 +169,20 @@ export function FileRead({
               {file}
             </span>
           </span>
-          <span className="grid size-[1em] shrink-0 place-items-center text-muted-foreground/60">
+          <StatusGlyphSwap
+            swapKey={status}
+            pop={settled && !reduce}
+            className="size-[1em] shrink-0 text-muted-foreground/60"
+          >
             {streaming ? (
               <LoaderCircle
-                aria-label="Reading file"
-                className={cn("size-[1em]", !reduce && "animate-spin")}
+                aria-label={t("toolCard.readingFile")}
+                className={cn("size-[1em]", !reduce && "animate-spin-fast")}
               />
             ) : (
-              <Check aria-label="File read" className="size-[1em]" />
+              <Check aria-label={t("toolCard.fileRead")} className="size-[1em]" />
             )}
-          </span>
+          </StatusGlyphSwap>
           <motion.span
             aria-hidden="true"
             animate={{ rotate: currentOpen ? 180 : 0 }}
@@ -206,7 +219,9 @@ export function FileRead({
               <motion.button
                 type="button"
                 aria-label={
-                  caption ? `View ${caption}` : "View image"
+                  caption
+                    ? t("toolCard.viewNamedImage", { name: caption })
+                    : t("toolCard.viewImage")
                 }
                 onClick={(event) => {
                   originRef.current = event.currentTarget
@@ -215,7 +230,10 @@ export function FileRead({
                 whileHover={reduce ? undefined : { scale: 1.01 }}
                 whileTap={reduce ? undefined : { scale: 0.99 }}
                 transition={SPRING_SWAP}
-                className="block max-w-full overflow-hidden rounded-xl border border-border bg-tool-output outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                className={cn(
+                  "block max-w-full overflow-hidden rounded-xl border border-border bg-tool-output focus-visible:border-ring",
+                  focusRing
+                )}
               >
                 <img
                   src={imageSrc}

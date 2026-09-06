@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/sidebar"
 
 import { WorkspaceDensityBridge } from "./workspace-density"
+import { WorkspaceWorkflowProvider } from "./workspace-workflow-context"
 import { WorkspaceFilesProvider } from "./workspace-files-context"
 import { WorkspaceSidebar } from "./workspace-sidebar"
 import { WorkspacePanelButtons } from "./workspace-toggle"
@@ -113,6 +114,7 @@ export function WorkspaceShell({
       stateCookieName="workspace_state"
     >
       <WorkspaceFilesProvider>
+        <WorkspaceWorkflowProvider>
         <WorkspaceDensityBridge
           maximized={maximized}
           shellWidth={layout.shellWidth}
@@ -139,6 +141,7 @@ export function WorkspaceShell({
             </>
           )}
         </WorkspaceDensityBridge>
+        </WorkspaceWorkflowProvider>
       </WorkspaceFilesProvider>
     </SidebarProvider>
   )

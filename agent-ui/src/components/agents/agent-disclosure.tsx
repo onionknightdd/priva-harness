@@ -1,42 +1,79 @@
 "use client";
 
-import type { CSSProperties, HTMLAttributes } from "react";
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  type HTMLAttributes,
+} from "react";
 import { cn } from "@/lib/utils";
 
 export interface AgentDisclosureProps extends HTMLAttributes<HTMLDivElement> {
   open: boolean;
-  openHeight?: CSSProperties["height"];
+  /** Drop the subtree once the close transition ends. For heavy bodies
+   * (process panels with dozens of tool rows); light bodies stay mounted and
+   * `inert`, so re-opening never re-highlights code. */
+  unmountOnClose?: boolean;
 }
 
-/** Height-only reveal so collapsible agent content always grows downward. */
+/** Height duration; also how long an unmounting body waits before leaving. */
+const CLOSE_MS = 200;
+
+/** Height-only reveal so collapsible agent content always grows downward.
+ * Opacity leads the height on open (content is solid while still unrolling)
+ * and lags it on close (text stays legible until the last 120ms), so the
+ * panel reads as a curtain over real content instead of a blur. */
 export function AgentDisclosure({
   open,
-  openHeight = "auto",
+  unmountOnClose = false,
   className,
   style,
   children,
   ...props
 }: AgentDisclosureProps) {
+  const [mounted, setMounted] = useState(open);
+  const [expanded, setExpanded] = useState(open);
+  const mountedRef = useRef(mounted);
+  mountedRef.current = mounted;
+
+  useLayoutEffect(() => {
+    if (open) {
+      if (mountedRef.current) {
+        setExpanded(true);
+        return;
+      }
+      // Freshly mounted: paint one frame collapsed so the transition has a start.
+      setMounted(true);
+      const frame = requestAnimationFrame(() => setExpanded(true));
+      return () => cancelAnimationFrame(frame);
+    }
+    setExpanded(false);
+    if (!unmountOnClose) return;
+    const timeout = window.setTimeout(() => setMounted(false), CLOSE_MS);
+    return () => window.clearTimeout(timeout);
+  }, [open, unmountOnClose]);
+
+  if (!mounted) return null;
+
   return (
     <div
       {...props}
-      aria-hidden={!open}
-      inert={!open}
+      aria-hidden={!expanded}
+      inert={!expanded}
       className={cn(
         "grid origin-top overflow-hidden [overflow-anchor:none]",
-        "transition-[grid-template-rows,opacity] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none",
-        open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
-        className
+        "ease-out [transition-property:grid-template-rows,opacity] [transition-duration:200ms,120ms] motion-reduce:transition-none",
+        expanded
+          ? "grid-rows-[1fr] opacity-100 [transition-delay:0ms]"
+          : "grid-rows-[0fr] opacity-0 [transition-delay:0ms,80ms]",
+        className,
       )}
       style={{
         ...style,
-        pointerEvents: open ? undefined : "none",
+        pointerEvents: expanded ? undefined : "none",
       }}
     >
-      <div
-        className="min-h-0 overflow-hidden [overflow-anchor:none]"
-        style={openHeight === "auto" ? undefined : { maxHeight: openHeight }}
-      >
+      <div className="min-h-0 overflow-hidden [overflow-anchor:none]">
         {children}
       </div>
     </div>

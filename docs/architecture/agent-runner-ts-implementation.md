@@ -287,8 +287,8 @@ API：
 - session 的 recap、删除、重命名、tag、`add_dirs`、pin 和 archive。
 - workdir 的 pin 和 archive。
 - `POST /api/sandbox/agent/fork` 和 `POST /api/sandbox/agent/rewind`。
-- `GET /api/sandbox/agent/workflow-agent/{agent_id}`。
-- `GET /api/sandbox/agent/workflow-state/{run_id}`。
+- `GET /api/sandbox/agent/sessions/{session_id}/workflows/{workflow_id}/agents/{agent_id}`：按需读取完整 prompt/result。
+- session thread API 直接汇聚 workflow 快照；事件结构和 UI 见 [Agent message workflow](../agent-message-workflow.md)。
 
 范围：
 

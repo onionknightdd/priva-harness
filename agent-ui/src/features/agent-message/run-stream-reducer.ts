@@ -1,3 +1,4 @@
+import { isWorkflowStatus, settleWorkflowCards, workflowFromSnapshot } from "./workflow-data"
 import {
   textFromBlocks,
   type AgentThreadMessage,
@@ -39,6 +40,7 @@ export type StreamFrame = {
   body?: string
   source?: string
   senderName?: string
+  workflow?: unknown
   workflowToolUseId?: string
   summary?: string
   prompt?: string
@@ -69,8 +71,13 @@ export function applyThreadStreamFrame(
   assistantId: string,
   frame: StreamFrame
 ): AgentThreadMessage[] {
+  const workflowId = frame.workflowToolUseId
+  const owner = workflowId === undefined ? undefined : messages.find((message) =>
+    message.workflows?.some((workflow) => workflow.workflowToolUseId === workflowId) ||
+    message.blocks?.some((block) => block.type === "tool_use" && block.id === workflowId))
+  const targetId = owner?.id ?? assistantId
   const withAssistant = messages.map((message) =>
-    message.id === assistantId &&
+    message.id === targetId &&
     frame.type !== "session.compacting" &&
     frame.type !== "session.compacted"
       ? applyStreamFrame(message, frame)
@@ -93,10 +100,11 @@ function applyStreamContent(
 ): AgentThreadMessage {
   if (frame.type === "error" || frame.type === "run.failed") {
     const errorText = frame.message?.trim() || message.content
-    return { ...message, content: errorText, status: "error" }
+    return { ...message, content: errorText, status: "error", workflows: settleWorkflowCards(message.workflows, "failed") }
   }
   if (frame.type === "run.aborted" || frame.type === "run.completed") {
-    return { ...message, status: frame.type === "run.aborted" ? "complete" : message.status }
+    return { ...message, status: frame.type === "run.aborted" ? "complete" : message.status,
+      workflows: frame.type === "run.aborted" ? settleWorkflowCards(message.workflows, "cancelled") : message.workflows }
   }
 
   if (frame.type?.startsWith("workflow.")) {
@@ -228,15 +236,19 @@ function applyNested(agents: NestedAgent[], frame: StreamFrame): NestedAgent[] {
 
 function withWorkflow(message: AgentThreadMessage, frame: StreamFrame): AgentThreadMessage {
   const id = frame.workflowToolUseId ?? frame.id ?? "workflow"
-  const workflows = [...(message.workflows ?? [])]
+  const snapshot = workflowFromSnapshot(frame.workflow)
+  const workflows = (message.workflows ?? []).filter((card) =>
+    !snapshot?.taskId || card.taskId !== snapshot.taskId || card.workflowToolUseId === id)
   const index = workflows.findIndex((card) => card.workflowToolUseId === id)
   const current: WorkflowCard =
     index >= 0
       ? workflows[index]
-      : { workflowToolUseId: id, status: "running" }
+      : { workflowToolUseId: id, status: "running", phases: [], agents: [] }
 
   let next = current
-  if (frame.type === "workflow.started") {
+  if (snapshot) {
+    next = snapshot
+  } else if (frame.type === "workflow.started") {
     next = {
       ...current,
       status: "running",
@@ -245,11 +257,11 @@ function withWorkflow(message: AgentThreadMessage, frame: StreamFrame): AgentThr
   } else if (frame.type === "workflow.notification") {
     next = {
       ...current,
-      status: frame.status ?? current.status,
+      status: isWorkflowStatus(frame.status) ? frame.status : current.status,
       ...(frame.summary === undefined ? {} : { summary: frame.summary }),
     }
   } else if (frame.type === "workflow.completed") {
-    next = { ...current, status: frame.status ?? "completed" }
+    next = { ...current, status: isWorkflowStatus(frame.status) ? frame.status : "unknown" }
   }
 
   if (index >= 0) {

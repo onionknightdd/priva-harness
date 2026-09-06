@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import { FileTypeIcon } from "@/features/file-browser/components/file-type-icon"
 import { useOptionalWorkspaceFiles } from "@/features/workspace/workspace-files-context"
 import { fileNameFromPath } from "@/lib/file-path"
+import { focusRing } from "@/lib/surfaces"
 import { cn } from "@/lib/utils"
 
 import { useFileExists } from "./use-file-exists"
@@ -57,7 +58,8 @@ export function FilePathLink({
       className={cn(
         "relative z-10 inline-flex max-w-full min-w-0 pointer-events-auto items-center gap-0.5 align-middle text-left font-normal leading-none outline-none",
         className,
-        "cursor-pointer bg-transparent p-0 underline-offset-2 focus-visible:ring-2 focus-visible:ring-ring",
+        "cursor-pointer bg-transparent p-0 underline-offset-2",
+        focusRing,
         variant === "code"
           ? "text-sky-600 underline decoration-sky-600/50 hover:decoration-sky-600 dark:text-sky-400 dark:decoration-sky-400/50 dark:hover:decoration-sky-400"
           : "hover:underline"

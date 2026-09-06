@@ -85,7 +85,7 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": {
-        target: process.env.AGENT_RUNNER_URL ?? "http://127.0.0.1:8000",
+        target: process.env.AGENT_RUNNER_URL ?? "http://127.0.0.1:8001",
         changeOrigin: true,
         ws: true,
       },

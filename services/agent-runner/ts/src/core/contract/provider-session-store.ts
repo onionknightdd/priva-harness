@@ -1,3 +1,4 @@
+import type { WorkflowAgentDetail } from '../resource/workflow.js'
 import type { SessionRef } from './agent-provider.js'
 import type {
   LastAssistantModel,
@@ -26,6 +27,7 @@ export interface ProviderSessionStore {
   lastAssistantModel(ref: SessionRef): Promise<LastAssistantModel | undefined>
   messages(ref: SessionRef, page?: SessionMessagePage): Promise<readonly SessionMessage[]>
   replay(ref: SessionRef, page?: SessionMessagePage): Promise<readonly ThreadReplayItem[]>
+  workflowAgent?(ref: SessionRef, runId: string, agentId: string): Promise<WorkflowAgentDetail>
   fork(ref: SessionRef, options: SessionForkOptions): Promise<ProviderSessionInfo>
   delete(ref: SessionRef): Promise<void>
   rename(ref: SessionRef, title: string): Promise<void>

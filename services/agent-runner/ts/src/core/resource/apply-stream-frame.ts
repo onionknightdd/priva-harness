@@ -1,3 +1,4 @@
+import { settleWorkflows, workflowStatus } from './workflow-status.js'
 import type { AgentEvent } from '../event/agent-event.js'
 import { isAgentName } from '../event/tool-names.js'
 import {
@@ -14,10 +15,12 @@ import {
 export function applyStreamFrame(message: ThreadMessage, event: AgentEvent): ThreadMessage {
   if (event.type === 'error' || event.type === 'run.failed') {
     const errorText = event.message.trim() === '' ? message.content : event.message.trim()
-    return { ...message, content: errorText, status: 'error' }
+    return { ...message, content: errorText, status: 'error',
+      ...(message.workflows === undefined ? {} : { workflows: settleWorkflows(message.workflows, 'failed') }) }
   }
   if (event.type === 'run.aborted') {
-    return { ...message, status: 'complete' }
+    return { ...message, status: 'complete',
+      ...(message.workflows === undefined ? {} : { workflows: settleWorkflows(message.workflows, 'cancelled') }) }
   }
 
   if (event.type.startsWith('workflow.')) {
@@ -150,13 +153,17 @@ function applyNested(
 
 function withWorkflow(message: ThreadMessage, event: AgentEvent): ThreadMessage {
   const id = workflowIdOf(event)
-  const workflows = [...(message.workflows ?? [])]
+  const snapshot = event.type === 'workflow.progress' ? event.workflow : undefined
+  const workflows = (message.workflows ?? []).filter((card) =>
+    !snapshot?.taskId || card.taskId !== snapshot.taskId || card.workflowToolUseId === id)
   const index = workflows.findIndex((card) => card.workflowToolUseId === id)
   const found = index >= 0 ? workflows[index] : undefined
-  const current: ThreadWorkflowCard = found ?? { workflowToolUseId: id, status: 'running' }
+  const current: ThreadWorkflowCard = found ?? { workflowToolUseId: id, status: 'running', phases: [], agents: [] }
 
   let next = current
-  if (event.type === 'workflow.started') {
+  if (event.type === 'workflow.progress' && event.workflow !== undefined) {
+    next = event.workflow
+  } else if (event.type === 'workflow.started') {
     const workflowName = event.name
     next = {
       ...current,
@@ -167,11 +174,11 @@ function withWorkflow(message: ThreadMessage, event: AgentEvent): ThreadMessage 
     const summary = event.summary
     next = {
       ...current,
-      status: event.status,
+      status: workflowStatus(event.status),
       ...(summary === undefined ? {} : { summary }),
     }
   } else if (event.type === 'workflow.completed') {
-    next = { ...current, status: event.status }
+    next = { ...current, status: workflowStatus(event.status) }
   }
 
   if (index >= 0) workflows[index] = next

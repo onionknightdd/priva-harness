@@ -1,5 +1,6 @@
-// Shared motion tokens. Easing curves mirror the CSS custom properties in
-// globals.css; springs are the canonical physics used across components.
+// Shared motion tokens. Easing curves mirror the `--ease-*` theme variables in
+// index.css (which back the `ease-out` / `ease-in-out` / `ease-drawer`
+// utilities); springs are the canonical physics used across components.
 // Strong custom variants — defaults like `ease-in`/`ease-out` feel weak.
 
 export const EASE_OUT = [0.16, 1, 0.3, 1] as const

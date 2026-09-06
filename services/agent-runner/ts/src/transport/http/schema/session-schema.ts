@@ -421,3 +421,16 @@ export const archiveSessionSchema = {
 } as const
 
 export { sessionInfoSchema, sessionGroupSchema }
+
+export const workflowAgentSchema = {
+  querystring: harnessQueryObject,
+  params: {
+    type: 'object',
+    required: ['session_id', 'workflow_id', 'agent_id'],
+    properties: {
+      session_id: { type: 'string', pattern: '^[A-Za-z0-9_-]+$' },
+      workflow_id: { type: 'string', pattern: '^wf_[A-Za-z0-9_-]{1,64}$' },
+      agent_id: { type: 'string', pattern: '^[A-Za-z0-9_-]{1,80}$' },
+    },
+  },
+} as const

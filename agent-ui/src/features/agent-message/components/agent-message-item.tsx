@@ -23,6 +23,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { writeClipboardText } from "@/lib/clipboard"
+import { EASE_OUT } from "@/lib/ease"
 
 import type { RelativeTimeLabel } from "@/lib/relative-time"
 
@@ -157,6 +158,17 @@ function AgentMessageSplitAction({
   )
 }
 
+const FRESH_MESSAGE_WINDOW_MS = 2000
+
+/** Decided once at mount: a message the user just sent rises in from the
+ * composer; history restored for an existing session appears in place. */
+function useIsFreshMessage(createdAt: string) {
+  const [fresh] = React.useState(
+    () => Date.now() - Date.parse(createdAt) < FRESH_MESSAGE_WINDOW_MS
+  )
+  return fresh
+}
+
 function AgentMessageRelativeTime({
   relativeTime,
 }: {
@@ -199,6 +211,7 @@ export function AgentMessageItem({
 }) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
+  const isFresh = useIsFreshMessage(message.createdAt)
   const isStreaming = message.status === "streaming"
   const isError = message.status === "error"
 
@@ -233,7 +246,7 @@ export function AgentMessageItem({
     }
   }
 
-  return (
+  const body = (
     <Message from={message.role}>
       {isError ? (
         <motion.div
@@ -291,6 +304,22 @@ export function AgentMessageItem({
         </>
       )}
     </Message>
+  )
+
+  if (message.role !== "user") {
+    return body
+  }
+
+  // A freshly sent message rises from the composer below it; the assistant
+  // side already fades its process header in, so the two now share a rhythm.
+  return (
+    <motion.div
+      initial={isFresh && !shouldReduceMotion ? { opacity: 0, y: 8 } : false}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2, ease: EASE_OUT }}
+    >
+      {body}
+    </motion.div>
   )
 }
 

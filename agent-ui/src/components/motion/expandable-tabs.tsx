@@ -4,10 +4,8 @@
 // The tab bar sits on top. The active tab stays selected.
 
 import {
-  AnimatePresence,
   motion,
   useReducedMotion,
-  type Variants,
 } from "motion/react"
 import {
   useCallback,
@@ -33,6 +31,8 @@ export type ExpandableTabsItem = {
   icon: ReactNode
   /** Panel shown below the bar when this tab is active. */
   content: ReactNode
+  /** Mount on first selection and retain state while another panel is active. */
+  keepMounted?: boolean
 }
 
 export type ExpandableTabsClassNames = {
@@ -66,30 +66,6 @@ const TAB_W = 32
 const ICON_W = 14
 const TAB_PAD_X = 8
 const LABEL_GAP = 4
-
-const CONTENT_VARIANTS: Variants = {
-  enter: { y: -8, scale: 0.98, opacity: 0, filter: "blur(4px)" },
-  center: { y: 0, scale: 1, opacity: 1, filter: "blur(0px)" },
-  exit: {
-    y: -6,
-    scale: 0.98,
-    opacity: 0,
-    filter: "blur(4px)",
-    transition: { duration: 0.08, ease: EASE_OUT },
-  },
-}
-
-const REDUCED_CONTENT_VARIANTS: Variants = {
-  enter: { opacity: 0, filter: "blur(0px)" },
-  center: { opacity: 1, filter: "blur(0px)" },
-  exit: {
-    opacity: 0,
-    filter: "blur(0px)",
-    transition: { duration: 0.08, ease: EASE_OUT },
-  },
-}
-
-const CONTENT_SPRING = { type: "spring", duration: 0.46, bounce: 0.08 } as const
 
 const tabButtonClassName =
   "flex h-full w-full min-w-0 items-center justify-start overflow-hidden rounded-full border-0 bg-transparent px-2 text-sm font-medium shadow-none outline-none transition-[color,background-color] select-none hover:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
@@ -172,6 +148,13 @@ export function ExpandableTabs({
   const activeId = controlled ? value : internal
   const active = items.find((item) => item.id === activeId) ?? null
   const visualActiveId = active?.id ?? null
+  const [visited, setVisited] = useState<Set<string>>(() => new Set(activeId ? [activeId] : []))
+  const [keyboard, setKeyboard] = useState(false)
+  useEffect(() => {
+    if (!activeId) return
+    setVisited((current) => current.has(activeId) ? current : new Set([...current, activeId]))
+  }, [activeId])
+
 
   const setActive = useCallback(
     (next: string | null) => {
@@ -203,6 +186,8 @@ export function ExpandableTabs({
   return (
     <>
       <div
+        onPointerDownCapture={() => setKeyboard(false)}
+        onKeyDownCapture={() => setKeyboard(true)}
         className={cn(
           "relative flex h-full min-h-0 w-full flex-col overflow-hidden rounded-[26px] bg-workspace-panel",
           className,
@@ -302,27 +287,23 @@ export function ExpandableTabs({
             classNames?.panel
           )}
         >
-          <AnimatePresence initial={false} mode="wait">
-            {active ? (
+          {items.filter((item) => item.id === activeId || (item.keepMounted && visited.has(item.id))).map((item) => {
+            const selected = item.id === activeId
+            return (
               <motion.div
-                key={active.id}
-                variants={reduce ? REDUCED_CONTENT_VARIANTS : CONTENT_VARIANTS}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                transition={
-                  reduce ? { duration: 0.15, ease: EASE_OUT } : CONTENT_SPRING
-                }
-                className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-[18px]"
-                style={{
-                  transformOrigin: "top center",
-                  willChange: "transform, opacity, filter",
-                }}
+                key={item.id}
+                aria-hidden={!selected}
+                inert={!selected}
+                initial={reduce || keyboard ? false : { opacity: 0 }}
+                animate={{ opacity: selected ? 1 : 0 }}
+                transition={{ duration: reduce || keyboard ? 0 : 0.15, ease: EASE_OUT }}
+                className="min-h-0 w-full flex-1 flex-col overflow-hidden rounded-[18px]"
+                style={{ display: selected ? "flex" : "none" }}
               >
-                {active.content}
+                {item.content}
               </motion.div>
-            ) : null}
-          </AnimatePresence>
+            )
+          })}
         </div>
       </div>
       <div

@@ -2,12 +2,7 @@
 
 import * as React from "react"
 import gsap from "gsap"
-import {
-  CheckIcon,
-  CopyIcon,
-  MoreHorizontalIcon,
-  PinIcon,
-} from "lucide-react"
+import { CheckIcon, CopyIcon, MoreHorizontalIcon } from "lucide-react"
 import { motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
@@ -15,7 +10,6 @@ import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
@@ -24,7 +18,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { useChatSession } from "@/features/chat-session"
+import { SessionMenuItems, useChatSession } from "@/features/chat-session"
 import { sessionDisplayTitle } from "@/features/sidebar/content/session-projects"
 import { writeClipboardText } from "@/lib/clipboard"
 import { cn } from "@/lib/utils"
@@ -124,7 +118,7 @@ function SessionIdCopyButton({ sessionId }: { sessionId: string }) {
 export function AgentChatHeader() {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
-  const { activeSession, rename, setPinned } = useChatSession()
+  const { activeSession, rename } = useChatSession()
   const untitled = t("sidebar.projects.untitledSession")
   const title = activeSession
     ? sessionDisplayTitle(activeSession, untitled)
@@ -249,29 +243,8 @@ export function AgentChatHeader() {
             >
               <MoreHorizontalIcon className="size-3.5" aria-hidden="true" />
             </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="start"
-              side="bottom"
-              className="min-w-28 w-fit p-0.5 text-xs"
-            >
-              <DropdownMenuItem
-                className="gap-1.5 px-1.5 py-1 text-xs [&_svg:not([class*='size-'])]:size-3.5"
-                onClick={() => {
-                  void setPinned(
-                    activeSession.sessionId,
-                    !activeSession.pinned
-                  )
-                }}
-              >
-                <PinIcon
-                  className={
-                    activeSession.pinned ? "fill-current" : undefined
-                  }
-                />
-                {activeSession.pinned
-                  ? t("sidebar.projects.unpin")
-                  : t("sidebar.projects.pin")}
-              </DropdownMenuItem>
+            <DropdownMenuContent align="start" side="bottom" className="w-fit">
+              <SessionMenuItems session={activeSession} />
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

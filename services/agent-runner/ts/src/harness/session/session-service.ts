@@ -263,6 +263,14 @@ export class SessionService {
     }
   }
 
+  async workflowAgent(harness: ProviderId, sessionId: string, runId: string, agentId: string) {
+    const sessions = this.provider(harness).sessions
+    if (sessions.workflowAgent === undefined) {
+      throw new SessionError('invalid-request', 'This provider does not support workflow agent details')
+    }
+    return sessions.workflowAgent(this.ref(harness, sessionId), runId, agentId)
+  }
+
   async recap(harness: ProviderId, sessionId: string): Promise<{ recap: string | null; turns: number }> {
     const ref = this.ref(harness, sessionId)
     await this.provider(harness).sessions.read(ref)

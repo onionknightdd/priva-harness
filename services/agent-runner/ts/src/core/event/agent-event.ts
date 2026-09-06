@@ -1,3 +1,4 @@
+import type { WorkflowState } from '../resource/workflow.js'
 export const STREAM_PROTOCOL_VERSION = 1 as const
 
 // Mapping table (product type ← SDK). Mappers emit AgentEvent; EnvelopeStamper adds the envelope.
@@ -203,6 +204,7 @@ export type AgentEvent =
       readonly phases?: unknown
       readonly agents?: unknown
       readonly workflowProgress?: unknown
+      readonly workflow?: WorkflowState
     }
   | {
       readonly type: 'workflow.updated'

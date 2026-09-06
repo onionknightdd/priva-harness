@@ -160,7 +160,9 @@ export function SessionTagPopover({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         render={
-          <motion.button
+          // Plain button: the popover anchors here, so a press scale would move
+          // the popup as the button springs back.
+          <button
             type="button"
             className={cn(
               rowHoverActionButtonClassName,
@@ -170,7 +172,6 @@ export function SessionTagPopover({
             )}
             aria-label={t("sidebar.projects.tag")}
             aria-pressed={tagged}
-            whileTap={reduceMotion ? undefined : { scale: 0.8 }}
             onPointerDown={(event) => event.stopPropagation()}
           />
         }
