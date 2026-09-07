@@ -31,6 +31,8 @@ import { isSyntheticNoResponseAssistant } from './session/claude-transcript.js'
 
 export interface ClaudeSdkMessage {
   readonly type: string
+  readonly uuid?: string
+  readonly sourceToolUseID?: string
   readonly subtype?: string
   readonly session_id?: string
   readonly parent_tool_use_id?: string | null
@@ -328,8 +330,21 @@ export class ClaudeEventMapper {
     if (inner === undefined) return []
     const blocks = contentBlocks(inner['content'])
     const hasToolResult = blocks.some((block) => stringField(block, 'type') === 'tool_result')
+    const sourceToolId = stringField(envelope, 'sourceToolUseID') ?? stringField(inner, 'sourceToolUseID')
+    if (sourceToolId !== undefined && this.tools.get(sourceToolId)?.toLowerCase() === 'skill') {
+      const output = blocks.map((block) => stringField(block, 'text') ?? '').join('\n\n')
+      if (output.trim() !== '') {
+        const index = this.indexByToolId.get(sourceToolId)
+        return [withChannel({
+          type: 'tool.completed', messageId: this.ensureMessageId(), blockId: sourceToolId,
+          ...(index === undefined ? {} : { index }),
+          id: sourceToolId, name: this.tools.get(sourceToolId) ?? 'Skill', ok: true, output,
+        }, channel)]
+      }
+    }
+
     if (channel.parentToolUseId !== undefined && !hasToolResult) {
-      return this.deliveryEvents(blocks, channel)
+      return this.deliveryEvents(blocks, channel, stringField(envelope, 'uuid'))
     }
 
     const events: AgentEvent[] = []
@@ -347,6 +362,9 @@ export class ClaudeEventMapper {
       if (id === undefined) continue
       const name = this.tools.get(id) ?? 'unknown'
       const output = claudeToolOutput(block, envelope, inner, name)
+      const resultMetrics = asRecord(envelope['tool_use_result'] ?? envelope['toolUseResult'] ?? inner['tool_use_result'] ?? block['toolUseResult']) ?? {}
+      const tokens = isAgentName(name) ? numberField(resultMetrics, 'totalTokens') : undefined
+      const durationMs = isAgentName(name) ? numberField(resultMetrics, 'totalDurationMs') : undefined
       const launch = parseAgentLaunch(block, output)
       if (launch?.agentId !== undefined) {
         this.agentIdByParent.set(id, launch.agentId)
@@ -364,6 +382,8 @@ export class ClaudeEventMapper {
             name,
             ok: block['is_error'] !== true,
             output,
+            ...(tokens === undefined ? {} : { tokens }),
+            ...(durationMs === undefined ? {} : { durationMs }),
             ...(launch?.status === undefined ? {} : { status: launch.status }),
             ...(launch?.agentId === undefined ? {} : { agentId: launch.agentId }),
           },
@@ -384,7 +404,7 @@ export class ClaudeEventMapper {
         events.push({ type: 'workflow.completed', workflowToolUseId: id, status: 'failed' })
       }
       if (channel.parentToolUseId !== undefined) {
-        events.push(...this.deliveryEvents(contentBlocks(block['content']), channel))
+        events.push(...this.deliveryEvents(contentBlocks(block['content']), channel, stringField(envelope, 'uuid')))
       }
     }
     return events
@@ -438,17 +458,20 @@ export class ClaudeEventMapper {
         (workflowToolUseId === undefined ? undefined : this.agentIdByParent.get(workflowToolUseId)) ??
         (taskId === '' ? undefined : taskId)
       if (agentId === undefined) return []
+      const agentChannel = workflowToolUseId === undefined ? {} : { parentToolUseId: workflowToolUseId, agentId }
+      if (workflowToolUseId !== undefined) this.agentIdByParent.set(workflowToolUseId, agentId)
       if (taskType.includes('started')) {
         const name = stringField(data, 'subagent_type')
-        return [{ type: 'agent.started', agentId, ...(name === undefined ? {} : { name }) }]
+        return [withChannel({ type: 'agent.started', agentId, ...(name === undefined ? {} : { name }) }, agentChannel)]
       }
       if (isTerminalStatus(status)) {
         return [
-          {
+          withChannel({
             type: 'agent.completed',
             agentId,
             ok: status !== 'failed' && status !== 'error' && status !== 'killed',
-          },
+            status: ['cancelled', 'canceled', 'killed', 'stopped'].includes(status) ? 'cancelled' : ['failed', 'error'].includes(status) ? 'failed' : 'completed',
+          }, agentChannel),
         ]
       }
     }
@@ -516,7 +539,7 @@ export class ClaudeEventMapper {
     }
   }
 
-  private deliveryEvents(blocks: JsonRecord[], channel: EventChannel): AgentEvent[] {
+  private deliveryEvents(blocks: JsonRecord[], channel: EventChannel, deliveryId?: string): AgentEvent[] {
     if (channel.parentToolUseId === undefined) return []
     const delivery = parseDelivery(blocks)
     if (delivery === undefined) return []
@@ -524,6 +547,7 @@ export class ClaudeEventMapper {
       withChannel(
         {
           type: 'agent.message',
+          ...(deliveryId === undefined ? {} : { deliveryId }),
           parentToolUseId: channel.parentToolUseId,
           direction: 'received',
           body: delivery.body,

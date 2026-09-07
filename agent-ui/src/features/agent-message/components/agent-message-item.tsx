@@ -36,6 +36,7 @@ import { AssistantProcess } from "./assistant-process"
 import { CompactSessionMarker } from "./compact-session-marker"
 import { AssistantMarkdownCode } from "./assistant-markdown-code"
 import { QuoteSelectable } from "./quote-selectable"
+import { UserMessageAttachments } from "./user-message-attachments"
 
 function animateControl(control: HTMLButtonElement) {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -215,7 +216,7 @@ export function AgentMessageItem({
   const isStreaming = message.status === "streaming"
   const isError = message.status === "error"
 
-  if (message.role === "user") {
+  if (message.role === "user" && !message.attachments?.length) {
     const surface = userMessageSurface(message.content, message.compact)
     if (surface === "hidden") {
       return null
@@ -286,7 +287,10 @@ export function AgentMessageItem({
                 hideProcessHeader={hideProcessHeader}
               />
             ) : (
-              <QuoteSelectable>{message.content}</QuoteSelectable>
+              <>
+                {message.attachments?.length ? <UserMessageAttachments attachments={message.attachments} /> : null}
+                {message.content ? <QuoteSelectable>{message.content}</QuoteSelectable> : null}
+              </>
             )}
           </MessageContent>
           {message.role === "assistant" && message.status === "complete" ? (

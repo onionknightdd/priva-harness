@@ -69,7 +69,9 @@ export function mergeSdkAndTranscriptMessages(
   for (const record of transcriptRecords) {
     const uuid = recordUuid(record)
     if (uuid !== undefined && sdkByUuid.has(uuid)) {
-      merged.push(sdkByUuid.get(uuid))
+      const sdk = sdkByUuid.get(uuid)
+      const sourceToolUseID = stringField(asRecord(record) ?? {}, 'sourceToolUseID')
+      merged.push(sourceToolUseID !== undefined && isRecord(sdk) ? { ...sdk, sourceToolUseID } : sdk)
       used.add(uuid)
       continue
     }
@@ -120,7 +122,7 @@ function isMainThreadRecord(record: JsonRecord): boolean {
   const type = stringField(record, 'type')
   if (type !== 'user' && type !== 'assistant') return false
   if (isSidechain(record)) return false
-  if (record['isMeta'] === true) return false
+  if (record['isMeta'] === true && stringField(record, 'sourceToolUseID') === undefined) return false
   if (isSyntheticNoResponseAssistant(record)) return false
   return true
 }

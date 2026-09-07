@@ -74,7 +74,7 @@ export function WorkflowAgentDetailPanel({ agent, now, loadDetail, enabled }: {
     return () => window.clearTimeout(timer)
   }, [copyState])
 
-  const process = detail?.process.filter((entry) => entry.name !== "StructuredOutput")
+  const process = detail?.process.filter((entry) => entry.name?.toLowerCase() !== "structuredoutput")
   const processText = process?.map((entry) => [entry.name, entry.text, entry.output].filter(Boolean).join("\n")).join("\n\n")
   const full = tab === "process" ? processText || undefined : detail?.[tab === "result" ? "result" : "prompt"]
   const preview = tab === "process" ? agent.lastToolSummary : tab === "result" ? agent.resultPreview : agent.promptPreview
@@ -92,7 +92,7 @@ export function WorkflowAgentDetailPanel({ agent, now, loadDetail, enabled }: {
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 pb-2 font-mono text-xs text-muted-foreground">
         {duration ? <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">{duration}</span> : null}
-        {agent.lastToolName && agent.lastToolName !== "StructuredOutput" ? <span className="inline-flex items-center gap-1.5"><TerminalIcon aria-hidden="true" className="size-3" />{agent.lastToolName}</span> : null}
+        {agent.lastToolName && agent.lastToolName.toLowerCase() !== "structuredoutput" ? <span className="inline-flex items-center gap-1.5"><TerminalIcon aria-hidden="true" className="size-3" />{agent.lastToolName}</span> : null}
         {agent.model ? <span>{agent.model}</span> : null}
         {agent.tokens !== undefined ? <span>{agent.tokens.toLocaleString()} tokens</span> : null}
         {agent.toolCalls !== undefined ? <span>{t("agentMessage.workflowUI.toolCalls", { count: agent.toolCalls })}</span> : null}

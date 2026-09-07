@@ -317,6 +317,7 @@ function toThreadMessageResponse(message: ThreadMessage): Record<string, unknown
     id: message.id,
     role: message.role,
     content: message.content,
+    ...(message.attachments === undefined ? {} : { attachments: message.attachments }),
     created_at: message.createdAt,
     status: message.status,
     transcript_uuid: message.transcriptUuid ?? null,

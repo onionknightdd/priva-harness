@@ -13,7 +13,7 @@ import {
   compactInstructionsOf,
   isCompactCommandContent,
 } from '../../core/resource/compact-command.js'
-import type { UserTurn } from '../../core/run/user-turn.js'
+import { userTurnText, type UserTurn } from '../../core/run/user-turn.js'
 import { AsyncQueue } from '../../core/stream/async-queue.js'
 import { PiEventMapper, type PiSessionEvent } from './pi-event-mapper.js'
 
@@ -71,7 +71,7 @@ export class PiRuntime implements AgentRuntime {
     if (context.signal.aborted) onAbort()
     else context.signal.addEventListener('abort', onAbort, { once: true })
 
-    const sending = this.send(turn.text).then(
+    const sending = this.send(userTurnText(turn)).then(
       () => undefined,
       (error: unknown) => {
         if (!finished) {

@@ -25,6 +25,7 @@ import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 
 import { lookup as lookupMimeType } from 'mime-types'
+import type { UserAttachment } from '../../core/run/user-turn.js'
 
 import type {
   PendingUserFileUpload,
@@ -355,16 +356,23 @@ export class NodeUserFileSystem implements UserFileSystem {
           )
         }
       },
-      commit: async (requestedDirectory) => {
+      commit: async (requestedDirectory, purpose) => {
         if (state !== 'staged') {
           throw new UserFileError('invalid-request', 'Upload content is not ready')
         }
         state = 'committing'
 
+        let attachmentDirectory: string | undefined
         try {
-          const directoryPath = await this.requireDirectory(
+          let directoryPath = await this.requireDirectory(
             this.resolveCandidate(requestedDirectory),
           )
+          if (purpose === 'attachment') {
+            const root = join(directoryPath, '.priva-attachments')
+            await mkdir(root, { recursive: true })
+            attachmentDirectory = await mkdtemp(join(root, 'file-'))
+            directoryPath = attachmentDirectory
+          }
           const targetPath = join(directoryPath, fileName)
           await copyStagedFileExclusively(stagingPath, targetPath, directoryPath)
           state = 'completed'
@@ -379,6 +387,9 @@ export class NodeUserFileSystem implements UserFileSystem {
         } catch (error) {
           state = 'aborted'
           await cleanup()
+          if (attachmentDirectory !== undefined) {
+            await rm(attachmentDirectory, { recursive: true, force: true })
+          }
           throw error
         }
       },
@@ -389,6 +400,20 @@ export class NodeUserFileSystem implements UserFileSystem {
         state = 'aborted'
         await cleanup()
       },
+    }
+  }
+
+  async inspectAttachment(path: string): Promise<UserAttachment> {
+    const opened = await this.openUserFile(path)
+    try {
+      return {
+        path: opened.path,
+        name: basename(opened.path),
+        mimeType: detectMimeType(opened.path),
+        size: opened.stats.size,
+      }
+    } finally {
+      await opened.handle.close()
     }
   }
 

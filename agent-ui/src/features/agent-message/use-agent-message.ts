@@ -13,6 +13,8 @@ import {
   type AgentThreadMessage,
 } from "./agent-message-data"
 import { composeSlashMessage } from "./composer-slash-command"
+import { readyComposerAttachments } from "./composer-attachments"
+import { useComposerAttachments } from "./use-composer-attachments"
 import {
   abortAgentSession,
   attachAgentSession,
@@ -58,6 +60,8 @@ export function useAgentMessage() {
     reloadThread,
     refresh,
   } = useChatSession()
+  const composerAttachments = useComposerAttachments(runCwd, runHarnessId, runSessionId)
+  const { attachments, clear: clearAttachments } = composerAttachments
   const { beginLiveSession, endLiveSession, runningSessions } =
     useLiveSessions()
   const [draft, setDraft] = React.useState("")
@@ -378,6 +382,8 @@ export function useAgentMessage() {
   )
 
   const submit = React.useCallback(() => {
+    const uploadedAttachments = readyComposerAttachments(attachments)
+    if (uploadedAttachments === null) return
     const content = (
       slashCommand
         ? composeSlashMessage(slashCommand.name, draft)
@@ -388,13 +394,14 @@ export function useAgentMessage() {
 
     const selectedModel = modelReferenceRef.current
 
-    if (!content || !selectedModel || !runHarnessId || !cwd) {
+    if ((!content && uploadedAttachments.length === 0) || !selectedModel || !runHarnessId || !cwd) {
       return
     }
 
     const userMessage = {
       ...createAgentThreadMessage("user", content),
-      ...(isCompactCommandUserMessage(content)
+      ...(uploadedAttachments.length ? { attachments: uploadedAttachments } : {}),
+      ...(uploadedAttachments.length === 0 && isCompactCommandUserMessage(content)
         ? { compact: { phase: "compacting" as const } }
         : {}),
     }
@@ -409,6 +416,7 @@ export function useAgentMessage() {
 
     setLastModelReference(selectedModel)
     setDraft("")
+    clearAttachments()
     setSlashCommand(null)
     setMessages((currentMessages) => {
       const settlePrevious =
@@ -457,6 +465,7 @@ export function useAgentMessage() {
         const connection = runAgentSession(
           {
             text: content,
+            attachments: uploadedAttachments,
             model: selectedModel,
             harness: runHarnessId,
             cwd,
@@ -471,10 +480,12 @@ export function useAgentMessage() {
           assistantMessage,
           connection,
           resumeSessionId,
-          resumeSessionId ? null : content
+          resumeSessionId ? null : content || uploadedAttachments.map((file) => file.name).join(", ")
         )
       })
   }, [
+    attachments,
+    clearAttachments,
     draft,
     effort,
     inputSuggestions,
@@ -602,13 +613,15 @@ export function useAgentMessage() {
   )
 
   return {
+    composerAttachments,
     draft,
     messages,
     contextUsage,
     modelReference,
     isStreaming,
     canSubmit: Boolean(
-      (draft.trim() || slashCommand) &&
+      (draft.trim() || slashCommand || attachments.length) &&
+        readyComposerAttachments(attachments) !== null &&
         modelReference &&
         runHarnessId &&
         runCwd.trim()

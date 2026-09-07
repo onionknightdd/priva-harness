@@ -21,6 +21,7 @@ export class FakeAgentProvider implements AgentProvider {
   readonly events: readonly AgentEvent[]
   readonly released: string[] = []
   readonly specs: ProviderRunSpec[] = []
+  readonly turns: UserTurn[] = []
   readonly targets: SessionTarget[] = []
   readonly slashRequests: SlashCommandListRequest[] = []
   slashCommands: readonly SlashCommand[] = []
@@ -76,7 +77,7 @@ export class FakeAgentRuntime implements AgentRuntime {
   }
 
   async *run(turn: UserTurn, context: TurnContext): AsyncIterable<AgentEvent> {
-    void turn
+    this.provider.turns.push(turn)
     if (this.provider.gate !== undefined) {
       await waitAbortable(this.provider.gate, context.signal)
     }

@@ -25,6 +25,7 @@ export const en = {
     collapse: "Collapse",
   },
   toolCard: {
+    unknown: "Unknown",
     running: "Running",
     completed: "Completed",
     failed: "Failed",
@@ -57,6 +58,9 @@ export const en = {
     attachMcpGroup: "MCP",
     attachMcpUnavailable: "Coming soon",
     removeAttachment: "Remove {{name}}",
+    retryAttachment: "Retry uploading {{name}}",
+    attachmentUploadIncomplete: "Upload incomplete",
+    messageAttachments: "Message attachments",
     slashCommandGroup: "Command",
     slashSkillGroup: "Skill",
     slashOriginBuiltin: "built-in",
@@ -131,7 +135,10 @@ export const en = {
     toolRunning: "Running",
     toolCompleted: "Done",
     toolFailed: "Failed",
+    agentUI: { agents: "Agents", noSummary: "No activity or result yet." },
     toolItem: {
+      skillRunning: "Loading skill",
+      skillDone: "Skill",
       readRunning: "Reading",
       readDone: "Read",
       editRunning: "Editing",

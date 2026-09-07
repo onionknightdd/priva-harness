@@ -45,6 +45,7 @@ export type UploadedFile = {
 }
 
 export type UploadFileOptions = {
+  purpose?: "attachment"
   signal?: AbortSignal
   onProgress?: (progress: number) => void
 }
@@ -112,6 +113,7 @@ export function uploadFile(
 ) {
   const body = new FormData()
   body.append("directory", directory)
+  if (options.purpose) body.append("purpose", options.purpose)
   body.append("file", file, file.name)
 
   return new Promise<UploadedFile>((resolve, reject) => {

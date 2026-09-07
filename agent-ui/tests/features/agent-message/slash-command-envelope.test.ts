@@ -14,6 +14,17 @@ import {
 const CLEAR_ENVELOPE =
   "<command-name>/clear</command-name>\n            <command-message>clear</command-message>\n            <command-args></command-args>"
 
+describe("messages with attachments", () => {
+  it("keeps attachment-only and command-shaped user messages visible", () => {
+    const attachments = [{ path: "/tmp/report.txt", name: "report.txt", size: 1, mimeType: "text/plain" }]
+    for (const content of ["", "/compact", "/clear", "<local-command-stdout>output</local-command-stdout>"]) {
+      const user = { ...message("u1", "user", content), attachments }
+      assert.equal(userMessageSurface(content, undefined, true), "bubble")
+      assert.deepEqual(foldCommandSurfaces([user]), [user])
+    }
+  })
+})
+
 const COMPACT_ENVELOPE =
   "<command-name>/compact</command-name>\n            <command-message>compact</command-message>\n            <command-args></command-args>"
 

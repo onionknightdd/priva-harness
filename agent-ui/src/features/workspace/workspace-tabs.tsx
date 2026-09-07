@@ -15,12 +15,18 @@ import {
 
 function WorkspaceModuleContent({
   moduleId,
+  onFileBrowserMinimumWidthChange,
 }: {
   moduleId: WorkspaceModuleId
+  onFileBrowserMinimumWidthChange?: (width: number) => void
 }) {
   if (moduleId === "tasks") return <WorkspaceWorkflowView />
   if (moduleId === "files") {
-    return <WorkspaceFileView />
+    return (
+      <WorkspaceFileView
+        onMinimumWidthChange={onFileBrowserMinimumWidthChange}
+      />
+    )
   }
 
   return <WorkspacePlaceholderView moduleId={moduleId} />
@@ -29,9 +35,13 @@ function WorkspaceModuleContent({
 export function WorkspaceTabs({
   activeId,
   onActiveIdChange,
+  onFileBrowserMinimumWidthChange,
+  onMinimumWidthChange,
 }: {
   activeId: WorkspaceModuleId
   onActiveIdChange: (id: WorkspaceModuleId) => void
+  onFileBrowserMinimumWidthChange?: (width: number) => void
+  onMinimumWidthChange?: (width: number) => void
 }) {
   const { t } = useTranslation()
 
@@ -46,7 +56,12 @@ export function WorkspaceTabs({
       icon: <Icon aria-hidden="true" />,
       content: (
         <div className="flex h-full min-h-0 flex-col overflow-hidden">
-          <WorkspaceModuleContent moduleId={module.id} />
+          <WorkspaceModuleContent
+            moduleId={module.id}
+            onFileBrowserMinimumWidthChange={
+              onFileBrowserMinimumWidthChange
+            }
+          />
         </div>
       ),
     }
@@ -57,6 +72,7 @@ export function WorkspaceTabs({
       items={items}
       value={activeId}
       ariaLabel={t("workspace.tabs.listLabel")}
+      onMinimumWidthChange={onMinimumWidthChange}
       onValueChange={(id) => {
         if (id && isWorkspaceModuleId(id)) {
           onActiveIdChange(id)

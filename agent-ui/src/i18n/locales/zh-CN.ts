@@ -25,6 +25,7 @@ export const zhCN = {
     collapse: "收起",
   },
   toolCard: {
+    unknown: "状态未知",
     running: "执行中",
     completed: "已完成",
     failed: "失败",
@@ -57,6 +58,9 @@ export const zhCN = {
     attachMcpGroup: "MCP",
     attachMcpUnavailable: "暂未开放",
     removeAttachment: "移除 {{name}}",
+    retryAttachment: "重新上传 {{name}}",
+    attachmentUploadIncomplete: "上传未完成",
+    messageAttachments: "消息附件",
     slashCommandGroup: "命令",
     slashSkillGroup: "技能",
     slashOriginBuiltin: "内置",
@@ -131,7 +135,10 @@ export const zhCN = {
     toolRunning: "执行中",
     toolCompleted: "已完成",
     toolFailed: "失败",
+    agentUI: { agents: "Agent 列表", noSummary: "暂无执行活动或结果。" },
     toolItem: {
+      skillRunning: "正在加载技能",
+      skillDone: "技能",
       readRunning: "正在读取",
       readDone: "已读取",
       editRunning: "正在编辑",

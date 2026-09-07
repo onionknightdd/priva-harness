@@ -34,8 +34,8 @@ export function WorkflowOverview({ workflow, onOpenAgent }: { workflow: Workflow
   return (
     <Collapsible open={open} onOpenChange={setOpen} className={cn("@container my-2 min-w-0", reduce && "[&_*]:transition-none [&_*]:animate-none")}
       onPointerDownCapture={() => setKeyboard(false)} onKeyDownCapture={() => setKeyboard(true)}>
-      <Card data-testid="workflow-overview" className="gap-0 rounded-xl border border-border bg-background py-0 shadow-none ring-0">
-        <CollapsibleTrigger className={cn("flex w-full items-center gap-2 rounded-t-xl bg-muted/40 px-3 py-2 text-left transition-colors duration-150 hover:bg-muted/60", focusRing)}>
+      <Card data-testid="workflow-overview" className="gap-0 rounded-lg border border-border bg-background py-0 shadow-none ring-0">
+        <CollapsibleTrigger className={cn("flex w-full items-center gap-2 rounded-t-lg aria-[expanded=false]:rounded-b-lg bg-muted/40 px-3 py-2 text-left transition-colors duration-150 hover:bg-muted/60", focusRing)}>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
               <span className="inline-flex min-w-0 items-center gap-1.5 text-sm font-medium"><WorkflowIcon aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" /><span className="min-w-0 break-words">{workflow.name ?? t("agentMessage.workflow")}</span></span>
@@ -86,7 +86,7 @@ export function WorkflowOverview({ workflow, onOpenAgent }: { workflow: Workflow
                       {agent.durationMs !== undefined ? <span>{workflowDuration(agent.durationMs)}</span> : null}
                       {agent.tokens !== undefined ? <span>{agent.tokens.toLocaleString()} tokens</span> : null}
                       {agent.toolCalls !== undefined ? <span>{t("agentMessage.workflowUI.toolCalls", { count: agent.toolCalls })}</span> : null}
-                      {agent.lastToolName && agent.lastToolName !== "StructuredOutput" ? <span>{agent.lastToolName}</span> : null}
+                      {agent.lastToolName && agent.lastToolName.toLowerCase() !== "structuredoutput" ? <span>{agent.lastToolName}</span> : null}
                     </div>
                   </div>
                   <Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-sm" aria-label={t("agentMessage.workflowUI.openAgent", { agent: agent.label })} onClick={() => onOpenAgent(agent.index)}><SquareArrowOutUpRightIcon aria-hidden="true" /></Button>} />

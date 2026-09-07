@@ -2,6 +2,7 @@
 // beui.dev/components/agents/code-block
 
 import { Check, Copy, FileCode2, LoaderCircle } from "lucide-react"
+import { ScrollArea } from "@base-ui/react/scroll-area"
 import { motion, useReducedMotion } from "motion/react"
 import {
   type ReactNode,
@@ -44,6 +45,7 @@ export interface CodeBlockProps {
   copyable?: boolean
   onCopy?: () => void | Promise<void>
   className?: string
+  contentClassName?: string
   lineNumberLeftPad?: number
 }
 
@@ -61,6 +63,7 @@ export function CodeBlock({
   copyable = true,
   onCopy,
   className,
+  contentClassName,
   lineNumberLeftPad = 0,
 }: CodeBlockProps) {
   const { t } = useTranslation()
@@ -211,24 +214,27 @@ export function CodeBlock({
         </div>
       ) : null}
 
-      <div className={TOOL_OUTPUT_INSET_CLASS}>
-        <div className="relative">
-          <div
+      <div className={cn(TOOL_OUTPUT_INSET_CLASS, contentClassName)}>
+        <ScrollArea.Root className="group/code-scroll relative">
+          <ScrollArea.Viewport
             ref={viewportRef}
+            data-slot="code-block-viewport"
             role={streaming ? "log" : undefined}
             aria-live={streaming ? "polite" : undefined}
-            className="overflow-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+            className={cn("w-full outline-none", focusRing)}
             style={{ maxHeight }}
           >
-            <pre
+            <ScrollArea.Content
+              render={<pre />}
+              style={{ minWidth: wrap ? "100%" : "fit-content" }}
               className={cn(
-                "agent-shiki shiki m-0 font-mono text-sm leading-5 text-foreground/85",
+                "agent-shiki shiki agent-code-content m-0 font-code text-(length:--text-code) font-light leading-5 text-foreground/85",
                 wrap
                   ? "w-full agent-shiki-wrap whitespace-normal"
                   : "inline-block min-w-full whitespace-normal"
               )}
             >
-              <code className="block">
+              <code className="block font-code">
                 {lines.map((line, index) => {
                   const lineNumber = startLine + index
                   return (
@@ -270,14 +276,25 @@ export function CodeBlock({
                   )
                 })}
               </code>
-            </pre>
-          </div>
+            </ScrollArea.Content>
+          </ScrollArea.Viewport>
+          {(["vertical", "horizontal"] as const).map((orientation) => (
+            <ScrollArea.Scrollbar
+              key={orientation}
+              orientation={orientation}
+              data-slot="code-block-scrollbar"
+              className="z-10 flex select-none p-0.5 opacity-0 transition-opacity duration-150 data-hovering:opacity-100 data-scrolling:opacity-100 group-has-[:focus-visible]/code-scroll:opacity-100 motion-reduce:transition-none data-[orientation=vertical]:w-2 data-[orientation=horizontal]:h-2 data-[orientation=horizontal]:flex-col"
+            >
+              <ScrollArea.Thumb className="relative flex-1 rounded-full bg-muted-foreground/40" />
+            </ScrollArea.Scrollbar>
+          ))}
+          <ScrollArea.Corner />
           {!showHeader ? (
             <div className="pointer-events-none absolute top-0 right-0">
               <span className="pointer-events-auto">{copyButton}</span>
             </div>
           ) : null}
-        </div>
+        </ScrollArea.Root>
       </div>
     </div>
   )

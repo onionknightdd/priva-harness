@@ -1,7 +1,13 @@
+import type { MessageAttachment } from "./message-attachment"
+
 export type ComposerAttachment = {
   id: string
   file: File
   previewUrl: string | null
+  status: "uploading" | "done" | "error"
+  progress: number
+  uploaded?: MessageAttachment
+  error?: string
 }
 
 export function isImageAttachment(file: File) {
@@ -15,7 +21,14 @@ export function createComposerAttachments(
     id: createAttachmentId(),
     file,
     previewUrl: createPreviewUrl(file),
+    status: "uploading",
+    progress: 0,
   }))
+}
+
+export function readyComposerAttachments(attachments: readonly ComposerAttachment[]): MessageAttachment[] | null {
+  if (attachments.some((attachment) => attachment.status !== "done" || !attachment.uploaded)) return null
+  return attachments.map((attachment) => attachment.uploaded!)
 }
 
 export function revokeComposerAttachment(attachment: ComposerAttachment) {

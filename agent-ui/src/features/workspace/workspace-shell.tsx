@@ -42,6 +42,11 @@ export function WorkspaceShell({
   const shellRef = React.useRef<HTMLDivElement>(null)
   const [layout, setLayout] = React.useState(getInitialWorkspaceLayout)
   const [maximized, setMaximized] = React.useState(false)
+  const [workspaceTabMinimumWidth, setWorkspaceTabMinimumWidth] = React.useState(
+    WORKSPACE_DEFAULT_WIDTH
+  )
+  const [workspaceContentMinimumWidth, setWorkspaceContentMinimumWidth] =
+    React.useState(0)
 
   React.useLayoutEffect(() => {
     if (!workspaceEnabled) {
@@ -102,6 +107,10 @@ export function WorkspaceShell({
       )
     )
   )
+  const workspaceMinimumWidth = Math.max(
+    workspaceTabMinimumWidth,
+    workspaceContentMinimumWidth
+  )
 
   return (
     <SidebarProvider
@@ -109,6 +118,7 @@ export function WorkspaceShell({
       className="h-full min-h-0 overflow-hidden"
       keyboardShortcut={false}
       defaultWidth={WORKSPACE_DEFAULT_WIDTH}
+      minWidth={workspaceMinimumWidth}
       maxWidth={workspaceMaxWidth}
       widthCookieName="workspace_width"
       stateCookieName="workspace_state"
@@ -131,6 +141,8 @@ export function WorkspaceShell({
               />
               <WorkspaceSidebar
                 resizable={!maximized}
+                onContentMinimumWidthChange={setWorkspaceContentMinimumWidth}
+                onMinimumWidthChange={setWorkspaceTabMinimumWidth}
                 className={maximized ? "z-30" : undefined}
                 style={
                   maximized && maximizedWidth > 0

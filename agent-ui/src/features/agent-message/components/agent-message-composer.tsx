@@ -14,11 +14,7 @@ import {
 } from "@/components/ui/input-group"
 import { Separator } from "@/components/ui/separator"
 
-import {
-  createComposerAttachments,
-  revokeComposerAttachment,
-  type ComposerAttachment,
-} from "../composer-attachments"
+import type { ComposerAttachment } from "../composer-attachments"
 import { composerPrimaryAction } from "../composer-primary-action"
 import {
   applySlashSelection,
@@ -245,6 +241,10 @@ function ComposerControls({
 
 export function AgentMessageComposer({
   compact = false,
+  attachments,
+  onFilesSelected,
+  onAttachmentRemove,
+  onAttachmentRetry,
   draft,
   canSubmit,
   isStreaming = false,
@@ -259,6 +259,10 @@ export function AgentMessageComposer({
   onStop,
 }: {
   compact?: boolean
+  attachments: ComposerAttachment[]
+  onFilesSelected: (files: File[]) => void
+  onAttachmentRemove: (id: string) => void
+  onAttachmentRetry: (id: string) => void
   draft: string
   canSubmit: boolean
   isStreaming?: boolean
@@ -280,11 +284,6 @@ export function AgentMessageComposer({
   const rightRef = React.useRef<HTMLDivElement>(null)
   const textareaRef = React.useRef<HTMLTextAreaElement>(null)
   const chipRef = React.useRef<HTMLDivElement>(null)
-  const attachmentsRef = React.useRef<ComposerAttachment[]>([])
-  const [attachments, setAttachments] = React.useState<ComposerAttachment[]>(
-    []
-  )
-  attachmentsRef.current = attachments
   const catalog = useSlashCommandCatalog()
   const [dismissedQuery, setDismissedQuery] = React.useState<string | null>(null)
   const [highlightedIndex, setHighlightedIndex] = React.useState(0)
@@ -320,7 +319,8 @@ export function AgentMessageComposer({
   const primaryAction = composerPrimaryAction(
     draft,
     isStreaming,
-    slashCommand !== null
+    slashCommand !== null,
+    attachments.length > 0
   )
   const fieldPadLeft = singleLine
     ? leftWidth || COMPOSER_LEFT_FALLBACK_PX
@@ -342,29 +342,6 @@ export function AgentMessageComposer({
     }
     setHighlightedIndex(0)
   }, [filteredCommands.length, highlightedIndex])
-
-  React.useEffect(() => {
-    return () => {
-      attachmentsRef.current.forEach(revokeComposerAttachment)
-    }
-  }, [])
-
-  const addAttachments = React.useCallback((files: File[]) => {
-    setAttachments((current) => [
-      ...current,
-      ...createComposerAttachments(files),
-    ])
-  }, [])
-
-  const removeAttachment = React.useCallback((id: string) => {
-    setAttachments((current) => {
-      const removed = current.find((attachment) => attachment.id === id)
-      if (removed) {
-        revokeComposerAttachment(removed)
-      }
-      return current.filter((attachment) => attachment.id !== id)
-    })
-  }, [])
 
   const selectSlashCommand = React.useCallback(
     (command: SlashCommand) => {
@@ -428,7 +405,8 @@ export function AgentMessageComposer({
         >
           <ComposerAttachmentChips
             attachments={attachments}
-            onRemove={removeAttachment}
+            onRemove={onAttachmentRemove}
+            onRetry={onAttachmentRetry}
           />
           <ComposerSlashMenu
             open={slashMenuOpen}
@@ -594,7 +572,7 @@ export function AgentMessageComposer({
               transition={transition}
               className="pointer-events-auto flex h-8 items-center pr-1 pl-2.5"
             >
-              <ComposerAttachMenu onFilesSelected={addAttachments} />
+              <ComposerAttachMenu onFilesSelected={onFilesSelected} />
             </motion.div>
             <div className="min-w-0 flex-1" />
             <motion.div

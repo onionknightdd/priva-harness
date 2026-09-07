@@ -26,9 +26,11 @@ import { useOptionalWorkspaceFiles } from "@/features/workspace"
 export function FileBrowserPage({
   className,
   compact = false,
+  onMinimumWidthChange,
 }: {
   className?: string
   compact?: boolean
+  onMinimumWidthChange?: (width: number) => void
 }) {
   const { t } = useTranslation()
   const browser = useFileBrowser()
@@ -315,6 +317,7 @@ export function FileBrowserPage({
       <FileBrowserWorkspace
         compact={compact}
         filePreview={filePreview}
+        onMinimumWidthChange={onMinimumWidthChange}
         onResizeTree={rememberTreeSize}
         onUserResizeTree={markUserResizedTree}
         panelTransitioning={panelTransitioning}

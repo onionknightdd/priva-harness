@@ -16,6 +16,7 @@ import { FakeAgentProvider } from '../../../support/fake-agent-provider.js'
 import type { FakeSessionStore } from '../../../support/fake-session-store.js'
 import { MemorySessionMetadataRepository } from '../../../support/memory-session-metadata.js'
 import { createTestAgentServices } from '../../../support/model-profile.js'
+import { userTurnText } from '../../../../src/core/run/user-turn.js'
 
 describe('/api/sandbox/agent/sessions', () => {
   let testRoot: string
@@ -276,6 +277,16 @@ describe('/api/sandbox/agent/sessions', () => {
         agents: expect.arrayContaining([expect.objectContaining({ index: 4, agentId: 'agent4', state: 'completed' })]) as unknown,
       })] }),
     ]))
+  })
+
+  it('returns attachment metadata separately from user text in the history API', async () => {
+    const attachments = [{ path: '/workspace/report.csv', name: 'report.csv', mimeType: 'text/csv', size: 12 }]
+    claude.sessions.messageLists.set('claude-1', [sessionMessage('user', 'u-attachment', 'claude-1', userTurnText({ text: '', attachments }))])
+    const response = await server.inject({ method: 'GET', url: '/api/sandbox/agent/sessions/claude-1/thread?harness=claude' })
+    expect(response.statusCode).toBe(200)
+    expect(parseJson(response)['messages']).toEqual([
+      expect.objectContaining({ role: 'user', content: '', attachments, transcript_uuid: 'u-attachment' }),
+    ])
   })
 
   it('validates workflow detail identifiers and reports unsupported providers', async () => {

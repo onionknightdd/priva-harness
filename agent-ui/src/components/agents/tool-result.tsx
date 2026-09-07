@@ -8,6 +8,7 @@ import {
   ChevronDown,
   CircleCheck,
   CircleX,
+  CircleHelp,
   Copy,
   LoaderCircle,
   RotateCcw,
@@ -41,12 +42,13 @@ import { SPRING_PRESS, SPRING_SWAP } from "@/lib/ease";
 import { focusRing } from "@/lib/surfaces";
 import { cn } from "@/lib/utils";
 
-export type ToolResultStatus = "running" | "success" | "error" | "cancelled";
+export type ToolResultStatus = "running" | "success" | "error" | "cancelled" | "unknown";
 export type ToolResultKind = "terminal" | "request" | "custom";
 
 export interface ToolResultProps {
   tool: ReactNode;
   title: ReactNode;
+  subtitle?: ReactNode;
   children?: ReactNode;
   status?: ToolResultStatus;
   kind?: ToolResultKind;
@@ -73,6 +75,7 @@ export interface ToolResultOutputProps {
 }
 
 const STATUS_LABEL_KEY = {
+  unknown: "toolCard.unknown",
   running: "toolCard.running",
   success: "toolCard.completed",
   error: "toolCard.failed",
@@ -82,6 +85,7 @@ const STATUS_LABEL_KEY = {
 // Status colours come from the shared `status-*` tokens so tool cards, the
 // sidebar status dot and diff gutters all speak the same colour language.
 const STATUS_CLASS = {
+  unknown: "text-muted-foreground",
   running: "text-status-running",
   success: "text-status-success",
   error: "text-status-error",
@@ -89,6 +93,7 @@ const STATUS_CLASS = {
 } as const satisfies Record<ToolResultStatus, string>;
 
 const STATUS_ICON = {
+  unknown: CircleHelp,
   running: LoaderCircle,
   success: CircleCheck,
   error: CircleX,
@@ -211,6 +216,7 @@ export function ToolResultOutput({
 export function ToolResult({
   tool,
   title,
+  subtitle,
   children,
   status = "running",
   kind = "custom",
@@ -379,6 +385,8 @@ export function ToolResult({
           <ChevronDown className="size-3.5" />
         </motion.span>
       </button>
+
+      {subtitle ? <div className="pl-[calc(1em+0.25rem)] text-xs text-muted-foreground">{subtitle}</div> : null}
 
       {children ? (
         <AgentDisclosure

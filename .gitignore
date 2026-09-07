@@ -11,6 +11,7 @@ dist/
 dist-ssr/
 .vite/
 coverage/
+.priva-attachments/
 
 # Logs
 logs/

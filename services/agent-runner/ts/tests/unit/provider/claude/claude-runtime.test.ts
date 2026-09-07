@@ -1,4 +1,4 @@
-import type { SDKControlGetContextUsageResponse, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+import type { Options, SDKControlGetContextUsageResponse, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { describe, expect, it } from 'vitest'
 
 import type { AgentEvent } from '../../../../src/core/event/agent-event.js'
@@ -9,8 +9,46 @@ import {
   type ClaudeQuery,
 } from '../../../../src/provider/claude/claude-runtime.js'
 import { testRunSpec } from '../../../support/run-spec.js'
+import { userTurnFromText } from '../../../../src/core/run/user-turn.js'
 
 describe('ClaudeRuntime stream input', () => {
+  it('sets a native title for a new attachment-only session and preserves empty user text', async () => {
+    let options: Options | undefined
+    let query: FakeClaudeQuery | undefined
+    const runtime = new ClaudeRuntime(testRunSpec(), { kind: 'new', provider: 'claude' }, '/tmp/claude', (args) => {
+      options = args.options
+      query = new FakeClaudeQuery(args.prompt)
+      return query
+    })
+    const turn = { text: '', attachments: [{ path: '/tmp/README.md', name: 'README.md', mimeType: 'text/markdown', size: 1 }] }
+    await collect(runtime.run(turn, { signal: new AbortController().signal }))
+    expect(options?.title).toBe('README.md')
+    expect(userTurnFromText(userTexts(query?.received)[0] ?? '')).toEqual(turn)
+    await runtime.release('dispose')
+  })
+
+  it('does not override a resumed session title for an attachment-only follow-up', async () => {
+    let options: Options | undefined
+    const runtime = new ClaudeRuntime(testRunSpec(), { kind: 'resume', session: { provider: 'claude', id: 'sess-stream' } }, '/tmp/claude', (args) => {
+      options = args.options
+      return new FakeClaudeQuery(args.prompt)
+    })
+    await collect(runtime.run({ text: '', attachments: [{ path: '/tmp/README.md', name: 'README.md', mimeType: 'text/markdown', size: 1 }] }, { signal: new AbortController().signal }))
+    expect(options?.title).toBeUndefined()
+    await runtime.release('dispose')
+  })
+  it('includes attached files in the actual SDK user message', async () => {
+    let query: FakeClaudeQuery | undefined
+    const runtime = new ClaudeRuntime(testRunSpec(), { kind: 'new', provider: 'claude' }, '/tmp/claude', ({ prompt, options }) => {
+      expect(options.title).toBeUndefined()
+      query = new FakeClaudeQuery(prompt)
+      return query
+    })
+    const turn = { text: 'read it', attachments: [{ path: '/tmp/report.txt', name: 'report.txt', mimeType: 'text/plain', size: 1 }] }
+    await collect(runtime.run(turn, { signal: new AbortController().signal }))
+    expect(userTurnFromText(userTexts(query?.received)[0] ?? '')).toEqual(turn)
+    await runtime.release('dispose')
+  })
   it('keeps the prompt iterable open after the first turn until release', async () => {
     let query: FakeClaudeQuery | undefined
     let started = 0

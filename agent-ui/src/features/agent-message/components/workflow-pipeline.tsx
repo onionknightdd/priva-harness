@@ -65,8 +65,8 @@ export function WorkflowPipeline({ workflow, loadDetail, initialAgentIndex }: { 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className={cn("@container my-2 w-full min-w-0", reduce && "[&_*]:transition-none [&_*]:animate-none [&_*]:scale-100")}
       onPointerDownCapture={() => setKeyboard(false)} onKeyDownCapture={() => setKeyboard(true)}>
-      <Card data-testid="workflow-pipeline" className="gap-0 rounded-xl border border-border bg-background py-0 text-foreground shadow-none ring-0">
-        <CollapsibleTrigger aria-controls={boardId} className={cn("flex w-full items-center gap-2 rounded-t-xl bg-muted/40 px-3 py-2 text-left transition-colors duration-150 hover:bg-muted/60 motion-reduce:transition-none", (reduce || keyboard) && "transition-none", focusRing)}>
+      <Card data-testid="workflow-pipeline" className="gap-0 rounded-lg border border-border bg-background py-0 text-foreground shadow-none ring-0">
+        <CollapsibleTrigger aria-controls={boardId} className={cn("flex w-full items-center gap-2 rounded-t-lg aria-[expanded=false]:rounded-b-lg bg-muted/40 px-3 py-2 text-left transition-colors duration-150 hover:bg-muted/60 motion-reduce:transition-none", (reduce || keyboard) && "transition-none", focusRing)}>
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
               <span className="inline-flex min-w-0 items-center gap-1.5 text-sm font-medium"><WorkflowIcon aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" /><span className="min-w-0 break-words">{workflow.name ?? t("agentMessage.workflow")}</span></span>
@@ -171,7 +171,7 @@ export function WorkflowPipeline({ workflow, loadDetail, initialAgentIndex }: { 
 }
 
 function AgentStepContent({ agent, now }: { agent: WorkflowAgent; now: number }) {
-  const toolName = agent.lastToolName === "StructuredOutput" ? undefined : agent.lastToolName
+  const toolName = agent.lastToolName?.toLowerCase() === "structuredoutput" ? undefined : agent.lastToolName
   const duration = workflowDuration(agent.durationMs ?? (agent.state === "running" && agent.startedAt ? Math.max(0, now - agent.startedAt) : undefined))
   return (
     <span className="flex min-w-0 flex-1 flex-col gap-0.5">

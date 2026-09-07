@@ -1,12 +1,14 @@
+import { agentToolsForMessage, isAgentTool } from "../agent-tool-data"
+import { AgentToolItem } from "./agent-tool-item"
 import { isWorkflowTool } from "../workflow-data"
 import { WorkflowToolItem } from "./workflow-tool-item"
 import * as React from "react"
 import {
-  BotIcon,
   ChevronDownIcon,
   FilePenLineIcon,
   FilePlusCornerIcon,
   ImageIcon,
+  ScrollTextIcon,
   WrenchIcon,
   type LucideIcon,
 } from "lucide-react"
@@ -46,7 +48,6 @@ import { cn } from "@/lib/utils"
 import {
   isProcessBlock,
   type AgentThreadMessage,
-  type NestedAgent,
   type StreamBlock,
   type ToolCard,
 } from "../agent-message-data"
@@ -59,6 +60,7 @@ import {
 import { parseFileReadOutput, isImageFilePath } from "../file-read-view"
 import { formatProcessStatusText } from "../process-status"
 import {
+  isStructuredOutputTool,
   isBashTool,
   isEditTool,
   isReadTool,
@@ -96,6 +98,8 @@ export function AssistantProcess({
 
   const rows: React.ReactNode[] = []
   const renderedWorkflows = new Set<string>()
+  const agentTools = agentToolsForMessage(message)
+  const renderedAgents = new Set<string>()
   for (const block of blocks) {
     if (!isProcessBlock(block, blocks)) {
       continue
@@ -128,7 +132,12 @@ export function AssistantProcess({
       continue
     }
     if (block.type === "tool_use") {
-      if (isWorkflowTool(block.name)) {
+      if (isStructuredOutputTool(block.name)) continue
+      if (isAgentTool(block.name)) {
+        const agent = agentTools.find((item) => item.id === block.id)
+        if (agent) rows.push(<AgentToolItem key={block.id} agent={agent} agents={agentTools} />)
+        renderedAgents.add(block.id)
+      } else if (isWorkflowTool(block.name)) {
         const workflow = message.workflows?.find((item) => item.workflowToolUseId === block.id) ?? {
           workflowToolUseId: block.id,
           status: block.tool?.ok === false ? "failed" as const : isStreaming ? "running" as const : "unknown" as const,
@@ -141,8 +150,8 @@ export function AssistantProcess({
       }
     }
   }
-  for (const agent of message.nestedAgents ?? []) {
-    rows.push(<NestedAgentItem key={agent.parentToolUseId} agent={agent} />)
+  for (const agent of agentTools) {
+    if (!renderedAgents.has(agent.id)) rows.push(<AgentToolItem key={agent.id} agent={agent} agents={agentTools} />)
   }
   for (const workflow of message.workflows ?? []) {
     if (!renderedWorkflows.has(workflow.workflowToolUseId)) {
@@ -209,7 +218,7 @@ export function AssistantProcess({
   )
 }
 
-function TextItem({ text }: { text: string }) {
+export function TextItem({ text }: { text: string }) {
   return (
     <div className="w-full min-w-0 px-0 py-0.5 text-sm text-foreground">
       <QuoteSelectable>
@@ -227,7 +236,7 @@ function TextItem({ text }: { text: string }) {
   )
 }
 
-function ThinkingItem({
+export function ThinkingItem({
   text,
   startedAt,
   durationMs,
@@ -271,7 +280,7 @@ function ThinkingItem({
   )
 }
 
-function ImageItem({
+export function ImageItem({
   block,
   defaultOpen,
 }: {
@@ -303,7 +312,7 @@ function ImageItem({
   )
 }
 
-function ToolItem({
+export function ToolItem({
   block,
 }: {
   block: Extract<StreamBlock, { type: "tool_use" }>
@@ -326,7 +335,31 @@ function ToolItem({
   if (isCanvasTool(block.name)) {
     return <CanvasToolItem block={block} />
   }
+  if (block.name.trim().toLowerCase() === "skill") {
+    return <SkillToolItem block={block} />
+  }
   return <GenericToolItem block={block} />
+}
+
+function SkillToolItem({ block }: { block: Extract<StreamBlock, { type: "tool_use" }> }) {
+  const { t } = useTranslation()
+  const input = usefulToolInput(block.tool?.input) ?? usefulToolInput(block.input)
+  const status = toolResultStatus(block.tool)
+  const output = block.tool?.output?.trim() ?? ""
+  return (
+    <ToolResult
+      tool={t(status === "running" ? "agentMessage.toolItem.skillRunning" : "agentMessage.toolItem.skillDone")}
+      title={stringInput(input, "skill") ?? ""}
+      icon={<ScrollTextIcon className="size-[1em]" />}
+      status={status}
+      defaultOpen={status === "running"}
+      maxHeight={280}
+      copyText={output || undefined}
+      contentClassName="min-w-0"
+    >
+      {output ? <QuoteSelectable><MessageResponse mode="static" className="min-w-0 break-words text-sm">{output}</MessageResponse></QuoteSelectable> : null}
+    </ToolResult>
+  )
 }
 
 function GenericToolItem({
@@ -653,86 +686,6 @@ function ReadToolItem({
       defaultOpen={running}
       collapseOnComplete
     />
-  )
-}
-
-function NestedAgentItem({ agent }: { agent: NestedAgent }) {
-  const { t } = useTranslation()
-  const running = agent.status === "running"
-  const text = agent.blocks
-    .filter((block) => block.type === "text")
-    .sort((left, right) => left.index - right.index)
-    .map((block) => block.text)
-    .join("")
-  const tools = agent.blocks
-    .filter(
-      (block): block is Extract<StreamBlock, { type: "tool_use" }> =>
-        block.type === "tool_use"
-    )
-    .sort((left, right) => left.index - right.index)
-  const hasBody =
-    text.length > 0 || agent.inbox.length > 0 || tools.length > 0
-
-  return (
-    <ProcessRow
-      icon={BotIcon}
-      title={t("agentMessage.nestedAgent")}
-      badge={
-        running
-          ? t("agentMessage.runInBackground")
-          : (agent.name ?? agent.agentId)
-      }
-      badgeVariant={running ? "secondary" : "outline"}
-      defaultOpen={running}
-    >
-      {hasBody ? (
-        <div className="flex flex-col gap-2">
-          {text ? (
-            <QuoteSelectable>
-              <p
-                className={cn(
-                  "whitespace-pre-wrap text-sm text-muted-foreground",
-                  TEXT_LINE_GAP_CLASS
-                )}
-              >
-                {text}
-              </p>
-            </QuoteSelectable>
-          ) : null}
-          {agent.inbox.length > 0 ? (
-            <ItemGroup className="gap-1 text-muted-foreground">
-              {agent.inbox.map((item, index) => (
-                <Item key={`${item.source}-${index}`} size="xs">
-                  <ItemContent>
-                    <ItemTitle>
-                      {item.source === "coordinator"
-                        ? t("agentMessage.coordinatorMessage")
-                        : t("agentMessage.peerMessage")}
-                    </ItemTitle>
-                    <p
-                      className={cn(
-                        "whitespace-pre-wrap text-sm text-muted-foreground",
-                        TEXT_LINE_GAP_CLASS
-                      )}
-                      data-assistant-selectable=""
-                    >
-                      {item.body}
-                    </p>
-                  </ItemContent>
-                </Item>
-              ))}
-            </ItemGroup>
-          ) : null}
-          {tools.length > 0 ? (
-            <ProcessItemGroup className="py-0">
-              {tools.map((block) => (
-                <ToolItem key={block.id} block={block} />
-              ))}
-            </ProcessItemGroup>
-          ) : null}
-        </div>
-      ) : null}
-    </ProcessRow>
   )
 }
 

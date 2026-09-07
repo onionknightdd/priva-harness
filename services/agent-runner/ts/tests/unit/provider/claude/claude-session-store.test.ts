@@ -296,11 +296,11 @@ function fakeClaudeSdk(): ClaudeSessionSdk & {
     )),
     getSessionMessages: vi.fn(() => Promise.resolve([
       { type: 'user', uuid: 'u1', session_id: 'sess-1', message: { role: 'user' } },
-      { type: 'assistant', uuid: 'a1', session_id: 'sess-1', message: { role: 'assistant' } },
+      { type: 'assistant', uuid: 'a1', session_id: 'sess-1', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'parent-a', name: 'Agent', input: {} }] } },
     ])),
     listSubagents: vi.fn(() => Promise.resolve([{ agentId: 'agent-a' }])),
     getSubagentMessages: vi.fn(() => Promise.resolve([
-      { type: 'user', uuid: 'sub-1', session_id: 'sess-1', message: { role: 'user' } },
+      { type: 'user', uuid: 'sub-1', session_id: 'sess-1', parent_tool_use_id: 'parent-a', message: { role: 'user' } },
     ])),
     deleteSession: vi.fn(() => Promise.resolve()),
     renameSession: vi.fn(() => Promise.resolve()),

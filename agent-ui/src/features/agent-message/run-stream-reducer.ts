@@ -13,6 +13,8 @@ import { frameAtMs, stampMessageThinkingTimes } from "./thinking-time"
 const STREAM_PROTOCOL_VERSION = 1
 
 export type StreamFrame = {
+  tokens?: number
+  durationMs?: number
   v?: number
   type?: string
   message?: string
@@ -37,6 +39,7 @@ export type StreamFrame = {
   url?: string
   alt?: string
   blocks?: unknown
+  deliveryId?: string
   body?: string
   source?: string
   senderName?: string
@@ -104,6 +107,7 @@ function applyStreamContent(
   }
   if (frame.type === "run.aborted" || frame.type === "run.completed") {
     return { ...message, status: frame.type === "run.aborted" ? "complete" : message.status,
+      nestedAgents: frame.type === "run.aborted" ? message.nestedAgents?.map((agent) => agent.status === "running" ? { ...agent, status: "cancelled" as const } : agent) : message.nestedAgents,
       workflows: frame.type === "run.aborted" ? settleWorkflowCards(message.workflows, "cancelled") : message.workflows }
   }
 
@@ -175,12 +179,18 @@ function applyMainBlocks(blocks: StreamBlock[], frame: StreamFrame): StreamBlock
 function applyNested(agents: NestedAgent[], frame: StreamFrame): NestedAgent[] {
   const parentId = frame.parentToolUseId
   if (parentId === undefined || parentId === "") {
+    if (frame.type === "tool.completed" && (frame.name === "agent" || frame.name === "task")) {
+      return agents.map((agent) => agent.parentToolUseId === frame.id ? { ...agent,
+        ...(frame.agentId === undefined ? {} : { agentId: frame.agentId }),
+        ...(frame.status === "async_launched" ? {} : { status: frame.ok === false ? "failed" as const : "completed" as const }),
+      } : agent)
+    }
     if (frame.type === "agent.started") {
       return agents
     }
     if (frame.type === "agent.completed") {
       return agents.map((agent) =>
-        agent.agentId === frame.agentId ? { ...agent, status: "completed" } : agent
+        agent.agentId === frame.agentId ? { ...agent, status: frame.status === "cancelled" ? "cancelled" : frame.ok === false ? "failed" : "completed" } : agent
       )
     }
     return agents
@@ -198,12 +208,15 @@ function applyNested(agents: NestedAgent[], frame: StreamFrame): NestedAgent[] {
 
   let next = current
   if (frame.type === "agent.message" && frame.body) {
+    if (frame.deliveryId && current.inbox.some((item) => item.deliveryId === frame.deliveryId)) return agents
     next = {
       ...current,
       inbox: [
         ...current.inbox,
         {
+          ...(frame.deliveryId === undefined ? {} : { deliveryId: frame.deliveryId }),
           body: frame.body,
+          afterBlockCount: current.blocks.length,
           source: frame.source === "coordinator" ? "coordinator" : "peer",
           ...(frame.senderName === undefined ? {} : { senderName: frame.senderName }),
         },
@@ -217,13 +230,13 @@ function applyNested(agents: NestedAgent[], frame: StreamFrame): NestedAgent[] {
       ...(frame.name === undefined ? {} : { name: frame.name }),
     }
   } else if (frame.type === "agent.completed") {
-    next = { ...current, status: "completed" }
+    next = { ...current, status: frame.status === "cancelled" ? "cancelled" : frame.ok === false ? "failed" : "completed" }
   } else if (
     frame.type === "tool.completed" &&
-    frame.status !== "async_launched" &&
+    frame.status !== "async_launched" && frame.id === parentId &&
     (frame.name === "agent" || frame.name === "task")
   ) {
-    next = { ...current, status: "completed" }
+    next = { ...current, status: frame.status === "cancelled" ? "cancelled" : frame.ok === false ? "failed" : "completed" }
   } else {
     next = { ...current, blocks: applyMainBlocks(current.blocks, frame) }
   }
@@ -317,7 +330,7 @@ function syncTools(blocks: StreamBlock[], frame: StreamFrame): StreamBlock[] {
     ...(isUsefulInput(frame.input) || base.tool?.inputRaw === undefined
       ? {}
       : { inputRaw: base.tool.inputRaw }),
-    ...(kind === "tool.completed" ? { ok: frame.ok !== false, output: frame.output ?? "" } : {}),
+    ...(kind === "tool.completed" ? { ok: frame.ok !== false, output: frame.output ?? "", ...(frame.tokens === undefined ? {} : { tokens: frame.tokens }), ...(frame.durationMs === undefined ? {} : { durationMs: frame.durationMs }) } : {}),
     ...(frame.status === undefined ? {} : { launchStatus: frame.status }),
     ...(frame.agentId === undefined ? {} : { agentId: frame.agentId }),
   }

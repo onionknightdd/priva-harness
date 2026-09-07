@@ -3,6 +3,13 @@ import { describe, expect, it } from 'vitest'
 import { ClaudeEventMapper } from '../../../../src/provider/claude/claude-event-mapper.js'
 
 describe('ClaudeEventMapper', () => {
+  it('preserves Agent result token and duration metrics', () => {
+    const mapper = new ClaudeEventMapper()
+    mapper.push({ type: 'assistant', message: { id: 'm', content: [{ type: 'tool_use', id: 'a', name: 'Agent', input: {} }] } })
+    const events = mapper.push({ type: 'user', toolUseResult: { totalTokens: 15142, totalDurationMs: 3357 }, message: { content: [{ type: 'tool_result', tool_use_id: 'a', content: 'done' }] } })
+    expect(events.find((event) => event.type === 'tool.completed')).toMatchObject({ tokens: 15142, durationMs: 3357 })
+  })
+
   it('maps text deltas, a complete assistant message, and a successful result', () => {
     const mapper = new ClaudeEventMapper()
     const events = [

@@ -4,6 +4,9 @@ import { describe, it } from "node:test"
 import { composerPrimaryAction } from "../../../src/features/agent-message/composer-primary-action.ts"
 
 describe("composerPrimaryAction", () => {
+  it("is send when attachments are selected during streaming", () => {
+    assert.equal(composerPrimaryAction("", true, false, true), "send")
+  })
   it("is stop while streaming with an empty draft", () => {
     assert.equal(composerPrimaryAction("", true), "stop")
     assert.equal(composerPrimaryAction("   ", true), "stop")

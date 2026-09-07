@@ -1,3 +1,5 @@
+import { userTurnSummary } from '../../../core/run/user-turn.js'
+import { ownedSubagentMessages } from "./claude-subagent-history.js"
 import { hydrateWorkflowResult, readWorkflowAgentDetail } from './claude-workflow-files.js'
 import { readFile, readdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -122,10 +124,12 @@ export class ClaudeSessionStore implements ProviderSessionStore {
     const mapped = source.map((message) => this.mapHydratedMessage(message, ref.id, toolUseResults))
     if (page?.limit === undefined) {
       const subagents = await this.sdk.listSubagents(ref.id, options)
-      for (const subagent of subagents) {
-        const extra = await this.sdk.getSubagentMessages(ref.id, subagent.agentId, options)
-        mapped.push(...extra.map((message) => this.mapHydratedMessage(message, ref.id, toolUseResults)))
-      }
+      const groups = await Promise.all(subagents.map(async (subagent) => ({
+        agentId: subagent.agentId,
+        messages: (await this.sdk.getSubagentMessages(ref.id, subagent.agentId, options))
+          .map((message) => this.mapHydratedMessage(message, ref.id, toolUseResults)),
+      })))
+      mapped.push(...ownedSubagentMessages(mapped, groups))
     }
     return pageSessionMessages(mapped, page)
   }
@@ -190,11 +194,11 @@ export class ClaudeSessionStore implements ProviderSessionStore {
   private toProviderInfo(info: ClaudeSdkSessionInfo): ProviderSessionInfo {
     return {
       ref: { provider: 'claude', id: info.sessionId },
-      summary: info.summary ?? '',
+      summary: userTurnSummary(info.summary ?? ''),
       lastModified: toEpochMs(info.lastModified),
       fileSize: info.fileSize ?? 0,
       customTitle: info.customTitle ?? null,
-      firstPrompt: info.firstPrompt ?? null,
+      firstPrompt: info.firstPrompt == null ? null : userTurnSummary(info.firstPrompt),
       gitBranch: info.gitBranch ?? null,
       cwd: info.cwd ?? null,
       tag: info.tag ?? null,
@@ -286,7 +290,8 @@ const defaultClaudeSessionSdk: ClaudeSessionSdk = {
   async listSubagents(sessionId, options) {
     const fn = claudeSdkFunction('listSubagents')
     if (fn === undefined) return []
-    return await Promise.resolve(fn(sessionId, ...optionalArg(options))) as ClaudeSdkSubagentInfo[]
+    const ids = await Promise.resolve(fn(sessionId, ...optionalArg(options))) as string[]
+    return ids.map((agentId) => ({ agentId }))
   },
   async getSubagentMessages(sessionId, agentId, options) {
     const fn = claudeSdkFunction('getSubagentMessages')
@@ -333,7 +338,7 @@ export function mapClaudeMessage(raw: unknown, sessionId: string): SessionMessag
     uuid,
     sessionId: stringField(record, 'session_id') ?? stringField(record, 'sessionId') ?? sessionId,
     message: withToolUseResult(
-      record['message'] ?? raw,
+      withSkillSource(record['message'] ?? raw, record['sourceToolUseID']),
       record['tool_use_result'] ?? record['toolUseResult'],
     ),
     parentToolUseId: stringField(record, 'parent_tool_use_id')
@@ -454,4 +459,9 @@ async function pathExists(path: string): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+function withSkillSource(message: unknown, sourceToolUseID: unknown): unknown {
+  if (typeof sourceToolUseID !== 'string' || typeof message !== 'object' || message === null || Array.isArray(message)) return message
+  return { ...message, sourceToolUseID }
 }

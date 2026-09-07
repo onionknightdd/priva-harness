@@ -392,7 +392,10 @@ export function FilePreviewToolbar({
           </>
         )}
 
-        <div className="file-preview-toolbar__controls flex shrink-0 items-center gap-1">
+        <div
+          data-file-preview-controls
+          className="file-preview-toolbar__controls flex shrink-0 items-center gap-1"
+        >
           <ToggleGroup
             aria-label={t("filePreview.modeLabel")}
             value={mode ? [mode] : []}

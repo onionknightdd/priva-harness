@@ -1,3 +1,4 @@
+import type { UserAttachment } from '../run/user-turn.js'
 import type {
   CreatedUserDirectory,
   DeletedUserPath,
@@ -11,7 +12,7 @@ export interface PendingUserFileUpload {
   readonly fileName: string
 
   write(content: AsyncIterable<Uint8Array>): Promise<void>
-  commit(directory: string): Promise<UserFileUploadResult>
+  commit(directory: string, purpose?: 'attachment'): Promise<UserFileUploadResult>
   abort(): Promise<void>
 }
 
@@ -24,5 +25,6 @@ export interface UserFileSystem {
   deletePath(path: string): Promise<DeletedUserPath>
   openDownload(path: string): Promise<UserFileDownload>
   previewFile(path: string): Promise<UserFilePreview>
+  inspectAttachment(path: string): Promise<UserAttachment>
   beginUpload(fileName: string): Promise<PendingUserFileUpload>
 }

@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -132,6 +132,33 @@ describe('WS /api/sandbox/agent/ws/run', () => {
         harness: 'unknown',
       }),
     ])
+  })
+
+  it.each(['claude', 'pi'] as const)('passes verified attachment-only turns to %s', async (harness) => {
+    const path = join(testRoot, 'report.txt')
+    await writeFile(path, 'report')
+    const socket = await server.injectWS(RUN_WEBSOCKET_PATH)
+    const frames = collectFrames(socket)
+    socket.send(JSON.stringify({
+      type: 'init', text: '', model: modelReference, harness, cwd: testRoot,
+      attachments: [{ path, name: 'untrusted', mimeType: 'fake/type', size: 999 }],
+    }))
+    expect(await frames).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'run.completed' })]))
+    const provider = harness === 'claude' ? claudeProvider : piProvider
+    expect(provider.turns).toEqual([{
+      text: '', attachments: [{ path: await realpath(path), name: 'report.txt', mimeType: 'text/plain', size: 6 }],
+    }])
+  })
+
+  it('does not launch the agent when an attachment is missing', async () => {
+    const socket = await server.injectWS(RUN_WEBSOCKET_PATH)
+    const frames = collectFrames(socket)
+    socket.send(JSON.stringify({
+      type: 'init', text: 'read this', model: modelReference, harness: 'claude', cwd: testRoot,
+      attachments: [{ path: join(testRoot, 'missing.txt'), name: 'missing.txt', mimeType: 'text/plain', size: 1 }],
+    }))
+    expect(await frames).toEqual([expect.objectContaining({ type: 'error' })])
+    expect(claudeProvider.turns).toEqual([])
   })
 
   it('returns an error frame when the profile cannot be resolved', async () => {

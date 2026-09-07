@@ -1,9 +1,9 @@
 import * as React from "react"
 
-import type { UploadBatchHandle } from "./upload.types"
+import type { UploadBatchHandle, UploadBatchOptions } from "./upload.types"
 
 export type UploadQueueContextValue = {
-  enqueueFiles: (directory: string, files: File[]) => UploadBatchHandle
+  enqueueFiles: (directory: string, files: File[], options?: UploadBatchOptions) => UploadBatchHandle
 }
 
 export const UploadQueueContext = React.createContext<

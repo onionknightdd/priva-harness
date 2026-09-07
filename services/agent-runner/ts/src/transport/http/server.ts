@@ -104,6 +104,7 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
   if (options.agentHarness !== undefined) {
     void server.register(websocket)
     void server.register(runWebsocketRoutes, {
+      fileSystem: options.userFileSystem,
       harness: options.agentHarness,
       modelProfileService: options.modelProfileService,
       agentProfileService: options.agentProfileService,

@@ -1,3 +1,4 @@
+import type { MessageAttachment } from "./message-attachment"
 import type { WorkflowCard } from "./workflow-data"
 export type { WorkflowCard } from "./workflow-data"
 import { isTaskBoardTool } from "./task-plan"
@@ -49,6 +50,8 @@ export type StreamBlock =
     }
 
 export type ToolCard = {
+  tokens?: number
+  durationMs?: number
   id: string
   name: string
   input?: unknown
@@ -61,6 +64,8 @@ export type ToolCard = {
 }
 
 export type NestedInboxMessage = {
+  deliveryId?: string
+  afterBlockCount?: number
   body: string
   source: "peer" | "coordinator"
   senderName?: string
@@ -70,7 +75,7 @@ export type NestedAgent = {
   parentToolUseId: string
   agentId?: string
   name?: string
-  status: "running" | "completed"
+  status: "running" | "completed" | "failed" | "cancelled"
   blocks: StreamBlock[]
   inbox: NestedInboxMessage[]
 }
@@ -79,6 +84,7 @@ export type AgentThreadMessage = {
   id: string
   role: AgentMessageRole
   content: string
+  attachments?: MessageAttachment[]
   createdAt: string
   status: AgentMessageStatus
   transcriptUuid?: string
@@ -142,7 +148,7 @@ function blockHasVisibleContent(block: StreamBlock): boolean {
     return isVisibleAnswerText(block.text)
   }
   if (block.type === "tool_use") {
-    return !isTaskBoardTool(block.name)
+    return !isTaskBoardTool(block.name) && block.name.toLowerCase() !== "structuredoutput"
   }
   return block.type === "image"
 }
@@ -162,7 +168,7 @@ export function isProcessBlock(
     return true
   }
   if (block.type === "tool_use") {
-    return !isTaskBoardTool(block.name)
+    return !isTaskBoardTool(block.name) && block.name.toLowerCase() !== "structuredoutput"
   }
   if (block.type !== "text" || block.text.trim() === "") {
     return false

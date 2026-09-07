@@ -20,6 +20,7 @@ export function applyStreamFrame(message: ThreadMessage, event: AgentEvent): Thr
   }
   if (event.type === 'run.aborted') {
     return { ...message, status: 'complete',
+      ...(message.nestedAgents === undefined ? {} : { nestedAgents: message.nestedAgents.map((agent) => agent.status === 'running' ? { ...agent, status: 'cancelled' as const } : agent) }),
       ...(message.workflows === undefined ? {} : { workflows: settleWorkflows(message.workflows, 'cancelled') }) }
   }
 
@@ -98,9 +99,15 @@ function applyNested(
 ): ThreadNestedAgent[] {
   const parentId = parentToolUseIdOf(event)
   if (parentId === undefined) {
+    if (event.type === 'tool.completed' && isAgentName(event.name)) {
+      return agents.map((agent) => agent.parentToolUseId === event.id ? { ...agent,
+        ...(event.agentId === undefined ? {} : { agentId: event.agentId }),
+        ...(event.status === 'async_launched' ? {} : { status: !event.ok ? 'failed' as const : 'completed' as const }),
+      } : agent)
+    }
     if (event.type === 'agent.completed') {
       return agents.map((agent) =>
-        agent.agentId === event.agentId ? { ...agent, status: 'completed' } : agent,
+        agent.agentId === event.agentId ? { ...agent, status: event.status ?? (event.ok === false ? 'failed' : 'completed') } : agent,
       )
     }
     return [...agents]
@@ -120,9 +127,12 @@ function applyNested(
 
   let next = current
   if (event.type === 'agent.message' && event.body !== '') {
+    if (event.deliveryId && current.inbox.some((item) => item.deliveryId === event.deliveryId)) return [...agents]
     const senderName = event.senderName
     const item: ThreadInboxMessage = {
+      ...(event.deliveryId === undefined ? {} : { deliveryId: event.deliveryId }),
       body: event.body,
+      afterBlockCount: current.blocks.length,
       source: event.source === 'coordinator' ? 'coordinator' : 'peer',
       ...(senderName === undefined ? {} : { senderName }),
     }
@@ -136,13 +146,13 @@ function applyNested(
       ...(startedName === undefined ? {} : { name: startedName }),
     }
   } else if (event.type === 'agent.completed') {
-    next = { ...current, status: 'completed' }
+    next = { ...current, status: event.status ?? (event.ok === false ? 'failed' : 'completed') }
   } else if (
     event.type === 'tool.completed' &&
-    event.status !== 'async_launched' &&
+    event.status !== 'async_launched' && event.id === parentId &&
     isAgentName(event.name)
   ) {
-    next = { ...current, status: 'completed' }
+    next = { ...current, status: !event.ok ? 'failed' : 'completed' }
   } else {
     next = { ...current, blocks: applyMainBlocks(current.blocks, event) }
   }
@@ -232,7 +242,7 @@ function syncTools(blocks: readonly ThreadBlock[], event: AgentEvent): ThreadBlo
       ? {}
       : { inputRaw: base.tool.inputRaw }),
     ...(event.type === 'tool.completed'
-      ? { ok: event.ok, output: event.output }
+      ? { ok: event.ok, output: event.output, ...(event.tokens === undefined ? {} : { tokens: event.tokens }), ...(event.durationMs === undefined ? {} : { durationMs: event.durationMs }) }
       : {}),
     ...(launchStatus === undefined ? {} : { launchStatus }),
     ...(toolAgentId === undefined ? {} : { agentId: toolAgentId }),

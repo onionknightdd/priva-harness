@@ -164,6 +164,25 @@ describe('/api/sandbox/files', () => {
     expect(await readdir(staging)).toEqual([])
     await expect(readFile(join(workspace, 'large.txt'))).rejects.toMatchObject({ code: 'ENOENT' })
   })
+
+  it('stores same-name chat attachments at distinct paths and serves them for preview', async () => {
+    const paths: string[] = []
+    for (const content of ['first', 'second']) {
+      const upload = multipartUpload('report.txt', content, workspace, 'attachment')
+      const response = await server.inject({ method: 'POST', url: '/api/sandbox/files/upload', headers: upload.headers, payload: upload.payload })
+      expect(response.statusCode).toBe(200)
+      const file = JSON.parse(response.body) as { path: string; name: string; size: number }
+      expect(file.name).toBe('report.txt')
+      expect(file.path.startsWith(join(canonicalWorkspace, '.priva-attachments') + '/')).toBe(true)
+      expect(await readFile(file.path, 'utf8')).toBe(content)
+      paths.push(file.path)
+      const preview = await server.inject({ method: 'GET', url: `/api/sandbox/files/preview?${new URLSearchParams({ path: file.path }).toString()}` })
+      expect(preview.statusCode).toBe(200)
+      expect(parseJson(preview.body)).toMatchObject({ content })
+    }
+    expect(paths[0]).not.toBe(paths[1])
+    expect(await readdir(staging)).toEqual([])
+  })
 })
 
 interface MultipartRequest {
@@ -175,6 +194,7 @@ function multipartUpload(
   fileName: string,
   content: string,
   directory: string,
+  purpose?: string,
 ): MultipartRequest {
   const boundary = 'priva-file-api-test-boundary'
   const payload = Buffer.concat([
@@ -188,6 +208,7 @@ function multipartUpload(
       `\r\n--${boundary}\r\n`
       + 'Content-Disposition: form-data; name="directory"\r\n\r\n'
       + `${directory}\r\n`
+      + (purpose === undefined ? '' : `--${boundary}\r\nContent-Disposition: form-data; name="purpose"\r\n\r\n${purpose}\r\n`)
       + `--${boundary}--\r\n`,
     ),
   ])

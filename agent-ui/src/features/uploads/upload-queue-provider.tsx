@@ -2,7 +2,7 @@
 
 import * as React from "react"
 
-import { uploadFile } from "@/lib/api/sandbox-files"
+import { uploadFile, type UploadFileOptions } from "@/lib/api/sandbox-files"
 
 import {
   UploadQueueContext,
@@ -11,9 +11,10 @@ import {
 import { UploadQueueFloatingPanel } from "./upload-queue-floating-panel"
 import type {
   UploadBatchHandle,
+  UploadBatchOptions,
   UploadBatchResult,
   UploadTask,
-  UploadTaskStatus,
+  UploadResult,
 } from "./upload.types"
 
 function getErrorMessage(error: unknown) {
@@ -22,12 +23,13 @@ function getErrorMessage(error: unknown) {
     : String(error)
 }
 
-function summarizeBatch(statuses: UploadTaskStatus[]): UploadBatchResult {
+function summarizeBatch(results: UploadResult[]): UploadBatchResult {
   return {
-    total: statuses.length,
-    succeeded: statuses.filter((status) => status === "succeeded").length,
-    failed: statuses.filter((status) => status === "failed").length,
-    canceled: statuses.filter((status) => status === "canceled").length,
+    results,
+    total: results.length,
+    succeeded: results.filter(({ status }) => status === "succeeded").length,
+    failed: results.filter(({ status }) => status === "failed").length,
+    canceled: results.filter(({ status }) => status === "canceled").length,
   }
 }
 
@@ -52,28 +54,32 @@ export function UploadQueueProvider({
   )
 
   const runUpload = React.useCallback(
-    async (task: UploadTask, file: File, controller: AbortController) => {
+    async (task: UploadTask, file: File, controller: AbortController, options: UploadFileOptions): Promise<UploadResult> => {
       try {
-        await uploadFile(task.directory, file, {
+        const uploaded = await uploadFile(task.directory, file, {
+          ...options,
           signal: controller.signal,
-          onProgress: (progress) => updateTask(task.id, { progress }),
+          onProgress: (progress) => {
+            updateTask(task.id, { progress })
+            options.onProgress?.(progress)
+          },
         })
         updateTask(task.id, { progress: 100, status: "succeeded" })
-        return "succeeded" as const
+        return { status: "succeeded", file: uploaded }
       } catch (error) {
         if (
           controller.signal.aborted ||
           (error instanceof DOMException && error.name === "AbortError")
         ) {
           updateTask(task.id, { status: "canceled" })
-          return "canceled" as const
+          return { status: "canceled" }
         }
 
         updateTask(task.id, {
           status: "failed",
           error: getErrorMessage(error),
         })
-        return "failed" as const
+        return { status: "failed", error: getErrorMessage(error) }
       } finally {
         controllersRef.current.delete(task.id)
       }
@@ -82,7 +88,7 @@ export function UploadQueueProvider({
   )
 
   const enqueueFiles = React.useCallback(
-    (directory: string, files: File[]): UploadBatchHandle => {
+    (directory: string, files: File[], options: UploadBatchOptions = {}): UploadBatchHandle => {
       const nextTasks = files.map<UploadTask>((file) => ({
         id: `${Date.now()}-${nextTaskIdRef.current++}`,
         directory,
@@ -98,10 +104,14 @@ export function UploadQueueProvider({
       const uploads = nextTasks.map((task, index) => {
         const controller = new AbortController()
         controllersRef.current.set(task.id, controller)
-        return runUpload(task, files[index], controller)
+        return runUpload(task, files[index], controller, {
+          purpose: options.purpose,
+          onProgress: (progress) => options.onProgress?.(index, progress),
+        })
       })
 
       return {
+        cancel: () => nextTasks.forEach((task) => controllersRef.current.get(task.id)?.abort()),
         taskIds: nextTasks.map((task) => task.id),
         completion: Promise.all(uploads).then(summarizeBatch),
       }

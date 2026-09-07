@@ -147,6 +147,8 @@ export type AgentEvent =
       EventChannel)
   | ({
       readonly type: 'tool.completed'
+      readonly tokens?: number
+      readonly durationMs?: number
       readonly id: string
       readonly name: string
       readonly ok: boolean
@@ -186,6 +188,7 @@ export type AgentEvent =
     }
   | ({
       readonly type: 'agent.message'
+      readonly deliveryId?: string
       readonly direction: 'received'
       readonly body: string
       readonly senderAgentId?: string
@@ -230,7 +233,7 @@ export type AgentEvent =
       readonly status: string
     }
   | { readonly type: 'agent.started'; readonly agentId: string; readonly name?: string }
-  | { readonly type: 'agent.completed'; readonly agentId: string; readonly ok?: boolean }
+  | { readonly type: 'agent.completed'; readonly agentId: string; readonly ok?: boolean; readonly status?: 'completed' | 'failed' | 'cancelled' }
   | {
       readonly type: 'permission.requested'
       readonly requestId: string

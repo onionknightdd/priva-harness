@@ -1,4 +1,4 @@
-import { FileIcon, XIcon } from "lucide-react"
+import { FileIcon, RotateCwIcon, XIcon } from "lucide-react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
@@ -23,9 +23,11 @@ import {
 export function ComposerAttachmentChips({
   attachments,
   onRemove,
+  onRetry,
 }: {
   attachments: ComposerAttachment[]
   onRemove: (id: string) => void
+  onRetry: (id: string) => void
 }) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
@@ -54,7 +56,7 @@ export function ComposerAttachmentChips({
               transition={shouldReduceMotion ? { duration: 0 } : SPRING_LAYOUT}
               className="min-w-0"
             >
-              <Attachment size="sm" state="done">
+              <Attachment size="sm" state={attachment.status}>
                 <AttachmentMedia variant={showImage ? "image" : "icon"}>
                   {showImage ? (
                     <img
@@ -66,12 +68,27 @@ export function ComposerAttachmentChips({
                   )}
                 </AttachmentMedia>
                 <AttachmentContent>
-                  <AttachmentTitle>{attachment.file.name}</AttachmentTitle>
-                  <AttachmentDescription>
-                    {formatComposerAttachmentSize(attachment.file.size)}
+                  <AttachmentTitle className="motion-reduce:animate-none!">
+                    {attachment.file.name}
+                  </AttachmentTitle>
+                  <AttachmentDescription title={attachment.error} role={attachment.status === "error" ? "alert" : undefined}>
+                    {attachment.status === "uploading"
+                      ? t("uploadQueue.percentage", { percentage: Math.round(attachment.progress) })
+                      : attachment.status === "error"
+                        ? attachment.error || t("agentMessage.attachmentUploadIncomplete")
+                        : formatComposerAttachmentSize(attachment.file.size)}
                   </AttachmentDescription>
                 </AttachmentContent>
                 <AttachmentActions>
+                  {attachment.status === "error" ? (
+                    <AttachmentAction
+                      type="button"
+                      aria-label={t("agentMessage.retryAttachment", { name: attachment.file.name })}
+                      onClick={() => onRetry(attachment.id)}
+                    >
+                      <RotateCwIcon />
+                    </AttachmentAction>
+                  ) : null}
                   <AttachmentAction
                     type="button"
                     aria-label={t("agentMessage.removeAttachment", {

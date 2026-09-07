@@ -1,3 +1,4 @@
+import { userTurnSummary } from '../../core/run/user-turn.js'
 import { readdir, stat, unlink } from 'node:fs/promises'
 import type { Dirent } from 'node:fs'
 import { join } from 'node:path'
@@ -185,7 +186,7 @@ export class PiSessionStore implements ProviderSessionStore {
       // Sessions listed from headers may outlive a deleted file.
     }
     const name = info.name === undefined || info.name === '' ? null : info.name
-    const firstPrompt = info.firstMessage === '' ? null : info.firstMessage
+    const firstPrompt = info.firstMessage === '' ? null : userTurnSummary(info.firstMessage)
     return {
       ref: { provider: 'pi', id: info.id },
       summary: name ?? firstPrompt ?? '',

@@ -171,7 +171,7 @@ export function countToolActivity(
   const counts = emptyToolActivityCounts()
   for (const block of blocks) {
     if (block.type !== "tool_use") continue
-    if (isTaskBoardTool(block.name)) continue
+    if (isTaskBoardTool(block.name) || isStructuredOutputTool(block.name)) continue
     const kind = classifyToolName(block.name)
     if (isToolRunning(block.tool)) {
       counts[kind].running += 1
@@ -208,4 +208,8 @@ function countKey(
   count: number
 ): string {
   return count === 1 ? keys.one : keys.many
+}
+
+export function isStructuredOutputTool(name: string): boolean {
+  return name.trim().toLowerCase() === "structuredoutput"
 }

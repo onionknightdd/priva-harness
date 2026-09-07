@@ -1,4 +1,5 @@
 import { useRef } from "react"
+import type { ComposerAttachment } from "../composer-attachments"
 import {
   AnimatePresence,
   motion,
@@ -34,6 +35,10 @@ const fadeTransition = {
 const agentColumnClassName = "mx-auto w-full max-w-3xl"
 
 export function AgentMessage({
+  attachments,
+  onFilesSelected,
+  onAttachmentRemove,
+  onAttachmentRetry,
   draft,
   messages,
   contextUsage,
@@ -48,6 +53,10 @@ export function AgentMessage({
   onSubmit,
   onStop,
 }: {
+  attachments: ComposerAttachment[]
+  onFilesSelected: (files: File[]) => void
+  onAttachmentRemove: (id: string) => void
+  onAttachmentRetry: (id: string) => void
   draft: string
   messages: AgentThreadMessage[]
   contextUsage: ContextUsage
@@ -126,6 +135,10 @@ export function AgentMessage({
         )}
       >
         <AgentMessageComposer
+          attachments={attachments}
+          onFilesSelected={onFilesSelected}
+          onAttachmentRemove={onAttachmentRemove}
+          onAttachmentRetry={onAttachmentRetry}
           compact={!isEmpty}
           draft={draft}
           canSubmit={canSubmit}

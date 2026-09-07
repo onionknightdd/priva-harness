@@ -18,21 +18,86 @@ import { WorkspaceToggle } from "./workspace-toggle"
 
 export function WorkspaceSidebar({
   className,
+  onContentMinimumWidthChange,
+  onMinimumWidthChange,
   resizable = true,
   style,
 }: {
   className?: string
+  onContentMinimumWidthChange?: (width: number) => void
+  onMinimumWidthChange?: (width: number) => void
   resizable?: boolean
   style?: React.CSSProperties
 }) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
   const { activeTabId, setActiveTabId } = useWorkspaceFiles()
+  const contentRef = React.useRef<HTMLDivElement>(null)
 
   const tabMode = activeTabId !== null
   const motionTransition = shouldReduceMotion
     ? { duration: 0 }
     : { duration: 0.2, ease: EASE_OUT }
+  const handleTabMinimumWidthChange = React.useCallback(
+    (tabWidth: number) => {
+      const content = contentRef.current
+
+      if (!content || !onMinimumWidthChange) {
+        return
+      }
+
+      const contentStyles = getComputedStyle(content)
+      const sidebar = content.closest<HTMLElement>(
+        '[data-slot="sidebar-container"]'
+      )
+      const sidebarStyles = sidebar ? getComputedStyle(sidebar) : null
+      const horizontalChrome =
+        (Number.parseFloat(contentStyles.paddingInlineStart) || 0) +
+        (Number.parseFloat(contentStyles.paddingInlineEnd) || 0) +
+        (Number.parseFloat(sidebarStyles?.borderInlineStartWidth ?? "") || 0) +
+        (Number.parseFloat(sidebarStyles?.borderInlineEndWidth ?? "") || 0)
+
+      onMinimumWidthChange(Math.ceil(tabWidth + horizontalChrome))
+    },
+    [onMinimumWidthChange]
+  )
+  const handleFileBrowserMinimumWidthChange = React.useCallback(
+    (fileBrowserWidth: number) => {
+      const content = contentRef.current
+      const fileBrowser = content?.querySelector<HTMLElement>(
+        "[data-file-browser-enter]"
+      )
+      const sidebar = content?.closest<HTMLElement>(
+        '[data-slot="sidebar-container"]'
+      )
+
+      if (
+        activeTabId !== "files" ||
+        !fileBrowser ||
+        !sidebar ||
+        !onContentMinimumWidthChange
+      ) {
+        return
+      }
+
+      const horizontalChrome = Math.max(
+        0,
+        sidebar.getBoundingClientRect().width -
+          fileBrowser.getBoundingClientRect().width
+      )
+
+      onContentMinimumWidthChange(
+        Math.ceil(fileBrowserWidth + horizontalChrome)
+      )
+    },
+    [activeTabId, onContentMinimumWidthChange]
+  )
+
+  React.useLayoutEffect(() => {
+    if (activeTabId !== "files") {
+      onContentMinimumWidthChange?.(0)
+    }
+  }, [activeTabId, onContentMinimumWidthChange])
 
   return (
     <Sidebar
@@ -52,6 +117,7 @@ export function WorkspaceSidebar({
     >
       <WorkspaceToggle className="absolute top-1 right-4 z-20 md:hidden" />
       <SidebarContent
+        ref={contentRef}
         className={
           tabMode
             ? "min-h-0 overflow-hidden px-1.5 pt-1 pb-2"
@@ -73,6 +139,10 @@ export function WorkspaceSidebar({
               <WorkspaceTabs
                 activeId={activeTabId}
                 onActiveIdChange={setActiveTabId}
+                onFileBrowserMinimumWidthChange={
+                  handleFileBrowserMinimumWidthChange
+                }
+                onMinimumWidthChange={handleTabMinimumWidthChange}
               />
             </motion.div>
           ) : (

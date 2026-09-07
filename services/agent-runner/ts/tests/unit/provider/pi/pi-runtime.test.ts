@@ -5,8 +5,17 @@ import { consumeRunEvents } from '../../../../src/harness/run/consume-run-events
 import { PiRuntime, type PiAgentSession } from '../../../../src/provider/pi/pi-runtime.js'
 import type { PiSessionEvent } from '../../../../src/provider/pi/pi-event-mapper.js'
 import { testRunSpec } from '../../../support/run-spec.js'
+import { userTurnFromText } from '../../../../src/core/run/user-turn.js'
 
 describe('PiRuntime stream input', () => {
+  it('includes attached files in the actual Pi prompt', async () => {
+    const session = new FakePiAgentSession()
+    const runtime = new PiRuntime(session)
+    const turn = { text: '', attachments: [{ path: '/tmp/report.txt', name: 'report.txt', mimeType: 'text/plain', size: 1 }] }
+    for await (const event of consumeRunEvents(runtime.run(turn, { signal: new AbortController().signal }))) void event
+    expect(userTurnFromText(session.prompts[0] ?? '')).toEqual(turn)
+    await runtime.release('dispose')
+  })
   it('keeps the session subscription open until release and sends with prompt when idle', async () => {
     const session = new FakePiAgentSession()
     const runtime = new PiRuntime(session)

@@ -1,3 +1,5 @@
+import type { MessageAttachment } from "@/features/agent-message/message-attachment"
+import { attachmentMessageSummary } from "@/features/agent-message/message-attachment-text"
 const SESSION_API_PREFIX = "/api/sandbox/agent/sessions"
 
 export type AgentRunHarness = "claude" | "pi"
@@ -110,10 +112,10 @@ async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
 function mapSession(session: SessionInfoResponse): SessionInfo {
   return {
     sessionId: session.session_id,
-    summary: session.summary ?? "",
+    summary: attachmentMessageSummary(session.summary ?? ""),
     lastModified: session.last_modified,
     customTitle: session.custom_title,
-    firstPrompt: session.first_prompt,
+    firstPrompt: session.first_prompt === null ? null : attachmentMessageSummary(session.first_prompt),
     cwd: session.cwd,
     tag: session.tag,
     tags: session.tags ?? [],
@@ -296,6 +298,7 @@ export function listSessionThread(
       id: string
       role: "user" | "assistant"
       content: string
+      attachments?: MessageAttachment[]
       created_at: string
       status: "streaming" | "complete" | "error"
       transcript_uuid: string | null
@@ -320,6 +323,7 @@ export function listSessionThread(
       id: item.id,
       role: item.role,
       content: item.content,
+      ...(item.attachments === undefined ? {} : { attachments: item.attachments }),
       createdAt: item.created_at,
       status: item.status,
       ...(item.transcript_uuid ? { transcriptUuid: item.transcript_uuid } : {}),

@@ -112,6 +112,7 @@ export const userFileRoutes: FastifyPluginCallback<UserFileRoutesOptions> = (
     async (request) => {
       let pendingUpload: PendingUserFileUpload | undefined
       let directory: string | undefined
+      let purpose: 'attachment' | undefined
       let foundFile = false
 
       try {
@@ -143,6 +144,11 @@ export const userFileRoutes: FastifyPluginCallback<UserFileRoutesOptions> = (
             }
           } else if (part.fieldname === 'directory') {
             directory = String(part.value)
+          } else if (part.fieldname === 'purpose') {
+            if (part.value !== 'attachment') {
+              throw new UserFileError('invalid-request', 'Upload purpose must be attachment')
+            }
+            purpose = 'attachment'
           }
         }
 
@@ -153,7 +159,7 @@ export const userFileRoutes: FastifyPluginCallback<UserFileRoutesOptions> = (
           throw new UserFileError('missing-field', 'directory field required')
         }
 
-        return await pendingUpload.commit(directory)
+        return await pendingUpload.commit(directory, purpose)
       } catch (error) {
         if (isMultipartFileTooLarge(error)) {
           throw uploadTooLarge(fileSystem.maxUploadBytes)

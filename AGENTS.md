@@ -27,8 +27,14 @@ run the following commands from that directory:
 - Build for production: `npm run build`
 - Start the production build: `npm start`
 
-No frontend automated test command or repository-wide formatter is currently
-configured. Add their exact commands here when those tools are introduced.
+No frontend-wide automated test command or repository-wide formatter is currently
+configured. Run the focused Agent data tests from the repository root:
+
+- `node --import ./services/agent-runner/ts/node_modules/tsx/dist/loader.mjs --test agent-ui/tests/features/agent-message/agent-tool-data.test.ts`
+- `node --test agent-ui/tests/features/agent-message/composer-attachments.test.ts agent-ui/tests/features/agent-message/composer-primary-action.test.ts agent-ui/tests/features/agent-message/slash-command-envelope.test.ts`
+- `./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/message-attachments.test.ts`
+
+Add exact commands here when additional test tooling is introduced.
 
 ## Engineering Principles
 

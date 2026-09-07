@@ -50,6 +50,7 @@ export interface ExpandableTabsProps {
   value?: string | null
   defaultValue?: string | null
   onValueChange?: (id: string | null) => void
+  onMinimumWidthChange?: (width: number) => void
   ariaLabel?: string
   className?: string
   classNames?: ExpandableTabsClassNames
@@ -136,12 +137,14 @@ export function ExpandableTabs({
   value,
   defaultValue = null,
   onValueChange,
+  onMinimumWidthChange,
   ariaLabel = "Navigation tabs",
   className,
   classNames,
 }: ExpandableTabsProps) {
   const reduce = Boolean(useReducedMotion())
   const { setLabelMeasureRef, widths: labelWidths } = useLabelWidths(items)
+  const tabBarRef = useRef<HTMLDivElement>(null)
 
   const controlled = value !== undefined
   const [internal, setInternal] = useState(defaultValue)
@@ -179,6 +182,45 @@ export function ExpandableTabs({
     [labelWidths]
   )
 
+  useLayoutEffect(() => {
+    const tabBar = tabBarRef.current
+
+    if (!tabBar || !onMinimumWidthChange) {
+      return
+    }
+
+    const measure = () => {
+      const tabs = Array.from(tabBar.children).filter(
+        (child): child is HTMLElement => child instanceof HTMLElement
+      )
+      const styles = getComputedStyle(tabBar)
+      const gap = Number.parseFloat(styles.columnGap) || 0
+      const paddingStart = Number.parseFloat(styles.paddingInlineStart) || 0
+      const paddingEnd = Number.parseFloat(styles.paddingInlineEnd) || 0
+      const tabsWidth = tabs.reduce(
+        (total, tab) => total + tab.getBoundingClientRect().width,
+        0
+      )
+
+      onMinimumWidthChange(
+        Math.ceil(
+          paddingStart +
+            tabsWidth +
+            Math.max(0, tabs.length - 1) * gap +
+            paddingEnd
+        )
+      )
+    }
+
+    measure()
+
+    const observer = new ResizeObserver(measure)
+    observer.observe(tabBar)
+    Array.from(tabBar.children).forEach((tab) => observer.observe(tab))
+
+    return () => observer.disconnect()
+  }, [items.length, onMinimumWidthChange])
+
   if (!items.length) {
     return null
   }
@@ -195,6 +237,7 @@ export function ExpandableTabs({
         )}
       >
         <div
+          ref={tabBarRef}
           role="tablist"
           aria-label={ariaLabel}
           aria-orientation="horizontal"

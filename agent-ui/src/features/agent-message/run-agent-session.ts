@@ -1,3 +1,5 @@
+import type { MessageAttachment } from "./message-attachment"
+import { messageTextWithAttachments } from "./message-attachment-text"
 import { parseStreamFrame, type StreamFrame } from "./run-stream-reducer"
 
 const RUN_WEBSOCKET_PATH = "/api/sandbox/agent/ws/run"
@@ -8,6 +10,7 @@ export type AgentRunEffort = "low" | "medium" | "high" | "xhigh" | "max"
 
 export type AgentRunInit = {
   text: string
+  attachments?: MessageAttachment[]
   model: string
   harness: AgentRunHarness
   cwd: string
@@ -52,7 +55,7 @@ export function runAgentSession(
   return openRunSocket(
     {
       type: "init",
-      text: init.text,
+      text: messageTextWithAttachments(init.text, init.attachments),
       model: init.model,
       harness: init.harness,
       cwd: init.cwd,

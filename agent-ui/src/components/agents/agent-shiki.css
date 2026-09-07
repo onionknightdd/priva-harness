@@ -56,3 +56,10 @@
   color: var(--status-error);
   content: "−";
 }
+
+/* CodeBlock content has one weight, including tokens styled by Shiki themes. */
+.agent-code-content,
+.agent-code-content * {
+  font-weight: var(--font-weight-light) !important;
+  font-variation-settings: "wght" var(--font-weight-light);
+}

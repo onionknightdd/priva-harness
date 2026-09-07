@@ -1,3 +1,5 @@
+import { z } from 'zod'
+import { userAttachmentSchema, type UserAttachment } from '../../../core/run/user-turn.js'
 import {
   isEffortLevel,
   type EffortLevel,
@@ -12,6 +14,7 @@ import {
 export interface InitFrame {
   readonly type: 'init'
   readonly text: string
+  readonly attachments?: readonly UserAttachment[]
   readonly model: string
   readonly harness: RunHarnessId
   readonly cwd: string
@@ -65,7 +68,11 @@ export function parseInitFrame(raw: unknown): ParseInitResult {
     return { ok: false, message: 'First WebSocket frame must be type "init".' }
   }
   const text = raw['text']
-  if (typeof text !== 'string' || text.trim() === '') {
+  const attachments = z.array(userAttachmentSchema).optional().safeParse(raw['attachments'])
+  if (!attachments.success) {
+    return { ok: false, message: 'Init attachments must contain a path, name, MIME type, and non-negative file size' }
+  }
+  if (typeof text !== 'string' || (text.trim() === '' && !attachments.data?.length)) {
     return { ok: false, message: 'Init text must be a non-empty string' }
   }
   const model = raw['model']
@@ -107,6 +114,7 @@ export function parseInitFrame(raw: unknown): ParseInitResult {
     frame: {
       type: 'init',
       text,
+      ...(attachments.data?.length ? { attachments: attachments.data } : {}),
       model: model.trim(),
       harness,
       cwd: cwd.trim(),

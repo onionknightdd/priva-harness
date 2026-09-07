@@ -8,7 +8,11 @@ const FileBrowserPage = React.lazy(async () => {
   return { default: module.FileBrowserPage }
 })
 
-export function WorkspaceFileView() {
+export function WorkspaceFileView({
+  onMinimumWidthChange,
+}: {
+  onMinimumWidthChange?: (width: number) => void
+}) {
   const { t } = useTranslation()
   return (
     <React.Suspense fallback={<div className="space-y-3 p-2" role="status" aria-label={t("common.loading")}>
@@ -17,7 +21,11 @@ export function WorkspaceFileView() {
       <Skeleton className="h-4 w-1/2" />
       <Skeleton className="h-4 w-2/3" />
     </div>}>
-      <FileBrowserPage className="h-full p-0" compact />
+      <FileBrowserPage
+        className="h-full p-0"
+        compact
+        onMinimumWidthChange={onMinimumWidthChange}
+      />
     </React.Suspense>
   )
 }

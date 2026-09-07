@@ -5,6 +5,8 @@ import {
   createComposerAttachments,
   formatComposerAttachmentSize,
   isImageAttachment,
+  readyComposerAttachments,
+  revokeComposerAttachment,
 } from "../../../src/features/agent-message/composer-attachments.ts"
 
 describe("createComposerAttachments", () => {
@@ -21,10 +23,24 @@ describe("createComposerAttachments", () => {
     assert.equal(attachments[0]?.previewUrl, null)
     assert.equal(attachments[1]?.file.name, "shot.png")
     assert.notEqual(attachments[0]?.id, attachments[1]?.id)
+    assert.equal(readyComposerAttachments(attachments), null)
+    attachments.forEach(revokeComposerAttachment)
   })
 
   it("returns an empty list when no files are selected", () => {
     assert.deepEqual(createComposerAttachments([]), [])
+  })
+})
+
+describe("readyComposerAttachments", () => {
+  it("blocks sending until every upload succeeds and preserves uploaded paths", () => {
+    const attachment = createComposerAttachments([new File(["hello"], "note.txt")])[0]!
+    const uploaded = { path: "/workspace/.priva-attachments/a/note.txt", name: "note.txt", size: 5, mimeType: "text/plain" }
+    assert.deepEqual(readyComposerAttachments([]), [])
+    assert.equal(readyComposerAttachments([{ ...attachment, status: "error" }]), null)
+    assert.equal(readyComposerAttachments([{ ...attachment, status: "done" }]), null)
+    assert.equal(readyComposerAttachments([{ ...attachment, status: "done", uploaded }, attachment]), null)
+    assert.deepEqual(readyComposerAttachments([{ ...attachment, status: "done", uploaded }]), [uploaded])
   })
 })
 

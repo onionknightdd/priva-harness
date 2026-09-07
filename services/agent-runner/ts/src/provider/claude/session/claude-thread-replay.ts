@@ -23,7 +23,7 @@ export function replayClaudeSessionMessages(
     }
     if (isVisibleUserTurn(message)) {
       const content = userContent(message.message)
-      if (content.trim() === '') continue
+      if (content.trim() === '' || content.trimStart().startsWith('[structured-output-enforce]')) continue
       items.push({
         kind: 'user',
         id: message.uuid === '' ? `user-${String(items.length)}` : message.uuid,
@@ -55,6 +55,7 @@ export function replayClaudeSessionMessages(
 
 function isVisibleUserTurn(message: SessionMessage): boolean {
   if (message.type !== 'user') return false
+  if (stringField(asRecord(message.message) ?? {}, 'sourceToolUseID') !== undefined) return false
   if (message.parentToolUseId !== null && message.parentToolUseId !== '') return false
   return !hasToolResult(message.message)
 }
@@ -122,6 +123,7 @@ function toClaudeSdkMessage(message: SessionMessage): ClaudeSdkMessage | undefin
       ? {}
       : { parent_tool_use_id: message.parentToolUseId }),
     message: payload,
+    uuid: message.uuid,
     ...(toolUseResult === undefined ? {} : { tool_use_result: toolUseResult }),
   }
 }

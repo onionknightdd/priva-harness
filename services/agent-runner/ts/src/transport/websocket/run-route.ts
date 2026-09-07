@@ -4,6 +4,7 @@ import type { FastifyPluginCallback } from 'fastify'
 import type { WebSocket } from 'ws'
 
 import type { ProviderRunSpec, SessionRef } from '../../core/contract/agent-provider.js'
+import type { UserFileSystem } from '../../core/contract/user-file-system.js'
 import type { StreamFrame } from '../../core/event/agent-event.js'
 import { encodeEvent } from '../../core/event/encode-event.js'
 import {
@@ -27,6 +28,7 @@ import {
 export const RUN_WEBSOCKET_PATH = '/api/sandbox/agent/ws/run'
 
 export interface RunRouteOptions {
+  readonly fileSystem: UserFileSystem
   readonly harness: AgentHarness
   readonly modelProfileService: ModelProfileService
   readonly agentProfileService: AgentProfileService
@@ -153,8 +155,11 @@ async function startInit(
     socket.close()
     return undefined
   }
+  const attachments = frame.attachments === undefined ? undefined : await Promise.all(
+    frame.attachments.map((attachment) => options.fileSystem.inspectAttachment(attachment.path)),
+  )
   return options.harness.launch(
-    { text: frame.text },
+    { text: frame.text, ...(attachments === undefined ? {} : { attachments }) },
     spec,
     { session: sessionTargetFromInit(frame) },
   )

@@ -16,7 +16,7 @@ import {
   profileEnvKeys,
   resolveProviderRunEnv,
 } from '../../core/resource/provider-run-env.js'
-import type { UserTurn } from '../../core/run/user-turn.js'
+import { userTurnText, type UserTurn } from '../../core/run/user-turn.js'
 import { AsyncQueue } from '../../core/stream/async-queue.js'
 import { PushableStream } from '../../core/stream/pushable-stream.js'
 import type { ToolDefinition } from '../../core/tool/define-tool.js'
@@ -94,8 +94,8 @@ export class ClaudeRuntime implements AgentRuntime {
     this.idleMapper = undefined
     this.mapper = new ClaudeEventMapper()
     this.events = new AsyncQueue<AgentEvent>()
-    this.ensureQuery()
-    this.input?.push(claudeUserMessage(turn.text))
+    this.ensureQuery(turn)
+    this.input?.push(claudeUserMessage(userTurnText(turn)))
 
     const onAbort = (): void => {
       void this.query?.interrupt()
@@ -151,24 +151,32 @@ export class ClaudeRuntime implements AgentRuntime {
     return Promise.resolve()
   }
 
-  private ensureQuery(): void {
+  private ensureQuery(turn: UserTurn): void {
     if (this.query !== undefined) return
     const input = new PushableStream<SDKUserMessage>()
     const abortController = new AbortController()
     this.input = input
     this.abortController = abortController
+    const title = this.target.kind === 'new' && turn.text.trim() === '' && turn.attachments?.length
+      ? turn.attachments.map((file) => file.name).join(', ')
+      : undefined
     const active = this.startQuery({
       prompt: input,
-      options: resolveClaudeQueryOptions(
-        this.spec,
-        this.globalConfigDir,
-        this.target,
-        abortController,
-        this.tools,
-        {
-          emitProgress: (chunk) => this.emitToolProgress(chunk),
-        },
-      ),
+      options: {
+        ...resolveClaudeQueryOptions(
+          this.spec,
+          this.globalConfigDir,
+          this.target,
+          abortController,
+          this.tools,
+          {
+            emitProgress: (chunk) => this.emitToolProgress(chunk),
+          },
+        ),
+        // Claude's session index skips XML-only first prompts, including our
+        // attachment manifest. A native title keeps these sessions discoverable.
+        ...(title === undefined ? {} : { title }),
+      },
     })
     this.query = active
     void this.pump(active)

@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils"
 export function FileBrowserWorkspace({
   compact = false,
   filePreview,
+  onMinimumWidthChange,
   onResizeTree,
   onUserResizeTree,
   panelTransitioning,
@@ -26,6 +27,7 @@ export function FileBrowserWorkspace({
 }: {
   compact?: boolean
   filePreview: React.ReactNode
+  onMinimumWidthChange?: (width: number) => void
   onResizeTree: (sizePercentage: number) => void
   onUserResizeTree: () => void
   panelTransitioning: boolean
@@ -40,6 +42,72 @@ export function FileBrowserWorkspace({
   const { t } = useTranslation()
   const isMobile = useIsMobile()
   const pageRef = React.useRef<HTMLDivElement>(null)
+  const [previewMinimumWidth, setPreviewMinimumWidth] = React.useState(0)
+
+  React.useLayoutEffect(() => {
+    if (isMobile) {
+      return
+    }
+
+    const controls = pageRef.current?.querySelector<HTMLElement>(
+      "[data-file-preview-controls]"
+    )
+    const toolbar = controls?.closest<HTMLElement>(
+      ".file-preview-toolbar"
+    )
+
+    if (!controls || !toolbar) {
+      return
+    }
+
+    const measure = () => {
+      const toolbarStyles = getComputedStyle(toolbar)
+      const horizontalPadding =
+        (Number.parseFloat(toolbarStyles.paddingInlineStart) || 0) +
+        (Number.parseFloat(toolbarStyles.paddingInlineEnd) || 0)
+      const nextWidth = Math.ceil(
+        controls.getBoundingClientRect().width + horizontalPadding
+      )
+      const handle = pageRef.current?.querySelector<HTMLElement>(
+        '[data-slot="resizable-handle"]'
+      )
+      const pageStyles = pageRef.current
+        ? getComputedStyle(pageRef.current)
+        : null
+      const pageChrome =
+        (Number.parseFloat(pageStyles?.borderInlineStartWidth ?? "") || 0) +
+        (Number.parseFloat(pageStyles?.borderInlineEndWidth ?? "") || 0) +
+        (handle?.getBoundingClientRect().width ?? 0)
+      const previewRatio =
+        treeVisible && !panelTransitioning
+          ? 1 - treeMinSize / 100
+          : 1
+
+      setPreviewMinimumWidth((currentWidth) =>
+        currentWidth === nextWidth ? currentWidth : nextWidth
+      )
+      onMinimumWidthChange?.(
+        Math.ceil(nextWidth / previewRatio + pageChrome)
+      )
+    }
+
+    measure()
+
+    const observer = new ResizeObserver(measure)
+    observer.observe(controls)
+    observer.observe(toolbar)
+
+    return () => {
+      observer.disconnect()
+    }
+  }, [
+    compact,
+    isMobile,
+    onMinimumWidthChange,
+    panelTransitioning,
+    treeMinSize,
+    treeVisible,
+  ])
 
   React.useLayoutEffect(() => {
     if (!isMobile) {
@@ -128,7 +196,7 @@ export function FileBrowserWorkspace({
           />
           <ResizablePanel
             id="file-preview-panel"
-            minSize="35%"
+            minSize={previewMinimumWidth}
             className="!flex !min-h-0 !overflow-hidden"
           >
             {filePreview}

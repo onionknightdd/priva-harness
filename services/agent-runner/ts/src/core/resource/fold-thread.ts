@@ -1,3 +1,4 @@
+import { userTurnFromText } from '../run/user-turn.js'
 import type { AgentEvent } from '../event/agent-event.js'
 import { applyStreamFrame, emptyAssistantMessage } from './apply-stream-frame.js'
 import {
@@ -49,18 +50,20 @@ export function foldThread(items: readonly ThreadReplayItem[]): ThreadMessage[] 
   for (const item of items) {
     if (item.kind === 'user') {
       finishAssistant()
-      if (item.content.trim() === '') continue
-      if (isHiddenCompactUserContent(item.content)) {
-        if (isCompactContinuationContent(item.content)) {
-          pendingSummaries.push(compactSummaryBody(item.content))
+      const turn = userTurnFromText(item.content)
+      if (turn.text.trim() === '' && !turn.attachments?.length) continue
+      if (!turn.attachments?.length && isHiddenCompactUserContent(turn.text)) {
+        if (isCompactContinuationContent(turn.text)) {
+          pendingSummaries.push(compactSummaryBody(turn.text))
         }
         continue
       }
-      const compact = compactForUser(item.content, pendingSummaries)
+      const compact = turn.attachments?.length ? undefined : compactForUser(turn.text, pendingSummaries)
       messages.push({
         id: item.id,
         role: 'user',
-        content: item.content,
+        content: turn.text,
+        ...(turn.attachments === undefined ? {} : { attachments: turn.attachments }),
         createdAt: item.createdAt,
         status: 'complete',
         transcriptUuid: item.id,
@@ -141,7 +144,7 @@ function findAssistantForParent(
 
 function assistantOwnsParent(message: ThreadMessage, parentId: string): boolean {
   if (message.role !== 'assistant') return false
-  if (message.nestedAgents?.some((agent) => agent.parentToolUseId === parentId) === true) {
+  if (message.nestedAgents?.some((agent) => agent.parentToolUseId === parentId || agent.blocks.some((block) => block.type === 'tool_use' && block.id === parentId)) === true) {
     return true
   }
   return (message.blocks ?? []).some((block) => block.type === 'tool_use' && block.id === parentId)

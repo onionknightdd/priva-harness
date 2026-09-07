@@ -1,3 +1,4 @@
+import type { UserAttachment } from '../run/user-turn.js'
 import type { WorkflowState } from './workflow.js'
 import type { CompactMarker } from './compact-command.js'
 import type { AgentEvent, ContentBlock } from '../event/agent-event.js'
@@ -45,6 +46,8 @@ export type ThreadBlock =
     }
 
 export interface ThreadToolCard {
+  readonly tokens?: number
+  readonly durationMs?: number
   readonly id: string
   readonly name: string
   readonly input?: unknown
@@ -57,6 +60,8 @@ export interface ThreadToolCard {
 }
 
 export interface ThreadInboxMessage {
+  readonly deliveryId?: string
+  readonly afterBlockCount?: number
   readonly body: string
   readonly source: 'peer' | 'coordinator'
   readonly senderName?: string
@@ -66,7 +71,7 @@ export interface ThreadNestedAgent {
   readonly parentToolUseId: string
   readonly agentId?: string
   readonly name?: string
-  readonly status: 'running' | 'completed'
+  readonly status: 'running' | 'completed' | 'failed' | 'cancelled'
   readonly blocks: readonly ThreadBlock[]
   readonly inbox: readonly ThreadInboxMessage[]
 }
@@ -77,6 +82,7 @@ export interface ThreadMessage {
   readonly id: string
   readonly role: 'user' | 'assistant'
   readonly content: string
+  readonly attachments?: readonly UserAttachment[]
   readonly createdAt: string
   readonly status: 'streaming' | 'complete' | 'error'
   readonly transcriptUuid?: string
@@ -149,7 +155,7 @@ export function textFromThreadBlocks(blocks: readonly ThreadBlock[]): string {
 }
 
 export function threadHasVisibleContent(message: ThreadMessage): boolean {
-  if (message.role === 'user') return message.content.trim() !== ''
+  if (message.role === 'user') return message.content.trim() !== '' || Boolean(message.attachments?.length)
   if (message.content.trim() !== '' && message.content.trim() !== NO_RESPONSE_REQUESTED) {
     return true
   }

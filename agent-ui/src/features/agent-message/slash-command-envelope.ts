@@ -15,6 +15,7 @@ type FoldableMessage = {
   id: string
   role: "user" | "assistant"
   content: string
+  attachments?: readonly unknown[]
   status: "streaming" | "complete" | "error"
   blocks?: readonly unknown[]
   nestedAgents?: readonly unknown[]
@@ -50,8 +51,10 @@ export function compactSummaryBody(content: string): string {
 
 export function userMessageSurface(
   content: string,
-  compact?: CompactMarker
+  compact?: CompactMarker,
+  hasAttachments = false
 ): UserMessageSurface {
+  if (hasAttachments) return "bubble"
   const text = content.trim()
   if (
     LOCAL_COMMAND_STDOUT.test(text) ||
@@ -77,7 +80,7 @@ export function foldCommandSurfaces<T extends FoldableMessage>(
     if (message === undefined) continue
 
     if (message.role === "user") {
-      const surface = userMessageSurface(message.content, message.compact)
+      const surface = userMessageSurface(message.content, message.compact, Boolean(message.attachments?.length))
       if (surface === "hidden") continue
       if (surface === "conversation-compacted") {
         const summary = summaries.get(message.id) ?? message.compact?.summary
@@ -110,7 +113,7 @@ function pairCompactSummaries(
   const summaries: Array<{ id: string; index: number; body: string }> = []
 
   messages.forEach((message, index) => {
-    if (message.role !== "user") return
+    if (message.role !== "user" || message.attachments?.length) return
     if (isCompactCommandUserMessage(message.content)) {
       compactIndexes.push({ id: message.id, index })
       return
@@ -173,7 +176,7 @@ function compactPhase(
     const message = messages[index]
     if (message === undefined) continue
     if (message.role === "user") {
-      const surface = userMessageSurface(message.content, message.compact)
+      const surface = userMessageSurface(message.content, message.compact, Boolean(message.attachments?.length))
       if (surface === "hidden") continue
       break
     }
@@ -198,7 +201,7 @@ function isCompactPlaceholderAssistant(
     const previous = messages[cursor]
     if (previous === undefined) continue
     if (previous.role === "user") {
-      const surface = userMessageSurface(previous.content, previous.compact)
+      const surface = userMessageSurface(previous.content, previous.compact, Boolean(previous.attachments?.length))
       if (surface === "hidden") continue
       return surface === "conversation-compacted"
     }
@@ -281,6 +284,7 @@ function failActiveCompact<T extends FoldableMessage>(
   for (let index = assistantIndex - 1; index >= 0; index -= 1) {
     const message = messages[index]
     if (message === undefined || message.role !== "user") continue
+    if (message.attachments?.length) return [...messages]
     if (message.compact?.phase === "compacted") return [...messages]
     if (
       message.compact?.phase === "compacting" ||
@@ -301,7 +305,7 @@ function lastCompactUserIndex(
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index]
     if (message === undefined || message.role !== "user") continue
-    if (message.compact !== undefined || isCompactCommandUserMessage(message.content)) {
+    if (!message.attachments?.length && (message.compact !== undefined || isCompactCommandUserMessage(message.content))) {
       return index
     }
   }

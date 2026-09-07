@@ -1,10 +1,12 @@
 import { workflowFromSnapshot } from "@/features/agent-message/workflow-data"
+import { attachmentsFromMessageText } from "@/features/agent-message/message-attachment-text"
 import type { AgentThreadMessage, NestedAgent, StreamBlock, ToolCard, WorkflowCard } from "@/features/agent-message/agent-message-data"
 
 type ThreadApiMessage = {
   id: string
   role: "user" | "assistant"
   content: string
+  attachments?: AgentThreadMessage["attachments"]
   createdAt: string
   status: "streaming" | "complete" | "error"
   transcriptUuid?: string
@@ -21,6 +23,8 @@ export function threadMessagesFromApi(
     id: item.id,
     role: item.role,
     content: item.content,
+    ...(item.attachments === undefined ? {} : { attachments: item.attachments }),
+    ...(item.role === "user" ? attachmentsFromMessageText(item.content) : undefined),
     createdAt: item.createdAt,
     status: item.status,
     ...(item.transcriptUuid ? { transcriptUuid: item.transcriptUuid } : {}),
@@ -113,6 +117,8 @@ function asToolCard(raw: unknown, id: string, fallbackName: string): ToolCard | 
     status,
     ...(record.input === undefined ? {} : { input: record.input }),
     ...(typeof record.ok === "boolean" ? { ok: record.ok } : {}),
+    ...(typeof record.tokens === "number" ? { tokens: record.tokens } : {}),
+    ...(typeof record.durationMs === "number" ? { durationMs: record.durationMs } : {}),
     ...(typeof record.output === "string" ? { output: record.output } : {}),
     ...(typeof record.launchStatus === "string" ? { launchStatus: record.launchStatus } : {}),
     ...(typeof record.agentId === "string" ? { agentId: record.agentId } : {}),
@@ -146,6 +152,8 @@ function snapshotNested(raw: unknown): NestedAgent[] {
           return [
             {
               body,
+              ...(typeof message.deliveryId === "string" ? { deliveryId: message.deliveryId } : {}),
+              ...(typeof message.afterBlockCount === "number" ? { afterBlockCount: message.afterBlockCount } : {}),
               source: message.source === "coordinator" ? "coordinator" as const : "peer" as const,
               ...(typeof message.senderName === "string" ? { senderName: message.senderName } : {}),
             },
@@ -155,7 +163,7 @@ function snapshotNested(raw: unknown): NestedAgent[] {
     return [
       {
         parentToolUseId,
-        status: record.status === "completed" ? "completed" as const : "running" as const,
+        status: record.status === "failed" ? "failed" as const : record.status === "cancelled" ? "cancelled" as const : record.status === "completed" ? "completed" as const : "running" as const,
         blocks: snapshotBlocks(record.blocks),
         inbox,
         ...(typeof record.agentId === "string" ? { agentId: record.agentId } : {}),

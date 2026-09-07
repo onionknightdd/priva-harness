@@ -9,7 +9,7 @@ import { fileTreeTargetPanelWidth } from "./file-tree-content-width"
 
 const TREE_DEFAULT_SIZE = 30
 const TREE_MIN_SIZE = 18
-const TREE_MAX_SIZE = 65
+const TREE_MAX_SIZE = 100
 
 function clampTreeSize(size: number) {
   return Math.min(TREE_MAX_SIZE, Math.max(TREE_MIN_SIZE, size))

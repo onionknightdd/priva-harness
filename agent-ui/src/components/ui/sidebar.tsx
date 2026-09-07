@@ -39,11 +39,18 @@ const SIDEBAR_KEYBOARD_SHORTCUT = "b"
 
 function clampSidebarWidth(
   width: number,
-  maxWidth = SIDEBAR_MAX_WIDTH
+  maxWidth = SIDEBAR_MAX_WIDTH,
+  minWidth = 0
 ) {
+  const upperBound = Math.max(0, Math.floor(maxWidth))
+  const lowerBound = Math.min(
+    upperBound,
+    Math.max(0, Math.ceil(minWidth))
+  )
+
   return Math.min(
-    Math.max(0, Math.floor(maxWidth)),
-    Math.max(0, Math.round(width))
+    upperBound,
+    Math.max(lowerBound, Math.round(width))
   )
 }
 
@@ -54,9 +61,10 @@ function isCookieAccessError(error: unknown) {
 function getInitialSidebarWidth(
   defaultWidth: number,
   maxWidth: number,
+  minWidth: number,
   widthCookieName: string | false
 ) {
-  const fallbackWidth = clampSidebarWidth(defaultWidth, maxWidth)
+  const fallbackWidth = clampSidebarWidth(defaultWidth, maxWidth, minWidth)
 
   if (typeof document === "undefined" || !widthCookieName) {
     return fallbackWidth
@@ -70,7 +78,7 @@ function getInitialSidebarWidth(
 
     return Number.isFinite(storedWidth) &&
       storedWidth >= SIDEBAR_COLLAPSE_THRESHOLD
-      ? clampSidebarWidth(storedWidth, maxWidth)
+      ? clampSidebarWidth(storedWidth, maxWidth, minWidth)
       : fallbackWidth
   } catch (error) {
     if (isCookieAccessError(error)) {
@@ -124,6 +132,7 @@ type SidebarContextProps = {
   isMobile: boolean
   toggleSidebar: () => void
   sidebarWidth: number
+  minSidebarWidth: number
   maxSidebarWidth: number
   commitSidebarWidth: (width: number) => void
 }
@@ -145,6 +154,7 @@ function SidebarProvider({
   onOpenChange: setOpenProp,
   keyboardShortcut = SIDEBAR_KEYBOARD_SHORTCUT,
   defaultWidth = SIDEBAR_DEFAULT_WIDTH,
+  minWidth = 0,
   maxWidth = SIDEBAR_MAX_WIDTH,
   widthCookieName = SIDEBAR_WIDTH_COOKIE_NAME,
   stateCookieName = SIDEBAR_COOKIE_NAME,
@@ -158,6 +168,7 @@ function SidebarProvider({
   onOpenChange?: (open: boolean) => void
   keyboardShortcut?: string | false
   defaultWidth?: number
+  minWidth?: number
   maxWidth?: number
   widthCookieName?: string | false
   stateCookieName?: string | false
@@ -165,18 +176,30 @@ function SidebarProvider({
   const isMobile = useIsMobile()
   const [openMobile, setOpenMobile] = React.useState(false)
   const maxSidebarWidth = Math.max(0, Math.floor(maxWidth))
+  const minSidebarWidth = Math.min(
+    maxSidebarWidth,
+    Math.max(0, Math.ceil(minWidth))
+  )
   const [preferredSidebarWidth, setPreferredSidebarWidth] = React.useState(
     () =>
       getInitialSidebarWidth(
         defaultWidth,
         maxSidebarWidth,
+        minSidebarWidth,
         widthCookieName
       )
   )
   const sidebarWidth = clampSidebarWidth(
     preferredSidebarWidth,
-    maxSidebarWidth
+    maxSidebarWidth,
+    minSidebarWidth
   )
+
+  React.useLayoutEffect(() => {
+    setPreferredSidebarWidth((currentWidth) =>
+      Math.max(currentWidth, minSidebarWidth)
+    )
+  }, [minSidebarWidth])
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
@@ -202,7 +225,11 @@ function SidebarProvider({
   }, [isMobile, setOpen, setOpenMobile])
 
   const commitSidebarWidth = React.useCallback((width: number) => {
-    const nextWidth = clampSidebarWidth(width, maxSidebarWidth)
+    const nextWidth = clampSidebarWidth(
+      width,
+      maxSidebarWidth,
+      minSidebarWidth
+    )
 
     if (nextWidth < SIDEBAR_COLLAPSE_THRESHOLD) {
       return
@@ -210,7 +237,7 @@ function SidebarProvider({
 
     setPreferredSidebarWidth(nextWidth)
     persistSidebarWidth(nextWidth, widthCookieName)
-  }, [maxSidebarWidth, widthCookieName])
+  }, [maxSidebarWidth, minSidebarWidth, widthCookieName])
 
   // Adds a keyboard shortcut to toggle the sidebar.
   React.useEffect(() => {
@@ -246,6 +273,7 @@ function SidebarProvider({
       setOpenMobile,
       toggleSidebar,
       sidebarWidth,
+      minSidebarWidth,
       maxSidebarWidth,
       commitSidebarWidth,
     }),
@@ -258,6 +286,7 @@ function SidebarProvider({
       setOpenMobile,
       toggleSidebar,
       sidebarWidth,
+      minSidebarWidth,
       maxSidebarWidth,
       commitSidebarWidth,
     ]
@@ -443,6 +472,7 @@ function SidebarResizeHandle({
 }) {
   const {
     sidebarWidth,
+    minSidebarWidth,
     maxSidebarWidth,
     commitSidebarWidth,
     setOpen,
@@ -533,7 +563,11 @@ function SidebarResizeHandle({
 
   const applySidebarWidth = React.useCallback(
     (width: number) => {
-      const nextWidth = clampSidebarWidth(width, maxSidebarWidth)
+      const nextWidth = clampSidebarWidth(
+        width,
+        maxSidebarWidth,
+        minSidebarWidth
+      )
       const wrapper = handleRef.current?.closest(
         '[data-slot="sidebar-wrapper"]'
       ) as HTMLElement | null
@@ -542,7 +576,7 @@ function SidebarResizeHandle({
       setDisplayedWidth(nextWidth)
       wrapper?.style.setProperty("--sidebar-width", `${nextWidth}px`)
     },
-    [maxSidebarWidth]
+    [maxSidebarWidth, minSidebarWidth]
   )
 
   const getWidthFromPointer = React.useCallback(
@@ -606,7 +640,10 @@ function SidebarResizeHandle({
 
       event.preventDefault()
 
-      if (nextWidth < SIDEBAR_COLLAPSE_THRESHOLD) {
+      if (
+        minSidebarWidth <= SIDEBAR_COLLAPSE_THRESHOLD &&
+        nextWidth < SIDEBAR_COLLAPSE_THRESHOLD
+      ) {
         collapseSidebarFromResize()
         return
       }
@@ -619,6 +656,7 @@ function SidebarResizeHandle({
       collapseSidebarFromResize,
       commitSidebarWidth,
       maxSidebarWidth,
+      minSidebarWidth,
       side,
     ]
   )
@@ -629,7 +667,7 @@ function SidebarResizeHandle({
       role="separator"
       aria-label={label ?? t("common.resizeSidebar")}
       aria-orientation="vertical"
-      aria-valuemin={0}
+      aria-valuemin={minSidebarWidth}
       aria-valuemax={maxSidebarWidth}
       aria-valuenow={displayedWidth}
       tabIndex={0}
@@ -665,7 +703,10 @@ function SidebarResizeHandle({
 
         const nextWidth = getWidthFromPointer(event.clientX)
 
-        if (nextWidth < SIDEBAR_COLLAPSE_THRESHOLD) {
+        if (
+          minSidebarWidth <= SIDEBAR_COLLAPSE_THRESHOLD &&
+          nextWidth < SIDEBAR_COLLAPSE_THRESHOLD
+        ) {
           collapseSidebarFromResize()
           return
         }
@@ -679,7 +720,10 @@ function SidebarResizeHandle({
 
         const nextWidth = getWidthFromPointer(event.clientX)
 
-        if (nextWidth < SIDEBAR_COLLAPSE_THRESHOLD) {
+        if (
+          minSidebarWidth <= SIDEBAR_COLLAPSE_THRESHOLD &&
+          nextWidth < SIDEBAR_COLLAPSE_THRESHOLD
+        ) {
           collapseSidebarFromResize()
           return
         }
