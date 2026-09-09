@@ -45,6 +45,7 @@ import {
   SPREADSHEET_ROW_OVERSCAN,
 } from "./spreadsheet-virtualization"
 import { useSpreadsheetWorkbook } from "./use-spreadsheet-workbook"
+import { TooltipHint } from "@/components/ui/tooltip"
 
 type CellPosition = {
   row: number
@@ -649,7 +650,7 @@ export function SpreadsheetRenderer({
             aria-label={t("filePreview.spreadsheetGrid", {
               name: sheet.name,
             })}
-            className="h-full overflow-auto overscroll-contain outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            className="ring-inset h-full overflow-auto overscroll-contain outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/50"
             onPointerDown={handleGridPointerDown}
             onPointerMove={handleGridPointerMove}
             onPointerUp={handleGridPointerUp}
@@ -768,26 +769,27 @@ export function SpreadsheetRenderer({
                             sheet.values[rowOffset]?.[columnOffset] ?? ""
 
                           return (
-                            <td
-                              key={column}
-                              data-sheet-drag="cell"
-                              data-sheet-row={row}
-                              data-sheet-column={column}
-                              aria-colindex={columnOffset + 2}
-                              aria-rowindex={rowOffset + 2}
-                              aria-selected={selected}
-                              rowSpan={merge?.rowSpan}
-                              colSpan={merge?.columnSpan}
-                              title={value || undefined}
-                              className={cn(
-                                "h-7 max-w-64 min-w-24 border-b border-r border-border bg-background px-2 text-left align-middle text-foreground",
-                                selected && "bg-primary/10",
-                                active &&
-                                  "relative z-10 outline-2 outline-offset-[-1px] outline-ring"
-                              )}
-                            >
-                              <span className="block truncate">{value}</span>
-                            </td>
+                            <TooltipHint key={column} content={value || undefined}>
+                              <td
+                                key={column}
+                                data-sheet-drag="cell"
+                                data-sheet-row={row}
+                                data-sheet-column={column}
+                                aria-colindex={columnOffset + 2}
+                                aria-rowindex={rowOffset + 2}
+                                aria-selected={selected}
+                                rowSpan={merge?.rowSpan}
+                                colSpan={merge?.columnSpan}
+                                className={cn(
+                                  "h-7 max-w-64 min-w-24 border-b border-r border-border bg-background px-2 text-left align-middle text-foreground",
+                                  selected && "bg-primary/10",
+                                  active &&
+                                    "relative z-10 ring-inset ring-2 ring-ring"
+                                )}
+                              >
+                                <span className="block truncate">{value}</span>
+                              </td>
+                            </TooltipHint>
                           )
                         }
                       )}

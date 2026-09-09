@@ -17,7 +17,7 @@ export const pressable =
   "transition-transform duration-150 ease-out active:scale-[0.96] motion-reduce:transition-none";
 
 export const ghostButton =
-  "flex items-center justify-center rounded-full text-foreground/45 outline-none transition-[background-color,color,scale] duration-150 hover:bg-foreground/[0.06] hover:text-foreground/90 active:scale-[0.96] focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none dark:hover:bg-foreground/[0.09]";
+  "ring-inset flex items-center justify-center rounded-full text-foreground/45 outline-none transition-[background-color,color,scale] duration-150 hover:bg-foreground/[0.06] hover:text-foreground/90 active:scale-[0.96] focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none dark:hover:bg-foreground/[0.09]";
 
 export const inkButton =
   "bg-foreground text-background transition-[opacity,scale] duration-150 ease-out hover:opacity-90 active:scale-[0.96] motion-reduce:transition-none";
@@ -38,10 +38,10 @@ export const labelSwapOut =
   "pointer-events-none select-none opacity-0 blur-[2px]";
 
 /** The one keyboard focus ring for custom interactive surfaces (shadcn's
- * `ring-3 ring-ring/50`), so Tab never shows three different halos. Bordered
+ * `ring-inset ring-3 ring-ring/50`), so Tab never shows three different halos. Bordered
  * controls add `focus-visible:border-ring` themselves. */
 export const focusRing =
-  "outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
+  "ring-inset outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
 
 /** Base UI Collapsible panel: height-only roll on the same 200ms ease-out as
  * the chevron that triggers it, so arrow and content finish together. */

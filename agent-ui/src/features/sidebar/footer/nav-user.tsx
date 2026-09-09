@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils"
 
 import { LanguageToggle } from "./language-toggle"
 import { ThemeToggle } from "./theme-toggle"
+import { TooltipHint } from "@/components/ui/tooltip"
 
 const ProfileDialog = React.lazy(async () => {
   const module = await import("@/features/profile")
@@ -70,7 +71,7 @@ export function NavUser() {
         <SidebarMenuItem className="flex items-center gap-0.5 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:justify-center">
           <button
             type="button"
-            className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none group-data-[collapsible=icon]:hidden"
+            className="ring-inset flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none group-data-[collapsible=icon]:hidden"
             aria-label={t("sidebar.user.openProfile")}
             onClick={() => {
               setProfileLoaded(true)
@@ -90,35 +91,37 @@ export function NavUser() {
 
           <ThemeToggle className="group-data-[collapsible=icon]:order-3" />
 
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="shrink-0 border-0 group-data-[collapsible=icon]:order-4"
-            aria-label={t("sidebar.user.logOut")}
-            title={t("sidebar.user.logOut")}
-          >
-            <LogOutIcon />
-          </Button>
+          <TooltipHint content={t("sidebar.user.logOut")}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="shrink-0 border-0 group-data-[collapsible=icon]:order-4"
+              aria-label={t("sidebar.user.logOut")}
+            >
+              <LogOutIcon />
+            </Button>
+          </TooltipHint>
 
           <DropdownMenu>
-            <DropdownMenuTrigger
-              aria-label={t("sidebar.user.openMenu")}
-              title={t("sidebar.user.openMenu")}
-              render={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  className="shrink-0 border-0 group-data-[collapsible=icon]:order-1"
-                />
-              }
-            >
-              <ChevronsUpDownIcon className="group-data-[collapsible=icon]:hidden" />
-              <span className="hidden size-8 group-data-[collapsible=icon]:block">
-                <UserAvatar label={initials} />
-              </span>
-            </DropdownMenuTrigger>
+            <TooltipHint content={t("sidebar.user.openMenu")}>
+              <DropdownMenuTrigger
+                aria-label={t("sidebar.user.openMenu")}
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="shrink-0 border-0 group-data-[collapsible=icon]:order-1"
+                  />
+                }
+              >
+                <ChevronsUpDownIcon className="group-data-[collapsible=icon]:hidden" />
+                <span className="hidden size-8 group-data-[collapsible=icon]:block">
+                  <UserAvatar label={initials} />
+                </span>
+              </DropdownMenuTrigger>
+            </TooltipHint>
             <DropdownMenuContent
               className="min-w-56 rounded-lg"
               side={isMobile ? "bottom" : "right"}

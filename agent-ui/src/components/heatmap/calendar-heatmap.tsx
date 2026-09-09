@@ -659,7 +659,7 @@ export const CalendarHeatmapBlock = ({
       className={cn(
         "motion-safe:transition-opacity motion-safe:hover:opacity-70",
         onCellClick &&
-          "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "ring-inset cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         className,
       )}
       data-value={activity.value}
@@ -797,7 +797,7 @@ export const CalendarHeatmapBody = ({
             aria-label={(
               labels.heatmapLabel ?? "Contribution heatmap for {{year}}"
             ).replace("{{year}}", String(yearRow.year))}
-            className="block overflow-visible rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="ring-inset block overflow-visible rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             height={height + strokePadding * 2}
             viewBox={`0 0 ${totalWidth} ${height + strokePadding * 2}`}
             width={totalWidth}

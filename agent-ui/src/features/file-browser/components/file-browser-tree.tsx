@@ -35,6 +35,7 @@ import {
 import { FileTreeFolderIcon } from "./file-tree-folder-icon"
 import { FileTreeItemMenu } from "./file-tree-item-menu"
 import { FileTypeIcon } from "./file-type-icon"
+import { TooltipHint } from "@/components/ui/tooltip"
 
 const FILE_TREE_INDENT = 20
 const FILE_TREE_STICKY_ROW_HEIGHT = 32
@@ -214,13 +215,14 @@ const FileBrowserTreeRow = React.memo(function FileBrowserTreeRow({
             <span className="w-[clamp(2.25rem,15cqi,3rem)] shrink-0 overflow-hidden text-right text-[10px] leading-none whitespace-nowrap tabular-nums text-muted-foreground">
               {size}
             </span>
-            <time
-              dateTime={modifiedDate?.toISOString()}
-              title={fullModifiedAt}
-              className="w-[clamp(3rem,22cqi,4rem)] shrink-0 overflow-hidden text-right text-[10px] leading-none whitespace-nowrap tabular-nums text-muted-foreground"
-            >
-              {modifiedAt}
-            </time>
+            <TooltipHint content={fullModifiedAt}>
+              <time
+                dateTime={modifiedDate?.toISOString()}
+                className="w-[clamp(3rem,22cqi,4rem)] shrink-0 overflow-hidden text-right text-[10px] leading-none whitespace-nowrap tabular-nums text-muted-foreground"
+              >
+                {modifiedAt}
+              </time>
+            </TooltipHint>
           </span>
         )}
       </TreeItemLabel>

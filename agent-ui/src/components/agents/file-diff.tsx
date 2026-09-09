@@ -37,6 +37,7 @@ import { writeClipboardText } from "@/lib/clipboard";
 import { SPRING_PRESS, SPRING_SWAP } from "@/lib/ease";
 import { focusRing } from "@/lib/surfaces";
 import { cn } from "@/lib/utils";
+import { TooltipHint } from "@/components/ui/tooltip";
 
 export type FileDiffStatus = "streaming" | "complete";
 export type FileDiffLineType = "added" | "removed" | "context";
@@ -361,26 +362,27 @@ export function FileDiff({
                   copied && "opacity-100",
                 )}
               >
-                <motion.button
-                  type="button"
-                  aria-label={copied ? t("common.copied") : t("toolCard.copyDiff")}
-                  title={copied ? t("common.copied") : t("toolCard.copyDiff")}
-                  onClick={handleCopy}
-                  whileTap={reduce ? undefined : { scale: 0.9 }}
-                  transition={SPRING_PRESS}
-                  className={cn(
-                    "grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground",
-                    focusRing,
-                  )}
-                >
-                  <StatusGlyphSwap swapKey={copied ? "copied" : "copy"} pop={!reduce}>
-                    {copied ? (
-                      <Check className="size-3.5" />
-                    ) : (
-                      <Copy className="size-3.5" />
+                <TooltipHint content={copied ? t("common.copied") : t("toolCard.copyDiff")}>
+                  <motion.button
+                    type="button"
+                    aria-label={copied ? t("common.copied") : t("toolCard.copyDiff")}
+                    onClick={handleCopy}
+                    whileTap={reduce ? undefined : { scale: 0.9 }}
+                    transition={SPRING_PRESS}
+                    className={cn(
+                      "grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground",
+                      focusRing,
                     )}
-                  </StatusGlyphSwap>
-                </motion.button>
+                  >
+                    <StatusGlyphSwap swapKey={copied ? "copied" : "copy"} pop={!reduce}>
+                      {copied ? (
+                        <Check className="size-3.5" />
+                      ) : (
+                        <Copy className="size-3.5" />
+                      )}
+                    </StatusGlyphSwap>
+                  </motion.button>
+                </TooltipHint>
               </div>
             ) : null}
           </div>

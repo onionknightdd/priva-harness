@@ -26,6 +26,7 @@ import {
 import { Progress, ProgressLabel } from "@/components/ui/progress"
 
 import { mockProfilePlan } from "./mock-profile-data"
+import { TooltipHint } from "@/components/ui/tooltip"
 
 function QuickStat({
   icon: Icon,
@@ -61,16 +62,17 @@ export function ProfileSidebarColumn() {
   return (
     <div className="flex flex-col gap-4">
       <div className="relative flex flex-col items-center text-center">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-xs"
-          className="absolute top-0 right-0"
-          aria-label={t("profile.edit")}
-          title={t("profile.edit")}
-        >
-          <PencilIcon />
-        </Button>
+        <TooltipHint content={t("profile.edit")}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            className="absolute top-0 right-0"
+            aria-label={t("profile.edit")}
+          >
+            <PencilIcon />
+          </Button>
+        </TooltipHint>
         <Avatar className="size-20 text-lg">
           <AvatarFallback className="bg-sky-500/15 text-sky-700 dark:text-sky-300">
             {initials}
@@ -151,16 +153,17 @@ export function ProfileSidebarColumn() {
               </p>
             </div>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            aria-label={themeLabel}
-            title={themeLabel}
-            onClick={() => setTheme(isDark ? "light" : "dark")}
-          >
-            {isDark ? <SunIcon /> : <MoonIcon />}
-          </Button>
+          <TooltipHint content={themeLabel}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              aria-label={themeLabel}
+              onClick={() => setTheme(isDark ? "light" : "dark")}
+            >
+              {isDark ? <SunIcon /> : <MoonIcon />}
+            </Button>
+          </TooltipHint>
         </CardContent>
       </Card>
 

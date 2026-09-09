@@ -25,6 +25,7 @@ import {
 } from "./row-hover-action"
 import { sessionDisplayTitle, type KnownSessionTag } from "./session-projects"
 import { SessionTagPopover } from "./session-tag-popover"
+import { TooltipHint } from "@/components/ui/tooltip"
 
 const renameTransition = {
   type: "spring" as const,
@@ -154,33 +155,34 @@ export function ProjectSessionItem({
           />
         </motion.div>
       ) : (
-        <SidebarMenuSubButton
-          render={<button type="button" />}
-          className="w-full pr-12 text-left"
-          title={title}
-          isActive={isActive}
-          onClick={() => onSelect(session)}
-          onDoubleClick={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-            skipBlurCommitRef.current = false
-            setDraft(title)
-            setEditing(true)
-          }}
-        >
-          <SessionLiveStatus
-            sessionId={session.sessionId}
-            runningLabel={t("sidebar.projects.sessionRunning")}
-            warmLabel={t("sidebar.projects.sessionWarm")}
-          />
-          {session.pinned ? (
-            <PinIcon
-              className="size-3.5 shrink-0 fill-current"
-              aria-hidden="true"
+        <TooltipHint content={title}>
+          <SidebarMenuSubButton
+            render={<button type="button" />}
+            className="w-full pr-12 text-left"
+            isActive={isActive}
+            onClick={() => onSelect(session)}
+            onDoubleClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              skipBlurCommitRef.current = false
+              setDraft(title)
+              setEditing(true)
+            }}
+          >
+            <SessionLiveStatus
+              sessionId={session.sessionId}
+              runningLabel={t("sidebar.projects.sessionRunning")}
+              warmLabel={t("sidebar.projects.sessionWarm")}
             />
-          ) : null}
-          <span>{title}</span>
-        </SidebarMenuSubButton>
+            {session.pinned ? (
+              <PinIcon
+                className="size-3.5 shrink-0 fill-current"
+                aria-hidden="true"
+              />
+            ) : null}
+            <span>{title}</span>
+          </SidebarMenuSubButton>
+        </TooltipHint>
       )}
       {editing ? null : (
         <div className="absolute top-1/2 right-1 z-[2] flex -translate-y-1/2 items-center gap-px">

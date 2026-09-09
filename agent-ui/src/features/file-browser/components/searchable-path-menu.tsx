@@ -14,6 +14,7 @@ import type {
   FileBrowserBreadcrumbEntry,
   FileBrowserItem,
 } from "../file-browser-data"
+import { TooltipHint } from "@/components/ui/tooltip"
 
 type PathMenuEntry = Pick<
   FileBrowserBreadcrumbEntry,
@@ -30,25 +31,26 @@ function SearchablePathMenuItem({
   const [marqueeActive, setMarqueeActive] = React.useState(false)
 
   return (
-    <DropdownMenuItem
-      data-path-menu-result
-      className="min-w-0"
-      title={entry.path}
-      onPointerEnter={() => setMarqueeActive(true)}
-      onPointerLeave={() => setMarqueeActive(false)}
-      onFocus={() => setMarqueeActive(true)}
-      onBlur={() => setMarqueeActive(false)}
-      onClick={() => onNavigate(entry.path, entry.type)}
-    >
-      <FolderIcon aria-hidden="true" />
-      <OverflowMarquee
-        active={marqueeActive}
-        playback="once"
-        className="min-w-0 flex-1"
+    <TooltipHint content={entry.path}>
+      <DropdownMenuItem
+        data-path-menu-result
+        className="min-w-0"
+        onPointerEnter={() => setMarqueeActive(true)}
+        onPointerLeave={() => setMarqueeActive(false)}
+        onFocus={() => setMarqueeActive(true)}
+        onBlur={() => setMarqueeActive(false)}
+        onClick={() => onNavigate(entry.path, entry.type)}
       >
-        {entry.name}
-      </OverflowMarquee>
-    </DropdownMenuItem>
+        <FolderIcon aria-hidden="true" />
+        <OverflowMarquee
+          active={marqueeActive}
+          playback="once"
+          className="min-w-0 flex-1"
+        >
+          {entry.name}
+        </OverflowMarquee>
+      </DropdownMenuItem>
+    </TooltipHint>
   )
 }
 

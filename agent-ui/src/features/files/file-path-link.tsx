@@ -8,6 +8,7 @@ import { focusRing } from "@/lib/surfaces"
 import { cn } from "@/lib/utils"
 
 import { useFileExists } from "./use-file-exists"
+import { TooltipHint } from "@/components/ui/tooltip"
 
 export function FilePathLink({
   path,
@@ -44,35 +45,36 @@ export function FilePathLink({
   }
 
   return (
-    <motion.button
-      type="button"
-      title={openLabel}
-      aria-label={openLabel}
-      onClick={(event) => {
-        event.preventDefault()
-        event.stopPropagation()
-        workspaceFiles.openFileInWorkspace(path)
-      }}
-      whileTap={shouldReduceMotion ? undefined : { scale: 0.98 }}
-      transition={{ duration: shouldReduceMotion ? 0 : 0.16 }}
-      className={cn(
-        "relative z-10 inline-flex max-w-full min-w-0 pointer-events-auto items-center gap-0.5 align-middle text-left font-normal leading-none outline-none",
-        className,
-        "cursor-pointer bg-transparent p-0 underline-offset-2",
-        focusRing,
-        variant === "code"
-          ? "text-sky-600 underline decoration-sky-600/50 hover:decoration-sky-600 dark:text-sky-400 dark:decoration-sky-400/50 dark:hover:decoration-sky-400"
-          : "hover:underline"
-      )}
-    >
-      {showIcon ? (
-        <FileTypeIcon
-          name={fileNameFromPath(path)}
-          path={path}
-          className="block size-[0.875em]"
-        />
-      ) : null}
-      <span className="min-w-0 truncate">{label}</span>
-    </motion.button>
+    <TooltipHint content={openLabel}>
+      <motion.button
+        type="button"
+        aria-label={openLabel}
+        onClick={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          workspaceFiles.openFileInWorkspace(path)
+        }}
+        whileTap={shouldReduceMotion ? undefined : { scale: 0.98 }}
+        transition={{ duration: shouldReduceMotion ? 0 : 0.16 }}
+        className={cn(
+          "relative z-10 inline-flex max-w-full min-w-0 pointer-events-auto items-center gap-0.5 align-middle text-left font-normal leading-none outline-none",
+          className,
+          "cursor-pointer bg-transparent p-0 underline-offset-2",
+          focusRing,
+          variant === "code"
+            ? "text-sky-600 underline decoration-sky-600/50 hover:decoration-sky-600 dark:text-sky-400 dark:decoration-sky-400/50 dark:hover:decoration-sky-400"
+            : "hover:underline"
+        )}
+      >
+        {showIcon ? (
+          <FileTypeIcon
+            name={fileNameFromPath(path)}
+            path={path}
+            className="block size-[0.875em]"
+          />
+        ) : null}
+        <span className="min-w-0 truncate">{label}</span>
+      </motion.button>
+    </TooltipHint>
   )
 }

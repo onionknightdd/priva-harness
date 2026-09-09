@@ -48,6 +48,7 @@ import {
   useWorkspaceTakesMajority,
   workspaceDensityTransition,
 } from "@/features/workspace"
+import { TooltipHint } from "@/components/ui/tooltip"
 
 const COMPOSER_MENU_WIDTH_CLASS = "w-56 min-w-56 max-w-56 text-sm"
 const COMPOSER_TEXT_CLASS = "text-sm font-normal"
@@ -768,71 +769,72 @@ export function ComposerModelSelector({
 
   return (
     <DropdownMenu modal>
-      <DropdownMenuTrigger
-        aria-label={triggerLabel}
-        title={saveError ?? triggerLabel}
-        render={
-          <InputGroupButton
-            type="button"
-            variant="ghost"
-            size="xs"
-            className={cn(
-              COMPOSER_MODEL_TRIGGER_MAX_CLASS,
-              "w-max min-w-0 max-w-full shrink justify-start cursor-pointer overflow-hidden border-0 bg-transparent px-1.5 shadow-none hover:bg-muted/40 dark:bg-transparent dark:hover:bg-muted/30",
-              COMPOSER_TEXT_CLASS
-            )}
-          />
-        }
-      >
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.span
-            key={selectionKey}
-            className={cn(
-              "flex min-w-0 items-center",
-              COMPOSER_TEXT_CLASS
-            )}
-            initial={shouldReduceMotion ? false : { opacity: 0, y: 3 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={shouldReduceMotion ? undefined : { opacity: 0, y: -3 }}
-            transition={{ duration: shouldReduceMotion ? 0 : 0.16 }}
-          >
-            {selection?.modelId ? (
-              <ProviderIcon
-                className="size-4 shrink-0"
-                providerId={getModelProviderId(selection.modelId)}
-              />
-            ) : iconOnly ? (
-              <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
-            ) : (
-              <span className={cn("truncate text-muted-foreground", COMPOSER_TEXT_CLASS)}>
-                {t("agentMessage.selectModel")}
-              </span>
-            )}
-            {selection?.modelId ? (
-              <CollapsingInline open={!iconOnly}>
-                <OverflowFadeText className={COMPOSER_TEXT_CLASS}>
-                  {displayModelName(selection.modelId)}
-                </OverflowFadeText>
-                <ChevronDownIcon
-                  className={cn(
-                    "size-3.5 shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none",
-                    "group-data-[popup-open]/button:rotate-180"
-                  )}
+      <TooltipHint content={saveError ?? triggerLabel}>
+        <DropdownMenuTrigger
+          aria-label={triggerLabel}
+          render={
+            <InputGroupButton
+              type="button"
+              variant="ghost"
+              size="xs"
+              className={cn(
+                COMPOSER_MODEL_TRIGGER_MAX_CLASS,
+                "w-max min-w-0 max-w-full shrink justify-start cursor-pointer overflow-hidden border-0 bg-transparent px-1.5 shadow-none hover:bg-muted/40 dark:bg-transparent dark:hover:bg-muted/30",
+                COMPOSER_TEXT_CLASS
+              )}
+            />
+          }
+        >
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.span
+              key={selectionKey}
+              className={cn(
+                "flex min-w-0 items-center",
+                COMPOSER_TEXT_CLASS
+              )}
+              initial={shouldReduceMotion ? false : { opacity: 0, y: 3 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={shouldReduceMotion ? undefined : { opacity: 0, y: -3 }}
+              transition={{ duration: shouldReduceMotion ? 0 : 0.16 }}
+            >
+              {selection?.modelId ? (
+                <ProviderIcon
+                  className="size-4 shrink-0"
+                  providerId={getModelProviderId(selection.modelId)}
                 />
-              </CollapsingInline>
-            ) : iconOnly ? null : (
-              <CollapsingInline open>
-                <ChevronDownIcon
-                  className={cn(
-                    "size-3.5 shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none",
-                    "group-data-[popup-open]/button:rotate-180"
-                  )}
-                />
-              </CollapsingInline>
-            )}
-          </motion.span>
-        </AnimatePresence>
-      </DropdownMenuTrigger>
+              ) : iconOnly ? (
+                <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
+              ) : (
+                <span className={cn("truncate text-muted-foreground", COMPOSER_TEXT_CLASS)}>
+                  {t("agentMessage.selectModel")}
+                </span>
+              )}
+              {selection?.modelId ? (
+                <CollapsingInline open={!iconOnly}>
+                  <OverflowFadeText className={COMPOSER_TEXT_CLASS}>
+                    {displayModelName(selection.modelId)}
+                  </OverflowFadeText>
+                  <ChevronDownIcon
+                    className={cn(
+                      "size-3.5 shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none",
+                      "group-data-[popup-open]/button:rotate-180"
+                    )}
+                  />
+                </CollapsingInline>
+              ) : iconOnly ? null : (
+                <CollapsingInline open>
+                  <ChevronDownIcon
+                    className={cn(
+                      "size-3.5 shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none",
+                      "group-data-[popup-open]/button:rotate-180"
+                    )}
+                  />
+                </CollapsingInline>
+              )}
+            </motion.span>
+          </AnimatePresence>
+        </DropdownMenuTrigger>
+      </TooltipHint>
       <DropdownMenuContent
         align="end"
         side="top"

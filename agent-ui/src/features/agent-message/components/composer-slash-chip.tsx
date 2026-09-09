@@ -7,10 +7,10 @@ import { SPRING_LAYOUT } from "@/lib/ease"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card"
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 import { slashKindLabelKey, slashOriginLabelKey } from "../composer-slash-command"
 
@@ -25,9 +25,8 @@ export function ComposerSlashChip({
   const shouldReduceMotion = Boolean(useReducedMotion())
 
   return (
-    <HoverCard>
-      <HoverCardTrigger
-        delay={200}
+    <Tooltip>
+      <TooltipTrigger
         closeDelay={150}
         render={<span />}
         className="inline-flex"
@@ -55,13 +54,14 @@ export function ComposerSlashChip({
             <XIcon className="size-3" />
           </button>
         </motion.span>
-      </HoverCardTrigger>
-      <HoverCardContent
+      </TooltipTrigger>
+      <TooltipContent
+        hideArrow
         side="top"
         align="start"
         sideOffset={8}
         className={cn(
-          "w-72 p-3",
+          "block w-72 rounded-lg bg-popover p-3 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10",
           shouldReduceMotion &&
             "data-open:animate-none data-closed:animate-none"
         )}
@@ -84,7 +84,7 @@ export function ComposerSlashChip({
             {command.description}
           </p>
         )}
-      </HoverCardContent>
-    </HoverCard>
+      </TooltipContent>
+    </Tooltip>
   )
 }

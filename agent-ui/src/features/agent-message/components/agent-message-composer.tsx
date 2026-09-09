@@ -30,6 +30,7 @@ import { ComposerAttachmentChips } from "./composer-attachment-chips"
 import { ComposerModelSelector, COMPOSER_MODEL_TRIGGER_MAX_CLASS, type ComposerEffort } from "./composer-model-selector"
 import { ComposerSlashChip } from "./composer-slash-chip"
 import { ComposerSlashMenu } from "./composer-slash-menu"
+import { TooltipHint } from "@/components/ui/tooltip"
 
 export const composerDockTransition = {
   duration: 0.4,
@@ -38,7 +39,7 @@ export const composerDockTransition = {
 
 const COMPOSER_FOOTER_HEIGHT = 40
 const COMPOSER_MULTI_PAD = 14
-const COMPOSER_SINGLE_PAD_Y = 8
+const COMPOSER_SINGLE_PAD_Y = 7
 const COMPOSER_CHIP_GAP = 8
 const COMPOSER_LEFT_FALLBACK_PX = 46
 const COMPACT_LINE_SLACK_PX = 8
@@ -208,33 +209,34 @@ function ComposerControls({
         orientation="vertical"
         className="mx-0.5 h-4 data-vertical:self-center"
       />
-      <InputGroupButton
-        type={stopping ? "button" : "submit"}
-        variant="default"
-        size="icon-xs"
-        className="relative z-10 shrink-0 rounded-full"
-        disabled={!stopping && !canSubmit}
-        aria-label={actionLabel}
-        title={stopping ? stopLabel : modelReady ? sendLabel : modelRequired}
-        onClick={
-          stopping
-            ? (event) => {
-                event.preventDefault()
-                onStop()
-              }
-            : undefined
-        }
-      >
-        {/* Roll swap (same language as tool-card titles) — the leaving and
-            arriving glyphs overlap, so the button is never empty mid-swap. */}
-        <ActionSwapRollIcon value={action} className="size-4">
-          {stopping ? (
-            <SquareIcon className="size-2.5 fill-current" />
-          ) : (
-            <ArrowUpIcon />
-          )}
-        </ActionSwapRollIcon>
-      </InputGroupButton>
+      <TooltipHint content={stopping ? stopLabel : modelReady ? sendLabel : modelRequired}>
+        <InputGroupButton
+          type={stopping ? "button" : "submit"}
+          variant="default"
+          size="icon-xs"
+          className="relative z-10 shrink-0 rounded-full"
+          disabled={!stopping && !canSubmit}
+          aria-label={actionLabel}
+          onClick={
+            stopping
+              ? (event) => {
+                  event.preventDefault()
+                  onStop()
+                }
+              : undefined
+          }
+        >
+          {/* Roll swap (same language as tool-card titles) — the leaving and
+              arriving glyphs overlap, so the button is never empty mid-swap. */}
+          <ActionSwapRollIcon value={action} className="size-4">
+            {stopping ? (
+              <SquareIcon className="size-2.5 fill-current" />
+            ) : (
+              <ArrowUpIcon />
+            )}
+          </ActionSwapRollIcon>
+        </InputGroupButton>
+      </TooltipHint>
     </div>
   )
 }
@@ -387,7 +389,7 @@ export function AgentMessageComposer({
             "group/input-group relative w-full min-w-0 overflow-hidden rounded-3xl border border-input shadow-xs dark:bg-input/30",
             // The focus ring eases in like shadcn's InputGroup instead of snapping.
             "transition-[border-color,box-shadow] duration-150 ease-out motion-reduce:transition-none",
-            "has-[[data-slot=input-group-control]:focus-visible]:border-ring has-[[data-slot=input-group-control]:focus-visible]:ring-3 has-[[data-slot=input-group-control]:focus-visible]:ring-ring/50"
+            "ring-inset has-[[data-slot=input-group-control]:focus-visible]:border-ring has-[[data-slot=input-group-control]:focus-visible]:ring-3 has-[[data-slot=input-group-control]:focus-visible]:ring-ring/50"
           )}
           onClick={(event) => {
             const target = event.target
@@ -435,7 +437,7 @@ export function AgentMessageComposer({
               animate={{
                 paddingTop: singleLine
                   ? COMPOSER_SINGLE_PAD_Y
-                  : COMPOSER_MULTI_PAD,
+                  : COMPOSER_MULTI_PAD - 2,
                 paddingBottom: singleLine
                   ? COMPOSER_SINGLE_PAD_Y
                   : COMPOSER_FOOTER_HEIGHT,

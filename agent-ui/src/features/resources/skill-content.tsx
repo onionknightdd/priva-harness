@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils"
 import { errorMessage, resourceRequest, resourceUrl, type ResourceQuery, type SkillDetail } from "./resource-api"
 import { ResourceEmpty, ResourceErrorState, ResourceLoading } from "./resource-shared"
 import { skillFileKind } from "./skill-file-kind"
+import { TooltipHint } from "@/components/ui/tooltip"
 
 const PdfRenderer = React.lazy(async () => ({ default: (await import("@/features/files/preview/renderers/pdf-renderer")).PdfRenderer }))
 
@@ -45,11 +46,11 @@ export const SkillContent = React.memo(function SkillContent({ detail, query, fi
 
   return <Tabs value={activeMode} onValueChange={setMode} className="min-h-0 flex-1 gap-0">
     <div className="flex min-w-0 items-center gap-3 border-b px-5 py-2 sm:px-7" data-skill-file-toolbar>
-      <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground" title={previewFile.path}>{previewFile.path}</p>
+      <TooltipHint content={previewFile.path}><p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{previewFile.path}</p></TooltipHint>
       <div className="flex shrink-0 items-center gap-2">
         <SkillCopyButton key={fileId} content={textAvailable ? content : undefined} />
         <TabsList className="h-7 rounded-md p-0.5" aria-label={t("resources.fileMode")}>
-          <TabsTrigger className="px-2 py-0.5 text-xs" value="source" disabled={!textAvailable} title={!textAvailable ? t("resources.textOnly") : undefined}>{t("resources.sourceCode")}</TabsTrigger>
+          <TooltipHint content={!textAvailable ? t("resources.textOnly") : undefined}><TabsTrigger className="px-2 py-0.5 text-xs" value="source" disabled={!textAvailable}>{t("resources.sourceCode")}</TabsTrigger></TooltipHint>
           <TabsTrigger className="px-2 py-0.5 text-xs" value="preview">{t("resources.preview")}</TabsTrigger>
         </TabsList>
       </div>
@@ -85,9 +86,11 @@ function SkillCopyButton({ content }: { content: string | undefined }) {
     catch { setFeedback("copyFailed") }
   }
   return <>
-    <ResourceIconButton aria-label={t("filePreview.copy")} title={t(`filePreview.${feedback ?? "copy"}`)} disabled={content === undefined} onClick={() => void copy()}>
-      {feedback === "copied" ? <CheckIcon /> : feedback === "copyFailed" ? <XIcon className="text-destructive" /> : <CopyIcon />}
-    </ResourceIconButton>
+    <TooltipHint content={t(`filePreview.${feedback ?? "copy"}`)}>
+      <ResourceIconButton aria-label={t("filePreview.copy")} disabled={content === undefined} onClick={() => void copy()}>
+        {feedback === "copied" ? <CheckIcon /> : feedback === "copyFailed" ? <XIcon className="text-destructive" /> : <CopyIcon />}
+      </ResourceIconButton>
+    </TooltipHint>
     <span role="status" className="sr-only">{feedback ? t(`filePreview.${feedback}`) : ""}</span>
   </>
 }

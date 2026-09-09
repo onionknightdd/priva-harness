@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next"
 
 import { EASE_OUT } from "@/lib/ease"
 import { cn } from "@/lib/utils"
+import { TooltipHint } from "@/components/ui/tooltip"
 
 const MIN_WIDTH = 160
 const MIN_HEIGHT = 120
@@ -159,46 +160,47 @@ function ResizeHandle({
   const vertical = edge === "e" || edge === "w"
 
   return (
-    <div
-      role="separator"
-      aria-label={label}
-      aria-orientation={
-        horizontal ? "horizontal" : vertical ? "vertical" : undefined
-      }
-      tabIndex={0}
-      title={label}
-      data-slot="mermaid-resize-handle"
-      data-edge={edge}
-      data-dragging={dragging ? "true" : undefined}
-      className={cn(
-        "absolute z-20 touch-none outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        className
-      )}
-      style={{ cursor }}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerCancel}
-      onLostPointerCapture={onLostPointerCapture}
-      onKeyDown={onKeyDown}
-      onPointerEnter={() => setHovered(true)}
-      onPointerLeave={() => setHovered(false)}
-    >
-      <motion.span
-        aria-hidden="true"
-        className={cn(
-          "pointer-events-none absolute bg-ring",
-          horizontal && "inset-x-6 top-1/2 h-0.5 -translate-y-1/2 rounded-full",
-          vertical && "inset-y-6 left-1/2 w-0.5 -translate-x-1/2 rounded-full",
-          !horizontal && !vertical && "inset-[3px] rounded-[1px]"
-        )}
-        initial={false}
-        animate={{ opacity: active ? 1 : 0 }}
-        transition={
-          reduceMotion ? { duration: 0 } : { duration: 0.16, ease: EASE_OUT }
+    <TooltipHint content={label}>
+      <div
+        role="separator"
+        aria-label={label}
+        aria-orientation={
+          horizontal ? "horizontal" : vertical ? "vertical" : undefined
         }
-      />
-    </div>
+        tabIndex={0}
+        data-slot="mermaid-resize-handle"
+        data-edge={edge}
+        data-dragging={dragging ? "true" : undefined}
+        className={cn(
+          "ring-inset absolute z-20 touch-none outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          className
+        )}
+        style={{ cursor }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerCancel}
+        onLostPointerCapture={onLostPointerCapture}
+        onKeyDown={onKeyDown}
+        onPointerEnter={() => setHovered(true)}
+        onPointerLeave={() => setHovered(false)}
+      >
+        <motion.span
+          aria-hidden="true"
+          className={cn(
+            "pointer-events-none absolute bg-ring",
+            horizontal && "inset-x-6 top-1/2 h-0.5 -translate-y-1/2 rounded-full",
+            vertical && "inset-y-6 left-1/2 w-0.5 -translate-x-1/2 rounded-full",
+            !horizontal && !vertical && "inset-[3px] rounded-[1px]"
+          )}
+          initial={false}
+          animate={{ opacity: active ? 1 : 0 }}
+          transition={
+            reduceMotion ? { duration: 0 } : { duration: 0.16, ease: EASE_OUT }
+          }
+        />
+      </div>
+    </TooltipHint>
   )
 }
 

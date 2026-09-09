@@ -19,6 +19,7 @@ import {
   isImageAttachment,
   type ComposerAttachment,
 } from "../composer-attachments"
+import { TooltipHint } from "@/components/ui/tooltip"
 
 export function ComposerAttachmentChips({
   attachments,
@@ -71,13 +72,15 @@ export function ComposerAttachmentChips({
                   <AttachmentTitle className="motion-reduce:animate-none!">
                     {attachment.file.name}
                   </AttachmentTitle>
-                  <AttachmentDescription title={attachment.error} role={attachment.status === "error" ? "alert" : undefined}>
-                    {attachment.status === "uploading"
-                      ? t("uploadQueue.percentage", { percentage: Math.round(attachment.progress) })
-                      : attachment.status === "error"
-                        ? attachment.error || t("agentMessage.attachmentUploadIncomplete")
-                        : formatComposerAttachmentSize(attachment.file.size)}
-                  </AttachmentDescription>
+                  <TooltipHint content={attachment.error}>
+                    <AttachmentDescription role={attachment.status === "error" ? "alert" : undefined}>
+                      {attachment.status === "uploading"
+                        ? t("uploadQueue.percentage", { percentage: Math.round(attachment.progress) })
+                        : attachment.status === "error"
+                          ? attachment.error || t("agentMessage.attachmentUploadIncomplete")
+                          : formatComposerAttachmentSize(attachment.file.size)}
+                    </AttachmentDescription>
+                  </TooltipHint>
                 </AttachmentContent>
                 <AttachmentActions>
                   {attachment.status === "error" ? (

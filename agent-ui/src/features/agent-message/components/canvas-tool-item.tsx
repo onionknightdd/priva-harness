@@ -17,6 +17,7 @@ import {
   canvasTitleFromInput,
 } from "../canvas-html"
 import { isToolRunning, toolItemStatusLabel } from "../tool-activity"
+import { TooltipHint } from "@/components/ui/tooltip"
 
 export function CanvasToolItem({
   block,
@@ -46,43 +47,44 @@ export function CanvasToolItem({
 
   return (
     <div className="flex w-full min-w-0 flex-col items-start gap-1 px-0 py-0.5">
-      <motion.button
-        type="button"
-        disabled={!canOpen}
-        title={canOpen ? openLabel : undefined}
-        aria-label={canOpen ? openLabel : undefined}
-        onClick={() => {
-          if (!canOpen || workspaceFiles === null) {
-            return
+      <TooltipHint content={canOpen ? openLabel : undefined}>
+        <motion.button
+          type="button"
+          disabled={!canOpen}
+          aria-label={canOpen ? openLabel : undefined}
+          onClick={() => {
+            if (!canOpen || workspaceFiles === null) {
+              return
+            }
+            rememberFileExists(path, true)
+            workspaceFiles.openFileInWorkspace(path, { previewMode: "render" })
+          }}
+          whileTap={
+            shouldReduceMotion || !canOpen ? undefined : { scale: 0.98 }
           }
-          rememberFileExists(path, true)
-          workspaceFiles.openFileInWorkspace(path, { previewMode: "render" })
-        }}
-        whileTap={
-          shouldReduceMotion || !canOpen ? undefined : { scale: 0.98 }
-        }
-        transition={shouldReduceMotion ? { duration: 0 } : SPRING_PRESS}
-        className={cn(
-          "flex w-fit max-w-full items-center gap-2 rounded-md bg-transparent px-0 py-0.5 text-left text-ui text-muted-foreground/70 outline-none",
-          canOpen && cn("cursor-pointer hover:text-muted-foreground", focusRing),
-          !canOpen && "cursor-default"
-        )}
-      >
-        <AppWindowIcon className="size-4 shrink-0" aria-hidden="true" />
-        <span className={cn("min-w-0", running && "shimmer")}>
-          {toolItemStatusLabel(block.name, running, t)}
-        </span>
-        {displayName ? (
-          <span className="min-w-0 truncate font-normal text-muted-foreground">
-            {displayName}
+          transition={shouldReduceMotion ? { duration: 0 } : SPRING_PRESS}
+          className={cn(
+            "flex w-fit max-w-full items-center gap-2 rounded-md bg-transparent px-0 py-0.5 text-left text-ui text-muted-foreground/70 outline-none",
+            canOpen && cn("cursor-pointer hover:text-muted-foreground", focusRing),
+            !canOpen && "cursor-default"
+          )}
+        >
+          <AppWindowIcon className="size-4 shrink-0" aria-hidden="true" />
+          <span className={cn("min-w-0", running && "shimmer")}>
+            {toolItemStatusLabel(block.name, running, t)}
           </span>
-        ) : null}
-        {canOpen ? (
-          <span className="shrink-0 text-muted-foreground/70">
-            {openLabel}
-          </span>
-        ) : null}
-      </motion.button>
+          {displayName ? (
+            <span className="min-w-0 truncate font-normal text-muted-foreground">
+              {displayName}
+            </span>
+          ) : null}
+          {canOpen ? (
+            <span className="shrink-0 text-muted-foreground/70">
+              {openLabel}
+            </span>
+          ) : null}
+        </motion.button>
+      </TooltipHint>
       {status === "error" ? (
         <p className="max-w-full text-ui text-destructive">
           {tool?.output?.trim() || t("agentMessage.toolFailed")}

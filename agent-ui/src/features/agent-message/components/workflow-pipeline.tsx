@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils"
 import { workflowDuration, workflowIsActive, workflowPhaseStatus, type WorkflowAgent, type WorkflowCard, type WorkflowPhase } from "../workflow-data"
 import { WorkflowAgentDetailPanel, type LoadWorkflowAgent } from "./workflow-agent-detail"
 import { WorkflowStatusMark } from "./workflow-status"
+import { TooltipHint } from "@/components/ui/tooltip"
 
 export function WorkflowPipeline({ workflow, loadDetail, initialAgentIndex }: { workflow: WorkflowCard; loadDetail: LoadWorkflowAgent; initialAgentIndex?: number }) {
   const { t } = useTranslation()
@@ -70,7 +71,7 @@ export function WorkflowPipeline({ workflow, loadDetail, initialAgentIndex }: { 
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
               <span className="inline-flex min-w-0 items-center gap-1.5 text-sm font-medium"><WorkflowIcon aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" /><span className="min-w-0 break-words">{workflow.name ?? t("agentMessage.workflow")}</span></span>
-              {workflow.summary ? <span className="min-w-0 flex-1 basis-40 truncate text-xs text-muted-foreground" title={workflow.summary}>{workflow.summary}</span> : null}
+              {workflow.summary ? <TooltipHint content={workflow.summary}><span className="min-w-0 flex-1 basis-40 truncate text-xs text-muted-foreground">{workflow.summary}</span></TooltipHint> : null}
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
               <span className={workflowStatusColor[workflow.status]}>{t(`agentMessage.workflowUI.status.${workflow.status}`)}</span>

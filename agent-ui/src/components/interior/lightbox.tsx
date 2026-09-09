@@ -57,7 +57,7 @@ const NEAR_HOME = 1.02;
 const SNAP_HOME = 1.05;
 
 const CHROME_BUTTON =
-  "grid size-8 place-items-center rounded-[9px] border border-border bg-background text-muted-foreground outline-none transition-[border-color,color,box-shadow] duration-150 hover:border-border hover:text-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+  "ring-inset grid size-8 place-items-center rounded-[9px] border border-border bg-background text-muted-foreground outline-none transition-[border-color,color,box-shadow] duration-150 hover:border-border hover:text-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50";
 
 type Spring = {
   type: "spring";

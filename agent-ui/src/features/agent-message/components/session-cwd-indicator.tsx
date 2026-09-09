@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next"
 
 import { fileNameFromPath } from "@/lib/file-path"
 import { cn } from "@/lib/utils"
+import { TooltipHint } from "@/components/ui/tooltip"
 
 export function SessionCwdIndicator({
   cwd,
@@ -21,19 +22,20 @@ export function SessionCwdIndicator({
   }
 
   return (
-    <div
-      className={cn(
-        // 1px transparent border + pl-2.5 matches the composer plus control inset.
-        "flex w-fit min-w-0 items-center gap-1 border-l border-transparent pl-2.5 text-[13px] text-muted-foreground",
-        className
-      )}
-      title={cwd}
-      aria-label={`${t("agentMessage.sessionCwd")}: ${cwd}`}
-    >
-      <span className="flex size-6 shrink-0 items-center justify-center">
-        <FolderIcon className="size-4" aria-hidden="true" />
-      </span>
-      <span className="min-w-0 truncate">{name}</span>
-    </div>
+    <TooltipHint content={cwd}>
+      <div
+        className={cn(
+          // 1px transparent border + pl-2.5 matches the composer plus control inset.
+          "flex w-fit min-w-0 items-center gap-1 border-l border-transparent pl-2.5 text-[13px] text-muted-foreground",
+          className
+        )}
+        aria-label={`${t("agentMessage.sessionCwd")}: ${cwd}`}
+      >
+        <span className="flex size-6 shrink-0 items-center justify-center">
+          <FolderIcon className="size-4" aria-hidden="true" />
+        </span>
+        <span className="min-w-0 truncate">{name}</span>
+      </div>
+    </TooltipHint>
   )
 }

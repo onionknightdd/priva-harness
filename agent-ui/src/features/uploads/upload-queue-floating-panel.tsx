@@ -29,6 +29,7 @@ import {
 import { cn } from "@/lib/utils"
 
 import type { UploadTask } from "./upload.types"
+import { TooltipHint } from "@/components/ui/tooltip"
 
 function taskFillClass(task: UploadTask) {
   switch (task.status) {
@@ -90,16 +91,17 @@ function UploadTaskCard({
           className="relative z-10"
         />
         <div className="relative z-10 flex min-w-0 flex-1 flex-col gap-0.5">
-          <FileName title={task.fileName}>{task.fileName}</FileName>
+          <TooltipHint content={task.fileName}><FileName>{task.fileName}</FileName></TooltipHint>
           <div className="flex min-w-0 items-center gap-2">
             <FileSize bytes={task.size} className="text-[11px]" />
             {task.error && (
-              <span
-                className="truncate text-[11px] text-destructive"
-                title={task.error}
-              >
-                {task.error}
-              </span>
+              <TooltipHint content={task.error}>
+                <span
+                  className="truncate text-[11px] text-destructive"
+                >
+                  {task.error}
+                </span>
+              </TooltipHint>
             )}
           </div>
         </div>
@@ -125,25 +127,26 @@ function UploadTaskCard({
           )}
 
           {(isUploading || canRemove) && (
-            <button
-              type="button"
-              className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/8 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-              aria-label={t(
+            <TooltipHint content={t(
                 isUploading
                   ? "uploadQueue.cancelFile"
                   : "uploadQueue.removeFile",
                 { fileName: task.fileName }
-              )}
-              title={t(
-                isUploading
-                  ? "uploadQueue.cancelFile"
-                  : "uploadQueue.removeFile",
-                { fileName: task.fileName }
-              )}
-              onClick={isUploading ? onCancel : onRemove}
-            >
-              <XIcon aria-hidden="true" className="size-3.5" />
-            </button>
+              )}>
+              <button
+                type="button"
+                className="ring-inset inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/8 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                aria-label={t(
+                  isUploading
+                    ? "uploadQueue.cancelFile"
+                    : "uploadQueue.removeFile",
+                  { fileName: task.fileName }
+                )}
+                onClick={isUploading ? onCancel : onRemove}
+              >
+                <XIcon aria-hidden="true" className="size-3.5" />
+              </button>
+            </TooltipHint>
           )}
         </div>
       </FileRoot>
@@ -258,46 +261,47 @@ export function UploadQueueFloatingPanel({
                 }
               }}
             >
-              <PopoverTrigger
-                render={
-                  <button
-                    type="button"
-                    className={cn(
-                      buttonVariants({ variant: "default", size: "icon-lg" }),
-                      "relative size-11 rounded-full shadow-lg"
-                    )}
-                    aria-label={floatingLabel}
-                    title={floatingLabel}
-                  />
-                }
-              >
-                <AnimatePresence initial={false} mode="wait">
-                  <motion.span
-                    key={
-                      activeCount > 0
-                        ? "uploading"
-                        : hasFailure
-                          ? "failure"
-                          : "succeeded"
-                    }
-                    initial={reducedMotion ? false : { opacity: 0, scale: 0.65 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={reducedMotion ? undefined : { opacity: 0, scale: 0.65 }}
-                    transition={{ duration: reducedMotion ? 0 : 0.16 }}
-                  >
-                    {activeCount > 0 ? (
-                      <UploadCloudIcon aria-hidden="true" />
-                    ) : hasFailure ? (
-                      <AlertCircleIcon aria-hidden="true" />
-                    ) : (
-                      <CheckCircle2Icon aria-hidden="true" />
-                    )}
-                  </motion.span>
-                </AnimatePresence>
-                <span className="absolute -top-1 -right-1 flex min-w-5 items-center justify-center rounded-full border-2 border-background bg-foreground px-1 text-[10px] leading-4 font-semibold text-background tabular-nums">
-                  {tasks.length}
-                </span>
-              </PopoverTrigger>
+              <TooltipHint content={floatingLabel}>
+                <PopoverTrigger
+                  render={
+                    <button
+                      type="button"
+                      className={cn(
+                        buttonVariants({ variant: "default", size: "icon-lg" }),
+                        "relative size-11 rounded-full shadow-lg"
+                      )}
+                      aria-label={floatingLabel}
+                    />
+                  }
+                >
+                  <AnimatePresence initial={false} mode="wait">
+                    <motion.span
+                      key={
+                        activeCount > 0
+                          ? "uploading"
+                          : hasFailure
+                            ? "failure"
+                            : "succeeded"
+                      }
+                      initial={reducedMotion ? false : { opacity: 0, scale: 0.65 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={reducedMotion ? undefined : { opacity: 0, scale: 0.65 }}
+                      transition={{ duration: reducedMotion ? 0 : 0.16 }}
+                    >
+                      {activeCount > 0 ? (
+                        <UploadCloudIcon aria-hidden="true" />
+                      ) : hasFailure ? (
+                        <AlertCircleIcon aria-hidden="true" />
+                      ) : (
+                        <CheckCircle2Icon aria-hidden="true" />
+                      )}
+                    </motion.span>
+                  </AnimatePresence>
+                  <span className="absolute -top-1 -right-1 flex min-w-5 items-center justify-center rounded-full border-2 border-background bg-foreground px-1 text-[10px] leading-4 font-semibold text-background tabular-nums">
+                    {tasks.length}
+                  </span>
+                </PopoverTrigger>
+              </TooltipHint>
             </motion.div>
 
             <PopoverContent

@@ -64,8 +64,9 @@ components/animate-ui/components/radix/switch.tsx
 primitives/radix/switch.tsx -> Radix UI + Motion
 ```
 
-三个调用点统一使用 32 × 20px 轨道、16px 滑块与按压伸展，颜色继续读取项目
-`primary`、`input`、`background` token。减少动态效果时立即切换状态，并关闭滑块
+三个调用点统一使用 32 × 20px 轨道、16px 滑块与按压伸展。激活轨道读取共享
+`toggle-active` token，浅色 / 深色均为 `rgb(78, 130, 239)`（`#4E82EF`）；其余颜色
+继续读取项目 `input`、`background` token。减少动态效果时立即切换状态，并关闭滑块
 位移与按压伸展动画。受控开关以调用方的 `checked` 为准，包括等待服务端保存的状态。
 旧 `ui/switch.tsx` 已移除，不建立兼容转发入口。
 
@@ -82,6 +83,41 @@ npx shadcn@latest add @animate-ui/components-radix-switch
 当前 shadcn CLI 在 `base-vega` 项目中会将上游 `asChild` 自动转换为 `render`，
 但该 Radix 组件需要 `asChild`。本地原语已恢复 Radix 组合 API，并补充 reduced-motion
 及受控状态处理；再次安装或升级时须审阅差异并运行下面的 Switch 浏览器检查。
+
+### Tab 与侧栏底色
+
+2026-09-09：按用户确认，以下背景色仅用于浅色主题。Tab 修改整组标签栏的底色；
+通用 Tabs 的所有变体、Skill 预览 Tabs 和工作区标签栏共用 `tabs-background`。
+主侧栏和工作区侧栏统一底色，选中项使用 `sidebar-active`，悬浮使用 `sidebar-accent`。
+深色主题保留各组件原有配色。
+
+```text
+TabsList / Animate UI TabsList / Workspace tab bar
+  -> tabs-background: rgb(229, 229, 229)  #E5E5E5
+Main sidebar / Workspace sidebar
+  -> sidebar: rgb(245, 245, 245)          #F5F5F5
+  -> sidebar-active: rgb(229, 229, 229)   #E5E5E5
+  -> sidebar-accent: rgb(239, 240, 240)   #EFF0F0
+```
+
+### 焦点框与用户消息底色
+
+2026-09-10：应用焦点框统一使用 `ring-inset`，包括共享 `focusRing`、基础组件、
+组合输入框的 `focus-within` / `has-focus-visible` 容器，以及独立可聚焦区域。
+焦点框不再叠加向外的 ring offset 或 outline；保留现有宽度、颜色和过渡。
+可视化沙箱内置按钮用等效的 inset box-shadow 绘制焦点框。
+
+用户消息气泡读取 `user-message` token：浅色为 `rgb(234, 243, 253)`（`#EAF3FD`），
+深色为 `rgb(34, 61, 114)`（`#223D72`）。深色弹出菜单共用 `popover` token，
+统一为 `rgb(53, 53, 53)`（`#353535`），覆盖下拉 / 右键 / 选择菜单、Popover、
+附件菜单与 Slash 命令菜单。
+
+```text
+Keyboard focus -> ring-inset
+User MessageContent -> user-message -> light: #EAF3FD
+                                   -> dark: #223D72
+Dark popup menus -> popover -> #353535
+```
 
 ### Skills 搜索与预览 Tab
 
@@ -201,9 +237,9 @@ Tabs，选择预览操作模式时可使用 ToggleGroup。不要只根据组件�
 
 | 组件类型 | 当前入口 / 来源 | 当前样式和反馈 | 代表场景 |
 | --- | --- | --- | --- |
-| Tooltip | [ui/tooltip](../agent-ui/src/components/ui/tooltip.tsx)，Base UI Tooltip | 深色提示气泡、箭头、全局首次延迟 500ms；125ms 进入 / 75ms 退出，相邻提示可即时打开 | 聊天工具栏、文件工具栏、侧栏动作 |
-| 浏览器原生提示 | 各业务组件的 HTML `title`，如 [LanguageToggle](../agent-ui/src/features/sidebar/footer/language-toggle.tsx)、[resource-detail](../agent-ui/src/features/resources/resource-detail.tsx) | 浏览器控制外观与延迟，不跟随应用 Tooltip 样式 | 图标按钮、路径、错误、截断文字；不是所有名为 title 的 React prop 都是原生提示 |
-| HoverCard | [ui/hover-card](../agent-ui/src/components/ui/hover-card.tsx)，Base UI PreviewCard | 富内容悬浮卡片，popover token + 共用弹层动效 | Slash command chip 预览 |
+| Tooltip | [ui/tooltip](../agent-ui/src/components/ui/tooltip.tsx)，Base UI Tooltip | 首次悬浮等待 2000ms，连续切换立即显示；全部离开 400ms 后重置。125ms 进入 / 75ms 退出，连续切换跳过进入动效 | 聊天工具栏、文件工具栏、侧栏动作、上下文用量 |
+| TooltipHint | 同一 [ui/tooltip](../agent-ui/src/components/ui/tooltip.tsx) 中的组合入口 | 替代浏览器原生 `title`，复用全局延迟组，不添加布局包裹元素，保留多行提示 | 图标按钮、路径、错误、状态、截断文字 |
+| 富内容提示 | [composer-slash-chip](../agent-ui/src/features/agent-message/components/composer-slash-chip.tsx)，Base UI Tooltip | 沿用 popover token 的卡片样式，与其他提示共享计时 | Slash command chip 预览；旧 HoverCard 入口当前无业务调用 |
 | Popover | [ui/popover](../agent-ui/src/components/ui/popover.tsx)，Base UI Popover | 浮层表单 / 信息面板，160ms 进入 / 100ms 退出 | 标签、上下文占用、任务计划、上传队列 |
 | DropdownMenu | [ui/dropdown-menu](../agent-ui/src/components/ui/dropdown-menu.tsx)，Base UI Menu | `ring-1`、共享 CSS 弹层动画、焦点行背景 | 模型、会话、账户、路径、Harness 菜单 |
 | 附件 Menu | [animate-ui/components/base/menu](../agent-ui/src/components/animate-ui/components/base/menu.tsx)，Base UI Menu + Animate UI | `border`、200ms 弹层、Motion 滑动高亮；与通用 DropdownMenu 的分组字号等不同 | 聊天附件菜单 |
@@ -216,7 +252,17 @@ Tabs，选择预览操作模式时可使用 ToggleGroup。不要只根据组件�
 | Spinner / Skeleton / Shimmer | [ui/spinner](../agent-ui/src/components/ui/spinner.tsx)、[ui/skeleton](../agent-ui/src/components/ui/skeleton.tsx)、[ShimmerLabel](../agent-ui/src/lib/surfaces.tsx) | Lucide 旋转、占位 pulse、`tw-shimmer`；业务中也直接使用 Loader 图标 | 等待请求、文件加载、工具执行 |
 | Empty / Error | [ui/empty](../agent-ui/src/components/ui/empty.tsx)、[resource-shared](../agent-ui/src/features/resources/resource-shared.tsx) 等本地组合 | 空状态图标和说明；错误使用 `role="alert"`、destructive 文本与重试按钮 | 空对话、空工作簿、资源失败 |
 
-Tooltip 应用于悬浮/键盘聚焦时的短提示，富内容使用 HoverCard 或 Popover。
+Tooltip 应用于悬浮/键盘聚焦时的说明提示，包括不含操作的富内容说明；交互面板使用 Popover。
+应用根部只保留一个 TooltipProvider，业务组件不再创建独立延迟组或覆盖打开延迟。
+键盘聚焦立即展示，Escape 可关闭。新增提示使用 TooltipHint 或 Tooltip 组合，
+不再使用 HTML `title`；iframe 的无障碍标题、组件的正文标题不属于悬浮提示。
+
+```text
+App TooltipProvider -> 首次悬浮 2s -> 连续切换 0ms
+                    -> 全部离开 400ms -> 重置
+                    -> 键盘聚焦 -> 立即显示
+```
+
 本地封装的实际默认值以源码为准，不能直接套用上游示例的默认值。
 参见 [shadcn Tooltip](https://ui.shadcn.com/docs/components/base/tooltip)。
 
@@ -245,13 +291,36 @@ Tooltip 应用于悬浮/键盘聚焦时的短提示，富内容使用 HoverCard 
 | --- | --- | --- |
 | Message / Markdown | [ai-elements/message](../agent-ui/src/components/ai-elements/message.tsx)，AI Elements + Streamdown | 用户气泡与助手正文；内容渲染插件处理代码、数学、Mermaid，操作复用本地 Button/Tooltip |
 | 附件卡 / 文件卡 / 消息标记 | [ui/attachment](../agent-ui/src/components/ui/attachment.tsx)、[assistant-ui/file](../agent-ui/src/components/assistant-ui/file.tsx)、[ui/marker](../agent-ui/src/components/ui/marker.tsx) | 分别服务 composer 附件、上传队列、消息/压缩标记；尺寸、圆角与状态表现有不同变体 |
-| ToolResult / FileRead / FileDiff / CodeBlock | [components/agents](../agent-ui/src/components/agents) | 本地领域封装 + Shiki + Motion/CSS；工具背景、状态图标、代码和 Diff 配色 |
+| ToolResult / FileRead / FileDiff / CodeBlock | [components/agents](../agent-ui/src/components/agents) | 本地领域封装 + Shiki + Motion/CSS；工具背景、状态图标、代码和 Diff 配色。CodeBlock 类型标题栏上下内边距各为 `4rem / 9`（约 7.11px），比原值减少 1/3 |
 | Plan / Workflow | [elements/agent-plan](../agent-ui/src/components/elements/agent-plan.tsx)、[workflow-overview](../agent-ui/src/features/agent-message/components/workflow-overview.tsx)、[workflow-pipeline](../agent-ui/src/features/agent-message/components/workflow-pipeline.tsx) | 本地步骤/进度，组合 Card、Badge、Button 和 Disclosure |
 | Image / Lightbox | [image-renderer](../agent-ui/src/features/files/preview/renderers/image-renderer.tsx)、[interior/lightbox](../agent-ui/src/components/interior/lightbox.tsx) | 图片预览；Lightbox 为本地 Motion 手势/缩放和覆盖层实现 |
 | PDF | [pdf-renderer](../agent-ui/src/features/files/preview/renderers/pdf-renderer.tsx)，EmbedPDF | 库内查看器 UI，接入应用浅/深色与 Inter 配置；不是 shadcn 基础组件 |
 | DOCX / PPTX | [document-renderer](../agent-ui/src/features/files/preview/renderers/document-renderer.tsx)、[presentation-renderer](../agent-ui/src/features/files/preview/renderers/presentation-renderer.tsx) | DocxEditor / PPTX Renderer 渲染文档内容，应用外框使用项目 token |
 | HTML 编辑器 | [html-visual-editor](../agent-ui/src/features/files/preview/renderers/html-visual-editor.tsx)，GrapesJS | 编辑器自带 UI；全局 CSS 当前明确保留默认粉/紫色点缀，形成应用内可见的独立风格 |
 | HTML / JSX 生成内容 | [html-renderer](../agent-ui/src/features/files/preview/renderers/html-renderer.tsx)、[visualize-sandbox](../agent-ui/src/features/agent-message/visualize-sandbox) | iframe 中的内容；JSX 沙箱另有 Button、Badge、Card、Progress、Separator 简化实现，传入主题颜色但不共享主应用全部字号、圆角与交互 |
+
+CodeBlock 标题栏在复制按钮左侧提供自动换行按钮，默认关闭，各代码块独立切换，
+流式追加和消息完成时保留选择。MessageResponse 一旦使用流式渲染器，完成时仍保留
+同一渲染器，通过 `isAnimating` 结束流式状态，避免重建代码块；初始静态内容继续
+使用静态渲染器。开启后长行和连续长字符串按可用宽度折行，行号仍对应原始
+代码行，复制仍使用原始代码。按钮复用共享 Button 的按压反馈和 inset 焦点框，
+开启使用折返箭头文本图标，关闭使用直线文本图标；通过 `aria-pressed` 表达状态，
+并提供中英文启用 / 禁用提示。调用方需要控制状态时，
+使用 `wrap` / `onWrapChange`。
+
+消息中的 CodeBlock 沿用组件的内容内边距，默认首行距标题栏 18px，不再通过
+`pt-0` 清除顶部留白。水平滚动条下移 8px，放在代码视口外的底部内边距中，
+避免覆盖末行；垂直滚动条止于视口底部，转角跟随水平条下移。
+Chat composer 单行上下内边距各为 7px，高度由 50px 减至 48px；多行顶部内边距
+由 14px 减至 12px，同样缩小 2px，保留文字行高、按钮尺寸和原有过渡。
+
+```text
+类型标题                         状态 | 自动换行 | 复制
+        18px 顶部留白
+代码视口                         | 垂直滚动条
+水平滚动条位于视口下方           + 转角
+自动换行：关闭 -> 横向滚动；开启 -> 按代码区宽度折行
+```
 
 ### 已有源码但未作为业务组件使用
 
@@ -307,7 +376,6 @@ Feature / Page
 
 | 优先级 | 当前差异与证据 | 建议结果 |
 | --- | --- | --- |
-| 1 | `ui/tooltip` 与语言/主题/资源动作的原生 `title` 并存 | 可交互控件的短提示统一使用 `ui/tooltip`，保留独立可访问名称；避免同一触发器叠加两套提示。截断文本和文档内容的 title 按语义评估 |
 | 1 | `ui/dropdown-menu` 与 Animate UI Menu 在边框、分组字号、入场时长和高亮方式上不同 | 通用菜单固定 `ui/dropdown-menu`；将需要的滑动高亮整合为该组件的统一能力，再更新附件菜单调用方 |
 | 1 | 普通 Tabs 位于 `assistant-ui/tabs`，工作区 ExpandableTabs 自行实现交互 | 将通用 Tabs 的现有实现归到 `ui/tabs` 并更新所有调用；工作区展开标签作为组合组件复用通用 Tabs 语义。现有 `ui/tabs` 文件尚不存在 |
 | 1 | Button 的 icon-xs 为 24px，而 Animate UI variants 的 xs 为 28px；业务还有独立圆形按钮和缩放值 | 集中 Button/IconButton 的尺寸、圆角、focus 与按压反馈；特殊状态交换只负责内容动画，避免继续复制按钮外观 |
@@ -388,6 +456,18 @@ node --test agent-ui/tests/features/agent-message/composer-attachments.test.ts a
 ```sh
 node --test agent-ui/tests/features/file-browser/file-tree-content-width.test.ts
 ```
+
+CodeBlock 自动换行浏览器回归：在开发服务器打开
+`/tests/components/agents/code-block-browser.html`，点击 **Run code block checks**。
+覆盖顶部留白、短内容 / 双向滚动的末行与滚动条间距、状态图标、长行 / 连续长字符串、原始行号与复制内容、各代码块独立切换、流式追加与完成、
+受控状态和窄栏；追加 `?dark=1&zh=1` 检查深色与中文。用 Tab 聚焦自动换行按钮，
+按 Space / Enter 检查键盘切换和 inset 焦点框。
+
+悬浮提示计时回归：打开 `/tests/components/ui/tooltip-browser.html`，点击
+**Run tooltip checks**。使用真实计时检查首次 2s、跨组件连续切换、400ms 重置、
+短暂悬浮取消、嵌套提示，以及按钮和 Popover 的组合行为；追加 `?dark=1` 检查深色主题。
+使用真实 Tab 聚焦按钮，确认提示立即出现，再按 Escape 关闭；程序调用 `focus()`
+不会在所有浏览器中切换键盘输入模式，因此这两项单独用真实按键验证。
 
 文件树浏览器布局和交互检查：在 `agent-ui/` 运行 `npm run dev`，打开开发服务器上的
 `/tests/features/file-browser/file-tree-browser.html`，点击 **Run file tree checks**。

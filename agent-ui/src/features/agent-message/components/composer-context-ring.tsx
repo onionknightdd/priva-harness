@@ -17,7 +17,6 @@ import {
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { SPRING_LAYOUT } from "@/lib/ease"
@@ -105,34 +104,32 @@ export function ComposerContextRing({
   return (
     <div className={cn("flex size-6 items-center justify-center", className)}>
       <Popover open={open} onOpenChange={setOpen}>
-        <TooltipProvider delay={300}>
-          <Tooltip disabled={open}>
-            <TooltipTrigger
-              render={
-                <PopoverTrigger
-                  render={
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-xs"
-                      aria-label={ariaLabel}
-                      data-slot="composer-context-ring"
-                    />
-                  }
-                />
-              }
-            >
-              <ContextRingGraphic
-                tone={tone}
-                dashOffset={dashOffset}
-                transition={fillTransition}
+        <Tooltip disabled={open}>
+          <TooltipTrigger
+            render={
+              <PopoverTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label={ariaLabel}
+                    data-slot="composer-context-ring"
+                  />
+                }
               />
-            </TooltipTrigger>
-            <TooltipContent side="top" sideOffset={4}>
-              {tooltip}
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+            }
+          >
+            <ContextRingGraphic
+              tone={tone}
+              dashOffset={dashOffset}
+              transition={fillTransition}
+            />
+          </TooltipTrigger>
+          <TooltipContent side="top" sideOffset={4}>
+            {tooltip}
+          </TooltipContent>
+        </Tooltip>
         <PopoverContent
           anchor={anchorRef}
           align="start"

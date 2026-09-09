@@ -68,15 +68,15 @@ function Tabs({
 }
 
 const tabsListVariants = cva(
-  "group/tabs-list text-muted-foreground relative inline-flex w-fit items-center justify-center",
+  "group/tabs-list bg-tabs-background text-muted-foreground relative inline-flex w-fit items-center justify-center",
   {
     variants: {
       variant: {
-        default: "bg-muted gap-1 rounded-lg p-1",
-        line: "border-border gap-1 border-b bg-transparent pb-2",
-        ghost: "gap-1.5 bg-transparent",
-        pills: "gap-2 bg-transparent",
-        outline: "border-border gap-1 rounded-lg border p-1",
+        default: "gap-1 rounded-lg p-1",
+        line: "border-border gap-1 border-b pb-2 dark:bg-transparent",
+        ghost: "gap-1.5 dark:bg-transparent",
+        pills: "gap-2 dark:bg-transparent",
+        outline: "border-border gap-1 rounded-lg border p-1 dark:bg-transparent",
       },
       size: {
         sm: "h-8",
@@ -282,7 +282,7 @@ function TabsTrigger({
       data-slot="tabs-trigger"
       data-value={value}
       className={cn(
-        "text-foreground/60 hover:text-foreground focus-visible:ring-ring/50 data-active:text-foreground dark:text-muted-foreground dark:hover:text-foreground relative z-10 inline-flex flex-1 cursor-pointer items-center justify-center gap-1.5 font-medium whitespace-nowrap transition-[color] duration-300 focus-visible:ring-2 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 data-active:font-medium [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "ring-inset text-foreground/60 hover:text-foreground focus-visible:ring-ring/50 data-active:text-foreground dark:text-muted-foreground dark:hover:text-foreground relative z-10 inline-flex flex-1 cursor-pointer items-center justify-center gap-1.5 font-medium whitespace-nowrap transition-[color] duration-300 focus-visible:ring-2 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 data-active:font-medium [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         "group-data-[variant=default]/tabs-list:rounded-md",
         "group-data-[variant=line]/tabs-list:rounded-md group-data-[variant=line]/tabs-list:bg-transparent",
         "group-data-[variant=ghost]/tabs-list:rounded-md group-data-[variant=ghost]/tabs-list:bg-transparent",

@@ -63,7 +63,7 @@ document.querySelector<HTMLButtonElement>("#run")!.addEventListener("click", asy
   const roots = () => Array.from(host.querySelectorAll<HTMLButtonElement>('[role="treeitem"][aria-level="1"]'))
   const rowName = (row: HTMLElement) => row.querySelector<HTMLElement>("[data-file-tree-name-text]")!.dataset.fileTreeNameText!
   const article = () => Array.from(host.querySelectorAll("article")).find((element) => element.getClientRects().length > 0)
-  const previewReady = (name: string) => Boolean(host.querySelector(`h2[title="${name}"]`)?.getClientRects().length && article())
+  const previewReady = (name: string) => Boolean(Array.from(host.querySelectorAll("h2")).find((heading) => heading.textContent === name)?.getClientRects().length && article())
   const checks: string[] = []
   const check = (name: string, passed: boolean) => {
     if (!passed) throw new Error(name)

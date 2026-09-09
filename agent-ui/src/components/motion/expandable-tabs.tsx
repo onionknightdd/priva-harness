@@ -69,7 +69,7 @@ const TAB_PAD_X = 8
 const LABEL_GAP = 4
 
 const tabButtonClassName =
-  "flex h-full w-full min-w-0 items-center justify-start overflow-hidden rounded-full border-0 bg-transparent px-2 text-sm font-medium shadow-none outline-none transition-[color,background-color] select-none hover:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+  "ring-inset flex h-full w-full min-w-0 items-center justify-start overflow-hidden rounded-full border-0 bg-transparent px-2 text-sm font-medium shadow-none outline-none transition-[color,background-color] select-none hover:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
 
 function sameWidths(a: Record<string, number>, b: Record<string, number>) {
   const aKeys = Object.keys(a)
@@ -242,7 +242,7 @@ export function ExpandableTabs({
           aria-label={ariaLabel}
           aria-orientation="horizontal"
           className={cn(
-            "relative z-20 flex h-8 w-full shrink-0 items-center gap-1 px-1.5 pr-24",
+            "relative z-20 flex h-8 w-full shrink-0 items-center gap-1 bg-tabs-background px-1.5 pr-24 dark:bg-transparent",
             classNames?.bar
           )}
         >

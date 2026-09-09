@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import {
+  TooltipHint,
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -207,24 +208,25 @@ export function AgentChatHeader() {
         </motion.div>
       ) : (
         <div className="flex min-w-0 items-center gap-1.5">
-          <h1
-            className={cn(
-              "min-w-0 truncate text-sm font-medium",
-              activeSession && "cursor-text"
-            )}
-            title={title}
-            onDoubleClick={() => {
-              if (!activeSession) {
-                return
-              }
+          <TooltipHint content={title}>
+            <h1
+              className={cn(
+                "min-w-0 truncate text-sm font-medium",
+                activeSession && "cursor-text"
+              )}
+              onDoubleClick={() => {
+                if (!activeSession) {
+                  return
+                }
 
-              skipBlurCommitRef.current = false
-              setDraft(title)
-              setEditing(true)
-            }}
-          >
-            {title}
-          </h1>
+                skipBlurCommitRef.current = false
+                setDraft(title)
+                setEditing(true)
+              }}
+            >
+              {title}
+            </h1>
+          </TooltipHint>
         </div>
       )}
       {activeSession && !editing ? (

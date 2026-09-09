@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useSidebar } from "@/components/ui/sidebar"
+import { TooltipHint } from "@/components/ui/tooltip"
 
 const AgentMessagePage = React.lazy(async () => {
   const module = await import("@/features/agent-message")
@@ -42,15 +43,16 @@ function MobileSidebarLogoTrigger({ onOpen }: { onOpen: () => void }) {
   const { t } = useTranslation()
 
   return (
-    <Button
-      className="md:hidden"
-      size="icon"
-      onClick={onOpen}
-      aria-label={t("common.openSidebar")}
-      title={t("common.openSidebar")}
-    >
-      <GalleryVerticalEndIcon />
-    </Button>
+    <TooltipHint content={t("common.openSidebar")}>
+      <Button
+        className="md:hidden"
+        size="icon"
+        onClick={onOpen}
+        aria-label={t("common.openSidebar")}
+      >
+        <GalleryVerticalEndIcon />
+      </Button>
+    </TooltipHint>
   )
 }
 

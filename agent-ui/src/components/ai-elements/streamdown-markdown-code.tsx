@@ -101,7 +101,6 @@ export function StreamdownMarkdownCode({
   return (
     <CodeBlock
       className="my-4"
-      contentClassName="pt-0"
       code={code}
       filename={filename}
       language={language || "text"}

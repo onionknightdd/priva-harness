@@ -18,6 +18,7 @@ import { filterResourceGroups, groupResourcesByProject, resourceProjectName, res
 import { ResourceLoading, ResourceEmpty, ResourceErrorState } from "./resource-shared"
 import { createResourceCache, useResource } from "./resource-hooks"
 import { SkillResourceTree } from "./skill-resource-tree"
+import { TooltipHint } from "@/components/ui/tooltip"
 
 const ResourceDetailPane = React.lazy(async () => ({ default: (await import("./resource-detail")).ResourceDetailPane }))
 const ResourceCreateDialog = React.lazy(async () => ({ default: (await import("./resource-forms")).ResourceCreateDialog }))
@@ -91,13 +92,15 @@ export function ResourceBrowser({ kind, harness }: { kind: ResourceKind; harness
       <SkillResourceTree key={item.id} skill={(detailScope.cache.get(`skills/${item.id}`)?.state.data as SkillDetail | undefined) ?? item} source={group.source} query={detailScope.query} revision={detailScope.revision} cache={detailScope.cache} selected={selected === item.id} file={selected === item.id ? file : null} mobile={mobile} onSelect={selectFile} onRetry={refresh} />
     ) : (
       <div key={item.id}>
-        <Button variant="ghost" className={cn("h-auto min-h-10 w-full justify-start gap-2 border-0 px-2 py-2 text-left", selected === item.id && "bg-accent text-accent-foreground")} title={`${item.name}\n${resourceSourceLabel(group.source)}\n${group.source.path}`} aria-pressed={selected === item.id} onClick={() => selectFile(item.id, null)}>
-          <CableIcon className="size-4 shrink-0 text-muted-foreground" />
-          <span className="min-w-0 flex-1 truncate">{item.name}</span>
-          {!group.source.writable && <LockKeyholeIcon className="size-3 shrink-0 text-muted-foreground" aria-label={t("resources.readOnly")} />}
-          {!item.enabled && <span className="size-1.5 shrink-0 rounded-full bg-muted-foreground" title={t("resources.disabled")} />}
-          {"effective" in item && item.effective === false && <Badge variant="outline" className="text-[10px]">{t("resources.overridden")}</Badge>}
-        </Button>
+        <TooltipHint content={`${item.name}\n${resourceSourceLabel(group.source)}\n${group.source.path}`}>
+          <Button variant="ghost" className={cn("h-auto min-h-10 w-full justify-start gap-2 border-0 px-2 py-2 text-left", selected === item.id && "bg-accent text-accent-foreground")} aria-pressed={selected === item.id} onClick={() => selectFile(item.id, null)}>
+            <CableIcon className="size-4 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 flex-1 truncate">{item.name}</span>
+            {!group.source.writable && <LockKeyholeIcon className="size-3 shrink-0 text-muted-foreground" aria-label={t("resources.readOnly")} />}
+            {!item.enabled && <TooltipHint content={t("resources.disabled")}><span className="size-1.5 shrink-0 rounded-full bg-muted-foreground" /></TooltipHint>}
+            {"effective" in item && item.effective === false && <Badge variant="outline" className="text-[10px]">{t("resources.overridden")}</Badge>}
+          </Button>
+        </TooltipHint>
       </div>
     )))
   const rail = (
@@ -106,13 +109,13 @@ export function ResourceBrowser({ kind, harness }: { kind: ResourceKind; harness
         {kind === "skills" ? <SkillListHeader query={search} onQueryChange={setSearch} loading={list.loading} onRefresh={refresh} onUpload={() => setCreating(true)} /> : <>
           <div className="flex items-center gap-2">
             <h1 className="min-w-0 flex-1 text-sm font-semibold">{t("resources.mcp")}</h1>
-            <Button variant="ghost" size="icon-sm" title={t("resources.refresh")} aria-label={t("resources.refresh")} onClick={refresh} disabled={list.loading}><RefreshCwIcon className={cn(list.loading && "animate-spin motion-reduce:animate-none")} /></Button>
-            <Button size="icon-sm" title={t("resources.add")} aria-label={t("resources.add")} onClick={() => setCreating(true)}><PlusIcon /></Button>
+            <TooltipHint content={t("resources.refresh")}><Button variant="ghost" size="icon-sm" aria-label={t("resources.refresh")} onClick={refresh} disabled={list.loading}><RefreshCwIcon className={cn(list.loading && "animate-spin motion-reduce:animate-none")} /></Button></TooltipHint>
+            <TooltipHint content={t("resources.add")}><Button size="icon-sm" aria-label={t("resources.add")} onClick={() => setCreating(true)}><PlusIcon /></Button></TooltipHint>
           </div>
           <div className="relative"><SearchIcon aria-hidden className="pointer-events-none absolute top-2.5 left-2.5 size-4 text-muted-foreground" /><Input className="pl-8" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("resources.search")} aria-label={t("resources.search")} /></div>
           <Select value={cwd || "all"} onValueChange={(value) => changeContext(value === "all" || !value ? "" : value)}>
-            <SelectTrigger className="w-full" size="sm" aria-label={t("resources.project")} title={cwd || undefined}><SelectValue>{cwd ? resourceProjectName(cwd) : t("resources.allProjects")}</SelectValue></SelectTrigger>
-            <SelectContent><SelectItem value="all">{t("resources.allProjects")}</SelectItem>{[...new Set([...(list.data?.projects ?? []), ...(cwd ? [cwd] : [])])].map((path) => <SelectItem key={path} value={path} title={path}>{resourceProjectName(path)}</SelectItem>)}</SelectContent>
+            <TooltipHint content={cwd || undefined}><SelectTrigger className="w-full" size="sm" aria-label={t("resources.project")}><SelectValue>{cwd ? resourceProjectName(cwd) : t("resources.allProjects")}</SelectValue></SelectTrigger></TooltipHint>
+            <SelectContent><SelectItem value="all">{t("resources.allProjects")}</SelectItem>{[...new Set([...(list.data?.projects ?? []), ...(cwd ? [cwd] : [])])].map((path) => <TooltipHint key={path} content={path}><SelectItem key={path} value={path}>{resourceProjectName(path)}</SelectItem></TooltipHint>)}</SelectContent>
           </Select>
         </>}
       </div>
@@ -172,13 +175,15 @@ function ResourceSection({ title, prefix, path, children, collapsible = false, d
   return <section aria-labelledby={id} className="mb-5">
     {collapsible ? <Collapsible open={open} onOpenChange={(next) => { setOpen(next); if (next) setVisited(true) }}>
       <h2 id={id}>
-        <CollapsibleTrigger onKeyDown={() => setKeyboard(true)} onPointerDown={() => setKeyboard(false)} className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm font-medium text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring" title={path} aria-label={label}>
-          {heading}
-        </CollapsibleTrigger>
+        <TooltipHint content={path}>
+          <CollapsibleTrigger onKeyDown={() => setKeyboard(true)} onPointerDown={() => setKeyboard(false)} className="ring-inset flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm font-medium text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={label}>
+            {heading}
+          </CollapsibleTrigger>
+        </TooltipHint>
       </h2>
       <CollapsibleContent keepMounted className={cn(collapsePanel, keyboard && "transition-none")}>{visited && children}</CollapsibleContent>
     </Collapsible> : <>
-      <h2 id={id} className="flex min-w-0 items-center gap-3 px-2 py-2 text-sm font-medium text-muted-foreground" title={path} aria-label={label}>{heading}</h2>
+      <TooltipHint content={path}><h2 id={id} className="flex min-w-0 items-center gap-3 px-2 py-2 text-sm font-medium text-muted-foreground" aria-label={label}>{heading}</h2></TooltipHint>
       {children}
     </>}
   </section>

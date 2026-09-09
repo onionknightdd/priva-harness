@@ -7,6 +7,7 @@ import { emptyFileBrowserModel, FILE_BROWSER_ROOT_ID, type FileBrowserModel } fr
 import { buildSkillTree, resourceSourceLabel, type ResourceDetail, type ResourceQuery, type ResourceSource, type Skill, type SkillDetail, type SkillTreeNode } from "./resource-api"
 import { useResource, type ResourceCache } from "./resource-hooks"
 import { ResourceErrorState } from "./resource-shared"
+import { TooltipHint } from "@/components/ui/tooltip"
 
 function skillFileModel(skill: Skill, files: SkillDetail["files"]): FileBrowserModel {
   const model: FileBrowserModel = {
@@ -63,25 +64,27 @@ export const SkillResourceTree = React.memo(function SkillResourceTree({ skill, 
     }
   }, [skill.id, skill.path, mobile, selected, model, onSelect])
 
-  return <div title={`${skill.name}\n${resourceSourceLabel(source)}\n${source.path}`}>
-    <FileBrowserTree
-      compact
-      hideRootToggle
-      defaultExpanded={false}
-      model={model}
-      query=""
-      rootPath={skill.path}
-      selectedItemPath={selected ? (model.items[selectedPath] ? selectedPath : skill.path) : null}
-      loadingDirectories={loadingDirectories}
-      onFolderExpand={onFolderExpand}
-      onItemSelect={onItemSelect}
-      onActionFeedback={setActionError}
-      rootIcon={<ScrollTextIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />}
-      rootMetadata={!source.writable || !skill.enabled ? <span className="flex shrink-0 items-center gap-2">
-        {!source.writable && <LockKeyholeIcon className="size-3 text-muted-foreground" aria-label={t("resources.readOnly")} />}
-        {!skill.enabled && <span className="size-1.5 rounded-full bg-muted-foreground" title={t("resources.disabled")} />}
-      </span> : null}
-    />
-    {(detail.error || actionError) && <ResourceErrorState message={detail.error || actionError!} retry={onRetry} />}
-  </div>
+  return <TooltipHint content={`${skill.name}\n${resourceSourceLabel(source)}\n${source.path}`}>
+    <div>
+      <FileBrowserTree
+        compact
+        hideRootToggle
+        defaultExpanded={false}
+        model={model}
+        query=""
+        rootPath={skill.path}
+        selectedItemPath={selected ? (model.items[selectedPath] ? selectedPath : skill.path) : null}
+        loadingDirectories={loadingDirectories}
+        onFolderExpand={onFolderExpand}
+        onItemSelect={onItemSelect}
+        onActionFeedback={setActionError}
+        rootIcon={<ScrollTextIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />}
+        rootMetadata={!source.writable || !skill.enabled ? <span className="flex shrink-0 items-center gap-2">
+          {!source.writable && <LockKeyholeIcon className="size-3 text-muted-foreground" aria-label={t("resources.readOnly")} />}
+          {!skill.enabled && <TooltipHint content={t("resources.disabled")}><span className="size-1.5 rounded-full bg-muted-foreground" /></TooltipHint>}
+        </span> : null}
+      />
+      {(detail.error || actionError) && <ResourceErrorState message={detail.error || actionError!} retry={onRetry} />}
+    </div>
+  </TooltipHint>
 })

@@ -17,6 +17,7 @@ import { SkillContent } from "./skill-content"
 import { errorMessage, jsonRequest, resourceRequest, resourceUrl, type McpCapabilities, type McpDetail, type ResourceDetail, type ResourceKind, type ResourceQuery, type SkillDetail } from "./resource-api"
 import { McpEditor } from "./resource-forms"
 import { ResourceEmpty, ResourceErrorState, ResourceLoading } from "./resource-shared"
+import { TooltipHint } from "@/components/ui/tooltip"
 
 export function ResourceDetailPane({ kind, query, detail, file, onChanged, onSkillUpdated }: {
   kind: ResourceKind; query: ResourceQuery; detail: ResourceDetail; file: string; onChanged: (id?: string) => void; onSkillUpdated?: (detail: SkillDetail) => Promise<void>
@@ -42,7 +43,7 @@ export function ResourceDetailPane({ kind, query, detail, file, onChanged, onSki
         {!skill && <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border bg-muted/40 text-muted-foreground"><CableIcon className="size-5" /></div>}
         <div className="min-w-0 flex-1">
           <div className="flex h-6 min-w-0 items-center gap-2">
-            <h2 className="min-w-0 truncate text-base font-semibold" title={detail.name}>{detail.name}</h2>
+            <TooltipHint content={detail.name}><h2 className="min-w-0 truncate text-base font-semibold">{detail.name}</h2></TooltipHint>
             {skill && !detail.enabled && <Badge variant="secondary" className="h-4 px-1.5 py-0 text-[10px] leading-none transition-colors">{t("resources.disabled")}</Badge>}
           </div>
           {!skill && <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span>{t(`resources.${detail.source.scope}`)}</span><span>·</span><span>{detail.source.origin}</span>{!detail.source.writable && <Badge variant="outline">{t("resources.readOnly")}</Badge>}{!detail.enabled && <Badge variant="secondary">{t("resources.disabled")}</Badge>}</div>}
@@ -50,11 +51,11 @@ export function ResourceDetailPane({ kind, query, detail, file, onChanged, onSki
         <div className={skill ? "flex shrink-0 items-center gap-2.5" : "flex items-center gap-1"}>
           {skill ? <>
             <Switch checked={detail.enabled} onCheckedChange={(enabled) => void mutate("PATCH", { enabled })} disabled={!skill.canToggle || busy} aria-label={t("resources.enabled")} />
-            <ResourceIconButton render={<a href={resourceUrl(`skills/${detail.id}/download`, query)} />} aria-label={t("resources.download")} title={t("resources.download")}><DownloadIcon /></ResourceIconButton>
-            <ResourceIconButton disabled={!canDelete || busy} onClick={() => setDeleting(true)} title={t("resources.delete")} aria-label={t("resources.delete")}><Trash2Icon /></ResourceIconButton>
+            <TooltipHint content={t("resources.download")}><ResourceIconButton render={<a href={resourceUrl(`skills/${detail.id}/download`, query)} />} aria-label={t("resources.download")}><DownloadIcon /></ResourceIconButton></TooltipHint>
+            <TooltipHint content={t("resources.delete")}><ResourceIconButton disabled={!canDelete || busy} onClick={() => setDeleting(true)} aria-label={t("resources.delete")}><Trash2Icon /></ResourceIconButton></TooltipHint>
           </> : <>
-            <Button variant="ghost" size="icon-sm" disabled={!detail.source.writable} onClick={() => setEditing(true)} title={t("resources.edit")} aria-label={t("resources.edit")}><PencilIcon /></Button>
-            <Button variant="ghost" size="icon-sm" disabled={!canDelete || busy} onClick={() => setDeleting(true)} title={t("resources.delete")} aria-label={t("resources.delete")}><Trash2Icon /></Button>
+            <TooltipHint content={t("resources.edit")}><Button variant="ghost" size="icon-sm" disabled={!detail.source.writable} onClick={() => setEditing(true)} aria-label={t("resources.edit")}><PencilIcon /></Button></TooltipHint>
+            <TooltipHint content={t("resources.delete")}><Button variant="ghost" size="icon-sm" disabled={!canDelete || busy} onClick={() => setDeleting(true)} aria-label={t("resources.delete")}><Trash2Icon /></Button></TooltipHint>
           </>}
         </div>
       </div>

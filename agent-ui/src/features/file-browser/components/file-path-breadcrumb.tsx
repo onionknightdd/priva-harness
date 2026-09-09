@@ -23,6 +23,7 @@ import {
   type FileBrowserModel,
 } from "../file-browser-data"
 import { SearchablePathMenuContent } from "./searchable-path-menu"
+import { TooltipHint } from "@/components/ui/tooltip"
 
 type VisibleBreadcrumbEntry =
   | { entry: FileBrowserBreadcrumbEntry; type: "item" }
@@ -98,21 +99,22 @@ function PathItem({
       className="inline-flex min-w-0 items-center rounded-md"
       data-current={current || undefined}
     >
-      <Button
-        type="button"
-        variant="ghost"
-        size="xs"
-        aria-current={current ? "location" : undefined}
-        className={cn(
-          "max-w-12 min-w-0 rounded-r-none font-normal data-[current=true]:bg-muted data-[current=true]:text-foreground sm:max-w-36",
-          compact ? "px-0.5 text-xs" : "px-1.5 text-sm"
-        )}
-        data-current={current || undefined}
-        title={entry.path}
-        onClick={() => onNavigate(entry.path, entry.type)}
-      >
-        <span className="truncate">{entry.name}</span>
-      </Button>
+      <TooltipHint content={entry.path}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          aria-current={current ? "location" : undefined}
+          className={cn(
+            "max-w-12 min-w-0 rounded-r-none font-normal data-[current=true]:bg-muted data-[current=true]:text-foreground sm:max-w-36",
+            compact ? "px-0.5 text-xs" : "px-1.5 text-sm"
+          )}
+          data-current={current || undefined}
+          onClick={() => onNavigate(entry.path, entry.type)}
+        >
+          <span className="truncate">{entry.name}</span>
+        </Button>
+      </TooltipHint>
       {hasDirectoryOptions && (
         <DropdownMenu
           open={directoryMenuOpen}

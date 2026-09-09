@@ -30,6 +30,7 @@ import type {
   ProfileDraft,
 } from "./model-settings.types"
 import { useModelCapabilityProbe } from "./use-model-capability-probe"
+import { TooltipHint } from "@/components/ui/tooltip"
 
 type MultimodalDraftKey =
   | "imageUnderstandingModel"
@@ -314,38 +315,39 @@ function CapabilityProbeResult({
   const content = probeStatusContent(status, t)
 
   return (
-    <span
-      role="status"
-      aria-live="polite"
-      title={status === "error" ? errorMessage ?? undefined : undefined}
-      className="flex min-h-5 min-w-0 items-center text-xs"
-    >
-      <AnimatePresence initial={false} mode="wait">
-        {content && (
-          <motion.span
-            key={status}
-            className={cn(
-              "inline-flex min-w-0 items-center gap-1.5 whitespace-nowrap",
-              status === "supported" &&
-                "text-emerald-600 dark:text-emerald-400",
-              status === "unsupported" && "text-muted-foreground",
-              status === "error" && "text-destructive"
-            )}
-            initial={shouldReduceMotion ? false : { opacity: 0, y: -3 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={shouldReduceMotion ? undefined : { opacity: 0, y: 3 }}
-            transition={
-              shouldReduceMotion
-                ? { duration: 0 }
-                : { duration: 0.16, ease: [0.22, 1, 0.36, 1] }
-            }
-          >
-            {content.icon}
-            <span className="truncate">{content.label}</span>
-          </motion.span>
-        )}
-      </AnimatePresence>
-    </span>
+    <TooltipHint content={status === "error" ? errorMessage ?? undefined : undefined}>
+      <span
+        role="status"
+        aria-live="polite"
+        className="flex min-h-5 min-w-0 items-center text-xs"
+      >
+        <AnimatePresence initial={false} mode="wait">
+          {content && (
+            <motion.span
+              key={status}
+              className={cn(
+                "inline-flex min-w-0 items-center gap-1.5 whitespace-nowrap",
+                status === "supported" &&
+                  "text-emerald-600 dark:text-emerald-400",
+                status === "unsupported" && "text-muted-foreground",
+                status === "error" && "text-destructive"
+              )}
+              initial={shouldReduceMotion ? false : { opacity: 0, y: -3 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={shouldReduceMotion ? undefined : { opacity: 0, y: 3 }}
+              transition={
+                shouldReduceMotion
+                  ? { duration: 0 }
+                  : { duration: 0.16, ease: [0.22, 1, 0.36, 1] }
+              }
+            >
+              {content.icon}
+              <span className="truncate">{content.label}</span>
+            </motion.span>
+          )}
+        </AnimatePresence>
+      </span>
+    </TooltipHint>
   )
 }
 

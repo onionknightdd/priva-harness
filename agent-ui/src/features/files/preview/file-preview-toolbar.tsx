@@ -30,6 +30,7 @@ import {
   ToggleGroupItem,
 } from "@/components/ui/toggle-group"
 import {
+  TooltipHint,
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -319,18 +320,19 @@ export function FilePreviewToolbar({
                   }
                 }}
               >
-                <TabsTrigger
-                  value={file.id}
-                  title={file.path}
-                  className="w-full min-w-0 flex-none justify-start overflow-hidden pr-7! font-normal dark:data-active:text-foreground"
-                >
-                  <OverflowMarquee
-                    active={marqueeFileId === file.id}
-                    className="flex-1"
+                <TooltipHint content={file.path}>
+                  <TabsTrigger
+                    value={file.id}
+                    className="w-full min-w-0 flex-none justify-start overflow-hidden pr-7! font-normal dark:data-active:text-foreground"
                   >
-                    {file.name}
-                  </OverflowMarquee>
-                </TabsTrigger>
+                    <OverflowMarquee
+                      active={marqueeFileId === file.id}
+                      className="flex-1"
+                    >
+                      {file.name}
+                    </OverflowMarquee>
+                  </TabsTrigger>
+                </TooltipHint>
                 <Tooltip>
                   <TooltipTrigger
                     render={
@@ -412,45 +414,48 @@ export function FilePreviewToolbar({
             size="sm"
             spacing={0}
           >
-            <ToggleGroupItem
-              value="source"
-              disabled={!sourceAvailable}
-              aria-label={t("filePreview.source")}
-              title={
+            <TooltipHint content={
                 sourceAvailable
                   ? t("filePreview.source")
                   : t("filePreview.sourceUnavailable")
-              }
-              className="px-2 text-xs font-normal"
-            >
-              {t("filePreview.source")}
-            </ToggleGroupItem>
-            <ToggleGroupItem
-              value="render"
-              disabled={!renderAvailable}
-              aria-label={t("filePreview.preview")}
-              title={
+              }>
+              <ToggleGroupItem
+                value="source"
+                disabled={!sourceAvailable}
+                aria-label={t("filePreview.source")}
+                className="px-2 text-xs font-normal"
+              >
+                {t("filePreview.source")}
+              </ToggleGroupItem>
+            </TooltipHint>
+            <TooltipHint content={
                 renderAvailable
                   ? t("filePreview.preview")
                   : t("filePreview.previewUnavailable")
-              }
-              className="px-2 text-xs font-normal"
-            >
-              {t("filePreview.preview")}
-            </ToggleGroupItem>
-            <ToggleGroupItem
-              value="edit"
-              disabled={!editAvailable}
-              aria-label={t("filePreview.edit")}
-              title={
+              }>
+              <ToggleGroupItem
+                value="render"
+                disabled={!renderAvailable}
+                aria-label={t("filePreview.preview")}
+                className="px-2 text-xs font-normal"
+              >
+                {t("filePreview.preview")}
+              </ToggleGroupItem>
+            </TooltipHint>
+            <TooltipHint content={
                 editAvailable
                   ? t("filePreview.edit")
                   : t("filePreview.editUnavailable")
-              }
-              className="px-2 text-xs font-normal"
-            >
-              {t("filePreview.edit")}
-            </ToggleGroupItem>
+              }>
+              <ToggleGroupItem
+                value="edit"
+                disabled={!editAvailable}
+                aria-label={t("filePreview.edit")}
+                className="px-2 text-xs font-normal"
+              >
+                {t("filePreview.edit")}
+              </ToggleGroupItem>
+            </TooltipHint>
           </ToggleGroup>
 
           <Tooltip>

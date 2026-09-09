@@ -1,7 +1,7 @@
 "use client"
 // beui.dev/components/agents/code-block
 
-import { Check, Copy, FileCode2, LoaderCircle } from "lucide-react"
+import { Check, Copy, FileCode2, LoaderCircle, TextAlignStart, TextWrap } from "lucide-react"
 import { ScrollArea } from "@base-ui/react/scroll-area"
 import { motion, useInView, useReducedMotion } from "motion/react"
 import {
@@ -24,10 +24,12 @@ import {
   TOOL_OUTPUT_INSET_CLASS,
   TOOL_OUTPUT_INSET_X_CLASS,
 } from "@/components/agents/tool-output-frame"
+import { Button } from "@/components/ui/button"
 import { writeClipboardText } from "@/lib/clipboard"
 import { SPRING_PRESS } from "@/lib/ease"
 import { focusRing } from "@/lib/surfaces"
 import { cn } from "@/lib/utils"
+import { TooltipHint } from "@/components/ui/tooltip"
 
 export type CodeBlockStatus = "streaming" | "complete"
 
@@ -42,6 +44,7 @@ export interface CodeBlockProps {
   highlightLines?: number[]
   maxHeight?: number
   wrap?: boolean
+  onWrapChange?: (wrap: boolean) => void
   copyable?: boolean
   deferHighlight?: boolean
   onCopy?: () => void | Promise<void>
@@ -60,7 +63,8 @@ export function CodeBlock({
   startLine = 1,
   highlightLines = [],
   maxHeight = 280,
-  wrap = false,
+  wrap: controlledWrap,
+  onWrapChange,
   copyable = true,
   deferHighlight = false,
   onCopy,
@@ -75,6 +79,8 @@ export function CodeBlock({
   const nearViewport = useInView(highlightRef, { once: true, margin: "200px" })
   const copyTimer = useRef<number | undefined>(undefined)
   const [copied, setCopied] = useState(false)
+  const [internalWrap, setInternalWrap] = useState(false)
+  const wrap = controlledWrap ?? internalWrap
   const streaming = status === "streaming"
   const highlighted = useAgentShikiHighlight(code, language, { enabled: !deferHighlight || nearViewport })
   const emphasized = useMemo(
@@ -153,22 +159,23 @@ export function CodeBlock({
   }, [code, onCopy])
 
   const copyButton = showCopy ? (
-    <motion.button
-      type="button"
-      aria-label={copyLabel}
-      title={copyLabel}
-      onClick={() => {
-        void handleCopy()
-      }}
-      whileTap={reduce ? undefined : { scale: 0.9 }}
-      transition={SPRING_PRESS}
-      className={cn(
-        "grid size-8 shrink-0 place-items-center rounded-full text-foreground transition-colors hover:bg-background/70",
-        focusRing
-      )}
-    >
-      {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
-    </motion.button>
+    <TooltipHint content={copyLabel}>
+      <motion.button
+        type="button"
+        aria-label={copyLabel}
+        onClick={() => {
+          void handleCopy()
+        }}
+        whileTap={reduce ? undefined : { scale: 0.9 }}
+        transition={SPRING_PRESS}
+        className={cn(
+          "grid size-8 shrink-0 place-items-center rounded-full text-foreground transition-colors hover:bg-background/70",
+          focusRing
+        )}
+      >
+        {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+      </motion.button>
+    </TooltipHint>
   ) : null
 
   return (
@@ -184,7 +191,7 @@ export function CodeBlock({
       {showHeader ? (
         <div
           className={cn(
-            "flex items-center gap-4 border-b border-foreground/[0.06] py-[calc(2rem/3)]",
+            "flex items-center gap-4 border-b border-foreground/[0.06] py-[calc(4rem/9)]",
             TOOL_OUTPUT_INSET_X_CLASS
           )}
         >
@@ -215,7 +222,29 @@ export function CodeBlock({
             )}
             {streaming ? t("common.codeWriting") : t("common.codeReady")}
           </span>
-          {copyButton}
+          <div className="flex shrink-0 items-center gap-1">
+            <TooltipHint content={t(wrap ? "common.disableCodeWrap" : "common.enableCodeWrap")}>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={t("common.wrapCode")}
+                aria-pressed={wrap}
+                onClick={() => {
+                  const next = !wrap
+                  if (controlledWrap === undefined) setInternalWrap(next)
+                  onWrapChange?.(next)
+                }}
+                className="rounded-full hover:bg-background/70 aria-pressed:bg-background/70"
+              >
+                {wrap ? (
+                  <TextWrap aria-hidden="true" className="size-4" />
+                ) : (
+                  <TextAlignStart aria-hidden="true" className="size-4" />
+                )}
+              </Button>
+            </TooltipHint>
+            {copyButton}
+          </div>
         </div>
       ) : null}
 
@@ -273,7 +302,7 @@ export function CodeBlock({
                         className={cn(
                           showLineNumbers ? "pl-2" : undefined,
                           wrap
-                            ? "whitespace-pre-wrap break-words"
+                            ? "whitespace-pre-wrap wrap-anywhere"
                             : "whitespace-pre"
                         )}
                       />
@@ -288,12 +317,14 @@ export function CodeBlock({
               key={orientation}
               orientation={orientation}
               data-slot="code-block-scrollbar"
+              // Place the horizontal track in the outer padding, below the code.
+              style={{ bottom: orientation === "horizontal" ? "calc(var(--spacing) * -2)" : 0 }}
               className="z-10 flex select-none p-0.5 opacity-0 transition-opacity duration-150 data-hovering:opacity-100 data-scrolling:opacity-100 group-has-[:focus-visible]/code-scroll:opacity-100 motion-reduce:transition-none data-[orientation=vertical]:w-2 data-[orientation=horizontal]:h-2 data-[orientation=horizontal]:flex-col"
             >
               <ScrollArea.Thumb className="relative flex-1 rounded-full bg-muted-foreground/40" />
             </ScrollArea.Scrollbar>
           ))}
-          <ScrollArea.Corner />
+          <ScrollArea.Corner style={{ bottom: "calc(var(--spacing) * -2)" }} />
           {!showHeader ? (
             <div className="pointer-events-none absolute top-0 right-0">
               <span className="pointer-events-auto">{copyButton}</span>

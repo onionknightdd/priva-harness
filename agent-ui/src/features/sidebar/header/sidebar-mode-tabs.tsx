@@ -14,6 +14,7 @@ import {
   TabsTrigger,
 } from "@/components/assistant-ui/tabs"
 import { Button } from "@/components/ui/button"
+import { TooltipHint } from "@/components/ui/tooltip"
 
 type SidebarMode = "agent" | "code"
 
@@ -168,16 +169,17 @@ export function SidebarModeTabs() {
                 }
                 transition={{ duration: shouldReduceMotion ? 0 : 0.16 }}
               >
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-lg"
-                  data-mode={mode}
-                  aria-label={helpLabel}
-                  title={helpLabel}
-                >
-                  <CircleQuestionMarkIcon />
-                </Button>
+                <TooltipHint content={helpLabel}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-lg"
+                    data-mode={mode}
+                    aria-label={helpLabel}
+                  >
+                    <CircleQuestionMarkIcon />
+                  </Button>
+                </TooltipHint>
               </motion.div>
             )}
           </AnimatePresence>

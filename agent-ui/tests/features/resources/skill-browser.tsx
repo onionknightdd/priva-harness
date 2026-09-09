@@ -118,9 +118,10 @@ document.querySelector<HTMLButtonElement>("#run")!.addEventListener("click", asy
     check("toolbar displays the absolute file path without a dropdown", toolbar.querySelector("p")?.textContent === "/fixture/skills/global-skill/SKILL.md" && !host.querySelector('[role="combobox"]'))
     check("file tabs are compact and aligned after the copy action", toolbar.querySelector('[role="tablist"]')!.getBoundingClientRect().height === 28 && toolbar.querySelector('button')?.getAttribute("aria-label") === "Copy content")
     const copyButton = () => toolbar.querySelector<HTMLButtonElement>('button[aria-label="Copy content"]')!
+    const copyFeedback = () => toolbar.querySelector('[role="status"]')?.textContent
     copyButton().click()
-    await until(() => copiedText === markdown && copyButton().title === "Copied", "copy content")
-    check("copy uses complete file content including frontmatter", copiedText.startsWith("---\n") && copyButton().title === "Copied")
+    await until(() => copiedText === markdown && copyFeedback() === "Copied", "copy content")
+    check("copy uses complete file content including frontmatter", copiedText.startsWith("---\n") && copyFeedback() === "Copied")
     const actionButtons = [searchButton(), host.querySelector<HTMLElement>('a[aria-label="Download"]')!, host.querySelector<HTMLElement>('button[aria-label="Delete"]')!]
     check("list and detail actions share the compact icon size", actionButtons.every((button) => button.getBoundingClientRect().width === 20 && button.querySelector("svg")!.getBoundingClientRect().width === 14))
     const article = host.querySelector("article")!

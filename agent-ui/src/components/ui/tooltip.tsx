@@ -1,20 +1,21 @@
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
+import type { ReactElement, ReactNode } from "react"
 
 import { tooltipMotion } from "@/lib/popup-motion"
 import { cn } from "@/lib/utils"
 
-// The first tooltip waits so passing the pointer over a toolbar does not fire
-// a cascade; once one is open, siblings in the same provider open instantly
-// (Base UI marks them `data-instant`, which `tooltipMotion` honors).
-function TooltipProvider({
-  delay = 500,
-  ...props
-}: TooltipPrimitive.Provider.Props) {
+const TOOLTIP_DELAY = 2000
+const TOOLTIP_RESET_TIMEOUT = 400
+
+// One delay group spans the app: wait on first hover, skip the delay between
+// hints, and reset after the pointer has left all hints for 400ms.
+function TooltipProvider(props: Omit<TooltipPrimitive.Provider.Props, "delay" | "timeout">) {
   return (
     <TooltipPrimitive.Provider
       data-slot="tooltip-provider"
-      delay={delay}
       {...props}
+      delay={TOOLTIP_DELAY}
+      timeout={TOOLTIP_RESET_TIMEOUT}
     />
   )
 }
@@ -23,8 +24,18 @@ function Tooltip({ ...props }: TooltipPrimitive.Root.Props) {
   return <TooltipPrimitive.Root data-slot="tooltip" {...props} />
 }
 
-function TooltipTrigger({ ...props }: TooltipPrimitive.Trigger.Props) {
-  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
+function TooltipTrigger(props: Omit<TooltipPrimitive.Trigger.Props, "delay">) {
+  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} delay={TOOLTIP_DELAY} />
+}
+
+function TooltipHint({ content, children }: { content?: ReactNode; children: ReactElement }) {
+  // Preserve the child's data-slot when composing buttons, tabs, and menus.
+  return (
+    <Tooltip disabled={content == null || content === false || content === ""}>
+      <TooltipPrimitive.Trigger render={children} delay={TOOLTIP_DELAY} />
+      <TooltipContent className="whitespace-pre-line wrap-anywhere">{content}</TooltipContent>
+    </Tooltip>
+  )
 }
 
 function TooltipContent({
@@ -33,13 +44,14 @@ function TooltipContent({
   sideOffset = 4,
   align = "center",
   alignOffset = 0,
+  hideArrow = false,
   children,
   ...props
 }: TooltipPrimitive.Popup.Props &
   Pick<
     TooltipPrimitive.Positioner.Props,
     "align" | "alignOffset" | "side" | "sideOffset"
-  >) {
+  > & { hideArrow?: boolean }) {
   return (
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Positioner
@@ -59,11 +71,11 @@ function TooltipContent({
           {...props}
         >
           {children}
-          <TooltipPrimitive.Arrow className="z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-[2px] bg-foreground fill-foreground data-[side=bottom]:top-1 data-[side=inline-end]:top-1/2! data-[side=inline-end]:-left-1 data-[side=inline-end]:-translate-y-1/2 data-[side=inline-start]:top-1/2! data-[side=inline-start]:-right-1 data-[side=inline-start]:-translate-y-1/2 data-[side=left]:top-1/2! data-[side=left]:-right-1 data-[side=left]:-translate-y-1/2 data-[side=right]:top-1/2! data-[side=right]:-left-1 data-[side=right]:-translate-y-1/2 data-[side=top]:-bottom-2.5" />
+          {!hideArrow && <TooltipPrimitive.Arrow className="z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-[2px] bg-foreground fill-foreground data-[side=bottom]:top-1 data-[side=inline-end]:top-1/2! data-[side=inline-end]:-left-1 data-[side=inline-end]:-translate-y-1/2 data-[side=inline-start]:top-1/2! data-[side=inline-start]:-right-1 data-[side=inline-start]:-translate-y-1/2 data-[side=left]:top-1/2! data-[side=left]:-right-1 data-[side=left]:-translate-y-1/2 data-[side=right]:top-1/2! data-[side=right]:-left-1 data-[side=right]:-translate-y-1/2 data-[side=top]:-bottom-2.5" />}
         </TooltipPrimitive.Popup>
       </TooltipPrimitive.Positioner>
     </TooltipPrimitive.Portal>
   )
 }
 
-export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider }
+export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, TooltipHint }

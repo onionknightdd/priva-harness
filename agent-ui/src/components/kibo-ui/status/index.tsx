@@ -1,6 +1,7 @@
 import type { ComponentProps, HTMLAttributes } from "react"
 
 import { cn } from "@/lib/utils"
+import { TooltipHint } from "@/components/ui/tooltip"
 
 export type StatusTone = "idle" | "running" | "warm"
 
@@ -51,14 +52,15 @@ export function StatusDot({
   ...props
 }: StatusDotProps) {
   return (
-    <Status
-      status={status}
-      aria-label={label}
-      title={label}
-      className={className}
-      {...props}
-    >
-      <StatusIndicator />
-    </Status>
+    <TooltipHint content={label}>
+      <Status
+        status={status}
+        aria-label={label}
+        className={className}
+        {...props}
+      >
+        <StatusIndicator />
+      </Status>
+    </TooltipHint>
   )
 }

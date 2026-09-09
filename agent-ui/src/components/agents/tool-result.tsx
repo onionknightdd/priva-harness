@@ -41,6 +41,7 @@ import {
 import { SPRING_PRESS, SPRING_SWAP } from "@/lib/ease";
 import { focusRing } from "@/lib/surfaces";
 import { cn } from "@/lib/utils";
+import { TooltipHint } from "@/components/ui/tooltip";
 
 export type ToolResultStatus = "running" | "success" | "error" | "cancelled" | "unknown";
 export type ToolResultKind = "terminal" | "request" | "custom";
@@ -148,23 +149,24 @@ function ToolResultAction({
   const reduce = useReducedMotion() ?? false;
 
   return (
-    <motion.button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      whileTap={reduce ? undefined : { scale: 0.9 }}
-      transition={SPRING_PRESS}
-      className={cn(
-        "grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground",
-        focusRing,
-      )}
-    >
-      {/* Keyed on the label so the copied check pops in instead of swapping flat. */}
-      <StatusGlyphSwap swapKey={label} pop={!reduce}>
-        {children}
-      </StatusGlyphSwap>
-    </motion.button>
+    <TooltipHint content={label}>
+      <motion.button
+        type="button"
+        aria-label={label}
+        onClick={onClick}
+        whileTap={reduce ? undefined : { scale: 0.9 }}
+        transition={SPRING_PRESS}
+        className={cn(
+          "grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground",
+          focusRing,
+        )}
+      >
+        {/* Keyed on the label so the copied check pops in instead of swapping flat. */}
+        <StatusGlyphSwap swapKey={label} pop={!reduce}>
+          {children}
+        </StatusGlyphSwap>
+      </motion.button>
+    </TooltipHint>
   );
 }
 

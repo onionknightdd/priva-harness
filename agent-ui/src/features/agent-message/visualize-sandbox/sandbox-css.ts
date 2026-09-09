@@ -47,7 +47,7 @@ button, input, select, textarea { font: inherit; }
   cursor: pointer;
 }
 .vs-btn:hover { filter: brightness(1.08); }
-.vs-btn:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.vs-btn:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ring); }
 .vs-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .vs-btn-outline { background: var(--background); color: var(--foreground); border-color: var(--border); }
 .vs-btn-secondary { background: var(--secondary); color: var(--secondary-foreground); }

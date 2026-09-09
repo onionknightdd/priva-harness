@@ -39,6 +39,7 @@ import {
   isSelectableHarnessId,
   type HarnessId,
 } from "./harness-options"
+import { TooltipHint } from "@/components/ui/tooltip"
 
 function HarnessOptionList({
   activeHarnessId,
@@ -205,62 +206,63 @@ export function HarnessSwitcher() {
               setHarnessMenuOpen(open)
             }}
           >
-            <DropdownMenuTrigger
-              aria-label={
-                isCollapsed
-                  ? t("common.expandSidebar")
-                  : t("sidebar.harness.select")
-              }
-              title={
+            <TooltipHint content={
                 isCollapsed
                   ? t("common.expandSidebar")
                   : runtimeName
-              }
-              render={
-                <SidebarMenuButton
-                  size="lg"
-                  className="h-auto min-h-12 data-open:bg-sidebar-accent data-open:text-sidebar-accent-foreground [&_[data-brand-logo]_svg]:size-6 [&_[data-runtime-logo]_svg]:size-3.5"
-                />
-              }
-            >
-              <div
-                ref={logoRef}
-                data-brand-logo
-                className="flex size-8 items-center justify-center"
+              }>
+              <DropdownMenuTrigger
+                aria-label={
+                  isCollapsed
+                    ? t("common.expandSidebar")
+                    : t("sidebar.harness.select")
+                }
+                render={
+                  <SidebarMenuButton
+                    size="lg"
+                    className="h-auto min-h-12 data-open:bg-sidebar-accent data-open:text-sidebar-accent-foreground [&_[data-brand-logo]_svg]:size-6 [&_[data-runtime-logo]_svg]:size-3.5"
+                  />
+                }
               >
-                <BotIcon aria-hidden="true" />
-              </div>
-              <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
-                <span className="truncate text-lg font-bold">
-                  {t("sidebar.brand")}
-                </span>
-                <span className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground">
-                  <AnimatePresence initial={false} mode="wait">
-                    <motion.span
-                      key={activeHarnessId}
-                      data-runtime-logo
-                      className="inline-flex min-w-0 items-center gap-1"
-                      initial={
-                        reduceMotion ? false : { opacity: 0, y: 5 }
-                      }
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={reduceMotion ? undefined : { opacity: 0, y: -5 }}
-                      transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-                    >
-                      <HarnessBrandLogo
-                        className={
-                          activeHarness.id === "pi"
-                            ? "size-3 shrink-0"
-                            : "size-3.5 shrink-0"
+                <div
+                  ref={logoRef}
+                  data-brand-logo
+                  className="flex size-8 items-center justify-center"
+                >
+                  <BotIcon aria-hidden="true" />
+                </div>
+                <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
+                  <span className="truncate text-lg font-bold">
+                    {t("sidebar.brand")}
+                  </span>
+                  <span className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground">
+                    <AnimatePresence initial={false} mode="wait">
+                      <motion.span
+                        key={activeHarnessId}
+                        data-runtime-logo
+                        className="inline-flex min-w-0 items-center gap-1"
+                        initial={
+                          reduceMotion ? false : { opacity: 0, y: 5 }
                         }
-                        harnessId={activeHarness.id}
-                      />
-                      <span className="truncate">{runtimeName}</span>
-                    </motion.span>
-                  </AnimatePresence>
-                </span>
-              </div>
-            </DropdownMenuTrigger>
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={reduceMotion ? undefined : { opacity: 0, y: -5 }}
+                        transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                      >
+                        <HarnessBrandLogo
+                          className={
+                            activeHarness.id === "pi"
+                              ? "size-3 shrink-0"
+                              : "size-3.5 shrink-0"
+                          }
+                          harnessId={activeHarness.id}
+                        />
+                        <span className="truncate">{runtimeName}</span>
+                      </motion.span>
+                    </AnimatePresence>
+                  </span>
+                </div>
+              </DropdownMenuTrigger>
+            </TooltipHint>
             <DropdownMenuContent
               align="start"
               className="min-w-72 p-1.5"
@@ -274,11 +276,12 @@ export function HarnessSwitcher() {
           </DropdownMenu>
         </SidebarMenuItem>
       </SidebarMenu>
-      <SidebarTrigger
-        className="shrink-0 group-data-[collapsible=icon]:hidden"
-        aria-label={t("common.collapseSidebar")}
-        title={t("common.collapseSidebar")}
-      />
+      <TooltipHint content={t("common.collapseSidebar")}>
+        <SidebarTrigger
+          className="shrink-0 group-data-[collapsible=icon]:hidden"
+          aria-label={t("common.collapseSidebar")}
+        />
+      </TooltipHint>
     </div>
   )
 }
