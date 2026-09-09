@@ -182,7 +182,7 @@ const FileBrowserTreeRow = React.memo(function FileBrowserTreeRow({
             }}
           />
         ))}
-      <TreeItemLabel showToggle={!hideToggle} className="relative z-[1] min-h-8 w-full min-w-0 max-w-full gap-1 bg-transparent! pe-5 hover:bg-transparent! in-data-[selected=true]:bg-accent! in-data-[stuck=true]:hover:bg-accent! in-data-popup-open:bg-accent!">
+      <TreeItemLabel showToggle={!hideToggle} className="relative z-[1] min-h-8 w-full min-w-0 max-w-full gap-1 bg-transparent! pe-5 hover:bg-transparent! in-data-[selected=true]:bg-accent! in-data-[stuck=true]:bg-accent! in-data-popup-open:bg-accent!">
         <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
           {icon ?? (isFolder ? (
             <FileTreeFolderIcon expanded={expanded} />

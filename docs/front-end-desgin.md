@@ -144,6 +144,39 @@ Base UI 工程中转换出的 `render`。文件正文不做高度布局动画或
 做短时状态切换，减少动态效果时立即更新。Skill 分组复用 `ui/collapsible` 与现有
 `collapsePanel` 动效样式。
 
+### 项目工作目录
+
+2026-09-10：按用户确认的桌面 / 移动端布局，保留主侧栏、聊天区和 Workspace，
+项目标题的加号与空白对话的目录标签共用
+[DirectoryPickerDialog](../agent-ui/src/features/project-directory/directory-picker-dialog.tsx)。
+弹窗使用现有 Dialog、Input、Button、FileBrowserTree 的 compact 变体与
+CreateFolderDialog；目录行沿用共享文件树高度，仅显示文件夹。桌面工具栏单行，移动端新建
+文件夹按钮换行，底部已选路径位于取消 / 使用按钮上方。弹窗与树沿用共享动效、
+键盘操作和 reduced-motion。
+
+```text
+Project [+] -----------+                    Existing project [+]
+Empty chat cwd chip --+-> Working directory          |
+                          | browse / type path       |
+                          | create child -> select   |
+                          v                          v
+                       Use directory ----------> Local draft (cwd)
+                                                   |
+                                             First message
+                                                   |
+                             WS init(cwd, harness, model, text)
+                                                   |
+                                    sessionId -> Sidebar project group
+```
+
+目录读取与新建直接使用 `GET /api/sandbox/files/list`、
+`POST /api/sandbox/files/mkdir`；使用前重新验证目录，关闭弹窗会取消读请求。
+新建文件夹后自动选中，点击使用才进入草稿。目录本身不产生空项目分组，首条消息经
+`/api/sandbox/agent/ws/run` 创建会话，收到 `sessionId` 后加入按 cwd 聚合的侧栏。
+已有项目的加号直接以该 cwd 开新草稿。空白对话更改目录不重置输入文字或附件，
+已完成与进行中的上传保留绝对路径；之后新增的附件上传到新 cwd。发出首条消息后，
+目录标签只读。
+
 ## Layout approval
 
 以下两条布局要求从 `AGENTS.md` 原样迁入，继续生效。
@@ -450,6 +483,16 @@ node --import ./services/agent-runner/ts/node_modules/tsx/dist/loader.mjs --test
 node --test agent-ui/tests/features/agent-message/composer-attachments.test.ts agent-ui/tests/features/agent-message/composer-primary-action.test.ts agent-ui/tests/features/agent-message/slash-command-envelope.test.ts
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/message-attachments.test.ts
 ```
+
+项目目录浏览器回归：在 `agent-ui/` 运行 `npm run dev`，打开
+`/tests/features/project-directory/project-directory-browser.html`，点击
+**Run project directory checks**。使用真实 App 组件与隔离的目录 / 会话 / 上传 / WS
+模拟，覆盖两个入口、懒加载与键盘展开、路径错误和重试、新建重名及自动选择、
+草稿和上传保留、首条消息 cwd / 附件 / 分组、已有项目新对话、关闭后过期响应、
+焦点恢复与弹窗溢出；长目录滚动检查吸顶行贴合顶部、各层保持选中背景、缩进区域
+不透明，以及返回顶部后恢复正常背景。追加 `?dark=1&zh=1` 检查深色与中文；追加 `&manual=1`
+用于桌面 / 移动端视觉和真实 Tab、方向键、Enter、Esc 检查。模拟接口不访问真实
+目录，不启动模型请求。
 
 文件树宽度测量回归：
 

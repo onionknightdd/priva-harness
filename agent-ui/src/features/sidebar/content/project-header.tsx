@@ -97,7 +97,9 @@ export function ProjectHeader({
   allSessionsExpanded,
   onToggleAllSessions,
   onRefresh,
+  onAddProject,
   refreshing = false,
+  addingDisabled = false,
 }: {
   query: string
   onQueryChange: (query: string) => void
@@ -110,7 +112,9 @@ export function ProjectHeader({
   allSessionsExpanded: boolean
   onToggleAllSessions: () => void
   onRefresh: () => void
+  onAddProject: () => void
   refreshing?: boolean
+  addingDisabled?: boolean
 }) {
   const [isSearching, setIsSearching] = React.useState(false)
   const [filterOpen, setFilterOpen] = React.useState(false)
@@ -383,7 +387,11 @@ export function ProjectHeader({
                 <ProjectHeaderAction
                   label={t("sidebar.projects.addProject")}
                   reduceMotion={shouldReduceMotion}
-                  onClick={() => setAddAnimationKey((key) => key + 1)}
+                  disabled={addingDisabled}
+                  onClick={() => {
+                    setAddAnimationKey((key) => key + 1)
+                    onAddProject()
+                  }}
                 >
                   <motion.span
                     key={addAnimationKey}

@@ -36,8 +36,10 @@ export function useComposerAttachments(cwd: string, harness: string | null, sess
   React.useEffect(() => {
     const previous = scopeRef.current
     scopeRef.current = { cwd, harness, sessionId }
-    // Binding a new chat's first session does not discard its next draft.
-    if (previous.cwd !== cwd || previous.harness !== harness ||
+    // A draft may change working directory while its attachments are uploading.
+    // Uploaded files keep their absolute paths and remain usable in that draft.
+    const changingDraftDirectory = previous.sessionId === null && sessionId === null
+    if ((previous.cwd !== cwd && !changingDraftDirectory) || previous.harness !== harness ||
       (previous.sessionId !== null && previous.sessionId !== sessionId)) clear()
   }, [cwd, harness, sessionId, clear])
 

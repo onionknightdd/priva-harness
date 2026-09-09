@@ -11,6 +11,7 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
+  useSidebar,
 } from "@/components/ui/sidebar"
 
 import { NavMenu } from "./content/nav-menu"
@@ -34,6 +35,7 @@ export function AppSidebar({
 }) {
   const footerFadeRef = React.useRef<HTMLDivElement>(null)
   const { openSession } = useChatSession()
+  const { isMobile, setOpenMobile } = useSidebar()
 
   React.useLayoutEffect(() => {
     const footerFade = footerFadeRef.current
@@ -82,6 +84,7 @@ export function AppSidebar({
           onCreateSession={(cwd) => {
             onViewChange("agent-message")
             onCreateProjectSession?.(cwd)
+            if (isMobile) setOpenMobile(false)
           }}
         />
       </SidebarContent>

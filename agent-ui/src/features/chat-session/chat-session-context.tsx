@@ -48,6 +48,7 @@ type ChatSessionContextValue = Omit<
   openSession: (session: SessionInfo) => void
   closeSession: () => void
   startNewChat: (cwd?: string) => void
+  setDraftCwd: (cwd: string) => void
   forkFrom: (input: ForkFromInput) => Promise<void>
   bindRunSession: (sessionId: string, seed?: { firstPrompt?: string }) => void
   reloadThread: () => Promise<AgentThreadMessage[]>
@@ -152,6 +153,12 @@ export function ChatSessionProvider({
     },
     [activeCwd, bumpTranscript]
   )
+
+  const setDraftCwd = React.useCallback((cwd: string) => {
+    if (activeSession || runSessionId || messagesStatus !== "idle") return
+    const path = cwd.trim()
+    if (path) setRunCwd(path)
+  }, [activeSession, messagesStatus, runSessionId])
 
   React.useEffect(() => {
     skipTranscriptLoadRef.current = false
@@ -470,6 +477,7 @@ export function ChatSessionProvider({
       openSession,
       closeSession,
       startNewChat,
+      setDraftCwd,
       forkFrom,
       bindRunSession,
       reloadThread,
@@ -501,6 +509,7 @@ export function ChatSessionProvider({
       setPinned,
       setTags,
       startNewChat,
+      setDraftCwd,
       status,
       threadMessages,
       transcriptEpoch,

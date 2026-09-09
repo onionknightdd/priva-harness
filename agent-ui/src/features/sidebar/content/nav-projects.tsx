@@ -5,6 +5,7 @@ import claudeIcon from "@lobehub/icons-static-svg/icons/claude-color.svg"
 import { ChevronRightIcon, FolderIcon, MoreHorizontalIcon, PlusIcon } from "lucide-react"
 import { motion, useReducedMotion, type Transition } from "motion/react"
 import { useTranslation } from "react-i18next"
+import { DirectoryPickerDialog } from "@/features/project-directory/directory-picker-dialog"
 
 import {
   Collapsible,
@@ -232,6 +233,7 @@ export function NavProjects({
   const [projectQuery, setProjectQuery] = React.useState("")
   const [selectedTags, setSelectedTags] = React.useState<string[]>([])
   const [projectsOpen, setProjectsOpen] = React.useState(true)
+  const [directoryPickerOpen, setDirectoryPickerOpen] = React.useState(false)
   const [collapsedCwds, setCollapsedCwds] = React.useState<Set<string>>(
     () => new Set()
   )
@@ -255,6 +257,7 @@ export function NavProjects({
   React.useEffect(() => {
     setCollapsedCwds(new Set())
     setSelectedTags([])
+    setDirectoryPickerOpen(false)
   }, [runHarnessId])
 
   const displayGroups = React.useMemo(() => {
@@ -412,6 +415,8 @@ export function NavProjects({
           allSessionsExpanded={allSessionsExpanded}
           onToggleAllSessions={toggleAllSessions}
           onRefresh={refresh}
+          onAddProject={() => setDirectoryPickerOpen(true)}
+          addingDisabled={!runHarnessId}
           refreshing={refreshing && status === "ready"}
         />
         <CollapsibleContent id={projectListId} className={collapsePanel}>
@@ -420,6 +425,19 @@ export function NavProjects({
           </SidebarMenu>
         </CollapsibleContent>
       </Collapsible>
+      <DirectoryPickerDialog
+        key={runHarnessId}
+        open={directoryPickerOpen}
+        initialPath={activeCwd}
+        onOpenChange={setDirectoryPickerOpen}
+        onConfirm={(cwd) => {
+          setProjectQuery("")
+          setSelectedTags([])
+          setProjectsOpen(true)
+          setGroupOpen(cwd, true)
+          onCreateSession(cwd)
+        }}
+      />
     </SidebarGroup>
   )
 }

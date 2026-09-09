@@ -89,9 +89,9 @@ function withPath(endpoint: string, path: string) {
   return `${FILE_API_PREFIX}${endpoint}?${new URLSearchParams({ path })}`
 }
 
-export function listDirectory(path?: string) {
+export function listDirectory(path?: string, signal?: AbortSignal) {
   const query = path === undefined ? "" : `?${new URLSearchParams({ path })}`
-  return requestJson<FileSystemDirectory>(`${FILE_API_PREFIX}/list${query}`)
+  return requestJson<FileSystemDirectory>(`${FILE_API_PREFIX}/list${query}`, { signal })
 }
 
 export function previewFile(path: string) {

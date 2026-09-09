@@ -52,10 +52,12 @@ export function CreateFolderDialog({
   directory,
   onCreate,
   onOpenChange,
+  finalFocus,
 }: {
   directory: string | null
   onCreate: (directory: string, name: string) => Promise<void>
   onOpenChange: (open: boolean) => void
+  finalFocus?: React.ComponentProps<typeof DialogContent>["finalFocus"]
 }) {
   const { t } = useTranslation()
   const [name, setName] = React.useState("")
@@ -102,7 +104,7 @@ export function CreateFolderDialog({
         }
       }}
     >
-      <DialogContent>
+      <DialogContent finalFocus={finalFocus}>
         <form className="grid gap-6" onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>{t("fileBrowser.createDialog.title")}</DialogTitle>

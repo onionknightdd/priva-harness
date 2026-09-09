@@ -73,7 +73,7 @@ export function AgentMessage({
 }) {
   const { t } = useTranslation()
   const composerShellRef = useRef<HTMLDivElement>(null)
-  const { activeSession, forkError, runCwd } = useChatSession()
+  const { activeSession, forkError, runCwd, runSessionId, setDraftCwd } = useChatSession()
   const shouldReduceMotion = Boolean(useReducedMotion())
   const isEmpty = messages.length === 0 && activeSession === null
   const dockTransition = shouldReduceMotion
@@ -156,8 +156,8 @@ export function AgentMessage({
         <div className="mt-1 flex items-center gap-1.5">
           {runCwd ? (
             <SessionCwdIndicator
-              key={runCwd}
               cwd={runCwd}
+              onChange={isEmpty && !isStreaming && !runSessionId ? setDraftCwd : undefined}
               className="min-w-0"
             />
           ) : null}

@@ -45,6 +45,12 @@ so finishing an animation does not render the subtree again. Folder icons,
 sticky headers, indentation, hover highlights, marquee and reduced-motion styles
 keep their existing markup and motion settings.
 
+Pinned folder labels keep the same `accent` background as selected labels,
+independently of hover; their opaque `card` backing covers indentation and
+rounded corners. This does not change the actual selection. The working-directory
+picker places its vertical padding inside the scroll area, so sticky rows reach
+the top edge without leaving a transparent strip above them.
+
 ## Verification
 
 From the repository root:
