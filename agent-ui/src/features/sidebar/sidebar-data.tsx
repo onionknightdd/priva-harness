@@ -37,10 +37,12 @@ export const sidebarData = {
       items: [
         {
           titleKey: "sidebar.navigation.agentSkill",
+          view: "skills",
           icon: <ScrollTextIcon />,
         },
         {
           titleKey: "sidebar.navigation.mcp",
+          view: "mcp",
           icon: <CableIcon />,
         },
         {

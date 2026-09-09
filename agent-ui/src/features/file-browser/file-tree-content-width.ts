@@ -32,38 +32,65 @@ export function fileTreeTargetPanelWidth({
   )
 }
 
-let measureNode: HTMLSpanElement | null = null
+export function createFileTreeNameMeasurer(ownerDocument: Document) {
+  const widths = new Map<string, number>()
 
-function getMeasureNode() {
-  if (measureNode && measureNode.isConnected) {
-    return measureNode
-  }
+  function measure(slots: Iterable<HTMLElement>) {
+    // Read the live rows before inserting probes. Interleaving a text write
+    // with offsetWidth for every row repeatedly lays out the session page.
+    const rows = Array.from(slots, (slot) => {
+      const font = ownerDocument.defaultView!.getComputedStyle(
+        slot.firstElementChild ?? slot
+      ).font
+      const name = slot.dataset.fileTreeNameText ?? slot.textContent ?? ""
 
-  const node = document.createElement("span")
-  node.ariaHidden = "true"
-  node.style.cssText =
-    "position:absolute;left:-9999px;top:0;white-space:nowrap;visibility:hidden;pointer-events:none"
-  document.body.appendChild(node)
-  measureNode = node
-  return node
-}
-
-export function measureFileTreeNameOverflow(
-  slots: Iterable<HTMLElement>
-) {
-  const probe = getMeasureNode()
-  const rows: { nameWidth: number; nameSlotWidth: number }[] = []
-
-  for (const slot of slots) {
-    const sample = slot.firstElementChild ?? slot
-    probe.style.font = getComputedStyle(sample).font
-    probe.textContent = slot.dataset.fileTreeNameText ?? slot.textContent ?? ""
-    rows.push({
-      nameWidth: probe.offsetWidth,
-      nameSlotWidth: slot.clientWidth,
+      return {
+        key: JSON.stringify([font, name]),
+        font,
+        name,
+        nameSlotWidth: slot.clientWidth,
+      }
     })
+    const probes = new Map<string, HTMLSpanElement>()
+    const fragment = ownerDocument.createDocumentFragment()
+
+    for (const row of rows) {
+      if (widths.has(row.key) || probes.has(row.key)) {
+        continue
+      }
+
+      const probe = ownerDocument.createElement("span")
+      probe.ariaHidden = "true"
+      probe.style.cssText =
+        "position:absolute;left:-9999px;top:0;white-space:nowrap;visibility:hidden;pointer-events:none"
+      probe.style.font = row.font
+      probe.textContent = row.name
+      probes.set(row.key, probe)
+      fragment.appendChild(probe)
+    }
+
+    if (probes.size > 0) {
+      ownerDocument.body.appendChild(fragment)
+      try {
+        // Keep the browser's original text metrics, with one write phase and
+        // one read phase for all uncached names, including duplicate names.
+        for (const [key, probe] of probes) {
+          widths.set(key, probe.offsetWidth)
+        }
+      } finally {
+        for (const probe of probes.values()) {
+          probe.remove()
+        }
+      }
+    }
+
+    return fileTreeMaxNameOverflow(
+      rows.map((row) => ({
+        nameWidth: widths.get(row.key)!,
+        nameSlotWidth: row.nameSlotWidth,
+      }))
+    )
   }
 
-  probe.textContent = ""
-  return fileTreeMaxNameOverflow(rows)
+  return { measure, clearCache: () => widths.clear() }
 }

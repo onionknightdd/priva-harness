@@ -3,6 +3,7 @@ import { describe, it } from "node:test"
 
 import {
   FILE_TREE_OVERFLOW_BUFFER_PX,
+  createFileTreeNameMeasurer,
   fileTreeMaxNameOverflow,
   fileTreeTargetPanelWidth,
 } from "../../../src/features/file-browser/file-tree-content-width.ts"
@@ -26,6 +27,111 @@ describe("fileTreeMaxNameOverflow", () => {
       ]),
       60
     )
+  })
+})
+
+function measurementFixture() {
+  const operations: string[] = []
+  let scale = 10
+  let connectedProbes = 0
+  const ownerDocument = {
+    defaultView: {
+      getComputedStyle: (sample: { font: string }) => {
+        operations.push("read:font")
+        return { font: sample.font }
+      },
+    },
+    createElement: () => ({
+      ariaHidden: "",
+      style: { cssText: "", font: "" },
+      textContent: "",
+      get offsetWidth() {
+        operations.push("read:probe")
+        return this.textContent.length * scale * (this.style.font.startsWith("bold") ? 2 : 1)
+      },
+      remove: () => {
+        connectedProbes -= 1
+        operations.push("write:remove")
+      },
+    }),
+    createDocumentFragment: () => ({
+      children: [] as unknown[],
+      appendChild(node: unknown) { this.children.push(node) },
+    }),
+    body: {
+      appendChild: (fragment: { children: unknown[] }) => {
+        connectedProbes += fragment.children.length
+        operations.push("write:insert")
+      },
+    },
+  } as unknown as Document
+  const slot = (name: string, width: number, font = "14px Inter") => ({
+    dataset: { fileTreeNameText: name },
+    firstElementChild: { font },
+    get clientWidth() {
+      operations.push("read:slot")
+      return width
+    },
+  }) as unknown as HTMLElement
+
+  return {
+    measurer: createFileTreeNameMeasurer(ownerDocument),
+    operations,
+    slot,
+    connectedProbes: () => connectedProbes,
+    setFontScale: (value: number) => { scale = value },
+  }
+}
+
+describe("file tree name measurement", () => {
+  it("batches all live reads, probe writes and measurements separately", () => {
+    const { measurer, operations, slot, connectedProbes } = measurementFixture()
+
+    assert.equal(measurer.measure([slot("one", 20), slot("long-name", 40)]), 50)
+    assert.deepEqual(operations, [
+      "read:font", "read:slot", "read:font", "read:slot",
+      "write:insert", "read:probe", "read:probe",
+      "write:remove", "write:remove",
+    ])
+    assert.equal(connectedProbes(), 0)
+  })
+
+  it("reuses widths for duplicate names and recalculates overflow after a resize", () => {
+    const { measurer, operations, slot } = measurementFixture()
+
+    assert.equal(measurer.measure([slot("file", 10), slot("file", 20)]), 30)
+    assert.equal(operations.filter((operation) => operation === "read:probe").length, 1)
+    operations.length = 0
+    assert.equal(measurer.measure([slot("file", 35)]), 5)
+    assert.deepEqual(operations, ["read:font", "read:slot"])
+  })
+
+  it("distinguishes names and fonts, including cached zero-width names", () => {
+    const { measurer, operations, slot } = measurementFixture()
+
+    assert.equal(measurer.measure([slot("file", 0)]), 40)
+    assert.equal(measurer.measure([slot("file", 0, "bold 14px Inter")]), 80)
+    assert.equal(measurer.measure([slot("other", 0)]), 50)
+    assert.equal(measurer.measure([slot("", 0)]), 0)
+    operations.length = 0
+    assert.equal(measurer.measure([slot("", 0)]), 0)
+    assert.deepEqual(operations, ["read:font", "read:slot"])
+  })
+
+  it("remeasures when the loaded font metrics change", () => {
+    const { measurer, slot, setFontScale } = measurementFixture()
+
+    assert.equal(measurer.measure([slot("file", 0)]), 40)
+    setFontScale(12)
+    measurer.clearCache()
+    assert.equal(measurer.measure([slot("file", 0)]), 48)
+  })
+
+  it("does not touch the live DOM for an empty tree", () => {
+    const { measurer, operations } = measurementFixture()
+
+    assert.equal(measurer.measure([]), 0)
+    assert.deepEqual(operations, [])
   })
 })
 

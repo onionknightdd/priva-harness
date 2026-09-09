@@ -2,6 +2,7 @@ import * as React from "react"
 import {
   expandAllFeature,
   hotkeysCoreFeature,
+  propMemoizationFeature,
   searchFeature,
   selectionFeature,
   syncDataLoaderFeature,
@@ -73,39 +74,51 @@ function useClipUntilOpenTransitionEnds(open: boolean) {
   return clipContents
 }
 
-function FileBrowserTreeNode({
+type FileBrowserTreeActions = {
+  onActionFeedback: (message: string) => void
+  onDeleteRequest?: (item: FileBrowserItem) => void
+  onDownload?: (item: FileBrowserItem) => void
+  onUpload?: (directory: string) => void
+}
+
+const FileBrowserTreeRow = React.memo(function FileBrowserTreeRow({
   compact,
+  data,
+  expanded,
+  focused,
   item,
+  icon,
+  metadata,
+  hideToggle,
   level,
-  loadingDirectories,
+  loading,
+  positionInSet,
+  searchMatch,
+  selected,
+  setSize,
   onActionFeedback,
   onDeleteRequest,
   onDownload,
   onUpload,
-}: {
+}: FileBrowserTreeActions & {
   compact: boolean
+  data: FileBrowserItem
+  expanded: boolean
+  focused: boolean
   item: ItemInstance<FileBrowserItem>
+  icon?: React.ReactNode
+  metadata?: React.ReactNode
+  hideToggle?: boolean
   level: number
-  loadingDirectories: Set<string>
-  onActionFeedback: (message: string) => void
-  onDeleteRequest: (item: FileBrowserItem) => void
-  onDownload: (item: FileBrowserItem) => void
-  onUpload: (directory: string) => void
+  loading: boolean
+  positionInSet: number
+  searchMatch: boolean
+  selected: boolean
+  setSize: number
 }) {
   const { i18n } = useTranslation()
-  const data = item.getItemData()
-  const isFolder = item.isFolder()
-  const children = item.getChildren()
-  const expanded = item.isExpanded()
-  const loading = isFolder && loadingDirectories.has(data.path)
-  // First expand loads children asynchronously. Opening only after they exist
-  // lets the panel measure its real height instead of animating empty, then
-  // painting the loaded rows over sibling items.
-  const panelOpen = expanded && (children.length > 0 || !loading)
-  const clipPanelContents = useClipUntilOpenTransitionEnds(panelOpen)
-  const stickySentinelRef = React.useRef<HTMLSpanElement>(null)
-  const [nameMarqueeActive, setNameMarqueeActive] =
-    React.useState(false)
+  const isFolder = data.type === "folder"
+  const [nameMarqueeActive, setNameMarqueeActive] = React.useState(false)
   const modifiedDate =
     compact || !data.modifiedAt
       ? null
@@ -129,6 +142,181 @@ function FileBrowserTreeNode({
     data.type === "file" && data.size !== null
       ? formatFileSize(data.size, i18n.resolvedLanguage)
       : ""
+
+  const treeItemButton = (
+    <TreeItem
+      item={item}
+      level={level}
+      aria-busy={loading || undefined}
+      aria-posinset={positionInSet}
+      aria-setsize={setSize}
+      data-focus={focused}
+      data-selected={selected}
+      data-search-match={searchMatch}
+      data-file-tree-item-id={item.getId()}
+      data-file-tree-folder-row={isFolder || undefined}
+      className="relative box-border w-full min-w-0 max-w-full rounded-none pb-0! text-start data-[file-tree-folder-row=true]:sticky data-[stuck=true]:bg-card"
+      onPointerEnter={() => setNameMarqueeActive(true)}
+      onPointerLeave={() => setNameMarqueeActive(false)}
+      onFocusCapture={() => setNameMarqueeActive(true)}
+      onBlurCapture={() => setNameMarqueeActive(false)}
+      style={
+        isFolder
+          ? {
+              top: `${level * FILE_TREE_STICKY_ROW_HEIGHT}px`,
+              zIndex: 50 - level,
+            }
+          : fileTreeRowVisibilityStyle
+      }
+    >
+      {isFolder &&
+        Array.from({ length: level }, (_, lineIndex) => (
+          <span
+            key={lineIndex}
+            aria-hidden="true"
+            data-slot="file-tree-sticky-indent-line"
+            className="pointer-events-none absolute inset-y-0 z-[1] hidden w-px bg-border in-data-[stuck=true]:block"
+            style={{
+              left: `${(lineIndex + 1) * FILE_TREE_INDENT - 5}px`,
+            }}
+          />
+        ))}
+      <TreeItemLabel showToggle={!hideToggle} className="relative z-[1] min-h-8 w-full min-w-0 max-w-full gap-1 bg-transparent! pe-5 hover:bg-transparent! in-data-[selected=true]:bg-accent! in-data-[stuck=true]:hover:bg-accent! in-data-popup-open:bg-accent!">
+        <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+          {icon ?? (isFolder ? (
+            <FileTreeFolderIcon expanded={expanded} />
+          ) : (
+            <FileTypeIcon name={data.name} path={data.path} />
+          ))}
+          <span
+            data-file-tree-name=""
+            data-file-tree-name-text={data.name}
+            className="min-w-0 flex-1"
+          >
+            <OverflowMarquee
+              active={nameMarqueeActive}
+              playback="once"
+              className="min-w-0 w-full"
+            >
+              {data.name}
+            </OverflowMarquee>
+          </span>
+          {loading && (
+            <LoaderCircleIcon className="size-3 shrink-0 animate-spin text-muted-foreground motion-reduce:animate-none" />
+          )}
+        </span>
+        {metadata !== undefined ? metadata : compact ? (
+          <span className="w-[clamp(2.25rem,15cqi,3rem)] shrink-0 overflow-hidden text-right text-[10px] leading-none whitespace-nowrap tabular-nums text-muted-foreground">
+            {size}
+          </span>
+        ) : (
+          <span className="flex min-w-0 shrink-0 items-center gap-[clamp(0.25rem,2cqi,0.75rem)] overflow-hidden">
+            <span className="w-[clamp(2.25rem,15cqi,3rem)] shrink-0 overflow-hidden text-right text-[10px] leading-none whitespace-nowrap tabular-nums text-muted-foreground">
+              {size}
+            </span>
+            <time
+              dateTime={modifiedDate?.toISOString()}
+              title={fullModifiedAt}
+              className="w-[clamp(3rem,22cqi,4rem)] shrink-0 overflow-hidden text-right text-[10px] leading-none whitespace-nowrap tabular-nums text-muted-foreground"
+            >
+              {modifiedAt}
+            </time>
+          </span>
+        )}
+      </TreeItemLabel>
+    </TreeItem>
+  )
+  if (!onDeleteRequest || !onDownload || !onUpload) return treeItemButton
+
+  return (
+    <FileTreeItemMenu
+      item={data}
+      onActionFeedback={onActionFeedback}
+      onDeleteRequest={onDeleteRequest}
+      onDownload={onDownload}
+      onUpload={onUpload}
+    >
+      {treeItemButton}
+    </FileTreeItemMenu>
+  )
+})
+
+function FileBrowserTreePanel({
+  children,
+  level,
+  open,
+}: {
+  children: React.ReactNode
+  level: number
+  open: boolean
+}) {
+  // Finishing the height transition only updates the panel, not every row.
+  const clipContents = useClipUntilOpenTransitionEnds(open)
+
+  return (
+    <CollapsibleContent
+      keepMounted
+      role="group"
+      className={cn(
+        "h-[var(--collapsible-panel-height)] overflow-hidden transition-[height] duration-200 ease-out starting:h-0 data-[ending-style]:h-0 data-[starting-style]:h-0 motion-reduce:transition-none",
+        // Sticky nested folders need overflow:visible once open. During the
+        // height animation it would paint children over still-collapsed rows.
+        open && !clipContents && "overflow-visible"
+      )}
+    >
+      <div
+        className="relative flex w-full min-w-0 max-w-full flex-col gap-0.5 pt-0.5 before:pointer-events-none before:absolute before:inset-y-0 before:start-[var(--file-tree-line-offset)] before:w-px before:bg-border"
+        style={
+          {
+            "--file-tree-line-offset": `${(level + 1) * FILE_TREE_INDENT - 5}px`,
+          } as React.CSSProperties
+        }
+      >
+        {children}
+      </div>
+    </CollapsibleContent>
+  )
+}
+
+function FileBrowserTreeNode({
+  compact,
+  item,
+  level,
+  loadingDirectories,
+  positionInSet,
+  setSize,
+  onActionFeedback,
+  onDeleteRequest,
+  onDownload,
+  onUpload,
+  onFolderExpand,
+  rootIcon,
+  rootMetadata,
+  hideRootToggle,
+}: FileBrowserTreeActions & {
+  compact: boolean
+  item: ItemInstance<FileBrowserItem>
+  level: number
+  loadingDirectories: Set<string>
+  positionInSet: number
+  setSize: number
+  onFolderExpand?: (path: string) => void
+  rootIcon?: React.ReactNode
+  rootMetadata?: React.ReactNode
+  hideRootToggle?: boolean
+}) {
+  const data = item.getItemData()
+  const isFolder = item.isFolder()
+  const children = isFolder ? item.getChildren() : []
+  const expanded = item.isExpanded()
+  const loading = isFolder && loadingDirectories.has(data.path)
+  // Wait for the first directory listing so the panel measures its real height.
+  const panelOpen = expanded && (children.length > 0 || !loading)
+  const stickySentinelRef = React.useRef<HTMLSpanElement>(null)
+
+  React.useEffect(() => {
+    if (isFolder && expanded) onFolderExpand?.(data.path)
+  }, [data.path, expanded, isFolder, onFolderExpand])
 
   React.useEffect(() => {
     const sentinel = stickySentinelRef.current
@@ -188,94 +376,31 @@ function FileBrowserTreeNode({
     }
   }, [isFolder, level])
 
-  const treeItemButton = (
-    <TreeItem
-      item={item}
-      level={level}
-      aria-busy={loading || undefined}
-      data-file-tree-item-id={item.getId()}
-      data-file-tree-folder-row={isFolder || undefined}
-      className="relative box-border w-full min-w-0 max-w-full rounded-none pb-0! text-start data-[file-tree-folder-row=true]:sticky data-[stuck=true]:bg-card"
-      onPointerEnter={() => setNameMarqueeActive(true)}
-      onPointerLeave={() => setNameMarqueeActive(false)}
-      onFocusCapture={() => setNameMarqueeActive(true)}
-      onBlurCapture={() => setNameMarqueeActive(false)}
-      style={
-        isFolder
-          ? {
-              top: `${level * FILE_TREE_STICKY_ROW_HEIGHT}px`,
-              zIndex: 50 - level,
-            }
-          : fileTreeRowVisibilityStyle
-      }
-    >
-      {isFolder &&
-        Array.from({ length: level }, (_, lineIndex) => (
-          <span
-            key={lineIndex}
-            aria-hidden="true"
-            data-slot="file-tree-sticky-indent-line"
-            className="pointer-events-none absolute inset-y-0 z-[1] hidden w-px bg-border in-data-[stuck=true]:block"
-            style={{
-              left: `${(lineIndex + 1) * FILE_TREE_INDENT - 5}px`,
-            }}
-          />
-        ))}
-      <TreeItemLabel className="relative z-[1] min-h-8 w-full min-w-0 max-w-full gap-1 bg-transparent! pe-5 hover:bg-transparent! in-data-[selected=true]:bg-accent! in-data-[stuck=true]:hover:bg-accent! in-data-popup-open:bg-accent!">
-        <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
-          {isFolder ? (
-            <FileTreeFolderIcon expanded={expanded} />
-          ) : (
-            <FileTypeIcon name={data.name} path={data.path} />
-          )}
-          <span
-            data-file-tree-name=""
-            data-file-tree-name-text={data.name}
-            className="min-w-0 flex-1"
-          >
-            <OverflowMarquee
-              active={nameMarqueeActive}
-              playback="once"
-              className="min-w-0 w-full"
-            >
-              {data.name}
-            </OverflowMarquee>
-          </span>
-          {loading && (
-            <LoaderCircleIcon className="size-3 shrink-0 animate-spin text-muted-foreground motion-reduce:animate-none" />
-          )}
-        </span>
-        {compact ? (
-          <span className="w-[clamp(2.25rem,15cqi,3rem)] shrink-0 overflow-hidden text-right text-[10px] leading-none whitespace-nowrap tabular-nums text-muted-foreground">
-            {size}
-          </span>
-        ) : (
-          <span className="flex min-w-0 shrink-0 items-center gap-[clamp(0.25rem,2cqi,0.75rem)] overflow-hidden">
-            <span className="w-[clamp(2.25rem,15cqi,3rem)] shrink-0 overflow-hidden text-right text-[10px] leading-none whitespace-nowrap tabular-nums text-muted-foreground">
-              {size}
-            </span>
-            <time
-              dateTime={modifiedDate?.toISOString()}
-              title={fullModifiedAt}
-              className="w-[clamp(3rem,22cqi,4rem)] shrink-0 overflow-hidden text-right text-[10px] leading-none whitespace-nowrap tabular-nums text-muted-foreground"
-            >
-              {modifiedAt}
-            </time>
-          </span>
-        )}
-      </TreeItemLabel>
-    </TreeItem>
-  )
+  // ItemInstance is mutable. Pass current primitive state into the memoized
+  // row so selection, keyboard focus, search and sibling metadata stay fresh.
+  // Sibling positions come from the directory, since Headless Tree resets
+  // metadata for hidden descendants while their closing animation still runs.
   const treeItem = (
-    <FileTreeItemMenu
-      item={data}
+    <FileBrowserTreeRow
+      compact={compact}
+      data={data}
+      expanded={expanded}
+      focused={item.isFocused()}
+      item={item}
+      icon={level === 0 ? rootIcon : undefined}
+      metadata={level === 0 ? rootMetadata : undefined}
+      hideToggle={level === 0 && hideRootToggle}
+      level={level}
+      loading={loading}
+      positionInSet={positionInSet}
+      searchMatch={item.isMatchingSearch()}
+      selected={item.isSelected()}
+      setSize={setSize}
       onActionFeedback={onActionFeedback}
       onDeleteRequest={onDeleteRequest}
       onDownload={onDownload}
       onUpload={onUpload}
-    >
-      {treeItemButton}
-    </FileTreeItemMenu>
+    />
   )
 
   if (!isFolder) {
@@ -294,44 +419,31 @@ function FileBrowserTreeNode({
         className="pointer-events-none -mb-px block h-px w-full"
       />
       {treeItem}
-      <CollapsibleContent
-        role="group"
-        className={cn(
-          "h-[var(--collapsible-panel-height)] overflow-hidden transition-[height] duration-200 ease-out starting:h-0 data-[ending-style]:h-0 data-[starting-style]:h-0 motion-reduce:transition-none",
-          // Sticky nested folders need overflow:visible once open. During the
-          // height animation it would paint children over still-collapsed rows.
-          panelOpen && !clipPanelContents && "overflow-visible"
-        )}
-      >
-        <div
-          className="relative flex w-full min-w-0 max-w-full flex-col gap-0.5 pt-0.5 before:pointer-events-none before:absolute before:inset-y-0 before:start-[var(--file-tree-line-offset)] before:w-px before:bg-border"
-          style={
-            {
-              "--file-tree-line-offset": `${(level + 1) * FILE_TREE_INDENT - 5}px`,
-            } as React.CSSProperties
-          }
-        >
-          {children.map((child) => (
-            <FileBrowserTreeNode
-              key={child.getId()}
-              compact={compact}
-              item={child}
-              level={level + 1}
-              loadingDirectories={loadingDirectories}
-              onActionFeedback={onActionFeedback}
-              onDeleteRequest={onDeleteRequest}
-              onDownload={onDownload}
-              onUpload={onUpload}
-            />
-          ))}
-        </div>
-      </CollapsibleContent>
+      <FileBrowserTreePanel open={panelOpen} level={level}>
+        {children.map((child, index) => (
+          <FileBrowserTreeNode
+            key={child.getId()}
+            compact={compact}
+            item={child}
+            level={level + 1}
+            loadingDirectories={loadingDirectories}
+            positionInSet={index + 1}
+            setSize={children.length}
+            onActionFeedback={onActionFeedback}
+            onDeleteRequest={onDeleteRequest}
+            onDownload={onDownload}
+            onUpload={onUpload}
+            onFolderExpand={onFolderExpand}
+          />
+        ))}
+      </FileBrowserTreePanel>
     </Collapsible>
   )
 }
 
 export function FileBrowserTree({
   compact = false,
+  defaultExpanded = true,
   loadingDirectories,
   model,
   onActionFeedback,
@@ -340,25 +452,34 @@ export function FileBrowserTree({
   onItemSelect,
   onUpload,
   onVisibleRowsChange,
+  onFolderExpand,
   query,
   rootPath,
   selectedItemPath,
+  rootIcon,
+  rootMetadata,
+  hideRootToggle,
 }: {
   compact?: boolean
+  defaultExpanded?: boolean
   loadingDirectories: Set<string>
   model: FileBrowserModel
   onActionFeedback: (message: string) => void
-  onDeleteRequest: (item: FileBrowserItem) => void
-  onDownload: (item: FileBrowserItem) => void
+  onDeleteRequest?: (item: FileBrowserItem) => void
+  onDownload?: (item: FileBrowserItem) => void
   onItemSelect: (
     path: string,
     shouldLoadDirectory: boolean
   ) => Promise<void>
-  onUpload: (directory: string) => void
+  onUpload?: (directory: string) => void
   onVisibleRowsChange?: () => void
+  onFolderExpand?: (path: string) => void
   query: string
   rootPath: string
   selectedItemPath: string | null
+  rootIcon?: React.ReactNode
+  rootMetadata?: React.ReactNode
+  hideRootToggle?: boolean
 }) {
   const { t } = useTranslation()
   const normalizedQuery = query.trim().toLocaleLowerCase()
@@ -370,7 +491,7 @@ export function FileBrowserTree({
   )
   const tree = useTree<FileBrowserItem>({
     initialState: {
-      expandedItems: [rootPath],
+      expandedItems: defaultExpanded ? [rootPath] : [],
       selectedItems: selectedItemPath ? [selectedItemPath] : [],
     },
     rootItemId: FILE_BROWSER_ROOT_ID,
@@ -399,6 +520,7 @@ export function FileBrowserTree({
       hotkeysCoreFeature,
       searchFeature,
       expandAllFeature,
+      propMemoizationFeature,
     ],
   })
 
@@ -418,11 +540,16 @@ export function FileBrowserTree({
       !model.items[selectedItemPath] ||
       !isSameOrDescendantPath(selectedItemPath, rootPath)
     ) {
-      tree.setSelectedItems([])
+      if (tree.getState().selectedItems.length > 0) {
+        tree.setSelectedItems([])
+      }
       return
     }
 
-    tree.setSelectedItems([selectedItemPath])
+    const selectedItems = tree.getState().selectedItems
+    if (selectedItems.length !== 1 || selectedItems[0] !== selectedItemPath) {
+      tree.setSelectedItems([selectedItemPath])
+    }
 
     getFileBrowserAncestorPaths(
       model.items,
@@ -430,7 +557,12 @@ export function FileBrowserTree({
       rootPath
     )
       .filter((path) => Boolean(model.items[path]))
-      .forEach((path) => tree.getItemInstance(path).expand())
+      .forEach((path) => {
+        const ancestor = tree.getItemInstance(path)
+        if (!ancestor.isExpanded()) {
+          ancestor.expand()
+        }
+      })
 
     const selectedItem = tree.getItemInstance(selectedItemPath)
 
@@ -481,10 +613,16 @@ export function FileBrowserTree({
             item={item}
             level={0}
             loadingDirectories={loadingDirectories}
+            positionInSet={1}
+            setSize={1}
             onActionFeedback={onActionFeedback}
             onDeleteRequest={onDeleteRequest}
             onDownload={onDownload}
             onUpload={onUpload}
+            onFolderExpand={onFolderExpand}
+            rootIcon={rootIcon}
+            rootMetadata={rootMetadata}
+            hideRootToggle={hideRootToggle}
           />
         ))}
       </Tree>

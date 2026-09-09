@@ -6,15 +6,11 @@ the file closest to the code being changed.
 
 ## Project Status
 
-The frontend lives in `agent-ui/` and uses React 19, TypeScript, Vite 8,
-Tailwind CSS 4, shadcn/ui with Base UI primitives, Animate UI, Motion, and GSAP.
-Use npm and run the following commands from `agent-ui/`:
-
-- Install dependencies: `npm ci`
-- Start development: `npm run dev`
-- Run static analysis: `npm run lint`
-- Build for production: `npm run build`
-- Preview the production build: `npm run preview`
+The frontend lives in `agent-ui/`. Before any frontend work, read and follow
+[docs/front-end-desgin.md](docs/front-end-desgin.md). It is the canonical source
+for frontend implementation rules, layout approval requirements, component
+inventory, design guidance, and development / verification commands. Maintain
+frontend-specific guidance there instead of duplicating it in this file.
 
 The TypeScript Agent Runner lives in `services/agent-runner/ts/`. Use npm and
 run the following commands from that directory:
@@ -27,14 +23,18 @@ run the following commands from that directory:
 - Build for production: `npm run build`
 - Start the production build: `npm start`
 
-No frontend-wide automated test command or repository-wide formatter is currently
-configured. Run the focused Agent data tests from the repository root:
+No repository-wide formatter is currently configured. Frontend test commands,
+including the focused Agent data, file tree, and resource tests, are maintained
+in [docs/front-end-desgin.md](docs/front-end-desgin.md#development-and-verification).
 
-- `node --import ./services/agent-runner/ts/node_modules/tsx/dist/loader.mjs --test agent-ui/tests/features/agent-message/agent-tool-data.test.ts`
-- `node --test agent-ui/tests/features/agent-message/composer-attachments.test.ts agent-ui/tests/features/agent-message/composer-primary-action.test.ts agent-ui/tests/features/agent-message/slash-command-envelope.test.ts`
-- `./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/message-attachments.test.ts`
+The backend `npm test` includes the isolated Pi MCP lifecycle probe. To also
+check the compiled production loader, run after `npm run build` from
+`services/agent-runner/ts/`:
 
-Add exact commands here when additional test tooling is introduced.
+- `node --import tsx tests/fixtures/resources/pi-mcp-probe.ts dist/provider/pi/pi-resource-loader.js`
+
+Add exact backend commands here when additional test tooling is introduced;
+add frontend commands to `docs/front-end-desgin.md`.
 
 ## Engineering Principles
 
@@ -91,42 +91,10 @@ Add exact commands here when additional test tooling is introduced.
 - Update relevant documentation and examples whenever behavior, interfaces,
   configuration, or usage changes.
 
-## Frontend Implementation
-
-- All frontend work must use a consistent `shadcn/ui` visual language and
-  component style across every screen and feature.
-- Reuse and compose `shadcn/ui` components and primitives before creating
-  custom equivalents. Extend them only when the product requirement cannot be
-  met through composition.
-- Define colors, typography, spacing, radii, and other visual decisions through
-  shared theme tokens. Do not introduce isolated styles that diverge from the
-  established design system.
-- Use shadcn/ui for foundational UI components and visual structure.
-- Prefer Animate UI for ready-made animated components that satisfy the product
-  requirement.
-- Use Motion for custom React interactions, gestures, and component-level state
-  transitions.
-- Reserve GSAP for the small number of complex scroll-driven or timeline-based
-  animations that Motion does not express clearly.
-- Every user-facing frontend implementation must include purposeful motion.
-  Motion should clarify hierarchy, state changes, or user feedback rather than
-  serve as decoration alone.
-- Keep animation behavior consistent and reusable. Scope animation timelines
-  and contexts to component lifecycles and clean them up when components
-  unmount.
-- Respect `prefers-reduced-motion` and provide a usable reduced-motion or
-  no-motion experience without removing access to content or functionality.
-- Preserve responsive behavior, keyboard navigation, visible focus states, and
-  semantic accessibility while styling and animating interfaces.
-
 ## Design Communication and Approval
 
-- Before implementing any frontend layout, present an ASCII wireframe to the
-  user and obtain explicit approval. Do not begin layout implementation until
-  the proposed layout has been confirmed.
-- The ASCII wireframe must show the relevant page regions, content hierarchy,
-  navigation, primary actions, and important states. Include separate desktop
-  and mobile views when their layouts differ materially.
+- Frontend layout wireframes and their approval requirements are maintained in
+  [docs/front-end-desgin.md](docs/front-end-desgin.md#layout-approval).
 - Every discussion of a proposal, system architecture, component architecture,
   or user/data flow must include an ASCII diagram alongside the written
   explanation. Use the diagram form that best communicates the design, such as

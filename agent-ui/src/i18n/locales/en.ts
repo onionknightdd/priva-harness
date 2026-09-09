@@ -1,4 +1,7 @@
+import { resourcesEn } from "./resources"
+
 export const en = {
+  resources: resourcesEn,
   common: {
     breadcrumb: "Breadcrumb",
     close: "Close",
@@ -96,6 +99,7 @@ export const en = {
     workflow: "Workflow",
     workflowUI: {
       status: {
+        skipped: "Skipped",
         pending: "Pending",
         running: "In progress",
         completed: "Completed",

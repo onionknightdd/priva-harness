@@ -173,6 +173,10 @@ export class AgentHarness {
     await this.pool?.disposeAll()
   }
 
+  async invalidateResources(): Promise<void> {
+    await this.pool?.invalidateResources()
+  }
+
   async *run(
     turn: UserTurn,
     context: TurnContext,

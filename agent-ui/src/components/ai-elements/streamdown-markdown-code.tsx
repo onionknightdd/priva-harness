@@ -56,12 +56,13 @@ function filenameFromNode(node: ExtraProps["node"]) {
     : undefined
 }
 
-type StreamdownMarkdownCodeProps = ComponentProps<"code"> & ExtraProps
+type StreamdownMarkdownCodeProps = ComponentProps<"code"> & ExtraProps & { deferHighlight?: boolean }
 
 export function StreamdownMarkdownCode({
   className,
   children,
   node,
+  deferHighlight,
   ...props
 }: StreamdownMarkdownCodeProps) {
   const isIncomplete = useIsCodeFenceIncomplete()
@@ -106,6 +107,7 @@ export function StreamdownMarkdownCode({
       language={language || "text"}
       showLineNumbers={lineNumbers !== false}
       status={isIncomplete ? "streaming" : "complete"}
+      deferHighlight={deferHighlight}
     />
   )
 }

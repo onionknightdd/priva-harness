@@ -180,13 +180,13 @@ export function FileBrowserPage({
     }
   }
 
-  const handleUploadRequest = (directory: string) => {
+  const handleUploadRequest = React.useCallback((directory: string) => {
     uploadDirectoryRef.current = directory
     if (uploadInputRef.current) {
       uploadInputRef.current.value = ""
       uploadInputRef.current.click()
     }
-  }
+  }, [])
 
   const handleUploadSelection = async (
     event: React.ChangeEvent<HTMLInputElement>
@@ -211,11 +211,11 @@ export function FileBrowserPage({
     }
   }
 
-  const handleDownload = (item: FileBrowserItem) => {
+  const handleDownload = React.useCallback((item: FileBrowserItem) => {
     if (item.type === "file") {
       startFileDownload(item.path, item.name)
     }
-  }
+  }, [])
 
   const handleSaveHtml = async (file: PreviewFile) => {
     if (file.content === undefined) {

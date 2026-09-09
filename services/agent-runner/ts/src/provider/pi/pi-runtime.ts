@@ -28,7 +28,7 @@ export interface PiAgentSession {
   compact?(customInstructions?: string): Promise<void>
   getContextUsage?(): { tokens: number | null; contextWindow: number } | undefined
   abort(): Promise<void>
-  dispose(): void
+  dispose(): Promise<void>
   bindProgressEmit?(emit: ((chunk: string) => void) | undefined): void
   setRunModel?(modelId: string): Promise<void>
 }
@@ -119,15 +119,15 @@ export class PiRuntime implements AgentRuntime {
     return Promise.resolve(mapPiContextUsage(this.sessionHandle.getContextUsage?.()))
   }
 
-  release(retention: 'warm' | 'dispose'): Promise<void> {
+  async release(retention: 'warm' | 'dispose'): Promise<void> {
     this.events?.close()
     this.events = undefined
     this.mapper = undefined
-    if (retention === 'warm') return Promise.resolve()
+    if (retention === 'warm') return
     this.unsubscribe()
-    this.sessionHandle?.dispose()
+    const session = this.sessionHandle
     this.sessionHandle = undefined
-    return Promise.resolve()
+    await session?.dispose()
   }
 
   private emitToolProgress(chunk: string): void {

@@ -3,6 +3,7 @@
 import {
   type CSSProperties,
   type ReactNode,
+  startTransition,
   useEffect,
   useState,
 } from "react"
@@ -26,49 +27,6 @@ export const AGENT_SHIKI_LIGHT_THEME = "github-light-high-contrast"
 export const AGENT_SHIKI_DARK_THEME = "github-dark-high-contrast"
 
 const SPECIAL_LANGUAGES = new Set(["text", "plain", "ansi"])
-
-const PRELOAD_LANGUAGE_CANDIDATES = [
-  "typescript",
-  "tsx",
-  "javascript",
-  "jsx",
-  "json",
-  "jsonc",
-  "html",
-  "css",
-  "scss",
-  "markdown",
-  "mdx",
-  "python",
-  "go",
-  "rust",
-  "java",
-  "kotlin",
-  "c",
-  "cpp",
-  "csharp",
-  "php",
-  "ruby",
-  "swift",
-  "sql",
-  "yaml",
-  "toml",
-  "xml",
-  "shellscript",
-  "docker",
-  "graphql",
-  "vue",
-  "svelte",
-  "lua",
-  "dart",
-  "make",
-  "ini",
-  "diff",
-] as const
-
-const PRELOAD_LANGUAGES = PRELOAD_LANGUAGE_CANDIDATES.filter(
-  (id) => id in bundledLanguages
-) as BundledLanguage[]
 
 const engine = createJavaScriptRegexEngine({ forgiving: true })
 const notationDiffTransformer = transformerNotationDiff({
@@ -244,7 +202,7 @@ function getAgentHighlighter() {
   if (!highlighterPromise) {
     highlighterPromise = createHighlighter({
       engine,
-      langs: PRELOAD_LANGUAGES,
+      langs: [],
       themes: [AGENT_SHIKI_LIGHT_THEME, AGENT_SHIKI_DARK_THEME],
     })
   }
@@ -302,6 +260,12 @@ export async function highlightAgentCode(
     }
   }
 
+  // A document can resolve many code blocks together. Give the browser a task
+  // boundary between tokenizations instead of blocking one long microtask queue.
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  const completed = highlightCache.get(key)
+  if (completed) return completed
+
   const root = highlighter.codeToHast(code, {
     lang,
     themes: {
@@ -325,8 +289,9 @@ export async function highlightAgentCode(
 export function useAgentShikiHighlight(
   code: string,
   language: AgentCodeLanguage,
-  options?: { notationDiff?: boolean }
+  options?: { notationDiff?: boolean; enabled?: boolean }
 ) {
+  const enabled = options?.enabled ?? true
   const notationDiff = options?.notationDiff === true
   const resolvedLanguage = resolveAgentCodeLanguage(language) ?? "text"
   const key = highlightCacheKey(code, resolvedLanguage, notationDiff)
@@ -336,6 +301,7 @@ export function useAgentShikiHighlight(
   )
 
   useEffect(() => {
+    if (!enabled) return
     const current = highlightCache.get(key)
     if (current) {
       setResult(current)
@@ -347,7 +313,7 @@ export function useAgentShikiHighlight(
     highlightAgentCode(code, language, { notationDiff })
       .then((next) => {
         if (!cancelled) {
-          setResult(next)
+          startTransition(() => setResult(next))
         }
       })
       .catch(() => {
@@ -359,8 +325,9 @@ export function useAgentShikiHighlight(
     return () => {
       cancelled = true
     }
-  }, [code, key, language, notationDiff])
+  }, [code, key, language, notationDiff, enabled])
 
+  if (!enabled) return null
   if (result?.key === key) {
     return result
   }

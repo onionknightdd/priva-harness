@@ -10,6 +10,7 @@ import { LiveRunRegistry } from './harness/run/live-run-registry.js'
 import { SessionService } from './harness/session/session-service.js'
 import { JsonSessionMetadataStore } from './infrastructure/session/json-session-metadata-store.js'
 import { NodeUserFileSystem } from './infrastructure/filesystem/node-user-file-system.js'
+import { LocalResourceService } from './infrastructure/resources/local-resource-service.js'
 import { CompatibleModelEndpointClient } from './infrastructure/model-profile/compatible-model-endpoint-client.js'
 import { JsonModelProfileStore } from './infrastructure/model-profile/json-model-profile-store.js'
 import { JsonRuntimeSettingsStore } from './infrastructure/settings/json-runtime-settings-store.js'
@@ -101,6 +102,13 @@ export async function startServer(): Promise<void> {
     new PiConfigAdapter(),
   ])
   const server = buildHttpServer({
+    resourceService: new LocalResourceService({
+      claudeDir: claudeConfigDir,
+      piDir: piConfigDir,
+      activeCwd: initialDirectory,
+      discoverProjects: async (provider) => (await providers[provider].sessions.list({}))
+        .map((session) => session.cwd).filter((cwd): cwd is string => cwd !== null && cwd !== ''),
+    }),
     userFileSystem: fileSystem,
     modelProfileService,
     agentProfileService,

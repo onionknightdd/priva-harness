@@ -26,6 +26,8 @@
     "@assistant-ui": "https://r.assistant-ui.com/styles/{style}/{name}.json",
     "@animate-ui": "https://animate-ui.com/r/{name}.json",
     "@ai-elements": "https://ai-sdk.dev/elements/api/registry/{name}.json",
-    "@beui": "https://beui.dev/r/{name}.json"
+    "@beui": "https://beui.dev/r/{name}.json",
+    "@diceui": "https://diceui.com/r/styles/{style}/{name}.json",
+    "@shadcnblocks": "https://shadcnblocks.com/r/{name}.json"
   }
 }

@@ -1,4 +1,7 @@
+import { resourcesZh } from "./resources"
+
 export const zhCN = {
+  resources: resourcesZh,
   common: {
     breadcrumb: "面包屑导航",
     close: "关闭",
@@ -96,6 +99,7 @@ export const zhCN = {
     workflow: "工作流",
     workflowUI: {
       status: {
+        skipped: "已跳过",
         pending: "等待中",
         running: "执行中",
         completed: "已完成",

@@ -18,7 +18,7 @@ import {
   type FileBrowserItem,
   type FileBrowserModel,
 } from "../file-browser-data"
-import { measureFileTreeNameOverflow } from "../file-tree-content-width"
+import { createFileTreeNameMeasurer } from "../file-tree-content-width"
 import { FileBrowserTree } from "./file-browser-tree"
 
 export function FileTreePane({
@@ -92,6 +92,7 @@ export function FileTreePane({
     }
 
     let reportFrame = 0
+    const nameMeasurer = createFileTreeNameMeasurer(root.ownerDocument)
     const visibleSlots = new Set<HTMLElement>()
     const observedSlots = new Set<HTMLElement>()
 
@@ -104,13 +105,25 @@ export function FileTreePane({
 
         if (connectedSlots.length > 0) {
           onVisibleContentOverflow(
-            measureFileTreeNameOverflow(connectedSlots)
+            nameMeasurer.measure(connectedSlots)
           )
         }
       })
     }
 
     reportVisibleOverflowRef.current = reportVisibleOverflow
+
+    const fonts = root.ownerDocument.fonts
+    const handleFontsChanged = () => {
+      nameMeasurer.clearCache()
+      reportVisibleOverflowRef.current()
+    }
+    fonts.addEventListener("loadingdone", handleFontsChanged)
+    fonts.addEventListener("loadingerror", handleFontsChanged)
+    const cleanUpFontListeners = () => {
+      fonts.removeEventListener("loadingdone", handleFontsChanged)
+      fonts.removeEventListener("loadingerror", handleFontsChanged)
+    }
 
     if (typeof IntersectionObserver === "undefined") {
       const reportAllRows = () => {
@@ -119,7 +132,7 @@ export function FileTreePane({
         )
 
         if (slots.length > 0) {
-          onVisibleContentOverflow(measureFileTreeNameOverflow(slots))
+          onVisibleContentOverflow(nameMeasurer.measure(slots))
         }
       }
 
@@ -127,6 +140,7 @@ export function FileTreePane({
       reportAllRows()
 
       return () => {
+        cleanUpFontListeners()
         reportVisibleOverflowRef.current = () => undefined
       }
     }
@@ -182,6 +196,7 @@ export function FileTreePane({
       window.cancelAnimationFrame(reportFrame)
       mutationObserver.disconnect()
       intersectionObserver.disconnect()
+      cleanUpFontListeners()
       reportVisibleOverflowRef.current = () => undefined
     }
   }, [onVisibleContentOverflow])

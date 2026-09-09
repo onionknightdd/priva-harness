@@ -6,6 +6,8 @@ import Fastify, {
 } from 'fastify'
 
 import type { UserFileSystem } from '../../core/contract/user-file-system.js'
+import type { ResourceService } from '../../core/contract/resource-service.js'
+import { ResourceError } from '../../core/resource/resource-catalog.js'
 import {
   ModelProfileError,
   type ModelProfileErrorKind,
@@ -27,6 +29,7 @@ import { modelProfileRoutes } from './route/model-profiles.js'
 import { sessionRoutes } from './route/sessions.js'
 import { slashCommandRoutes } from './route/slash-commands.js'
 import { userFileRoutes } from './route/user-files.js'
+import { resourceRoutes } from './route/resources.js'
 
 export interface BuildHttpServerOptions {
   readonly userFileSystem: UserFileSystem
@@ -35,6 +38,7 @@ export interface BuildHttpServerOptions {
   readonly agentHarness?: AgentHarness
   readonly sessionService?: SessionService
   readonly configDistributor?: ConfigDistributor
+  readonly resourceService?: ResourceService
   readonly logger?: FastifyServerOptions['logger']
 }
 
@@ -45,6 +49,10 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
   })
 
   server.setErrorHandler((error, request, reply) => {
+    if (error instanceof ResourceError) {
+      void reply.code(error.statusCode).send({ detail: error.message })
+      return
+    }
     if (error instanceof UserFileError) {
       void reply.code(statusForUserFileError(error.kind)).send({ detail: error.message })
       return
@@ -98,6 +106,12 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
   void server.register(userFileRoutes, { fileSystem: options.userFileSystem })
   void server.register(modelProfileRoutes, { service: options.modelProfileService })
   void server.register(agentProfileRoutes, { service: options.agentProfileService })
+  if (options.resourceService !== undefined) {
+    void server.register(resourceRoutes, {
+      service: options.resourceService,
+      onChanged: async () => { await options.agentHarness?.invalidateResources() },
+    })
+  }
   if (options.sessionService !== undefined) {
     void server.register(sessionRoutes, { sessionService: options.sessionService })
   }

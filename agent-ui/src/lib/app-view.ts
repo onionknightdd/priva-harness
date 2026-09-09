@@ -1,4 +1,4 @@
-export type SidebarContentView = "file-browser"
+export type SidebarContentView = "file-browser" | "skills" | "mcp"
 
 export type AppView = "agent-message" | SidebarContentView
 

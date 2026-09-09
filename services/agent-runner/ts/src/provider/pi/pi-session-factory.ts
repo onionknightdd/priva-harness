@@ -18,6 +18,7 @@ import { createPiSessionManager } from './pi-session-open.js'
 import type { PiSessionFactory } from './pi-provider.js'
 import type { PiAgentSession } from './pi-runtime.js'
 import type { PiSessionEvent } from './pi-event-mapper.js'
+import { createPiResourceLoader } from './pi-resource-loader.js'
 import { compilePiCustomTools } from './tools/compile-custom-tools.js'
 
 export class CodingAgentSessionFactory implements PiSessionFactory {
@@ -44,6 +45,7 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
 
     const progressSink: { emit?: (chunk: string) => void } = {}
 
+    let opened: Awaited<ReturnType<typeof createAgentSession>>['session'] | undefined
     try {
       const modelRuntime = await ModelRuntime.create({ authPath, modelsPath })
       const model = modelRuntime.getModel(options.providerId, options.modelId)
@@ -51,13 +53,15 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
         throw new Error(`Unknown model ${spec.model}`)
       }
 
+      const settingsManager = SettingsManager.create(spec.cwd, this.agentDir)
       const { session } = await createAgentSession({
         cwd: spec.cwd,
         agentDir: this.agentDir,
         model,
         modelRuntime,
         sessionManager: await createPiSessionManager(this.agentDir, spec, target),
-        settingsManager: SettingsManager.create(spec.cwd, this.agentDir),
+        settingsManager,
+        resourceLoader: await createPiResourceLoader(spec.cwd, this.agentDir, settingsManager),
         thinkingLevel: 'off',
         ...(this.tools.length === 0
           ? {}
@@ -71,6 +75,9 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
               }),
             }),
       })
+
+      opened = session
+      await session.bindExtensions({ mode: 'rpc' })
 
       if (
         target.kind === 'resume'
@@ -88,7 +95,13 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
         options.providerId,
       )
     } catch (error) {
-      await rm(runDir, { recursive: true, force: true })
+      try {
+        if (opened !== undefined) {
+          try { await opened.extensionRunner.emit({ type: 'session_shutdown', reason: 'quit' }) } finally { opened.dispose() }
+        }
+      } finally {
+        await rm(runDir, { recursive: true, force: true })
+      }
       throw error
     }
   }
@@ -96,6 +109,7 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
 
 class SdkPiAgentSession implements PiAgentSession {
   private currentModelId: string
+  private closing: Promise<void> | undefined
 
   constructor(
     private readonly session: Awaited<ReturnType<typeof createAgentSession>>['session'],
@@ -168,8 +182,18 @@ class SdkPiAgentSession implements PiAgentSession {
     return this.session.getContextUsage()
   }
 
-  dispose(): void {
-    this.session.dispose()
-    void rm(this.runDir, { recursive: true, force: true })
+  dispose(): Promise<void> {
+    this.closing ??= this.close()
+    return this.closing
+  }
+
+  private async close(): Promise<void> {
+    try {
+      await this.session.abort()
+      await this.session.extensionRunner.emit({ type: 'session_shutdown', reason: 'quit' })
+    } finally {
+      this.session.dispose()
+      await rm(this.runDir, { recursive: true, force: true })
+    }
   }
 }

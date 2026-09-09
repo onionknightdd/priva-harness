@@ -32,7 +32,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
-import { Switch } from "@/components/ui/switch"
+import { Switch } from "@/components/animate-ui/components/radix/switch"
 import { cn } from "@/lib/utils"
 
 import type {
@@ -141,7 +141,6 @@ export function ModelProfileEditor({
                   {t("settings.models.defaultBadge")}
                 </span>
                 <Switch
-                  size="sm"
                   checked={isDefault}
                   disabled={
                     isDefault ||

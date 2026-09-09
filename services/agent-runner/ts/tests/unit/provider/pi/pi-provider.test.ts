@@ -78,7 +78,7 @@ class FakePiAgentSession implements PiAgentSession {
     return Promise.resolve()
   }
 
-  dispose(): void {
-    return undefined
+  dispose(): Promise<void> {
+    return Promise.resolve()
   }
 }

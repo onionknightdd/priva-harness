@@ -260,6 +260,7 @@ export function resolveClaudeQueryOptions(
     permissionMode: 'bypassPermissions',
     promptSuggestions: spec.promptSuggestions !== false,
     systemPrompt: { type: 'preset', preset: 'claude_code' },
+    settingSources: ['user', 'project', 'local'],
     settings: resolveClaudeQuerySettings(spec),
     env: resolveClaudeQueryEnv(spec, globalConfigDir),
     ...(abortController === undefined ? {} : { abortController }),

@@ -61,6 +61,7 @@ export class WarmRuntimePool {
   private readonly idle = new Map<string, WarmLease>()
   private readonly busy = new Set<AgentRuntime>()
   private readonly overflow = new Set<AgentRuntime>()
+  private resourceGeneration = 0
 
   constructor(options: WarmRuntimePoolOptions = {}) {
     this.limit = options.limit ?? WARM_POOL_LIMIT
@@ -74,20 +75,24 @@ export class WarmRuntimePool {
     spec: ProviderRunSpec,
     open: () => Promise<AgentRuntime>,
   ): Promise<AgentRuntime> {
+    const generation = this.resourceGeneration
     if (session !== undefined && session.id !== '') {
       const key = sessionRefKey(session)
       const lease = this.idle.get(key)
       if (lease !== undefined) {
         if (canApplyWarmRunSpec(lease.spec, spec)) {
+          this.clearTimer(lease)
+          this.idle.delete(key)
+          this.busy.add(lease.runtime)
+          if (isIdleWatchable(lease.runtime)) lease.runtime.listenIdle(undefined)
           try {
             await lease.runtime.applyRunSpec(spec)
-            this.clearTimer(lease)
-            this.idle.delete(key)
-            if (isIdleWatchable(lease.runtime)) lease.runtime.listenIdle(undefined)
-            this.busy.add(lease.runtime)
+            if (generation !== this.resourceGeneration) throw new Error('Resources changed while acquiring the session')
             return lease.runtime
           } catch {
-            await this.evict(key)
+            this.busy.delete(lease.runtime)
+            this.overflow.delete(lease.runtime)
+            await lease.runtime.release('dispose')
           }
         } else {
           await this.evict(key)
@@ -101,6 +106,10 @@ export class WarmRuntimePool {
     }
     const overflow = this.size >= this.limit
     const runtime = await open()
+    if (generation !== this.resourceGeneration) {
+      await runtime.release('dispose')
+      return await this.acquire(session, spec, open)
+    }
     this.busy.add(runtime)
     if (overflow) this.overflow.add(runtime)
     return runtime
@@ -153,6 +162,7 @@ export class WarmRuntimePool {
     }, this.idleMs)
     this.idle.set(key, lease)
     await runtime.release('warm')
+    if (this.idle.get(key) !== lease) return
     if (isIdleWatchable(runtime) && this.onIdleEvents !== undefined) {
       runtime.listenIdle((events) => {
         lease.idleSince = this.now()
@@ -168,6 +178,13 @@ export class WarmRuntimePool {
   async disposeAll(): Promise<void> {
     const keys = [...this.idle.keys()]
     for (const key of keys) await this.evict(key)
+  }
+
+  async invalidateResources(): Promise<void> {
+    this.resourceGeneration++
+    // Finish active turns with their snapshot; discard them instead of returning them to the pool.
+    for (const runtime of this.busy) this.overflow.add(runtime)
+    await this.disposeAll()
   }
 
   get size(): number {

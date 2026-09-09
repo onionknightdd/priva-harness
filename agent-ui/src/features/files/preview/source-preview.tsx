@@ -154,13 +154,15 @@ function HighlightedSourceLines({
 export function SourcePreview({
   content,
   fileName,
+  highlight = true,
 }: {
   content: string
   fileName: string
+  highlight?: boolean
 }) {
   const { resolvedTheme } = useTheme()
   const { t } = useTranslation()
-  const language = getSourceLanguage(fileName)
+  const language = highlight ? getSourceLanguage(fileName) : null
   const theme: SourceHighlightTheme =
     resolvedTheme === "dark" ? "github-dark" : "github-light"
   const label = t("filePreview.sourceLabel", { fileName })

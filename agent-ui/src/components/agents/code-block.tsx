@@ -3,7 +3,7 @@
 
 import { Check, Copy, FileCode2, LoaderCircle } from "lucide-react"
 import { ScrollArea } from "@base-ui/react/scroll-area"
-import { motion, useReducedMotion } from "motion/react"
+import { motion, useInView, useReducedMotion } from "motion/react"
 import {
   type ReactNode,
   useCallback,
@@ -43,6 +43,7 @@ export interface CodeBlockProps {
   maxHeight?: number
   wrap?: boolean
   copyable?: boolean
+  deferHighlight?: boolean
   onCopy?: () => void | Promise<void>
   className?: string
   contentClassName?: string
@@ -61,6 +62,7 @@ export function CodeBlock({
   maxHeight = 280,
   wrap = false,
   copyable = true,
+  deferHighlight = false,
   onCopy,
   className,
   contentClassName,
@@ -69,10 +71,12 @@ export function CodeBlock({
   const { t } = useTranslation()
   const reduce = useReducedMotion() ?? false
   const viewportRef = useRef<HTMLDivElement>(null)
+  const highlightRef = useRef<HTMLDivElement>(null)
+  const nearViewport = useInView(highlightRef, { once: true, margin: "200px" })
   const copyTimer = useRef<number | undefined>(undefined)
   const [copied, setCopied] = useState(false)
   const streaming = status === "streaming"
-  const highlighted = useAgentShikiHighlight(code, language)
+  const highlighted = useAgentShikiHighlight(code, language, { enabled: !deferHighlight || nearViewport })
   const emphasized = useMemo(
     () => new Set(highlightLines),
     [highlightLines]
@@ -169,6 +173,7 @@ export function CodeBlock({
 
   return (
     <div
+      ref={deferHighlight ? highlightRef : undefined}
       data-state={status}
       aria-busy={streaming}
       className={cn(

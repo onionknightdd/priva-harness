@@ -33,6 +33,11 @@ const FileBrowserPage = React.lazy(async () => {
   return { default: module.FileBrowserPage }
 })
 
+const ResourcePage = React.lazy(async () => {
+  const module = await import("@/features/resources/resource-page")
+  return { default: module.ResourcePage }
+})
+
 function MobileSidebarLogoTrigger({ onOpen }: { onOpen: () => void }) {
   const { t } = useTranslation()
 
@@ -74,6 +79,7 @@ export function AgentLayout({
   const { setOpenMobile } = useSidebar()
   const { t } = useTranslation()
   const isFileBrowser = activeView === "file-browser"
+  const isResource = activeView === "skills" || activeView === "mcp"
   const workspaceEnabled = !isSidebarContentView(activeView)
 
   return (
@@ -94,16 +100,16 @@ export function AgentLayout({
               className="mr-2 data-[orientation=vertical]:h-4"
             />
           </div>
-          {isFileBrowser ? (
+          {isFileBrowser || isResource ? (
             <Breadcrumb>
               <BreadcrumbList>
                 <BreadcrumbItem className="hidden md:block">
-                  <span>{t("breadcrumb.dataAndUsage")}</span>
+                  <span>{t(isResource ? "resources.plugins" : "breadcrumb.dataAndUsage")}</span>
                 </BreadcrumbItem>
                 <BreadcrumbSeparator className="hidden md:block" />
                 <BreadcrumbItem>
                   <BreadcrumbPage>
-                    {t("breadcrumb.fileBrowser")}
+                    {isResource ? t(`resources.${activeView}`) : t("breadcrumb.fileBrowser")}
                   </BreadcrumbPage>
                 </BreadcrumbItem>
               </BreadcrumbList>
@@ -113,7 +119,11 @@ export function AgentLayout({
           )}
         </div>
       </header>
-      {isFileBrowser ? (
+      {isResource ? (
+        <React.Suspense fallback={<AgentLayoutFallback />}>
+          <ResourcePage key={activeView} kind={activeView} />
+        </React.Suspense>
+      ) : isFileBrowser ? (
         <React.Suspense fallback={<AgentLayoutFallback />}>
           <FileBrowserPage />
         </React.Suspense>

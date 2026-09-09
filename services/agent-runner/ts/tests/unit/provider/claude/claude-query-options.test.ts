@@ -59,6 +59,7 @@ describe('resolveClaudeQueryOptions', () => {
     expect(options.permissionMode).toBe('bypassPermissions')
     expect(options.promptSuggestions).toBe(true)
     expect(options.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code' })
+    expect(options.settingSources).toEqual(['user', 'project', 'local'])
     expect(options.effort).toBeUndefined()
     expect(options.resume).toBeUndefined()
     expect(options.forkSession).toBeUndefined()

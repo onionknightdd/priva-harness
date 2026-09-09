@@ -239,3 +239,37 @@ describe('WarmRuntimePool idle inbound', () => {
     expect(received).toEqual([[{ type: 'run.started', model: 'm' }]])
   })
 })
+
+describe('WarmRuntimePool resource changes', () => {
+  it('disposes idle sessions immediately and active sessions after their current turn', async () => {
+    const pool = new WarmRuntimePool()
+    const active = fakeRuntime('active')
+    const idle = fakeRuntime('idle')
+    await pool.acquire(active.session, spec, () => Promise.resolve(active))
+    await pool.acquire(idle.session, spec, () => Promise.resolve(idle))
+    await pool.recycle(idle, spec, idle.session)
+    await pool.invalidateResources()
+    expect(idle.released).toEqual(['warm', 'dispose'])
+    expect(active.released).toEqual([])
+    expect(pool.busyCount).toBe(1)
+    await pool.recycle(active, spec, active.session)
+    expect(active.released).toEqual(['dispose'])
+    expect(pool.size).toBe(0)
+  })
+
+  it('reopens when resources change during asynchronous session creation', async () => {
+    const pool = new WarmRuntimePool()
+    const stale = fakeRuntime('same')
+    const fresh = fakeRuntime('same')
+    let finish: ((runtime: AgentRuntime) => void) | undefined
+    const first = new Promise<AgentRuntime>((resolve) => { finish = resolve })
+    let calls = 0
+    const pending = pool.acquire(stale.session, spec, () => ++calls === 1 ? first : Promise.resolve(fresh))
+    await pool.invalidateResources()
+    finish?.(stale)
+    expect(await pending).toBe(fresh)
+    expect(stale.released).toEqual(['dispose'])
+    await pool.invalidateResources()
+    await pool.recycle(fresh, spec, fresh.session)
+  })
+})

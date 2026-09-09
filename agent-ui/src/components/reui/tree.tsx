@@ -1,4 +1,4 @@
-import { createContext, useContext } from "react"
+import { createContext, useContext, useMemo } from "react"
 import { mergeProps } from "@base-ui/react/merge-props"
 import { useRender } from "@base-ui/react/use-render"
 import type { ItemInstance } from "@headless-tree/core"
@@ -39,6 +39,10 @@ function Tree({
   toggleIconType = "chevron",
   ...props
 }: TreeProps) {
+  const context = useMemo(
+    () => ({ indent, tree, toggleIconType }),
+    [indent, tree, toggleIconType]
+  )
   const containerProps =
     tree && typeof tree.getContainerProps === "function"
       ? tree.getContainerProps()
@@ -55,7 +59,7 @@ function Tree({
   } as React.CSSProperties
 
   return (
-    <TreeContext.Provider value={{ indent, tree, toggleIconType }}>
+    <TreeContext.Provider value={context}>
       <div
         data-slot="tree"
         style={mergedStyle}
@@ -145,10 +149,12 @@ interface TreeItemLabelProps<
   T = any,
 > extends React.HTMLAttributes<HTMLSpanElement> {
   item?: ItemInstance<T>
+  showToggle?: boolean
 }
 
 function TreeItemLabel<T = any>({
   item: propItem,
+  showToggle = true,
   children,
   className,
   ...props
@@ -174,7 +180,7 @@ function TreeItemLabel<T = any>({
       )}
       {...props}
     >
-      {item.isFolder() &&
+      {showToggle && item.isFolder() &&
         (toggleIconType === "plus-minus" ? (
           item.isExpanded() ? (
             <MinusIcon className="text-muted-foreground size-3.5" stroke="currentColor" strokeWidth="1" />
