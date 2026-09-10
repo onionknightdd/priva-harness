@@ -103,6 +103,7 @@ async function runChecks() {
     await act(async () => { row("alpha/references").click() })
     await settle()
     const example = row("alpha/references/example.ts")
+    check("compact nested rows use the matching sticky offset", getComputedStyle(row("alpha/references")).top === "26px" && row("alpha/references").getBoundingClientRect().height === 26 && example.getBoundingClientRect().height === 26)
     await act(async () => { example.click() })
     check("nested file selection opens its relative path", preview() === "alpha:references/example.ts:ready" && example.getAttribute("aria-selected") === "true")
 

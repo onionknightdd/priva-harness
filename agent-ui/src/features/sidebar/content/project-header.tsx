@@ -29,16 +29,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
+import { headerSearchMotion } from "@/lib/header-search-motion"
 
 import { SessionTagFilter } from "./session-tag-filter"
 import type { KnownSessionTag } from "./session-projects"
-
-const searchTransition: Transition = {
-  type: "spring",
-  stiffness: 420,
-  damping: 34,
-  mass: 0.75,
-}
 
 const actionTransition: Transition = {
   type: "spring",
@@ -126,9 +120,8 @@ export function ProjectHeader({
   const searchIconLayoutId = React.useId()
   const shouldReduceMotion = Boolean(useReducedMotion())
   const { t } = useTranslation()
-  const transition: Transition = shouldReduceMotion
-    ? { duration: 0 }
-    : searchTransition
+  const searchMotion = headerSearchMotion(shouldReduceMotion)
+  const { transition } = searchMotion
   const hasFilters = query.length > 0 || selectedTags.length > 0
   const showSearch = isSearching || hasFilters || filterOpen
   const filterOpenRef = React.useRef(filterOpen)
@@ -178,18 +171,7 @@ export function ProjectHeader({
             key="input"
             layout
             className="absolute inset-0 z-[1]"
-            initial={
-              shouldReduceMotion
-                ? false
-                : { opacity: 0, scaleX: 0.94, y: -2 }
-            }
-            animate={{ opacity: 1, scaleX: 1, y: 0 }}
-            exit={
-              shouldReduceMotion
-                ? { opacity: 0 }
-                : { opacity: 0, scaleX: 0.96, y: -1 }
-            }
-            transition={transition}
+            {...searchMotion.input}
             onBlurCapture={(event) => {
               const nextTarget = event.relatedTarget
 
@@ -254,18 +236,7 @@ export function ProjectHeader({
             key="actions"
             layout
             className="absolute inset-0"
-            initial={
-              shouldReduceMotion
-                ? false
-                : { opacity: 0, scaleX: 0.96, y: 1 }
-            }
-            animate={{ opacity: 1, scaleX: 1, y: 0 }}
-            exit={
-              shouldReduceMotion
-                ? { opacity: 0 }
-                : { opacity: 0, scaleX: 0.94, y: 1 }
-            }
-            transition={transition}
+            {...searchMotion.actions}
           >
             <SidebarGroupLabel className="group/project-title w-full gap-0 pr-2 text-sm">
               <motion.span

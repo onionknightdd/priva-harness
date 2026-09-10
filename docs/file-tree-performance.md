@@ -45,6 +45,10 @@ so finishing an animation does not render the subtree again. Folder icons,
 sticky headers, indentation, hover highlights, marquee and reduced-motion styles
 keep their existing markup and motion settings.
 
+Skills, Workspace and Data and Usage file browsers share 26 px rows with 3 px
+vertical padding and 1 px gaps. Sticky offsets and off-screen intrinsic sizes
+use the same row height. The `compact` option only changes metadata columns.
+
 Pinned folder labels keep the same `accent` background as selected labels,
 independently of hover; their opaque `card` backing covers indentation and
 rounded corners. This does not change the actual selection. The working-directory

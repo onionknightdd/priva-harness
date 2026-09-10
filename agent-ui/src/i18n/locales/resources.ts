@@ -1,5 +1,9 @@
 export const resourcesEn = {
   skills: "Agent Skills", mcp: "MCP servers", plugins: "Plugins", search: "Search resources…",
+  skillsHint: "Skills are instructions that extend an Agent's capabilities.",
+  searchSkills: "Search skills",
+  mcpHint: "MCP servers connect Agents to external tools and data.",
+  searchMcp: "Search MCP servers", clearSearch: "Clear and close search", globalMcp: "Global MCP", mcpViews: "Server details", testFailed: "Connection failed",
   refresh: "Refresh", upload: "Upload skill", add: "Add server", allProjects: "All projects",
   project: "Project", global: "Global", local: "Local", source: "Source", sources: "Sources",
   globalSkills: "Global skills",
@@ -34,7 +38,11 @@ export const resourcesEn = {
 }
 
 export const resourcesZh = {
-  skills: "Agent Skills", mcp: "MCP 服务", plugins: "插件", search: "搜索资源…",
+  skills: "技能", mcp: "MCP 服务", plugins: "插件", search: "搜索资源…",
+  skillsHint: "技能是用于扩展 Agent 能力的指令。",
+  searchSkills: "搜索技能",
+  mcpHint: "MCP 服务用于连接 Agent 与外部工具和数据。",
+  searchMcp: "搜索 MCP 服务", clearSearch: "清除并关闭搜索", globalMcp: "全局 MCP", mcpViews: "服务详情", testFailed: "连接失败",
   refresh: "刷新", upload: "上传 Skill", add: "新增服务", allProjects: "所有项目",
   project: "项目", global: "全局", local: "本地", source: "来源", sources: "来源分组",
   globalSkills: "全局skill",

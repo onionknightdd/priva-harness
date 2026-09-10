@@ -42,6 +42,14 @@ export const SPRING_LAYOUT = {
   mass: 0.6,
 } as const
 
+/** Inline header search expansion and shared search-icon movement. */
+export const SPRING_HEADER_SEARCH = {
+  type: "spring",
+  stiffness: 420,
+  damping: 34,
+  mass: 0.75,
+} as const
+
 /** Cursor-follow physics for decorative mouse tracking (magnetic, tilt, dock). */
 export const SPRING_MOUSE = {
   stiffness: 200,

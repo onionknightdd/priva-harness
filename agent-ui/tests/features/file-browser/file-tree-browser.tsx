@@ -109,6 +109,9 @@ async function runChecks() {
     await act(async () => { src.click() })
     await settle()
     const alpha = row("/workspace/src/alpha.ts")
+    const label = alpha.querySelector<HTMLElement>('[data-slot="tree-item-label"]')!
+    check("shared file trees use 26px rows with 3px vertical padding", label.getBoundingClientRect().height === 26 && getComputedStyle(label).paddingTop === "3px" && getComputedStyle(label).paddingBottom === "3px")
+    check("shared file trees use 1px gaps and matching nested sticky offsets", Math.abs(row("/workspace/src/beta.ts").getBoundingClientRect().top - alpha.getBoundingClientRect().bottom - 1) < 0.1 && getComputedStyle(src).top === "26px")
     check("folder opens with its original height transition", src.getAttribute("aria-expanded") === "true")
     const panel = alpha.closest<HTMLElement>('[data-slot="collapsible-content"]')!
     check("height animation retains its 200 ms duration", getComputedStyle(panel).transitionDuration === "0.2s" || matchMedia("(prefers-reduced-motion: reduce)").matches)

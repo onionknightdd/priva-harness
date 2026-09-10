@@ -1,10 +1,8 @@
 import * as React from "react"
-import { CheckIcon, CopyIcon, XIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/animate-ui/components/radix/tabs"
-import { ResourceIconButton } from "./resource-icon-button"
-import { writeClipboardText } from "@/lib/clipboard"
+import { ResourceCopyButton } from "./resource-copy-button"
 import { PreviewRendererBoundary } from "@/features/files/preview/preview-renderer-boundary"
 import { ImageRenderer } from "@/features/files/preview/renderers/image-renderer"
 import { MarkdownRenderer } from "@/features/files/preview/renderers/markdown-renderer"
@@ -45,18 +43,18 @@ export const SkillContent = React.memo(function SkillContent({ detail, query, fi
   const textState = error ? <ResourceErrorState message={error} /> : content === undefined ? <ResourceLoading /> : null
 
   return <Tabs value={activeMode} onValueChange={setMode} className="min-h-0 flex-1 gap-0">
-    <div className="flex min-w-0 items-center gap-3 border-b px-5 py-2 sm:px-7" data-skill-file-toolbar>
+    <div className="flex h-9 min-w-0 shrink-0 items-center gap-3 border-b px-5 sm:px-7" data-skill-file-toolbar>
       <TooltipHint content={previewFile.path}><p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{previewFile.path}</p></TooltipHint>
       <div className="flex shrink-0 items-center gap-2">
-        <SkillCopyButton key={fileId} content={textAvailable ? content : undefined} />
-        <TabsList className="h-7 rounded-md p-0.5" aria-label={t("resources.fileMode")}>
-          <TooltipHint content={!textAvailable ? t("resources.textOnly") : undefined}><TabsTrigger className="px-2 py-0.5 text-xs" value="source" disabled={!textAvailable}>{t("resources.sourceCode")}</TabsTrigger></TooltipHint>
-          <TabsTrigger className="px-2 py-0.5 text-xs" value="preview">{t("resources.preview")}</TabsTrigger>
+        <ResourceCopyButton key={fileId} content={textAvailable ? content : undefined} />
+        <TabsList className="h-6 rounded-md p-0.5" aria-label={t("resources.fileMode")}>
+          <TooltipHint content={!textAvailable ? t("resources.textOnly") : undefined}><TabsTrigger className="px-2 py-0 text-xs leading-none" value="source" disabled={!textAvailable}>{t("resources.sourceCode")}</TabsTrigger></TooltipHint>
+          <TabsTrigger className="px-2 py-0 text-xs leading-none" value="preview">{t("resources.preview")}</TabsTrigger>
         </TabsList>
       </div>
     </div>
     <TabsContent value="source" className="min-h-0 flex-1 overflow-auto">
-      {textState ?? <SourcePreview content={content!} fileName={file} highlight={false} />}
+      {textState ?? <SourcePreview content={content!} fileName={file} highlight={kind === "markdown"} />}
     </TabsContent>
     <TabsContent value="preview" className={cn("min-h-0 flex-1", kind === "pdf" ? "overflow-hidden" : "overflow-auto")}>
       <PreviewRendererBoundary key={fileId}>
@@ -71,26 +69,3 @@ export const SkillContent = React.memo(function SkillContent({ detail, query, fi
     </TabsContent>
   </Tabs>
 })
-
-function SkillCopyButton({ content }: { content: string | undefined }) {
-  const { t } = useTranslation()
-  const [feedback, setFeedback] = React.useState<"copied" | "copyFailed" | null>(null)
-  React.useEffect(() => {
-    if (!feedback) return
-    const timer = window.setTimeout(() => setFeedback(null), 1600)
-    return () => window.clearTimeout(timer)
-  }, [feedback])
-  const copy = async () => {
-    if (content === undefined) return
-    try { await writeClipboardText(content); setFeedback("copied") }
-    catch { setFeedback("copyFailed") }
-  }
-  return <>
-    <TooltipHint content={t(`filePreview.${feedback ?? "copy"}`)}>
-      <ResourceIconButton aria-label={t("filePreview.copy")} disabled={content === undefined} onClick={() => void copy()}>
-        {feedback === "copied" ? <CheckIcon /> : feedback === "copyFailed" ? <XIcon className="text-destructive" /> : <CopyIcon />}
-      </ResourceIconButton>
-    </TooltipHint>
-    <span role="status" className="sr-only">{feedback ? t(`filePreview.${feedback}`) : ""}</span>
-  </>
-}

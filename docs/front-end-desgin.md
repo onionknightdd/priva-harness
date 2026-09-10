@@ -64,9 +64,10 @@ components/animate-ui/components/radix/switch.tsx
 primitives/radix/switch.tsx -> Radix UI + Motion
 ```
 
-三个调用点统一使用 32 × 20px 轨道、16px 滑块与按压伸展。激活轨道读取共享
+默认使用 32 × 20px 轨道、16px 滑块与按压伸展；Skill 启停使用 `size="sm"` 的
+24 × 15px 轨道和 11px 滑块。激活轨道读取共享
 `toggle-active` token，浅色 / 深色均为 `rgb(78, 130, 239)`（`#4E82EF`）；其余颜色
-继续读取项目 `input`、`background` token。减少动态效果时立即切换状态，并关闭滑块
+继续读取项目 `input`、`background` 等 token。减少动态效果时立即切换状态，并关闭滑块
 位移与按压伸展动画。受控开关以调用方的 `checked` 为准，包括等待服务端保存的状态。
 旧 `ui/switch.tsx` 已移除，不建立兼容转发入口。
 
@@ -121,13 +122,28 @@ Dark popup menus -> popover -> #353535
 
 ### Skills 搜索与预览 Tab
 
-2026-09-09：按最新调整，Skills 移除项目范围筛选及对应的 Combobox / Command 组件。
-标题右侧的搜索图标参照侧栏项目区，点击后在同一行显示输入框，支持自动聚焦和 Esc 清空收起。
+2026-09-10：按最新调整，Skills 移除项目范围筛选及对应的 Combobox / Command 组件。
+标题右侧的搜索图标参照侧栏项目区，点击后在标题右侧展开输入框，标题、刷新和上传保持可见，占位文本为“搜索技能”
+（英文为“Search skills”），支持自动聚焦和 Esc 清空收起。
+搜索位于刷新、上传之前；与项目搜索共用 `header-search-motion.ts` 和
+`SPRING_HEADER_SEARCH`，同步弹簧展开和搜索图标位移。键盘操作和减少动态效果时，
+Skill 搜索立即切换。分组折叠图标位于标题文字右侧、分割线之前。
 右栏模式使用 `@animate-ui/components-radix-tabs`，按用户指定采用 Radix + Motion。
-这项选择作用于 Skill 预览，其他功能的 Tabs 沿用各自入口。
+这项选择作用于 Skill 预览和 MCP 详情，其他功能的 Tabs 沿用各自入口。
+左栏“技能”标题使用 18px，右栏 Skill 名称使用 16px，描述使用 12px / 20px 行高。文件工具栏高 36px，Tab 组高
+24px；高亮容器和按钮撑满内部高度，以 flex 垂直居中文字并保留原有指示器动效。
+左栏标题和说明随应用语言切换：中文标题为“技能”，说明为“技能是用于扩展 Agent
+能力的指令。”，说明使用 12px 二级文本并在搜索展开时保留。Skill、Workspace 与
+“数据与用量 → 文件浏览器”的文件树统一采用上下内边距各 3px、行间距 1px、行高和
+嵌套吸顶步长 26px；`compact` 属性仍只控制元数据列。Skill 条目之间另加 2px 间距，
+不影响条目内部的文件树间距。Markdown 源文件保留原始内容、frontmatter 和行号，
+并启用共享 Shiki 的 Markdown 语法高亮；其他源文件仍使用带行号的纯文本。
+Skill 启停开关采用 `size="sm"`（24 × 15px 轨道、11px 滑块），保存期间保持透明度，
+其他开关保留默认尺寸和动效。
 
 ```text
-标题右侧搜索 -> 同行输入框 -> 本地过滤资源
+技能标题 | 搜索图标 / 展开的输入框 | 刷新 | 上传
+                          └─ 本地过滤资源
 工具栏左侧路径 / 右侧复制按钮
 文件模式 -> Animate UI Radix Tabs -> 源文件 / 预览
                                     └─ 复用 files/preview 渲染器
@@ -176,6 +192,38 @@ Empty chat cwd chip --+-> Working directory          |
 已有项目的加号直接以该 cwd 开新草稿。空白对话更改目录不重置输入文字或附件，
 已完成与进行中的上传保留绝对路径；之后新增的附件上传到新 cwd。发出首条消息后，
 目录标签只读。
+
+### MCP 页面精修
+
+2026-09-10：MCP 按 Skills 已确认的视觉细节统一，用户确认移除项目选择器。
+列表标题使用 18px，说明使用 12px / 20px 行高；中英文文案分别为 MCP 服务 / MCP servers。
+Skills 与 MCP 共用 [ResourceListHeader](../agent-ui/src/features/resources/resource-list-header.tsx)，
+搜索在标题右侧展开，搜索、刷新、新增依次排列，保留说明和动作按钮。
+图标沿用 `ResourceIconButton` 的 14px 样式、共享 Tooltip、按压反馈和 inset 焦点框。
+
+桌面初始分栏为 1:2；MCP 分组初始仅展开全局，项目标题使用 CSS 圆点分隔，
+折叠箭头位于标题右侧。服务行高 26px，行间距 2px，禁用标签高 16px。
+详情移除大图标与来源元信息，显示 16px 服务名、12px 服务地址 / 启动命令，
+保留只读与禁用状态、编辑和删除动作。
+
+```text
+MCP 服务 | 搜索 | 刷新 | 新增  | 服务名称              编辑 删除
+12px 说明                     | 服务地址 / 启动命令
+全局 MCP v ------------------ | 协议 / 连接状态         测试连接
+  服务名称 [已禁用]           |----------------------------------
+项目 · 名称 > --------------- | 配置路径 复制 [工具 提示词 资源 配置]
+                              | 所选内容 / 加载 / 空状态 / 错误
+
+手机：列表 -> 服务详情 -> 返回列表
+窄详情栏：配置路径独占一行，复制与 Tabs 在下一行。
+```
+
+MCP 工具栏采用同一 Animate UI Radix Tabs 入口：工具栏高 36px、Tab 组高 24px，
+文字垂直居中；窄栏按上图换行。路径为二级文本，复制按钮复制当前 Tab 内容。
+已访问的 Tab 保留 DOM 与滚动位置，未访问的 Tab 按需挂载。
+两类资源最多保留三个最近详情；刷新或配置保存会使旧详情失效。
+连接重测时保留上次结果和滚动，显示忙碌状态并阻止重复测试；失败显示明确错误。
+项目 MCP 的编辑、连接与工具测试使用所选服务的 `source.cwd`，全局服务沿用默认范围。
 
 ## Layout approval
 
@@ -250,7 +298,7 @@ Empty chat cwd chip --+-> Working directory          |
 | 特殊动作按钮 | [motion/action-swap](../agent-ui/src/components/motion/action-swap.tsx)、[action-swap-roll](../agent-ui/src/components/motion/action-swap-roll.tsx)，本地 Motion | 图标/文案交换；另有 `surfaces.tsx` 的圆形 ghost/ink 样式 | 发送/停止、工作状态、复制按钮 |
 | Toggle | [ui/toggle](../agent-ui/src/components/ui/toggle.tsx)，Base UI Toggle | 两态按压按钮；default / outline，选中态 `bg-muted` | 当前仅 `toggleVariants` 被 ToggleGroup 复用，没有独立 `<Toggle>` 业务实例 |
 | ToggleGroup | [ui/toggle-group](../agent-ui/src/components/ui/toggle-group.tsx)，Base UI ToggleGroup + Toggle | 文件工具栏采用 `outline`、`sm`、`spacing={0}` 的连接分段按钮 | 文件源码 / 预览 / 编辑模式 |
-| Switch | [animate-ui/components/radix/switch](../agent-ui/src/components/animate-ui/components/radix/switch.tsx)，Radix UI + Motion | 统一 32 × 20px 轨道、16px 滑块；按压伸展，spring `stiffness: 300 / damping: 25`；支持 reduced motion | Agent 输入建议、模型默认项、Skill 启停，共 3 处 |
+| Switch | [animate-ui/components/radix/switch](../agent-ui/src/components/animate-ui/components/radix/switch.tsx)，Radix UI + Motion | 默认轨道 32 × 20px / 滑块 16px；Skill 小号轨道 24 × 15px / 滑块 11px；按压伸展，spring `stiffness: 300 / damping: 25`；支持 reduced motion | Agent 输入建议、模型默认项、Skill 启停，共 3 处 |
 | 主题 / 语言 / 工作区切换 | [ThemeToggle](../agent-ui/src/features/sidebar/footer/theme-toggle.tsx)、[LanguageToggle](../agent-ui/src/features/sidebar/footer/language-toggle.tsx)、[WorkspaceToggle](../agent-ui/src/features/workspace/workspace-toggle.tsx) | 分别是 Animate UI 主题按钮、shadcn Button + GSAP、Button + Motion；名称带 toggle，但并未使用通用 Toggle 或 Switch | 全局模式与面板开关 |
 | Input / Textarea | [ui/input](../agent-ui/src/components/ui/input.tsx)、[ui/textarea](../agent-ui/src/components/ui/textarea.tsx) | Input 基于 Base UI，Textarea 是本地样式的原生 textarea；共享 input / ring / destructive token | 搜索、名称、配置文本 |
 | Field / Label | [ui/field](../agent-ui/src/components/ui/field.tsx)、[ui/label](../agent-ui/src/components/ui/label.tsx) | 本地 shadcn 风格的标签、说明、错误与分组结构 | 设置和表单；资源表单还存在本地 FormField 组合 |
@@ -303,7 +351,8 @@ App TooltipProvider -> 首次悬浮 2s -> 连续切换 0ms
 
 | 组件类型 | 当前入口 / 来源 | 当前样式和反馈 | 代表场景 |
 | --- | --- | --- | --- |
-| Tabs | [assistant-ui/tabs](../agent-ui/src/components/assistant-ui/tabs.tsx)，Base UI + Motion | 多种变体，共享选中/悬浮滑块；属于本地通用封装 | 侧栏模式、文件标签、工作表、工作流详情、资源详情 |
+| Tabs | [assistant-ui/tabs](../agent-ui/src/components/assistant-ui/tabs.tsx)，Base UI + Motion | 多种变体，共享选中/悬浮滑块；属于本地通用封装 | 侧栏模式、文件标签、工作表、工作流详情 |
+| 资源 Tabs | [animate-ui/components/radix/tabs](../agent-ui/src/components/animate-ui/components/radix/tabs.tsx)，Radix + Motion | 24px 标签栏、共享底色和滑块；键盘及减少动态效果时立即切换 | Skill 文件预览、MCP 工具 / 提示词 / 资源 / 配置 |
 | ExpandableTabs | [motion/expandable-tabs](../agent-ui/src/components/motion/expandable-tabs.tsx)，BE UI 衍生 | 胶囊图标展开标签；固定 26px 外框 / 18px 内容圆角、本地 tab 语义和动画 | Workspace 模块切换 |
 | Sidebar | [ui/sidebar](../agent-ui/src/components/ui/sidebar.tsx)，shadcn 衍生组合 | `sidebar-*` token；Base UI Sheet 处理移动端，GSAP 调整桌面宽度，Motion 处理行高亮 | 主侧栏、工作区侧栏 |
 | Breadcrumb | [ui/breadcrumb](../agent-ui/src/components/ui/breadcrumb.tsx) | shadcn 风格路径层级，Lucide 分隔图标 | 顶栏、设置导航、文件路径 |
@@ -535,13 +584,23 @@ React 提交耗时 / 帧间隔；检查预览 DOM 复用、最多保留三个预
 
 Skill 页面分组、预览模式与开关闪屏回归：打开
 `/tests/features/resources/skill-browser.html`，点击 **Run skill browser checks**。
-使用隔离的网络和剪贴板样例，覆盖搜索展开 / Esc 与聚焦、初始折叠和 1:2 分栏、分组状态保留、
+使用隔离的网络和剪贴板样例，覆盖搜索展开边界 / 标题保留 / Esc 与聚焦、Skill 外层间距、初始折叠和 1:2 分栏、分组状态保留、
 启停成功 / 失败的 DOM 与滚动保留、紧凑标签的高度稳定、绝对路径与复制、文本模式 / 高亮、二进制读取路径，以及 390px
 iframe 中的移动端列表 / 文件 / 返回操作，不修改真实 Skill。
+附加 `?reduced-motion=1&dark=1` 检查深色和减少动态效果。检查会逐帧采样启停时
+右栏按钮及图标的透明度，覆盖保存成功、失败与重复点击；临时保存仍阻止重复操作，
+仅真正不可用的操作采用禁用淡化样式。
 
 PDF 预览回归：打开 `/tests/features/resources/skill-pdf-browser.html`，点击
 **Run PDF preview checks**。在内存生成有效单页 PDF，通过实际的 SkillContent 和
 共享 PDF 查看器渲染，并检查二进制读取与源文件 Tab 禁用。
+
+MCP 页面浏览器回归：打开 `/tests/features/resources/mcp-browser.html`，点击
+**Run MCP browser checks**。使用隔离的服务、能力列表、网络及剪贴板样例，覆盖
+搜索 / Esc 焦点、分组与范围选择器移除、分栏、紧凑工具栏、重测成功 / 失败时的
+结果与滚动保留、防重复请求、Tab / 最近服务切换、复制配置、只读 / 禁用限制、
+项目连接的 cwd、最近详情数量上限，以及 390px iframe 的搜索、Tab 和返回操作。
+附加 `?reduced-motion=1&dark=1` 检查深色和减少动态效果；不会连接或修改真实服务。
 
 测试继续放在 `agent-ui/tests/` 的对应目录中，遵守根 `AGENTS.md` 的测试组织要求。
 只报告实际运行的检查；执行受阻时说明原因和未验证范围。后端测试及编译产物的

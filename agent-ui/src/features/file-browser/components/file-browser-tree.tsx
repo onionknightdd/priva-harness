@@ -38,11 +38,11 @@ import { FileTypeIcon } from "./file-type-icon"
 import { TooltipHint } from "@/components/ui/tooltip"
 
 const FILE_TREE_INDENT = 20
-const FILE_TREE_STICKY_ROW_HEIGHT = 32
+const FILE_TREE_ROW_HEIGHT = 26
 const FILE_TREE_PANEL_TRANSITION_MS = 200
 const fileTreeRowVisibilityStyle = {
   contentVisibility: "auto",
-  containIntrinsicSize: `auto ${FILE_TREE_STICKY_ROW_HEIGHT}px`,
+  containIntrinsicSize: `auto ${FILE_TREE_ROW_HEIGHT}px`,
 } satisfies React.CSSProperties
 
 function resolveFileTreeHighlightElement(item: HTMLElement) {
@@ -164,7 +164,7 @@ const FileBrowserTreeRow = React.memo(function FileBrowserTreeRow({
       style={
         isFolder
           ? {
-              top: `${level * FILE_TREE_STICKY_ROW_HEIGHT}px`,
+              top: `${level * FILE_TREE_ROW_HEIGHT}px`,
               zIndex: 50 - level,
             }
           : fileTreeRowVisibilityStyle
@@ -182,7 +182,7 @@ const FileBrowserTreeRow = React.memo(function FileBrowserTreeRow({
             }}
           />
         ))}
-      <TreeItemLabel showToggle={!hideToggle} className="relative z-[1] min-h-8 w-full min-w-0 max-w-full gap-1 bg-transparent! pe-5 hover:bg-transparent! in-data-[selected=true]:bg-accent! in-data-[stuck=true]:bg-accent! in-data-popup-open:bg-accent!">
+      <TreeItemLabel showToggle={!hideToggle} className="relative z-[1] min-h-6.5 w-full min-w-0 max-w-full gap-1 bg-transparent! py-0.75 pe-5 hover:bg-transparent! in-data-[selected=true]:bg-accent! in-data-[stuck=true]:bg-accent! in-data-popup-open:bg-accent!">
         <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
           {icon ?? (isFolder ? (
             <FileTreeFolderIcon expanded={expanded} />
@@ -267,7 +267,7 @@ function FileBrowserTreePanel({
       )}
     >
       <div
-        className="relative flex w-full min-w-0 max-w-full flex-col gap-0.5 pt-0.5 before:pointer-events-none before:absolute before:inset-y-0 before:start-[var(--file-tree-line-offset)] before:w-px before:bg-border"
+        className="relative flex w-full min-w-0 max-w-full flex-col gap-px pt-px before:pointer-events-none before:absolute before:inset-y-0 before:start-[var(--file-tree-line-offset)] before:w-px before:bg-border"
         style={
           {
             "--file-tree-line-offset": `${(level + 1) * FILE_TREE_INDENT - 5}px`,
@@ -351,7 +351,7 @@ function FileBrowserTreeNode({
         const stickyBoundary =
           entry.rootBounds?.top ??
           scrollContainer.getBoundingClientRect().top +
-            level * FILE_TREE_STICKY_ROW_HEIGHT
+            level * FILE_TREE_ROW_HEIGHT
         const nextIsStuck =
           !entry.isIntersecting &&
           entry.boundingClientRect.top < stickyBoundary
@@ -365,7 +365,7 @@ function FileBrowserTreeNode({
       },
       {
         root: scrollContainer,
-        rootMargin: `-${level * FILE_TREE_STICKY_ROW_HEIGHT}px 0px 0px 0px`,
+        rootMargin: `-${level * FILE_TREE_ROW_HEIGHT}px 0px 0px 0px`,
         threshold: 0,
       }
     )
@@ -606,7 +606,7 @@ export function FileBrowserTree({
         tree={tree}
         indent={FILE_TREE_INDENT}
         aria-label={t("fileBrowser.treeLabel")}
-        className="w-full min-w-0 max-w-full gap-0.5 overflow-x-clip"
+        className="w-full min-w-0 max-w-full gap-px overflow-x-clip"
       >
         {tree.getRootItem().getChildren().map((item) => (
           <FileBrowserTreeNode

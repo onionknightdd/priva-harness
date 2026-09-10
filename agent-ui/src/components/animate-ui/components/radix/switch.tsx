@@ -9,6 +9,7 @@ import {
 import { cn } from '@/lib/utils';
 
 type SwitchProps = SwitchPrimitiveProps & {
+  size?: 'default' | 'sm';
   pressedWidth?: number;
   startIcon?: React.ReactElement;
   endIcon?: React.ReactElement;
@@ -17,7 +18,8 @@ type SwitchProps = SwitchPrimitiveProps & {
 
 function Switch({
   className,
-  pressedWidth = 19,
+  size = 'default',
+  pressedWidth = size === 'sm' ? 14 : 19,
   startIcon,
   endIcon,
   thumbIcon,
@@ -26,7 +28,8 @@ function Switch({
   return (
     <SwitchPrimitive
       className={cn(
-        'ring-inset relative peer focus-visible:border-ring focus-visible:ring-ring/50 flex h-5 w-8 px-px shrink-0 items-center justify-start rounded-full border border-transparent shadow-xs outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50',
+        'ring-inset relative peer focus-visible:border-ring focus-visible:ring-ring/50 flex px-px shrink-0 items-center justify-start rounded-full border border-transparent shadow-xs outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50',
+        size === 'sm' ? 'h-3.75 w-6' : 'h-5 w-8',
         'data-[state=checked]:bg-toggle-active data-[state=unchecked]:bg-input dark:data-[state=unchecked]:bg-input/80 data-[state=checked]:justify-end',
         className,
       )}
@@ -34,7 +37,8 @@ function Switch({
     >
       <SwitchThumbPrimitive
         className={cn(
-          'relative z-10 bg-background dark:data-[state=unchecked]:bg-foreground dark:data-[state=checked]:bg-primary-foreground pointer-events-none block size-4 rounded-full ring-0',
+          'relative z-10 bg-background dark:data-[state=unchecked]:bg-foreground dark:data-[state=checked]:bg-primary-foreground pointer-events-none block rounded-full ring-0',
+          size === 'sm' ? 'size-2.75' : 'size-4',
         )}
         pressedAnimation={{ width: pressedWidth }}
       >
