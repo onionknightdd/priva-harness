@@ -3,9 +3,11 @@ import { useTranslation } from "react-i18next"
 
 export function PreviewRequestState({
   error,
+  reason,
   loading = false,
 }: {
   error?: string
+  reason?: "too-large"
   loading?: boolean
 }) {
   const { t } = useTranslation()
@@ -32,12 +34,16 @@ export function PreviewRequestState({
           {t(
             loading
               ? "filePreview.loadingTitle"
-              : "filePreview.loadFailedTitle"
+              : reason === "too-large"
+                ? "filePreview.tooLargeTitle"
+                : "filePreview.loadFailedTitle"
           )}
         </p>
         {!loading && (
           <p className="max-w-sm text-xs leading-5 text-muted-foreground">
-            {error || t("filePreview.loadFailedDescription")}
+            {reason === "too-large"
+              ? t("filePreview.tooLargeDescription")
+              : error || t("filePreview.loadFailedDescription")}
           </p>
         )}
       </div>

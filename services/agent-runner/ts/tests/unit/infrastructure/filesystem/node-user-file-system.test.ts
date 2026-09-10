@@ -139,6 +139,60 @@ describe('NodeUserFileSystem', () => {
     })
   })
 
+  it.each(['large.txt', 'extensionless'])('previews %s through the 3 MiB boundary', async (name) => {
+    const path = join(workspace, name)
+    for (const size of [1024 * 1024 + 1, 3 * 1024 * 1024 - 1, 3 * 1024 * 1024]) {
+      await writeFile(path, Buffer.alloc(size, 97))
+      const preview = await fileSystem.previewFile(path)
+      expect(Buffer.byteLength(preview.content ?? '')).toBe(size)
+      expect(preview).toMatchObject({ size, isBinary: false, previewError: null })
+    }
+  })
+
+  it.each(['large.txt', 'extensionless'])('reports oversized %s as text with a preview error', async (name) => {
+    const size = 3 * 1024 * 1024 + 1
+    const path = join(workspace, name)
+    await writeFile(path, Buffer.alloc(size, 97))
+    await expect(fileSystem.previewFile(path)).resolves.toMatchObject({
+      size,
+      content: null,
+      isBinary: false,
+      previewUrl: null,
+      previewError: 'too-large',
+    })
+  })
+
+  it('measures the text preview limit in UTF-8 bytes', async () => {
+    const path = join(workspace, 'unicode.txt')
+    const content = '中'.repeat(1024 * 1024)
+    await writeFile(path, content)
+    const preview = await fileSystem.previewFile(path)
+    expect(preview.content).toBe(content)
+    expect(preview.previewError).toBeNull()
+
+    await writeFile(path, `${content}a`)
+    await expect(fileSystem.previewFile(path)).resolves.toMatchObject({ content: null, previewError: 'too-large' })
+  })
+
+  it('keeps large binary files distinct from oversized text', async () => {
+    const path = join(workspace, 'payload.bin')
+    await writeFile(path, Buffer.alloc(3 * 1024 * 1024 + 1))
+    await expect(fileSystem.previewFile(path)).resolves.toMatchObject({
+      content: null,
+      isBinary: true,
+      previewUrl: null,
+      previewError: null,
+    })
+  })
+
+  it.each(['image.png', 'document.pdf'])('retains download-backed previews for large %s', async (name) => {
+    const path = join(workspace, name)
+    await writeFile(path, Buffer.alloc(3 * 1024 * 1024 + 1))
+    const preview = await fileSystem.previewFile(path)
+    expect(preview).toMatchObject({ content: null, isBinary: false, previewError: null })
+    expect(preview.previewUrl).toContain('/api/sandbox/files/download?path=')
+  })
+
   it('streams an upload through staging and does not overwrite an existing file', async () => {
     const firstUpload = await fileSystem.beginUpload('../note.txt')
     await firstUpload.write(chunks('hello', ' world'))

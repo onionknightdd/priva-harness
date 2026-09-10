@@ -245,20 +245,20 @@ export class NodeUserFileSystem implements UserFileSystem {
       let content: string | null = null
       let isBinary = false
       let previewUrl: string | null = null
+      let previewError: UserFilePreview['previewError'] = null
 
-      if (isKnownText) {
+      if (isKnownText || (!isImage && !isPdf && await looksLikeText(opened.handle, opened.stats.size))) {
         if (opened.stats.size > USER_FILE_PREVIEW_LIMIT_BYTES) {
-          isBinary = true
+          previewError = 'too-large'
         } else {
           content = await readUtf8(opened.handle)
+          if (Buffer.byteLength(content) > USER_FILE_PREVIEW_LIMIT_BYTES) {
+            content = null
+            previewError = 'too-large'
+          }
         }
       } else if (isImage || isPdf) {
         previewUrl = `/api/sandbox/files/download?path=${encodePathQueryValue(opened.path)}`
-      } else if (
-        opened.stats.size <= USER_FILE_PREVIEW_LIMIT_BYTES
-        && await looksLikeText(opened.handle, opened.stats.size)
-      ) {
-        content = await readUtf8(opened.handle)
       } else {
         isBinary = true
       }
@@ -271,6 +271,7 @@ export class NodeUserFileSystem implements UserFileSystem {
         content,
         isBinary,
         previewUrl,
+        previewError,
       }
     } catch (error) {
       if (isAccessError(error)) {

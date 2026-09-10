@@ -17,6 +17,7 @@ export type PreviewFile = {
   mediaType: string
   content?: string
   error?: string
+  previewError?: "too-large"
   renderKind?: FileRenderKind
   renderSource?: string
   status?: "loading" | "ready" | "error"

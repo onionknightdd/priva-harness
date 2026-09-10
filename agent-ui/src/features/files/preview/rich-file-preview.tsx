@@ -208,7 +208,7 @@ function FilePreviewPanel({
         {file.status === "loading" ? (
           <PreviewRequestState loading />
         ) : file.status === "error" ? (
-          <PreviewRequestState error={file.error} />
+          <PreviewRequestState error={file.error} reason={file.previewError} />
         ) : !active ? null : mode === "source" && file.content !== undefined ? (
           <SourcePreview content={file.content} fileName={file.name} />
         ) : mode === "edit" && file.content !== undefined ? (

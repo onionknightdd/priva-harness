@@ -261,6 +261,17 @@ export function isSameOrDescendantPath(path: string, ancestorPath: string) {
 export function previewResponseToFile(
   preview: FilePreviewResponse
 ): PreviewFile {
+  const file: PreviewFile = {
+    id: preview.path,
+    path: preview.path,
+    name: preview.name,
+    mediaType: preview.mime_type,
+    status: "ready",
+  }
+  if (preview.preview_error === "too-large") {
+    return { ...file, status: "error", previewError: "too-large" }
+  }
+
   const renderKind = getFileRenderKind(preview)
   const needsBinarySource =
     renderKind === "document" ||
@@ -270,16 +281,12 @@ export function previewResponseToFile(
     renderKind === "spreadsheet"
 
   return {
-    id: preview.path,
-    path: preview.path,
-    name: preview.name,
-    mediaType: preview.mime_type,
+    ...file,
     content: preview.content ?? undefined,
     renderKind,
     renderSource: needsBinarySource
       ? preview.preview_url ?? getDownloadUrl(preview.path)
       : undefined,
-    status: "ready",
   }
 }
 

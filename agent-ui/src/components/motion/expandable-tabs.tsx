@@ -242,7 +242,7 @@ export function ExpandableTabs({
           aria-label={ariaLabel}
           aria-orientation="horizontal"
           className={cn(
-            "relative z-20 flex h-8 w-full shrink-0 items-center gap-1 bg-tabs-background px-1.5 pr-24 dark:bg-transparent",
+            "relative z-20 flex h-8 w-full shrink-0 items-center gap-1 px-1.5 pr-24",
             classNames?.bar
           )}
         >

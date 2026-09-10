@@ -25,6 +25,7 @@ export type FilePreviewResponse = {
   content: string | null
   is_binary: boolean
   preview_url: string | null
+  preview_error: "too-large" | null
 }
 
 type CreatedDirectory = {

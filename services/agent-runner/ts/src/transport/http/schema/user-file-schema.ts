@@ -112,6 +112,7 @@ export const previewFileSchema = {
         'content',
         'is_binary',
         'preview_url',
+        'preview_error',
       ],
       properties: {
         path: { type: 'string' },
@@ -121,6 +122,7 @@ export const previewFileSchema = {
         content: nullableString,
         is_binary: { type: 'boolean' },
         preview_url: nullableString,
+        preview_error: { enum: ['too-large', null] },
       },
     },
   },

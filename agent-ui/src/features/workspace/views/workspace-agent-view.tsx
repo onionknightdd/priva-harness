@@ -1,9 +1,10 @@
 import { workflowDuration } from "@/features/agent-message/workflow-data"
 import { useLayoutEffect, useRef, useState } from "react"
-import { ArrowLeftIcon, BotIcon, MessageSquareIcon } from "lucide-react"
+import { ArrowLeftIcon, BotIcon, ListChecksIcon, MessageSquareIcon, TextAlignStartIcon } from "lucide-react"
 import { motion, useReducedMotionConfig } from "motion/react"
 import { useTranslation } from "react-i18next"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/assistant-ui/tabs"
+import { TabsTriggerContent } from "@/components/assistant-ui/tabs-trigger-content"
 import { MessageResponse } from "@/components/ai-elements/message"
 import { Button } from "@/components/ui/button"
 import { WorkflowStatusPill } from "@/features/agent-message/components/workflow-status"
@@ -56,6 +57,7 @@ export function WorkspaceAgentView({ target }: { target: WorkspaceAgentTarget })
 
 function AgentDetail({ agent, agents, onSelectAgent }: { agent: AgentToolView; agents: AgentToolView[]; onSelectAgent: (id: string) => void }) {
   const { t } = useTranslation()
+  const reduce = useReducedMotionConfig()
   const [tab, setTab] = useState("process")
   const viewport = useRef<HTMLDivElement>(null)
   const follow = useRef(true)
@@ -76,8 +78,17 @@ function AgentDetail({ agent, agents, onSelectAgent }: { agent: AgentToolView; a
         <div className="mt-1 flex flex-wrap gap-x-2 text-xs text-muted-foreground">{agent.type ? <span>{agent.type}</span> : null}{agent.model ? <span>{agent.model}</span> : null}<span>{t("agentMessage.workflowUI.toolCalls", { count: agent.toolCount })}</span>{agent.tokens !== undefined ? <span>{agent.tokens.toLocaleString()} tokens</span> : null}{agent.durationMs !== undefined ? <span>{workflowDuration(agent.durationMs)}</span> : null}</div>
       </header>
       <Tabs value={tab} onValueChange={(value) => setTab(String(value))} className="gap-0 border-t">
-        <TabsList variant="ghost" size="sm" className="mx-2 mt-1" aria-label={t("agentMessage.workflowUI.agentDetails")}>
-          <TabsTrigger value="prompt">{t("agentMessage.workflowUI.prompt")}</TabsTrigger><TabsTrigger value="process">{t("agentMessage.workflowUI.process")}</TabsTrigger><TabsTrigger value="result">{t("agentMessage.workflowUI.output")}</TabsTrigger>
+        <TabsList variant="default" size="sm" className="mx-2 mt-2 max-w-[calc(100%-1rem)] overflow-hidden" aria-label={t("agentMessage.workflowUI.agentDetails")}>
+          {[
+            { value: "prompt", icon: MessageSquareIcon, label: t("agentMessage.workflowUI.prompt") },
+            { value: "process", icon: ListChecksIcon, label: t("agentMessage.workflowUI.process") },
+            { value: "result", icon: TextAlignStartIcon, label: t("agentMessage.workflowUI.output") },
+          ].map(({ value, icon, label }) => (
+            <TabsTrigger key={value} value={value} aria-label={label}
+              className="group-data-[size=sm]/tabs-list:px-1 @min-[360px]:group-data-[size=sm]/tabs-list:px-2 [&_svg:not([class*='size-'])]:size-3.5 dark:data-active:text-white">
+              <TabsTriggerContent active={tab === value} icon={icon} label={label} reduceMotion={Boolean(reduce)} />
+            </TabsTrigger>
+          ))}
         </TabsList>
         {["prompt", "process", "result"].map((value) => <TabsContent value={value} key={value}>
           <div ref={tab === value ? viewport : undefined} tabIndex={0} aria-label={t(`agentMessage.workflowUI.${value === "result" ? "output" : value}`)}

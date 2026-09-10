@@ -91,6 +91,7 @@ describe('/api/sandbox/files', () => {
       content: 'hello',
       is_binary: false,
       preview_url: null,
+      preview_error: null,
     })
 
     const downloadResponse = await server.inject({
@@ -118,6 +119,36 @@ describe('/api/sandbox/files', () => {
     await expect(readdir(join(canonicalWorkspace, 'reports'))).rejects.toMatchObject({
       code: 'ENOENT',
     })
+  })
+
+  it('returns text content at the 3 MiB preview limit', async () => {
+    const size = 3 * 1024 * 1024
+    await writeFile(join(workspace, 'large.txt'), Buffer.alloc(size, 97))
+    const response = await server.inject({ method: 'GET', url: '/api/sandbox/files/preview?path=large.txt' })
+    expect(response.statusCode).toBe(200)
+    const body = response.json<{ content: string }>()
+    expect(body).toMatchObject({ size, is_binary: false, preview_error: null })
+    expect(typeof body.content).toBe('string')
+    expect(Buffer.byteLength(body.content)).toBe(size)
+  })
+
+  it('returns an explicit preview error above 3 MiB and still allows downloading', async () => {
+    const size = 3 * 1024 * 1024 + 1
+    await writeFile(join(workspace, 'large.txt'), Buffer.alloc(size, 97))
+    const response = await server.inject({ method: 'GET', url: '/api/sandbox/files/preview?path=large.txt' })
+    expect(response.statusCode).toBe(200)
+    expect(parseJson(response.body)).toMatchObject({
+      name: 'large.txt',
+      size,
+      content: null,
+      is_binary: false,
+      preview_url: null,
+      preview_error: 'too-large',
+    })
+
+    const download = await server.inject({ method: 'GET', url: '/api/sandbox/files/download?path=large.txt' })
+    expect(download.statusCode).toBe(200)
+    expect(Buffer.byteLength(download.body)).toBe(size)
   })
 
   it('accepts the existing file-first multipart field order and prevents overwrite', async () => {

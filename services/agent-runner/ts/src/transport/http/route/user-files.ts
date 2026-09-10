@@ -102,6 +102,7 @@ export const userFileRoutes: FastifyPluginCallback<UserFileRoutesOptions> = (
         content: preview.content,
         is_binary: preview.isBinary,
         preview_url: preview.previewUrl,
+        preview_error: preview.previewError,
       }
     },
   )

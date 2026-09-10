@@ -88,13 +88,17 @@ npx shadcn@latest add @animate-ui/components-radix-switch
 ### Tab 与侧栏底色
 
 2026-09-09：按用户确认，以下背景色仅用于浅色主题。Tab 修改整组标签栏的底色；
-通用 Tabs 的所有变体、Skill 预览 Tabs 和工作区标签栏共用 `tabs-background`。
+通用 Tabs 的所有变体和 Skill 预览 Tabs 共用 `tabs-background`。
 主侧栏和工作区侧栏统一底色，选中项使用 `sidebar-active`，悬浮使用 `sidebar-accent`。
 深色主题保留各组件原有配色。
 
+2026-09-10：Workspace 标签栏在浅色和深色主题下均使用透明背景。
+
 ```text
-TabsList / Animate UI TabsList / Workspace tab bar
+TabsList / Animate UI TabsList
   -> tabs-background: rgb(229, 229, 229)  #E5E5E5
+Workspace tab bar
+  -> transparent
 Main sidebar / Workspace sidebar
   -> sidebar: rgb(245, 245, 245)          #F5F5F5
   -> sidebar-active: rgb(229, 229, 229)   #E5E5E5
@@ -160,6 +164,68 @@ Base UI 工程中转换出的 `render`。文件正文不做高度布局动画或
 做短时状态切换，减少动态效果时立即更新。Skill 分组复用 `ui/collapsible` 与现有
 `collapsePanel` 动效样式。
 
+### Mermaid 模块加载失败
+
+2026-09-11：Markdown 图表使用局部 `MermaidRenderBoundary`。异步模块加载或图表
+渲染抛错时，仅该图表切换为带错误提示的源代码块，保留复制与换行操作；其他消息继续
+显示并可交互。错误提示支持中英文，刷新页面后重新加载图表。
+
+```text
+Markdown Mermaid block -> MermaidRenderBoundary -> rendered diagram
+                                  |
+                             load/render error
+                                  v
+                         notice + original source
+```
+
+开发环境遇到 `504 Outdated Optimize Dep` 时，先重启 Vite 并使用 `npm run dev -- --force`
+重建依赖缓存，再刷新浏览器。独立验证服务需使用单独的 `cacheDir`，避免覆盖正在运行的
+开发服务缓存；优先复用已经运行的开发服务。
+
+### 工作状态加载动效
+
+2026-09-11：按用户截图指定，在消息列表 `WorkingStatusLine` 的“工作中……”左侧显示
+[Beautiful UI Loading State](https://www.beautifului.dev/r/loading-state.json) 的
+Drive 像素动效。共享入口为 `components/ui/loading-state.tsx`；采用 15 × 15px
+的 3 × 3 方格、650ms 透明度循环和 90ms 波纹间隔。图案颜色读取共享 `loading-state`
+token，浅色 / 深色均为 `rgb(77, 159, 240)`（`#4D9FF0`）。
+文案复用现有工作状态与工具活动摘要，图案置于文字滚动动画之外；回复结束时随状态行
+一同移除。系统或 MotionConfig 要求减少动态效果时，图案保持静态。
+`ThinkingItem` 思考详情标题保持纯文字。
+
+```text
+[pixel grid] Working...
+Thinking  2.3s  v
+  Thinking content
+```
+
+通过以下命令安装后，提取 Drive 图案与对应 keyframes 并接入项目主题；
+未使用的演示文案、计时器、视频及 foundation 样式不纳入应用。
+
+```sh
+npx shadcn add https://www.beautifului.dev/r/loading-state.json
+```
+
+浏览器验证入口为 `/tests/agent-preview.html`，工作状态预览可切换开始 / 结束、
+减少动效及深色模式。
+
+### Workspace Agent 详情标签
+
+2026-09-10：Workspace 的“提示词 / 执行过程 / 输出”按用户指定，复用 sidebar
+Agent / Code 切换的 `TabsList` default 变体；按最新尺寸调整使用 `size="sm"`：
+32px 高圆角底座、选中块滑动，激活项显示对应图标。图标与文字的弹入由共享
+`components/assistant-ui/tabs-trigger-content.tsx` 实现，两处沿用同一组弹簧参数。
+标签文字统一为 12px，图标为 14px，宽栏左右内边距各 8px，窄栏各 4px，避免截断选项。
+减少动态效果时，激活图标和文字直接显示；面板沿用原有内容与滚动逻辑。
+
+```text
+Agent information
+  +---------------------------------------+
+  | Prompt | [icon Execution] | Output    |
+  +---------------------------------------+
+  Current panel content
+```
+
 ### 项目工作目录
 
 2026-09-10：按用户确认的桌面 / 移动端布局，保留主侧栏、聊天区和 Workspace，
@@ -192,6 +258,25 @@ Empty chat cwd chip --+-> Working directory          |
 已有项目的加号直接以该 cwd 开新草稿。空白对话更改目录不重置输入文字或附件，
 已完成与进行中的上传保留绝对路径；之后新增的附件上传到新 cwd。发出首条消息后，
 目录标签只读。
+
+### 文件预览大小限制
+
+2026-09-10：`GET /api/sandbox/files/preview` 的文本内容上限为 3 MiB
+（3 × 1024 × 1024 字节），恰好等于上限时仍返回完整内容。已知文本类型和通过
+内容检测识别的文本共用此限制，按 UTF-8 字节数判断。
+
+超限时保留文件元数据，返回 HTTP 200、`content: null`、`is_binary: false` 和
+`preview_error: "too-large"`；其他成功响应的 `preview_error` 为 `null`。
+前端复用现有预览错误区域，显示“内容过大，无法预览”和 3 MiB 上限说明，保留下载
+入口；超限文件链接仍按文件存在处理。图片 / PDF 的下载预览路径及其他二进制
+渲染器沿用现有逻辑；该限制不改变独立的 Skill 资源接口。
+
+```text
+Text file -> preview size check
+             +-- <= 3 MiB -> content -> source / renderer
+             +-- >  3 MiB -> preview_error: too-large
+                                      -> 内容过大，无法预览 / 下载
+```
 
 ### MCP 页面精修
 
@@ -520,6 +605,10 @@ rg -n '@base-ui/react|motion/react|gsap' agent-ui/src
 - 生产构建：`npm run build`
 - 预览生产构建：`npm run preview`
 
+Mermaid 浏览器回归：打开 `/tests/components/ai-elements/mermaid-browser.html` 并点击
+**Run Mermaid checks**。覆盖真实图表加载、异步模块拒绝、局部源代码回退、复制入口、
+周围消息保留和页面可交互；追加 `?zh&dark` 验证中文提示与深色主题。
+
 目前没有前端全量自动化测试命令，也没有仓库级 formatter。
 `lint` 对应 `oxlint .`，`build` 对应 `tsc -b && vite build`，以
 [package.json](../agent-ui/package.json) 为准。下列测试均从仓库根目录运行；
@@ -548,6 +637,15 @@ node --test agent-ui/tests/features/agent-message/composer-attachments.test.ts a
 ```sh
 node --test agent-ui/tests/features/file-browser/file-tree-content-width.test.ts
 ```
+
+文本预览响应映射、超限提示的中英文渲染，以及消息文件链接存在性回归：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/file-browser/file-preview.test.tsx
+```
+
+后端文件系统与 HTTP 回归覆盖 1–3 MiB、3 MiB 边界、UTF-8 字节数、无扩展名文本、
+二进制分类与超限后的下载，包含在 Runner 的 `npm test` 中。
 
 CodeBlock 自动换行浏览器回归：在开发服务器打开
 `/tests/components/agents/code-block-browser.html`，点击 **Run code block checks**。

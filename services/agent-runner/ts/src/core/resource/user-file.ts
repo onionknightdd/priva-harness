@@ -1,5 +1,5 @@
 export const DEFAULT_USER_FILE_UPLOAD_LIMIT_BYTES = 100 * 1024 * 1024
-export const USER_FILE_PREVIEW_LIMIT_BYTES = 1024 * 1024
+export const USER_FILE_PREVIEW_LIMIT_BYTES = 3 * 1024 * 1024
 
 export type UserFileEntryType = 'file' | 'directory'
 
@@ -45,6 +45,7 @@ export interface UserFilePreview {
   readonly content: string | null
   readonly isBinary: boolean
   readonly previewUrl: string | null
+  readonly previewError: 'too-large' | null
 }
 
 export interface UserFileUploadResult {

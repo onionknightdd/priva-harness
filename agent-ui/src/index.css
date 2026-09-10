@@ -70,9 +70,11 @@
     --color-status-warm: var(--status-warm);
     --color-status-success: var(--status-success);
     --color-status-error: var(--status-error);
+    --color-loading-state: var(--loading-state);
     --color-tool-output: var(--tool-output);
     /* Tool spinners: the default 1s `animate-spin` reads as idle; 0.7s reads as work. */
     --animate-spin-fast: spin 0.7s linear infinite;
+    --animate-loading-state-pixel: loading-state-pixel 650ms ease-in-out infinite;
     --color-context-system: var(--context-system);
     --color-context-tools: var(--context-tools);
     --color-context-skills: var(--context-skills);
@@ -133,6 +135,7 @@
     --status-warm: oklch(0.75 0.1 232);
     --status-success: oklch(0.596 0.13 163);
     --status-error: oklch(0.586 0.21 20);
+    --loading-state: rgb(77 159 240);
     --tool-output: oklch(0.964 0 0);
     --context-system: oklch(0.549 0 0);
     --context-tools: oklch(0.48 0.22 305);
@@ -394,6 +397,15 @@
   padding: 0;
   box-shadow: none;
   backdrop-filter: none;
+}
+
+@keyframes loading-state-pixel {
+  0%, 62%, 100% {
+    opacity: 0.15;
+  }
+  18%, 42% {
+    opacity: 1;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
