@@ -30,6 +30,7 @@ import { sessionRoutes } from './route/sessions.js'
 import { slashCommandRoutes } from './route/slash-commands.js'
 import { userFileRoutes } from './route/user-files.js'
 import { resourceRoutes } from './route/resources.js'
+import { subagentTestRoutes } from './route/subagent-test.js'
 
 export interface BuildHttpServerOptions {
   readonly userFileSystem: UserFileSystem
@@ -110,6 +111,10 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
     void server.register(resourceRoutes, {
       service: options.resourceService,
       onChanged: async () => { await options.agentHarness?.invalidateResources() },
+    })
+    if (options.agentHarness !== undefined) void server.register(subagentTestRoutes, {
+      service: options.resourceService, harness: options.agentHarness, models: options.modelProfileService,
+      profile: options.agentProfileService, cwd: options.userFileSystem.initialDirectory,
     })
   }
   if (options.sessionService !== undefined) {

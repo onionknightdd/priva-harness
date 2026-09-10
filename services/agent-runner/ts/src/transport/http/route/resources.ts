@@ -8,6 +8,8 @@ const prefix = '/api/sandbox/resource'
 const querySchema = z.object({ harness: z.enum(['claude', 'pi']), cwd: z.string().min(1).max(4096).optional() })
 const definitionSchema = z.record(z.string(), z.unknown())
 const draftSchema = z.object({ id: z.string().min(1).optional(), definition: definitionSchema.optional() }).refine((value) => (value.id === undefined) !== (value.definition === undefined), 'Provide either id or definition')
+const agentDraft = z.object({ definition: definitionSchema, prompt: z.string().max(1024 * 1024) })
+const revisionSchema = z.string().regex(/^[A-Za-z0-9_-]{32}$/u)
 
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value)
@@ -26,6 +28,47 @@ function id(value: unknown): string {
 
 export const resourceRoutes: FastifyPluginCallback<{ service: ResourceService; onChanged?: () => Promise<void> }> = (server, { service, onChanged }, done) => {
   server.get(`${prefix}/skills`, async (request) => await service.skills.list(query(request.query)))
+  server.get(`${prefix}/subagents/catalog`, (request) => service.subagents.catalog(query(request.query)))
+  server.get(`${prefix}/subagents`, async (request) => await service.subagents.list(query(request.query)))
+  server.get(`${prefix}/subagents/:id`, async (request) => await service.subagents.get(query(request.query), id(request.params)))
+  server.post(`${prefix}/subagents`, async (request, reply) => {
+    const input = parse(agentDraft.extend({ sourceId: revisionSchema }).strict(), request.body)
+    const result = await service.subagents.create(query(request.query), input)
+    await onChanged?.()
+    return await reply.code(201).send(result)
+  })
+  server.patch(`${prefix}/subagents/:id`, async (request) => {
+    const input = parse(agentDraft.extend({ revision: revisionSchema }).strict(), request.body)
+    const result = await service.subagents.update(query(request.query), id(request.params), input)
+    await onChanged?.()
+    return result
+  })
+  server.delete(`${prefix}/subagents/:id`, async (request, reply) => {
+    const { revision } = parse(z.object({ revision: revisionSchema }).strict(), request.body)
+    await service.subagents.delete(query(request.query), id(request.params), revision)
+    await onChanged?.()
+    return await reply.code(204).send()
+  })
+  server.get(`${prefix}/memory`, async (request) => await service.memory.list(query(request.query)))
+  server.get(`${prefix}/memory/:id`, async (request) => await service.memory.get(query(request.query), id(request.params)))
+  server.patch(`${prefix}/memory/:id`, async (request) => {
+    const { content, revision } = parse(z.object({ content: z.string().max(1024 * 1024), revision: revisionSchema }).strict(), request.body)
+    const result = await service.memory.update(query(request.query), id(request.params), content, revision)
+    await onChanged?.()
+    return result
+  })
+  server.delete(`${prefix}/memory/:id`, async (request, reply) => {
+    const { revision } = parse(z.object({ revision: revisionSchema }).strict(), request.body)
+    await service.memory.delete(query(request.query), id(request.params), revision)
+    await onChanged?.()
+    return await reply.code(204).send()
+  })
+  server.put(`${prefix}/memory/auto/enabled`, async (request) => {
+    const { enabled } = parse(z.object({ enabled: z.boolean() }).strict(), request.body)
+    const result = await service.memory.toggle(query(request.query), enabled)
+    await onChanged?.()
+    return result
+  })
   server.get(`${prefix}/skills/:id`, async (request) => await service.skills.get(query(request.query), id(request.params)))
   server.get(`${prefix}/skills/:id/file`, async (request) => {
     const path = parse(z.object({ path: z.string().min(1).max(4096) }), request.query).path

@@ -36,6 +36,7 @@ export interface AgentHarnessOptions {
 export interface AgentRunOptions {
   readonly runId?: string
   readonly session?: SessionTarget
+  readonly keepRuntimeWarm?: boolean
 }
 
 export interface ListSlashCommandsOptions {
@@ -196,17 +197,18 @@ export class AgentHarness {
     const session = this.prepareSession(spec, runOptions?.session, false)
     const provider = this.options.providers[spec.provider]
     const poolKey = sessionRefOf(session)
-    const runtime = this.pool === undefined
+    const pool = runOptions?.keepRuntimeWarm === false ? undefined : this.pool
+    const runtime = pool === undefined
       ? await provider.openSession(session, spec)
-      : await this.pool.acquire(poolKey, spec, () => provider.openSession(session, spec))
+      : await pool.acquire(poolKey, spec, () => provider.openSession(session, spec))
 
     try {
       yield* this.forward(runtime, turn, context, spec, runId, stamper)
     } finally {
-      if (this.pool === undefined || runtime.session.id === '') {
+      if (pool === undefined || runtime.session.id === '') {
         await runtime.release('dispose')
       } else {
-        await this.pool.recycle(runtime, spec, runtime.session)
+        await pool.recycle(runtime, spec, runtime.session)
       }
     }
   }

@@ -7,7 +7,7 @@ import { expect, it } from 'vitest'
 import { SettingsManager } from '@earendil-works/pi-coding-agent'
 import { createPiResourceLoader } from '../../../../src/provider/pi/pi-resource-loader.js'
 
-it('loads the Pi MCP adapter with its ESM compatibility and TypeBox subpaths', async () => {
+it('loads the Pi host extensions with their ESM compatibility and TypeBox subpaths', async () => {
   const root = await mkdtemp(join(tmpdir(), 'pi-loader-test-'))
   try {
     const loader = await createPiResourceLoader(root, join(root, 'agent'), SettingsManager.inMemory())

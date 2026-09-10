@@ -1,4 +1,5 @@
 import type { McpDetail, McpSummary, ResourceList, ResourceQuery, ResourceScope, SkillDetail, SkillSummary } from '../resource/resource-catalog.js'
+import type { AutoMemoryProject, MemoryDetail, MemoryList, SubagentCatalog, SubagentDetail, SubagentDraft, SubagentSummary } from '../resource/agent-resources.js'
 
 export interface McpCapabilities {
   readonly tools: Record<string, unknown>[]
@@ -8,6 +9,21 @@ export interface McpCapabilities {
 }
 
 export interface ResourceService {
+  readonly subagents: {
+    catalog(query: ResourceQuery): SubagentCatalog
+    list(query: ResourceQuery): Promise<ResourceList<SubagentSummary>>
+    get(query: ResourceQuery, id: string): Promise<SubagentDetail>
+    create(query: ResourceQuery, input: SubagentDraft & { sourceId: string }): Promise<SubagentDetail>
+    update(query: ResourceQuery, id: string, input: SubagentDraft & { revision: string }): Promise<SubagentDetail>
+    delete(query: ResourceQuery, id: string, revision: string): Promise<void>
+  }
+  readonly memory: {
+    list(query: ResourceQuery): Promise<MemoryList>
+    get(query: ResourceQuery, id: string): Promise<MemoryDetail>
+    update(query: ResourceQuery, id: string, content: string, revision: string): Promise<MemoryDetail>
+    delete(query: ResourceQuery, id: string, revision: string): Promise<void>
+    toggle(query: ResourceQuery, enabled: boolean): Promise<AutoMemoryProject>
+  }
   readonly skills: {
     list(query: ResourceQuery): Promise<ResourceList<SkillSummary>>
     get(query: ResourceQuery, id: string): Promise<SkillDetail>

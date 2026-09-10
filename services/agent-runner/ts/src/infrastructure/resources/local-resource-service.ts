@@ -8,10 +8,14 @@ import { canonicalDirectory, ResourceFiles } from './resource-files.js'
 import type { ResourceEnvironment } from './resource-sources.js'
 import { downloadSkillArchive, readSkillArchive } from './skill-archives.js'
 import { SkillCatalog } from './skill-catalog.js'
+import { SubagentCatalog } from './subagent-catalog.js'
+import { MemoryCatalog } from './memory-catalog.js'
 
 export class LocalResourceService implements ResourceService {
   readonly skills: SkillCatalog
   readonly mcp: McpCatalog
+  readonly subagents: SubagentCatalog
+  readonly memory: MemoryCatalog
   private readonly probe = new McpProbe()
 
   constructor(private readonly options: ResourceEnvironment & { activeCwd: string; discoverProjects: (harness: ProviderId) => Promise<readonly string[]> }) {
@@ -19,6 +23,8 @@ export class LocalResourceService implements ResourceService {
     const projects = new ProjectDirectories(options.activeCwd, options.discoverProjects)
     this.skills = new SkillCatalog(options, files, projects)
     this.mcp = new McpCatalog(options, files, projects)
+    this.subagents = new SubagentCatalog(options, files, projects)
+    this.memory = new MemoryCatalog(options, files, projects, this.subagents)
   }
 
   async uploadSkill(query: ResourceQuery, scope: 'global' | 'project', filename: string, data: Buffer) {

@@ -602,6 +602,12 @@ MCP 页面浏览器回归：打开 `/tests/features/resources/mcp-browser.html`�
 项目连接的 cwd、最近详情数量上限，以及 390px iframe 的搜索、Tab 和返回操作。
 附加 `?reduced-motion=1&dark=1` 检查深色和减少动态效果；不会连接或修改真实服务。
 
+Subagent 测试流客户端：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --test agent-ui/tests/features/resources/agent-resource-api.test.ts
+```
+
 测试继续放在 `agent-ui/tests/` 的对应目录中，遵守根 `AGENTS.md` 的测试组织要求。
 只报告实际运行的检查；执行受阻时说明原因和未验证范围。后端测试及编译产物的
 Pi MCP 生命周期探针仍由根 `AGENTS.md` 维护。
