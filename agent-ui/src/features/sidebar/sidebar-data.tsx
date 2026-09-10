@@ -12,7 +12,6 @@ import {
   FolderSearchIcon,
   NotebookPenIcon,
   ScrollTextIcon,
-  UploadIcon,
   WebhookIcon,
 } from "lucide-react"
 
@@ -70,10 +69,6 @@ export const sidebarData = {
         {
           titleKey: "sidebar.navigation.activityAndTraces",
           icon: <ActivityIcon />,
-        },
-        {
-          titleKey: "sidebar.navigation.uploads",
-          icon: <UploadIcon />,
         },
         {
           titleKey: "sidebar.navigation.fileBrowser",
