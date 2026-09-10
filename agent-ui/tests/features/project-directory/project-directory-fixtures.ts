@@ -6,25 +6,25 @@ export function installProjectDirectoryFixtures() {
   const originalUpload = window.XMLHttpRequest
   const scrollFolders = Array.from({ length: 48 }, (_, index) => `folder-${String(index + 1).padStart(2, "0")}`)
   const directories = new Map<string, string[]>([
-    ["/", ["work"]], ["/work", ["existing", "other", "denied", "lazy"]],
-    ["/work/existing", scrollFolders], ["/work/other", []], ["/work/lazy", ["child"]],
-    ["/work/lazy/child", []],
+    ["/workspace", ["work"]], ["/workspace/work", ["existing", "other", "denied", "lazy"]],
+    ["/workspace/work/existing", scrollFolders], ["/workspace/work/other", []], ["/workspace/work/lazy", ["child"]],
+    ["/workspace/work/lazy/child", []],
   ])
-  scrollFolders.forEach((name) => directories.set(`/work/existing/${name}`, []))
-  const failures = new Map([["/work/denied", "Permission denied"]])
+  scrollFolders.forEach((name) => directories.set(`/workspace/work/existing/${name}`, []))
+  const failures = new Map([["/workspace/work/denied", "Permission denied"]])
   const requests: string[] = []
   const unexpected: string[] = []
   const held = new Map<string, { resolve: (response: Response) => void; signal?: AbortSignal | null }>()
   const holdPaths = new Set<string>()
   const sessions = [{
     session_id: "existing-session", summary: "Existing conversation", first_prompt: "Existing conversation",
-    cwd: "/work/existing", last_modified: Date.now(), custom_title: null, tag: null,
+    cwd: "/workspace/work/existing", last_modified: Date.now(), custom_title: null, tag: null,
     tags: [], tag_colors: {}, pinned: false, archived: false, run_mode: "agent",
   }]
 
   function listing(path: string): FileSystemDirectory {
     return {
-      path, parent: path === "/" ? null : path.slice(0, path.lastIndexOf("/")) || "/",
+      root: "/workspace", path, parent: path === "/workspace" ? null : path.slice(0, path.lastIndexOf("/")) || "/",
       entries: [...(directories.get(path) ?? []).map((name) => ({
         path: `${path === "/" ? "" : path}/${name}`, name, type: "directory" as const,
         size: null, modified: null, permissions: null,
@@ -37,8 +37,9 @@ export function installProjectDirectoryFixtures() {
     if (!url.pathname.startsWith("/api/")) return originalFetch(input, init)
     requests.push(`${init?.method ?? "GET"} ${url.pathname}${url.search}`)
     if (url.pathname === "/api/sandbox/files/list") {
-      const raw = url.searchParams.get("path") || "/work/existing"
-      const path = raw === "~/other" ? "/work/other" : raw
+      const raw = url.searchParams.get("path") || "/workspace"
+      const path = raw === "~/other" ? "/workspace/work/other" : raw
+      if (path !== "/workspace" && !path.startsWith("/workspace/")) return Response.json({ detail: "Directory is outside WORKSPACE_DIR" }, { status: 403 })
       if (holdPaths.has(path)) return new Promise((resolve) => held.set(path, { resolve, signal: init?.signal }))
       if (failures.has(path)) return Response.json({ detail: failures.get(path) }, { status: 403 })
       return directories.has(path) ? Response.json(listing(path)) : Response.json({ detail: "Directory not found" }, { status: 404 })
@@ -51,6 +52,13 @@ export function installProjectDirectoryFixtures() {
       directories.get(directory)!.push(name)
       return Response.json({ path, name })
     }
+    if (url.pathname === "/api/sandbox/files" && init?.method === "DELETE") {
+      const path = url.searchParams.get("path")!
+      for (const directory of directories.keys()) {
+        if (directory === path || directory.startsWith(`${path}/`)) directories.delete(directory)
+      }
+      return Response.json({ status: "ok", path })
+    }
     if (url.pathname === "/api/sandbox/files/preview") {
       const path = url.searchParams.get("path")!
       return Response.json({ path, name: path.split("/").at(-1), mime_type: "text/plain", size: 12, content: "Attachment fixture", is_binary: false, preview_url: null })
@@ -59,7 +67,7 @@ export function installProjectDirectoryFixtures() {
     if (/^\/api\/sandbox\/agent\/sessions\/new-session-\d+\/context-usage$/.test(url.pathname)) return Response.json(null)
     if (url.pathname === "/api/sandbox/agent/sessions/running") return Response.json({ running: [], warm: [] })
     if (url.pathname === "/api/sandbox/agent/sessions") return Response.json({
-      active_cwd: "/work/existing", groups: [...new Set(sessions.map((session) => session.cwd))].map((cwd) => ({
+      active_cwd: "/workspace/work/existing", groups: [...new Set(sessions.map((session) => session.cwd))].map((cwd) => ({
         cwd, pinned: false, has_more: false, sessions: sessions.filter((session) => session.cwd === cwd),
       })),
     })

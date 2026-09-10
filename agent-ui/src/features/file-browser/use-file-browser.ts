@@ -19,6 +19,7 @@ import {
   mergeDirectoryListing,
   previewResponseToFile,
   removeFileBrowserPath,
+  revealFileBrowserDirectory,
   type FileBrowserItem,
   type FileBrowserModel,
 } from "./file-browser-data"
@@ -36,6 +37,7 @@ export function useFileBrowser() {
   )
   const modelRef = React.useRef(model)
   const [rootPath, setRootPath] = React.useState<string | null>(null)
+  const workspaceRootRef = React.useRef<string | null>(null)
   const [selectedItemPath, setSelectedItemPath] = React.useState<
     string | null
   >(null)
@@ -102,6 +104,8 @@ export function useFileBrowser() {
             return directory
           }
 
+          workspaceRootRef.current = directory.root
+          setRootPath(directory.root)
           updateModel((currentModel) =>
             mergeDirectoryListing(
               currentModel,
@@ -136,7 +140,6 @@ export function useFileBrowser() {
 
     return loadDirectory()
       .then((directory) => {
-        setRootPath(directory.path)
         setSelectedItemPath((current) => current ?? directory.path)
       })
       .catch((error: unknown) => {
@@ -219,7 +222,14 @@ export function useFileBrowser() {
     async (path: string) => {
       const parentPath = getFileBrowserParentPath(path)
       if (parentPath) {
-        await loadDirectory(parentPath, parentPath).catch(() => undefined)
+        const workspaceRoot = workspaceRootRef.current ?? await loadDirectory()
+          .then((directory) => directory.root)
+          .catch(() => null)
+        // A message can preview a file outside the workspace without loading
+        // that file's parent directory into the bounded file tree.
+        if (workspaceRoot && isSameOrDescendantPath(parentPath, workspaceRoot)) {
+          await loadDirectory(parentPath, parentPath).catch(() => undefined)
+        }
       }
 
       return openFile({
@@ -264,14 +274,16 @@ export function useFileBrowser() {
     async (path: string) => {
       try {
         const directory = await loadDirectory(path)
-        setRootPath(directory.path)
+        updateModel((current) => revealFileBrowserDirectory(current, directory.path, directory.root))
+        const ancestors = getFileBrowserBreadcrumb(directory.path, directory.root).slice(0, -1)
+        await Promise.all(ancestors.map((entry) => loadDirectory(entry.path)))
         setSelectedItemPath(directory.path)
         return true
       } catch {
         return false
       }
     },
-    [loadDirectory]
+    [loadDirectory, updateModel]
   )
 
   const navigateBreadcrumb = React.useCallback(
@@ -356,8 +368,8 @@ export function useFileBrowser() {
           isSameOrDescendantPath(selectedItemPath, item.path)
       )
 
-      if (rootWasDeleted && parentPath) {
-        await goToDirectory(parentPath)
+      if (rootWasDeleted) {
+        await loadInitialDirectory()
       } else if (parentPath && modelRef.current.childrenByPath[parentPath]) {
         await refreshDirectory(parentPath)
       }
@@ -367,7 +379,7 @@ export function useFileBrowser() {
       }
     },
     [
-      goToDirectory,
+      loadInitialDirectory,
       refreshDirectory,
       rootPath,
       selectedItemPath,
@@ -418,11 +430,9 @@ export function useFileBrowser() {
     selectedItem?.type === "folder"
       ? selectedItem.path
       : selectedItem?.parentPath ?? rootPath
-  const breadcrumb = selectedItem
-    ? getFileBrowserBreadcrumb(selectedItem.path, selectedItem.type)
-    : rootPath
-      ? getFileBrowserBreadcrumb(rootPath)
-      : []
+  const breadcrumb = rootPath
+    ? getFileBrowserBreadcrumb(selectedItem?.path ?? rootPath, rootPath, selectedItem?.type)
+    : []
 
   return {
     activeFileId,

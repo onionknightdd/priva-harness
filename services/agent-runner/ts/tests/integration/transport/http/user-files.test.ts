@@ -58,7 +58,9 @@ describe('/api/sandbox/files', () => {
     })
     expect(listResponse.statusCode).toBe(200)
     expect(parseJson(listResponse.body)).toMatchObject({
+      root: canonicalWorkspace,
       path: canonicalWorkspace,
+      parent: null,
       entries: [{
         path: join(canonicalWorkspace, 'hello world.txt'),
         name: 'hello world.txt',
@@ -149,6 +151,18 @@ describe('/api/sandbox/files', () => {
     const download = await server.inject({ method: 'GET', url: '/api/sandbox/files/download?path=large.txt' })
     expect(download.statusCode).toBe(200)
     expect(Buffer.byteLength(download.body)).toBe(size)
+  })
+
+  it('keeps directory navigation within WORKSPACE_DIR', async () => {
+    await mkdir(join(workspace, 'project'))
+    const nested = await server.inject({ method: 'GET', url: '/api/sandbox/files/list?path=project' })
+    expect(nested.statusCode).toBe(200)
+    expect(parseJson(nested.body)).toMatchObject({
+      root: canonicalWorkspace, path: join(canonicalWorkspace, 'project'), parent: canonicalWorkspace,
+    })
+    const outside = await server.inject({ method: 'GET', url: '/api/sandbox/files/list?path=..' })
+    expect(outside.statusCode).toBe(403)
+    expect(parseJson(outside.body)).toMatchObject({ detail: 'Directory is outside WORKSPACE_DIR: ..' })
   })
 
   it('accepts the existing file-first multipart field order and prevents overwrite', async () => {

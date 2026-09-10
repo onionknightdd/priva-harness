@@ -31,8 +31,9 @@ export const listDirectorySchema = {
     200: {
       type: 'object',
       additionalProperties: false,
-      required: ['path', 'parent', 'entries'],
+      required: ['root', 'path', 'parent', 'entries'],
       properties: {
+        root: { type: 'string' },
         path: { type: 'string' },
         parent: nullableString,
         entries: { type: 'array', items: fileEntrySchema },

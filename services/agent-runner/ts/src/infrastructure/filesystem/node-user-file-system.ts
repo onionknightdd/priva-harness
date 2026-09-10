@@ -1,6 +1,7 @@
 import { createReadStream, createWriteStream, type Stats } from 'node:fs'
 import {
   type FileHandle,
+  lstat,
   mkdir,
   mkdtemp,
   open,
@@ -19,7 +20,9 @@ import {
   isAbsolute,
   join,
   parse,
+  relative,
   resolve,
+  sep,
 } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
@@ -111,8 +114,12 @@ export class NodeUserFileSystem implements UserFileSystem {
   }
 
   async listDirectory(requestedPath: string): Promise<UserFileDirectory> {
+    const root = await this.requireDirectory(this.initialDirectory)
     const candidate = this.resolveCandidate(requestedPath)
     const directoryPath = await this.requireDirectory(candidate)
+    if (!isWithinDirectory(root, directoryPath)) {
+      throw new UserFileError('access-denied', `Directory is outside WORKSPACE_DIR: ${requestedPath}`)
+    }
 
     let names: string[]
     try {
@@ -124,15 +131,13 @@ export class NodeUserFileSystem implements UserFileSystem {
     const entries: UserFileEntry[] = []
     for (let offset = 0; offset < names.length; offset += DIRECTORY_STAT_CONCURRENCY) {
       const batch = names.slice(offset, offset + DIRECTORY_STAT_CONCURRENCY)
-      entries.push(...await Promise.all(
-        batch.map((name) => describeEntry(directoryPath, name)),
-      ))
+      const described = await Promise.all(batch.map((name) => describeEntry(directoryPath, name, root)))
+      entries.push(...described.filter((entry): entry is UserFileEntry => entry !== null))
     }
 
     entries.sort(compareEntries)
-    const root = parse(directoryPath).root
-
     return {
+      root,
       path: directoryPath,
       parent: directoryPath === root ? null : dirname(directoryPath),
       entries,
@@ -474,10 +479,20 @@ export class NodeUserFileSystem implements UserFileSystem {
   }
 }
 
-async function describeEntry(directoryPath: string, name: string): Promise<UserFileEntry> {
+function isWithinDirectory(root: string, path: string): boolean {
+  const pathFromRoot = relative(root, path)
+  return pathFromRoot !== '..' && !pathFromRoot.startsWith(`..${sep}`) && !isAbsolute(pathFromRoot)
+}
+
+async function describeEntry(directoryPath: string, name: string, root: string): Promise<UserFileEntry | null> {
   const path = join(directoryPath, name)
   try {
-    const stats = await stat(path)
+    let stats = await lstat(path)
+    if (stats.isSymbolicLink()) {
+      const target = await realpath(path)
+      if (!isWithinDirectory(root, target)) return null
+      stats = await stat(target)
+    }
     const type = stats.isDirectory() ? 'directory' : 'file'
     return {
       path,

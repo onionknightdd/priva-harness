@@ -236,6 +236,11 @@ CreateFolderDialog；目录行沿用共享文件树高度，仅显示文件夹�
 文件夹按钮换行，底部已选路径位于取消 / 使用按钮上方。弹窗与树沿用共享动效、
 键盘操作和 reduced-motion。
 
+目录滚动区直接沿用 FileTreePane 的 `card` 底色、底部留白、稳定滚动条槽、
+inline-size 容器与 overscroll 设置；树外不加顶部或侧边留白，吸顶边界与文件浏览器一致。
+吸附底色只用于有子项的展开目录实际停驻的区间；折叠目录、空目录经过遮挡区，或展开目录
+被自身子树末端推离吸附位置时，保持普通底色。真实选中状态单独保留。
+
 ```text
 Project [+] -----------+                    Existing project [+]
 Empty chat cwd chip --+-> Working directory          |
@@ -258,6 +263,38 @@ Empty chat cwd chip --+-> Working directory          |
 已有项目的加号直接以该 cwd 开新草稿。空白对话更改目录不重置输入文字或附件，
 已完成与进行中的上传保留绝对路径；之后新增的附件上传到新 cwd。发出首条消息后，
 目录标签只读。
+
+默认目录由后端启动时的 `WORKSPACE_DIR` 决定；未设置时使用后端进程用户的
+`homedir()`。会话列表接口返回 `active_cwd`，前端用它初始化默认项目和新对话。
+项目标题加号从该目录打开选择器，空白对话的目录标签则从当前草稿的 cwd 打开。
+选择目录只改变该草稿，不修改服务端默认目录。
+
+### 文件浏览范围
+
+2026-09-10：工作目录选择器、Workspace 文件浏览器和“数据与用量 → 文件浏览器”
+固定以 `WORKSPACE_DIR` 为树根，沿用未配置时的 `homedir()` 默认值。目录列表接口
+返回规范化的 `root`；根目录的 `parent` 为 `null`，前端据此截断树和面包屑。
+跳转深层目录只补载根目录以内的祖先，子目录仍在展开时按需读取，不递归扫描整棵树。
+
+```text
+DirectoryPicker / Workspace / FileBrowserPage
+                    |
+                    v
+             GET files/list
+                    |
+              root = WORKSPACE_DIR
+              +-- project-a
+              |     +-- src (load on expand)
+              +-- project-b
+```
+
+后端解析真实路径后校验范围，拒绝上一级、其他绝对目录以及通向外部目录的符号链接；
+列表不包含指向工作区外的文件或目录链接。手动输入越界路径会显示错误，保留当前树根。
+选择器先读取工作区根目录，再定位草稿 cwd；旧草稿 cwd 越界时仍可从根目录重新选择。
+消息中的外部文件仍可单独预览，但不会加载其父目录到树中。
+
+此范围适用于 `files/list` 驱动的文件浏览；Skills 使用独立的资源接口，继续按技能
+自身路径展示资源树。文件预览、上传、新建、删除及 Agent 执行的路径规则保持原有职责。
 
 ### 文件预览大小限制
 
@@ -627,14 +664,19 @@ node --test agent-ui/tests/features/agent-message/composer-attachments.test.ts a
 **Run project directory checks**。使用真实 App 组件与隔离的目录 / 会话 / 上传 / WS
 模拟，覆盖两个入口、懒加载与键盘展开、路径错误和重试、新建重名及自动选择、
 草稿和上传保留、首条消息 cwd / 附件 / 分组、已有项目新对话、关闭后过期响应、
-焦点恢复与弹窗溢出；长目录滚动检查吸顶行贴合顶部、各层保持选中背景、缩进区域
-不透明，以及返回顶部后恢复正常背景。追加 `?dark=1&zh=1` 检查深色与中文；追加 `&manual=1`
+焦点恢复与弹窗溢出，以及选择器、主文件浏览器和 Workspace 的根目录范围、深层导航、
+祖先目录补载、面包屑和越界输入；长目录滚动检查吸顶行贴合顶部、各层保持选中背景、缩进区域
+不透明、滚动区与吸顶行底色一致、两侧无额外留白，以及返回顶部后恢复正常背景。
+被吸附祖先遮挡的折叠目录不应出现吸附高亮。
+追加 `?dark=1&zh=1` 检查深色与中文；追加 `&manual=1`
 用于桌面 / 移动端视觉和真实 Tab、方向键、Enter、Esc 检查。模拟接口不访问真实
-目录，不启动模型请求。
+目录，不启动模型请求。视觉检查需将鼠标停留在吸顶目录行上滚动，确认悬浮时仍保持
+选中底色，并在移出鼠标后保持一致。
 
-文件树宽度测量回归：
+文件树范围与宽度测量回归：
 
 ```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/file-browser/file-browser-scope.test.ts
 node --test agent-ui/tests/features/file-browser/file-tree-content-width.test.ts
 ```
 

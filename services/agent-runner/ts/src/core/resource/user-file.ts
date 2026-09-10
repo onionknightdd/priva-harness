@@ -13,6 +13,7 @@ export interface UserFileEntry {
 }
 
 export interface UserFileDirectory {
+  readonly root: string
   readonly path: string
   readonly parent: string | null
   readonly entries: readonly UserFileEntry[]

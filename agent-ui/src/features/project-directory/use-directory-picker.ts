@@ -4,7 +4,7 @@ import {
   emptyFileBrowserModel,
   getFileBrowserBreadcrumb,
   mergeDirectoryListing,
-  type FileBrowserModel,
+  revealFileBrowserDirectory,
 } from "@/features/file-browser/file-browser-data"
 import {
   createDirectory,
@@ -17,28 +17,10 @@ type RequestScope = {
   cache: Map<string, FileSystemDirectory>
   requests: Map<string, Promise<FileSystemDirectory>>
   navigation: number
+  rootPath: string | null
 }
 
 type DirectoryError = { path: string | undefined; message: string }
-
-// A verified absolute path gives us its ancestors even when a parent cannot be
-// listed. Keep that path reachable while loading the rest of the directory tree.
-function revealPath(model: FileBrowserModel, path: string): FileBrowserModel {
-  const items = { ...model.items }
-  const childrenByPath = { ...model.childrenByPath }
-  const chain = getFileBrowserBreadcrumb(path)
-  chain.forEach((entry, index) => {
-    const parentPath = chain[index - 1]?.path ?? null
-    items[entry.path] ??= {
-      path: entry.path, name: entry.name, type: "folder", parentPath,
-      size: null, modifiedAt: null, permissions: null,
-    }
-    if (parentPath && !childrenByPath[parentPath]?.includes(entry.path)) {
-      childrenByPath[parentPath] = [...(childrenByPath[parentPath] ?? []), entry.path]
-    }
-  })
-  return { items, childrenByPath }
-}
 
 export function useDirectoryPicker(open: boolean, initialPath: string) {
   const scopeRef = React.useRef<RequestScope | null>(null)
@@ -61,6 +43,7 @@ export function useDirectoryPicker(open: boolean, initialPath: string) {
     const request = listDirectory(path, scope.controller.signal)
       .then((directory) => {
         if (scopeRef.current !== scope) return directory
+        scope.rootPath = directory.root
         scope.cache.set(key, directory)
         scope.cache.set(directory.path, directory)
         setModel((current) => mergeDirectoryListing(current, {
@@ -98,9 +81,9 @@ export function useDirectoryPicker(open: boolean, initialPath: string) {
     try {
       const directory = await loadDirectory(scope, path?.trim() || undefined, true)
       if (scopeRef.current !== scope || scope.navigation !== navigation) return false
-      setModel((current) => revealPath(current, directory.path))
-      const chain = getFileBrowserBreadcrumb(directory.path)
-      setRootPath(chain[0]?.path ?? directory.path)
+      setModel((current) => revealFileBrowserDirectory(current, directory.path, directory.root))
+      const chain = getFileBrowserBreadcrumb(directory.path, directory.root)
+      setRootPath(directory.root)
       setSelectedPath(directory.path)
       // Parent listing failures are reported by loadDirectory; they do not make
       // the already verified destination unusable.
@@ -116,7 +99,7 @@ export function useDirectoryPicker(open: boolean, initialPath: string) {
   React.useEffect(() => {
     if (!open) return
     const scope: RequestScope = {
-      controller: new AbortController(), cache: new Map(), requests: new Map(), navigation: 0,
+      controller: new AbortController(), cache: new Map(), requests: new Map(), navigation: 0, rootPath: null,
     }
     scopeRef.current = scope
     setModel(emptyFileBrowserModel)
@@ -124,7 +107,13 @@ export function useDirectoryPicker(open: boolean, initialPath: string) {
     setSelectedPath(null)
     setLoadingDirectories(new Set())
     setConfirming(false)
-    void navigateTo(initialPath)
+    // Discover the workspace first, so an old draft outside it still opens a
+    // usable picker at the configured root with the navigation error visible.
+    void navigateTo().then((ready) => {
+      if (ready && scopeRef.current === scope && initialPath.trim() && initialPath.trim() !== scope.rootPath) {
+        return navigateTo(initialPath)
+      }
+    })
     return () => {
       scopeRef.current = null
       scope.controller.abort()
@@ -150,10 +139,11 @@ export function useDirectoryPicker(open: boolean, initialPath: string) {
 
   const makeDirectory = React.useCallback(async (parent: string, name: string) => {
     const scope = scopeRef.current
-    if (!scope) return
+    if (!scope?.rootPath) return
     const created = await createDirectory(parent, name)
     if (scopeRef.current !== scope) return
-    setModel((current) => revealPath(current, created.path))
+    const root = scope.rootPath
+    setModel((current) => revealFileBrowserDirectory(current, created.path, root))
     setSelectedPath(created.path)
     // Creation is complete even if refreshing fails. Surface the read error
     // outside the create dialog so retry cannot accidentally repeat mkdir.
@@ -181,11 +171,11 @@ export function useDirectoryPicker(open: boolean, initialPath: string) {
     const scope = scopeRef.current
     if (!scope) return
     if (!rootPath) {
-      await navigateTo(initialPath)
+      await navigateTo()
     } else if (error) {
       try { await loadDirectory(scope, error.path, true) } catch { /* displayed in the dialog */ }
     }
-  }, [error, initialPath, loadDirectory, navigateTo, rootPath])
+  }, [error, loadDirectory, navigateTo, rootPath])
 
   return {
     model, rootPath, selectedPath, loadingDirectories, navigating, confirming, error,

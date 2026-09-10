@@ -182,7 +182,7 @@ const FileBrowserTreeRow = React.memo(function FileBrowserTreeRow({
             }}
           />
         ))}
-      <TreeItemLabel showToggle={!hideToggle} className="relative z-[1] min-h-6.5 w-full min-w-0 max-w-full gap-1 bg-transparent! py-0.75 pe-5 hover:bg-transparent! in-data-[selected=true]:bg-accent! in-data-[stuck=true]:bg-accent! in-data-popup-open:bg-accent!">
+      <TreeItemLabel showToggle={!hideToggle} className="relative z-[1] min-h-6.5 w-full min-w-0 max-w-full gap-1 bg-transparent! py-0.75 pe-5 hover:bg-transparent! in-data-[selected=true]:bg-accent! in-data-[stuck=true]:bg-accent! in-data-[stuck=true]:hover:bg-accent! in-data-popup-open:bg-accent!">
         <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
           {icon ?? (isFolder ? (
             <FileTreeFolderIcon expanded={expanded} />
@@ -314,7 +314,9 @@ function FileBrowserTreeNode({
   const loading = isFolder && loadingDirectories.has(data.path)
   // Wait for the first directory listing so the panel measures its real height.
   const panelOpen = expanded && (children.length > 0 || !loading)
+  const canStick = isFolder && expanded && children.length > 0
   const stickySentinelRef = React.useRef<HTMLSpanElement>(null)
+  const stickyEndSentinelRef = React.useRef<HTMLSpanElement>(null)
 
   React.useEffect(() => {
     if (isFolder && expanded) onFolderExpand?.(data.path)
@@ -322,6 +324,7 @@ function FileBrowserTreeNode({
 
   React.useEffect(() => {
     const sentinel = stickySentinelRef.current
+    const endSentinel = stickyEndSentinelRef.current
     const row = sentinel?.parentElement?.querySelector<HTMLButtonElement>(
       ':scope > [data-file-tree-folder-row="true"]'
     )
@@ -332,29 +335,37 @@ function FileBrowserTreeNode({
     if (
       !isFolder ||
       !sentinel ||
+      !endSentinel ||
       !row ||
-      !scrollContainer ||
-      typeof IntersectionObserver === "undefined"
+      !scrollContainer
     ) {
       return
     }
 
-    let isStuck = false
     row.dataset.stuck = "false"
+    if (!canStick || typeof IntersectionObserver === "undefined") return
+
+    let isStuck = false
+    let startAboveBoundary = false
+    let endAboveBoundary = false
 
     const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry) {
-          return
+      (entries) => {
+        for (const entry of entries) {
+          const stickyBoundary =
+            entry.rootBounds?.top ??
+            scrollContainer.getBoundingClientRect().top +
+              level * FILE_TREE_ROW_HEIGHT
+          const aboveBoundary =
+            !entry.isIntersecting &&
+            entry.boundingClientRect.top < stickyBoundary
+          if (entry.target === sentinel) startAboveBoundary = aboveBoundary
+          if (entry.target === endSentinel) endAboveBoundary = aboveBoundary
         }
 
-        const stickyBoundary =
-          entry.rootBounds?.top ??
-          scrollContainer.getBoundingClientRect().top +
-            level * FILE_TREE_ROW_HEIGHT
-        const nextIsStuck =
-          !entry.isIntersecting &&
-          entry.boundingClientRect.top < stickyBoundary
+        // Crossing the top alone also catches ordinary rows scrolling away.
+        // A sticky row must still have enough subtree below it to stay pinned.
+        const nextIsStuck = startAboveBoundary && !endAboveBoundary
 
         if (nextIsStuck === isStuck) {
           return
@@ -371,12 +382,13 @@ function FileBrowserTreeNode({
     )
 
     observer.observe(sentinel)
+    observer.observe(endSentinel)
 
     return () => {
       observer.disconnect()
       delete row.dataset.stuck
     }
-  }, [isFolder, level])
+  }, [canStick, isFolder, level])
 
   // ItemInstance is mutable. Pass current primitive state into the memoized
   // row so selection, keyboard focus, search and sibling metadata stay fresh.
@@ -413,7 +425,7 @@ function FileBrowserTreeNode({
     <Collapsible
       open={panelOpen}
       role="none"
-      className="flex w-full min-w-0 max-w-full flex-col"
+      className="relative flex w-full min-w-0 max-w-full flex-col"
     >
       <span
         ref={stickySentinelRef}
@@ -439,6 +451,12 @@ function FileBrowserTreeNode({
           />
         ))}
       </FileBrowserTreePanel>
+      <span
+        ref={stickyEndSentinelRef}
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 h-px"
+        style={{ bottom: FILE_TREE_ROW_HEIGHT }}
+      />
     </Collapsible>
   )
 }

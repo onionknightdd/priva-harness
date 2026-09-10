@@ -12,6 +12,7 @@ export type FileSystemEntry = {
 }
 
 export type FileSystemDirectory = {
+  root: string
   path: string
   parent: string | null
   entries: FileSystemEntry[]

@@ -50,16 +50,45 @@ vertical padding and 1 px gaps. Sticky offsets and off-screen intrinsic sizes
 use the same row height. The `compact` option only changes metadata columns.
 
 Pinned folder labels keep the same `accent` background as selected labels,
-independently of hover; their opaque `card` backing covers indentation and
+including while hovered; their opaque `card` backing covers indentation and
 rounded corners. This does not change the actual selection. The working-directory
-picker places its vertical padding inside the scroll area, so sticky rows reach
-the top edge without leaving a transparent strip above them.
+picker uses the same scroll surface as `FileTreePane`: a `card` background, no
+top or side padding, bottom padding, stable scrollbar gutter, inline-size
+containment and contained overscroll. The shared tree therefore keeps the same
+sticky edges and background in both views, including dark mode.
+
+Only expanded folders with children can acquire the sticky highlight. Two
+IntersectionObserver sentinels delimit the interval in which the row is pinned:
+its normal position has passed the sticky boundary, while its subtree still has
+enough height below that boundary. Collapsed and empty folders scrolling under
+an ancestor, and expanded folders pushed out by the end of their subtree, keep
+their normal background. Real selection remains independent of this state.
+
+```text
+Expanded folder with children
+  + start crossed boundary + subtree end below boundary -> sticky background
+  + subtree end crossed boundary                       -> normal background
+Collapsed / empty folder                               -> normal background
+Selected row                                           -> selected background
+```
+
+The working-directory picker, Workspace and Data and Usage file browsers keep
+the directory API's canonical `WORKSPACE_DIR` as their tree root. Breadcrumbs
+and deep-navigation ancestor reads stop there; descendants still load on demand.
+The directory API rejects paths outside that root and omits symlinks whose
+targets are outside it. Skills retain their independent resource API and roots.
+
+```text
+Directory listing root -> WORKSPACE_DIR -> selected path's ancestors
+                                      -> expanded folders' immediate children
+```
 
 ## Verification
 
 From the repository root:
 
 ```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/file-browser/file-browser-scope.test.ts
 node --test agent-ui/tests/features/file-browser/file-tree-content-width.test.ts
 ```
 
@@ -72,7 +101,9 @@ For real browser regression checks, start `npm run dev` in `agent-ui/`, open
 `/tests/features/file-browser/file-tree-browser.html`, and click **Run file tree
 checks**. The standalone page needs no backend or session data. It exercises
 row retention, hidden state, the original transition and clipping, selection,
-arrow-key navigation, sibling insertion, search and loading indicators. It also
+arrow-key navigation, sibling insertion, search and loading indicators. Sticky
+checks cover collapsed/empty folders underneath pinned ancestors, a subtree
+pushing its header out, and retained selection; append `?dark=1` for dark mode. It also
 compares cached measurements with the previous DOM algorithm for 36 combinations
 of fonts, names and slot widths, including CJK, emoji and whitespace.
 

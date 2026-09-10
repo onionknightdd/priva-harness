@@ -118,34 +118,31 @@ export function DirectoryPickerDialog({
         <div
           data-file-tree-scroll
           aria-busy={busy}
-          className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3"
+          className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain bg-card pb-2 [scrollbar-gutter:stable] [container-type:inline-size]"
           inert={picker.confirming || undefined}
         >
-          {/* Keep spacing inside the scroller so sticky rows cover its top edge. */}
-          <div className="py-0.75">
-            {picker.rootPath ? (
-              <FileBrowserTree
-                compact
-                model={picker.model}
-                rootPath={picker.rootPath}
-                selectedItemPath={picker.selectedPath}
-                loadingDirectories={picker.loadingDirectories}
-                query=""
-                onItemSelect={(path) => {
-                  setPathInput("")
-                  return picker.selectDirectory(path)
-                }}
-                onFolderExpand={picker.expandDirectory}
-                onActionFeedback={setFeedback}
-              />
-            ) : picker.navigating ? (
-              <div className="space-y-1.5 px-2 py-3" aria-label={t("directoryPicker.loading")}>
-                {[0, 1, 2, 3, 4].map((depth) => (
-                  <Skeleton key={depth} className="h-6 w-2/3" style={{ marginLeft: depth * 12 }} />
-                ))}
-              </div>
-            ) : null}
-          </div>
+          {picker.rootPath ? (
+            <FileBrowserTree
+              compact
+              model={picker.model}
+              rootPath={picker.rootPath}
+              selectedItemPath={picker.selectedPath}
+              loadingDirectories={picker.loadingDirectories}
+              query=""
+              onItemSelect={(path) => {
+                setPathInput("")
+                return picker.selectDirectory(path)
+              }}
+              onFolderExpand={picker.expandDirectory}
+              onActionFeedback={setFeedback}
+            />
+          ) : picker.navigating ? (
+            <div className="space-y-1.5 px-2 py-3" aria-label={t("directoryPicker.loading")}>
+              {[0, 1, 2, 3, 4].map((depth) => (
+                <Skeleton key={depth} className="h-6 w-2/3" style={{ marginLeft: depth * 12 }} />
+              ))}
+            </div>
+          ) : null}
         </div>
 
         <div className="flex flex-col gap-3 border-t px-5 py-4 sm:flex-row sm:items-center">

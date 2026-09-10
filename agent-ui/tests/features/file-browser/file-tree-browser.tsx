@@ -12,6 +12,7 @@ import {
 import { createFileTreeNameMeasurer } from "../../../src/features/file-browser/file-tree-content-width"
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
+document.documentElement.classList.toggle("dark", new URLSearchParams(location.search).has("dark"))
 
 function item(path: string, type: FileBrowserItem["type"]): FileBrowserItem {
   return {
@@ -70,7 +71,8 @@ async function runChecks() {
   const render = async (
     model = initialModel,
     query = "",
-    loadingDirectories = noLoading
+    loadingDirectories = noLoading,
+    selectedItemPath: string | null = null
   ) => {
     await act(async () => {
       root.render(
@@ -80,7 +82,7 @@ async function runChecks() {
           query={query}
           loadingDirectories={loadingDirectories}
           rootPath="/workspace"
-          selectedItemPath={null}
+          selectedItemPath={selectedItemPath}
           onActionFeedback={noAction}
           onDeleteRequest={noAction}
           onDownload={noAction}
@@ -164,6 +166,40 @@ async function runChecks() {
     check("loading state reaches the memoized folder", src.getAttribute("aria-busy") === "true")
     await render(updatedModel)
     check("completed loading removes the busy state", !src.hasAttribute("aria-busy"))
+
+    const empty = item("/workspace/src/empty", "folder")
+    const closedFolders = Array.from({ length: 12 }, (_, index) => item(`/workspace/src/closed-${index}`, "folder"))
+    const followingFolders = Array.from({ length: 20 }, (_, index) => item(`/workspace/following-${index}`, "folder"))
+    const scrollEntries = [empty, ...closedFolders, ...followingFolders]
+    const scrollingModel = {
+      items: { ...initialModel.items, ...Object.fromEntries(scrollEntries.map((entry) => [entry.path, entry])) },
+      childrenByPath: {
+        ...initialModel.childrenByPath,
+        ...Object.fromEntries(scrollEntries.map((entry) => [entry.path, []])),
+        "/workspace": ["/workspace/src", "/workspace/docs", ...followingFolders.map((entry) => entry.path)],
+        "/workspace/src": [empty.path, ...closedFolders.map((entry) => entry.path), "/workspace/src/alpha.ts", "/workspace/src/beta.ts"],
+      },
+    }
+    await render(scrollingModel)
+    await act(async () => { row(empty.path).click() })
+    await settle()
+    await render(scrollingModel, "", noLoading, "/workspace/src/alpha.ts")
+    await settle()
+    await act(async () => { host.scrollTop = 115 })
+    await settle()
+    const background = (element: HTMLElement) => getComputedStyle(element.querySelector('[data-slot="tree-item-label"]')!).backgroundColor
+    const transparent = (element: HTMLElement) => ["transparent", "rgba(0, 0, 0, 0)"].includes(background(element))
+    check("expanded ancestors keep their sticky background", row("/workspace").dataset.stuck === "true" && src.dataset.stuck === "true" && !transparent(src))
+    check("collapsed rows passing underneath sticky ancestors never acquire the sticky highlight", closedFolders.every((entry) => row(entry.path).dataset.stuck !== "true" && row(entry.path).getAttribute("aria-selected") === "false" && transparent(row(entry.path))))
+    check("an expanded empty folder cannot acquire the sticky highlight", row(empty.path).getAttribute("aria-expanded") === "true" && row(empty.path).dataset.stuck !== "true" && transparent(row(empty.path)))
+    check("scrolling keeps the real selected file highlighted", alpha.getAttribute("aria-selected") === "true" && !transparent(alpha))
+    const sectionBottom = src.parentElement!.getBoundingClientRect().bottom - host.getBoundingClientRect().top + host.scrollTop
+    await act(async () => { host.scrollTop = sectionBottom - 42 })
+    await settle()
+    check("an expanded ancestor loses the sticky highlight when its subtree pushes it underneath its parent", src.getBoundingClientRect().top < host.getBoundingClientRect().top + 26 && src.dataset.stuck === "false" && transparent(src) && row("/workspace").dataset.stuck === "true")
+    await act(async () => { host.scrollTop = 0 })
+    await settle()
+    check("returning to the top clears sticky highlights without clearing selection", row("/workspace").dataset.stuck === "false" && src.dataset.stuck === "false" && alpha.getAttribute("aria-selected") === "true" && !transparent(alpha))
 
     await document.fonts.ready
     const measurer = createFileTreeNameMeasurer(document)

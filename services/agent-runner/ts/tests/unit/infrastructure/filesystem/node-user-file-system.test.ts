@@ -53,6 +53,8 @@ describe('NodeUserFileSystem', () => {
     const listing = await fileSystem.listDirectory('.')
 
     expect(listing.path).toBe(await realpath(workspace))
+    expect(listing.root).toBe(canonicalWorkspace)
+    expect(listing.parent).toBeNull()
     expect(listing.entries.map(({ name }) => name)).toEqual([
       'A-directory',
       'z-directory',
@@ -81,20 +83,38 @@ describe('NodeUserFileSystem', () => {
     })
   })
 
-  it('allows absolute paths and follows directory symlinks outside the initial directory', async () => {
+  it('rejects directory listings outside the workspace, including traversal and symlinks', async () => {
     const outside = join(testRoot, 'outside')
-    await mkdir(outside)
+    const sibling = join(testRoot, 'workspace-extra')
+    await Promise.all([mkdir(outside), mkdir(sibling)])
     await writeFile(join(outside, 'outside.txt'), 'outside')
     await symlink(outside, join(workspace, 'outside-link'), 'dir')
+    await symlink(join(outside, 'outside.txt'), join(workspace, 'outside-file'))
 
-    await expect(fileSystem.listDirectory(outside)).resolves.toMatchObject({
-      path: await realpath(outside),
-      entries: [{ name: 'outside.txt', type: 'file' }],
-    })
-    await expect(fileSystem.listDirectory('outside-link')).resolves.toMatchObject({
-      path: await realpath(outside),
-      entries: [{ name: 'outside.txt', type: 'file' }],
-    })
+    for (const path of [outside, sibling, '..', '../outside', 'outside-link']) {
+      await expect(fileSystem.listDirectory(path)).rejects.toMatchObject({ kind: 'access-denied' })
+    }
+    expect((await fileSystem.listDirectory('.')).entries).toEqual([])
+  })
+
+  it('browses nested directories and internal symlinks within a canonical workspace root', async () => {
+    const nested = join(workspace, 'project', 'src')
+    await mkdir(nested, { recursive: true })
+    await writeFile(join(nested, 'index.ts'), 'export {}')
+    await symlink(nested, join(workspace, 'src-link'), 'dir')
+    const alias = join(testRoot, 'workspace-link')
+    await symlink(workspace, alias, 'dir')
+    const aliasedFileSystem = new NodeUserFileSystem({ initialDirectory: alias })
+
+    for (const path of [nested, 'project/src', 'src-link']) {
+      await expect(aliasedFileSystem.listDirectory(path)).resolves.toMatchObject({
+        root: canonicalWorkspace,
+        path: join(canonicalWorkspace, 'project', 'src'),
+        parent: join(canonicalWorkspace, 'project'),
+        entries: [{ name: 'index.ts' }],
+      })
+    }
+    expect((await fileSystem.listDirectory('.')).entries.map((entry) => entry.name)).toEqual(['project', 'src-link'])
   })
 
   it('recursively deletes paths but refuses to delete a filesystem root', async () => {

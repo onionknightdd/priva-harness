@@ -116,6 +116,7 @@ export function removeFileBrowserPath(
 
 export function getFileBrowserBreadcrumb(
   path: string,
+  rootPath: string,
   selectedType: FileBrowserItem["type"] = "folder"
 ): FileBrowserBreadcrumbEntry[] {
   const normalizedPath = normalizeFileBrowserPath(path)
@@ -156,7 +157,30 @@ export function getFileBrowserBreadcrumb(
     lastEntry.type = selectedType
   }
 
-  return entries
+  const rootIndex = entries.findIndex((entry) => entry.path === normalizeFileBrowserPath(rootPath))
+  return rootIndex < 0 ? [] : entries.slice(rootIndex)
+}
+
+// A verified directory can remain reachable even if an ancestor listing fails.
+export function revealFileBrowserDirectory(
+  model: FileBrowserModel,
+  path: string,
+  rootPath: string
+): FileBrowserModel {
+  const items = { ...model.items }
+  const childrenByPath = { ...model.childrenByPath }
+  const chain = getFileBrowserBreadcrumb(path, rootPath)
+  chain.forEach((entry, index) => {
+    const parentPath = chain[index - 1]?.path ?? null
+    items[entry.path] ??= {
+      path: entry.path, name: entry.name, type: "folder", parentPath,
+      size: null, modifiedAt: null, permissions: null,
+    }
+    if (parentPath && !childrenByPath[parentPath]?.includes(entry.path)) {
+      childrenByPath[parentPath] = [...(childrenByPath[parentPath] ?? []), entry.path]
+    }
+  })
+  return { items, childrenByPath }
 }
 
 export function getFileBrowserAncestorPaths(
