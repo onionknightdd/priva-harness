@@ -1,4 +1,4 @@
-export type WorkflowStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'paused' | 'unknown'
+export type WorkflowStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'paused' | 'skipped' | 'unknown'
 
 export interface WorkflowPhase {
   readonly index: number

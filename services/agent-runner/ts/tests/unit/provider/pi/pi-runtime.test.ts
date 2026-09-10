@@ -8,6 +8,24 @@ import { testRunSpec } from '../../../support/run-spec.js'
 import { userTurnFromText } from '../../../../src/core/run/user-turn.js'
 
 describe('PiRuntime stream input', () => {
+  it('waits for background workflow terminal state before completing the host turn', async () => {
+    const session = new FakePiAgentSession()
+    let settle: (() => void) | undefined
+    const idle = new Promise<void>((resolve) => { settle = resolve })
+    const enhanced: PiAgentSession = Object.assign(session, { waitForWorkflows: () => idle })
+    const runtime = new PiRuntime(enhanced)
+    const events: AgentEvent[] = []
+    const consume = (async () => {
+      for await (const event of consumeRunEvents(runtime.run({ text: 'workflow' }, { signal: new AbortController().signal }))) events.push(event)
+    })()
+    await Promise.resolve()
+    expect(events).toEqual([])
+    settle?.()
+    await consume
+    expect(events.at(-1)?.type).toBe('run.completed')
+    await runtime.release('dispose')
+  })
+
   it('includes attached files in the actual Pi prompt', async () => {
     const session = new FakePiAgentSession()
     const runtime = new PiRuntime(session)

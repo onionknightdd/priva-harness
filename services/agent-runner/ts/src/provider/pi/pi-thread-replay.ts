@@ -1,3 +1,4 @@
+import { piWorkflowToolResult } from './pi-workflow-data.js'
 import { asRecord, isRecord, stringField } from '../../core/event/json-record.js'
 import { isReadToolName } from '../../core/event/tool-names.js'
 import { patchFromToolDetails } from '../../core/event/tool-patch.js'
@@ -72,6 +73,8 @@ export function replayPiSessionMessages(messages: readonly SessionMessage[]): Th
         stringField(inner, 'id') ??
         message.uuid
       const name = (stringField(inner, 'toolName') ?? stringField(inner, 'name') ?? 'unknown').toLowerCase()
+      const workflow = piWorkflowToolResult(id, name, inner, undefined, true)
+      if (workflow) items.push({ kind: 'frame', event: { type: 'workflow.progress', workflowToolUseId: id, workflow }, createdAt: isoFromTimestamp(message.timestamp) })
       items.push({
         kind: 'frame',
         event: {

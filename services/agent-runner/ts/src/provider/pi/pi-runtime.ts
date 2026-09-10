@@ -18,6 +18,7 @@ import { AsyncQueue } from '../../core/stream/async-queue.js'
 import { PiEventMapper, type PiSessionEvent } from './pi-event-mapper.js'
 
 export interface PiAgentSession {
+  waitForWorkflows?(): Promise<void>
   readonly sessionId: string
   readonly modelId: string
   readonly isStreaming: boolean
@@ -48,6 +49,13 @@ export class PiRuntime implements AgentRuntime {
       const mapper = this.mapper
       const events = this.events
       if (mapper === undefined || events === undefined) return
+      if (event.type === 'agent_end' && agentSession.waitForWorkflows) {
+        void agentSession.waitForWorkflows().then(() => {
+          for (const mapped of mapper.push(event)) events.push(mapped)
+          events.close()
+        }, (error: unknown) => events.push({ type: 'run.failed', message: error instanceof Error ? error.message : String(error) }))
+        return
+      }
       for (const mapped of mapper.push(event)) events.push(mapped)
     })
   }

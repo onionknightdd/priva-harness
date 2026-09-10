@@ -7,6 +7,7 @@ export function workflowStatus(raw: string | undefined): WorkflowStatus {
     case 'killed': case 'stopped': case 'aborted': case 'cancelled': return 'cancelled'
     case 'queued': case 'pending': return 'pending'
     case 'async_launched': case 'running': return 'running'
+    case 'skipped': return 'skipped'
     case 'paused': return 'paused'
     default: return 'unknown'
   }

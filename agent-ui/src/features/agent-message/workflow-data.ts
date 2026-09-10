@@ -1,4 +1,4 @@
-export type WorkflowStatus = "pending" | "running" | "completed" | "failed" | "cancelled" | "paused" | "unknown"
+export type WorkflowStatus = "pending" | "running" | "completed" | "failed" | "cancelled" | "paused" | "skipped" | "unknown"
 
 export interface WorkflowPhase {
   readonly index: number
@@ -60,7 +60,7 @@ export function isWorkflowTool(name: string): boolean {
 }
 
 export function isWorkflowStatus(value: unknown): value is WorkflowStatus {
-  return typeof value === "string" && ["pending", "running", "completed", "failed", "cancelled", "paused", "unknown"].includes(value)
+  return typeof value === "string" && ["pending", "running", "completed", "failed", "cancelled", "paused", "skipped", "unknown"].includes(value)
 }
 
 export function workflowFromSnapshot(value: unknown): WorkflowCard | undefined {
@@ -82,7 +82,8 @@ export function workflowPhaseStatus(agents: readonly WorkflowAgent[], workflowSt
   if (agents.some((agent) => agent.state === "failed")) return "failed"
   if (agents.some((agent) => agent.state === "cancelled")) return "cancelled"
   if (agents.some((agent) => agent.state === "paused")) return "paused"
-  if (agents.length && agents.every((agent) => agent.state === "completed")) return "completed"
+  if (agents.length && agents.every((agent) => agent.state === "skipped")) return "skipped"
+  if (agents.length && agents.every((agent) => agent.state === "completed" || agent.state === "skipped")) return "completed"
   if (workflowStatus === "cancelled" || workflowStatus === "failed" || workflowStatus === "unknown") return "unknown"
   return "pending"
 }
@@ -100,6 +101,7 @@ export const workflowStatusColor: Record<WorkflowStatus, string> = {
   failed: "text-status-error",
   cancelled: "text-muted-foreground",
   paused: "text-status-warm",
+  skipped: "text-muted-foreground",
   unknown: "text-muted-foreground",
 }
 

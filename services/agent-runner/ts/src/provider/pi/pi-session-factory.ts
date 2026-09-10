@@ -18,8 +18,9 @@ import { createPiSessionManager } from './pi-session-open.js'
 import type { PiSessionFactory } from './pi-provider.js'
 import type { PiAgentSession } from './pi-runtime.js'
 import type { PiSessionEvent } from './pi-event-mapper.js'
-import { createPiResourceLoader } from './pi-resource-loader.js'
 import { compilePiCustomTools } from './tools/compile-custom-tools.js'
+import { PiWorkflows } from './pi-workflows.js'
+import { createPiResourceLoader } from './pi-resource-loader.js'
 
 export class CodingAgentSessionFactory implements PiSessionFactory {
   constructor(
@@ -44,8 +45,9 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
     await mkdir(sessionDir, { recursive: true, mode: 0o700 })
 
     const progressSink: { emit?: (chunk: string) => void } = {}
-
+    let workflows: PiWorkflows | undefined
     let opened: Awaited<ReturnType<typeof createAgentSession>>['session'] | undefined
+
     try {
       const modelRuntime = await ModelRuntime.create({ authPath, modelsPath })
       const model = modelRuntime.getModel(options.providerId, options.modelId)
@@ -53,27 +55,25 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
         throw new Error(`Unknown model ${spec.model}`)
       }
 
+      const sessionManager = await createPiSessionManager(this.agentDir, spec, target)
       const settingsManager = SettingsManager.create(spec.cwd, this.agentDir)
+      workflows = new PiWorkflows({ cwd: spec.cwd, agentDir: this.agentDir,
+        sessionId: sessionManager.getSessionId(), modelRuntime,
+        providerId: options.providerId, modelId: options.modelId })
       const { session } = await createAgentSession({
         cwd: spec.cwd,
         agentDir: this.agentDir,
         model,
         modelRuntime,
-        sessionManager: await createPiSessionManager(this.agentDir, spec, target),
+        sessionManager,
         settingsManager,
         resourceLoader: await createPiResourceLoader(spec.cwd, this.agentDir, settingsManager),
         thinkingLevel: 'off',
-        ...(this.tools.length === 0
-          ? {}
-          : {
-              customTools: compilePiCustomTools(this.tools, {
-                cwd: spec.cwd,
-                session: { provider: 'pi', id: '' },
-                signal: new AbortController().signal,
-                profile: imageToolsFromSpec(spec),
-                emitProgress: (chunk) => progressSink.emit?.(chunk),
-              }),
-            }),
+        customTools: [workflows.tool, ...compilePiCustomTools(this.tools, {
+          cwd: spec.cwd, session: { provider: 'pi', id: sessionManager.getSessionId() },
+          signal: new AbortController().signal, profile: imageToolsFromSpec(spec),
+          emitProgress: (chunk) => progressSink.emit?.(chunk),
+        })],
       })
 
       opened = session
@@ -93,8 +93,10 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
         progressSink,
         modelRuntime,
         options.providerId,
+        workflows,
       )
     } catch (error) {
+      workflows?.dispose()
       try {
         if (opened !== undefined) {
           try { await opened.extensionRunner.emit({ type: 'session_shutdown', reason: 'quit' }) } finally { opened.dispose() }
@@ -118,6 +120,7 @@ class SdkPiAgentSession implements PiAgentSession {
     private readonly progressSink: { emit?: (chunk: string) => void } = {},
     private readonly modelRuntime: ModelRuntime,
     private readonly providerId: string,
+    private readonly workflows: PiWorkflows,
   ) {
     this.currentModelId = modelId
   }
@@ -133,6 +136,7 @@ class SdkPiAgentSession implements PiAgentSession {
       throw new Error(`Unknown model ${modelId}`)
     }
     await this.session.setModel(model)
+    this.workflows.setModel(modelId)
     this.currentModelId = modelId
   }
 
@@ -153,9 +157,9 @@ class SdkPiAgentSession implements PiAgentSession {
   }
 
   subscribe(listener: (event: PiSessionEvent) => void): () => void {
-    return this.session.subscribe((event) => {
-      listener(event)
-    })
+    const stopWorkflow = this.workflows.subscribe(listener)
+    const stopSession = this.session.subscribe(listener)
+    return () => { stopWorkflow(); stopSession() }
   }
 
   prompt(text: string): Promise<void> {
@@ -174,7 +178,10 @@ class SdkPiAgentSession implements PiAgentSession {
     return this.session.compact(customInstructions).then(() => undefined)
   }
 
+  waitForWorkflows(): Promise<void> { return this.workflows.waitForIdle() }
+
   abort(): Promise<void> {
+    this.workflows.abort()
     return this.session.abort()
   }
 
@@ -188,6 +195,7 @@ class SdkPiAgentSession implements PiAgentSession {
   }
 
   private async close(): Promise<void> {
+    this.workflows.dispose()
     try {
       await this.session.abort()
       await this.session.extensionRunner.emit({ type: 'session_shutdown', reason: 'quit' })

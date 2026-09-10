@@ -1,5 +1,7 @@
+import { asRecord, stringField } from '../../core/event/json-record.js'
+import { loadPiWorkflow, readPiWorkflowAgent, piWorkflowRoot } from './pi-workflow-files.js'
 import { userTurnSummary } from '../../core/run/user-turn.js'
-import { readdir, stat, unlink } from 'node:fs/promises'
+import { readdir, stat, unlink, rm } from 'node:fs/promises'
 import type { Dirent } from 'node:fs'
 import { join } from 'node:path'
 
@@ -115,13 +117,29 @@ export class PiSessionStore implements ProviderSessionStore {
 
   async replay(ref: SessionRef, page?: SessionMessagePage): Promise<readonly ThreadReplayItem[]> {
     const messages = await this.messages(ref, page)
-    return replayPiSessionMessages(messages)
+    const hydrated = await Promise.all(messages.map(async (message) => {
+      if (message.type !== 'tool_result') return message
+      const inner = asRecord(message.message)
+      const details = asRecord(inner?.['details'])
+      const runId = details && stringField(details, 'runId')
+      if (!inner || !runId) return message
+      const record = await loadPiWorkflow(this.agentDir, ref.id, runId)
+      if (!record) return message
+      return { ...message, message: { ...inner, details: { ...details, workflowState: record.state } } }
+    }))
+    return replayPiSessionMessages(hydrated)
+  }
+
+  async workflowAgent(ref: SessionRef, runId: string, agentId: string) {
+    await this.resolve(ref)
+    return readPiWorkflowAgent(this.agentDir, ref.id, runId, agentId)
   }
 
   async delete(ref: SessionRef): Promise<void> {
     const listed = await this.resolve(ref)
     try {
       await unlink(listed.path)
+      await rm(piWorkflowRoot(this.agentDir, ref.id), { recursive: true, force: true })
     } catch (error) {
       if (hasErrorCode(error, 'ENOENT')) {
         throw new SessionError('session-not-found', 'Session not found')

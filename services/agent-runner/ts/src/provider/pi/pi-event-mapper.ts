@@ -1,3 +1,5 @@
+import { piWorkflowToolResult } from './pi-workflow-data.js'
+import type { WorkflowState } from '../../core/resource/workflow.js'
 import type {
   AgentEvent,
   BlockKind,
@@ -17,6 +19,7 @@ import { patchFromToolDetails } from '../../core/event/tool-patch.js'
 import { encodeReadView } from '../../core/event/tool-read.js'
 
 export interface PiSessionEvent {
+  readonly workflow?: WorkflowState
   readonly type: string
   readonly assistantMessageEvent?: unknown
   readonly message?: unknown
@@ -45,6 +48,7 @@ interface PendingTool {
 }
 
 export class PiEventMapper {
+  private readonly workflows = new Map<string, WorkflowState>()
   private readonly startedAt: number
   private model: string
   private messageSeq = 0
@@ -73,6 +77,8 @@ export class PiEventMapper {
 
   push(event: PiSessionEvent): AgentEvent[] {
     switch (event.type) {
+      case 'workflow_progress':
+        return event.workflow ? this.mapWorkflow(event.workflow) : []
       case 'message_update':
         return this.mapMessageUpdate(event)
       case 'message_end':
@@ -277,7 +283,9 @@ export class PiEventMapper {
   private mapToolExecutionUpdate(event: PiSessionEvent): AgentEvent[] {
     const id = event.toolCallId
     if (id === undefined) return []
+    const workflow = this.workflowEvent(id, event.toolName ?? this.tools.get(id) ?? '', event.partialResult)
     const chunk = toolOutput(event.partialResult)
+    if (workflow.length) return workflow
     if (chunk === '') return []
     const index = this.indexByToolId.get(id)
     return [
@@ -297,8 +305,10 @@ export class PiEventMapper {
     const id = event.toolCallId
     if (id === undefined) return []
     const name = normalizeToolName(event.toolName ?? this.tools.get(id) ?? 'unknown')
+    const workflow = this.workflowEvent(id, name, event.result, true)
     const index = this.indexByToolId.get(id)
     return [
+      ...workflow,
       {
         type: 'tool.completed',
         id,
@@ -310,6 +320,26 @@ export class PiEventMapper {
         ...(index === undefined ? {} : { index }),
       },
     ]
+  }
+
+  private workflowEvent(id: string, name: string, result: unknown, terminal = false): AgentEvent[] {
+    const previous = this.workflows.get(id)
+    // The embedded manager has richer timing/transcript state than tool details.
+    if (previous?.workflowRunId && previous.agents.some((a) => a.startedAt !== undefined)) return []
+    const workflow = piWorkflowToolResult(id, name, result, previous, terminal)
+    if (!workflow) return []
+    return this.mapWorkflow(workflow)
+  }
+
+  private mapWorkflow(workflow: WorkflowState): AgentEvent[] {
+    const id = workflow.workflowToolUseId
+    const previous = this.workflows.get(id)
+    this.workflows.set(id, workflow)
+    const events: AgentEvent[] = [{ type: 'workflow.progress', workflowToolUseId: id, workflow }]
+    if (!['pending', 'running'].includes(workflow.status) && previous?.status !== workflow.status) {
+      events.push({ type: 'workflow.completed', workflowToolUseId: id, status: workflow.status })
+    }
+    return events
   }
 
   private mapCompactionEnd(event: PiSessionEvent): AgentEvent[] {
