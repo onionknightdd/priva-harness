@@ -70,6 +70,7 @@
     --color-status-running: var(--status-running);
     --color-status-warm: var(--status-warm);
     --color-status-success: var(--status-success);
+    --color-status-warning: var(--status-warning);
     --color-status-error: var(--status-error);
     --color-loading-state: var(--loading-state);
     --color-tool-output: var(--tool-output);
@@ -136,6 +137,7 @@
     --status-running: oklch(0.541 0.217 293.01);
     --status-warm: oklch(0.75 0.1 232);
     --status-success: oklch(0.596 0.13 163);
+    --status-warning: oklch(0.681 0.162 75.834);
     --status-error: oklch(0.586 0.21 20);
     --loading-state: rgb(77 159 240);
     --tool-output: oklch(0.964 0 0);
@@ -190,6 +192,7 @@
     --status-running: oklch(0.702 0.161 293.54);
     --status-warm: oklch(0.78 0.1 232);
     --status-success: oklch(0.765 0.15 163);
+    --status-warning: oklch(0.852 0.199 91.936);
     --status-error: oklch(0.712 0.17 16);
     --tool-output: oklch(0.24 0 0);
     --context-system: oklch(0.82 0 0);

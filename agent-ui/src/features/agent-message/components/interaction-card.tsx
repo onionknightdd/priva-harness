@@ -1,5 +1,6 @@
 import { Fragment, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { ChevronDown, MessageCircleQuestionMark, TriangleAlert } from "lucide-react"
 import { motion, useReducedMotionConfig } from "motion/react"
 import { MessageResponse } from "@/components/ai-elements/message"
 import ApprovalCard from "@/components/primitives/ApprovalCard"
@@ -57,14 +58,20 @@ export function QuestionSummary({ resolution, output, skipped }: { resolution?: 
   const reduce = Boolean(useReducedMotionConfig())
   const request = resolution?.request
   const denied = resolution ? resolution.decision === "deny" : skipped
+  const statusLabel = t(denied ? (resolution?.reason === "cancelled" ? "toolCard.cancelled" : "interaction.skipped") : "interaction.answered")
   return <motion.details data-question-summary={denied ? "skipped" : "answered"}
-    className="my-2 ml-auto w-max min-w-0 max-w-full text-ui text-foreground"
+    className="group/question-summary my-2 ml-auto w-max min-w-0 max-w-full rounded-lg border border-border px-3 py-2 text-ui text-foreground"
     initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduce ? 0 : 0.15 }}>
-    <summary className={cn("cursor-pointer rounded-sm text-muted-foreground", focusRing)}>{t(denied ? "interaction.skipped" : "interaction.answered")}</summary>
+    <summary className={cn("flex cursor-pointer list-none items-center gap-2 rounded-sm text-muted-foreground [&::-webkit-details-marker]:hidden", focusRing)}>
+      {denied ? <TriangleAlert aria-hidden="true" className="size-4 shrink-0 text-status-warning" />
+        : <MessageCircleQuestionMark aria-hidden="true" className="size-4 shrink-0 text-background [&>path:first-child]:fill-status-success [&>path:first-child]:stroke-status-success" />}
+      <span>{statusLabel}</span>
+      <ChevronDown aria-hidden="true" className="ml-auto size-3.5 shrink-0 group-open/question-summary:rotate-180" />
+    </summary>
     {request?.kind === "question" ? <div className="mt-3 min-w-0">
       {request.questions.map((question, index) => {
         const answer = resolution?.answers?.[question.id]
-        const text = answer ? [...answer.selected, ...(answer.text.trim() ? [answer.text] : [])].join("; ") : t("interaction.skipped")
+        const text = answer ? [...answer.selected, ...(answer.text.trim() ? [answer.text] : [])].join("; ") : denied ? statusLabel : t("interaction.skipped")
         const quote = question.question.split(/\r\n?|\n/).map((line) => `> ${line}`).join("\n")
         return <Fragment key={question.id}>
           {index > 0 ? <Separator className="my-3" /> : null}
