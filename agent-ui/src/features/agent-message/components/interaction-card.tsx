@@ -6,10 +6,10 @@ import { MessageResponse } from "@/components/ai-elements/message"
 import ApprovalCard from "@/components/primitives/ApprovalCard"
 import { ToolApproval, ToolApprovalCode, type ToolApprovalStatus } from "@/components/agents/tool-approval"
 import { Collapsible, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { EASE_OUT } from "@/lib/ease"
 import { focusRing } from "@/lib/surfaces"
 import { cn } from "@/lib/utils"
 import type { InteractionRequest, InteractionResolution, InteractionResponse } from "../interaction-data"
+import { questionSummaryMask, questionSummaryTransition } from "../question-summary-motion"
 
 export function InteractionCard({ request, count, connected, onRespond }: {
   request: InteractionRequest
@@ -61,7 +61,7 @@ export function QuestionSummary({ resolution, output, skipped }: { resolution?: 
   const [keyboard, setKeyboard] = useState(false)
   const contentId = useId()
   const instant = reduce || keyboard
-  const layoutTransition = { duration: instant ? 0 : open ? 0.18 : 0.12, ease: EASE_OUT }
+  const layoutTransition = questionSummaryTransition(open, instant)
   const request = resolution?.request
   const denied = resolution ? resolution.decision === "deny" : skipped
   const statusLabel = t(denied ? (resolution?.reason === "cancelled" ? "toolCard.cancelled" : "interaction.skipped") : "interaction.answered")
@@ -69,7 +69,7 @@ export function QuestionSummary({ resolution, output, skipped }: { resolution?: 
     setKeyboard(!("detail" in details.event) || details.event.detail === 0)
     setOpen(nextOpen)
   }} data-question-summary={denied ? "skipped" : "answered"}
-    className="relative my-2 ml-auto w-max min-w-0 max-w-full rounded-lg border border-border px-3 py-2 text-ui text-foreground"
+    className="relative my-2 ml-auto w-max min-w-0 max-w-full overflow-hidden rounded-lg border border-border px-3 py-2 text-ui text-foreground"
     render={<motion.div layout layoutDependency={open} style={{ originX: 1, originY: 0 }}
       initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }}
       transition={{ opacity: { duration: reduce ? 0 : 0.15 }, layout: layoutTransition }} />}>
@@ -112,8 +112,8 @@ export function QuestionSummary({ resolution, output, skipped }: { resolution?: 
 }
 
 const questionBodyMotion = {
-  open: (instant: boolean) => ({ opacity: 1, transition: { duration: instant ? 0 : 0.18, ease: EASE_OUT } }),
-  closed: (instant: boolean) => ({ opacity: 0, transition: { duration: instant ? 0 : 0.12, ease: EASE_OUT } }),
+  open: (instant: boolean) => ({ maskImage: questionSummaryMask.open, transition: questionSummaryTransition(true, instant) }),
+  closed: (instant: boolean) => ({ maskImage: questionSummaryMask.closed, transition: questionSummaryTransition(false, instant) }),
 }
 
 function QuestionSummaryBody({ children, id, ref }: { children: ReactNode; id: string; ref?: Ref<HTMLDivElement> }) {
@@ -122,8 +122,8 @@ function QuestionSummaryBody({ children, id, ref }: { children: ReactNode; id: s
   // Keep the exit out of flow while popLayout removes its stylesheet during unmount.
   return <motion.div ref={ref} id={id} layout="position" layoutDependency={false} custom={instant} variants={questionBodyMotion}
     initial="closed" animate="open" exit="closed" aria-hidden={!present} inert={!present}
-    className={cn("min-w-0", !present && "absolute pointer-events-none")}
-    transition={{ layout: { duration: instant ? 0 : present ? 0.18 : 0.12, ease: EASE_OUT } }}>
+    className={cn("min-w-0 text-sm", !present && "absolute pointer-events-none")}
+    transition={{ layout: questionSummaryTransition(present, instant) }}>
     {children}
   </motion.div>
 }

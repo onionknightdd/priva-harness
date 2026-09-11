@@ -28,7 +28,6 @@ import {
 import { useChatSession } from "@/features/chat-session"
 import { sessionDisplayTitle } from "@/features/sidebar/content/session-projects"
 import { useHarness } from "@/features/sidebar/header/harness-context"
-import { EASE_OUT } from "@/lib/ease"
 import { formatSessionRelativeTime, useTickingNow } from "@/lib/relative-time"
 import { cn } from "@/lib/utils"
 
@@ -41,6 +40,7 @@ import {
   releaseThreadFollow,
 } from "../expand-down-anchor"
 import { foldCommandSurfaces } from "../slash-command-envelope"
+import { questionSummaryTransition } from "../question-summary-motion"
 import {
   groupThreadTurns,
   turnStickyParts,
@@ -74,7 +74,7 @@ export function AgentMessageThread({
   const now = useTickingNow()
   const [followPaused, setFollowPaused] = useState(false)
   const reduceMotion = Boolean(useReducedMotionConfig())
-  const [layoutDuration, setLayoutDuration] = useState(0.18)
+  const [layoutTransition, setLayoutTransition] = useState(() => questionSummaryTransition(true, false))
   const untitled = t("sidebar.projects.untitledSession")
   const locale = i18n.resolvedLanguage ?? i18n.language
   const justNow = t("agentMessage.justNow")
@@ -140,7 +140,7 @@ export function AgentMessageThread({
     <MessageScrollerProvider autoScroll={!followPaused}>
       <MessageScroller>
         <MotionConfig
-          transition={{ layout: { duration: reduceMotion ? 0 : layoutDuration, ease: EASE_OUT } }}
+          transition={{ layout: reduceMotion ? questionSummaryTransition(true, true) : layoutTransition }}
         >
           <LayoutGroup inherit={false}>
             <MotionScrollerViewport layoutScroll>
@@ -152,7 +152,7 @@ export function AgentMessageThread({
                     : null
                   if (trigger) {
                     const closing = trigger.getAttribute("aria-expanded") === "true"
-                    setLayoutDuration(event.detail === 0 ? 0 : closing ? 0.12 : 0.18)
+                    setLayoutTransition(questionSummaryTransition(!closing, event.detail === 0))
                   }
                 }}
               >
