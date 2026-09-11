@@ -254,13 +254,17 @@ AgentCode、AgentDisclosure 和主题 token；上游演示用 Button / foundatio
 展开 / 收起复用 Base UI Collapsible 的按钮语义，由 Motion 驱动：外框使用布局
 transform 过渡，正文与外框展开 180 ms、收起 120 ms，箭头同步旋转。
 复用共享 `EASE_OUT`，不逐帧动画宽高、不缩放正文文字；连续点击可从当前进度反向。
-正文使用 `AnimatePresence mode="popLayout"` 并向右锚定，退出时立即释放布局占位，
+正文使用 `AnimatePresence mode="popLayout"` 并向右锚定，退出时立即释放布局占位；
+退出节点自身同时保留 `absolute`，防止临时样式清理后重新占位并触发末尾回弹。
+外框从右上角缩放，按钮的命中区域同步缩放；标题和箭头分别做位置补偿，保持文字
+与图标尺寸，箭头保持右侧锚定，避免点击区域提前缩窄导致指针变化。
 文字淡出、外框收起及后续内容移动同时开始、同时结束。退出中的正文立即设为
 `inert` 和 `aria-hidden`，完成淡出后卸载；键盘与辅助技术触发、
 减少动态效果模式下立即切换。保留右对齐、最长文本决定宽度和现有状态图标。
 问题摘要与同一消息流共用 Motion `LayoutGroup`；后续工具行、正文、操作栏和后续
 消息只做位置过渡，与卡片采用相同的 180 / 120 ms 节奏。滚动容器通过 `layoutScroll`
-参与测量，保留展开触发点锚定。被动位置节点使用固定 `layoutDependency`，由卡片
+参与测量，滚动校正优先锚定 `data-layout-scroll-anchor` 标记的外层工具行，避免将
+按钮的动画位移当成实际滚动。被动位置节点使用固定 `layoutDependency`，由卡片
 展开状态及正文退出触发布局测量，流式文本更新不主动触发布局动画。正文容器允许
 位移内容溢出，执行过程的 AgentDisclosure 通过 `overflowWhenOpen` 在自身展开完成后
 释放裁剪，收起时恢复裁剪，避免嵌套卡片切换时截断移动中的内容；键盘、辅助技术

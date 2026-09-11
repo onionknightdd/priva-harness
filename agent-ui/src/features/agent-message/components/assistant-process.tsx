@@ -720,6 +720,7 @@ function ProcessItemGroup({
       {React.Children.toArray(children).map((child, index) => (
         <motion.div
           key={React.isValidElement(child) ? child.key ?? index : index}
+          data-layout-scroll-anchor
           layout="position"
           layoutDependency={false}
           className="flow-root min-w-0"

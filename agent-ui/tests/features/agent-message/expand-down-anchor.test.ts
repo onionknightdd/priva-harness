@@ -39,6 +39,44 @@ describe("expand-down-anchor", () => {
     assert.equal(isExpandScrollLocked(), false)
   })
 
+  it("ignores a trigger's animated transform but corrects actual row displacement", () => {
+    resetExpandAnchor()
+    const viewport = { scrollTop: 640 }
+    const row = {
+      isConnected: true,
+      layoutTop: 820,
+      getBoundingClientRect() {
+        return { top: this.layoutTop - viewport.scrollTop }
+      },
+    }
+    const trigger = {
+      isConnected: true,
+      visualOffset: 0,
+      closest(selector: string) {
+        if (selector === "[aria-expanded]") return this
+        if (selector === "[data-layout-scroll-anchor]") return row
+        return null
+      },
+      getBoundingClientRect() {
+        return { top: row.getBoundingClientRect().top + this.visualOffset }
+      },
+    }
+
+    captureExpandTrigger(trigger as unknown as EventTarget)
+    for (const offset of [-8, -3, 0]) {
+      trigger.visualOffset = offset
+      keepExpandTriggerInPlace(viewport as HTMLElement)
+      assert.equal(viewport.scrollTop, 640)
+    }
+
+    row.layoutTop -= 40
+    keepExpandTriggerInPlace(viewport as HTMLElement)
+    assert.equal(viewport.scrollTop, 600)
+    keepExpandTriggerInPlace(viewport as HTMLElement)
+    assert.equal(viewport.scrollTop, 600)
+    resetExpandAnchor()
+  })
+
   it("releases stick-to-bottom follow with a wheel event", () => {
     const types: string[] = []
     const viewport = {

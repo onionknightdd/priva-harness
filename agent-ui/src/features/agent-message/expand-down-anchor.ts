@@ -21,16 +21,19 @@ export function captureExpandTrigger(target: EventTarget | null) {
   }
 
   const trigger = (target as Element).closest("[aria-expanded]")
+  // A trigger inside a scaling card can move visually without moving in layout.
+  // Anchor its stable row so scroll correction doesn't chase the animation.
+  const element = trigger?.closest("[data-layout-scroll-anchor]") ?? trigger
   if (
-    trigger === null ||
-    typeof trigger.getBoundingClientRect !== "function"
+    element === null ||
+    typeof element.getBoundingClientRect !== "function"
   ) {
     return
   }
 
   anchor = {
-    element: trigger,
-    top: trigger.getBoundingClientRect().top,
+    element,
+    top: element.getBoundingClientRect().top,
     until: performance.now() + EXPAND_LOCK_MS,
   }
 }

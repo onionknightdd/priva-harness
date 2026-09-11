@@ -70,17 +70,24 @@ export function QuestionSummary({ resolution, output, skipped }: { resolution?: 
     setOpen(nextOpen)
   }} data-question-summary={denied ? "skipped" : "answered"}
     className="relative my-2 ml-auto w-max min-w-0 max-w-full rounded-lg border border-border px-3 py-2 text-ui text-foreground"
-    render={<motion.div layout layoutDependency={open} initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }}
+    render={<motion.div layout layoutDependency={open} style={{ originX: 1, originY: 0 }}
+      initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }}
       transition={{ opacity: { duration: reduce ? 0 : 0.15 }, layout: layoutTransition }} />}>
     <CollapsibleTrigger aria-controls={open ? contentId : undefined}
-      render={<motion.button layout="position" layoutDependency={open} transition={{ layout: layoutTransition }} />}
+      render={<motion.button layout layoutDependency={open} transition={{ layout: layoutTransition }} />}
       className={cn("flex w-full cursor-pointer items-center gap-2 rounded-sm text-left text-muted-foreground", focusRing)}>
-      {denied ? <TriangleAlert aria-hidden="true" className="size-4 shrink-0 text-status-warning" />
-        : <MessageCircleQuestionMark aria-hidden="true" className="size-4 shrink-0 text-background [&>path:first-child]:fill-status-success [&>path:first-child]:stroke-status-success" />}
-      <span>{statusLabel}</span>
-      <motion.span aria-hidden="true" className="ml-auto flex size-3.5 shrink-0" initial={false}
-        animate={{ transform: open ? "rotate(180deg)" : "rotate(0deg)" }} transition={layoutTransition}>
-        <ChevronDown className="size-full" />
+      <motion.span layout="position" layoutDependency={open} transition={{ layout: layoutTransition }}
+        className="flex items-center gap-2">
+        {denied ? <TriangleAlert aria-hidden="true" className="size-4 shrink-0 text-status-warning" />
+          : <MessageCircleQuestionMark aria-hidden="true" className="size-4 shrink-0 text-background [&>path:first-child]:fill-status-success [&>path:first-child]:stroke-status-success" />}
+        <span>{statusLabel}</span>
+      </motion.span>
+      <motion.span aria-hidden="true" layout="position" layoutDependency={open} layoutAnchor={{ x: 1, y: 0 }}
+        transition={{ layout: layoutTransition }} className="ml-auto flex size-3.5 shrink-0">
+        <motion.span className="flex size-full" initial={false}
+          animate={{ transform: open ? "rotate(180deg)" : "rotate(0deg)" }} transition={layoutTransition}>
+          <ChevronDown className="size-full" />
+        </motion.span>
       </motion.span>
     </CollapsibleTrigger>
     <AnimatePresence initial={false} custom={instant} mode="popLayout" anchorX="right">
@@ -112,9 +119,11 @@ const questionBodyMotion = {
 function QuestionSummaryBody({ children, id, ref }: { children: ReactNode; id: string; ref?: Ref<HTMLDivElement> }) {
   const present = useIsPresent()
   const instant = Boolean(usePresenceData())
+  // Keep the exit out of flow while popLayout removes its stylesheet during unmount.
   return <motion.div ref={ref} id={id} layout="position" layoutDependency={false} custom={instant} variants={questionBodyMotion}
     initial="closed" animate="open" exit="closed" aria-hidden={!present} inert={!present}
-    className="min-w-0" transition={{ layout: { duration: instant ? 0 : present ? 0.18 : 0.12, ease: EASE_OUT } }}>
+    className={cn("min-w-0", !present && "absolute pointer-events-none")}
+    transition={{ layout: { duration: instant ? 0 : present ? 0.18 : 0.12, ease: EASE_OUT } }}>
     {children}
   </motion.div>
 }
