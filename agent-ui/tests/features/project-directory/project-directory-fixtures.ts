@@ -61,7 +61,7 @@ export function installProjectDirectoryFixtures() {
     }
     if (url.pathname === "/api/sandbox/files/preview") {
       const path = url.searchParams.get("path")!
-      return Response.json({ path, name: path.split("/").at(-1), mime_type: "text/plain", size: 12, content: "Attachment fixture", is_binary: false, preview_url: null })
+      return Response.json({ path, name: path.split("/").at(-1), mime_type: "text/plain", size: 12, content: "Attachment fixture", is_binary: false, preview_url: null, preview_error: null })
     }
     if (url.pathname === "/api/sandbox/agent/profile") return Response.json({ queue_behavior: "follow-up" })
     if (/^\/api\/sandbox\/agent\/sessions\/new-session-\d+\/context-usage$/.test(url.pathname)) return Response.json(null)

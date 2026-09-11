@@ -180,7 +180,7 @@ export function useFileBrowser() {
 
       return currentFiles.map((file) =>
         file.id === item.path
-          ? { ...file, status: "loading", error: undefined }
+          ? { ...file, status: "loading", error: undefined, previewError: undefined }
           : file
       )
     })
