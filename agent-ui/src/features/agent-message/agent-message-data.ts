@@ -10,6 +10,7 @@ export type AgentMessageStatus = "streaming" | "complete" | "error"
 export type ToolCardStatus = "started" | "running" | "completed"
 
 export type StreamBlock =
+  | { type: "task_notification"; blockId: string; index: number; notification: import("./background-task-store").TaskNotification }
   | {
       type: "text"
       blockId: string
@@ -50,6 +51,7 @@ export type StreamBlock =
     }
 
 export type ToolCard = {
+  backgroundTask?: import("./background-task-store").BackgroundTask
   tokens?: number
   durationMs?: number
   id: string
@@ -141,6 +143,7 @@ export function answerTextBlock(
 }
 
 function blockHasVisibleContent(block: StreamBlock): boolean {
+  if (block.type === "task_notification") return true
   if (block.type === "thinking") {
     return block.text.trim() !== ""
   }

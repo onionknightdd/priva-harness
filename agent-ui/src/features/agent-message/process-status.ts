@@ -11,6 +11,8 @@ export function formatProcessStatusText(
   const blocks = [...(message.blocks ?? [])].sort(
     (left, right) => left.index - right.index
   )
+  const background = blocks.filter((block) => block.type === "tool_use" && block.tool?.backgroundTask && ["pending", "running", "paused"].includes(block.tool.backgroundTask.status)).length
+  if (background && !isStreaming) return t("backgroundTasks.count", { count: background })
   const summary = formatToolActivitySummary(blocks, t)
   const statusLabel = isStreaming
     ? t("agentMessage.thinking")

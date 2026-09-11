@@ -1,6 +1,11 @@
 import { resourcesEn } from "./resources"
 
 export const en = {
+  backgroundTasks: {
+    title: "Background tasks", empty: "No background tasks in this session", stop: "Stop", stopping: "Stopping…", output: "View output",
+    stopTask: "Stop task: {{name}}", count: "{{count}} background",
+    status: { pending: "Pending", running: "Running in background", paused: "Paused", completed: "Completed", failed: "Failed", cancelled: "Stopped", unknown: "Unknown status" },
+  },
   resources: resourcesEn,
   common: {
     breadcrumb: "Breadcrumb",

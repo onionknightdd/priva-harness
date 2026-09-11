@@ -1,3 +1,6 @@
+import { ClaudeBackgroundTasks } from './claude-background-tasks.js'
+import { taskNotification } from '../../core/resource/background-task.js'
+import { TaskReplyTracker } from '../../core/resource/task-reply-tracker.js'
 import { ClaudeWorkflows } from './claude-workflow.js'
 import type {
   AgentEvent,
@@ -30,6 +33,8 @@ import {
 import { isSyntheticNoResponseAssistant } from './session/claude-transcript.js'
 
 export interface ClaudeSdkMessage {
+  readonly origin?: unknown
+  readonly timestamp?: string
   readonly type: string
   readonly uuid?: string
   readonly sourceToolUseID?: string
@@ -70,6 +75,10 @@ export class ClaudeEventMapper {
   private readonly agentIdByParent = new Map<string, string>()
   private lastToolId: string | undefined
   private readonly workflows = new ClaudeWorkflows()
+  readonly backgroundTasks = new ClaudeBackgroundTasks()
+  private readonly replies = new TaskReplyTracker()
+
+  beginUserTurn(): void { this.replies.clear() }
 
   activeMessageId(): string {
     return this.ensureMessageId()
@@ -80,6 +89,26 @@ export class ClaudeEventMapper {
   }
 
   push(message: ClaudeSdkMessage): AgentEvent[] {
+    if (message.type === 'user' && !message.parent_tool_use_id) {
+      const content = asRecord(message.message)?.['content']
+      const text = typeof content === 'string' ? content : Array.isArray(content)
+        ? content.filter(isRecord).map((block) => stringField(block, 'text') ?? '').join('') : ''
+      const fields = taskNotification(message.origin, text)
+      if (fields?.['task_id']) {
+        const mapped = this.backgroundTasks.push({ ...fields, subtype: 'task_notification' }, this.tools)
+        const previous = this.backgroundTasks.state.get(fields['task_id'])
+        if (!previous || !message.uuid) return mapped
+        const task = this.backgroundTasks.state.update({ ...previous, result: fields['result'] ?? null })
+        return this.replies.deliver({ id: message.uuid, task,
+          ...(message.timestamp ? { createdAt: message.timestamp } : {}) }, asRecord(message.origin)?.['delivery'] === 'absorbed_mid_turn')
+      }
+      const toolResult = Array.isArray(content) && content.some((block) => isRecord(block) && block['type'] === 'tool_result')
+      if (text.trim() && !toolResult && !message.sourceToolUseID && !asRecord(message.message)?.['sourceToolUseID']) this.beginUserTurn()
+    }
+    return this.replies.route(this.map(message))
+  }
+
+  private map(message: ClaudeSdkMessage): AgentEvent[] {
     this.rememberSession(message)
     const channel = this.channelOf(message)
     switch (message.type) {
@@ -92,7 +121,7 @@ export class ClaudeEventMapper {
         return this.mapUser(message, channel)
       case 'system':
         this.rememberModel(message)
-        return this.mapSystem(message)
+        return [...this.backgroundTasks.push(message as unknown as JsonRecord, this.tools), ...this.mapSystem(message)]
       case 'result':
         return [this.mapResult(message)]
       default:
@@ -393,6 +422,7 @@ export class ClaudeEventMapper {
           },
         ),
       )
+      events.push(...this.backgroundTasks.launch(id, name, resultMetrics, output))
       if (isWorkflowName(name)) {
         const result = asRecord(envelope['tool_use_result'] ?? envelope['toolUseResult'] ?? inner['tool_use_result'] ?? block['toolUseResult']) ?? {}
         const snapshot = asRecord(result['workflowSnapshot'])
@@ -413,6 +443,9 @@ export class ClaudeEventMapper {
   private mapSystem(message: ClaudeSdkMessage): AgentEvent[] {
     const record = message as unknown as JsonRecord
     const subtype = message.subtype ?? stringField(record, 'subtype')
+    if (subtype === 'session_state_changed' && ['running', 'idle', 'requires_action'].includes(String(record['state']))) {
+      return [{ type: 'session.state', state: record['state'] as 'running' | 'idle' | 'requires_action' }]
+    }
     if (subtype === 'status') {
       return this.mapCompactStatus(record)
     }

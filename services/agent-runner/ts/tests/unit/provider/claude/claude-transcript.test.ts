@@ -130,6 +130,27 @@ describe('attachTranscriptToolUseResult', () => {
 })
 
 describe('transcriptThreadRecords', () => {
+  it('normalizes only provider task attachments and retains their identity through SDK merging', () => {
+    const content = '<task-notification><task-id>worker</task-id><status>completed</status><result>Actual output</result></task-notification>'
+    const attachment = { type: 'attachment', uuid: 'absorbed', timestamp: '2026-01-01T00:00:00Z', attachment: {
+      type: 'queued_command', commandMode: 'task-notification', prompt: content,
+    } }
+    const records = transcriptThreadRecords([
+      attachment,
+      { type: 'queue-operation', operation: 'remove', reason: 'absorbed_mid_turn', content },
+      { ...attachment, uuid: 'human-attachment', attachment: { ...attachment.attachment, commandMode: 'prompt' } },
+      { ...attachment, uuid: 'other-attachment', attachment: { ...attachment.attachment, type: 'skill_listing' } },
+      { ...attachment, uuid: 'sidechain', isSidechain: true },
+      { ...attachment, uuid: 'sidechain-alias', is_sidechain: true },
+      { ...attachment, uuid: 'nested', parent_tool_use_id: 'parent' },
+      { ...attachment, uuid: 'invalid', attachment: { ...attachment.attachment, prompt: '<task-notification>bad</task-notification>' } },
+    ].map((record) => JSON.stringify(record)))
+    expect(records).toHaveLength(1)
+    expect(records[0]).toMatchObject({ type: 'user', uuid: 'absorbed', timestamp: attachment.timestamp,
+      origin: { kind: 'task-notification', delivery: 'absorbed_mid_turn' }, message: { role: 'user', content } })
+    expect(mergeSdkAndTranscriptMessages([attachment], records)).toEqual(records)
+  })
+
   it('keeps main-thread user and assistant records and drops compact plumbing', () => {
     const records = transcriptThreadRecords([
       JSON.stringify({ type: 'user', uuid: 'u1', message: { role: 'user', content: 'hello' } }),

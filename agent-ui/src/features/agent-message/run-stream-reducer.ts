@@ -1,3 +1,4 @@
+import type { BackgroundTask, TaskNotification, TaskReplyTarget } from "./background-task-store"
 import { isWorkflowStatus, settleWorkflowCards, workflowFromSnapshot } from "./workflow-data"
 import {
   textFromBlocks,
@@ -8,15 +9,25 @@ import {
   type WorkflowCard,
 } from "./agent-message-data"
 import { applyThreadCompactFrame } from "./slash-command-envelope"
-import { frameAtMs, stampMessageThinkingTimes } from "./thinking-time"
+import { frameAtMs, freezeMessageThinking, stampMessageThinkingTimes } from "./thinking-time"
 
-const STREAM_PROTOCOL_VERSION = 1
+const STREAM_PROTOCOL_VERSION = 2
 
 export type StreamFrame = {
+  messageTargetId?: string
+  notification?: TaskNotification
+  replyTo?: TaskReplyTarget
+  streamId?: string
+  task?: BackgroundTask
+  tasks?: BackgroundTask[]
+  messages?: AgentThreadMessage[]
+  userMessage?: AgentThreadMessage
+  activeRunId?: string
   tokens?: number
   durationMs?: number
   v?: number
   type?: string
+  code?: string
   message?: string
   sessionId?: string
   parentToolUseId?: string
@@ -74,12 +85,37 @@ export function applyThreadStreamFrame(
   assistantId: string,
   frame: StreamFrame
 ): AgentThreadMessage[] {
-  const workflowId = frame.workflowToolUseId
+  if (frame.type === "task.updated" || frame.type === "task.notification" || frame.type === "tasks.snapshot") {
+    const tasks = frame.task ? [frame.task] : frame.tasks ?? []
+    return messages.map((message) => ({ ...message, blocks: message.blocks?.map((block) => {
+      if (block.type !== "tool_use") return block
+      const task = tasks.find((task) => task.toolUseId === block.id)
+      return task ? { ...block, tool: { ...block.tool, id: block.id, name: block.name, status: "completed", backgroundTask: task } } : block
+    }) }))
+  }
+  const workflowId = frame.workflowToolUseId ?? frame.parentToolUseId
   const owner = workflowId === undefined ? undefined : messages.find((message) =>
     message.workflows?.some((workflow) => workflow.workflowToolUseId === workflowId) ||
     message.blocks?.some((block) => block.type === "tool_use" && block.id === workflowId))
-  const targetId = owner?.id ?? assistantId
-  const withAssistant = messages.map((message) =>
+  const targetId = owner?.id ?? frame.messageTargetId ?? assistantId
+  if (frame.type === "run.started") {
+    const next = [...messages]
+    if (frame.userMessage && !next.some((message) => message.id === frame.userMessage?.id)) next.push(frame.userMessage)
+    if (!frame.userMessage && !frame.replyTo) return next
+    if (!next.some((message) => message.id === targetId)) next.push(emptyAssistant(targetId, frame))
+    return next.map((message) => message.id === targetId ? { ...message, status: "streaming" } : message)
+  }
+  let current = [...messages]
+  if (frame.type === "task.delivered") {
+    current = applyThreadStreamFrame(current, assistantId, { ...frame, type: "task.updated" }).map((message) =>
+      frame.notification?.turnId && message.id !== targetId && message.status === "streaming"
+        ? { ...freezeMessageThinking(message, frameAtMs(frame)), status: "complete" } : message)
+  }
+  if (targetId && (frame.type?.startsWith("assistant.") || frame.type === "tool.started" || frame.type === "task.delivered") && !frame.parentToolUseId && !current.some((message) => message.id === targetId)) {
+    current.push(emptyAssistant(targetId, frame))
+  }
+  if (targetId !== assistantId) current = current.filter((message) => message.id !== assistantId || message.role === "user" || message.content || message.blocks?.length)
+  const withAssistant = current.map((message) =>
     message.id === targetId &&
     frame.type !== "session.compacting" &&
     frame.type !== "session.compacted"
@@ -87,6 +123,10 @@ export function applyThreadStreamFrame(
       : message
   )
   return applyThreadCompactFrame(withAssistant, assistantId, frame)
+}
+
+function emptyAssistant(id: string, frame: StreamFrame): AgentThreadMessage {
+  return { id, role: "assistant", content: "", blocks: [], status: "streaming", createdAt: new Date(frame.ts ?? Date.now()).toISOString() }
 }
 
 export function applyStreamFrame(
@@ -101,14 +141,22 @@ function applyStreamContent(
   message: AgentThreadMessage,
   frame: StreamFrame
 ): AgentThreadMessage {
+  if (frame.type === "task.delivered" && frame.notification) {
+    const blocks = message.blocks ?? []
+    if (blocks.some((block) => block.type === "task_notification" && block.notification.id === frame.notification!.id)) return message
+    return { ...message, blocks: [...blocks.map((block) => block.type === "tool_use" && block.id === frame.task?.toolUseId
+      ? { ...block, tool: { ...block.tool, id: block.id, name: block.name, status: "completed" as const, backgroundTask: frame.task } } : block),
+      { type: "task_notification", blockId: `notification:${frame.notification.id}`, index: blocks.length ? Math.max(...blocks.map((block) => block.index)) + 1 : 0, notification: frame.notification }] }
+  }
   if (frame.type === "error" || frame.type === "run.failed") {
     const errorText = frame.message?.trim() || message.content
-    return { ...message, content: errorText, status: "error", workflows: settleWorkflowCards(message.workflows, "failed") }
+    return { ...message, content: errorText, status: "error", workflows: settleForegroundWorkflows(message, "failed") }
   }
-  if (frame.type === "run.aborted" || frame.type === "run.completed") {
-    return { ...message, status: frame.type === "run.aborted" ? "complete" : message.status,
-      nestedAgents: frame.type === "run.aborted" ? message.nestedAgents?.map((agent) => agent.status === "running" ? { ...agent, status: "cancelled" as const } : agent) : message.nestedAgents,
-      workflows: frame.type === "run.aborted" ? settleWorkflowCards(message.workflows, "cancelled") : message.workflows }
+  if (frame.type === "run.aborted") {
+    return { ...message, status: "complete", workflows: settleForegroundWorkflows(message, "cancelled") }
+  }
+  if (frame.type === "run.completed") {
+    return { ...message, status: "complete" }
   }
 
   if (frame.type?.startsWith("workflow.")) {
@@ -137,10 +185,17 @@ function applyStreamContent(
   const blocks = applyMainBlocks(withUuid.blocks ?? [], frame)
   return {
     ...withUuid,
+    ...(frame.type?.startsWith("assistant.") ? { status: "streaming" as const } : {}),
     blocks,
     nestedAgents: applyNested(withUuid.nestedAgents ?? [], frame),
     content: textFromBlocks(blocks),
   }
+}
+
+function settleForegroundWorkflows(message: AgentThreadMessage, status: "failed" | "cancelled"): WorkflowCard[] | undefined {
+  return message.workflows?.flatMap((workflow) => message.blocks?.some((block) =>
+    block.type === "tool_use" && block.id === workflow.workflowToolUseId && block.tool?.backgroundTask)
+    ? [workflow] : settleWorkflowCards([workflow], status) ?? [])
 }
 
 function applyMainBlocks(blocks: StreamBlock[], frame: StreamFrame): StreamBlock[] {
@@ -448,6 +503,13 @@ function snapshotBlocks(raw: unknown): StreamBlock[] {
 // message id after each tool_result. Keep earlier messages as a prefix, place
 // this snapshot's blocks after it in snapshot order, and keep a single thinking row.
 function mergeSnapshot(existing: StreamBlock[], snapshot: StreamBlock[]): StreamBlock[] {
+  const boundary = existing.map((block) => block.type).lastIndexOf("task_notification")
+  if (boundary >= 0) {
+    const prefix = existing.slice(0, boundary + 1)
+    const suffix = mergeSnapshot(existing.slice(boundary + 1), snapshot)
+    let index = Math.max(...prefix.map((block) => block.index)) + 1
+    return [...prefix, ...suffix.map((block) => ({ ...block, index: index++ }))]
+  }
   const existingThinking = existing.find(
     (block): block is Extract<StreamBlock, { type: "thinking" }> =>
       block.type === "thinking"

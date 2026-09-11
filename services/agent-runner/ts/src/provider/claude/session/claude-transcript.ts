@@ -1,4 +1,5 @@
 import { asRecord, isRecord, stringField, type JsonRecord } from '../../../core/event/json-record.js'
+import { claudeTaskNotificationRecord } from './claude-task-notification.js'
 
 export const EMPTY_TOOL_USE_RESULTS: ReadonlyMap<string, unknown> = new Map()
 
@@ -48,8 +49,10 @@ export function transcriptThreadRecords(lines: readonly string[]): unknown[] {
       continue
     }
     const record = asRecord(parsed)
-    if (record === undefined || !isMainThreadRecord(record)) continue
-    records.push(parsed)
+    if (record === undefined) continue
+    const notification = claudeTaskNotificationRecord(record)
+    if (notification) records.push(notification)
+    else if (isMainThreadRecord(record)) records.push(record)
   }
   return records
 }
@@ -71,7 +74,16 @@ export function mergeSdkAndTranscriptMessages(
     if (uuid !== undefined && sdkByUuid.has(uuid)) {
       const sdk = sdkByUuid.get(uuid)
       const sourceToolUseID = stringField(asRecord(record) ?? {}, 'sourceToolUseID')
-      merged.push(sourceToolUseID !== undefined && isRecord(sdk) ? { ...sdk, sourceToolUseID } : sdk)
+      const origin = asRecord(record)?.['origin']
+      if (asRecord(origin)?.['delivery'] === 'absorbed_mid_turn') {
+        merged.push({ ...asRecord(sdk), ...asRecord(record) })
+        used.add(uuid)
+        continue
+      }
+      merged.push(isRecord(sdk) && (sourceToolUseID !== undefined || origin !== undefined) ? { ...sdk,
+        ...(sourceToolUseID === undefined ? {} : { sourceToolUseID }),
+        ...(origin === undefined ? {} : { origin }),
+      } : sdk)
       used.add(uuid)
       continue
     }

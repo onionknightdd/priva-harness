@@ -26,7 +26,7 @@ DSH 必须使用独立 id（建议 `'dsh'`），不要和 UI 的 `deepseek` 混�
 
 ```text
 用户 / UI
-    │  WS /api/sandbox/agent/ws/run
+    │  WS /api/sandbox/agent/ws/session
     ▼
 AgentHarness          ← 产品侧编排（事件归一；以后才有 registry / session / permission）
     │  AgentProvider.openSession()
@@ -63,7 +63,7 @@ LLM 端点（Anthropic / 自建 / DeepSeek Official / OpenAI-compat）
 main.ts
   ├── ClaudeProvider(globalConfigDir = $RUNTIME_HOME/harness/.claude)
   ├── AgentHarness({ provider: claude, cwd })
-  └── HTTP + WS /api/sandbox/agent/ws/run
+  └── HTTP + WS /api/sandbox/agent/ws/session
 ```
 
 一次 turn：

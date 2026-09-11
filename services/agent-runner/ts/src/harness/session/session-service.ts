@@ -1,3 +1,5 @@
+import type { BackgroundTask } from '../../core/resource/background-task.js'
+import { applyStreamFrame } from '../../core/resource/apply-stream-frame.js'
 import { realpath, stat } from 'node:fs/promises'
 
 import type {
@@ -134,6 +136,17 @@ export interface RecordRunCompletedInput {
 }
 
 export class SessionService {
+  private liveThreadReader: ((ref: SessionRef) => readonly ThreadMessage[] | undefined) | undefined
+  private backgroundReader: ((harness: ProviderId) => readonly { sessionId: string; tasks: readonly BackgroundTask[] }[]) | undefined
+  bindLiveThreadReader(read: (ref: SessionRef) => readonly ThreadMessage[] | undefined): void { this.liveThreadReader = read }
+  bindBackgroundReader(read: NonNullable<SessionService['backgroundReader']>): void { this.backgroundReader = read }
+  listBackground(harness: ProviderId) { return this.backgroundReader?.(harness) ?? [] }
+  async saveBackgroundTasks(ref: SessionRef, tasks: readonly BackgroundTask[]): Promise<void> {
+    await this.options.metadata.upsert(ref, { backgroundTasks: tasks })
+  }
+  async savedBackgroundTasks(ref: SessionRef): Promise<readonly BackgroundTask[]> {
+    return (await this.options.metadata.get(ref)).backgroundTasks
+  }
   private warmListing: ((harness: ProviderId) => readonly SessionRef[]) | undefined
   private contextUsageReader:
     | ((ref: SessionRef, spec?: ProviderRunSpec) => Promise<ContextUsage>)
@@ -256,7 +269,15 @@ export class SessionService {
       Promise.resolve(this.options.liveRuns.liveForSession(ref)),
     ])
     return {
-      messages: foldThread(items),
+      messages: this.liveThreadReader?.(ref) ?? foldThread(items).map((message) => {
+        const restored = metadata.backgroundTasks.reduce((next, task) => applyStreamFrame(next, { type: 'task.updated', task }), message)
+        return { ...restored, blocks: (restored.blocks ?? []).map((block) => {
+          if (block.type !== 'tool_use' || !block.tool?.backgroundTask) return block
+          const task = block.tool.backgroundTask
+          if (!['running', 'pending', 'paused'].includes(task.status)) return block
+          return { ...block, tool: { ...block.tool, backgroundTask: { ...task, status: 'unknown' as const } } }
+        }),
+      } }),
       addDirs: metadata.addDirs,
       runMode: metadata.runMode ?? 'code',
       liveRunId: live?.runId ?? null,

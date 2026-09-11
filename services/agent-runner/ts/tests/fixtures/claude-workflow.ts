@@ -32,6 +32,6 @@ export const workflowTranscript = [
   { type: 'assistant', uuid: 'a2', timestamp: '2026-09-05T10:00:03Z', message: { role: 'assistant', content: [{ type: 'text', text: 'The workflow is running.' }] } },
   { type: 'user', uuid: 'u2', timestamp: '2026-09-05T10:00:04Z', message: { role: 'user', content: 'Another turn' } },
   { type: 'assistant', uuid: 'a3', timestamp: '2026-09-05T10:00:05Z', message: { role: 'assistant', content: [{ type: 'text', text: 'Another answer.' }] } },
-  { type: 'user', uuid: 'notice', timestamp: '2026-09-05T10:00:14Z', message: { role: 'user',
+  { type: 'user', uuid: 'notice', origin: { kind: 'task-notification' }, timestamp: '2026-09-05T10:00:14Z', message: { role: 'user',
     content: '<task-notification>\n<task-id>task-one</task-id>\n<tool-use-id>tool-one</tool-use-id>\n<status>completed</status>\n<summary>Dynamic workflow completed</summary>\n</task-notification>' } },
 ]

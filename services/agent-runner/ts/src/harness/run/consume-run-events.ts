@@ -1,8 +1,8 @@
 import type { AgentEvent } from '../../core/event/agent-event.js'
-import { BackgroundDrainTracker } from './background-drain.js'
+import { ForegroundToolSettle } from './foreground-tool-settle.js'
 
 export interface ConsumeRunEventsOptions {
-  readonly drain?: BackgroundDrainTracker
+  readonly drain?: ForegroundToolSettle
   readonly signal?: AbortSignal
 }
 
@@ -10,7 +10,7 @@ export async function* consumeRunEvents(
   source: AsyncIterable<AgentEvent>,
   options: ConsumeRunEventsOptions = {},
 ): AsyncGenerator<AgentEvent> {
-  const drain = options.drain ?? new BackgroundDrainTracker()
+  const drain = options.drain ?? new ForegroundToolSettle()
   const iterator = source[Symbol.asyncIterator]()
   let pending: Promise<IteratorResult<AgentEvent>> | undefined
   let seenResult = false
@@ -59,11 +59,6 @@ export async function* consumeRunEvents(
       }
       if (event.type === 'run.completed') {
         seenResult = true
-        if (drain.hadBackgroundWork()) {
-          yield event
-          if (drain.shouldClose(true)) return
-          continue
-        }
         if (drain.shouldClose(true)) {
           yield event
           return

@@ -61,17 +61,24 @@ const context = { hasUI: false } as ExtensionContext
 describe('Pi workflow bridge with Responses transport', () => {
   it('inherits the host model, separates identical labels and persists full details', async () => {
     const { cwd, bridge, states, requests } = await setup()
+    const deliveries: string[] = []
+    bridge.bindResultDelivery((_state, result) => { deliveries.push(result); return Promise.resolve() })
     const script = `export const meta={name:'Bridge',description:'Fixture only',phases:[{title:'Read'}]};phase('Read');return await parallel([()=>agent('MARKER_A',{label:'Same'}),()=>agent('MARKER_B',{label:'Same'})]);`
     await bridge.tool.execute('tool', { script, maxAgents: 2, agentRetries: 0 }, new AbortController().signal, undefined, context)
-    await bridge.waitForIdle()
+    await waitForTerminal(states)
+    await bridge.flush()
     const state = states.at(-1)
     expect(state?.status).toBe('completed')
     expect(requests).toEqual(['fixture-model', 'fixture-model'])
     expect(state?.agents.map((a) => a.resultPreview).sort()).toEqual(['A', 'B'])
     const details = await Promise.all((state?.agents ?? []).map((a) => readPiWorkflowAgent(cwd, 'session', state?.workflowRunId ?? '', a.agentId ?? '')))
     expect(details.map((d) => d.process.filter((p) => p.kind === 'message').map((p) => p.text).join('')).sort()).toEqual(['A', 'B'])
+    expect(deliveries).toHaveLength(1)
+    expect(deliveries[0]).toContain('A')
+    expect(deliveries[0]).toContain('B')
     const count = states.length
-    await bridge.waitForIdle()
+    await waitForTerminal(states)
+    await bridge.flush()
     expect(states).toHaveLength(count)
   }, 15000)
 
@@ -79,8 +86,17 @@ describe('Pi workflow bridge with Responses transport', () => {
     const { bridge, states } = await setup()
     await bridge.tool.execute('cancel', { script: `export const meta={name:'Cancel',description:'Fixture only',phases:[]};return await agent('MARKER_A');`, agentRetries: 0 }, new AbortController().signal, undefined, context)
     bridge.abort()
-    await bridge.waitForIdle()
+    await waitForTerminal(states)
+    await bridge.flush()
     expect(states.at(-1)?.status).toBe('cancelled')
     expect(states.at(-1)?.agents.every((a) => !['running', 'pending'].includes(a.state))).toBe(true)
   }, 15000)
 })
+
+async function waitForTerminal(states: readonly WorkflowState[]): Promise<void> {
+  const start = Date.now()
+  while (!states.length || ['running', 'pending'].includes(states.at(-1)?.status ?? 'running')) {
+    if (Date.now() - start > 10000) throw new Error('Workflow did not finish')
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  }
+}

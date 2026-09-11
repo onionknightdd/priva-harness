@@ -259,7 +259,7 @@ Empty chat cwd chip --+-> Working directory          |
 目录读取与新建直接使用 `GET /api/sandbox/files/list`、
 `POST /api/sandbox/files/mkdir`；使用前重新验证目录，关闭弹窗会取消读请求。
 新建文件夹后自动选中，点击使用才进入草稿。目录本身不产生空项目分组，首条消息经
-`/api/sandbox/agent/ws/run` 创建会话，收到 `sessionId` 后加入按 cwd 聚合的侧栏。
+`/api/sandbox/agent/ws/session` 创建会话，收到 `sessionId` 后加入按 cwd 聚合的侧栏。
 已有项目的加号直接以该 cwd 开新草稿。空白对话更改目录不重置输入文字或附件，
 已完成与进行中的上传保留绝对路径；之后新增的附件上传到新 cwd。发出首条消息后，
 目录标签只读。
@@ -757,3 +757,38 @@ Switch 浏览器回归：在 `agent-ui/` 运行 `npm run dev`，打开
 再分别带 `?reduced-motion=1`、`?dark=1` 验证减少动态效果和深色样式。检查覆盖
 受控/非受控状态、label 激活、禁用、表单值、服务端等待、快速切换、按压和释放。
 运行后可用 Tab 聚焦 **Controlled switch**，按 Space 验证真实键盘激活。
+
+
+### 后台任务与会话连接（2026-09-10）
+
+当前聊天连接使用 `/api/sandbox/agent/ws/session` v2，`run.completed` 只结束对应回复。
+后台任务通过 `background-task-store.ts` 更新原工具卡、Tasks & Activity 和侧栏计数。
+输入框只由模型生成状态控制；后台卡提供独立停止和输出预览。
+任务通知与其续答按实际消费顺序放回启动任务的 assistant 气泡；通知是可点击的独立
+组件，同一气泡只保留一组复制 / 分支操作。Agent 启动卡不再叠加重复的任务状态卡。
+点击通知打开 Workspace 对应 Agent 的“输出”页，正文取自该条原生通知的 `result`。
+后续真实用户消息仍保持独立。桌面沿用右侧 Workspace，窄屏沿用 Workspace 抽屉。
+`absorbed_mid_turn` 批次在实际消费位置显示为独立 assistant turn：先显示同批通知，
+再追加主 Agent 的续答；之前的回复在原位置结束。实时流与历史回放使用相同的
+`turnId`，不拆分 SDK 执行或改变输入框忙碌状态。Workspace 跨 turn 关联通知与
+原启动 Agent，点击仍打开该次通知的实际输出。
+
+```text
+Session WebSocket -> run.* -> assistant message / composer
+                  -> task.* -> original tool card -> stop
+                            -> Tasks & Activity / sidebar count
+                  -> task.delivered -> notification + continuation in launch bubble
+                                     -> click -> Workspace Agent / Output
+                  -> absorbed batch -> new turn: notifications + continuation
+                                     -> click -> same Workspace Agent / Output
+```
+
+任务状态与通知组件复用 Badge / Button，状态与通知出现时为 150 ms 透明度变化，减少动态效果时立即更新。
+窄屏操作允许换行，状态文本保留；未知任务不显示运行计数或停止按钮。
+接口、持久化和重连语义见 [后台任务协议](background-tasks.md)。
+
+从仓库根目录运行相关前端数据测试：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/*.test.ts
+```

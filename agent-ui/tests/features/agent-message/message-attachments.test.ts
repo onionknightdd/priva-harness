@@ -7,7 +7,7 @@ import path from "node:path"
 import { it } from "node:test"
 import { promisify } from "node:util"
 
-import { runAgentSession } from "../../../src/features/agent-message/run-agent-session.ts"
+import { connectAgentSession } from "../../../src/features/agent-message/run-agent-session.ts"
 import { threadMessagesFromApi } from "../../../src/features/chat-session/session-thread-messages.ts"
 import { attachmentMessageSummary, attachmentsFromMessageText, messageTextWithAttachments } from "../../../src/features/agent-message/message-attachment-text.ts"
 
@@ -84,11 +84,12 @@ it("sends only the formatted text through WebSocket for both providers, includin
     for (const harness of ["claude", "pi"] as const) {
       for (const text of ["", "请分析"]) {
         const init = { text, attachments, model: "profile:model", harness, cwd: "/workspace" }
-        const run = runAgentSession(init, { onFrame: () => {}, onError: assert.fail })
+        const run = connectAgentSession({ harness }, { onFrame: () => {}, onError: assert.fail, onConnection: () => {}, onSession: () => {} })
+        const finished = run.start(init, "test-run")
         Socket.instance.dispatchEvent(new Event("open"))
-        assert.deepEqual(Socket.instance.sent, [{ type: "init", text: messageTextWithAttachments(text, attachments), model: init.model, harness, cwd: init.cwd }])
+        assert.deepEqual(Socket.instance.sent, [{ type: "run.start", runId: "test-run", text: messageTextWithAttachments(text, attachments), model: init.model, harness, cwd: init.cwd }])
         run.disconnect()
-        await run.finished
+        await finished
       }
     }
   } finally {

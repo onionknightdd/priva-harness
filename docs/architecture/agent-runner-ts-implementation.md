@@ -7,13 +7,13 @@
 
 ## MVP 清单
 
-以下顺序以 API 对 Agent 运行主链的重要程度、与 `/ws/run` 的相关性，以及前后依赖
-为依据。这里的 `/ws/run` 是简写，当前完整路由为
-`WS /api/sandbox/agent/ws/run`。每个 MVP 都必须形成可独立验收的纵向切片，不能按
+以下顺序以 API 对 Agent 运行主链的重要程度、与 `/ws/session` 的相关性，以及前后依赖
+为依据。这里的 `/ws/session` 是简写，当前完整路由为
+`WS /api/sandbox/agent/ws/session`。每个 MVP 都必须形成可独立验收的纵向切片，不能按
 现有 Python router 文件逐个翻译。
 
 ```text
-MVP 1  最小文本对话 /ws/run
+MVP 1  最小文本对话 /ws/session
   │
   ├──→ MVP 2  session 连续性 ──→ MVP 3  live run 恢复 ──→ MVP 4  permission / queue
   │
@@ -29,11 +29,11 @@ MVP 7  其他 transport / 输入 ──→ MVP 8  高级 session ──→ MVP 9
 编号表示建议验收顺序；图中的分支表示依赖关系。MVP 2–4 和 MVP 5–6 在 MVP 1
 通过后可以并行推进。
 
-### MVP 1：最基础的 `/ws/run`
+### MVP 1：最基础的 `/ws/session`
 
 API：
 
-- `WS /api/sandbox/agent/ws/run`。
+- `WS /api/sandbox/agent/ws/session`。
 
 范围：
 
@@ -51,8 +51,8 @@ API：
 
 - 任何配置字段或配置 API，包括 `cwd`、model、profile、`provider` 选择、system prompt
   和 MCP。
-- session 持久化、多轮对话、恢复、`attach`、`abort`、permission、queue 和事件重放。
-- 工具、文件、图片、Pi、其他 `transport`，以及 `/ws/run` 之外的任何业务 API。
+- session 持久化、多轮对话、恢复、`session.subscribe`、`run.abort`、permission、queue 和事件重放。
+- 工具、文件、图片、Pi、其他 `transport`，以及 `/ws/session` 之外的任何业务 API。
 
 MVP 1 只在开发或测试环境中证明最短对话链路，不承担生产兼容性。
 
@@ -60,7 +60,7 @@ MVP 1 只在开发或测试环境中证明最短对话链路，不承担生产�
 
 API：
 
-- `/ws/run` 的 `session_id` 恢复语义。
+- `/ws/session` 的 `session_id` 恢复语义。
 - `GET /api/sandbox/agent/sessions`。
 - `GET /api/sandbox/agent/sessions/{session_id}/messages`。
 - `GET /api/sandbox/agent/sessions/{session_id}/thread`（把 provider transcript 折叠成与 live stream 相同的 assistant 回合快照；`/messages` 仍返回 provider 原生记录）。
@@ -94,29 +94,30 @@ GET /context-usage
 - 恢复运行不会重复提交已经成功发送的用户输入。
 - session 响应通过黄金测试夹具验证，不暴露 SDK 原始对象。
 
-明确不包含 live run 的 `attach`、元数据修改、fork、rewind、recap 和 transcript
+明确不包含 live run 的 `session.subscribe`、元数据修改、fork、rewind、recap 和 transcript
 修复。
 
-### MVP 3：live run 生命周期、断线重连与停止
+### MVP 3：会话事件流、断线重连与停止
 
 API：
 
-- `/ws/run` 的 `attach`、`since_seq` 和 `abort` 帧。
+- `/ws/session` 的 `run.start`、`session.subscribe`、`run.abort` 和 `task.stop` 帧。
+- 当前使用会话级 v2 协议，字段、游标和任务生命周期见 [后台任务协议](../background-tasks.md)。
 - `GET /api/sandbox/agent/sessions/running`。
 
 范围：
 
 - 实现 `LiveRunRegistry`、有界 replay buffer、subscriber fan-out 和 activity lease。
-- WebSocket 断开只解除订阅，不终止 run；客户端可以按 `since_seq` 重放并继续跟随。
+- WebSocket 断开只解除订阅，不终止 run；客户端可以按 `sinceSeq` 重放并继续跟随。
 - 支持显式停止、同一 session 仅有一个 live run、keepalive、进程关闭排空和取消。
 - 保留 replay gap、慢消费者隔离，以及终止记录短期保留语义。
 
 完成定义：
 
-- 断线后 run 继续执行；重新 `attach` 不重复事件，也不遗漏仍在 buffer 内的事件。
+- 断线后 run 继续执行；重新 `session.subscribe` 不重复事件，也不遗漏仍在 buffer 内的事件。
 - 超出 buffer 时明确返回 `replay_gap`，不得伪装成完整回放。
 - 慢订阅者只断开自身，不阻塞 run 或其他订阅者。
-- 并发运行同一 session 被稳定拒绝；`abort` 最终只产生一个终止状态。
+- 并发运行同一 session 被稳定拒绝；`run.abort` 最终只产生一个终止状态。
 
 明确不包含跨进程 run 恢复、分布式 registry、permission 待处理快照和暖运行时池。
 
@@ -124,7 +125,7 @@ API：
 
 API：
 
-- `/ws/run` 的 `permission_response`、`queue` 和 `queue_cancel` 帧。
+- `/ws/session` 的 `permission_response`、`queue` 和 `queue_cancel` 帧。
 - `POST /api/sandbox/agent/permission/respond`。
 
 范围：
@@ -151,7 +152,7 @@ API：
   能力探测。
 - `/api/sandbox/agent/profile` 读取和更新 `agentProfile`（当前为 `queue_behavior`）。
 - `/api/sandbox/resource/mcp` 下的列表、读取、创建、更新和删除。
-- `/ws/run` 的 `mcp_servers = auto | disable | string[]`。
+- `/ws/session` 的 `mcp_servers = auto | disable | string[]`。
 
 范围：
 
@@ -235,7 +236,7 @@ memory 的投影留到后续 MVP。
 
 API：
 
-- 复用 MVP 1–4 的同一个 `/ws/run`，不新增 Pi 专用 endpoint。
+- 复用 MVP 1–4 的同一个 `/ws/session`，不新增 Pi 专用 endpoint。
 
 范围：
 
@@ -263,7 +264,7 @@ API：
 - `POST /api/sandbox/agent/run/stream`。
 - `POST /api/sandbox/agent/image-route`。
 - `/api/sandbox/agent-attachments` 下的上传、列表、读取和删除。
-- `/ws/run` 的 attachments、images、model 和 partial message 等可选输入。
+- `/ws/session` 的 attachments、images、model 和 partial message 等可选输入。
 
 范围：
 

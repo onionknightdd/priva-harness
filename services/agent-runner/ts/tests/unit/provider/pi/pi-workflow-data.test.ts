@@ -42,6 +42,7 @@ describe('Pi workflow normalization', () => {
     const workflowState = piWorkflowState('old-tool', { ...snapshot, status: 'completed' })
     const replay = replayPiSessionMessages([{ type: 'tool_result', uuid: 'result', sessionId: 'session', parentToolUseId: 'tool', timestamp: 10, metadata: null,
       message: { role: 'toolResult', toolName: 'workflow', details: { runId: 'run:one', background: true, workflowState } } }])
-    expect(replay[0]).toMatchObject({ kind: 'frame', event: { type: 'workflow.progress', workflow: { workflowToolUseId: 'tool', status: 'completed' } } })
+    expect(replay).toContainEqual(expect.objectContaining({ kind: 'frame', event: expect.objectContaining({ type: 'workflow.progress', workflow: expect.objectContaining({ workflowToolUseId: 'tool', status: 'completed' }) as unknown }) as unknown }))
+    expect(replay[0]).toMatchObject({ kind: 'frame', event: { type: 'task.updated', task: { toolUseId: 'tool', status: 'completed' } } })
   })
 })

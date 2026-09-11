@@ -1,3 +1,4 @@
+import { syncBackgroundOverview, type BackgroundTask } from "@/features/agent-message/background-task-store"
 import type { MessageAttachment } from "@/features/agent-message/message-attachment"
 import { attachmentMessageSummary } from "@/features/agent-message/message-attachment-text"
 const SESSION_API_PREFIX = "/api/sandbox/agent/sessions"
@@ -266,13 +267,16 @@ export function listRunningSessions(
       run_mode: SessionRunMode
       harness: AgentRunHarness
     }>
+    background?: Array<{ sessionId: string; tasks: BackgroundTask[] }>
     warm: Array<{
       session_id: string
       status: "warm"
       harness: AgentRunHarness
     }>
   }>(`${SESSION_API_PREFIX}/running?${harnessQuery(harness)}`, { signal }).then(
-    (payload): LiveSessionLists => ({
+    (payload): LiveSessionLists => {
+      syncBackgroundOverview(harness, payload.background ?? [])
+      return ({
       running: payload.running.map((item) => ({
         sessionId: item.session_id,
         runId: item.run_id,
@@ -284,7 +288,7 @@ export function listRunningSessions(
         harness: item.harness,
       })),
       warmSessionIds: payload.warm.map((item) => item.session_id),
-    })
+    }) }
   )
 }
 

@@ -17,7 +17,9 @@ import { isRunResultEvent } from '../core/event/agent-event.js'
 import type { SlashCommand } from '../core/resource/slash-command.js'
 import type { UserTurn } from '../core/run/user-turn.js'
 import { SessionError } from '../core/resource/session.js'
-import { DRAIN_SETTLE_MS } from './run/background-drain.js'
+import { SessionStream } from './session/session-stream.js'
+import { sessionRefKey } from '../core/resource/session.js'
+import { userTurnFromText } from '../core/run/user-turn.js'
 import { consumeRunEvents } from './run/consume-run-events.js'
 import { EnvelopeStamper } from './run/envelope-stamper.js'
 import type { LiveRun } from './run/live-run.js'
@@ -54,10 +56,13 @@ export interface SlashCommandCatalog {
 export class AgentHarness {
   private readonly liveRuns: LiveRunRegistry | undefined
   private readonly pool: WarmRuntimePool | undefined
-  private readonly inboundIdleTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  private readonly streams = new Map<string, SessionStream>()
+  private readonly loadingStreams = new Map<string, Promise<SessionStream>>()
 
   constructor(private readonly options: AgentHarnessOptions) {
     this.liveRuns = options.liveRuns
+    options.sessions?.bindLiveThreadReader((ref) => this.streams.get(sessionRefKey(ref))?.snapshot().messages)
+    options.sessions?.bindBackgroundReader((provider) => [...this.streams.values()].filter((stream) => stream.session.provider === provider).map((stream) => ({ sessionId: stream.session.id, tasks: stream.tasks.list() })))
     this.pool = options.pool ?? (
       options.liveRuns === undefined
         ? undefined
@@ -67,6 +72,52 @@ export class AgentHarness {
           },
         })
     )
+  }
+
+  sessionStream(ref: SessionRef): SessionStream {
+    const key = sessionRefKey(ref)
+    let stream = this.streams.get(key)
+    if (!stream) { stream = new SessionStream(ref, [], 4096, (tasks) => this.options.sessions?.saveBackgroundTasks(ref, tasks) ?? Promise.resolve()); this.streams.set(key, stream) }
+    return stream
+  }
+
+  async loadSessionStream(ref: SessionRef): Promise<SessionStream> {
+    const key = sessionRefKey(ref)
+    const existing = this.streams.get(key)
+    if (existing) return existing
+    const loading = this.loadingStreams.get(key)
+    if (loading) return loading
+    const promise = (async () => {
+      const [history, tasks] = await Promise.all([
+        this.options.sessions?.thread(ref.provider, ref.id), this.options.sessions?.savedBackgroundTasks(ref),
+      ])
+      const stream = this.streams.get(key) ?? new SessionStream(ref, history?.messages, 4096,
+        (tasks) => this.options.sessions?.saveBackgroundTasks(ref, tasks) ?? Promise.resolve(), tasks)
+      this.streams.set(key, stream)
+      return stream
+    })()
+    this.loadingStreams.set(key, promise)
+    try { return await promise } finally { this.loadingStreams.delete(key) }
+  }
+
+  async stopTask(ref: SessionRef, taskId: string): Promise<void> {
+    const runtime = this.pool?.peek(ref)
+    if (!runtime?.stopTask) throw new SessionError('invalid-request', 'The task runtime is no longer available')
+    const stream = this.sessionStream(ref)
+    const task = stream.tasks.get(taskId)
+    if (!task) throw new SessionError('invalid-request', 'Unknown background task')
+    stream.publish({ type: 'task.updated', task: { ...task, stopRequested: true } })
+    try { await runtime.stopTask(taskId) } catch (error) {
+      stream.publish({ type: 'task.updated', task: { ...task, stopRequested: false } })
+      throw error
+    }
+  }
+
+  private publish(live: LiveRun, event: StreamFrame): void {
+    if (event.sessionId || live.sessionId) {
+      this.sessionStream({ provider: live.provider, id: event.sessionId ?? live.sessionId ?? '' }).publish(event, live.runId)
+    }
+    live.publish(event)
   }
 
   launch(
@@ -169,9 +220,8 @@ export class AgentHarness {
   }
 
   async disposePool(): Promise<void> {
-    for (const timer of this.inboundIdleTimers.values()) clearTimeout(timer)
-    this.inboundIdleTimers.clear()
     await this.pool?.disposeAll()
+    await Promise.all([...this.streams.values()].map((stream) => stream.flush()))
   }
 
   async invalidateResources(): Promise<void> {
@@ -185,14 +235,6 @@ export class AgentHarness {
     runOptions?: AgentRunOptions,
   ): AsyncIterable<StreamFrame> {
     const runId = runOptions?.runId ?? randomUUID()
-    const live = this.liveRuns?.get(runId)
-    const stamper = new EnvelopeStamper(
-      runId,
-      spec.provider,
-      Date.now,
-      live?.sessionId ?? undefined,
-    )
-    yield stamper.stamp({ type: 'run.started', model: spec.model })
 
     const session = this.prepareSession(spec, runOptions?.session, false)
     const provider = this.options.providers[spec.provider]
@@ -202,7 +244,19 @@ export class AgentHarness {
       ? await provider.openSession(session, spec)
       : await pool.acquire(poolKey, spec, () => provider.openSession(session, spec))
 
+    this.liveRuns?.attachSession(runId, runtime.session.id)
+    const stamper = new EnvelopeStamper(runId, spec.provider, Date.now, runtime.session.id)
+    const userTurn = userTurnFromText(turn.text)
+    const attachments = turn.attachments ?? userTurn.attachments
     try {
+      yield stamper.stamp({
+        type: 'run.started', model: spec.model,
+        userMessage: {
+          id: `${runId}:user`, role: 'user', content: userTurn.text,
+          ...(attachments ? { attachments } : {}),
+          createdAt: new Date().toISOString(), status: 'complete',
+        },
+      })
       yield* this.forward(runtime, turn, context, spec, runId, stamper)
     } finally {
       if (pool === undefined || runtime.session.id === '') {
@@ -229,12 +283,12 @@ export class AgentHarness {
           this.liveRuns?.attachSession(live.runId, frame.sessionId)
         }
         if (isRunResultEvent(frame)) sawResult = true
-        live.publish(frame)
-        if (sawResult) live.complete()
+        this.publish(live, frame)
+        if (sawResult) { live.complete(); this.liveRuns?.finish(live.runId) }
       }
     } catch (error) {
       if (!sawResult) {
-        live.publish(live.stamp({
+        this.publish(live, live.stamp({
           type: 'run.failed',
           message: errorMessage(error),
           model: spec.model,
@@ -243,7 +297,7 @@ export class AgentHarness {
       }
     } finally {
       if (!sawResult) {
-        live.publish(live.stamp(
+        this.publish(live, live.stamp(
           live.abort.signal.aborted
             ? { type: 'run.aborted', message: 'aborted', model: spec.model }
             : { type: 'run.failed', message: 'Run ended without a result', model: spec.model },
@@ -268,7 +322,10 @@ export class AgentHarness {
       this.publishInbound(existing, events, runtime, spec, session)
       return
     }
-    if (!hasActiveInboundWork(events)) return
+    if (!hasActiveInboundWork(events)) {
+      for (const event of events) this.sessionStream(session).publish(event)
+      return
+    }
     this.pool?.claim(runtime)
     const runId = randomUUID()
     const abort = new AbortController()
@@ -280,13 +337,10 @@ export class AgentHarness {
     })
     liveRuns.attachSession(runId, session.id)
     abort.signal.addEventListener('abort', () => {
-      this.clearInboundIdle(runId)
-      if (live.status !== 'running') return
-      live.complete()
-      liveRuns.finish(runId)
-      void this.pool?.recycle(runtime, spec, session)
+      void runtime.abort().catch((error: unknown) => this.publishInbound(live, [{ type: 'run.failed', message: errorMessage(error) }], runtime, spec, session))
     })
-    live.publish(live.stamp({ type: 'run.started', model: spec.model }))
+    const replyTo = events.find((event) => event.replyTo)?.replyTo
+    this.publish(live, live.stamp({ type: 'run.started', model: spec.model, ...(replyTo ? { replyTo } : {}) }))
     this.publishInbound(live, events, runtime, spec, session)
   }
 
@@ -297,39 +351,15 @@ export class AgentHarness {
     spec: ProviderRunSpec,
     session: SessionRef,
   ): void {
-    for (const event of events) {
-      live.publish(live.stamp(event))
+    for (const [index, event] of events.entries()) {
+      this.publish(live, live.stamp(event))
       if (!isRunResultEvent(event)) continue
-      this.clearInboundIdle(live.runId)
       live.complete()
       this.liveRuns?.finish(live.runId)
       void this.pool?.recycle(runtime, spec, session)
+      this.promoteIdle(runtime, spec, session, events.slice(index + 1))
       return
     }
-    this.armInboundIdle(live, runtime, spec, session)
-  }
-
-  private armInboundIdle(
-    live: LiveRun,
-    runtime: AgentRuntime,
-    spec: ProviderRunSpec,
-    session: SessionRef,
-  ): void {
-    this.clearInboundIdle(live.runId)
-    const timer = setTimeout(() => {
-      this.inboundIdleTimers.delete(live.runId)
-      if (live.status !== 'running') return
-      live.complete()
-      this.liveRuns?.finish(live.runId)
-      void this.pool?.recycle(runtime, spec, session)
-    }, DRAIN_SETTLE_MS)
-    this.inboundIdleTimers.set(live.runId, timer)
-  }
-
-  private clearInboundIdle(runId: string): void {
-    const timer = this.inboundIdleTimers.get(runId)
-    if (timer !== undefined) clearTimeout(timer)
-    this.inboundIdleTimers.delete(runId)
   }
 
   private async *forward(
@@ -444,12 +474,10 @@ function hasActiveInboundWork(events: readonly AgentEvent[]): boolean {
       case 'assistant.image_delta':
       case 'tool.started':
       case 'tool.input_delta':
-      case 'tool.running':
-      case 'tool.progress':
-      case 'agent.started':
-      case 'workflow.started':
-      case 'workflow.progress':
-        return true
+      case 'assistant.message':
+        return !('parentToolUseId' in event && event.parentToolUseId)
+      case 'session.state':
+        return event.state === 'running'
       default:
         return false
     }

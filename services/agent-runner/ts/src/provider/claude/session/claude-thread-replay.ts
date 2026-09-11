@@ -1,4 +1,4 @@
-import { isWorkflowName } from '../../../core/event/tool-names.js'
+import { taskNotification } from '../../../core/resource/background-task.js'
 import { ClaudeEventMapper, type ClaudeSdkMessage } from '../claude-event-mapper.js'
 import { asRecord, isRecord, stringField } from '../../../core/event/json-record.js'
 import type { SessionMessage } from '../../../core/resource/session.js'
@@ -10,20 +10,18 @@ export function replayClaudeSessionMessages(
 ): ThreadReplayItem[] {
   const mapper = new ClaudeEventMapper()
   const items: ThreadReplayItem[] = []
-  const workflowIds = new Set<string>()
 
   for (const message of messages) {
-    rememberWorkflowIds(message.message, workflowIds)
-    const notification = workflowNotification(message, workflowIds)
-    if (notification !== undefined) {
-      for (const event of mapper.push(notification)) {
-        items.push({ kind: 'frame', event, createdAt: isoFromTimestamp(message.timestamp) })
-      }
+    const sdk = toClaudeSdkMessage(message)
+    const events = sdk ? mapper.push(sdk) : []
+    if (taskNotification(message.origin, userContent(message.message))) {
+      for (const event of events) items.push({ kind: 'frame', event, createdAt: isoFromTimestamp(message.timestamp) })
       continue
     }
     if (isVisibleUserTurn(message)) {
       const content = userContent(message.message)
       if (content.trim() === '' || content.trimStart().startsWith('[structured-output-enforce]')) continue
+      mapper.beginUserTurn()
       items.push({
         kind: 'user',
         id: message.uuid === '' ? `user-${String(items.length)}` : message.uuid,
@@ -42,10 +40,8 @@ export function replayClaudeSessionMessages(
       continue
     }
 
-    const sdk = toClaudeSdkMessage(message)
-    if (sdk === undefined) continue
     const createdAt = isoFromTimestamp(message.timestamp)
-    for (const event of mapper.push(sdk)) {
+    for (const event of events) {
       items.push({ kind: 'frame', event, createdAt })
     }
   }
@@ -124,6 +120,8 @@ function toClaudeSdkMessage(message: SessionMessage): ClaudeSdkMessage | undefin
       : { parent_tool_use_id: message.parentToolUseId }),
     message: payload,
     uuid: message.uuid,
+    ...(message.origin ? { origin: message.origin } : {}),
+    timestamp: isoFromTimestamp(message.timestamp),
     ...(toolUseResult === undefined ? {} : { tool_use_result: toolUseResult }),
   }
 }
@@ -162,29 +160,4 @@ function withAssistantId(raw: unknown, uuid: string): unknown {
 function isoFromTimestamp(value: number | null): string {
   if (value === null || value <= 0) return new Date(0).toISOString()
   return new Date(value).toISOString()
-}
-
-function workflowNotification(message: SessionMessage, workflowIds: ReadonlySet<string>): ClaudeSdkMessage | undefined {
-  if (message.type !== 'user') return undefined
-  const text = userContent(message.message).trim()
-  if (!text.startsWith('<task-notification>')) return undefined
-  const field = (name: string) => new RegExp(`<${name}>([\\s\\S]*?)</${name}>`, 'u').exec(text)?.[1]
-  const toolId = field('tool-use-id')
-  if (toolId === undefined || !workflowIds.has(toolId)) return undefined
-  return {
-    type: 'system', subtype: 'task_notification',
-    task_type: 'workflow', task_id: field('task-id'), tool_use_id: field('tool-use-id'),
-    status: field('status'), summary: field('summary'),
-  } as ClaudeSdkMessage
-}
-
-function rememberWorkflowIds(raw: unknown, ids: Set<string>): void {
-  const content = asRecord(raw)?.['content']
-  if (!Array.isArray(content)) return
-  for (const block of content) {
-    const item = asRecord(block)
-    if (item?.['type'] !== 'tool_use' || !isWorkflowName(stringField(item, 'name') ?? '')) continue
-    const id = stringField(item, 'id')
-    if (id !== undefined) ids.add(id)
-  }
 }

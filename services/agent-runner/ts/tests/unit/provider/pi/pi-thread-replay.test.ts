@@ -5,6 +5,24 @@ import { replayPiSessionMessages } from '../../../../src/provider/pi/pi-thread-r
 import type { SessionMessage } from '../../../../src/core/resource/session.js'
 
 describe('replayPiSessionMessages', () => {
+  it('keeps native task notices out of user messages and attaches the model follow-up to the launch', () => {
+    const entry = (type: SessionMessage['type'], uuid: string, message: unknown): SessionMessage => ({ type, uuid, message,
+      sessionId: 's', parentToolUseId: null, metadata: null, timestamp: 1 })
+    const replay = replayPiSessionMessages([
+      entry('assistant', 'launch', { role: 'assistant', content: [{ type: 'toolCall', id: 'tool', name: 'Agent', arguments: {} }] }),
+      entry('tool_result', 'result', { role: 'toolResult', toolCallId: 'tool', toolName: 'Agent', details: { agentId: 'job', status: 'background' }, content: 'started' }),
+      entry('assistant', 'reply', { role: 'assistant', content: 'Background started' }),
+      entry('custom', 'notice', { role: 'custom', customType: 'subagent-notification', details: { id: 'job', status: 'completed' }, content: '<task-notification>native</task-notification>' }),
+      entry('assistant', 'followup', { role: 'assistant', content: 'Background finished' }),
+      entry('user', 'human', { role: 'user', content: '<task-notification>human</task-notification>' }),
+    ])
+    const thread = foldThread(replay)
+    expect(thread.map((message) => message.role)).toEqual(['assistant', 'user'])
+    expect(thread[0]?.blocks?.find((block) => block.type === 'tool_use')).toMatchObject({ tool: { backgroundTask: { taskId: 'job', status: 'completed' } } })
+    expect(thread[0]?.content).toBe('Background finished')
+    expect(thread[1]?.content).toContain('human')
+  })
+
   it('keeps tool results on the assistant turn and surfaces compaction', () => {
     const messages: SessionMessage[] = [
       {

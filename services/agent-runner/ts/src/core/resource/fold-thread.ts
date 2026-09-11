@@ -1,6 +1,7 @@
 import { userTurnFromText } from '../run/user-turn.js'
 import type { AgentEvent } from '../event/agent-event.js'
 import { applyStreamFrame, emptyAssistantMessage } from './apply-stream-frame.js'
+import { taskNotificationReplyTarget } from './background-task.js'
 import {
   compactSummaryBody,
   isCompactCommandContent,
@@ -12,6 +13,7 @@ import {
 import { freezeMessageThinking, stampMessageThinkingTimes } from './thinking-time.js'
 import {
   threadHasVisibleContent,
+  taskReplyOwner,
   type ThreadMessage,
   type ThreadReplayItem,
 } from './thread.js'
@@ -72,6 +74,8 @@ export function foldThread(items: readonly ThreadReplayItem[]): ThreadMessage[] 
       continue
     }
 
+    if (item.event.type === 'tasks.snapshot' || item.event.type === 'session.state' || item.event.type === 'session.snapshot') continue
+
     if (item.event.type === 'session.compacting') {
       finishAssistant()
       patchLastCompactUser(messages, { phase: 'compacting' })
@@ -90,6 +94,28 @@ export function foldThread(items: readonly ThreadReplayItem[]): ThreadMessage[] 
     }
 
     if (PASS_THROUGH_TYPES.has(item.event.type)) continue
+
+    if (item.event.type === 'task.delivered') {
+      const update: AgentEvent = { type: 'task.updated', task: item.event.task }
+      for (const [index, message] of messages.entries()) messages[index] = applyStreamFrame(message, update)
+      if (current) current = applyStreamFrame(current, update)
+      const turnId = item.event.notification.turnId
+      if (!turnId || current?.id !== turnId) finishAssistant()
+      if (turnId) current ??= emptyAssistantMessage(turnId, item.createdAt ?? createdAtNow())
+    }
+
+    const reply = item.event.type === 'task.delivered'
+      ? taskNotificationReplyTarget(item.event.notification)
+      : item.event.replyTo
+    const replyOwner = reply ? taskReplyOwner([...messages, ...(current ? [current] : [])], reply) : undefined
+    if (replyOwner) {
+      const atMs = atMsOf(item.createdAt)
+      const updated = applyStreamFrame(replyOwner, item.event)
+      const stamped = atMs === undefined ? updated : stampMessageThinkingTimes(replyOwner, updated, item.event, atMs)
+      if (current?.id === replyOwner.id) { current = stamped; if (atMs !== undefined) lastAtMs = atMs }
+      else replaceMessage(messages, { ...stamped, status: stamped.status === 'error' ? 'error' : 'complete' })
+      continue
+    }
 
     const parentId = parentToolUseIdOf(item.event)
     const atMs = atMsOf(item.createdAt)
@@ -160,6 +186,7 @@ function replaceMessage(messages: ThreadMessage[], next: ThreadMessage): void {
 }
 
 function parentToolUseIdOf(event: AgentEvent): string | undefined {
+  if (event.type === 'task.updated' || event.type === 'task.notification' || event.type === 'task.delivered') return event.task.toolUseId
   if ('workflowToolUseId' in event) return event.workflowToolUseId
   return 'parentToolUseId' in event ? event.parentToolUseId : undefined
 }

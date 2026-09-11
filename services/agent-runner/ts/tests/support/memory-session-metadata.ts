@@ -33,6 +33,7 @@ export class MemorySessionMetadataRepository implements SessionMetadataRepositor
   async upsert(ref: SessionRef, patch: SessionMetadataPatch): Promise<SessionMetadataRecord> {
     const current = await this.get(ref)
     const next: SessionMetadataRecord = {
+      backgroundTasks: patch.backgroundTasks ?? current.backgroundTasks,
       flags: {
         pinned: patch.pinned ?? current.flags.pinned,
         archived: patch.archived ?? current.flags.archived,

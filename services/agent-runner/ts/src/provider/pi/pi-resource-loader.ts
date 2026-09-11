@@ -2,7 +2,7 @@ import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { DefaultPackageManager, DefaultResourceLoader, type ExtensionFactory, type SettingsManager } from '@earendil-works/pi-coding-agent'
+import { DefaultPackageManager, DefaultResourceLoader, type ExtensionFactory, type EventBus, type SettingsManager } from '@earendil-works/pi-coding-agent'
 import { createJiti } from 'jiti'
 import { loadMcpConfig } from 'pi-mcp-adapter/config'
 import type { McpConfig } from 'pi-mcp-adapter/types'
@@ -23,7 +23,7 @@ const jiti = createJiti(import.meta.url, {
 })
 let adapter: Promise<{ createMcpAdapter: (options: { config: McpConfig }) => ExtensionFactory }> | undefined
 
-export async function createPiResourceLoader(cwd: string, agentDir: string, settingsManager: SettingsManager): Promise<DefaultResourceLoader> {
+export async function createPiResourceLoader(cwd: string, agentDir: string, settingsManager: SettingsManager, eventBus?: EventBus): Promise<DefaultResourceLoader> {
   adapter ??= jiti.import(adapterEntry)
   const { createMcpAdapter } = await adapter
   const manager = new DefaultPackageManager({ cwd, agentDir, settingsManager })
@@ -40,7 +40,7 @@ export async function createPiResourceLoader(cwd: string, agentDir: string, sett
     ...(memoryEnabled ? [{ name: 'pi-code-memory', factory: memory.default }] : []),
   ]
   const loader = new DefaultResourceLoader({
-    cwd, agentDir, settingsManager,
+    cwd, agentDir, settingsManager, ...(eventBus ? { eventBus } : {}),
     noExtensions: true,
     additionalExtensionPaths: extensionPaths,
     additionalSkillPaths: [join(adapterRoot, 'skills')],

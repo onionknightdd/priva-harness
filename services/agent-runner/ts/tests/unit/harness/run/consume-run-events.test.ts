@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { AgentEvent } from '../../../../src/core/event/agent-event.js'
 import { consumeRunEvents } from '../../../../src/harness/run/consume-run-events.js'
-import { BackgroundDrainTracker } from '../../../../src/harness/run/background-drain.js'
+import { ForegroundToolSettle } from '../../../../src/harness/run/foreground-tool-settle.js'
 
 async function* fromEvents(events: AgentEvent[], pauseAfter?: number): AsyncGenerator<AgentEvent> {
   for (const [index, event] of events.entries()) {
@@ -33,8 +33,8 @@ describe('consumeRunEvents', () => {
     expect(events.map((event) => event.type)).toEqual(['assistant.delta', 'run.completed'])
   })
 
-  it('keeps reading after the first run.completed while a workflow is outstanding', async () => {
-    const drain = new BackgroundDrainTracker({ idleMs: 200, settleMs: 20 })
+  it('finishes a response without waiting for a background workflow', async () => {
+    const drain = new ForegroundToolSettle({})
     const events = await collect(
       consumeRunEvents(
         fromEvents(
@@ -52,13 +52,11 @@ describe('consumeRunEvents', () => {
     expect(events.map((event) => event.type)).toEqual([
       'tool.started',
       'run.completed',
-      'workflow.progress',
-      'workflow.completed',
     ])
   })
 
   it('holds run.completed until the one-shot image tool returns', async () => {
-    const drain = new BackgroundDrainTracker({ imageFollowUpSettleMs: 20 })
+    const drain = new ForegroundToolSettle({ imageFollowUpSettleMs: 20 })
     const events = await collect(
       consumeRunEvents(
         fromEvents(
@@ -93,7 +91,7 @@ describe('consumeRunEvents', () => {
   })
 
   it('holds run.completed for same-turn text after the image tool returns', async () => {
-    const drain = new BackgroundDrainTracker({ imageFollowUpSettleMs: 80 })
+    const drain = new ForegroundToolSettle({ imageFollowUpSettleMs: 80 })
     const events = await collect(
       consumeRunEvents(
         fromEvents(

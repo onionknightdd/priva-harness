@@ -50,6 +50,25 @@ describe('WarmRuntimePool', () => {
     vi.useRealTimers()
   })
 
+  it('retains background runtimes through capacity pressure, expiry and resource invalidation', async () => {
+    vi.useFakeTimers()
+    const pool = new WarmRuntimePool({ limit: 1, idleMs: 10 })
+    const background = Object.assign(fakeRuntime('background'), { hasBackgroundTasks: true })
+    await pool.acquire(background.session, spec, () => Promise.resolve(background))
+    await pool.recycle(background, spec, background.session)
+    const second = await pool.acquire(undefined, spec, () => Promise.resolve(fakeRuntime('other')))
+    await pool.recycle(second, spec, second.session)
+    await vi.advanceTimersByTimeAsync(100)
+    await pool.invalidateResources()
+    expect(background.released).toEqual(['warm'])
+    expect(pool.peek(background.session)).toBe(background)
+    await expect(pool.acquire(background.session, { ...spec, authToken: 'changed' }, () => Promise.resolve(fakeRuntime('replacement')))).rejects.toThrow('Stop background tasks')
+    background.hasBackgroundTasks = false
+    await vi.advanceTimersByTimeAsync(10)
+    expect(background.released).toEqual(['warm', 'dispose'])
+    await pool.disposeAll()
+  })
+
   it('defaults to five live-plus-idle slots', async () => {
     const pool = new WarmRuntimePool()
     expect(WARM_POOL_LIMIT).toBe(5)

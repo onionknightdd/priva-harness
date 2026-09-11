@@ -46,7 +46,7 @@ describe('LiveRun', () => {
         blockId: 'b',
         index: 0,
         text: String(seq),
-        v: 1,
+        v: 2,
         runId: 'run-1',
         seq,
         ts: seq,

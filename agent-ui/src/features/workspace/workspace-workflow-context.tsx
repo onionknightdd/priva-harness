@@ -1,5 +1,6 @@
 import type { AgentToolView } from "@/features/agent-message/agent-tool-data"
-import type { WorkspaceAgentTarget } from "./use-workspace-workflow"
+import type { AgentNavigation, WorkspaceAgentTarget } from "./use-workspace-workflow"
+import type { BackgroundTask } from "@/features/agent-message/background-task-store"
 import { useCallback, useMemo, useState, useRef, type ReactNode } from "react"
 import { useSidebar } from "@/components/ui/sidebar"
 import type { WorkflowCard } from "@/features/agent-message/workflow-data"
@@ -19,13 +20,25 @@ export function WorkspaceWorkflowProvider({ children }: { children: ReactNode })
     if (isMobile) setOpenMobile(true)
     else setOpen(true)
   }, [isMobile, setOpen, setOpenMobile, setActiveTabId])
-  const openAgent = useCallback((sourceKey: string, agents: AgentToolView[], selectedId: string) => {
+  const openAgent = useCallback((sourceKey: string, agents: AgentToolView[], selectedId: string, navigation?: AgentNavigation) => {
     setTarget(null)
-    setAgentTarget((current) => ({ sourceKey, agents: agentCatalog.current?.sourceKey === sourceKey ? agentCatalog.current.agents : agents, selectedId, navigationId: (current?.navigationId ?? 0) + 1 }))
+    setAgentTarget((current) => ({ sourceKey, agents: agentCatalog.current?.sourceKey === sourceKey ? agentCatalog.current.agents : agents, selectedId, ...navigation, navigationId: (current?.navigationId ?? 0) + 1 }))
     setActiveTabId("tasks")
     if (isMobile) setOpenMobile(true)
     else setOpen(true)
   }, [isMobile, setOpen, setOpenMobile, setActiveTabId])
+  const openTask = useCallback((task: BackgroundTask, notificationId?: string) => {
+    const catalog = agentCatalog.current
+    const agent = catalog?.agents.find((item) => item.id === task.toolUseId || item.backgroundTask?.taskId === task.taskId)
+    if (catalog && agent) openAgent(catalog.sourceKey, catalog.agents, agent.id, { tab: "result", notificationId })
+    else {
+      setTarget(null)
+      setAgentTarget(null)
+      setActiveTabId("tasks")
+      if (isMobile) setOpenMobile(true)
+      else setOpen(true)
+    }
+  }, [openAgent, isMobile, setOpen, setOpenMobile, setActiveTabId])
   const syncAgents = useCallback((sourceKey: string, agents: AgentToolView[]) => {
     agentCatalog.current = { sourceKey, agents }
     setAgentTarget((current) => !current || current.sourceKey !== sourceKey ? null : { ...current, agents })
@@ -38,6 +51,6 @@ export function WorkspaceWorkflowProvider({ children }: { children: ReactNode })
       return workflow && workflow !== current.workflow ? { ...current, workflow } : current
     })
   }, [])
-  const value = useMemo(() => ({ target, agentTarget, openAgent, syncAgents, openWorkflow, syncWorkflows }), [target, agentTarget, openAgent, syncAgents, openWorkflow, syncWorkflows])
+  const value = useMemo(() => ({ target, agentTarget, openAgent, openTask, syncAgents, openWorkflow, syncWorkflows }), [target, agentTarget, openAgent, openTask, syncAgents, openWorkflow, syncWorkflows])
   return <WorkflowContext.Provider value={value}>{children}</WorkflowContext.Provider>
 }

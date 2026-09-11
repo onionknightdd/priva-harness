@@ -1,3 +1,4 @@
+import type { BackgroundTask, TaskNotification, TaskReplyTarget } from './background-task.js'
 import type { UserAttachment } from '../run/user-turn.js'
 import type { WorkflowState } from './workflow.js'
 import type { CompactMarker } from './compact-command.js'
@@ -6,6 +7,7 @@ import type { AgentEvent, ContentBlock } from '../event/agent-event.js'
 export type ThreadToolStatus = 'started' | 'running' | 'completed'
 
 export type ThreadBlock =
+  | { readonly type: 'task_notification'; readonly blockId: string; readonly index: number; readonly notification: TaskNotification }
   | {
       readonly type: 'text'
       readonly blockId: string
@@ -46,6 +48,7 @@ export type ThreadBlock =
     }
 
 export interface ThreadToolCard {
+  readonly backgroundTask?: BackgroundTask
   readonly tokens?: number
   readonly durationMs?: number
   readonly id: string
@@ -145,6 +148,7 @@ export function answerTextBlock(
 }
 
 function blockHasVisibleContent(block: ThreadBlock): boolean {
+  if (block.type === 'task_notification') return true
   if (block.type === 'thinking') return block.text.trim() !== ''
   if (block.type === 'text') return isVisibleAnswerText(block.text)
   return block.type === 'tool_use' || block.type === 'image'
@@ -162,10 +166,17 @@ export function threadHasVisibleContent(message: ThreadMessage): boolean {
   if ((message.workflows?.length ?? 0) > 0) return true
   if ((message.nestedAgents?.length ?? 0) > 0) return true
   return (message.blocks ?? []).some((block) => {
-    if (block.type === 'tool_use' || block.type === 'image') return true
+    if (block.type === 'tool_use' || block.type === 'image' || block.type === 'task_notification') return true
     if (block.type === 'thinking') return block.text.trim() !== ''
     if (block.type !== 'text') return false
     const text = block.text.trim()
     return text !== '' && text !== NO_RESPONSE_REQUESTED
   })
+}
+
+export function taskReplyOwner(messages: readonly ThreadMessage[], reply: TaskReplyTarget): ThreadMessage | undefined {
+  if (reply.turnId) return messages.find((message) => message.role === 'assistant' && message.id === reply.turnId)
+  return messages.find((message) => message.role === 'assistant' && message.blocks?.some((block) =>
+    block.type === 'tool_use' ? block.id === reply.toolUseId || block.tool?.backgroundTask?.taskId === reply.taskId :
+      block.type === 'task_notification' && reply.notificationIds.includes(block.notification.id)))
 }

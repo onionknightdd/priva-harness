@@ -52,6 +52,11 @@ function snapshotBlocks(raw: unknown): StreamBlock[] {
     const type = block.type
     const blockId = typeof block.blockId === "string" ? block.blockId : String(index)
     const blockIndex = typeof block.index === "number" ? block.index : index
+    if (type === "task_notification" && typeof block.notification === "object" && block.notification !== null) {
+      const notification = block.notification as import("../agent-message/background-task-store").TaskNotification
+      if (typeof notification.id === "string" && notification.task?.taskId) blocks.push({ type, blockId, index: blockIndex, notification })
+      return
+    }
     if (type === "text") {
       blocks.push({ type: "text", blockId, index: blockIndex, text: String(block.text ?? "") })
       return
@@ -120,6 +125,7 @@ function asToolCard(raw: unknown, id: string, fallbackName: string): ToolCard | 
     ...(typeof record.tokens === "number" ? { tokens: record.tokens } : {}),
     ...(typeof record.durationMs === "number" ? { durationMs: record.durationMs } : {}),
     ...(typeof record.output === "string" ? { output: record.output } : {}),
+    ...(record.backgroundTask && typeof record.backgroundTask === "object" ? { backgroundTask: record.backgroundTask as import("../agent-message/background-task-store").BackgroundTask } : {}),
     ...(typeof record.launchStatus === "string" ? { launchStatus: record.launchStatus } : {}),
     ...(typeof record.agentId === "string" ? { agentId: record.agentId } : {}),
   }

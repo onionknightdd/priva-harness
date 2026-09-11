@@ -16,7 +16,7 @@ describe('encodeEvent', () => {
     })
 
     expect(JSON.parse(json)).toEqual({
-      v: 1,
+      v: 2,
       type: 'run.started',
       runId: 'run-1',
       seq: 1,

@@ -1,3 +1,7 @@
+import { BackgroundTasks } from '../../core/resource/background-task.js'
+import { TaskReplyTracker } from '../../core/resource/task-reply-tracker.js'
+import type { BackgroundTask } from '../../core/resource/background-task.js'
+import { piBackgroundLaunch, piTaskNotices } from './pi-background-tasks.js'
 import { piWorkflowToolResult } from './pi-workflow-data.js'
 import type { WorkflowState } from '../../core/resource/workflow.js'
 import type {
@@ -19,6 +23,7 @@ import { patchFromToolDetails } from '../../core/event/tool-patch.js'
 import { encodeReadView } from '../../core/event/tool-read.js'
 
 export interface PiSessionEvent {
+  readonly task?: BackgroundTask
   readonly workflow?: WorkflowState
   readonly type: string
   readonly assistantMessageEvent?: unknown
@@ -48,8 +53,14 @@ interface PendingTool {
 }
 
 export class PiEventMapper {
+  private readonly replies = new TaskReplyTracker()
+  private readonly tasks = new BackgroundTasks()
+  private noticeSeq = 0
+
+  beginUserTurn(): void { this.replies.clear() }
+
   private readonly workflows = new Map<string, WorkflowState>()
-  private readonly startedAt: number
+  private startedAt: number
   private model: string
   private messageSeq = 0
   private currentMessageId: string | undefined
@@ -76,7 +87,24 @@ export class PiEventMapper {
   }
 
   push(event: PiSessionEvent): AgentEvent[] {
+    const raw = asRecord(event.message)
+    if (event.type === 'message_end' && raw?.['role'] === 'user') this.beginUserTurn()
+    const notices = event.type === 'message_end' ? piTaskNotices(event.message) : []
+    if (notices.length) return notices.flatMap((task) => {
+      const updated = this.tasks.update(task)
+      return this.replies.deliver({ id: `${stringField(raw ?? {}, 'id') ?? String(numberField(raw ?? {}, 'timestamp') ?? ++this.noticeSeq)}:${task.taskId}`, task: updated })
+    })
+    return this.replies.route(this.map(event).map((mapped) =>
+      mapped.type === 'task.updated' || mapped.type === 'task.notification' ? { ...mapped, task: this.tasks.update(mapped.task) } : mapped))
+  }
+
+  private map(event: PiSessionEvent): AgentEvent[] {
+    if ((event.type === 'task.updated' || event.type === 'task.notification') && event.task) return [{ type: event.type, task: event.task }]
+    if (event.type === 'background_error') return [{ type: 'error', message: event.errorMessage ?? 'Background result delivery failed' }]
     switch (event.type) {
+      case 'agent_start':
+        this.startedAt = Date.now()
+        return [{ type: 'session.state', state: 'running' }]
       case 'workflow_progress':
         return event.workflow ? this.mapWorkflow(event.workflow) : []
       case 'message_update':
@@ -307,7 +335,10 @@ export class PiEventMapper {
     const name = normalizeToolName(event.toolName ?? this.tools.get(id) ?? 'unknown')
     const workflow = this.workflowEvent(id, name, event.result, true)
     const index = this.indexByToolId.get(id)
+    const task = piBackgroundLaunch(id, name, event.result)
+    const tasks: AgentEvent[] = task ? [{ type: 'task.updated', task }] : []
     return [
+      ...tasks,
       ...workflow,
       {
         type: 'tool.completed',

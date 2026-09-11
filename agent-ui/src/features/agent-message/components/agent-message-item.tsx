@@ -33,6 +33,8 @@ import {
 } from "../agent-message-data"
 import { userMessageSurface } from "../slash-command-envelope"
 import { AssistantProcess } from "./assistant-process"
+import { assistantTimeline } from "../assistant-timeline"
+import { TaskNotificationCard } from "./task-notification-card"
 import { CompactSessionMarker } from "./compact-session-marker"
 import { AssistantMarkdownCode } from "./assistant-markdown-code"
 import { QuoteSelectable } from "./quote-selectable"
@@ -295,7 +297,7 @@ export function AgentMessageItem({
           </MessageContent>
           {message.role === "assistant" && message.status === "complete" ? (
             <MessageActions>
-              <AgentMessageCopyAction text={message.content} />
+              <AgentMessageCopyAction text={message.role === "assistant" ? assistantTimeline(message).map((section) => section.message.content).filter(Boolean).join("\n\n") : message.content} />
               <AgentMessageSplitAction
                 onFork={onFork}
                 disabledReason={forkDisabledReason}
@@ -328,6 +330,25 @@ export function AgentMessageItem({
 }
 
 function AssistantStreamBody({
+  message,
+  isStreaming,
+  hideProcessHeader,
+}: {
+  message: AgentThreadMessage
+  isStreaming: boolean
+  hideProcessHeader: boolean
+}) {
+  const sections = assistantTimeline(message)
+  return <div className="flex flex-col gap-3">
+    {sections.map((section, index) => <div key={section.id} className="flex flex-col gap-3">
+      {section.notification ? <TaskNotificationCard notification={section.notification} /> : null}
+      <AssistantSegment message={section.message} isStreaming={isStreaming && index === sections.length - 1}
+        hideProcessHeader={hideProcessHeader || index > 0} />
+    </div>)}
+  </div>
+}
+
+function AssistantSegment({
   message,
   isStreaming,
   hideProcessHeader,

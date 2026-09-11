@@ -101,6 +101,7 @@ export const sessionRoutes: FastifyPluginCallback<SessionRoutesOptions> = (
         run_mode: item.runMode,
         harness: item.harness,
       })),
+      background: sessionService.listBackground(request.query.harness),
       warm: sessionService.listWarm(request.query.harness).map((item) => ({
         session_id: item.sessionId,
         status: item.status,
@@ -141,6 +142,7 @@ export const sessionRoutes: FastifyPluginCallback<SessionRoutesOptions> = (
           message: message.message,
           parent_tool_use_id: message.parentToolUseId,
           metadata: message.metadata,
+          ...(message.origin ? { origin: message.origin } : {}),
           timestamp: message.timestamp,
         })),
         add_dirs: result.addDirs,

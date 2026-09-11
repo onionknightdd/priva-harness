@@ -85,6 +85,7 @@ export function isReadTool(name: string): boolean {
 }
 
 export function isToolRunning(tool: ToolCard | undefined): boolean {
+  if (tool?.backgroundTask) return ["pending", "running", "paused"].includes(tool.backgroundTask.status)
   if (tool?.launchStatus === "async_launched") {
     return true
   }

@@ -56,4 +56,15 @@ describe('JsonSessionMetadataStore', () => {
     expect(deleted.flags.pinned).toBe(false)
     expect(deleted.recap).toBeNull()
   })
+
+  it('persists task identity and terminal status across store instances and metadata edits', async () => {
+    const ref = { provider: 'claude' as const, id: 'background' }
+    const tasks = [{ taskId: 'job', kind: 'bash' as const, status: 'cancelled' as const, toolUseId: 'tool', outputFile: '/tmp/job.output' }]
+    await store.upsert(ref, { backgroundTasks: tasks })
+    await store.upsert(ref, { pinned: true })
+    expect((await new JsonSessionMetadataStore({ runtimeHome }).get(ref)).backgroundTasks).toEqual(tasks)
+    expect((await store.get({ provider: 'pi', id: ref.id })).backgroundTasks).toEqual([])
+    await store.delete(ref)
+    expect((await store.get(ref)).backgroundTasks).toEqual([])
+  })
 })

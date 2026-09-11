@@ -37,6 +37,7 @@ export class SessionError extends Error {
 }
 
 export interface SessionMessage {
+  readonly origin?: Readonly<Record<string, unknown>>
   readonly type: SessionMessageType
   readonly uuid: string
   readonly sessionId: string
@@ -106,6 +107,7 @@ export interface SessionFlags {
 }
 
 export interface SessionMetadataRecord {
+  readonly backgroundTasks: readonly BackgroundTask[]
   readonly flags: SessionFlags
   readonly tags: readonly string[]
   readonly addDirs: readonly string[]
@@ -115,6 +117,7 @@ export interface SessionMetadataRecord {
 }
 
 export interface SessionMetadataPatch {
+  readonly backgroundTasks?: readonly BackgroundTask[]
   readonly pinned?: boolean
   readonly archived?: boolean
   readonly tags?: readonly string[]
@@ -144,6 +147,7 @@ export function parseSessionRefKey(key: string): SessionRef | undefined {
 
 export function emptySessionMetadata(): SessionMetadataRecord {
   return {
+    backgroundTasks: [],
     flags: { pinned: false, archived: false },
     tags: [],
     addDirs: [],
@@ -319,3 +323,4 @@ function registeredTagColor(
 function isColorSlot(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value < TAG_COLOR_SLOTS
 }
+import type { BackgroundTask } from './background-task.js'

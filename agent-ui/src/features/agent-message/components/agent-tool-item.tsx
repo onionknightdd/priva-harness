@@ -9,6 +9,7 @@ import { useChatSession } from "@/features/chat-session"
 import { useHarness } from "@/features/sidebar/header/harness-context"
 import { useWorkspaceWorkflow } from "@/features/workspace/use-workspace-workflow"
 import type { AgentToolView } from "../agent-tool-data"
+import { BackgroundTaskStopButton } from "./background-task-card"
 
 export function AgentToolItem({ agent, agents }: { agent: AgentToolView; agents: AgentToolView[] }) {
   const { activeSession, runSessionId } = useChatSession()
@@ -37,6 +38,7 @@ export function AgentToolSummary({ agent, onOpen }: { agent: AgentToolView; onOp
           <span>{t("agentMessage.workflowUI.toolCalls", { count: agent.toolCount })}</span>
         </div>
       </div>
+      {agent.backgroundTask ? <BackgroundTaskStopButton task={agent.backgroundTask} /> : null}
       <Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-sm"
         aria-label={t("agentMessage.workflowUI.openAgent", { agent: agent.label })}
         onClick={onOpen}>

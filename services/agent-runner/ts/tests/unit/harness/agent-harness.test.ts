@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { emptyContextUsage } from '../../../src/core/resource/context-usage.js'
 import type { StreamFrame } from '../../../src/core/event/agent-event.js'
 import { AgentHarness } from '../../../src/harness/agent-harness.js'
-import { DRAIN_SETTLE_MS } from '../../../src/harness/run/background-drain.js'
 import { LiveRunRegistry } from '../../../src/harness/run/live-run-registry.js'
 import { FakeAgentProvider } from '../../support/fake-agent-provider.js'
 import { testRunSpec } from '../../support/run-spec.js'
@@ -47,7 +46,7 @@ describe('AgentHarness', () => {
 
     expect(events[0]).toMatchObject({
       type: 'run.started',
-      v: 1,
+      v: 2,
       seq: 1,
       harness: 'claude',
       model: 'm',
@@ -215,7 +214,7 @@ describe('AgentHarness', () => {
     await harness.disposePool()
   })
 
-  it('reaps a silent inbound promotion so the session does not stay running', async () => {
+  it('keeps an inbound response active until a provider result, even during a long quiet period', async () => {
     const { provider, liveRuns, harness } = await warmAfterLaunch('sess-inbound')
     vi.useFakeTimers()
     provider.emitIdle([
@@ -228,7 +227,9 @@ describe('AgentHarness', () => {
       },
     ])
     expect(liveRuns.listActive()).toHaveLength(1)
-    await vi.advanceTimersByTimeAsync(DRAIN_SETTLE_MS)
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(liveRuns.listActive()).toHaveLength(1)
+    provider.emitIdle([{ type: 'run.completed', model: 'm', durationMs: 60_000 }])
     expect(liveRuns.listActive()).toEqual([])
     await harness.disposePool()
   })
@@ -247,6 +248,7 @@ describe('AgentHarness', () => {
     const inbound = liveRuns.listActive()[0]
     if (inbound === undefined) throw new Error('expected inbound live run')
     harness.abortLive(inbound.runId)
+    provider.emitIdle([{ type: 'run.aborted' }])
     expect(liveRuns.listActive()).toEqual([])
     await harness.disposePool()
   })

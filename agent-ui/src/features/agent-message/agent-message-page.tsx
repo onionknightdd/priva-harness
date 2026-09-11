@@ -1,4 +1,4 @@
-import { agentToolsForMessage } from "./agent-tool-data"
+import { agentToolsForThread } from "./agent-tool-data"
 import { useEffect } from "react"
 import { useChatSession } from "@/features/chat-session"
 import { useHarness } from "@/features/sidebar/header/harness-context"
@@ -13,11 +13,13 @@ export function AgentMessagePage() {
   const { runHarnessId } = useHarness()
   const sourceKey = `${runHarnessId}:${activeSession?.sessionId ?? runSessionId}`
   useEffect(() => {
-    syncAgents(sourceKey, agentMessage.messages.flatMap(agentToolsForMessage))
+    syncAgents(sourceKey, agentToolsForThread(agentMessage.messages))
     syncWorkflows(sourceKey, agentMessage.messages.flatMap((message) => message.workflows ?? []))
   }, [sourceKey, agentMessage.messages, syncWorkflows, syncAgents])
 
   return (
+    <>
+    {agentMessage.connectionError ? <div role="alert" className="mx-4 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{agentMessage.connectionError}</div> : null}
     <AgentMessage
       attachments={agentMessage.composerAttachments.attachments}
       onFilesSelected={agentMessage.composerAttachments.add}
@@ -37,5 +39,6 @@ export function AgentMessagePage() {
       onSubmit={agentMessage.submit}
       onStop={agentMessage.stop}
     />
+    </>
   )
 }

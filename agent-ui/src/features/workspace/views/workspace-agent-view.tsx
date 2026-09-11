@@ -47,7 +47,8 @@ export function WorkspaceAgentView({ target }: { target: WorkspaceAgentTarget })
             requestAnimationFrame(() => selectedButton.current?.focus({ preventScroll: true }))
           }}><ArrowLeftIcon />{t("agentMessage.agentUI.agents")}</Button></div>
           <motion.div key={agent.id} initial={reduce || keyboard ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.15, ease: EASE_OUT }}>
-            <AgentDetail agent={agent} onSelectAgent={select} agents={target.agents} />
+            <AgentDetail agent={agent} onSelectAgent={select} agents={target.agents}
+              initialTab={target.tab} notificationId={agent.id === target.selectedId ? target.notificationId : undefined} />
           </motion.div>
         </div>
       </div>
@@ -55,16 +56,17 @@ export function WorkspaceAgentView({ target }: { target: WorkspaceAgentTarget })
   )
 }
 
-function AgentDetail({ agent, agents, onSelectAgent }: { agent: AgentToolView; agents: AgentToolView[]; onSelectAgent: (id: string) => void }) {
+function AgentDetail({ agent, agents, onSelectAgent, initialTab, notificationId }: { agent: AgentToolView; agents: AgentToolView[]; onSelectAgent: (id: string) => void; initialTab?: string; notificationId?: string }) {
   const { t } = useTranslation()
   const reduce = useReducedMotionConfig()
-  const [tab, setTab] = useState("process")
+  const [tab, setTab] = useState(initialTab ?? "process")
   const viewport = useRef<HTMLDivElement>(null)
   const follow = useRef(true)
   useLayoutEffect(() => {
     if (tab === "process" && follow.current && viewport.current) viewport.current.scrollTop = viewport.current.scrollHeight
   }, [agent.blocks, agent.inbox, tab])
-  const output = agent.output ?? (agent.state === "completed" ? agent.blocks.filter((block) => block.type === "text").at(-1)?.text : undefined)
+  const notification = agent.notifications.find((item) => item.id === notificationId)
+  const output = notification ? notification.task.result : agent.output ?? (!agent.backgroundTask && agent.state === "completed" ? agent.blocks.filter((block) => block.type === "text").at(-1)?.text : undefined)
   const blocks = agent.blocks.filter((block) => block.type !== "tool_use" || block.name.toLowerCase() !== "structuredoutput")
   const timeline = agent.blocks.flatMap((block, index) => [
     ...agent.inbox.filter((item) => item.afterBlockCount === index).map((item, messageIndex) => ({ key: `message-${index}-${messageIndex}`, item, block: undefined })),

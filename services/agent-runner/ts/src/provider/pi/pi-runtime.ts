@@ -1,3 +1,6 @@
+import { BackgroundTasks, taskIsActive } from '../../core/resource/background-task.js'
+import { asRecord, stringField } from '../../core/event/json-record.js'
+import { piTaskNotices } from './pi-background-tasks.js'
 import type {
   AgentRuntime,
   ProviderRunSpec,
@@ -18,7 +21,7 @@ import { AsyncQueue } from '../../core/stream/async-queue.js'
 import { PiEventMapper, type PiSessionEvent } from './pi-event-mapper.js'
 
 export interface PiAgentSession {
-  waitForWorkflows?(): Promise<void>
+  stopTask?(taskId: string): Promise<void>
   readonly sessionId: string
   readonly modelId: string
   readonly isStreaming: boolean
@@ -39,25 +42,63 @@ export class PiRuntime implements AgentRuntime {
   private readonly unsubscribe: () => void
   private mapper: PiEventMapper | undefined
   private events: AsyncQueue<AgentEvent> | undefined
+  private readonly tasks = new BackgroundTasks()
+  private readonly idleBacklog: AgentEvent[] = []
+  private idleListener: ((events: readonly AgentEvent[]) => void) | undefined
+  private turnEnded = false
+  private readonly pendingNotices = new Set<string>()
+  private readonly consumedNotices = new Set<string>()
+  private readonly deliveredNotices = new Set<string>()
+  private readonly resultReads = new Map<string, string>()
 
   constructor(
     private readonly agentSession: PiAgentSession,
     private queueBehavior: QueueBehavior = 'follow-up',
   ) {
     this.sessionHandle = agentSession
+    this.mapper = new PiEventMapper({ sessionId: agentSession.sessionId, model: agentSession.modelId })
     this.unsubscribe = agentSession.subscribe((event) => {
-      const mapper = this.mapper
-      const events = this.events
-      if (mapper === undefined || events === undefined) return
-      if (event.type === 'agent_end' && agentSession.waitForWorkflows) {
-        void agentSession.waitForWorkflows().then(() => {
-          for (const mapped of mapper.push(event)) events.push(mapped)
-          events.close()
-        }, (error: unknown) => events.push({ type: 'run.failed', message: error instanceof Error ? error.message : String(error) }))
-        return
+      const mapped = this.mapper?.push(event) ?? []
+      for (const frame of mapped) if (frame.type === 'task.updated' || frame.type === 'task.notification') {
+        this.tasks.update(frame.task)
+        if (frame.type === 'task.notification' && !this.deliveredNotices.has(frame.task.taskId)) this.pendingNotices.add(frame.task.taskId)
       }
-      for (const mapped of mapper.push(event)) events.push(mapped)
+      if (event.type === 'message_end') for (const task of piTaskNotices(event.message)) this.consumedNotices.add(task.taskId)
+      if (event.type === 'tool_execution_start' && event.toolName === 'get_subagent_result' && event.toolCallId) {
+        const id = stringField(asRecord(event.args) ?? {}, 'agent_id')
+        if (id) this.resultReads.set(event.toolCallId, id)
+      }
+      if (event.type === 'tool_execution_end' && event.toolCallId) {
+        const id = this.resultReads.get(event.toolCallId)
+        const task = id ? this.tasks.get(id) : undefined
+        if (task && !taskIsActive(task) && !event.isError) this.consumedNotices.add(task.taskId)
+        this.resultReads.delete(event.toolCallId)
+      }
+      if (mapped.some(isRunResultEvent)) {
+        for (const id of this.consumedNotices) { this.pendingNotices.delete(id); this.deliveredNotices.add(id) }
+        this.consumedNotices.clear()
+      }
+      if (this.events && !this.turnEnded) {
+        for (const frame of mapped) this.events.push(frame)
+        if (mapped.some(isRunResultEvent)) { this.turnEnded = true; this.events.close() }
+      } else {
+        this.idleBacklog.push(...mapped)
+        if (!this.events) this.flushIdle()
+      }
     })
+  }
+
+  get hasBackgroundTasks(): boolean { return this.tasks.hasActive || this.idleBacklog.length > 0 || this.pendingNotices.size > 0 }
+  listenIdle(listener: ((events: readonly AgentEvent[]) => void) | undefined): void {
+    this.idleListener = listener
+    if (!this.events) this.flushIdle()
+  }
+  private flushIdle(): void {
+    if (this.idleListener && this.idleBacklog.length) this.idleListener(this.idleBacklog.splice(0))
+  }
+  async stopTask(taskId: string): Promise<void> {
+    if (!this.agentSession.stopTask) throw new Error('Task runtime is unavailable')
+    await this.agentSession.stopTask(taskId)
   }
 
   get session(): SessionRef {
@@ -65,10 +106,8 @@ export class PiRuntime implements AgentRuntime {
   }
 
   async *run(turn: UserTurn, context: TurnContext): AsyncIterable<AgentEvent> {
-    this.mapper = new PiEventMapper({
-      sessionId: this.agentSession.sessionId,
-      model: this.agentSession.modelId,
-    })
+    this.mapper?.beginUserTurn()
+    this.turnEnded = false
     this.events = new AsyncQueue<AgentEvent>()
     this.agentSession.bindProgressEmit?.((chunk) => this.emitToolProgress(chunk))
     let finished = false
@@ -130,8 +169,8 @@ export class PiRuntime implements AgentRuntime {
   async release(retention: 'warm' | 'dispose'): Promise<void> {
     this.events?.close()
     this.events = undefined
-    this.mapper = undefined
-    if (retention === 'warm') return
+    if (retention === 'warm') { this.flushIdle(); return }
+    this.idleListener = undefined
     this.unsubscribe()
     const session = this.sessionHandle
     this.sessionHandle = undefined

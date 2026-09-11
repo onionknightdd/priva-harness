@@ -1,4 +1,7 @@
+import { TaskReplyTracker } from '../../core/resource/task-reply-tracker.js'
 import { piWorkflowToolResult } from './pi-workflow-data.js'
+import { piBackgroundLaunch, piTaskNotices } from './pi-background-tasks.js'
+import { BackgroundTasks } from '../../core/resource/background-task.js'
 import { asRecord, isRecord, stringField } from '../../core/event/json-record.js'
 import { isReadToolName } from '../../core/event/tool-names.js'
 import { patchFromToolDetails } from '../../core/event/tool-patch.js'
@@ -9,8 +12,18 @@ import type { ThreadReplayItem } from '../../core/resource/thread.js'
 
 export function replayPiSessionMessages(messages: readonly SessionMessage[]): ThreadReplayItem[] {
   const items: ThreadReplayItem[] = []
+  const tasks = new BackgroundTasks()
+  const replies = new TaskReplyTracker()
 
   for (const message of messages) {
+    const notices = message.type === 'custom' ? piTaskNotices(message.message) : []
+    if (notices.length) {
+      const createdAt = isoFromTimestamp(message.timestamp)
+      for (const task of notices) for (const event of replies.deliver({ id: `${message.uuid}:${task.taskId}`, task: tasks.update(task), createdAt })) {
+        items.push({ kind: 'frame', event, createdAt })
+      }
+      continue
+    }
     if (message.type === 'compaction') {
       const createdAt = isoFromTimestamp(message.timestamp)
       const id = message.uuid === '' ? `compact-${String(items.length)}` : message.uuid
@@ -33,6 +46,7 @@ export function replayPiSessionMessages(messages: readonly SessionMessage[]): Th
     }
 
     if (message.type === 'user') {
+      replies.clear()
       const content = userContent(message.message)
       if (content.trim() === '') continue
       items.push({
@@ -51,14 +65,14 @@ export function replayPiSessionMessages(messages: readonly SessionMessage[]): Th
       const createdAt = isoFromTimestamp(message.timestamp)
       items.push({
         kind: 'frame',
-        event: { type: 'assistant.message', messageId, blocks },
+        event: replies.routeEvent({ type: 'assistant.message', messageId, blocks }),
         createdAt,
       })
       for (const block of blocks) {
         if (block.type !== 'tool_use') continue
         items.push({
           kind: 'frame',
-          event: toolStartedEvent(messageId, block),
+          event: replies.routeEvent(toolStartedEvent(messageId, block)),
           createdAt,
         })
       }
@@ -74,6 +88,8 @@ export function replayPiSessionMessages(messages: readonly SessionMessage[]): Th
         message.uuid
       const name = (stringField(inner, 'toolName') ?? stringField(inner, 'name') ?? 'unknown').toLowerCase()
       const workflow = piWorkflowToolResult(id, name, inner, undefined, true)
+      const task = piBackgroundLaunch(id, name, inner)
+      if (task) items.push({ kind: 'frame', event: { type: 'task.updated', task: tasks.update(task) }, createdAt: isoFromTimestamp(message.timestamp) })
       if (workflow) items.push({ kind: 'frame', event: { type: 'workflow.progress', workflowToolUseId: id, workflow }, createdAt: isoFromTimestamp(message.timestamp) })
       items.push({
         kind: 'frame',

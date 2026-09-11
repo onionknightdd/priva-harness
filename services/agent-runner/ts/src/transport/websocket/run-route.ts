@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto'
-
 import type { FastifyPluginCallback } from 'fastify'
 import type { WebSocket } from 'ws'
 
@@ -11,21 +9,20 @@ import {
   providerIdForHarness,
   rewriteProviderBaseUrl,
 } from '../../core/resource/run-harness.js'
-import { SessionError } from '../../core/resource/session.js'
 import type { AgentHarness } from '../../harness/agent-harness.js'
 import type { AgentProfileService } from '../../harness/config/agent-profile-service.js'
 import type { ModelProfileService } from '../../harness/config/model-profile-service.js'
 import { EnvelopeStamper } from '../../harness/run/envelope-stamper.js'
 import type { LiveRun } from '../../harness/run/live-run.js'
+import type { SessionStream } from '../../harness/session/session-stream.js'
 import {
   parseClientFrame,
   sessionTargetFromInit,
   type AbortFrame,
-  type AttachFrame,
   type InitFrame,
 } from './schema/run-frames.js'
 
-export const RUN_WEBSOCKET_PATH = '/api/sandbox/agent/ws/run'
+export const SESSION_WEBSOCKET_PATH = '/api/sandbox/agent/ws/session'
 
 export interface RunRouteOptions {
   readonly fileSystem: UserFileSystem
@@ -36,138 +33,106 @@ export interface RunRouteOptions {
 }
 
 export const runWebsocketRoutes: FastifyPluginCallback<RunRouteOptions> = (fastify, options, done) => {
-  fastify.get(RUN_WEBSOCKET_PATH, { websocket: true }, (socket) => {
-    void handleRunSocket(socket, options)
+  fastify.get(SESSION_WEBSOCKET_PATH, { websocket: true }, (socket) => {
+    handleRunSocket(socket, options)
   })
   done()
 }
 
-async function handleRunSocket(
-  socket: WebSocket,
-  options: RunRouteOptions,
-): Promise<void> {
-  let live: LiveRun | undefined
-  let listener: ((frame: StreamFrame) => void) | undefined
-
-  try {
-    const raw = await readFirstMessage(socket)
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(raw) as unknown
-    } catch {
-      sendError(socket, 'Init frame must be JSON', randomUUID(), 'unknown')
-      socket.close()
-      return
-    }
-
-    const client = parseClientFrame(parsed)
-    if (!client.ok) {
-      sendError(socket, client.message, randomUUID(), harnessOf(parsed) ?? 'unknown')
-      socket.close()
-      return
-    }
-
-    const frame = client.frame
-    if (frame.type === 'init') {
-      live = await startInit(socket, options, frame)
-    } else {
-      live = resolveLive(options.harness, frame)
-      if (live === undefined) {
-        sendError(socket, 'No live run to attach', randomUUID(), frame.harness)
-        socket.close()
-        return
-      }
-      if (frame.type === 'abort') {
-        live.abort.abort()
-      }
-    }
-    if (live === undefined) return
-
-    const sinceSeq = frame.type === 'attach' ? frame.sinceSeq : 0
-    const queued: StreamFrame[] = []
-    let replaying = true
-    listener = (event) => {
-      if (replaying) {
-        queued.push(event)
-        return
-      }
-      if (socketOpen(socket)) socket.send(encodeEvent(event))
-    }
-    const subscription = live.subscribe(listener, sinceSeq)
-    let lastSent = sinceSeq
-    if (subscription.gap) {
-      if (socketOpen(socket)) socket.send(encodeEvent(live.gapFrame()))
-    } else {
-      for (const replayed of subscription.replay) {
-        if (socketOpen(socket)) socket.send(encodeEvent(replayed))
-        lastSent = replayed.seq
-      }
-    }
-    replaying = false
-    for (const extra of queued) {
-      if (extra.seq <= lastSent) continue
-      if (socketOpen(socket)) socket.send(encodeEvent(extra))
-      lastSent = extra.seq
-    }
-
-    const onLater = (data: WebSocket.RawData): void => {
-      let later: unknown
-      try {
-        later = JSON.parse(rawToString(data)) as unknown
-      } catch {
-        return
-      }
-      const parsedLater = parseClientFrame(later)
-      if (!parsedLater.ok || parsedLater.frame.type !== 'abort') return
-      const target = resolveLive(options.harness, parsedLater.frame) ?? live
-      target?.abort.abort()
-    }
-    socket.on('message', onLater)
-
-    await live.waitForComplete()
-    socket.off('message', onLater)
-    if (socketOpen(socket)) socket.close()
-  } catch (error) {
-    const message = error instanceof SessionError
-      ? error.message
-      : error instanceof Error ? error.message : String(error)
-    if (socketOpen(socket)) {
-      sendError(socket, message, live?.runId ?? randomUUID(), live?.provider ?? 'unknown')
-      socket.close()
-    }
-  } finally {
-    if (live !== undefined && listener !== undefined) {
-      live.unsubscribe(listener)
-    }
+function handleRunSocket(socket: WebSocket, options: RunRouteOptions): void {
+  let unsubscribe: (() => void) | undefined
+  let stream: SessionStream | undefined
+  let commandHarness = 'unknown'
+  let commandType = ''
+  let commandRunId = ''
+  let closed = false
+  let commands = Promise.resolve()
+  const subscribe = (next: SessionStream, cursor?: { streamId: string; seq: number }) => {
+    unsubscribe?.()
+    stream = next
+    unsubscribe = next.subscribe((frame) => {
+      if (socketOpen(socket)) socket.send(encodeEvent(frame))
+    }, cursor)
   }
+  socket.once('close', () => { closed = true; unsubscribe?.() })
+  const handle = async (data: WebSocket.RawData): Promise<void> => {
+    let raw: unknown
+    commandType = ''; commandRunId = ''
+    try { raw = JSON.parse(rawToString(data)) as unknown } catch { throw new Error('Frame must be JSON') }
+    if (typeof raw === 'object' && raw && 'harness' in raw && typeof raw.harness === 'string') commandHarness = raw.harness
+    if (typeof raw === 'object' && raw && 'type' in raw && typeof raw.type === 'string') commandType = raw.type
+    if (typeof raw === 'object' && raw && 'runId' in raw && typeof raw.runId === 'string') commandRunId = raw.runId
+    const parsed = parseClientFrame(raw)
+    if (!parsed.ok) throw new Error(parsed.message)
+    let frame = parsed.frame
+    if (frame.type === 'session.subscribe') {
+      const id = frame.sessionId
+      const next = await options.harness.loadSessionStream({ provider: frame.harness, id })
+      if (closed) return
+      subscribe(next, frame.streamId ? { streamId: frame.streamId, seq: frame.sinceSeq } : undefined)
+      // A reconnect also reconciles starts whose command response was lost.
+      if (frame.streamId && socketOpen(socket)) socket.send(encodeEvent(next.snapshot()))
+      return
+    }
+    if (frame.type === 'task.stop') {
+      if (stream && (stream.session.id !== frame.sessionId || stream.session.provider !== frame.harness)) throw new Error('Task belongs to another session')
+      await options.harness.stopTask({ provider: frame.harness, id: frame.sessionId }, frame.taskId)
+      return
+    }
+    if (frame.type === 'run.abort') {
+      const live = resolveLive(options.harness, frame)
+      if (live && (live.provider !== frame.harness || (stream && live.sessionId !== stream.session.id))) throw new Error('Run belongs to another session')
+      if (!stream && live?.sessionId) subscribe(options.harness.sessionStream({ provider: live.provider, id: live.sessionId }))
+      live?.abort.abort()
+      return
+    }
+    if (stream) {
+      if (frame.harness !== stream.session.provider || frame.fork) throw new Error('Start a new connection to change sessions')
+      if (frame.sessionId === undefined) frame = { ...frame, sessionId: stream.session.id }
+    }
+    const spec = await buildRunSpec(options, frame)
+    const attachments = frame.attachments === undefined ? undefined : await Promise.all(
+      frame.attachments.map((attachment) => options.fileSystem.inspectAttachment(attachment.path)),
+    )
+    if (frame.sessionId && !frame.fork) {
+      const next = await options.harness.loadSessionStream({ provider: frame.harness, id: frame.sessionId })
+      if (stream && stream !== next) throw new Error('Start a new connection to change sessions')
+      if (!stream && !closed) subscribe(next)
+    }
+    if (closed) return
+    const live = options.harness.launch(
+      { text: frame.text, ...(attachments ? { attachments } : {}) }, spec,
+      { session: sessionTargetFromInit(frame), ...(frame.runId ? { runId: frame.runId } : {}) },
+    )
+    if (stream) return
+    const id = await sessionOfLive(live)
+    if (!id) { sendError(socket, 'Could not open the session', live.runId, frame.harness, 'run.start'); return }
+    const next = options.harness.sessionStream({ provider: frame.harness, id })
+    subscribe(next, { streamId: next.streamId, seq: 0 })
+  }
+  socket.on('message', (data) => {
+    commands = commands.then(() => handle(data)).catch((error: unknown) => {
+      sendError(socket, error instanceof Error ? error.message : String(error), commandRunId, stream?.session.provider ?? commandHarness, commandType)
+    })
+  })
 }
 
-async function startInit(
-  socket: WebSocket,
-  options: RunRouteOptions,
-  frame: InitFrame,
-): Promise<LiveRun | undefined> {
-  let spec: ProviderRunSpec
-  try {
-    spec = await buildRunSpec(options, frame)
-  } catch (error) {
-    sendError(socket, error instanceof Error ? error.message : String(error), randomUUID(), frame.harness)
-    socket.close()
-    return undefined
-  }
-  const attachments = frame.attachments === undefined ? undefined : await Promise.all(
-    frame.attachments.map((attachment) => options.fileSystem.inspectAttachment(attachment.path)),
-  )
-  return options.harness.launch(
-    { text: frame.text, ...(attachments === undefined ? {} : { attachments }) },
-    spec,
-    { session: sessionTargetFromInit(frame) },
-  )
+async function sessionOfLive(live: LiveRun): Promise<string | null> {
+  if (live.sessionId) return live.sessionId
+  return await new Promise((resolve) => {
+    const listener = (frame: StreamFrame) => {
+      if (!frame.sessionId && !['run.failed', 'run.aborted'].includes(frame.type)) return
+      live.unsubscribe(listener)
+      resolve(frame.sessionId ?? null)
+    }
+    const subscription = live.subscribe(listener)
+    for (const frame of subscription.replay) listener(frame)
+  })
 }
 
 function resolveLive(
   harness: AgentHarness,
-  frame: AttachFrame | AbortFrame,
+  frame: AbortFrame,
 ): LiveRun | undefined {
   if (frame.runId !== undefined) {
     const byRun = harness.live(frame.runId)
@@ -213,41 +178,10 @@ async function buildRunSpec(
   }
 }
 
-function readFirstMessage(socket: WebSocket): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const onMessage = (data: WebSocket.RawData): void => {
-      cleanup()
-      resolve(rawToString(data))
-    }
-    const onError = (error: Error): void => {
-      cleanup()
-      reject(error)
-    }
-    const onClose = (): void => {
-      cleanup()
-      reject(new Error('socket closed before init'))
-    }
-    const cleanup = (): void => {
-      socket.off('message', onMessage)
-      socket.off('error', onError)
-      socket.off('close', onClose)
-    }
-    socket.once('message', onMessage)
-    socket.once('error', onError)
-    socket.once('close', onClose)
-  })
-}
-
-function sendError(socket: WebSocket, message: string, runId: string, harness: string): void {
+function sendError(socket: WebSocket, message: string, runId: string, harness: string, code: string): void {
   if (!socketOpen(socket)) return
   const stamper = new EnvelopeStamper(runId, harness)
-  socket.send(encodeEvent(stamper.stamp({ type: 'error', message })))
-}
-
-function harnessOf(raw: unknown): string | undefined {
-  if (typeof raw !== 'object' || raw === null) return undefined
-  const harness = (raw as { harness?: unknown }).harness
-  return typeof harness === 'string' ? harness : undefined
+  socket.send(encodeEvent(stamper.stamp({ type: 'error', message, code })))
 }
 
 function socketOpen(socket: WebSocket): boolean {

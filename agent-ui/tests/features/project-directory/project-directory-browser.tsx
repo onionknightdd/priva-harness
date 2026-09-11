@@ -133,7 +133,7 @@ async function runChecks() {
     await click(button(t("agentMessage.send"), host))
     const socket = fixtures.sockets[0]
     const init = socket.sent[0]
-    check("first send creates a new run with the selected cwd and no sessionId", init.type === "init" && init.cwd === "/workspace/work/other" && !init.sessionId && ["pi", "claude"].includes(String(init.harness)))
+    check("first send creates a new run with the selected cwd and no sessionId", init.type === "run.start" && init.cwd === "/workspace/work/other" && !init.sessionId && ["pi", "claude"].includes(String(init.harness)))
     check("first send retains absolute paths from uploads before and after the directory change", String(init.text).includes("/workspace/work/new-project/.priva-attachments/ready.txt") && String(init.text).includes("/workspace/work/new-project/.priva-attachments/pending.txt") && String(init.text).includes("/workspace/work/other/.priva-attachments/later.txt"))
     check("cwd is locked as soon as the first message is sent", !host.querySelector('button[aria-label^="' + t("directoryPicker.change") + '"]'))
     await act(async () => { socket.bindSession() })

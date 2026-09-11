@@ -1,5 +1,7 @@
 import type { WorkflowState } from '../resource/workflow.js'
-export const STREAM_PROTOCOL_VERSION = 1 as const
+import type { BackgroundTask, TaskNotification, TaskReplyTarget } from '../resource/background-task.js'
+import type { ThreadMessage } from '../resource/thread.js'
+export const STREAM_PROTOCOL_VERSION = 2 as const
 
 // Mapping table (product type ← SDK). Mappers emit AgentEvent; EnvelopeStamper adds the envelope.
 // Claude stream_event.content_block_start          → assistant.block_start
@@ -83,8 +85,13 @@ export interface BlockAddress {
   readonly index?: number
 }
 
-export type AgentEvent =
-  | ({ readonly type: 'run.started'; readonly model?: string } & EventChannel)
+export type AgentEvent = (
+  | { readonly type: 'tasks.snapshot'; readonly tasks: readonly BackgroundTask[] }
+  | { readonly type: 'task.updated' | 'task.notification'; readonly task: BackgroundTask }
+  | { readonly type: 'task.delivered'; readonly notification: TaskNotification; readonly task: BackgroundTask }
+  | { readonly type: 'session.state'; readonly state: 'running' | 'idle' | 'requires_action' }
+  | { readonly type: 'session.snapshot'; readonly tasks: readonly BackgroundTask[]; readonly messages: readonly ThreadMessage[]; readonly activeRunId?: string }
+  | ({ readonly type: 'run.started'; readonly model?: string; readonly userMessage?: ThreadMessage } & EventChannel)
   | ({
       readonly type: 'assistant.block_start'
       readonly kind: BlockKind
@@ -251,9 +258,12 @@ export type AgentEvent =
       readonly name: string
       readonly data?: unknown
     }
+) & { readonly replyTo?: TaskReplyTarget }
 
 export interface StreamEnvelope {
+  readonly messageTargetId?: string
   readonly v: typeof STREAM_PROTOCOL_VERSION
+  readonly streamId?: string
   readonly runId: string
   readonly seq: number
   readonly ts: number

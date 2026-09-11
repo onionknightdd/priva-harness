@@ -58,6 +58,9 @@ describe('dynamic workflow aggregation', () => {
     const message = { ...emptyAssistantMessage('a1', '2026-09-05T10:00:00Z'), workflows: [workflow] }
     const aborted = applyStreamFrame(message, { type: 'run.aborted' })
     expect(aborted.workflows?.[0]).toMatchObject({ status: 'cancelled', agents: [{ state: 'completed' }, { state: 'cancelled' }] })
+    const background = applyStreamFrame({ ...message, blocks: [{ type: 'tool_use', name: 'workflow', id: 'tool-one', blockId: 'tool-one', index: 0,
+      tool: { id: 'tool-one', name: 'workflow', status: 'completed', backgroundTask: { taskId: 'bg', toolUseId: 'tool-one', kind: 'workflow', status: 'running' } } }] }, { type: 'run.aborted' })
+    expect(background.workflows?.[0]?.status).toBe(workflow.status)
   })
 
   it('routes a task update lacking workflow markers using the launch identity', () => {

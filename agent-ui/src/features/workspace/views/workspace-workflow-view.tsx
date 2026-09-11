@@ -1,3 +1,4 @@
+import { WorkspaceTasksView } from "./workspace-tasks-view"
 import { WorkspaceAgentView } from "./workspace-agent-view"
 import { useCallback } from "react"
 import type { LoadWorkflowAgent } from "@/features/agent-message/components/workflow-agent-detail"
@@ -15,7 +16,7 @@ export function WorkspaceWorkflowView() {
     return loader(runId, agent, signal)
   }, [loader, runId])
   if (agentTarget) return <WorkspaceAgentView key={`${agentTarget.sourceKey}:${agentTarget.navigationId}`} target={agentTarget} />
-  if (!target) return <div className="p-4 text-xs text-muted-foreground">{t("agentMessage.workflowUI.openFromMessage")}</div>
+  if (!target) return <WorkspaceTasksView />
   return (
     <div className="min-h-0 min-w-0 overflow-y-auto p-1" role="region" aria-label={t("agentMessage.workflow")}>
       <WorkflowPipeline key={`${target.sourceKey}:${target.workflow.workflowToolUseId}:${target.navigationId}`}

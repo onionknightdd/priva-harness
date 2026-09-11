@@ -1,6 +1,6 @@
 import type { AgentRuntime, ProviderRunSpec, SessionRef } from '../../core/contract/agent-provider.js'
 import type { AgentEvent } from '../../core/event/agent-event.js'
-import { sessionRefKey } from '../../core/resource/session.js'
+import { SessionError, sessionRefKey } from '../../core/resource/session.js'
 
 export const WARM_POOL_LIMIT = 5
 export const WARM_IDLE_MS = 10 * 60 * 1000
@@ -61,6 +61,7 @@ export class WarmRuntimePool {
   private readonly idle = new Map<string, WarmLease>()
   private readonly busy = new Set<AgentRuntime>()
   private readonly overflow = new Set<AgentRuntime>()
+  private readonly invalidated = new Set<AgentRuntime>()
   private resourceGeneration = 0
 
   constructor(options: WarmRuntimePoolOptions = {}) {
@@ -78,23 +79,32 @@ export class WarmRuntimePool {
     const generation = this.resourceGeneration
     if (session !== undefined && session.id !== '') {
       const key = sessionRefKey(session)
-      const lease = this.idle.get(key)
+      let lease = this.idle.get(key)
+      if (lease && this.invalidated.has(lease.runtime) && !lease.runtime.hasBackgroundTasks) {
+        await this.evict(key)
+        lease = undefined
+      }
       if (lease !== undefined) {
         if (canApplyWarmRunSpec(lease.spec, spec)) {
           this.clearTimer(lease)
           this.idle.delete(key)
           this.busy.add(lease.runtime)
-          if (isIdleWatchable(lease.runtime)) lease.runtime.listenIdle(undefined)
           try {
             await lease.runtime.applyRunSpec(spec)
             if (generation !== this.resourceGeneration) throw new Error('Resources changed while acquiring the session')
             return lease.runtime
-          } catch {
+          } catch (error) {
+            if (lease.runtime.hasBackgroundTasks) {
+              this.busy.delete(lease.runtime)
+              this.idle.set(key, lease)
+              throw error
+            }
             this.busy.delete(lease.runtime)
             this.overflow.delete(lease.runtime)
             await lease.runtime.release('dispose')
           }
         } else {
+          if (lease.runtime.hasBackgroundTasks) throw new SessionError('session-busy', 'Stop background tasks before changing session credentials or runtime settings')
           await this.evict(key)
         }
       }
@@ -112,6 +122,9 @@ export class WarmRuntimePool {
     }
     this.busy.add(runtime)
     if (overflow) this.overflow.add(runtime)
+    if (isIdleWatchable(runtime) && this.onIdleEvents) {
+      runtime.listenIdle((events) => this.onIdleEvents?.(runtime, spec, runtime.session, events))
+    }
     return runtime
   }
 
@@ -132,7 +145,9 @@ export class WarmRuntimePool {
     session: SessionRef,
   ): Promise<void> {
     this.busy.delete(runtime)
-    if (this.overflow.delete(runtime) || session.id === '') {
+    const overflow = this.overflow.delete(runtime)
+    if (((overflow || this.invalidated.has(runtime)) && !runtime.hasBackgroundTasks) || session.id === '') {
+      this.invalidated.delete(runtime)
       await runtime.release('dispose')
       return
     }
@@ -141,7 +156,7 @@ export class WarmRuntimePool {
       if (oldest === undefined) break
       await this.evict(oldest)
     }
-    if (this.size >= this.limit) {
+    if (this.size >= this.limit && !runtime.hasBackgroundTasks) {
       await runtime.release('dispose')
       return
     }
@@ -157,22 +172,24 @@ export class WarmRuntimePool {
       idleSince: this.now(),
       timer: undefined,
     }
-    lease.timer = setTimeout(() => {
-      void this.evict(key)
-    }, this.idleMs)
+    const armExpiry = () => {
+      this.clearTimer(lease)
+      lease.timer = setTimeout(() => {
+        if (runtime.hasBackgroundTasks) { armExpiry(); return }
+        void this.evict(key)
+      }, this.idleMs)
+      lease.timer.unref()
+    }
     this.idle.set(key, lease)
-    await runtime.release('warm')
-    if (this.idle.get(key) !== lease) return
-    if (isIdleWatchable(runtime) && this.onIdleEvents !== undefined) {
+    armExpiry()
+    if (isIdleWatchable(runtime) && this.onIdleEvents) {
       runtime.listenIdle((events) => {
         lease.idleSince = this.now()
-        this.clearTimer(lease)
-        lease.timer = setTimeout(() => {
-          void this.evict(key)
-        }, this.idleMs)
+        if (this.idle.get(key) === lease) armExpiry()
         this.onIdleEvents?.(runtime, spec, session, events)
       })
     }
+    await runtime.release('warm')
   }
 
   async disposeAll(): Promise<void> {
@@ -183,8 +200,11 @@ export class WarmRuntimePool {
   async invalidateResources(): Promise<void> {
     this.resourceGeneration++
     // Finish active turns with their snapshot; discard them instead of returning them to the pool.
-    for (const runtime of this.busy) this.overflow.add(runtime)
-    await this.disposeAll()
+    for (const runtime of this.busy) this.invalidated.add(runtime)
+    for (const [key, lease] of this.idle) {
+      this.invalidated.add(lease.runtime)
+      if (!lease.runtime.hasBackgroundTasks) await this.evict(key)
+    }
   }
 
   get size(): number {
@@ -217,6 +237,7 @@ export class WarmRuntimePool {
   private oldestIdleKey(): string | undefined {
     let oldest: { key: string; at: number } | undefined
     for (const [key, lease] of this.idle) {
+      if (lease.runtime.hasBackgroundTasks) continue
       if (oldest === undefined || lease.idleSince < oldest.at) {
         oldest = { key, at: lease.idleSince }
       }
@@ -228,6 +249,7 @@ export class WarmRuntimePool {
     const lease = this.idle.get(key)
     if (lease === undefined) return
     this.idle.delete(key)
+    this.invalidated.delete(lease.runtime)
     this.clearTimer(lease)
     if (isIdleWatchable(lease.runtime)) lease.runtime.listenIdle(undefined)
     await lease.runtime.release('dispose')

@@ -1,3 +1,6 @@
+import { taskNotification } from '../../core/resource/background-task.js'
+import { asRecord, stringField } from '../../core/event/json-record.js'
+import { ClaudeTaskDeliveryReader } from './session/claude-task-delivery-reader.js'
 import type { SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { query, type Options, type Query, type Settings } from '@anthropic-ai/claude-agent-sdk'
 
@@ -8,6 +11,7 @@ import type {
   SessionTarget,
   TurnContext,
 } from '../../core/contract/agent-provider.js'
+import { isRunResultEvent } from '../../core/event/agent-event.js'
 import type { AgentEvent } from '../../core/event/agent-event.js'
 import { emptyContextUsage, mapClaudeContextUsage } from '../../core/resource/context-usage.js'
 import type { ContextUsage } from '../../core/resource/context-usage.js'
@@ -49,7 +53,7 @@ export const CLAUDE_DISABLED_SKILLS = [
   'run-skill-generator',
 ] as const
 
-export type ClaudeQuery = Pick<Query, 'interrupt' | 'close' | 'setModel' | 'getContextUsage'>
+export type ClaudeQuery = Pick<Query, 'interrupt' | 'close' | 'setModel' | 'getContextUsage'> & Partial<Pick<Query, 'stopTask'>>
   & AsyncIterable<SDKMessage>
 
 export type ClaudeQueryStart = (args: {
@@ -61,8 +65,15 @@ export class ClaudeRuntime implements AgentRuntime {
   private query: ClaudeQuery | undefined
   private input: PushableStream<SDKUserMessage> | undefined
   private events: AsyncQueue<AgentEvent> | undefined
-  private mapper: ClaudeEventMapper | undefined
-  private idleMapper: ClaudeEventMapper | undefined
+  private readonly mapper = new ClaudeEventMapper()
+  private readonly deliveries: ClaudeTaskDeliveryReader
+  private lastMainMessageId: string | undefined
+  private readonly idleBacklog: AgentEvent[] = []
+  private turnEnded = false
+  private sessionStateAvailable = false
+  private heldResult: AgentEvent | undefined
+  private readonly pendingNotices = new Set<string>()
+  private readonly consumedNotices = new Set<string>()
   private abortController: AbortController | undefined
   private sessionId = ''
   private inTurn = false
@@ -78,6 +89,7 @@ export class ClaudeRuntime implements AgentRuntime {
   ) {
     this.startQuery = startQuery ?? ((args) => query(args))
     this.sessionId = initialSessionId(target)
+    this.deliveries = new ClaudeTaskDeliveryReader(globalConfigDir, spec.cwd)
   }
 
   get session(): SessionRef {
@@ -86,15 +98,16 @@ export class ClaudeRuntime implements AgentRuntime {
 
   listenIdle(listener: ((events: readonly AgentEvent[]) => void) | undefined): void {
     this.idleListener = listener
-    if (listener === undefined) this.idleMapper = undefined
+    if (listener && !this.inTurn) this.flushIdle()
   }
 
   async *run(turn: UserTurn, context: TurnContext): AsyncIterable<AgentEvent> {
     this.inTurn = true
-    this.idleMapper = undefined
-    this.mapper = new ClaudeEventMapper()
+    this.turnEnded = false
     this.events = new AsyncQueue<AgentEvent>()
+    await this.deliveries.start(this.sessionId)
     this.ensureQuery(turn)
+    this.mapper.beginUserTurn()
     this.input?.push(claudeUserMessage(userTurnText(turn)))
 
     const onAbort = (): void => {
@@ -109,7 +122,6 @@ export class ClaudeRuntime implements AgentRuntime {
       this.inTurn = false
       this.events.close()
       this.events = undefined
-      this.mapper = undefined
       context.signal.removeEventListener('abort', onAbort)
     }
   }
@@ -119,6 +131,13 @@ export class ClaudeRuntime implements AgentRuntime {
       await this.query.setModel(spec.model)
     }
     this.spec = spec
+  }
+
+  get hasBackgroundTasks(): boolean { return this.mapper.backgroundTasks.state.hasActive || this.idleBacklog.length > 0 || this.heldResult !== undefined || this.pendingNotices.size > 0 }
+
+  async stopTask(taskId: string): Promise<void> {
+    if (!this.query?.stopTask) throw new Error('Task runtime is unavailable')
+    await this.query.stopTask(taskId)
   }
 
   async abort(): Promise<void> {
@@ -137,11 +156,12 @@ export class ClaudeRuntime implements AgentRuntime {
   release(retention: 'warm' | 'dispose'): Promise<void> {
     this.events?.close()
     this.events = undefined
-    this.mapper = undefined
     this.inTurn = false
-    if (retention === 'warm') return Promise.resolve()
+    if (retention === 'warm') { this.flushIdle(); return Promise.resolve() }
     this.idleListener = undefined
-    this.idleMapper = undefined
+    this.idleBacklog.length = 0
+    this.pendingNotices.clear()
+    this.consumedNotices.clear()
     this.input?.close()
     this.query?.close()
     this.abortController?.abort()
@@ -183,31 +203,63 @@ export class ClaudeRuntime implements AgentRuntime {
   }
 
   private async pump(active: ClaudeQuery): Promise<void> {
+    let failed = false
     try {
       for await (const message of active) {
         const sessionId = sessionIdOf(message)
-        if (sessionId !== undefined) this.sessionId = sessionId
-        const mapped = this.mapMessage(message)
-        if (this.inTurn) {
-          const events = this.events
-          if (events === undefined) continue
-          for (const event of mapped) events.push(event)
-          continue
+        if (sessionId !== undefined) {
+          this.sessionId = sessionId
+          await this.deliveries.start(sessionId)
         }
-        if (this.idleListener !== undefined && mapped.length > 0) {
-          this.idleListener(mapped)
+        if (message.type === 'system' && message.subtype === 'task_notification' && !message.ambient && !message.skip_transcript) this.pendingNotices.add(message.task_id)
+        if (message.type === 'user' && 'origin' in message) {
+          const content = message.message.content
+          const text = typeof content === 'string' ? content : content.flatMap((block) => block.type === 'text' ? [block.text] : []).join('')
+          const notice = taskNotification(message.origin, text)
+          if (notice?.['task_id']) this.consumedNotices.add(notice['task_id'])
         }
+        const mainId = mainAssistantId(message)
+        const deliveries: AgentEvent[] = []
+        if (mainId && mainId !== this.lastMainMessageId) {
+          this.lastMainMessageId = mainId
+          if (this.pendingNotices.size) for (const notice of await this.deliveries.forAssistant(mainId)) {
+            for (const event of this.mapper.push(notice)) {
+              if (event.type === 'task.delivered') this.consumedNotices.add(event.task.taskId)
+              deliveries.push(event)
+            }
+          }
+        }
+        let mapped = [...deliveries, ...this.mapper.push(message)]
+        if (mapped.some(isRunResultEvent)) {
+          for (const id of this.consumedNotices) this.pendingNotices.delete(id)
+          this.consumedNotices.clear()
+        }
+        const state = mapped.find((event) => event.type === 'session.state')
+        if (state) this.sessionStateAvailable = true
+        if (this.sessionStateAvailable) {
+          mapped = mapped.filter((event) => {
+            if (!isRunResultEvent(event)) return true
+            this.heldResult = event
+            return false
+          })
+          if (state?.type === 'session.state' && state.state === 'idle' && this.heldResult) {
+            mapped = [...mapped, this.heldResult]
+            this.heldResult = undefined
+          }
+        }
+        this.dispatch(mapped)
       }
     } catch (error) {
-      const failed: AgentEvent = {
+      failed = true
+      const failure: AgentEvent = {
         type: 'run.failed',
         message: error instanceof Error ? error.message : String(error),
         ...(this.sessionId === '' ? {} : { sessionId: this.sessionId }),
         model: this.spec.model,
       }
-      if (this.inTurn) this.events?.push(failed)
-      else if (this.idleListener !== undefined) this.idleListener([failed])
+      this.dispatch([failure])
     } finally {
+      if (!failed && this.query === active) this.dispatch([{ type: 'run.failed', message: 'Claude session process ended unexpectedly', model: this.spec.model }])
       this.events?.close()
     }
   }
@@ -215,8 +267,8 @@ export class ClaudeRuntime implements AgentRuntime {
   private emitToolProgress(chunk: string): void {
     const mapper = this.mapper
     const events = this.events
-    const toolId = mapper?.latestToolId()
-    if (mapper === undefined || events === undefined || toolId === undefined) return
+    const toolId = mapper.latestToolId()
+    if (events === undefined || toolId === undefined) return
     events.push({
       type: 'tool.progress',
       id: toolId,
@@ -225,19 +277,34 @@ export class ClaudeRuntime implements AgentRuntime {
     })
   }
 
-  private mapMessage(message: SDKMessage): readonly AgentEvent[] {
-    if (this.inTurn) {
-      const mapper = this.mapper
-      if (mapper === undefined) return []
-      return mapper.push(message)
+  private dispatch(mapped: readonly AgentEvent[]): void {
+    if (this.inTurn && !this.turnEnded && this.events) {
+      for (const event of mapped) this.events.push(event)
+      if (mapped.some(isRunResultEvent)) { this.turnEnded = true; this.events.close() }
+      return
     }
-    this.idleMapper ??= new ClaudeEventMapper()
-    return this.idleMapper.push(message)
+    this.idleBacklog.push(...mapped)
+    if (!this.inTurn) this.flushIdle()
   }
+
+  private flushIdle(): void {
+    if (!this.idleListener || this.idleBacklog.length === 0) return
+    const batch = this.idleBacklog.splice(0)
+    this.idleListener(batch)
+  }
+
 }
 
 export interface ClaudeToolEmitters {
   readonly emitProgress?: (chunk: string) => void
+}
+
+function mainAssistantId(message: SDKMessage): string | undefined {
+  if ('parent_tool_use_id' in message && message.parent_tool_use_id) return undefined
+  if (message.type === 'assistant') return stringField(asRecord(message.message) ?? {}, 'id')
+  if (message.type !== 'stream_event') return undefined
+  const event = asRecord(message.event)
+  return event?.['type'] === 'message_start' ? stringField(asRecord(event['message']) ?? {}, 'id') : undefined
 }
 
 export function resolveClaudeQueryOptions(
@@ -257,6 +324,7 @@ export function resolveClaudeQueryOptions(
     enableFileCheckpointing: true,
     forwardSubagentText: true,
     includePartialMessages: true,
+    perTaskStopAffordance: true,
     permissionMode: 'bypassPermissions',
     promptSuggestions: spec.promptSuggestions !== false,
     systemPrompt: { type: 'preset', preset: 'claude_code' },

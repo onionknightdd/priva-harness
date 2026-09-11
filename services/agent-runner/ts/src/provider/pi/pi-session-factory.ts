@@ -1,3 +1,6 @@
+import { createEventBus, type EventBus } from '@earendil-works/pi-coding-agent'
+import { asRecord, stringField } from '../../core/event/json-record.js'
+import { taskStatus } from '../../core/resource/background-task.js'
 import { randomUUID } from 'node:crypto'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -60,6 +63,7 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
       workflows = new PiWorkflows({ cwd: spec.cwd, agentDir: this.agentDir,
         sessionId: sessionManager.getSessionId(), modelRuntime,
         providerId: options.providerId, modelId: options.modelId })
+      const eventBus = createEventBus()
       const { session } = await createAgentSession({
         cwd: spec.cwd,
         agentDir: this.agentDir,
@@ -67,7 +71,7 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
         modelRuntime,
         sessionManager,
         settingsManager,
-        resourceLoader: await createPiResourceLoader(spec.cwd, this.agentDir, settingsManager),
+        resourceLoader: await createPiResourceLoader(spec.cwd, this.agentDir, settingsManager, eventBus),
         thinkingLevel: 'off',
         customTools: [workflows.tool, ...compilePiCustomTools(this.tools, {
           cwd: spec.cwd, session: { provider: 'pi', id: sessionManager.getSessionId() },
@@ -94,6 +98,7 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
         modelRuntime,
         options.providerId,
         workflows,
+        eventBus,
       )
     } catch (error) {
       workflows?.dispose()
@@ -121,8 +126,14 @@ class SdkPiAgentSession implements PiAgentSession {
     private readonly modelRuntime: ModelRuntime,
     private readonly providerId: string,
     private readonly workflows: PiWorkflows,
+    private readonly eventBus: EventBus,
   ) {
     this.currentModelId = modelId
+    workflows.bindResultDelivery((workflow, result) => session.sendCustomMessage({
+      customType: 'workflow-notification', display: false,
+      content: `Workflow ${workflow.name ?? workflow.workflowRunId} ${workflow.status}. ${workflow.summary ?? ''}\n${result}`,
+      details: { ...workflow, result },
+    }, { deliverAs: 'followUp', triggerTurn: true }))
   }
 
   get modelId(): string {
@@ -159,7 +170,17 @@ class SdkPiAgentSession implements PiAgentSession {
   subscribe(listener: (event: PiSessionEvent) => void): () => void {
     const stopWorkflow = this.workflows.subscribe(listener)
     const stopSession = this.session.subscribe(listener)
-    return () => { stopWorkflow(); stopSession() }
+    const stopAgents = ['started', 'completed', 'failed'].map((phase) => this.eventBus.on(`subagents:${phase}`, (value) => {
+      const raw = asRecord(value) ?? {}
+      const taskId = stringField(raw, 'id')
+      if (!taskId) return
+      listener({ type: phase === 'started' ? 'task.updated' : 'task.notification', task: {
+        taskId, kind: 'agent', status: phase === 'started' ? 'running' : raw['status'] === 'error' ? 'failed' : raw['status'] === 'aborted' ? 'cancelled' : taskStatus(raw['status'] ?? phase),
+        ...(typeof raw['description'] === 'string' ? { description: raw['description'] } : {}),
+        ...(typeof raw['error'] === 'string' ? { summary: raw['error'] } : {}),
+      } })
+    }))
+    return () => { stopWorkflow(); stopSession(); for (const stop of stopAgents) stop() }
   }
 
   prompt(text: string): Promise<void> {
@@ -178,11 +199,23 @@ class SdkPiAgentSession implements PiAgentSession {
     return this.session.compact(customInstructions).then(() => undefined)
   }
 
-  waitForWorkflows(): Promise<void> { return this.workflows.waitForIdle() }
-
   abort(): Promise<void> {
-    this.workflows.abort()
     return this.session.abort()
+  }
+
+  async stopTask(taskId: string): Promise<void> {
+    if (this.workflows.stop(taskId)) return
+    await new Promise<void>((resolve, reject) => {
+      const requestId = randomUUID()
+      const timer = setTimeout(() => { off(); reject(new Error('Subagent stop timed out')) }, 5000)
+      const off = this.eventBus.on(`subagents:rpc:stop:reply:${requestId}`, (reply) => {
+        clearTimeout(timer); off()
+        const result = asRecord(reply)
+        if (result?.['success'] === true) resolve()
+        else reject(new Error(stringField(result ?? {}, 'error') ?? 'Subagent stop failed'))
+      })
+      this.eventBus.emit('subagents:rpc:stop', { requestId, agentId: taskId })
+    })
   }
 
   getContextUsage(): { tokens: number | null; contextWindow: number } | undefined {

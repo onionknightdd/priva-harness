@@ -10,6 +10,7 @@ Pi host session (OpenAI Responses)
        ├─ lifecycle + usage → PiWorkflows → PiEventMapper
        │                                    └─ workflow.progress / completed
        │                                         └─ existing message + Workspace UI
+       ├─ terminal background result -> native follow-up -> model reply
        └─ real WorkflowAgent sessions
             └─ session-scoped raw transcripts + invocation entry IDs
                  └─ PiSessionStore.workflowAgent → prompt / process / result
@@ -20,8 +21,13 @@ Pi host session (OpenAI Responses)
 - Subagents inherit the host model and model runtime, including its endpoint and
   credentials. Explicit per-agent model routing still takes precedence.
 - Foreground structured updates and background manager events both use the
-  shared workflow state. The host stream waits for background execution before
-  ending; cancellation stops its active workflow runs.
+  shared workflow state. A model reply completes independently of detached work;
+  the session stream remains subscribed. Stopping a reply leaves background work
+  running; `task.stop` cancels the selected workflow or subagent.
+- Terminal background workflows deliver their result once through the native
+  session `sendCustomMessage` follow-up queue. Agent notifications keep the
+  subagent plugin as their only sender. Runtime retention covers queued results.
+  See [the session protocol](background-tasks.md).
 - Phase names map to one-based UI indices. Agent identity uses the plugin's
   journal call ID, not the label, so equal labels and parallel agents stay distinct.
 - The UI shows per-agent model, provider token usage, timing, and full tool counts.

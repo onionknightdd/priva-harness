@@ -345,6 +345,7 @@ export function mapClaudeMessage(raw: unknown, sessionId: string): SessionMessag
       ?? stringField(record, 'parentToolUseId')
       ?? null,
     metadata: metadataField(record['metadata']),
+    ...(record['origin'] && typeof record['origin'] === 'object' ? { origin: asRecord(record['origin']) } : {}),
     timestamp: parseMessageTimestamp(record['timestamp'])
       ?? parseMessageTimestamp(asRecord(record['message'])['timestamp']),
   }

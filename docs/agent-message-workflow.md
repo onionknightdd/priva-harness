@@ -34,6 +34,11 @@ The workspace target retains the session/runtime identity and detail loader;
 message-level synchronization updates the selected workflow even when its
 process disclosure is closed. Changing sessions clears the previous target.
 
+Background Bash, Agent and Workflow launches also carry a session-scoped task
+card with status, output preview and a separate stop button. The Tasks & Activity
+module lists current-session tasks when no workflow agent is selected. See
+[background task lifecycle and protocol](background-tasks.md).
+
 ## Data contract
 
 The Claude adapter joins the tool-use ID, background task ID, and workflow run

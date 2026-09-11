@@ -8,21 +8,23 @@ import { testRunSpec } from '../../../support/run-spec.js'
 import { userTurnFromText } from '../../../../src/core/run/user-turn.js'
 
 describe('PiRuntime stream input', () => {
-  it('waits for background workflow terminal state before completing the host turn', async () => {
+  it('completes the foreground turn while a workflow continues on the session listener', async () => {
     const session = new FakePiAgentSession()
-    let settle: (() => void) | undefined
-    const idle = new Promise<void>((resolve) => { settle = resolve })
-    const enhanced: PiAgentSession = Object.assign(session, { waitForWorkflows: () => idle })
-    const runtime = new PiRuntime(enhanced)
+    const runtime = new PiRuntime(session)
+    const idle: AgentEvent[] = []
+    runtime.listenIdle((events) => idle.push(...events))
     const events: AgentEvent[] = []
-    const consume = (async () => {
-      for await (const event of consumeRunEvents(runtime.run({ text: 'workflow' }, { signal: new AbortController().signal }))) events.push(event)
-    })()
-    await Promise.resolve()
-    expect(events).toEqual([])
-    settle?.()
-    await consume
+    for await (const event of runtime.run({ text: 'workflow' }, { signal: new AbortController().signal })) events.push(event)
+    await runtime.release('warm')
+    session.emit({ type: 'task.updated', task: { taskId: 'wf', kind: 'workflow', status: 'running' } })
     expect(events.at(-1)?.type).toBe('run.completed')
+    expect(runtime.hasBackgroundTasks).toBe(true)
+    session.emit({ type: 'task.notification', task: { taskId: 'wf', kind: 'workflow', status: 'completed' } })
+    expect(idle.map((event) => event.type)).toEqual(['task.updated', 'task.notification'])
+    expect(runtime.hasBackgroundTasks).toBe(true)
+    session.emit({ type: 'message_end', message: { role: 'custom', customType: 'workflow-notification', details: { workflowRunId: 'wf', status: 'completed' } } })
+    session.emit({ type: 'agent_end', messages: [] })
+    expect(runtime.hasBackgroundTasks).toBe(false)
     await runtime.release('dispose')
   })
 
@@ -246,6 +248,8 @@ class FakePiAgentSession implements PiAgentSession {
       this.listener = undefined
     }
   }
+
+  emit(event: PiSessionEvent): void { this.listener?.(event) }
 
   prompt(text: string): Promise<void> {
     this.prompts.push(text)

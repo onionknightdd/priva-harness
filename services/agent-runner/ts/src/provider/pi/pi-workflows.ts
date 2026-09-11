@@ -1,4 +1,5 @@
 import { asRecord } from '../../core/event/json-record.js'
+import { taskStatus } from '../../core/resource/background-task.js'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
@@ -27,6 +28,9 @@ export class PiWorkflows {
   private writes: Promise<void> = Promise.resolve()
   private writeError: unknown
   private disposed = false
+  private readonly background = new Set<string>()
+  private readonly delivered = new Set<string>()
+  private resultDelivery: ((state: WorkflowState, result: string) => Promise<void>) | undefined
 
   constructor(private readonly options: { cwd: string; agentDir: string; sessionId: string; modelRuntime: ModelRuntime; providerId: string; modelId: string }) {
     const registry = new ModelRegistry(options.modelRuntime)
@@ -118,10 +122,20 @@ export class PiWorkflows {
         }
         const result = await tool.execute(id, args, signal, onUpdate, context)
         const runId = asRecord(result.details)?.['runId']
+        if (typeof runId === 'string' && asRecord(result.details)?.['background'] === true) this.background.add(runId)
         if (typeof runId === 'string') { this.toolIds.set(runId, id); this.pending.add(runId); this.publish(runId) }
         return result
       }),
     }
+  }
+
+  bindResultDelivery(deliver: (state: WorkflowState, result: string) => Promise<void>): void { this.resultDelivery = deliver }
+
+  stop(taskId: string): boolean {
+    if (!this.manager.getRun(taskId)) return false
+    this.manager.stop(taskId)
+    this.publish(taskId)
+    return true
   }
 
   setModel(modelId: string): void {
@@ -134,14 +148,7 @@ export class PiWorkflows {
     return () => { this.listeners.delete(listener) }
   }
 
-  async waitForIdle(): Promise<void> {
-    // Keep the host event stream open after the main agent's final message so
-    // background workflows can finish and publish their terminal snapshots.
-    while ([...this.pending].some((id) => this.manager.getRun(id)?.status === 'running')) {
-      await new Promise<void>((resolve) => setTimeout(resolve, 100))
-    }
-    for (const id of this.pending) this.publish(id)
-    this.pending.clear()
+  async flush(): Promise<void> {
     await this.writes
     if (this.writeError !== undefined) throw this.writeError instanceof Error ? this.writeError : new Error('Could not persist Pi workflow', { cause: this.writeError })
   }
@@ -179,6 +186,21 @@ export class PiWorkflows {
     if (state.agents.every((a) => a.toolCalls !== undefined)) state = { ...state, totalToolCalls: state.agents.reduce((sum, a) => sum + (a.toolCalls ?? 0), 0) }
     this.states.set(runId, state)
     for (const listener of this.listeners) listener({ type: 'workflow_progress', workflow: state })
+    const terminal = ['completed', 'failed', 'cancelled'].includes(state.status)
+    if (terminal) this.pending.delete(runId)
+    if (this.background.has(runId)) for (const listener of this.listeners) listener({
+      type: terminal ? 'task.notification' : 'task.updated', task: {
+        taskId: runId, toolUseId: toolId, kind: 'workflow', status: taskStatus(state.status),
+        ...(state.name ? { description: state.name } : {}), ...(state.summary ? { summary: state.summary } : {}),
+      },
+    })
+    if (this.background.has(runId) && terminal && !this.delivered.has(runId) && this.resultDelivery) {
+      this.delivered.add(runId)
+      const result = run.result?.result
+      void this.resultDelivery(state, (typeof result === 'string' ? result : result === undefined ? '' : JSON.stringify(result)).slice(0, 8000)).catch((error: unknown) => {
+        for (const listener of this.listeners) listener({ type: 'background_error', errorMessage: error instanceof Error ? error.message : String(error) })
+      })
+    }
     // Serialize snapshots; an older write must never overwrite terminal state.
     const record = structuredClone({ sessionId: this.options.sessionId, state, transcripts: this.transcripts.get(runId) ?? {} })
     this.writes = this.writes.then(() => savePiWorkflow(this.options.agentDir, record)).catch((error: unknown) => { this.writeError = error })

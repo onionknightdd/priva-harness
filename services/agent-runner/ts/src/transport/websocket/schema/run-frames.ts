@@ -12,7 +12,8 @@ import {
 } from '../../../core/resource/run-harness.js'
 
 export interface InitFrame {
-  readonly type: 'init'
+  readonly type: 'run.start'
+  readonly runId?: string
   readonly text: string
   readonly attachments?: readonly UserAttachment[]
   readonly model: string
@@ -24,22 +25,24 @@ export interface InitFrame {
   readonly promptSuggestions?: boolean
 }
 
-export interface AttachFrame {
-  readonly type: 'attach'
+export interface SubscribeFrame {
+  readonly type: 'session.subscribe'
   readonly harness: RunHarnessId
   readonly sinceSeq: number
-  readonly sessionId?: string
-  readonly runId?: string
+  readonly streamId?: string
+  readonly sessionId: string
 }
 
 export interface AbortFrame {
-  readonly type: 'abort'
+  readonly type: 'run.abort'
   readonly harness: RunHarnessId
   readonly sessionId?: string
   readonly runId?: string
 }
 
-export type ClientFrame = InitFrame | AttachFrame | AbortFrame
+export interface StopTaskFrame { readonly type: 'task.stop'; readonly harness: RunHarnessId; readonly sessionId: string; readonly taskId: string }
+
+export type ClientFrame = InitFrame | SubscribeFrame | AbortFrame | StopTaskFrame
 
 export type ParseClientResult =
   | { readonly ok: true; readonly frame: ClientFrame }
@@ -54,18 +57,26 @@ export function parseClientFrame(raw: unknown): ParseClientResult {
     return { ok: false, message: 'Frame must be a JSON object' }
   }
   const type = raw['type']
-  if (type === 'init') return parseInitFrame(raw)
-  if (type === 'attach') return parseAttachFrame(raw)
-  if (type === 'abort') return parseAbortFrame(raw)
-  return { ok: false, message: 'First message must be type init, attach, or abort' }
+  if (type === 'task.stop') {
+    const result = z.object({ type: z.literal('task.stop'), harness: z.enum(['claude', 'pi']), sessionId: z.string().trim().min(1), taskId: z.string().trim().min(1) }).safeParse(raw)
+    return result.success ? { ok: true, frame: result.data } : { ok: false, message: 'Task stop requires harness, sessionId and taskId' }
+  }
+  if (type === 'run.start') return parseInitFrame(raw)
+  if (type === 'session.subscribe') return parseSubscribeFrame(raw)
+  if (type === 'run.abort') return parseAbortFrame(raw)
+  return { ok: false, message: 'Message must be run.start, session.subscribe, run.abort or task.stop' }
 }
 
 export function parseInitFrame(raw: unknown): ParseInitResult {
   if (!isRecord(raw)) {
     return { ok: false, message: 'Frame must be a JSON object' }
   }
-  if (raw['type'] !== 'init') {
-    return { ok: false, message: 'First WebSocket frame must be type "init".' }
+  if (raw['type'] !== 'run.start') {
+    return { ok: false, message: 'Run start frame must be type "run.start".' }
+  }
+  const runId = raw['runId']
+  if (runId !== undefined && (typeof runId !== 'string' || !runId.trim())) {
+    return { ok: false, message: 'Run start runId must be a non-empty string' }
   }
   const text = raw['text']
   const attachments = z.array(userAttachmentSchema).optional().safeParse(raw['attachments'])
@@ -112,7 +123,8 @@ export function parseInitFrame(raw: unknown): ParseInitResult {
   return {
     ok: true,
     frame: {
-      type: 'init',
+      type: 'run.start',
+      ...(runId === undefined ? {} : { runId: runId.trim() }),
       text,
       ...(attachments.data?.length ? { attachments: attachments.data } : {}),
       model: model.trim(),
@@ -126,36 +138,15 @@ export function parseInitFrame(raw: unknown): ParseInitResult {
   }
 }
 
-export function parseAttachFrame(raw: Record<string, unknown>): ParseClientResult {
-  const harness = raw['harness']
-  if (!isRunHarnessId(harness)) {
-    return { ok: false, message: 'Attach harness must be claude or pi' }
-  }
-  const sinceSeq = parseSinceSeq(raw['sinceSeq'])
-  if (sinceSeq === undefined) {
-    return { ok: false, message: 'Attach sinceSeq must be a non-negative integer' }
-  }
-  const sessionId = raw['sessionId']
-  if (sessionId !== undefined && (typeof sessionId !== 'string' || sessionId.trim() === '')) {
-    return { ok: false, message: 'Attach sessionId must be a non-empty string' }
-  }
-  const runId = raw['runId']
-  if (runId !== undefined && (typeof runId !== 'string' || runId.trim() === '')) {
-    return { ok: false, message: 'Attach runId must be a non-empty string' }
-  }
-  if (sessionId === undefined && runId === undefined) {
-    return { ok: false, message: 'Attach requires sessionId or runId' }
-  }
-  return {
-    ok: true,
-    frame: {
-      type: 'attach',
-      harness,
-      sinceSeq,
-      ...(sessionId === undefined ? {} : { sessionId: sessionId.trim() }),
-      ...(runId === undefined ? {} : { runId: runId.trim() }),
-    },
-  }
+export function parseSubscribeFrame(raw: Record<string, unknown>): ParseClientResult {
+  const result = z.object({
+    type: z.literal('session.subscribe'), harness: z.enum(['claude', 'pi']),
+    sessionId: z.string().trim().min(1), streamId: z.string().trim().min(1).optional(),
+    sinceSeq: z.number().int().nonnegative().default(0),
+  }).safeParse(raw)
+  if (!result.success) return { ok: false, message: 'Session subscribe requires harness, sessionId and a valid cursor' }
+  const { streamId, ...frame } = result.data
+  return { ok: true, frame: { ...frame, ...(streamId === undefined ? {} : { streamId }) } }
 }
 
 export function parseAbortFrame(raw: Record<string, unknown>): ParseClientResult {
@@ -177,7 +168,7 @@ export function parseAbortFrame(raw: Record<string, unknown>): ParseClientResult
   return {
     ok: true,
     frame: {
-      type: 'abort',
+      type: 'run.abort',
       harness,
       ...(sessionId === undefined ? {} : { sessionId: sessionId.trim() }),
       ...(runId === undefined ? {} : { runId: runId.trim() }),
@@ -194,12 +185,6 @@ export function sessionTargetFromInit(frame: InitFrame): SessionTarget {
     return { kind: 'resume', session: { provider, id: frame.sessionId } }
   }
   return { kind: 'new', provider }
-}
-
-function parseSinceSeq(value: unknown): number | undefined {
-  if (value === undefined) return 0
-  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) return undefined
-  return value
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

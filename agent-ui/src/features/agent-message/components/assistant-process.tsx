@@ -1,3 +1,4 @@
+import { BackgroundTaskCard } from "./background-task-card"
 import { agentToolsForMessage, isAgentTool } from "../agent-tool-data"
 import { AgentToolItem } from "./agent-tool-item"
 import { isWorkflowTool } from "../workflow-data"
@@ -87,14 +88,16 @@ export function AssistantProcess({
 }) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
-  const [open, setOpen] = React.useState(isStreaming)
+  const hasBackgroundTasks = message.blocks?.some((block) => block.type === "tool_use" && block.tool?.backgroundTask &&
+    ["pending", "running", "paused"].includes(block.tool.backgroundTask.status)) ?? false
+  const [open, setOpen] = React.useState(isStreaming || hasBackgroundTasks)
   const blocks = [...(message.blocks ?? [])].sort(
     (left, right) => left.index - right.index
   )
 
   React.useEffect(() => {
-    setOpen(isStreaming)
-  }, [isStreaming])
+    setOpen(isStreaming || hasBackgroundTasks)
+  }, [isStreaming, hasBackgroundTasks])
 
   const rows: React.ReactNode[] = []
   const renderedWorkflows = new Set<string>()
@@ -148,6 +151,7 @@ export function AssistantProcess({
       } else {
         rows.push(<ToolItem key={block.id} block={block} />)
       }
+      if (block.tool?.backgroundTask && !isAgentTool(block.name)) rows.push(<BackgroundTaskCard key={`${block.id}:background`} task={block.tool.backgroundTask} />)
     }
   }
   for (const agent of agentTools) {
@@ -406,7 +410,7 @@ function BashToolItem({
   const input = usefulToolInput(block.tool?.input) ?? usefulToolInput(block.input)
   const command = stringInput(input, "command")
   const description = stringInput(input, "description")
-  const output = block.tool?.output?.trim() ?? ""
+  const output = block.tool?.backgroundTask ? "" : block.tool?.output?.trim() ?? ""
   const status = toolResultStatus(block.tool)
   const shouldReduceMotion = Boolean(useReducedMotion())
   const inputStreaming =
@@ -418,7 +422,7 @@ function BashToolItem({
     inputStreaming
   )
   const awaitingOutput =
-    status === "running" && !inputStreaming && !commandCaret
+    !block.tool?.backgroundTask && status === "running" && !inputStreaming && !commandCaret
   const copyText = [command, output].filter(Boolean).join("\n")
   const showPrompt =
     inputStreaming || Boolean(command || output) || awaitingOutput
@@ -871,7 +875,8 @@ function stringInput(
 }
 
 function toolResultStatus(tool: ToolCard | undefined): ToolResultStatus {
-  if (tool?.launchStatus === "async_launched" || isToolRunning(tool)) {
+  if (tool?.backgroundTask?.status === "failed") return "error"
+  if (isToolRunning(tool)) {
     return "running"
   }
   if (tool?.ok === false) {

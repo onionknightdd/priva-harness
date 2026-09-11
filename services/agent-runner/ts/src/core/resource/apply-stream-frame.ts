@@ -1,4 +1,5 @@
 import { settleWorkflows, workflowStatus } from './workflow-status.js'
+import { taskIsActive } from './background-task.js'
 import type { AgentEvent } from '../event/agent-event.js'
 import { isAgentName } from '../event/tool-names.js'
 import {
@@ -13,15 +14,32 @@ import {
 } from './thread.js'
 
 export function applyStreamFrame(message: ThreadMessage, event: AgentEvent): ThreadMessage {
+  if (event.type === 'task.delivered') {
+    const updated = applyStreamFrame(message, { type: 'task.updated', task: event.task })
+    const blocks = updated.blocks ?? []
+    if (blocks.some((block) => block.type === 'task_notification' && block.notification.id === event.notification.id)) return updated
+    return { ...updated, blocks: [...blocks, { type: 'task_notification',
+      blockId: `notification:${event.notification.id}`, index: blocks.length ? Math.max(...blocks.map((block) => block.index)) + 1 : 0,
+      notification: event.notification }] }
+  }
+  if (event.type === 'task.updated' || event.type === 'task.notification') {
+    const task = event.task
+    return { ...message, blocks: (message.blocks ?? []).map((block) =>
+      block.type !== 'tool_use' || block.id !== task.toolUseId ? block : {
+        ...block, tool: { ...block.tool, id: block.id, name: block.name,
+          status: 'completed', backgroundTask: { ...block.tool?.backgroundTask, ...task,
+            status: block.tool?.backgroundTask && !taskIsActive(block.tool.backgroundTask) && taskIsActive(task)
+              ? block.tool.backgroundTask.status : task.status } },
+      }) }
+  }
   if (event.type === 'error' || event.type === 'run.failed') {
     const errorText = event.message.trim() === '' ? message.content : event.message.trim()
     return { ...message, content: errorText, status: 'error',
-      ...(message.workflows === undefined ? {} : { workflows: settleWorkflows(message.workflows, 'failed') }) }
+      ...(message.workflows === undefined ? {} : { workflows: settleForegroundWorkflows(message, 'failed') }) }
   }
   if (event.type === 'run.aborted') {
     return { ...message, status: 'complete',
-      ...(message.nestedAgents === undefined ? {} : { nestedAgents: message.nestedAgents.map((agent) => agent.status === 'running' ? { ...agent, status: 'cancelled' as const } : agent) }),
-      ...(message.workflows === undefined ? {} : { workflows: settleWorkflows(message.workflows, 'cancelled') }) }
+      ...(message.workflows === undefined ? {} : { workflows: settleForegroundWorkflows(message, 'cancelled') }) }
   }
 
   if (event.type.startsWith('workflow.')) {
@@ -52,6 +70,12 @@ export function applyStreamFrame(message: ThreadMessage, event: AgentEvent): Thr
     nestedAgents: applyNested(withUuid.nestedAgents ?? [], event),
     content: textFromThreadBlocks(blocks),
   }
+}
+
+function settleForegroundWorkflows(message: ThreadMessage, status: 'failed' | 'cancelled'): readonly ThreadWorkflowCard[] {
+  return (message.workflows ?? []).flatMap((workflow) => message.blocks?.some((block) =>
+    block.type === 'tool_use' && block.id === workflow.workflowToolUseId && block.tool?.backgroundTask)
+    ? [workflow] : settleWorkflows([workflow], status))
 }
 
 function applyMainBlocks(blocks: readonly ThreadBlock[], event: AgentEvent): ThreadBlock[] {
@@ -267,6 +291,13 @@ function mergeSnapshot(
   existing: readonly ThreadBlock[],
   snapshot: readonly ThreadBlock[],
 ): ThreadBlock[] {
+  const boundary = existing.map((block) => block.type).lastIndexOf('task_notification')
+  if (boundary >= 0) {
+    const prefix = existing.slice(0, boundary + 1)
+    const suffix = mergeSnapshot(existing.slice(boundary + 1), snapshot)
+    let index = Math.max(...prefix.map((block) => block.index)) + 1
+    return [...prefix, ...suffix.map((block) => ({ ...block, index: index++ }))]
+  }
   const existingThinking = existing.find(
     (block): block is Extract<ThreadBlock, { type: 'thinking' }> => block.type === 'thinking',
   )

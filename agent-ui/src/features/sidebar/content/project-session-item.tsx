@@ -1,5 +1,7 @@
 "use client"
 
+import { useHarness } from "../header/harness-context"
+import { useBackgroundTasks, taskIsActive } from "@/features/agent-message/background-task-store"
 import * as React from "react"
 import { MoreHorizontalIcon, PinIcon } from "lucide-react"
 import { motion, useReducedMotion } from "motion/react"
@@ -44,6 +46,11 @@ function SessionLiveStatus({
   warmLabel: string
 }) {
   const { runningSessionIds, warmSessionIds } = useLiveSessionStatus()
+  const { runHarnessId } = useHarness()
+  const { t } = useTranslation()
+  const tasks = useBackgroundTasks(`${runHarnessId}:${sessionId}`)
+  const count = tasks.filter(taskIsActive).length
+  if (count) return <span className="shrink-0 text-[10px] text-muted-foreground" title={t("backgroundTasks.count", { count })}>{t("backgroundTasks.count", { count })}</span>
 
   if (runningSessionIds.has(sessionId)) {
     return <StatusDot status="running" label={runningLabel} />

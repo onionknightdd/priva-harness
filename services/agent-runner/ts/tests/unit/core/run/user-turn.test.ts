@@ -50,7 +50,7 @@ describe('user turn attachments', () => {
   })
 
   it('accepts attachment-only input and rejects empty or invalid attachments', () => {
-    const init = { type: 'init', text: '', model: 'm', harness: 'claude', cwd: '/workspace', attachments }
+    const init = { type: 'run.start', text: '', model: 'm', harness: 'claude', cwd: '/workspace', attachments }
     expect(parseInitFrame(init)).toMatchObject({ ok: true, frame: { text: '', attachments } })
     expect(parseInitFrame({ ...init, attachments: [] })).toMatchObject({ ok: false })
     expect(parseInitFrame({ ...init, attachments: [{ ...attachments[0], path: '' }] })).toMatchObject({ ok: false })

@@ -99,7 +99,7 @@ export function installProjectDirectoryFixtures() {
       const init = this.sent[0]
       const id = `new-session-${sockets.indexOf(this)}`
       sessions.push({ ...sessions[0], session_id: id, cwd: String(init.cwd), summary: "New conversation", first_prompt: String(init.text) })
-      this.reply({ type: "session.started", sessionId: id, runId: `run-${id}` })
+      this.reply({ v: 2, type: "run.started", sessionId: id, runId: init.runId, harness: init.harness, streamId: `stream-${id}`, seq: 1, ts: Date.now() })
       return id
     }
   }

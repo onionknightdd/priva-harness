@@ -53,6 +53,8 @@ export interface TurnContext {
 
 export interface AgentRuntime {
   readonly session: SessionRef
+  readonly hasBackgroundTasks?: boolean
+  stopTask?(taskId: string): Promise<void>
   run(turn: UserTurn, context: TurnContext): AsyncIterable<AgentEvent>
   applyRunSpec(spec: ProviderRunSpec): Promise<void>
   abort(reason?: string): Promise<void>

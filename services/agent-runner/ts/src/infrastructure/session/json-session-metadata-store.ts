@@ -36,6 +36,7 @@ export interface JsonSessionMetadataStoreOptions {
 }
 
 interface StoredSessionFlags {
+  readonly backgroundTasks?: readonly BackgroundTask[]
   readonly pinned?: boolean
   readonly archived?: boolean
   readonly tags?: readonly string[]
@@ -96,6 +97,7 @@ export class JsonSessionMetadataStore implements SessionMetadataRepository {
       const key = sessionRefKey(ref)
       const current = recordFromDocument(document, key)
       const next: SessionMetadataRecord = {
+        backgroundTasks: patch.backgroundTasks ?? current.backgroundTasks,
         flags: {
           pinned: patch.pinned ?? current.flags.pinned,
           archived: patch.archived ?? current.flags.archived,
@@ -251,6 +253,7 @@ function recordFromDocument(document: SessionMetadataDocument, key: string): Ses
   const lastResponseModel = parseStoredModel(document.lastResponseModels[key])
   return {
     flags,
+    backgroundTasks: stored?.backgroundTasks ?? [],
     tags,
     addDirs,
     runMode,
@@ -277,6 +280,7 @@ function writeRecord(
     sessions: {
       ...document.sessions,
       [key]: {
+        backgroundTasks: record.backgroundTasks,
         pinned: record.flags.pinned,
         archived: record.flags.archived,
         tags: [...record.tags],
@@ -410,3 +414,4 @@ async function delay(milliseconds: number): Promise<void> {
     setTimeout(resolve, milliseconds)
   })
 }
+import type { BackgroundTask } from '../../core/resource/background-task.js'

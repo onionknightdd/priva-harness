@@ -8,7 +8,7 @@ import { parseClientFrame, parseInitFrame, sessionTargetFromInit } from '../../.
 describe('run frames', () => {
   it('accepts init text, model, harness, and cwd', () => {
     expect(parseInitFrame({
-      type: 'init',
+      type: 'run.start',
       text: 'hi',
       model: 'gateway:llama3',
       harness: 'pi',
@@ -16,7 +16,7 @@ describe('run frames', () => {
     })).toEqual({
       ok: true,
       frame: {
-        type: 'init',
+        type: 'run.start',
         text: 'hi',
         model: 'gateway:llama3',
         harness: 'pi',
@@ -27,7 +27,7 @@ describe('run frames', () => {
 
   it('maps resume and fork session targets', () => {
     const resumed = parseInitFrame({
-      type: 'init',
+      type: 'run.start',
       text: 'hi',
       model: 'p:m',
       harness: 'claude',
@@ -44,7 +44,7 @@ describe('run frames', () => {
     }
 
     const forked = parseInitFrame({
-      type: 'init',
+      type: 'run.start',
       text: 'hi',
       model: 'p:m',
       harness: 'claude',
@@ -61,7 +61,7 @@ describe('run frames', () => {
     }
 
     const resumedPi = parseInitFrame({
-      type: 'init',
+      type: 'run.start',
       text: 'hi',
       model: 'p:m',
       harness: 'pi',
@@ -78,22 +78,22 @@ describe('run frames', () => {
   })
 
   it('rejects empty init text, missing model, unknown harness, and invalid resume', () => {
-    expect(parseInitFrame({ type: 'init', text: '  ' }).ok).toBe(false)
-    expect(parseInitFrame({ type: 'init', text: 'hi', harness: 'claude' }).ok).toBe(false)
+    expect(parseInitFrame({ type: 'run.start', text: '  ' }).ok).toBe(false)
+    expect(parseInitFrame({ type: 'run.start', text: 'hi', harness: 'claude' }).ok).toBe(false)
     expect(parseInitFrame({
-      type: 'init',
+      type: 'run.start',
       text: 'hi',
       model: 'gateway:llama3',
       harness: 'deepseek',
     }).ok).toBe(false)
     expect(parseInitFrame({
-      type: 'init',
+      type: 'run.start',
       text: 'hi',
       model: 'p:m',
       harness: 'claude',
     }).ok).toBe(false)
     expect(parseInitFrame({
-      type: 'init',
+      type: 'run.start',
       text: 'hi',
       model: 'p:m',
       harness: 'claude',
@@ -101,7 +101,7 @@ describe('run frames', () => {
       fork: true,
     }).ok).toBe(false)
     expect(parseInitFrame({
-      type: 'init',
+      type: 'run.start',
       text: 'hi',
       model: 'p:m',
       harness: 'pi',
@@ -112,42 +112,42 @@ describe('run frames', () => {
       ok: false,
       message: 'Pi does not support fork',
     })
-    expect(parseInitFrame({ type: 'abort' }).ok).toBe(false)
+    expect(parseInitFrame({ type: 'run.abort' }).ok).toBe(false)
   })
 
   it('parses attach and abort client frames', () => {
     expect(parseClientFrame({
-      type: 'attach',
+      type: 'session.subscribe',
       harness: 'claude',
       sessionId: 'sess-1',
       sinceSeq: 4,
     })).toEqual({
       ok: true,
       frame: {
-        type: 'attach',
+        type: 'session.subscribe',
         harness: 'claude',
         sessionId: 'sess-1',
         sinceSeq: 4,
       },
     })
     expect(parseClientFrame({
-      type: 'abort',
+      type: 'run.abort',
       harness: 'pi',
       runId: 'run-1',
     })).toEqual({
       ok: true,
       frame: {
-        type: 'abort',
+        type: 'run.abort',
         harness: 'pi',
         runId: 'run-1',
       },
     })
-    expect(parseClientFrame({ type: 'attach', harness: 'claude' }).ok).toBe(false)
+    expect(parseClientFrame({ type: 'session.subscribe', harness: 'claude' }).ok).toBe(false)
   })
 
   it('accepts promptSuggestions on init and ignores queueBehavior', () => {
     expect(parseInitFrame({
-      type: 'init',
+      type: 'run.start',
       text: 'hi',
       model: 'p:m',
       harness: 'pi',
@@ -157,7 +157,7 @@ describe('run frames', () => {
     })).toEqual({
       ok: true,
       frame: {
-        type: 'init',
+        type: 'run.start',
         text: 'hi',
         model: 'p:m',
         harness: 'pi',
@@ -169,7 +169,7 @@ describe('run frames', () => {
 
   it('rejects invalid promptSuggestions', () => {
     expect(parseInitFrame({
-      type: 'init',
+      type: 'run.start',
       text: 'hi',
       model: 'p:m',
       harness: 'claude',

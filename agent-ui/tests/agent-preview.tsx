@@ -14,12 +14,12 @@ import type { AgentToolView } from "../src/features/agent-message/agent-tool-dat
 import "../src/index.css"
 const i18n = i18next.createInstance()
 void i18n.use(initReactI18next).init({ lng: "zh-CN", resources: { "zh-CN": { translation: zhCN } } })
-const agents: AgentToolView[] = [{ id: "one", label: "检查认证模块", state: "completed", type: "Explore", model: "test-model", toolCount: 1, tokens: 15142, durationMs: 3357,
+const agents: AgentToolView[] = [{ id: "one", notifications: [], label: "检查认证模块", state: "completed", type: "Explore", model: "test-model", toolCount: 1, tokens: 15142, durationMs: 3357,
   prompt: "# 检查认证模块\n\n检查会话验证、过期处理和权限检查。", output: "# 检查结果\n\n- 会话过期处理正确\n- 建议补充取消测试", inbox: [{ body: "请关注取消流程。", senderName: "验证 Agent", afterBlockCount: 1 }],
   blocks: [{ type: "thinking", blockId: "t", index: 0, text: "先确认会话入口，然后检查取消流程。" },
     { type: "tool_use", blockId: "bash", index: 1, id: "bash", name: "bash", tool: { id: "bash", name: "bash", status: "completed", ok: true, input: { command: "npm test", description: "验证会话测试" }, output: "All tests passed" } },
     ...Array.from({ length: 12 }, (_, index) => ({ type: "text" as const, blockId: `text-${index}`, index: index + 2, text: `检查记录 ${index + 1}：会话验证已通过。` }))] },
- { id: "two", label: "验证测试结果", state: "failed", toolCount: 0, blocks: [], inbox: [], prompt: "检查测试结果", output: "测试进程退出，未完成验证。" }]
+ { id: "two", notifications: [], label: "验证测试结果", state: "failed", toolCount: 0, blocks: [], inbox: [], prompt: "检查测试结果", output: "测试进程退出，未完成验证。" }]
 const workingMessage = createAgentThreadMessage("assistant", "", "streaming")
 function WorkingStatusPreview() {
  const [timing, setTiming] = useState<{ startedAt: number; durationMs?: number }>(() => ({ startedAt: Date.now() }))
