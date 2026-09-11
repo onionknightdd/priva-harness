@@ -30,11 +30,50 @@ Sibling positions come from the directory structure because Headless Tree
 clears metadata for descendants during a parent's closing animation. Shared
 tree context and action callbacks remain stable.
 
+Nodes (the folder `Collapsible` plus its row and children) are memoized too.
+Because their state lives on mutable instances, `file-tree-revisions.ts`
+diffs the tree inputs on every render — expanded, selected and focused items,
+search, the loading set and the model's items / children maps — and bumps a
+per-item revision for each changed item and all of its ancestors. A search
+change bumps everything. The node receives `revision` as a prop, so React.memo
+re-renders exactly the changed branch; the loading set travels through a ref
+so replacing it does not invalidate untouched nodes.
+
 ```text
-Tree state -> lightweight nodes -> changed row snapshots -> render changed rows
+Tree state -> revision diff -> bump changed items + ancestors
+           -> memoized nodes: changed branch renders, siblings bail out
 Folder toggle -> existing 200 ms panel animation -> hide/reveal retained rows
 Panel animation completion -> update clipping on that panel
 ```
+
+First expansion of a directory used to spend one long frame on: rendering the
+whole tree twice (click, then data arrival), Base UI Collapsible layout effects,
+the address bar's `layout` projection re-measuring the page, and the name
+measurement plus `panel.getSize()` forcing further layouts before the first
+paint — the width-fit spring then started late and visibly jumped. Now:
+
+- Only the clicked branch renders on click and on data arrival.
+- The overflow report waits one painted frame (double `requestAnimationFrame`)
+  so the new rows are on screen before measuring; `fitTreeToNameOverflow`
+  returns before `getSize()` when the overflow is under the threshold.
+- Measurement probes live in one persistent `contain: strict` host, so probe
+  insertion and removal no longer dirty the page layout that `getSize()` reads.
+- The address bar container is a plain `div`: it fills its parent, so its
+  `layout` animation never had anything to animate but re-measured the page on
+  every breadcrumb change. `FileGoToControl` is memoized so its `layout` /
+  `layoutId` elements only re-measure when it actually re-renders.
+- While the fit spring runs (`fitAnimating`), `FileBrowserWorkspace` skips the
+  per-frame preview toolbar measurement and measures once when it ends.
+
+```text
+click -> render clicked branch -> fetch -> render branch + mount new rows -> paint
+      -> next frame: measure visible names (contained probes) -> fit spring
+      -> spring frames: panel.resize only; toolbar measure deferred to the end
+```
+
+The fit now grows to the names in view (with the existing 64 px margin) and
+grows again as more rows scroll into view; before, the same expansion often
+jumped straight to the maximum width.
 
 Base UI's `keepMounted` retains loaded descendants across toggles; its `hidden`
 attribute removes closed panels from layout and accessibility after the exit
@@ -88,14 +127,17 @@ Directory listing root -> WORKSPACE_DIR -> selected path's ancestors
 From the repository root:
 
 ```sh
-./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/file-browser/file-browser-scope.test.ts
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/file-browser/file-browser-scope.test.ts agent-ui/tests/features/file-browser/file-tree-revisions.test.ts
 node --test agent-ui/tests/features/file-browser/file-tree-content-width.test.ts
 ```
 
 The tests assert batched read/write ordering, duplicate-name caching, distinct
-fonts, current slot widths after resizing, empty names, font invalidation and
-measurement-node cleanup. From `agent-ui/`, run `npm run lint` and
-`npm run build` for static analysis and production compilation.
+fonts, current slot widths after resizing, empty names, font invalidation, the
+persistent contained probe host and its disposal, and that revisions move for
+exactly the changed items and their ancestors (expansion, loading, model
+children and item data, removed items, focus / selection, search). From
+`agent-ui/`, run `npm run lint` and `npm run build` for static analysis and
+production compilation.
 
 For real browser regression checks, start `npm run dev` in `agent-ui/`, open
 `/tests/features/file-browser/file-tree-browser.html`, and click **Run file tree
@@ -122,3 +164,11 @@ render time, with maximum frame intervals of 110/107 ms. This sample still
 contains long frames; the per-name forced-layout loop and repeated descendant
 mounting have been removed. The browser regression page passed 52 checks, and
 the focused Node suite passed 9 tests.
+
+2026-09-12, development build, Workspace at 760 px with a 150 px tree pane,
+first expansion of an unloaded directory (click frame / data-arrival frame):
+93 new rows 34 ms / 199 ms → under 20 ms / 125 ms; 4 new rows 52 ms / 71 ms →
+36 ms / 43 ms. Long tasks dropped from 198 ms to 116 ms for 93 rows and to none
+for 4 rows. The remaining data-arrival cost is mounting the new rows themselves
+(Base UI Collapsible, context menu and tooltip per row). The browser regression
+page passed 60 checks.

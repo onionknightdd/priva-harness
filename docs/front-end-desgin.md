@@ -973,10 +973,10 @@ node --test agent-ui/tests/features/agent-message/composer-attachments.test.ts a
 目录，不启动模型请求。视觉检查需将鼠标停留在吸顶目录行上滚动，确认悬浮时仍保持
 选中底色，并在移出鼠标后保持一致。
 
-文件树范围与宽度测量回归：
+文件树范围、行修订号与宽度测量回归：
 
 ```sh
-./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/file-browser/file-browser-scope.test.ts
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/file-browser/file-browser-scope.test.ts agent-ui/tests/features/file-browser/file-tree-revisions.test.ts
 node --test agent-ui/tests/features/file-browser/file-tree-content-width.test.ts
 ```
 

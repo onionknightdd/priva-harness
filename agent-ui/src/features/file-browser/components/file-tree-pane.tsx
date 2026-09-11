@@ -110,18 +110,22 @@ export function FileTreePane({
     const visibleSlots = new Set<HTMLElement>()
     const observedSlots = new Set<HTMLElement>()
 
+    const measureVisibleOverflow = () => {
+      const connectedSlots = [...visibleSlots].filter(
+        (slot) => slot.isConnected
+      )
+
+      if (connectedSlots.length > 0) {
+        onVisibleContentOverflow(nameMeasurer.measure(connectedSlots))
+      }
+    }
+
+    // Measuring forces layout. Wait one painted frame so newly expanded rows
+    // are on screen before the measurement and the panel fit that follows.
     const reportVisibleOverflow = () => {
       window.cancelAnimationFrame(reportFrame)
       reportFrame = window.requestAnimationFrame(() => {
-        const connectedSlots = [...visibleSlots].filter(
-          (slot) => slot.isConnected
-        )
-
-        if (connectedSlots.length > 0) {
-          onVisibleContentOverflow(
-            nameMeasurer.measure(connectedSlots)
-          )
-        }
+        reportFrame = window.requestAnimationFrame(measureVisibleOverflow)
       })
     }
 
@@ -155,6 +159,7 @@ export function FileTreePane({
 
       return () => {
         cleanUpFontListeners()
+        nameMeasurer.dispose()
         reportVisibleOverflowRef.current = () => undefined
       }
     }
@@ -211,6 +216,7 @@ export function FileTreePane({
       mutationObserver.disconnect()
       intersectionObserver.disconnect()
       cleanUpFontListeners()
+      nameMeasurer.dispose()
       reportVisibleOverflowRef.current = () => undefined
     }
   }, [onVisibleContentOverflow])

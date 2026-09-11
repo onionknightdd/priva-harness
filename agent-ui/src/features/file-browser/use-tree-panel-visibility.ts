@@ -4,7 +4,10 @@ import { usePanelRef } from "react-resizable-panels"
 
 import { EASE_IN_OUT, SPRING_LAYOUT } from "@/lib/ease"
 
-import { fileTreeTargetPanelWidth } from "./file-tree-content-width"
+import {
+  FILE_TREE_OVERFLOW_THRESHOLD_PX,
+  fileTreeTargetPanelWidth,
+} from "./file-tree-content-width"
 
 const TREE_DEFAULT_SIZE = 30
 const TREE_MIN_SIZE = 18
@@ -27,6 +30,9 @@ export function useTreePanelVisibility() {
   const [treeVisible, setTreeVisible] = React.useState(true)
   const [previewVisible, setPreviewVisible] = React.useState(true)
   const [panelTransitioning, setPanelTransitioning] = React.useState(false)
+  // True while the tree grows to fit long names. Consumers pause per-frame
+  // measurements for the duration and measure once when it flips back.
+  const [fitAnimating, setFitAnimating] = React.useState(false)
 
   React.useEffect(
     () => () => {
@@ -37,13 +43,18 @@ export function useTreePanelVisibility() {
     []
   )
 
+  const stopFitAnimation = React.useCallback(() => {
+    fitAnimationRef.current?.stop()
+    fitAnimationRef.current = null
+    setFitAnimating(false)
+  }, [])
+
   const stopPanelAnimations = React.useCallback(() => {
     window.cancelAnimationFrame(panelFrameRef.current)
     panelAnimationRef.current?.stop()
     panelAnimationRef.current = null
-    fitAnimationRef.current?.stop()
-    fitAnimationRef.current = null
-  }, [])
+    stopFitAnimation()
+  }, [stopFitAnimation])
 
   const setDesktopPanelVisibility = React.useCallback((nextTreeVisible: boolean, nextPreviewVisible: boolean) => {
     const panel = treePanelRef.current
@@ -152,9 +163,8 @@ export function useTreePanelVisibility() {
 
   const markUserResizedTree = React.useCallback(() => {
     userOverrideRef.current = true
-    fitAnimationRef.current?.stop()
-    fitAnimationRef.current = null
-  }, [])
+    stopFitAnimation()
+  }, [stopFitAnimation])
 
   const fitTreeToNameOverflow = React.useCallback((overflowPx: number) => {
     if (
@@ -162,7 +172,10 @@ export function useTreePanelVisibility() {
       !previewVisible ||
       panelTransitioning ||
       transitioningRef.current ||
-      userOverrideRef.current
+      userOverrideRef.current ||
+      // Decide before touching the panel: getSize() forces layout, and most
+      // visibility reports carry no overflow at all.
+      overflowPx < FILE_TREE_OVERFLOW_THRESHOLD_PX
     ) {
       return
     }
@@ -199,7 +212,7 @@ export function useTreePanelVisibility() {
       previousTreeSizeRef.current = clampTreeSize(
         panel.getSize().asPercentage
       )
-      fitAnimationRef.current = null
+      stopFitAnimation()
       return
     }
 
@@ -213,17 +226,26 @@ export function useTreePanelVisibility() {
           panel.getSize().asPercentage
         )
         fitAnimationRef.current = null
+        setFitAnimating(false)
       },
     })
 
     fitAnimationRef.current = playback
-  }, [panelTransitioning, previewVisible, treePanelRef, treeVisible])
+    setFitAnimating(true)
+  }, [
+    panelTransitioning,
+    previewVisible,
+    stopFitAnimation,
+    treePanelRef,
+    treeVisible,
+  ])
 
   const onTreeStructureChange = React.useCallback(() => {
     userOverrideRef.current = false
   }, [])
 
   return {
+    fitAnimating,
     fitTreeToNameOverflow,
     markUserResizedTree,
     onTreeStructureChange,

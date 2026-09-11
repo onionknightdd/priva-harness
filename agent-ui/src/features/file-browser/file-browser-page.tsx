@@ -57,6 +57,7 @@ export function FileBrowserPage({
     TREE_MAX_SIZE,
     TREE_MIN_SIZE,
     panelTransitioning,
+    fitAnimating,
     fitTreeToNameOverflow,
     markUserResizedTree,
     onTreeStructureChange,
@@ -337,6 +338,7 @@ export function FileBrowserPage({
       <FileBrowserWorkspace
         compact={compact}
         filePreview={filePreview}
+        fitAnimating={fitAnimating}
         onMinimumWidthChange={onMinimumWidthChange}
         onResizeTree={rememberTreeSize}
         onUserResizeTree={markUserResizedTree}
