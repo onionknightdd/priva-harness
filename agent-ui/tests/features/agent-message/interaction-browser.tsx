@@ -45,9 +45,9 @@ const fill = async (element: HTMLInputElement | HTMLTextAreaElement, text: strin
 }
 const question = (): InteractionRequest => ({ kind: "question", requestId: `ask-${seq}`, toolUseId: `question-tool-${seq}`, tool: "AskUserQuestion", expiresAt: Date.now() + 600000,
   questions: [
-    { id: "q0", question: "这次功能优先服务哪个地区？", multiSelect: false, options: [{ label: "亚洲", description: "先支持中国、日本和新加坡。" }, { label: "欧洲", description: "先覆盖欧洲市场。" }] },
+    { id: "q0", question: "这次功能优先服务**哪个地区**？", multiSelect: false, options: [{ label: "亚洲", description: "先支持中国、日本和新加坡。" }, { label: "欧洲", description: "先覆盖欧洲市场。" }] },
     { id: "q1", question: "需要支持哪些能力？", multiSelect: true, options: [{ label: "权限审批" }, { label: "交互式问答" }] },
-    { id: "q2", question: "还有哪些需要注意的细节？", multiSelect: false, options: [] },
+    { id: "q2", question: "还有哪些需要注意的细节？\n\n请说明 `上线顺序`。", multiSelect: false, options: [] },
   ] })
 const tool = (): InteractionRequest => ({ kind: "tool", requestId: `tool-${seq}`, tool: "Bash", title: "运行项目测试", reason: "此命令会运行当前工作目录下的测试脚本。", input: { command: "npm test -- --run tests/unit/core/run/interaction-coordinator.test.ts", cwd: "/workspace/work/existing" }, expiresAt: Date.now() + 600000 })
 const show = async (request: InteractionRequest) => {
@@ -103,6 +103,15 @@ async function runChecks() {
     await click(button(t("interaction.send")))
     await resolve(ask, "allow", answers)
     check("acknowledgment restores the draft and composer width", host.querySelector<HTMLTextAreaElement>("textarea")?.value === "保留这段未发送草稿" && Math.abs(host.querySelector<HTMLElement>("[data-composer-line]")!.getBoundingClientRect().width - width) < 1)
+    const answered = host.querySelector<HTMLDetailsElement>('[data-question-summary="answered"]')!
+    const userBubble = host.querySelector<HTMLElement>(".is-user > div")!
+    check("answered summary aligns with the user bubble and fits its content", Math.abs(answered.getBoundingClientRect().right - userBubble.getBoundingClientRect().right) < 1 && answered.getBoundingClientRect().width < width)
+    await click(answered.querySelector("summary")!)
+    check("every question is rendered as a Markdown blockquote", answered.querySelectorAll("blockquote").length === 3 && answered.querySelector('blockquote [data-streamdown="strong"]')?.textContent === "哪个地区" && answered.querySelector("blockquote code")?.textContent === "上线顺序")
+    const answerRows = [...answered.querySelectorAll<HTMLElement>("[data-question-answer]")]
+    check("answer prefixes come from CSS and do not alter the answer text", answerRows[0].textContent === "亚洲" && answerRows.every((row) => getComputedStyle(row.firstElementChild!, "::before").content === '">"'))
+    check("multiple questions are separated by dividers", answered.querySelectorAll('[data-slot="separator"]').length === 2)
+    check("expanded answered content keeps the right edge and does not overflow", Math.abs(answered.getBoundingClientRect().right - userBubble.getBoundingClientRect().right) < 1 && answered.scrollWidth <= answered.clientWidth)
     const one = tool(); await show(one)
     const two = { ...tool(), requestId: `second-${seq}` }; await show(two)
     await click(button(t("interaction.skip")))
@@ -139,3 +148,14 @@ async function runChecks() {
 document.getElementById("run")!.onclick = () => { void runChecks() }
 document.getElementById("question")!.onclick = () => { void (async () => { await start(); for (const request of [...currentRequests]) await resolve(request, "deny"); await show(question()) })() }
 document.getElementById("tool")!.onclick = () => { void (async () => { await start(); for (const request of [...currentRequests]) await resolve(request, "deny"); await show(tool()) })() }
+document.getElementById("answered")!.onclick = () => { void (async () => {
+  await start()
+  for (const request of [...currentRequests]) await resolve(request, "deny")
+  const existing = new Set(host.querySelectorAll('[data-question-summary="answered"]'))
+  const request = question()
+  await show(request)
+  await resolve(request, "allow", { q0: { selected: ["亚洲"], text: "" }, q1: { selected: ["权限审批", "交互式问答"], text: "" }, q2: { selected: [], text: "先在测试环境验证，再部署到生产环境。\n保留监控和回滚入口。" } })
+  const summary = [...host.querySelectorAll<HTMLDetailsElement>('[data-question-summary="answered"]')].find((item) => !existing.has(item))!
+  await click(summary.querySelector("summary")!)
+  summary.scrollIntoView({ block: "end" })
+})() }

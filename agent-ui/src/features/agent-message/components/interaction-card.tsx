@@ -1,7 +1,12 @@
-import { useRef, useState } from "react"
+import { Fragment, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { motion, useReducedMotionConfig } from "motion/react"
+import { MessageResponse } from "@/components/ai-elements/message"
 import ApprovalCard from "@/components/primitives/ApprovalCard"
 import { ToolApproval, ToolApprovalCode, type ToolApprovalStatus } from "@/components/agents/tool-approval"
+import { Separator } from "@/components/ui/separator"
+import { focusRing } from "@/lib/surfaces"
+import { cn } from "@/lib/utils"
 import type { InteractionRequest, InteractionResolution, InteractionResponse } from "../interaction-data"
 
 export function InteractionCard({ request, count, connected, onRespond }: {
@@ -49,16 +54,36 @@ export function InteractionCard({ request, count, connected, onRespond }: {
 
 export function QuestionSummary({ resolution, output, skipped }: { resolution?: InteractionResolution; output?: string; skipped?: boolean }) {
   const { t } = useTranslation()
+  const reduce = Boolean(useReducedMotionConfig())
   const request = resolution?.request
   const denied = resolution ? resolution.decision === "deny" : skipped
-  return <details className="my-2 rounded-lg border border-border bg-muted/20 px-3 py-2 text-sm">
-    <summary className="cursor-pointer text-muted-foreground">{t(denied ? "interaction.skipped" : "interaction.answered")}</summary>
-    {request?.kind === "question" ? <dl className="mt-2 space-y-2">
-      {request.questions.map((question) => {
+  return <motion.details data-question-summary={denied ? "skipped" : "answered"}
+    className="my-2 ml-auto w-fit min-w-0 max-w-full rounded-lg bg-user-message px-4 py-3 text-ui text-foreground"
+    initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduce ? 0 : 0.15 }}>
+    <summary className={cn("cursor-pointer rounded-sm text-muted-foreground", focusRing)}>{t(denied ? "interaction.skipped" : "interaction.answered")}</summary>
+    {request?.kind === "question" ? <div className="mt-3 min-w-0">
+      {request.questions.map((question, index) => {
         const answer = resolution?.answers?.[question.id]
-        return <div key={question.id}><dt className="break-words font-medium">{question.question}</dt>
-          <dd className="mt-0.5 whitespace-pre-wrap break-words text-muted-foreground">{answer ? [...answer.selected, answer.text.trim()].filter(Boolean).join("; ") : t("interaction.skipped")}</dd></div>
+        const text = answer ? [...answer.selected, ...(answer.text.trim() ? [answer.text] : [])].join("; ") : t("interaction.skipped")
+        const quote = question.question.split(/\r\n?|\n/).map((line) => `> ${line}`).join("\n")
+        return <Fragment key={question.id}>
+          {index > 0 ? <Separator className="my-3" /> : null}
+          <div data-question-pair className="min-w-0">
+            <MessageResponse mode="static" animated={false} isAnimating={false}
+              className="[overflow-wrap:anywhere] [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground [&_blockquote]:not-italic [&_p]:leading-6">
+              {quote}
+            </MessageResponse>
+            <QuestionAnswerText>{text}</QuestionAnswerText>
+          </div>
+        </Fragment>
       })}
-    </dl> : output ? <p className="mt-2 whitespace-pre-wrap break-words text-muted-foreground">{output}</p> : null}
-  </details>
+    </div> : output ? <QuestionAnswerText>{output}</QuestionAnswerText> : null}
+  </motion.details>
+}
+
+function QuestionAnswerText({ children }: { children: string }) {
+  return <p data-question-answer className="mt-2 flex min-w-0 items-baseline gap-2 [overflow-wrap:anywhere]">
+    <span aria-hidden="true" className="shrink-0 text-muted-foreground before:content-['>']" />
+    <span className="min-w-0 whitespace-pre-wrap">{children}</span>
+  </p>
 }
