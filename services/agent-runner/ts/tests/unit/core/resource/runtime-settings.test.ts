@@ -17,7 +17,42 @@ describe('runtime settings domain', () => {
         profiles: [],
       },
       agentProfile: { queueBehavior: 'follow-up' },
+      dataRetention: { auditRetentionDays: 90, toolAuditRetentionDays: 90, factRetentionDays: 365 },
     })
+  })
+
+  it('defaults dataRetention when the block is absent and validates it when present', () => {
+    const base = {
+      version: 1,
+      modelProfiles: { defaultProfileId: null, profiles: [] },
+      agentProfile: { queueBehavior: 'follow-up' },
+    }
+    expect(parseRuntimeSettings(base).dataRetention).toEqual({
+      auditRetentionDays: 90, toolAuditRetentionDays: 90, factRetentionDays: 365,
+    })
+    expect(parseRuntimeSettings({
+      ...base,
+      dataRetention: { auditRetentionDays: 30, toolAuditRetentionDays: 7, factRetentionDays: 400 },
+    }).dataRetention).toEqual({ auditRetentionDays: 30, toolAuditRetentionDays: 7, factRetentionDays: 400 })
+
+    for (const dataRetention of [
+      { auditRetentionDays: 0, toolAuditRetentionDays: 7, factRetentionDays: 400 },
+      { auditRetentionDays: 1.5, toolAuditRetentionDays: 7, factRetentionDays: 400 },
+      { auditRetentionDays: 30, toolAuditRetentionDays: 7 },
+    ]) {
+      try {
+        parseRuntimeSettings({ ...base, dataRetention })
+        expect.unreachable()
+      } catch (error) {
+        expect(error).toMatchObject({ kind: 'invalid-data-retention' })
+      }
+    }
+    try {
+      parseRuntimeSettings({ ...base, dataRetention: { auditRetentionDays: 1, toolAuditRetentionDays: 1, factRetentionDays: 1, extra: 1 } })
+      expect.unreachable()
+    } catch (error) {
+      expect(error).toMatchObject({ kind: 'store-corrupt' })
+    }
   })
 
   it('parses nested modelProfiles without a collection version field', () => {

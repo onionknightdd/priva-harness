@@ -33,6 +33,10 @@ check the compiled production loader, run after `npm run build` from
 
 - `node --import tsx tests/fixtures/resources/pi-mcp-probe.ts dist/provider/pi/pi-resource-loader.js`
 
+Usage statistics and audit records are stored in SQLite; before touching
+recording, retention, or the `dataRetention` setting, read
+[docs/architecture/usage-data-store.md](docs/architecture/usage-data-store.md).
+
 Add exact backend commands here when additional test tooling is introduced;
 add frontend commands to `docs/front-end-desgin.md`.
 

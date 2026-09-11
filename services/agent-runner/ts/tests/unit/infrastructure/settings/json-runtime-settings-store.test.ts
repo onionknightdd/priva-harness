@@ -38,6 +38,7 @@ describe('JsonRuntimeSettingsStore', () => {
         profiles: [],
       },
       agentProfile: { queueBehavior: 'follow-up' },
+      dataRetention: { auditRetentionDays: 90, toolAuditRetentionDays: 90, factRetentionDays: 365 },
     })
     await expect(access(store.filePath)).rejects.toMatchObject({ code: 'ENOENT' })
   })
@@ -59,6 +60,7 @@ describe('JsonRuntimeSettingsStore', () => {
         profiles: [],
       },
       agentProfile: { queueBehavior: 'steer' },
+      dataRetention: { auditRetentionDays: 90, toolAuditRetentionDays: 90, factRetentionDays: 365 },
     })
     expect((await stat(runtimeHome)).mode & 0o777).toBe(0o700)
     expect((await stat(store.filePath)).mode & 0o777).toBe(0o600)

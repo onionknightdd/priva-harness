@@ -8,6 +8,7 @@ import { ConfigDistributor } from './harness/config/config-distributor.js'
 import { ModelProfileService } from './harness/config/model-profile-service.js'
 import { LiveRunRegistry } from './harness/run/live-run-registry.js'
 import { SessionService } from './harness/session/session-service.js'
+import { WorkerDataRecorder } from './infrastructure/data/worker-data-recorder.js'
 import { JsonSessionMetadataStore } from './infrastructure/session/json-session-metadata-store.js'
 import { NodeUserFileSystem } from './infrastructure/filesystem/node-user-file-system.js'
 import { LocalResourceService } from './infrastructure/resources/local-resource-service.js'
@@ -23,6 +24,8 @@ import { PiConfigAdapter } from './provider/pi/config-adapter/pi-config-adapter.
 import { PiProvider } from './provider/pi/pi-provider.js'
 import { PiSessionStore } from './provider/pi/pi-session-store.js'
 import { CodingAgentSessionFactory } from './provider/pi/pi-session-factory.js'
+import { defaultDataRetention, type DataRetention } from './core/resource/data-store.js'
+import type { RuntimeSettingsStore } from './core/contract/runtime-settings.js'
 import { productTools } from './core/tool/product-tools.js'
 import {
   createRuntimeConfig,
@@ -117,17 +120,39 @@ export async function startServer(): Promise<void> {
     configDistributor,
     logger: true,
   })
+  const dataRecorder = new WorkerDataRecorder({
+    dbPath: runtimeConfig.dataFilePath,
+    retention: await readDataRetention(runtimeSettings, server.log),
+    logger: server.log,
+  })
+  dataRecorder.start()
   const port = parsePort(process.env['PORT'])
   const host = process.env['HOST'] ?? '0.0.0.0'
 
   const close = async (): Promise<void> => {
     await agentHarness.disposePool()
+    await dataRecorder.close()
     await server.close()
   }
   process.once('SIGINT', () => { void close() })
   process.once('SIGTERM', () => { void close() })
 
   await server.listen({ host, port })
+}
+
+// Retention is read once at boot. A broken settings file must not keep the
+// runner from starting, so the failure is logged and defaults apply.
+async function readDataRetention(
+  settings: RuntimeSettingsStore,
+  log: { error(message: string): void },
+): Promise<DataRetention> {
+  try {
+    return (await settings.read()).dataRetention
+  } catch (error) {
+    log.error(`data store: could not read dataRetention settings, using defaults: ${
+      error instanceof Error ? error.message : String(error)}`)
+    return defaultDataRetention()
+  }
 }
 
 function parsePort(rawPort: string | undefined): number {

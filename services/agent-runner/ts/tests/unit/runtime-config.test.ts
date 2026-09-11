@@ -20,6 +20,7 @@ describe('runtimeConfig', () => {
       runtimeHome,
       settingsFilePath: join(runtimeHome, 'bambuddy.settings.json'),
       harnessHome: join(runtimeHome, 'harness'),
+      dataFilePath: join(runtimeHome, '.data.db'),
     })
     expect(Object.isFrozen(runtimeConfig)).toBe(true)
     expect(RUNTIME_HOME_ENV).toBe('RUNTIME_HOME_DIR')
@@ -38,6 +39,7 @@ describe('runtimeConfig', () => {
       runtimeHome: resolve(runtimeHome),
       settingsFilePath: join(runtimeHome, 'bambuddy.settings.json'),
       harnessHome: join(runtimeHome, 'harness'),
+      dataFilePath: join(runtimeHome, '.data.db'),
     })
   })
 

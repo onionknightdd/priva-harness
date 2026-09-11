@@ -169,7 +169,9 @@ function statusForUserFileError(kind: UserFileErrorKind): number {
 
 function statusForRuntimeSettingsError(kind: RuntimeSettingsErrorKind): number {
   switch (kind) {
-    case 'invalid-queue-behavior': return 422
+    case 'invalid-queue-behavior':
+    case 'invalid-data-retention':
+      return 422
     case 'io-failure':
     case 'store-corrupt':
       return 500
