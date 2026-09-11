@@ -58,7 +58,7 @@ export function QuestionSummary({ resolution, output, skipped }: { resolution?: 
   const request = resolution?.request
   const denied = resolution ? resolution.decision === "deny" : skipped
   return <motion.details data-question-summary={denied ? "skipped" : "answered"}
-    className="my-2 ml-auto w-fit min-w-0 max-w-full rounded-lg bg-user-message px-4 py-3 text-ui text-foreground"
+    className="my-2 ml-auto w-max min-w-0 max-w-full text-ui text-foreground"
     initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduce ? 0 : 0.15 }}>
     <summary className={cn("cursor-pointer rounded-sm text-muted-foreground", focusRing)}>{t(denied ? "interaction.skipped" : "interaction.answered")}</summary>
     {request?.kind === "question" ? <div className="mt-3 min-w-0">

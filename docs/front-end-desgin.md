@@ -241,22 +241,21 @@ AgentCode、AgentDisclosure 和主题 token；上游演示用 Button / foundatio
 150 ms；键盘翻题与 reduced-motion 立即更新。正文限高并内部滚动，窄屏按钮可换行。
 协议和 provider 差异见 [权限审批与问答](agent-interactions.md)。
 
-2026-09-11：已回答摘要沿用用户消息气泡的 `w-fit min-w-0 max-w-full`、内边距和
-`user-message` 底色，使用 `ml-auto` 右对齐，保留原有展开 / 收起入口。
+2026-09-11：已回答摘要使用 `ml-auto` 整体右对齐，块内文字左对齐，保留原有
+展开 / 收起入口。外层不添加气泡底色、圆角或内边距。使用 `w-max min-w-0 max-w-full`
+让宽度由最长一行内容决定，并限制在消息区内；超长文本自动换行。
 每个问题逐行添加 Markdown 的 `> ` 引用语法，复用 `MessageResponse` 静态渲染；
 回答保留原始文本和换行，用 CSS `::before` 生成装饰性 `>`，不写入回答内容。
 多个问题之间使用共享 Separator。摘要出现时做 150 ms 淡入，减少动态效果时直接显示。
 
 ```text
 Message area
-                        +--------------------------+
-                        | Answered                 |
-                        | | Markdown question      |
-                        | > Answer text            |
-                        | ------------------------ |
-                        | | Next question          |
-                        | > Answer text            |
-                        +--------------------------+
+                          v Answered
+                          | Markdown question
+                          > A longer answer text
+                          ----------------------
+                          | Next question
+                          > Answer text
 ```
 
 安装命令（在 `agent-ui/`）：
@@ -722,8 +721,8 @@ Mermaid 浏览器回归：打开 `/tests/components/ai-elements/mermaid-browser.
 跳过和断线重连，避免访问真实模型。追加 `?zh&dark&reduced-motion`，并使用 390px
 视口检查中文、深色、减少动态效果和窄屏；**Show question / Show tool approval**
 可单独查看卡片。用真实 Tab / Enter 验证选择与翻题。
-**Show answered** 展示已回答气泡；检查包含收起 / 展开时与用户气泡右边缘对齐、
-宽度自适应、Markdown 引用与行内格式、CSS 回答前缀、分割线和窄屏无横向溢出。
+**Show answered** 展示已回答摘要；检查包含收起 / 展开时与用户气泡右边缘对齐、
+透明外层、最长文本决定宽度、Markdown 引用与行内格式、CSS 回答前缀、分割线和窄屏无横向溢出。
 相关数据和连接测试包含在下方 Agent message 的 `*.test.ts` 命令中。
 
 目前没有前端全量自动化测试命令，也没有仓库级 formatter。
