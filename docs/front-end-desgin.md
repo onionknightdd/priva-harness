@@ -305,6 +305,16 @@ Empty chat cwd chip --+-> Working directory          |
 项目标题加号从该目录打开选择器，空白对话的目录标签则从当前草稿的 cwd 打开。
 选择目录只改变该草稿，不修改服务端默认目录。
 
+2026-09-11：工作目录选择器与新建文件夹弹窗使用共享 `shadow-modal` token，
+由 2px / 8px 的轻柔边缘阴影和 16px / 48px 的扩散阴影组成；浅色透明度为
+6% / 14%，深色为 20% / 36%，突出嵌套弹窗层次。保留原有细边框和共享弹窗动效。
+
+```text
+DirectoryPickerDialog / CreateFolderDialog
+  -> shadow-modal -> soft edge + diffuse shadow
+                  -> light / dark theme values
+```
+
 ### 文件浏览范围
 
 2026-09-10：工作目录选择器、Workspace 文件浏览器和“数据与用量 → 文件浏览器”

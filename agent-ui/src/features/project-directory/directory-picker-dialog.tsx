@@ -72,7 +72,7 @@ export function DirectoryPickerDialog({
     <Dialog open={open} onOpenChange={(next) => { if (!createParent) onOpenChange(next) }}>
       <DialogContent
         initialFocus={pathInputRef}
-        className="flex h-[min(36rem,calc(100dvh-2rem))] min-h-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-xl"
+        className="flex h-[min(36rem,calc(100dvh-2rem))] min-h-0 flex-col gap-0 overflow-hidden p-0 shadow-modal sm:max-w-xl"
       >
         <DialogHeader className="gap-1.5 px-5 pt-5 pb-4 pr-12">
           <DialogTitle>{t("directoryPicker.title")}</DialogTitle>
