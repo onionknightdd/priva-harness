@@ -331,11 +331,17 @@ Empty chat cwd chip --+-> Working directory          |
 2026-09-11：工作目录选择器与新建文件夹弹窗使用共享 `shadow-modal` token，
 由 2px / 8px 的轻柔边缘阴影和 16px / 48px 的扩散阴影组成；浅色透明度为
 6% / 14%，深色为 20% / 36%，突出嵌套弹窗层次。保留原有细边框和共享弹窗动效。
+共享 Dialog 的遮罩使用 Base UI `forceRender`，嵌套弹窗同样显示现有的
+`backdrop-blur-xs` 模糊和 10% 黑色遮罩。新建文件夹打开时，后面的工作目录弹窗
+一同模糊；关闭后恢复清晰，焦点回到新建文件夹按钮。遮罩沿用透明度过渡及 reduced-motion。
 
 ```text
 DirectoryPickerDialog / CreateFolderDialog
   -> shadow-modal -> soft edge + diffuse shadow
                   -> light / dark theme values
+
+Page (blurred) -> Directory picker (blurred while child is open)
+                -> Create folder (sharp + shadow)
 ```
 
 ### 文件浏览范围
@@ -743,7 +749,7 @@ node --test agent-ui/tests/features/agent-message/composer-attachments.test.ts a
 **Run project directory checks**。使用真实 App 组件与隔离的目录 / 会话 / 上传 / WS
 模拟，覆盖两个入口、懒加载与键盘展开、路径错误和重试、新建重名及自动选择、
 草稿和上传保留、首条消息 cwd / 附件 / 分组、已有项目新对话、关闭后过期响应、
-焦点恢复与弹窗溢出，以及选择器、主文件浏览器和 Workspace 的根目录范围、深层导航、
+焦点恢复、嵌套弹窗背景模糊与关闭恢复、弹窗溢出，以及选择器、主文件浏览器和 Workspace 的根目录范围、深层导航、
 祖先目录补载、面包屑和越界输入；长目录滚动检查吸顶行贴合顶部、各层保持选中背景、缩进区域
 不透明、滚动区与吸顶行底色一致、两侧无额外留白，以及返回顶部后恢复正常背景。
 被吸附祖先遮挡的折叠目录不应出现吸附高亮。

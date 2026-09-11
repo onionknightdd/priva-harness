@@ -102,6 +102,11 @@ async function runChecks() {
     await go("/workspace/work")
     await click(button(t("fileBrowser.createDialog.title")))
     const nameInput = () => document.querySelector<HTMLInputElement>(`input[placeholder="${t("fileBrowser.createDialog.placeholder")}"]`)!
+    const nestedBackdrop = [...document.querySelectorAll<HTMLElement>('[data-slot="dialog-overlay"]')].at(-1)!
+    const pickerBounds = dialog().getBoundingClientRect()
+    check("the nested folder dialog blurs and covers the directory picker behind it", getComputedStyle(nestedBackdrop).backdropFilter.includes("blur(") && document.elementFromPoint(pickerBounds.left + 16, pickerBounds.top + 16) === nestedBackdrop)
+    const folderBounds = nameInput().getBoundingClientRect()
+    check("the folder form stays above the blur and receives focus", document.elementFromPoint(folderBounds.left + folderBounds.width / 2, folderBounds.top + folderBounds.height / 2) === nameInput() && document.activeElement === nameInput())
     await fill(nameInput(), "existing")
     await click(button(t("fileBrowser.createDialog.create"), nameInput().closest("form")!))
     check("duplicate folder errors remain in the create dialog", nameInput().closest("form")!.textContent?.includes("Folder already exists") === true)
@@ -109,6 +114,7 @@ async function runChecks() {
     await click(button(t("fileBrowser.createDialog.create"), nameInput().closest("form")!))
     check("creating a folder selects it after refreshing the tree", selected("/workspace/work/new-project") && Boolean(row("/workspace/work/new-project")))
     check("closing the nested create dialog returns focus inside the directory picker", document.activeElement === button(t("fileBrowser.createDialog.title"), dialog()))
+    check("closing the folder dialog removes its blur from the directory picker", !nestedBackdrop.isConnected && dialog().contains(document.elementFromPoint(pickerBounds.left + 16, pickerBounds.top + 16)))
     check("choosing and creating folders do not start an agent run", fixtures.sockets.length === 0)
     await click(button(t("directoryPicker.use")))
     check("Use opens a local draft in the chosen directory", !dialog() && Boolean(indicator("/workspace/work/new-project")) && draft().value === "")
