@@ -5,14 +5,14 @@ import { useCallback, useMemo, useState, useRef, type ReactNode } from "react"
 import { useSidebar } from "@/components/ui/sidebar"
 import type { WorkflowCard } from "@/features/agent-message/workflow-data"
 import { WorkflowContext, type WorkspaceWorkflowTarget } from "./use-workspace-workflow"
-import { useWorkspaceFiles } from "./workspace-files-context"
+import { useWorkspaceTab } from "./workspace-files-context"
 
 export function WorkspaceWorkflowProvider({ children }: { children: ReactNode }) {
   const agentCatalog = useRef<{ sourceKey: string; agents: AgentToolView[] } | null>(null)
   const [agentTarget, setAgentTarget] = useState<WorkspaceAgentTarget | null>(null)
   const [target, setTarget] = useState<(WorkspaceWorkflowTarget & { navigationId: number }) | null>(null)
   const { isMobile, setOpen, setOpenMobile } = useSidebar()
-  const { setActiveTabId } = useWorkspaceFiles()
+  const { setActiveTabId } = useWorkspaceTab()
   const openWorkflow = useCallback((next: WorkspaceWorkflowTarget) => {
     setAgentTarget(null)
     setTarget((current) => ({ ...next, navigationId: (current?.navigationId ?? 0) + 1 }))

@@ -12,7 +12,7 @@ import { EASE_OUT } from "@/lib/ease"
 import { cn } from "@/lib/utils"
 
 import { WorkspaceHome } from "./workspace-home"
-import { useWorkspaceFiles } from "./workspace-files-context"
+import { useWorkspaceTab } from "./workspace-files-context"
 import { WorkspaceTabs } from "./workspace-tabs"
 import { WorkspaceToggle } from "./workspace-toggle"
 
@@ -31,7 +31,7 @@ export function WorkspaceSidebar({
 }) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
-  const { activeTabId, setActiveTabId } = useWorkspaceFiles()
+  const { activeTabId, setActiveTabId } = useWorkspaceTab()
   const contentRef = React.useRef<HTMLDivElement>(null)
 
   const tabMode = activeTabId !== null
@@ -61,6 +61,9 @@ export function WorkspaceSidebar({
     },
     [onMinimumWidthChange]
   )
+  // Keep this callback identity stable across tab switches: the kept-mounted
+  // file browser re-measures whenever it changes. The hidden browser reports a
+  // zero-width box while another tab is active, which is ignored here.
   const handleFileBrowserMinimumWidthChange = React.useCallback(
     (fileBrowserWidth: number) => {
       const content = contentRef.current
@@ -71,26 +74,26 @@ export function WorkspaceSidebar({
         '[data-slot="sidebar-container"]'
       )
 
-      if (
-        activeTabId !== "files" ||
-        !fileBrowser ||
-        !sidebar ||
-        !onContentMinimumWidthChange
-      ) {
+      if (!fileBrowser || !sidebar || !onContentMinimumWidthChange) {
+        return
+      }
+
+      const visibleWidth = fileBrowser.getBoundingClientRect().width
+
+      if (visibleWidth === 0) {
         return
       }
 
       const horizontalChrome = Math.max(
         0,
-        sidebar.getBoundingClientRect().width -
-          fileBrowser.getBoundingClientRect().width
+        sidebar.getBoundingClientRect().width - visibleWidth
       )
 
       onContentMinimumWidthChange(
         Math.ceil(fileBrowserWidth + horizontalChrome)
       )
     },
-    [activeTabId, onContentMinimumWidthChange]
+    [onContentMinimumWidthChange]
   )
 
   React.useLayoutEffect(() => {

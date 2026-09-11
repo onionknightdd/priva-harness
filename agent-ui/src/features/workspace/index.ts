@@ -3,7 +3,4 @@ export {
   useWorkspaceTakesMajority,
   workspaceDensityTransition,
 } from "./workspace-density"
-export {
-  useOptionalWorkspaceFiles,
-  useWorkspaceFiles,
-} from "./workspace-files-context"
+export { useOptionalWorkspaceFiles } from "./workspace-files-context"

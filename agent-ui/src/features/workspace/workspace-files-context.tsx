@@ -9,8 +9,15 @@ export type OpenFileInWorkspaceOptions = {
   previewMode?: FilePreviewMode
 }
 
-type WorkspaceFilesContextValue = {
+// Tab selection lives in its own context so that switching tabs does not
+// re-render the chat transcript and the kept-mounted file browser, which only
+// subscribe to the file-open request below.
+type WorkspaceTabContextValue = {
   activeTabId: WorkspaceModuleId | null
+  setActiveTabId: (id: WorkspaceModuleId | null) => void
+}
+
+type WorkspaceFilesContextValue = {
   pendingFilePath: string | null
   pendingPreviewMode: FilePreviewMode | null
   fileOpenNonce: number
@@ -18,9 +25,10 @@ type WorkspaceFilesContextValue = {
     path: string,
     options?: OpenFileInWorkspaceOptions
   ) => void
-  setActiveTabId: (id: WorkspaceModuleId | null) => void
 }
 
+const WorkspaceTabContext =
+  React.createContext<WorkspaceTabContextValue | null>(null)
 const WorkspaceFilesContext =
   React.createContext<WorkspaceFilesContextValue | null>(null)
 
@@ -54,35 +62,34 @@ export function WorkspaceFilesProvider({
     [isMobile, setOpen, setOpenMobile]
   )
 
-  const value = React.useMemo(
+  const tabValue = React.useMemo(
+    () => ({ activeTabId, setActiveTabId }),
+    [activeTabId]
+  )
+
+  const filesValue = React.useMemo(
     () => ({
-      activeTabId,
       pendingFilePath,
       pendingPreviewMode,
       fileOpenNonce,
       openFileInWorkspace,
-      setActiveTabId,
     }),
-    [
-      activeTabId,
-      fileOpenNonce,
-      openFileInWorkspace,
-      pendingFilePath,
-      pendingPreviewMode,
-    ]
+    [fileOpenNonce, openFileInWorkspace, pendingFilePath, pendingPreviewMode]
   )
 
   return (
-    <WorkspaceFilesContext.Provider value={value}>
-      {children}
-    </WorkspaceFilesContext.Provider>
+    <WorkspaceTabContext.Provider value={tabValue}>
+      <WorkspaceFilesContext.Provider value={filesValue}>
+        {children}
+      </WorkspaceFilesContext.Provider>
+    </WorkspaceTabContext.Provider>
   )
 }
 
-export function useWorkspaceFiles() {
-  const context = React.useContext(WorkspaceFilesContext)
+export function useWorkspaceTab() {
+  const context = React.useContext(WorkspaceTabContext)
   if (!context) {
-    throw new Error("useWorkspaceFiles must be used within WorkspaceFilesProvider")
+    throw new Error("useWorkspaceTab must be used within WorkspaceFilesProvider")
   }
   return context
 }

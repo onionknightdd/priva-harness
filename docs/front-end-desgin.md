@@ -330,7 +330,20 @@ Agent information
   Current panel content
 ```
 
-### 项目工作目录
+### Workspace 标签切换性能
+
+2026-09-12：「任务和活动」与「文件」互切时，保留挂载的文件浏览器不得随
+tab 切换或 Shell 重渲染而重新执行。`WorkspaceTabs` 用 `useMemo` 固定
+`ExpandableTabs` 的 `items`，让 `keepMounted` 面板的 content element 保持引用；
+`WorkspaceSidebar` 上报文件浏览器最小宽度的回调不依赖当前 tab，改为跳过隐藏
+（宽度为 0）的浏览器，避免 `FileBrowserWorkspace` 每次切换都重新测量；
+`workspace-files-context.tsx` 拆成 `useWorkspaceTab`（activeTabId，仅 Workspace
+内部使用）和 `useOptionalWorkspaceFiles`（打开文件请求，供聊天与文件浏览器使用），
+切 tab 不再重渲染聊天区的文件链接和任务卡。
+实测（dev 构建，128 行文件树 + 一个源码预览）：切换 long task 从 51–55ms 降为 0，
+点击到第二帧从 101–118ms 降为 43–64ms，动画期间文件树不再出现在 CPU profile 中。
+tab 栏弹簧动画仍会通过 ResizeObserver 每帧更新 Shell 的 tab 最小宽度，这是有意保留
+的既有行为，代价已降到只重渲染 Shell 外层。
 
 2026-09-10：按用户确认的桌面 / 移动端布局，保留主侧栏、聊天区和 Workspace，
 项目标题的加号与空白对话的目录标签共用

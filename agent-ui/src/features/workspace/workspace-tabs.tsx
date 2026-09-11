@@ -1,5 +1,6 @@
 "use client"
 
+import { useMemo } from "react"
 import { useTranslation } from "react-i18next"
 
 import { ExpandableTabs } from "@/components/motion/expandable-tabs"
@@ -45,27 +46,33 @@ export function WorkspaceTabs({
 }) {
   const { t } = useTranslation()
 
-  const items = WORKSPACE_MODULES.map((module) => {
-    const Icon = module.icon
-    const label = t(module.labelKey)
+  // Stable item elements let React bail out of the kept-mounted file browser
+  // when only the active tab (or the shell around it) changes.
+  const items = useMemo(
+    () =>
+      WORKSPACE_MODULES.map((module) => {
+        const Icon = module.icon
+        const label = t(module.labelKey)
 
-    return {
-      id: module.id,
-      keepMounted: module.id === "files",
-      label,
-      icon: <Icon aria-hidden="true" />,
-      content: (
-        <div className="flex h-full min-h-0 flex-col overflow-hidden">
-          <WorkspaceModuleContent
-            moduleId={module.id}
-            onFileBrowserMinimumWidthChange={
-              onFileBrowserMinimumWidthChange
-            }
-          />
-        </div>
-      ),
-    }
-  })
+        return {
+          id: module.id,
+          keepMounted: module.id === "files",
+          label,
+          icon: <Icon aria-hidden="true" />,
+          content: (
+            <div className="flex h-full min-h-0 flex-col overflow-hidden">
+              <WorkspaceModuleContent
+                moduleId={module.id}
+                onFileBrowserMinimumWidthChange={
+                  onFileBrowserMinimumWidthChange
+                }
+              />
+            </div>
+          ),
+        }
+      }),
+    [onFileBrowserMinimumWidthChange, t]
+  )
 
   return (
     <ExpandableTabs
