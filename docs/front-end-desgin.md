@@ -250,7 +250,12 @@ AgentCode、AgentDisclosure 和主题 token；上游演示用 Button / foundatio
 黄色（含浅色 / 深色主题）。取消显示“已取消”，右侧箭头随展开 / 收起更新方向。
 每个问题逐行添加 Markdown 的 `> ` 引用语法，复用 `MessageResponse` 静态渲染；
 回答保留原始文本和换行，用 CSS `::before` 生成装饰性 `>`，不写入回答内容。
-多个问题之间使用共享 Separator。摘要出现时做 150 ms 淡入，减少动态效果时直接显示。
+多个问题之间使用共享 Separator。摘要出现时做 150 ms 淡入。
+展开 / 收起复用 Base UI Collapsible 的按钮语义，由 Motion 驱动：外框使用布局
+transform 过渡，正文展开 180 ms、淡出 100 ms，收起外框 120 ms，箭头同步旋转。
+复用共享 `EASE_OUT`，不逐帧动画宽高、不缩放正文文字；连续点击可从当前进度反向。
+退出中的正文立即设为 `inert` 和 `aria-hidden`，完成淡出后卸载；键盘与辅助技术触发、
+减少动态效果模式下立即切换。保留右对齐、最长文本决定宽度和现有状态图标。
 
 ```text
 Message area

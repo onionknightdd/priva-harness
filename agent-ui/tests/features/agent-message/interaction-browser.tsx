@@ -103,10 +103,10 @@ async function runChecks() {
     await click(button(t("interaction.send")))
     await resolve(ask, "allow", answers)
     check("acknowledgment restores the draft and composer width", host.querySelector<HTMLTextAreaElement>("textarea")?.value === "保留这段未发送草稿" && Math.abs(host.querySelector<HTMLElement>("[data-composer-line]")!.getBoundingClientRect().width - width) < 1)
-    const answered = host.querySelector<HTMLDetailsElement>('[data-question-summary="answered"]')!
+    const answered = host.querySelector<HTMLElement>('[data-question-summary="answered"]')!
     const userBubble = host.querySelector<HTMLElement>(".is-user > div")!
     check("answered summary aligns with the user bubble and fits its content", Math.abs(answered.getBoundingClientRect().right - userBubble.getBoundingClientRect().right) < 1 && answered.getBoundingClientRect().width < width)
-    await click(answered.querySelector("summary")!)
+    await click(answered.querySelector<HTMLButtonElement>('[data-slot="collapsible-trigger"]')!)
     check("every question is rendered as a Markdown blockquote", answered.querySelectorAll("blockquote").length === 3 && answered.querySelector('blockquote [data-streamdown="strong"]')?.textContent === "哪个地区" && answered.querySelector("blockquote code")?.textContent === "上线顺序")
     const answerRows = [...answered.querySelectorAll<HTMLElement>("[data-question-answer]")]
     check("answer prefixes come from CSS and do not alter the answer text", answerRows[0].textContent === "亚洲" && answerRows.every((row) => getComputedStyle(row.firstElementChild!, "::before").content === '">"'))
@@ -155,7 +155,7 @@ document.getElementById("answered")!.onclick = () => { void (async () => {
   const request = question()
   await show(request)
   await resolve(request, "allow", { q0: { selected: ["亚洲"], text: "" }, q1: { selected: ["权限审批", "交互式问答"], text: "" }, q2: { selected: [], text: "先在测试环境验证，再部署到生产环境。\n保留监控和回滚入口。" } })
-  const summary = [...host.querySelectorAll<HTMLDetailsElement>('[data-question-summary="answered"]')].find((item) => !existing.has(item))!
-  await click(summary.querySelector("summary")!)
+  const summary = [...host.querySelectorAll<HTMLElement>('[data-question-summary="answered"]')].find((item) => !existing.has(item))!
+  await click(summary.querySelector<HTMLButtonElement>('[data-slot="collapsible-trigger"]')!)
   summary.scrollIntoView({ block: "end" })
 })() }

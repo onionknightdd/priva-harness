@@ -1,11 +1,13 @@
-import { Fragment, useRef, useState } from "react"
+import { Fragment, useId, useRef, useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { ChevronDown, MessageCircleQuestionMark, TriangleAlert } from "lucide-react"
-import { motion, useReducedMotionConfig } from "motion/react"
+import { AnimatePresence, LayoutGroup, motion, useIsPresent, useReducedMotionConfig } from "motion/react"
 import { MessageResponse } from "@/components/ai-elements/message"
 import ApprovalCard from "@/components/primitives/ApprovalCard"
 import { ToolApproval, ToolApprovalCode, type ToolApprovalStatus } from "@/components/agents/tool-approval"
 import { Separator } from "@/components/ui/separator"
+import { Collapsible, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { EASE_OUT } from "@/lib/ease"
 import { focusRing } from "@/lib/surfaces"
 import { cn } from "@/lib/utils"
 import type { InteractionRequest, InteractionResolution, InteractionResponse } from "../interaction-data"
@@ -56,19 +58,35 @@ export function InteractionCard({ request, count, connected, onRespond }: {
 export function QuestionSummary({ resolution, output, skipped }: { resolution?: InteractionResolution; output?: string; skipped?: boolean }) {
   const { t } = useTranslation()
   const reduce = Boolean(useReducedMotionConfig())
+  const [open, setOpen] = useState(false)
+  const [keyboard, setKeyboard] = useState(false)
+  const contentId = useId()
+  const instant = reduce || keyboard
+  const layoutTransition = { duration: instant ? 0 : open ? 0.18 : 0.12, ease: EASE_OUT }
   const request = resolution?.request
   const denied = resolution ? resolution.decision === "deny" : skipped
   const statusLabel = t(denied ? (resolution?.reason === "cancelled" ? "toolCard.cancelled" : "interaction.skipped") : "interaction.answered")
-  return <motion.details data-question-summary={denied ? "skipped" : "answered"}
-    className="group/question-summary my-2 ml-auto w-max min-w-0 max-w-full rounded-lg border border-border px-3 py-2 text-ui text-foreground"
-    initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduce ? 0 : 0.15 }}>
-    <summary className={cn("flex cursor-pointer list-none items-center gap-2 rounded-sm text-muted-foreground [&::-webkit-details-marker]:hidden", focusRing)}>
+  return <LayoutGroup inherit={false}><Collapsible open={open} onOpenChange={(nextOpen, details) => {
+    setKeyboard(!("detail" in details.event) || details.event.detail === 0)
+    setOpen(nextOpen)
+  }} data-question-summary={denied ? "skipped" : "answered"}
+    className="my-2 ml-auto w-max min-w-0 max-w-full rounded-lg border border-border px-3 py-2 text-ui text-foreground"
+    render={<motion.div layout initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }}
+      transition={{ opacity: { duration: reduce ? 0 : 0.15 }, layout: layoutTransition }} />}>
+    <CollapsibleTrigger aria-controls={open ? contentId : undefined}
+      render={<motion.button layout="position" transition={{ layout: layoutTransition }} />}
+      className={cn("flex w-full cursor-pointer items-center gap-2 rounded-sm text-left text-muted-foreground", focusRing)}>
       {denied ? <TriangleAlert aria-hidden="true" className="size-4 shrink-0 text-status-warning" />
         : <MessageCircleQuestionMark aria-hidden="true" className="size-4 shrink-0 text-background [&>path:first-child]:fill-status-success [&>path:first-child]:stroke-status-success" />}
       <span>{statusLabel}</span>
-      <ChevronDown aria-hidden="true" className="ml-auto size-3.5 shrink-0 group-open/question-summary:rotate-180" />
-    </summary>
-    {request?.kind === "question" ? <div className="mt-3 min-w-0">
+      <motion.span aria-hidden="true" className="ml-auto flex size-3.5 shrink-0" initial={false}
+        animate={{ transform: open ? "rotate(180deg)" : "rotate(0deg)" }} transition={layoutTransition}>
+        <ChevronDown className="size-full" />
+      </motion.span>
+    </CollapsibleTrigger>
+    <AnimatePresence initial={false} custom={instant}>
+    {open ? <QuestionSummaryBody key="answers" id={contentId} instant={instant}>
+    {request?.kind === "question" ? <div className="pt-3 min-w-0">
       {request.questions.map((question, index) => {
         const answer = resolution?.answers?.[question.id]
         const text = answer ? [...answer.selected, ...(answer.text.trim() ? [answer.text] : [])].join("; ") : denied ? statusLabel : t("interaction.skipped")
@@ -85,7 +103,23 @@ export function QuestionSummary({ resolution, output, skipped }: { resolution?: 
         </Fragment>
       })}
     </div> : output ? <QuestionAnswerText>{output}</QuestionAnswerText> : null}
-  </motion.details>
+    </QuestionSummaryBody> : null}
+    </AnimatePresence>
+  </Collapsible></LayoutGroup>
+}
+
+const questionBodyMotion = {
+  open: (instant: boolean) => ({ opacity: 1, transform: "translateY(0px)", transition: { duration: instant ? 0 : 0.18, ease: EASE_OUT } }),
+  closed: (instant: boolean) => ({ opacity: 0, transform: instant ? "translateY(0px)" : "translateY(-4px)", transition: { duration: instant ? 0 : 0.1, ease: EASE_OUT } }),
+}
+
+function QuestionSummaryBody({ children, id, instant }: { children: ReactNode; id: string; instant: boolean }) {
+  const present = useIsPresent()
+  return <motion.div id={id} layout="position" custom={instant} variants={questionBodyMotion}
+    initial="closed" animate="open" exit="closed" aria-hidden={!present} inert={!present}
+    className="min-w-0" transition={{ layout: { duration: instant ? 0 : 0.18, ease: EASE_OUT } }}>
+    {children}
+  </motion.div>
 }
 
 function QuestionAnswerText({ children }: { children: string }) {
