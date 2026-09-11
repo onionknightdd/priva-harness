@@ -193,7 +193,13 @@ token，浅色 / 深色均为 `rgb(77, 159, 240)`（`#4D9FF0`）。
 一同移除。系统或 MotionConfig 要求减少动态效果时，图案保持静态。
 `ThinkingItem` 思考详情标题保持纯文字。
 
+流式输出时，工作状态吸附在用户消息下方，偏移使用用户消息的实际测量高度，
+保留小数像素，避免高度取整后两层背景之间出现缝隙。
+
 ```text
+[User message background]
+            | exact measured height (including fractional pixels)
+            v
 [pixel grid] Working...
 Thinking  2.3s  v
   Thinking content

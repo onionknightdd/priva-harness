@@ -171,7 +171,8 @@ function ThreadTurnItem({
     }
 
     const syncHeight = () => {
-      setUserHeight(Math.round(userBar.getBoundingClientRect().height))
+      // Preserve fractional pixels so the stacked sticky backgrounds meet.
+      setUserHeight(userBar.getBoundingClientRect().height)
     }
 
     syncHeight()
