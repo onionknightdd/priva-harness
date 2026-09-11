@@ -1,3 +1,5 @@
+import { isQuestionTool } from "../interaction-data"
+import { QuestionSummary } from "./interaction-card"
 import { BackgroundTaskCard } from "./background-task-card"
 import { agentToolsForMessage, isAgentTool } from "../agent-tool-data"
 import { AgentToolItem } from "./agent-tool-item"
@@ -135,6 +137,11 @@ export function AssistantProcess({
       continue
     }
     if (block.type === "tool_use") {
+      if (isQuestionTool(block.name)) {
+        const resolution = message.interactions?.find((item) => item.request.toolUseId === block.id)
+        if (resolution || block.tool?.status === "completed") rows.push(<QuestionSummary key={block.id} resolution={resolution} output={block.tool?.output} skipped={block.tool?.ok === false} />)
+        continue
+      }
       if (isStructuredOutputTool(block.name)) continue
       if (isAgentTool(block.name)) {
         const agent = agentTools.find((item) => item.id === block.id)
@@ -153,6 +160,9 @@ export function AssistantProcess({
       }
       if (block.tool?.backgroundTask && !isAgentTool(block.name)) rows.push(<BackgroundTaskCard key={`${block.id}:background`} task={block.tool.backgroundTask} />)
     }
+  }
+  for (const resolution of message.interactions ?? []) {
+    if (!blocks.some((block) => block.type === "tool_use" && block.id === resolution.request.toolUseId)) rows.push(<QuestionSummary key={resolution.request.requestId} resolution={resolution} />)
   }
   for (const agent of agentTools) {
     if (!renderedAgents.has(agent.id)) rows.push(<AgentToolItem key={agent.id} agent={agent} agents={agentTools} />)

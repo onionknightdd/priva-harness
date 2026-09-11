@@ -74,3 +74,41 @@ test("late task frames update the owning reply without changing the current repl
   assert.equal(next[1]?.status, "streaming")
   assert.equal(next.length, 2)
 })
+
+test("interaction submission waits for acknowledgment, allows retry and never replays an uncertain decision", async () => {
+  const originals = ["window", "WebSocket"].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const)
+  Object.defineProperty(globalThis, "window", { configurable: true, value: { location: { protocol: "http:", host: "localhost" } } })
+  Object.defineProperty(globalThis, "WebSocket", { configurable: true, value: Socket })
+  const connectionErrors: string[] = []
+  const connection = connectAgentSession({ harness: "pi", sessionId: "session" }, { onFrame: () => {}, onError: (error) => connectionErrors.push(error), onSession: () => {}, onConnection: () => {} })
+  const request = { kind: "tool", requestId: "one", tool: "extension", expiresAt: 100 }
+  try {
+    const socket = Socket.instances.at(-1)!
+    await assert.rejects(connection.respondPermission({ requestId: "one", decision: "allow" }), /unavailable/)
+    socket.open()
+    socket.frame({ type: "permission.requested", request, seq: 1 })
+    let acknowledged = false
+    const sending = connection.respondPermission({ requestId: "one", decision: "allow" }).then(() => { acknowledged = true })
+    await assert.rejects(connection.respondPermission({ requestId: "one", decision: "deny" }), /already being submitted/)
+    assert.deepEqual(socket.sent.at(-1), { type: "permission.respond", harness: "pi", sessionId: "session", requestId: "one", decision: "allow" })
+    assert.equal(acknowledged, false)
+    const rejected = assert.rejects(sending, /Try again/)
+    socket.frame({ type: "error", requestId: "one", code: "permission.respond", message: "Try again" })
+    await rejected
+    assert.deepEqual(connectionErrors, [])
+    const retry = connection.respondPermission({ requestId: "one", decision: "deny" })
+    socket.frame({ type: "permission.resolved", seq: 2, resolution: { request, decision: "deny", reason: "skipped" } })
+    await retry
+    const uncertain = assert.rejects(connection.respondPermission({ requestId: "two", decision: "allow" }), /before the response was confirmed/)
+    socket.close()
+    await uncertain
+    await new Promise((resolve) => setTimeout(resolve, 350))
+    const reconnected = Socket.instances.at(-1)!
+    reconnected.open()
+    assert.equal(reconnected.sent.length, 1)
+    assert.equal(reconnected.sent[0]?.type, "session.subscribe")
+  } finally {
+    connection.disconnect()
+    for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key) }
+  }
+})

@@ -1,3 +1,4 @@
+import type { InteractionResponse } from '../core/resource/interaction.js'
 import { randomUUID } from 'node:crypto'
 
 import type {
@@ -111,6 +112,12 @@ export class AgentHarness {
       stream.publish({ type: 'task.updated', task: { ...task, stopRequested: false } })
       throw error
     }
+  }
+
+  respondPermission(ref: SessionRef, response: InteractionResponse): void {
+    const runtime = this.pool?.peek(ref)
+    if (!runtime?.respondPermission) throw new SessionError('invalid-request', 'The interaction runtime is no longer available')
+    runtime.respondPermission(response)
   }
 
   private publish(live: LiveRun, event: StreamFrame): void {

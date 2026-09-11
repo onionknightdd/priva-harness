@@ -1,4 +1,5 @@
 import type { WorkflowState } from '../resource/workflow.js'
+import type { InteractionRequest, InteractionResolution } from '../resource/interaction.js'
 import type { BackgroundTask, TaskNotification, TaskReplyTarget } from '../resource/background-task.js'
 import type { ThreadMessage } from '../resource/thread.js'
 export const STREAM_PROTOCOL_VERSION = 2 as const
@@ -90,7 +91,7 @@ export type AgentEvent = (
   | { readonly type: 'task.updated' | 'task.notification'; readonly task: BackgroundTask }
   | { readonly type: 'task.delivered'; readonly notification: TaskNotification; readonly task: BackgroundTask }
   | { readonly type: 'session.state'; readonly state: 'running' | 'idle' | 'requires_action' }
-  | { readonly type: 'session.snapshot'; readonly tasks: readonly BackgroundTask[]; readonly messages: readonly ThreadMessage[]; readonly activeRunId?: string }
+  | { readonly type: 'session.snapshot'; readonly tasks: readonly BackgroundTask[]; readonly messages: readonly ThreadMessage[]; readonly activeRunId?: string; readonly interactions?: readonly InteractionRequest[] }
   | ({ readonly type: 'run.started'; readonly model?: string; readonly userMessage?: ThreadMessage } & EventChannel)
   | ({
       readonly type: 'assistant.block_start'
@@ -187,7 +188,7 @@ export type AgentEvent = (
       readonly sessionId?: string
       readonly model?: string
     }
-  | { readonly type: 'error'; readonly code?: string; readonly message: string }
+  | { readonly type: 'error'; readonly code?: string; readonly message: string; readonly requestId?: string }
   | {
       readonly type: 'replay.gap'
       readonly firstSeq: number
@@ -241,13 +242,8 @@ export type AgentEvent = (
     }
   | { readonly type: 'agent.started'; readonly agentId: string; readonly name?: string }
   | { readonly type: 'agent.completed'; readonly agentId: string; readonly ok?: boolean; readonly status?: 'completed' | 'failed' | 'cancelled' }
-  | {
-      readonly type: 'permission.requested'
-      readonly requestId: string
-      readonly tool: string
-      readonly input?: unknown
-    }
-  | { readonly type: 'permission.resolved'; readonly requestId: string; readonly decision: string }
+  | { readonly type: 'permission.requested'; readonly request: InteractionRequest }
+  | { readonly type: 'permission.resolved'; readonly resolution: InteractionResolution }
   | { readonly type: 'session.compacting' }
   | { readonly type: 'session.compacted'; readonly summary?: string }
   | { readonly type: 'suggestion.prompts'; readonly prompts: readonly string[] }

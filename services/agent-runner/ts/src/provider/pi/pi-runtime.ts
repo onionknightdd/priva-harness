@@ -1,3 +1,4 @@
+import type { InteractionResponse } from '../../core/resource/interaction.js'
 import { BackgroundTasks, taskIsActive } from '../../core/resource/background-task.js'
 import { asRecord, stringField } from '../../core/event/json-record.js'
 import { piTaskNotices } from './pi-background-tasks.js'
@@ -21,6 +22,8 @@ import { AsyncQueue } from '../../core/stream/async-queue.js'
 import { PiEventMapper, type PiSessionEvent } from './pi-event-mapper.js'
 
 export interface PiAgentSession {
+  initialize?(): Promise<void>
+  respondPermission?(response: InteractionResponse): void
   stopTask?(taskId: string): Promise<void>
   readonly sessionId: string
   readonly modelId: string
@@ -58,7 +61,8 @@ export class PiRuntime implements AgentRuntime {
     this.sessionHandle = agentSession
     this.mapper = new PiEventMapper({ sessionId: agentSession.sessionId, model: agentSession.modelId })
     this.unsubscribe = agentSession.subscribe((event) => {
-      const mapped = this.mapper?.push(event) ?? []
+      const mapped: AgentEvent[] = event.type === 'permission.requested' || event.type === 'permission.resolved'
+        ? [event as AgentEvent] : this.mapper?.push(event) ?? []
       for (const frame of mapped) if (frame.type === 'task.updated' || frame.type === 'task.notification') {
         this.tasks.update(frame.task)
         if (frame.type === 'task.notification' && !this.deliveredNotices.has(frame.task.taskId)) this.pendingNotices.add(frame.task.taskId)
@@ -118,7 +122,15 @@ export class PiRuntime implements AgentRuntime {
     if (context.signal.aborted) onAbort()
     else context.signal.addEventListener('abort', onAbort, { once: true })
 
-    const sending = this.send(userTurnText(turn)).then(
+    const sending = (async () => {
+      await this.agentSession.initialize?.()
+      if (context.signal.aborted) {
+        this.events?.push({ type: 'run.aborted', sessionId: this.session.id })
+        this.events?.close()
+        return
+      }
+      await this.send(userTurnText(turn))
+    })().then(
       () => undefined,
       (error: unknown) => {
         if (!finished) {
@@ -155,6 +167,11 @@ export class PiRuntime implements AgentRuntime {
       await this.agentSession.setRunModel(spec.model)
     }
     this.queueBehavior = spec.queueBehavior ?? 'follow-up'
+  }
+
+  respondPermission(response: InteractionResponse): void {
+    if (!this.agentSession.respondPermission) throw new Error('Pi interaction runtime is unavailable')
+    this.agentSession.respondPermission(response)
   }
 
   async abort(): Promise<void> {

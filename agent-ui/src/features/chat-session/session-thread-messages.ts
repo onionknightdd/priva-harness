@@ -14,6 +14,7 @@ type ThreadApiMessage = {
   nestedAgents?: unknown
   workflows?: unknown
   compact?: AgentThreadMessage["compact"]
+  interactions?: AgentThreadMessage["interactions"]
 }
 
 export function threadMessagesFromApi(
@@ -29,6 +30,7 @@ export function threadMessagesFromApi(
     status: item.status,
     ...(item.transcriptUuid ? { transcriptUuid: item.transcriptUuid } : {}),
     ...(item.compact === undefined ? {} : { compact: item.compact }),
+    ...(item.interactions === undefined ? {} : { interactions: item.interactions }),
     ...(item.role === "assistant"
       ? {
           blocks: snapshotBlocks(item.blocks),

@@ -1,4 +1,6 @@
-import { useRef } from "react"
+import { useEffect, useRef } from "react"
+import type { InteractionRequest, InteractionResponse } from '../interaction-data'
+import { InteractionCard } from './interaction-card'
 import type { ComposerAttachment } from "../composer-attachments"
 import {
   AnimatePresence,
@@ -35,6 +37,9 @@ const fadeTransition = {
 const agentColumnClassName = "mx-auto w-full max-w-3xl"
 
 export function AgentMessage({
+  interactions = [],
+  interactionConnected = false,
+  onInteractionResponse,
   attachments,
   onFilesSelected,
   onAttachmentRemove,
@@ -53,6 +58,9 @@ export function AgentMessage({
   onSubmit,
   onStop,
 }: {
+  interactions?: InteractionRequest[]
+  interactionConnected?: boolean
+  onInteractionResponse?: (response: InteractionResponse) => Promise<void>
   attachments: ComposerAttachment[]
   onFilesSelected: (files: File[]) => void
   onAttachmentRemove: (id: string) => void
@@ -75,6 +83,16 @@ export function AgentMessage({
   const composerShellRef = useRef<HTMLDivElement>(null)
   const { activeSession, forkError, runCwd, runSessionId, setDraftCwd } = useChatSession()
   const shouldReduceMotion = Boolean(useReducedMotion())
+  const pending = interactions[0]
+  const hadInteraction = useRef(false)
+  useEffect(() => {
+    if (hadInteraction.current && !pending) {
+      const id = requestAnimationFrame(focusAgentComposer)
+      hadInteraction.current = false
+      return () => cancelAnimationFrame(id)
+    }
+    hadInteraction.current = Boolean(pending)
+  }, [pending])
   const isEmpty = messages.length === 0 && activeSession === null
   const dockTransition = shouldReduceMotion
     ? { duration: 0 }
@@ -134,7 +152,13 @@ export function AgentMessage({
           !isEmpty && "pt-1.5"
         )}
       >
-        <AgentMessageComposer
+        {pending && onInteractionResponse ? (
+          <motion.div key={pending.requestId} ref={composerShellRef}
+            initial={shouldReduceMotion ? false : { opacity: 0, transform: 'translateY(4px)' }}
+            animate={{ opacity: 1, transform: 'translateY(0px)' }} transition={{ duration: shouldReduceMotion ? 0 : 0.15 }}>
+            <InteractionCard request={pending} count={interactions.length} connected={interactionConnected} onRespond={onInteractionResponse} />
+          </motion.div>
+        ) : <AgentMessageComposer
           attachments={attachments}
           onFilesSelected={onFilesSelected}
           onAttachmentRemove={onAttachmentRemove}
@@ -152,7 +176,7 @@ export function AgentMessage({
           onEffortChange={onEffortChange}
           onSubmit={onSubmit}
           onStop={onStop}
-        />
+        />}
         <div className="mt-1 flex items-center gap-1.5">
           {runCwd ? (
             <SessionCwdIndicator

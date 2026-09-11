@@ -1,6 +1,14 @@
 import { resourcesZh } from "./resources"
 
 export const zhCN = {
+  interaction: {
+    skip: "跳过", continue: "继续", send: "提交回答", custom: "输入其他回答…", previous: "上一题", next: "下一题",
+    submitting: "提交中…", toolTitle: "允许执行此工具？", details: "查看详情", allow: "允许本次",
+    answered: "已回答", skipped: "已跳过", pendingCount: "还有 {{count}} 个请求等待处理",
+    disconnected: "正在重新连接，已填写的答案会保留。", failed: "回复尚未确认，请重试。",
+    status: { pending: "等待审批", approving: "提交中", approved: "已允许", denied: "已跳过", running: "执行中", complete: "已完成", error: "失败" },
+  },
+
   backgroundTasks: {
     title: "后台任务", empty: "当前会话没有后台任务", stop: "停止", stopping: "正在停止…", output: "查看输出",
     stopTask: "停止任务：{{name}}", count: "后台 {{count}}",

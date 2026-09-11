@@ -1,3 +1,4 @@
+import type { InteractionRequest } from '../../core/resource/interaction.js'
 import { randomUUID } from 'node:crypto'
 import type { SessionRef } from '../../core/contract/agent-provider.js'
 import { STREAM_PROTOCOL_VERSION, isRunResultEvent, type AgentEvent, type StreamFrame } from '../../core/event/agent-event.js'
@@ -10,6 +11,7 @@ import { taskReplyOwner, type ThreadMessage } from '../../core/resource/thread.j
 export class SessionStream {
   readonly streamId = randomUUID()
   readonly tasks = new BackgroundTasks()
+  private readonly interactions = new Map<string, { request: InteractionRequest; runId: string }>()
   private seq = 0
   private readonly buffer: StreamFrame[] = []
   private readonly listeners = new Set<(frame: StreamFrame) => void>()
@@ -31,6 +33,15 @@ export class SessionStream {
   }
 
   publish(event: AgentEvent, runId = ''): StreamFrame {
+    // Cancellation may stop the provider iterator before its final resolution is drained.
+    if (event.type === 'run.aborted' || event.type === 'run.failed') {
+      for (const pending of [...this.interactions.values()]) {
+        if (pending.runId === runId) this.publish({ type: 'permission.resolved',
+          resolution: { request: pending.request, decision: 'deny', reason: 'cancelled' } }, runId)
+      }
+    }
+    if (event.type === 'permission.requested') this.interactions.set(event.request.requestId, { request: event.request, runId })
+    if (event.type === 'permission.resolved') this.interactions.delete(event.resolution.request.requestId)
     let normalized = event
     if (event.type === 'task.updated' || event.type === 'task.notification' || event.type === 'task.delivered') {
       const owner = this.messages.find((message) => message.blocks?.some((block) => block.type === 'tool_use' && block.id === event.task.toolUseId))
@@ -78,7 +89,7 @@ export class SessionStream {
   }
 
   snapshot(): StreamFrame & { type: 'session.snapshot' } {
-    return this.frame({ type: 'session.snapshot', tasks: this.tasks.list(), messages: this.messages,
+    return this.frame({ type: 'session.snapshot', tasks: this.tasks.list(), messages: this.messages, interactions: [...this.interactions.values()].map(({ request }) => request),
       ...(this.activeRunId ? { activeRunId: this.activeRunId } : {}) }, this.seq) as StreamFrame & { type: 'session.snapshot' }
   }
 

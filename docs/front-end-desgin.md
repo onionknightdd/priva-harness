@@ -209,6 +209,42 @@ npx shadcn add https://www.beautifului.dev/r/loading-state.json
 浏览器验证入口为 `/tests/agent-preview.html`，工作状态预览可切换开始 / 结束、
 减少动效及深色模式。
 
+### 权限审批与回答问题
+
+2026-09-11：按用户指定，问题使用 Beautiful UI ApprovalCard，工具审批使用
+BE UI ToolApproval。两者直接替换 Chat composer，共用原有 `w-full max-w-3xl` 容器；
+请求队列一次显示一张卡片，最后一张完成后恢复输入框、未发送文字及附件。
+
+```text
+Chat / message list
+  |
+  +-- composer slot (same width)
+       +-- pending question -> ApprovalCard
+       +-- pending tool     -> ToolApproval
+       +-- no requests      -> Chat composer + preserved draft
+```
+
+入口为 `components/primitives/ApprovalCard.tsx`、`GlideMenu.tsx`、
+`components/agents/tool-approval.tsx`；业务组合和结果摘要位于
+`features/agent-message/components/interaction-card.tsx`。它们复用本地 Button、Input、
+AgentCode、AgentDisclosure 和主题 token；上游演示用 Button / foundation 全局样式不纳入应用。
+
+问答支持单选、多选、自定义文本、前后翻题和整组跳过。末题明确提交，提交错误保留
+答案，断线禁用操作；服务端确认后才移除卡片。工具显示原始参数，允许本次或跳过。
+所有文案支持中英文。卡片出现和问题切换使用 150–160 ms 透明度 / 小幅位移，悬浮层
+150 ms；键盘翻题与 reduced-motion 立即更新。正文限高并内部滚动，窄屏按钮可换行。
+协议和 provider 差异见 [权限审批与问答](agent-interactions.md)。
+
+安装命令（在 `agent-ui/`）：
+
+```sh
+npx shadcn add https://www.beautifului.dev/r/approval-card.json
+npx shadcn add @beui/tool-approval
+```
+
+再次安装时保留已有 AgentCode、AgentDisclosure 和共享 ease，审阅本地协议接入、
+错误 / 跳过 / 自定义文本处理和主题适配，不能直接覆盖为上游演示逻辑。
+
 ### Workspace Agent 详情标签
 
 2026-09-10：Workspace 的“提示词 / 执行过程 / 输出”按用户指定，复用 sidebar
@@ -645,6 +681,14 @@ rg -n '@base-ui/react|motion/react|gsap' agent-ui/src
 Mermaid 浏览器回归：打开 `/tests/components/ai-elements/mermaid-browser.html` 并点击
 **Run Mermaid checks**。覆盖真实图表加载、异步模块拒绝、局部源代码回退、复制入口、
 周围消息保留和页面可交互；追加 `?zh&dark` 验证中文提示与深色主题。
+
+审批与问答浏览器回归：打开 `/tests/features/agent-message/interaction-browser.html`，
+点击 **Run interaction checks**。使用真实 App 和隔离的 WebSocket/HTTP 样例，覆盖
+等宽替换、单选 / 多选 / 自定义文本、等待确认、失败重试、草稿恢复、审批队列、
+跳过和断线重连，避免访问真实模型。追加 `?zh&dark&reduced-motion`，并使用 390px
+视口检查中文、深色、减少动态效果和窄屏；**Show question / Show tool approval**
+可单独查看卡片。用真实 Tab / Enter 验证选择与翻题。
+相关数据和连接测试包含在下方 Agent message 的 `*.test.ts` 命令中。
 
 目前没有前端全量自动化测试命令，也没有仓库级 formatter。
 `lint` 对应 `oxlint .`，`build` 对应 `tsc -b && vite build`，以

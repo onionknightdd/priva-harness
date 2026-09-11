@@ -6,8 +6,34 @@ import { PiRuntime, type PiAgentSession } from '../../../../src/provider/pi/pi-r
 import type { PiSessionEvent } from '../../../../src/provider/pi/pi-event-mapper.js'
 import { testRunSpec } from '../../../support/run-spec.js'
 import { userTurnFromText } from '../../../../src/core/run/user-turn.js'
+import { PiInteractions } from '../../../../src/provider/pi/pi-interactions.js'
+import type { ExtensionUIContext } from '@earendil-works/pi-coding-agent'
 
 describe('PiRuntime stream input', () => {
+  it.each([false, true])('delivers startup dialogs after subscribing and respects startup cancellation (%s)', async (cancel) => {
+    const base = new FakePiAgentSession()
+    const interactions = new PiInteractions()
+    interactions.subscribe((event) => base.emit(event))
+    const session = Object.assign(base, {
+      initialize: async () => { await interactions.ui({} as ExtensionUIContext).input('Startup question?') },
+      respondPermission: interactions.respond.bind(interactions),
+      abort: () => { interactions.cancel(); return Promise.resolve() },
+    })
+    const runtime = new PiRuntime(session)
+    const abort = new AbortController()
+    const events: AgentEvent[] = []
+    for await (const event of runtime.run({ text: 'hello' }, { signal: abort.signal })) {
+      events.push(event)
+      if (event.type !== 'permission.requested') continue
+      expect(base.prompts).toEqual([])
+      if (cancel) abort.abort()
+      else runtime.respondPermission({ requestId: event.request.requestId, decision: 'allow', answers: { q0: { selected: [], text: 'Startup answer' } } })
+    }
+    expect(base.prompts).toEqual(cancel ? [] : ['hello'])
+    expect(events.at(-1)?.type).toBe(cancel ? 'run.aborted' : 'run.completed')
+    await runtime.release('dispose')
+  })
+
   it('completes the foreground turn while a workflow continues on the session listener', async () => {
     const session = new FakePiAgentSession()
     const runtime = new PiRuntime(session)

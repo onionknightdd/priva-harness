@@ -1,3 +1,4 @@
+import type { InteractionResponse } from "./interaction-data"
 import type { MessageAttachment } from "./message-attachment"
 import { messageTextWithAttachments } from "./message-attachment-text"
 import { parseStreamFrame, type StreamFrame } from "./run-stream-reducer"
@@ -30,6 +31,7 @@ export function connectAgentSession(target: { harness: AgentRunHarness; sessionI
   let cursor: { streamId: string; seq: number } | undefined
   let activeRunId: string | undefined
   const pending = new Map<string, Waiter>()
+  const replies = new Map<string, Waiter>()
   const idleWaiters: Array<() => void> = []
   const toolWaiters: Array<() => void> = []
   const tools = new Set<string>()
@@ -100,7 +102,16 @@ export function connectAgentSession(target: { harness: AgentRunHarness; sessionI
         waiter?.resolve()
         tools.clear()
       }
-      if (frame.type === "error") {
+      if (frame.type === "permission.resolved" && frame.resolution) {
+        const requestId = frame.resolution.request.requestId
+        replies.get(requestId)?.resolve()
+        replies.delete(requestId)
+      }
+      if (frame.type === "error" && frame.requestId) {
+        replies.get(frame.requestId)?.reject(new Error(frame.message ?? "Interaction response failed"))
+        replies.delete(frame.requestId)
+      }
+      if (frame.type === "error" && !frame.requestId) {
         if (frame.code === "run.start" && frame.runId) {
           pending.get(frame.runId)?.reject(new Error(frame.message ?? "Agent request failed"))
           pending.delete(frame.runId)
@@ -113,6 +124,8 @@ export function connectAgentSession(target: { harness: AgentRunHarness; sessionI
     })
     socket.addEventListener("close", () => {
       handlers.onConnection(false)
+      for (const reply of replies.values()) reply.reject(new Error("Connection lost before the response was confirmed"))
+      replies.clear()
       if (closed) return
       if (!sessionId) {
         for (const waiter of pending.values()) waiter.reject(new Error("Disconnected before a session was confirmed; the request was not retried"))
@@ -136,6 +149,15 @@ export function connectAgentSession(target: { harness: AgentRunHarness; sessionI
           type: "run.start", runId, ...(sessionId ? { sessionId } : {}) })
       })
     },
+    respondPermission(response: InteractionResponse): Promise<void> {
+      if (!sessionId || closed || socket.readyState !== WebSocket.OPEN) return Promise.reject(new Error("Connection unavailable"))
+      if (replies.has(response.requestId)) return Promise.reject(new Error("A response is already being submitted"))
+      return new Promise((resolve, reject) => {
+        replies.set(response.requestId, { resolve, reject })
+        try { socket.send(JSON.stringify({ type: "permission.respond", harness: target.harness, sessionId, ...response })) }
+        catch (error) { replies.delete(response.requestId); reject(error) }
+      })
+    },
     waitForIdle: () => activeRunId || pending.size ? new Promise<void>((resolve) => idleWaiters.push(resolve)) : Promise.resolve(),
     waitForTools: () => tools.size ? new Promise<void>((resolve) => toolWaiters.push(resolve)) : Promise.resolve(),
     abort: () => { if (sessionId) send({ type: "run.abort", harness: target.harness, sessionId, ...(activeRunId ? { runId: activeRunId } : {}) }) },
@@ -144,6 +166,8 @@ export function connectAgentSession(target: { harness: AgentRunHarness; sessionI
       closed = true
       clearTimeout(retry)
       socket.close()
+      for (const reply of replies.values()) reply.reject(new Error("Session connection is closed"))
+      replies.clear()
       for (const waiter of pending.values()) waiter.resolve()
       pending.clear(); activeRunId = undefined; tools.clear(); queued.length = 0
       for (const resolve of toolWaiters.splice(0)) resolve()

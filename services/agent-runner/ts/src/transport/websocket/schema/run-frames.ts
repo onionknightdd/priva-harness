@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { interactionResponseSchema, type InteractionResponse } from '../../../core/resource/interaction.js'
 import { userAttachmentSchema, type UserAttachment } from '../../../core/run/user-turn.js'
 import {
   isEffortLevel,
@@ -42,7 +43,8 @@ export interface AbortFrame {
 
 export interface StopTaskFrame { readonly type: 'task.stop'; readonly harness: RunHarnessId; readonly sessionId: string; readonly taskId: string }
 
-export type ClientFrame = InitFrame | SubscribeFrame | AbortFrame | StopTaskFrame
+export type PermissionFrame = { readonly type: 'permission.respond'; readonly harness: 'claude' | 'pi'; readonly sessionId: string } & InteractionResponse
+export type ClientFrame = InitFrame | SubscribeFrame | AbortFrame | StopTaskFrame | PermissionFrame
 
 export type ParseClientResult =
   | { readonly ok: true; readonly frame: ClientFrame }
@@ -57,6 +59,11 @@ export function parseClientFrame(raw: unknown): ParseClientResult {
     return { ok: false, message: 'Frame must be a JSON object' }
   }
   const type = raw['type']
+  if (type === 'permission.respond') {
+    const address = z.object({ type: z.literal('permission.respond'), harness: z.enum(['claude', 'pi']), sessionId: z.string().trim().min(1) }).safeParse(raw)
+    const response = interactionResponseSchema.safeParse(raw)
+    return address.success && response.success ? { ok: true, frame: { ...address.data, ...response.data } } : { ok: false, message: 'Invalid interaction response' }
+  }
   if (type === 'task.stop') {
     const result = z.object({ type: z.literal('task.stop'), harness: z.enum(['claude', 'pi']), sessionId: z.string().trim().min(1), taskId: z.string().trim().min(1) }).safeParse(raw)
     return result.success ? { ok: true, frame: result.data } : { ok: false, message: 'Task stop requires harness, sessionId and taskId' }
@@ -64,7 +71,7 @@ export function parseClientFrame(raw: unknown): ParseClientResult {
   if (type === 'run.start') return parseInitFrame(raw)
   if (type === 'session.subscribe') return parseSubscribeFrame(raw)
   if (type === 'run.abort') return parseAbortFrame(raw)
-  return { ok: false, message: 'Message must be run.start, session.subscribe, run.abort or task.stop' }
+  return { ok: false, message: 'Message must be run.start, session.subscribe, run.abort, task.stop or permission.respond' }
 }
 
 export function parseInitFrame(raw: unknown): ParseInitResult {

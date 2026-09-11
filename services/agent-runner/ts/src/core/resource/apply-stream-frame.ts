@@ -14,6 +14,10 @@ import {
 } from './thread.js'
 
 export function applyStreamFrame(message: ThreadMessage, event: AgentEvent): ThreadMessage {
+  if (event.type === 'permission.resolved' && event.resolution.request.kind === 'question') {
+    const interactions = message.interactions ?? []
+    return interactions.some((item) => item.request.requestId === event.resolution.request.requestId) ? message : { ...message, interactions: [...interactions, event.resolution] }
+  }
   if (event.type === 'task.delivered') {
     const updated = applyStreamFrame(message, { type: 'task.updated', task: event.task })
     const blocks = updated.blocks ?? []

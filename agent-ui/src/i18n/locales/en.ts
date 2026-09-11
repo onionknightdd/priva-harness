@@ -1,6 +1,14 @@
 import { resourcesEn } from "./resources"
 
 export const en = {
+  interaction: {
+    skip: "Skip", continue: "Continue", send: "Send answers", custom: "Something else…", previous: "Previous question", next: "Next question",
+    submitting: "Submitting…", toolTitle: "Allow this tool to run?", details: "View details", allow: "Allow once",
+    answered: "Answered", skipped: "Skipped", pendingCount: "{{count}} requests awaiting your response",
+    disconnected: "Reconnecting. Your answers are kept here.", failed: "Response could not be confirmed. Please retry.",
+    status: { pending: "Approval required", approving: "Submitting", approved: "Approved", denied: "Skipped", running: "Running", complete: "Completed", error: "Failed" },
+  },
+
   backgroundTasks: {
     title: "Background tasks", empty: "No background tasks in this session", stop: "Stop", stopping: "Stopping…", output: "View output",
     stopTask: "Stop task: {{name}}", count: "{{count}} background",

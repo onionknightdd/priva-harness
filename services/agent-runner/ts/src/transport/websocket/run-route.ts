@@ -45,6 +45,7 @@ function handleRunSocket(socket: WebSocket, options: RunRouteOptions): void {
   let commandHarness = 'unknown'
   let commandType = ''
   let commandRunId = ''
+  let commandRequestId: string | undefined
   let closed = false
   let commands = Promise.resolve()
   const subscribe = (next: SessionStream, cursor?: { streamId: string; seq: number }) => {
@@ -57,11 +58,12 @@ function handleRunSocket(socket: WebSocket, options: RunRouteOptions): void {
   socket.once('close', () => { closed = true; unsubscribe?.() })
   const handle = async (data: WebSocket.RawData): Promise<void> => {
     let raw: unknown
-    commandType = ''; commandRunId = ''
+    commandType = ''; commandRunId = ''; commandRequestId = undefined
     try { raw = JSON.parse(rawToString(data)) as unknown } catch { throw new Error('Frame must be JSON') }
     if (typeof raw === 'object' && raw && 'harness' in raw && typeof raw.harness === 'string') commandHarness = raw.harness
     if (typeof raw === 'object' && raw && 'type' in raw && typeof raw.type === 'string') commandType = raw.type
     if (typeof raw === 'object' && raw && 'runId' in raw && typeof raw.runId === 'string') commandRunId = raw.runId
+    if (typeof raw === 'object' && raw && 'requestId' in raw && typeof raw.requestId === 'string') commandRequestId = raw.requestId
     const parsed = parseClientFrame(raw)
     if (!parsed.ok) throw new Error(parsed.message)
     let frame = parsed.frame
@@ -72,6 +74,11 @@ function handleRunSocket(socket: WebSocket, options: RunRouteOptions): void {
       subscribe(next, frame.streamId ? { streamId: frame.streamId, seq: frame.sinceSeq } : undefined)
       // A reconnect also reconciles starts whose command response was lost.
       if (frame.streamId && socketOpen(socket)) socket.send(encodeEvent(next.snapshot()))
+      return
+    }
+    if (frame.type === 'permission.respond') {
+      if (stream?.session.id !== frame.sessionId || stream.session.provider !== frame.harness) throw new Error('Interaction belongs to another session')
+      options.harness.respondPermission(stream.session, frame)
       return
     }
     if (frame.type === 'task.stop') {
@@ -112,7 +119,7 @@ function handleRunSocket(socket: WebSocket, options: RunRouteOptions): void {
   }
   socket.on('message', (data) => {
     commands = commands.then(() => handle(data)).catch((error: unknown) => {
-      sendError(socket, error instanceof Error ? error.message : String(error), commandRunId, stream?.session.provider ?? commandHarness, commandType)
+      sendError(socket, error instanceof Error ? error.message : String(error), commandRunId, stream?.session.provider ?? commandHarness, commandType, commandRequestId)
     })
   })
 }
@@ -178,10 +185,10 @@ async function buildRunSpec(
   }
 }
 
-function sendError(socket: WebSocket, message: string, runId: string, harness: string, code: string): void {
+function sendError(socket: WebSocket, message: string, runId: string, harness: string, code: string, requestId?: string): void {
   if (!socketOpen(socket)) return
   const stamper = new EnvelopeStamper(runId, harness)
-  socket.send(encodeEvent(stamper.stamp({ type: 'error', message, code })))
+  socket.send(encodeEvent(stamper.stamp({ type: 'error', message, code, ...(requestId ? { requestId } : {}) })))
 }
 
 function socketOpen(socket: WebSocket): boolean {

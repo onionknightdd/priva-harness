@@ -1,3 +1,4 @@
+import { updateInteractions, type InteractionRequest, type InteractionResponse } from "./interaction-data"
 import * as React from "react"
 import { useTranslation } from "react-i18next"
 import { useAgentPreferences } from "@/features/settings/agent-preferences-context"
@@ -23,6 +24,7 @@ export function useAgentMessage() {
   const { beginLiveSession, endLiveSession } = useLiveSessions()
   const composerAttachments = useComposerAttachments(runCwd, runHarnessId, runSessionId)
   const { attachments, clear: clearAttachments } = composerAttachments
+  const [interactions, setInteractions] = React.useState<InteractionRequest[]>([])
   const [draft, setDraft] = React.useState("")
   const [slashCommand, setSlashCommand] = React.useState<SlashCommand | null>(null)
   const [modelReference, setModelReference] = React.useState<string | null>(null)
@@ -53,6 +55,7 @@ export function useAgentMessage() {
   // Socket handlers retain a live view of React callbacks without reconnecting on each render.
   const receiveRef = React.useRef<(frame: StreamFrame) => void>(() => undefined)
   receiveRef.current = (frame) => {
+    setInteractions((current) => updateInteractions(current, frame))
     const id = frame.sessionId ?? connectionRef.current?.sessionId
     const key = `${runHarnessId}:${id}`
     if (frame.type === "session.snapshot") {
@@ -122,6 +125,7 @@ export function useAgentMessage() {
     pendingIdsRef.current.clear()
     hasSnapshotRef.current = false
     setConnected(false)
+    setInteractions([])
     setActiveRunId(null)
   }, [])
 
@@ -152,7 +156,7 @@ export function useAgentMessage() {
   const submit = React.useCallback(() => {
     const files = readyComposerAttachments(attachments)
     const content = (slashCommand ? composeSlashMessage(slashCommand.name, draft) : draft).trim()
-    if (!files || (!content && !files.length) || !modelReference || !runHarnessId || !runCwd.trim()) return
+    if (interactions.length || !files || (!content && !files.length) || !modelReference || !runHarnessId || !runCwd.trim()) return
     const connection = ensureConnection()
     const assistant = createAgentThreadMessage("assistant", "", "streaming")
     const user = { ...createAgentThreadMessage("user", content), id: `${assistant.id}:user`,
@@ -183,13 +187,17 @@ export function useAgentMessage() {
       void connection.start({ text: content, attachments: files, model: modelReference, harness: runHarnessId,
         cwd: runCwd.trim(), effort, promptSuggestions: inputSuggestions }, assistant.id).catch(failed)
     }).catch(failed)
-  }, [attachments, slashCommand, draft, modelReference, runHarnessId, runCwd, ensureConnection, setLastModelReference, clearAttachments, queueBehavior, effort, inputSuggestions, t])
+  }, [interactions.length, attachments, slashCommand, draft, modelReference, runHarnessId, runCwd, ensureConnection, setLastModelReference, clearAttachments, queueBehavior, effort, inputSuggestions, t])
 
+  const respondPermission = React.useCallback((response: InteractionResponse) => {
+    const connection = connectionRef.current
+    return connection ? connection.respondPermission(response) : Promise.reject(new Error("Connection unavailable"))
+  }, [])
   const stop = React.useCallback(() => connectionRef.current?.abort(), [])
   return {
-    composerAttachments, draft, messages, contextUsage, modelReference, isConnected, connectionError,
+    interactions, respondPermission, composerAttachments, draft, messages, contextUsage, modelReference, isConnected, connectionError,
     isStreaming: activeRunId !== null || messages.some((message) => message.status === "streaming"),
-    canSubmit: Boolean((draft.trim() || slashCommand || attachments.length) && readyComposerAttachments(attachments) !== null && modelReference && runHarnessId && runCwd.trim()),
+    canSubmit: Boolean(!interactions.length && (draft.trim() || slashCommand || attachments.length) && readyComposerAttachments(attachments) !== null && modelReference && runHarnessId && runCwd.trim()),
     modelReady: Boolean(modelReference && runHarnessId), slashCommand, setDraft, setSlashCommand, setModelReference, setEffort, submit, stop,
   }
 }

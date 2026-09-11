@@ -1,3 +1,5 @@
+import { PiInteractions } from './pi-interactions.js'
+import type { InteractionResponse } from '../../core/resource/interaction.js'
 import { createEventBus, type EventBus } from '@earendil-works/pi-coding-agent'
 import { asRecord, stringField } from '../../core/event/json-record.js'
 import { taskStatus } from '../../core/resource/background-task.js'
@@ -47,6 +49,7 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
     const sessionDir = piSessionBucketDir(this.agentDir, spec.cwd)
     await mkdir(sessionDir, { recursive: true, mode: 0o700 })
 
+    const interactions = new PiInteractions()
     const progressSink: { emit?: (chunk: string) => void } = {}
     let workflows: PiWorkflows | undefined
     let opened: Awaited<ReturnType<typeof createAgentSession>>['session'] | undefined
@@ -73,7 +76,7 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
         settingsManager,
         resourceLoader: await createPiResourceLoader(spec.cwd, this.agentDir, settingsManager, eventBus),
         thinkingLevel: 'off',
-        customTools: [workflows.tool, ...compilePiCustomTools(this.tools, {
+        customTools: [workflows.tool, interactions.tool, ...compilePiCustomTools(this.tools, {
           cwd: spec.cwd, session: { provider: 'pi', id: sessionManager.getSessionId() },
           signal: new AbortController().signal, profile: imageToolsFromSpec(spec),
           emitProgress: (chunk) => progressSink.emit?.(chunk),
@@ -81,15 +84,6 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
       })
 
       opened = session
-      await session.bindExtensions({ mode: 'rpc' })
-
-      if (
-        target.kind === 'resume'
-        && piSessionNeedsModelSwitch(session.model, options.providerId, options.modelId)
-      ) {
-        await session.setModel(model)
-      }
-
       return new SdkPiAgentSession(
         session,
         options.modelId,
@@ -99,6 +93,7 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
         options.providerId,
         workflows,
         eventBus,
+        interactions,
       )
     } catch (error) {
       workflows?.dispose()
@@ -117,6 +112,7 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
 class SdkPiAgentSession implements PiAgentSession {
   private currentModelId: string
   private closing: Promise<void> | undefined
+  private initialized: Promise<void> | undefined
 
   constructor(
     private readonly session: Awaited<ReturnType<typeof createAgentSession>>['session'],
@@ -127,6 +123,7 @@ class SdkPiAgentSession implements PiAgentSession {
     private readonly providerId: string,
     private readonly workflows: PiWorkflows,
     private readonly eventBus: EventBus,
+    private readonly interactions: PiInteractions,
   ) {
     this.currentModelId = modelId
     workflows.bindResultDelivery((workflow, result) => session.sendCustomMessage({
@@ -134,6 +131,20 @@ class SdkPiAgentSession implements PiAgentSession {
       content: `Workflow ${workflow.name ?? workflow.workflowRunId} ${workflow.status}. ${workflow.summary ?? ''}\n${result}`,
       details: { ...workflow, result },
     }, { deliverAs: 'followUp', triggerTurn: true }))
+  }
+
+  initialize(): Promise<void> {
+    // Startup hooks can ask questions. Bind only after the runtime has subscribed
+    // and published run.started, so the first dialog can be answered as well.
+    this.initialized ??= (async () => {
+      await this.session.bindExtensions({ mode: 'rpc', uiContext: this.interactions.ui(this.session.extensionRunner.getUIContext()) })
+      if (piSessionNeedsModelSwitch(this.session.model, this.providerId, this.currentModelId)) {
+        const model = this.modelRuntime.getModel(this.providerId, this.currentModelId)
+        if (!model) throw new Error(`Unknown model ${this.currentModelId}`)
+        await this.session.setModel(model)
+      }
+    })()
+    return this.initialized
   }
 
   get modelId(): string {
@@ -168,6 +179,7 @@ class SdkPiAgentSession implements PiAgentSession {
   }
 
   subscribe(listener: (event: PiSessionEvent) => void): () => void {
+    const stopInteractions = this.interactions.subscribe(listener)
     const stopWorkflow = this.workflows.subscribe(listener)
     const stopSession = this.session.subscribe(listener)
     const stopAgents = ['started', 'completed', 'failed'].map((phase) => this.eventBus.on(`subagents:${phase}`, (value) => {
@@ -180,7 +192,7 @@ class SdkPiAgentSession implements PiAgentSession {
         ...(typeof raw['error'] === 'string' ? { summary: raw['error'] } : {}),
       } })
     }))
-    return () => { stopWorkflow(); stopSession(); for (const stop of stopAgents) stop() }
+    return () => { stopInteractions(); stopWorkflow(); stopSession(); for (const stop of stopAgents) stop() }
   }
 
   prompt(text: string): Promise<void> {
@@ -199,7 +211,10 @@ class SdkPiAgentSession implements PiAgentSession {
     return this.session.compact(customInstructions).then(() => undefined)
   }
 
+  respondPermission(response: InteractionResponse): void { this.interactions.respond(response) }
+
   abort(): Promise<void> {
+    this.interactions.cancel()
     return this.session.abort()
   }
 
@@ -228,6 +243,7 @@ class SdkPiAgentSession implements PiAgentSession {
   }
 
   private async close(): Promise<void> {
+    this.interactions.cancel()
     this.workflows.dispose()
     try {
       await this.session.abort()

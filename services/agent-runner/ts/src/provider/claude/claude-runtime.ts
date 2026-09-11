@@ -1,8 +1,10 @@
+import { InteractionCoordinator } from '../../core/run/interaction-coordinator.js'
+import { answersByQuestion, normalizeQuestions, type InteractionResponse } from '../../core/resource/interaction.js'
 import { taskNotification } from '../../core/resource/background-task.js'
 import { asRecord, stringField } from '../../core/event/json-record.js'
 import { ClaudeTaskDeliveryReader } from './session/claude-task-delivery-reader.js'
 import type { SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
-import { query, type Options, type Query, type Settings } from '@anthropic-ai/claude-agent-sdk'
+import { query, type CanUseTool, type Options, type Query, type Settings } from '@anthropic-ai/claude-agent-sdk'
 
 import type {
   AgentRuntime,
@@ -62,6 +64,7 @@ export type ClaudeQueryStart = (args: {
 }) => ClaudeQuery
 
 export class ClaudeRuntime implements AgentRuntime {
+  private readonly interactions = new InteractionCoordinator((event) => this.dispatch([event]))
   private query: ClaudeQuery | undefined
   private input: PushableStream<SDKUserMessage> | undefined
   private events: AsyncQueue<AgentEvent> | undefined
@@ -111,6 +114,7 @@ export class ClaudeRuntime implements AgentRuntime {
     this.input?.push(claudeUserMessage(userTurnText(turn)))
 
     const onAbort = (): void => {
+      this.interactions.cancelAll()
       void this.query?.interrupt()
     }
     if (context.signal.aborted) onAbort()
@@ -140,7 +144,10 @@ export class ClaudeRuntime implements AgentRuntime {
     await this.query.stopTask(taskId)
   }
 
+  respondPermission(response: InteractionResponse): void { this.interactions.respond(response) }
+
   async abort(): Promise<void> {
+    this.interactions.cancelAll()
     await this.query?.interrupt()
   }
 
@@ -158,6 +165,7 @@ export class ClaudeRuntime implements AgentRuntime {
     this.events = undefined
     this.inTurn = false
     if (retention === 'warm') { this.flushIdle(); return Promise.resolve() }
+    this.interactions.cancelAll()
     this.idleListener = undefined
     this.idleBacklog.length = 0
     this.pendingNotices.clear()
@@ -193,6 +201,7 @@ export class ClaudeRuntime implements AgentRuntime {
             emitProgress: (chunk) => this.emitToolProgress(chunk),
           },
         ),
+        canUseTool: this.canUseTool,
         // Claude's session index skips XML-only first prompts, including our
         // attachment manifest. A native title keeps these sessions discoverable.
         ...(title === undefined ? {} : { title }),
@@ -200,6 +209,24 @@ export class ClaudeRuntime implements AgentRuntime {
     })
     this.query = active
     void this.pump(active)
+  }
+
+  private readonly canUseTool: CanUseTool = async (tool, input, context) => {
+    try {
+      const common = { tool, input, toolUseId: context.toolUseID,
+        ...(context.title ? { title: context.title } : {}),
+        ...(context.decisionReason ? { reason: context.decisionReason } : {}) }
+      // Every callback is an explicit SDK ask, including ask rules in bypass mode.
+      const result = await this.interactions.request(tool === 'AskUserQuestion'
+        ? { ...common, kind: 'question', questions: normalizeQuestions(input['questions']) }
+        : { ...common, kind: 'tool' }, { signal: context.signal })
+      if (result.decision === 'deny') return { behavior: 'deny', message: `User interaction ${result.reason}` }
+      return tool === 'AskUserQuestion'
+        ? { behavior: 'allow', updatedInput: { ...input, answers: answersByQuestion(result) } }
+        : { behavior: 'allow' }
+    } catch (error) {
+      return { behavior: 'deny', message: `Invalid interaction request: ${error instanceof Error ? error.message : String(error)}` }
+    }
   }
 
   private async pump(active: ClaudeQuery): Promise<void> {
@@ -259,6 +286,7 @@ export class ClaudeRuntime implements AgentRuntime {
       }
       this.dispatch([failure])
     } finally {
+      this.interactions.cancelAll()
       if (!failed && this.query === active) this.dispatch([{ type: 'run.failed', message: 'Claude session process ended unexpectedly', model: this.spec.model }])
       this.events?.close()
     }

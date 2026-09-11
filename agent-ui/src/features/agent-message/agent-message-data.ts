@@ -83,6 +83,7 @@ export type NestedAgent = {
 }
 
 export type AgentThreadMessage = {
+  interactions?: import('./interaction-data').InteractionResolution[]
   id: string
   role: AgentMessageRole
   content: string
@@ -187,6 +188,7 @@ export function isProcessBlock(
 }
 
 export function assistantHasProcess(message: AgentThreadMessage): boolean {
+  if (message.interactions?.length) return true
   if ((message.nestedAgents?.length ?? 0) > 0) {
     return true
   }

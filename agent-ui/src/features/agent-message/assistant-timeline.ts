@@ -3,6 +3,7 @@ import type { TaskNotification } from "./background-task-store"
 
 /** Notification boundaries keep each answer beside the delivery that prompted it. */
 export function assistantTimeline(message: AgentThreadMessage) {
+  const messageTools = new Set((message.blocks ?? []).flatMap((block) => block.type === "tool_use" ? [block.id] : []))
   const sections: { id: string; notification?: TaskNotification; blocks: StreamBlock[] }[] = [
     { id: message.id, blocks: [] },
   ]
@@ -16,6 +17,7 @@ export function assistantTimeline(message: AgentThreadMessage) {
     const workflows = (message.workflows ?? []).filter((workflow) => tools.has(workflow.workflowToolUseId))
     return { id: section.id, notification: section.notification, message: {
       ...message, blocks: section.blocks,
+      interactions: message.interactions?.filter((item) => item.request.toolUseId && messageTools.has(item.request.toolUseId) ? tools.has(item.request.toolUseId) : index === 0),
       content: sections.length === 1 && !section.blocks.length ? message.content : textFromBlocks(section.blocks),
       nestedAgents: sections.length === 1 ? message.nestedAgents : nestedAgents,
       workflows: sections.length === 1 ? message.workflows : workflows,

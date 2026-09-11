@@ -1,3 +1,4 @@
+import type { InteractionRequest, InteractionResolution } from './interaction-data'
 import type { BackgroundTask, TaskNotification, TaskReplyTarget } from "./background-task-store"
 import { isWorkflowStatus, settleWorkflowCards, workflowFromSnapshot } from "./workflow-data"
 import {
@@ -14,6 +15,10 @@ import { frameAtMs, freezeMessageThinking, stampMessageThinkingTimes } from "./t
 const STREAM_PROTOCOL_VERSION = 2
 
 export type StreamFrame = {
+  requestId?: string
+  request?: InteractionRequest
+  resolution?: InteractionResolution
+  interactions?: InteractionRequest[]
   messageTargetId?: string
   notification?: TaskNotification
   replyTo?: TaskReplyTarget
@@ -141,6 +146,10 @@ function applyStreamContent(
   message: AgentThreadMessage,
   frame: StreamFrame
 ): AgentThreadMessage {
+  if (frame.type === 'permission.resolved' && frame.resolution?.request.kind === 'question') {
+    const interactions = message.interactions ?? []
+    return interactions.some((item) => item.request.requestId === frame.resolution!.request.requestId) ? message : { ...message, interactions: [...interactions, frame.resolution] }
+  }
   if (frame.type === "task.delivered" && frame.notification) {
     const blocks = message.blocks ?? []
     if (blocks.some((block) => block.type === "task_notification" && block.notification.id === frame.notification!.id)) return message

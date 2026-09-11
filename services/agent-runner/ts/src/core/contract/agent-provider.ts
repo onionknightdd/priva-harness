@@ -1,3 +1,4 @@
+import type { InteractionResponse } from '../resource/interaction.js'
 import type { AgentEvent } from '../event/agent-event.js'
 import type { ContextUsage } from '../resource/context-usage.js'
 import type { SlashCommand } from '../resource/slash-command.js'
@@ -55,6 +56,7 @@ export interface AgentRuntime {
   readonly session: SessionRef
   readonly hasBackgroundTasks?: boolean
   stopTask?(taskId: string): Promise<void>
+  respondPermission?(response: InteractionResponse): void
   run(turn: UserTurn, context: TurnContext): AsyncIterable<AgentEvent>
   applyRunSpec(spec: ProviderRunSpec): Promise<void>
   abort(reason?: string): Promise<void>

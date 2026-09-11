@@ -1,3 +1,4 @@
+import type { InteractionResolution } from './interaction.js'
 import type { BackgroundTask, TaskNotification, TaskReplyTarget } from './background-task.js'
 import type { UserAttachment } from '../run/user-turn.js'
 import type { WorkflowState } from './workflow.js'
@@ -82,6 +83,7 @@ export interface ThreadNestedAgent {
 export type ThreadWorkflowCard = WorkflowState
 
 export interface ThreadMessage {
+  readonly interactions?: readonly InteractionResolution[]
   readonly id: string
   readonly role: 'user' | 'assistant'
   readonly content: string
@@ -159,6 +161,7 @@ export function textFromThreadBlocks(blocks: readonly ThreadBlock[]): string {
 }
 
 export function threadHasVisibleContent(message: ThreadMessage): boolean {
+  if (message.interactions?.length) return true
   if (message.role === 'user') return message.content.trim() !== '' || Boolean(message.attachments?.length)
   if (message.content.trim() !== '' && message.content.trim() !== NO_RESPONSE_REQUESTED) {
     return true
