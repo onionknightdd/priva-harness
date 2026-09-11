@@ -1,4 +1,5 @@
 import { taskNotification } from '../../../core/resource/background-task.js'
+import { questionResolutionFromToolResult } from '../../../core/resource/interaction-history.js'
 import { ClaudeEventMapper, type ClaudeSdkMessage } from '../claude-event-mapper.js'
 import { asRecord, isRecord, stringField } from '../../../core/event/json-record.js'
 import type { SessionMessage } from '../../../core/resource/session.js'
@@ -43,6 +44,13 @@ export function replayClaudeSessionMessages(
     const createdAt = isoFromTimestamp(message.timestamp)
     for (const event of events) {
       items.push({ kind: 'frame', event, createdAt })
+      if (event.type === 'tool.completed') {
+        const content = asRecord(sdk?.message)?.['content']
+        const block = Array.isArray(content) ? content.filter(isRecord).find((part) => part['tool_use_id'] === event.id) : undefined
+        const raw = block?.['toolUseResult'] ?? block?.['tool_use_result'] ?? sdk?.tool_use_result ?? sdk?.toolUseResult
+        const resolution = questionResolutionFromToolResult(event.id, event.name, raw, !event.ok)
+        if (resolution) items.push({ kind: 'frame', event: { type: 'permission.resolved', resolution }, createdAt })
+      }
     }
   }
 

@@ -17,6 +17,9 @@ export function FileBrowserWorkspace({
   onResizeTree,
   onUserResizeTree,
   panelTransitioning,
+  previewPaneContentRef,
+  previewPaneId,
+  previewVisible,
   treeDefaultSize,
   treeMaxSize,
   treeMinSize,
@@ -31,6 +34,9 @@ export function FileBrowserWorkspace({
   onResizeTree: (sizePercentage: number) => void
   onUserResizeTree: () => void
   panelTransitioning: boolean
+  previewPaneContentRef: React.RefObject<HTMLDivElement | null>
+  previewPaneId: string
+  previewVisible: boolean
   treeDefaultSize: number
   treeMaxSize: number
   treeMinSize: number
@@ -46,6 +52,10 @@ export function FileBrowserWorkspace({
 
   React.useLayoutEffect(() => {
     if (isMobile) {
+      return
+    }
+    if (!previewVisible) {
+      if (!panelTransitioning) onMinimumWidthChange?.(0)
       return
     }
 
@@ -78,10 +88,7 @@ export function FileBrowserWorkspace({
         (Number.parseFloat(pageStyles?.borderInlineStartWidth ?? "") || 0) +
         (Number.parseFloat(pageStyles?.borderInlineEndWidth ?? "") || 0) +
         (handle?.getBoundingClientRect().width ?? 0)
-      const previewRatio =
-        treeVisible && !panelTransitioning
-          ? 1 - treeMinSize / 100
-          : 1
+      const previewRatio = treeVisible ? 1 - treeMinSize / 100 : 1
 
       setPreviewMinimumWidth((currentWidth) =>
         currentWidth === nextWidth ? currentWidth : nextWidth
@@ -105,6 +112,7 @@ export function FileBrowserWorkspace({
     isMobile,
     onMinimumWidthChange,
     panelTransitioning,
+    previewVisible,
     treeMinSize,
     treeVisible,
   ])
@@ -152,7 +160,21 @@ export function FileBrowserWorkspace({
     >
       {isMobile ? (
         <div data-mobile-file-pane className="flex min-h-0 flex-1">
-          {treeVisible ? treePane : filePreview}
+          <div
+            className={treeVisible ? "flex min-h-0 min-w-0 flex-1" : "hidden"}
+            inert={!treeVisible}
+            aria-hidden={!treeVisible}
+          >
+            {treePane}
+          </div>
+          <div
+            id={previewPaneId}
+            className={treeVisible ? "hidden" : "flex min-h-0 min-w-0 flex-1"}
+            inert={treeVisible}
+            aria-hidden={treeVisible}
+          >
+            {filePreview}
+          </div>
         </div>
       ) : (
         <ResizablePanelGroup
@@ -166,9 +188,9 @@ export function FileBrowserWorkspace({
         >
           <ResizablePanel
             id="file-tree-panel"
-            className="!flex !min-h-0 !overflow-hidden"
+            className="!flex !min-h-0 !justify-end !overflow-hidden"
             panelRef={treePanelRef}
-            defaultSize={`${treeDefaultSize}%`}
+            defaultSize={`${treeVisible ? (previewVisible ? treeDefaultSize : 100) : 0}%`}
             minSize={
               treeVisible && !panelTransitioning
                 ? `${treeMinSize}%`
@@ -181,25 +203,37 @@ export function FileBrowserWorkspace({
               id="file-browser-tree-pane"
               ref={treePaneContentRef}
               aria-hidden={!treeVisible}
-              className="flex h-full min-w-0 flex-1"
+              inert={!treeVisible}
+              className={cn("flex h-full min-w-0 flex-1", !treeVisible && !panelTransitioning && "invisible")}
             >
               {treePane}
             </div>
           </ResizablePanel>
           <ResizableHandle
             aria-label={t("fileBrowser.resizePanels")}
+            disabled={!treeVisible || !previewVisible || panelTransitioning}
             className={
-              treeVisible || panelTransitioning
+              (treeVisible && previewVisible) || panelTransitioning
                 ? "opacity-100"
                 : "pointer-events-none opacity-0"
             }
           />
           <ResizablePanel
             id="file-preview-panel"
-            minSize={previewMinimumWidth}
+            minSize={previewVisible && !panelTransitioning ? previewMinimumWidth : 0}
+            maxSize={previewVisible || panelTransitioning ? "100%" : "0%"}
             className="!flex !min-h-0 !overflow-hidden"
           >
-            {filePreview}
+            <div
+              id={previewPaneId}
+              ref={previewPaneContentRef}
+              style={{ minWidth: previewMinimumWidth }}
+              className={cn("flex min-h-0 min-w-0 flex-1", !previewVisible && !panelTransitioning && "invisible")}
+              inert={!previewVisible}
+              aria-hidden={!previewVisible}
+            >
+              {filePreview}
+            </div>
           </ResizablePanel>
         </ResizablePanelGroup>
       )}

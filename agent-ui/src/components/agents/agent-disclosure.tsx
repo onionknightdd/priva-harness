@@ -78,7 +78,7 @@ export function AgentDisclosure({
       aria-hidden={!expanded}
       inert={!expanded}
       className={cn(
-        "grid origin-top [overflow-anchor:none]",
+        "grid min-w-0 grid-cols-1 origin-top [overflow-anchor:none]",
         overflow,
         "ease-out [transition-property:grid-template-rows,opacity] [transition-duration:200ms,120ms] motion-reduce:transition-none",
         expanded
@@ -91,7 +91,7 @@ export function AgentDisclosure({
         pointerEvents: expanded ? undefined : "none",
       }}
     >
-      <div className={cn("min-h-0 [overflow-anchor:none]", overflow)}>
+      <div className={cn("min-h-0 min-w-0 [overflow-anchor:none]", overflow)}>
         {children}
       </div>
     </div>

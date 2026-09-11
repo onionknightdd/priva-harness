@@ -1,4 +1,5 @@
 import { motion, useReducedMotion } from "motion/react"
+import { OverflowMarquee } from "@/components/motion/overflow-marquee"
 import { useTranslation } from "react-i18next"
 
 import { FileTypeIcon } from "@/features/file-browser/components/file-type-icon"
@@ -16,6 +17,7 @@ export function FilePathLink({
   showIcon = false,
   recheckKey,
   variant = "text",
+  marquee = false,
   className,
 }: {
   path: string
@@ -23,6 +25,7 @@ export function FilePathLink({
   showIcon?: boolean
   recheckKey?: string
   variant?: "text" | "code"
+  marquee?: boolean
   className?: string
 }) {
   const { t } = useTranslation()
@@ -41,7 +44,7 @@ export function FilePathLink({
       )
     }
 
-    return <span className={className}>{label}</span>
+    return <span className={cn(marquee && "inline-block max-w-full min-w-0 truncate align-middle", className)}>{label}</span>
   }
 
   return (
@@ -57,7 +60,7 @@ export function FilePathLink({
         whileTap={shouldReduceMotion ? undefined : { scale: 0.98 }}
         transition={{ duration: shouldReduceMotion ? 0 : 0.16 }}
         className={cn(
-          "relative z-10 inline-flex max-w-full min-w-0 pointer-events-auto items-center gap-0.5 align-middle text-left font-normal leading-none outline-none",
+          "relative z-10 inline-flex max-w-full min-w-0 pointer-events-auto items-center gap-0.5 align-middle text-left font-normal leading-normal outline-none",
           className,
           "cursor-pointer bg-transparent p-0 underline-offset-2",
           focusRing,
@@ -73,7 +76,7 @@ export function FilePathLink({
             className="block size-[0.875em]"
           />
         ) : null}
-        <span className="min-w-0 truncate">{label}</span>
+        {marquee ? <OverflowMarquee className="flex-1">{label}</OverflowMarquee> : <span className="min-w-0 truncate">{label}</span>}
       </motion.button>
     </TooltipHint>
   )

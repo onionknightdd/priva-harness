@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { productTools } from '../../../src/core/tool/product-tools.js'
+import { defineTool } from '../../../src/core/tool/define-tool.js'
 import {
   PRODUCT_MCP_TOOL_TIMEOUT_MS,
   compileClaudeCustomTools,
@@ -53,5 +54,13 @@ describe('compile custom tools', () => {
   it('returns nothing when the catalog is empty', () => {
     expect(compileClaudeCustomTools([], context)).toEqual({})
     expect(compilePiCustomTools([], context)).toEqual([])
+  })
+
+  it.each(['image_read', 'image_gen', 'image_edit'])('reports %s failures to Pi with the original error text', async (name) => {
+    const raw = '{"error":{"message":"Original service failure <detail>"}}'
+    const definition = defineTool({ name, description: 'Image error fixture', inputSchema: { type: 'object', properties: {} }, execute: () => Promise.resolve({ ok: false, text: raw }) })
+    const [tool] = compilePiCustomTools([definition], { ...context, session: { provider: 'pi', id: 'sess-1' } })
+    if (!tool) throw new Error('Image fixture did not compile')
+    await expect(tool.execute('call-1', {}, context.signal, undefined, {} as never)).rejects.toMatchObject({ message: raw })
   })
 })

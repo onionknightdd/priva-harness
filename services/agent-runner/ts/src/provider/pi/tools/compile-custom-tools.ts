@@ -33,9 +33,10 @@ async function executePiTool(
     ...(context.profile === undefined ? {} : { profile: context.profile }),
     ...(context.emitProgress === undefined ? {} : { emitProgress: context.emitProgress }),
   })
+  // Pi marks tool results as failed only when execute throws.
+  if (!result.ok) throw new Error(result.text)
   return {
     content: [{ type: 'text' as const, text: result.text }],
     details: {},
-    ...(result.ok ? {} : { isError: true as const }),
   }
 }

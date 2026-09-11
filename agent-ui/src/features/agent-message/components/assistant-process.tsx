@@ -11,9 +11,9 @@ import {
   FilePenLineIcon,
   FilePlusCornerIcon,
   ImageIcon,
+  ImagesIcon,
   ScrollTextIcon,
   WrenchIcon,
-  type LucideIcon,
 } from "lucide-react"
 import { motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
@@ -76,6 +76,8 @@ import { CanvasToolItem } from "./canvas-tool-item"
 import { VisualizeToolItem } from "./visualize-tool-item"
 import { isCanvasTool } from "../canvas-html"
 import { isVisualizeTool } from "../visualize-jsx"
+import { isImageEditTool, isImageGenTool, isImageReadTool } from "../image-tools"
+import { ImageGenToolItem, ImageReadToolItem } from "./image-tool-item"
 
 const TEXT_LINE_GAP_CLASS = "[line-height:1.5em]"
 
@@ -313,7 +315,7 @@ export function ImageItem({
 
   return (
     <ProcessRow
-      icon={ImageIcon}
+      icon={<ImageIcon />}
       title={block.alt || t("agentMessage.generatedImage")}
       defaultOpen={defaultOpen}
     >
@@ -349,10 +351,21 @@ export function ToolItem({
   if (isCanvasTool(block.name)) {
     return <CanvasToolItem block={block} />
   }
+  if (isImageGenTool(block.name)) {
+    return <ImageGenToolItem block={block} />
+  }
+  if (isImageReadTool(block.name)) {
+    return <SessionImageReadToolItem block={block} />
+  }
   if (block.name.trim().toLowerCase() === "skill") {
     return <SkillToolItem block={block} />
   }
   return <GenericToolItem block={block} />
+}
+
+function SessionImageReadToolItem({ block }: { block: Extract<StreamBlock, { type: "tool_use" }> }) {
+  const { runCwd } = useChatSession()
+  return <ImageReadToolItem block={block} cwd={runCwd} />
 }
 
 function SkillToolItem({ block }: { block: Extract<StreamBlock, { type: "tool_use" }> }) {
@@ -389,7 +402,7 @@ function GenericToolItem({
 
   return (
     <ProcessRow
-      icon={WrenchIcon}
+      icon={isImageEditTool(block.name) ? <ImagesIcon /> : <WrenchIcon />}
       title={toolItemStatusLabel(block.name, running, t)}
       badge={label}
       badgeVariant={variant}
@@ -399,9 +412,11 @@ function GenericToolItem({
         <QuoteSelectable>
           <pre
             className={cn(
-              "max-h-40 overflow-auto whitespace-pre-wrap text-sm text-muted-foreground",
-              TEXT_LINE_GAP_CLASS
+              "max-h-40 max-w-full overflow-y-auto whitespace-pre-wrap break-words text-sm [overflow-wrap:anywhere]",
+              TEXT_LINE_GAP_CLASS,
+              tool?.ok === false ? "text-destructive" : "text-muted-foreground"
             )}
+            role={tool?.ok === false ? "alert" : undefined}
           >
             {output}
           </pre>
@@ -573,6 +588,7 @@ function ToolFileName({
     <FilePathLink
       path={resolveAgainstCwd(path, runCwd)}
       label={fileNameFromPath(path)}
+      marquee
       recheckKey={status}
       className="text-muted-foreground/70"
     />
@@ -733,14 +749,14 @@ function ProcessItemGroup({
 }
 
 function ProcessRow({
-  icon: Icon,
+  icon,
   title,
   badge,
   badgeVariant = "outline",
   defaultOpen = false,
   children,
 }: {
-  icon?: LucideIcon
+  icon?: React.ReactNode
   title: React.ReactNode
   badge?: React.ReactNode
   badgeVariant?: "secondary" | "outline" | "destructive"
@@ -753,9 +769,9 @@ function ProcessRow({
 
   const header = (
     <>
-      {Icon ? (
-        <ItemMedia variant="icon">
-          <Icon />
+      {icon ? (
+        <ItemMedia variant="icon" aria-hidden="true">
+          {icon}
         </ItemMedia>
       ) : null}
       <ItemContent className="min-w-0 flex-none">
@@ -799,7 +815,7 @@ function ProcessRow({
       <AgentDisclosure open={open}>
         <div
           className={cn(
-            Icon ? "pb-2 pl-6" : "pb-2",
+            icon ? "pb-2 pl-6" : "pb-2",
             "text-sm",
             TEXT_LINE_GAP_CLASS
           )}

@@ -5,6 +5,18 @@ import { replayPiSessionMessages } from '../../../../src/provider/pi/pi-thread-r
 import type { SessionMessage } from '../../../../src/core/resource/session.js'
 
 describe('replayPiSessionMessages', () => {
+  it('restores answered question summaries from native tool details', () => {
+    const entry = (type: SessionMessage['type'], uuid: string, message: unknown): SessionMessage => ({ type, uuid, message, sessionId: 's', parentToolUseId: null, metadata: null, timestamp: 1 })
+    const questions = [{ question: 'Which region?', options: [{ label: 'Asia' }], multiSelect: false }]
+    const thread = foldThread(replayPiSessionMessages([
+      entry('assistant', 'a1', { content: [{ type: 'toolCall', id: 'ask-1', name: 'ask_user_question', arguments: { questions } }] }),
+      entry('tool_result', 't1', { toolCallId: 'ask-1', toolName: 'ask_user_question', details: { questions, answers: { 'Which region?': 'Asia' }, decision: 'allow' }, content: [{ type: 'text', text: '{"answers":{"Which region?":"Asia"}}' }] }),
+    ]))
+    expect(thread[0]?.interactions).toMatchObject([{
+      decision: 'allow', request: { toolUseId: 'ask-1' }, answers: { q0: { selected: [], text: 'Asia' } },
+    }])
+  })
+
   it('keeps native task notices out of user messages and attaches the model follow-up to the launch', () => {
     const entry = (type: SessionMessage['type'], uuid: string, message: unknown): SessionMessage => ({ type, uuid, message,
       sessionId: 's', parentToolUseId: null, metadata: null, timestamp: 1 })

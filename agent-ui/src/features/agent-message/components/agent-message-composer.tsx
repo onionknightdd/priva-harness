@@ -385,12 +385,7 @@ export function AgentMessageComposer({
           role="group"
           data-slot="input-group"
           data-composer-line={singleLine ? "single" : "multi"}
-          className={cn(
-            "group/input-group relative w-full min-w-0 overflow-hidden rounded-3xl border border-input shadow-xs dark:bg-input/30",
-            // The focus ring eases in like shadcn's InputGroup instead of snapping.
-            "transition-[border-color,box-shadow] duration-150 ease-out motion-reduce:transition-none",
-            "ring-inset has-[[data-slot=input-group-control]:focus-visible]:border-ring has-[[data-slot=input-group-control]:focus-visible]:ring-3 has-[[data-slot=input-group-control]:focus-visible]:ring-ring/50"
-          )}
+          className="group/input-group relative w-full min-w-0 overflow-hidden rounded-3xl border border-input shadow-xs dark:bg-input/30"
           onClick={(event) => {
             const target = event.target
             if (

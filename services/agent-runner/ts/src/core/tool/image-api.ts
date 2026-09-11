@@ -197,13 +197,14 @@ async function readImageResponse(response: Response): Promise<ImageBytes> {
   if (contentType.includes('text/event-stream') && response.body !== null) {
     return await readImageSse(response.body)
   }
-  return imageFromPayload(JSON.parse(await response.text()))
+  return imageFromPayload(parseImageApiPayload(await response.text()))
 }
 
 async function readImageSse(body: ReadableStream<Uint8Array>): Promise<ImageBytes> {
   let latest: ImageBytes | undefined
-  await forEachSseEvent(body, (event) => {
-    latest = imageFromPayload(JSON.parse(event))
+  await forEachSseEvent(body, (event, type) => {
+    if (event === '[DONE]') return
+    latest = imageFromPayload(parseImageApiPayload(event, type))
   })
   if (latest === undefined) {
     throw new Error('image stream ended without an image')
@@ -225,7 +226,7 @@ async function readChatCompletionResponse(
   if (contentType.includes('text/event-stream') && response.body !== null) {
     return await readChatCompletionStream(response.body, onDelta)
   }
-  const payload: unknown = JSON.parse(await response.text())
+  const payload = parseImageApiPayload(await response.text())
   const text = chatDeltaText(payload)
   if (text !== '') onDelta?.(text)
   return text
@@ -236,9 +237,9 @@ async function readChatCompletionStream(
   onDelta: ((text: string) => void) | undefined,
 ): Promise<string> {
   let text = ''
-  await forEachSseEvent(body, (event) => {
+  await forEachSseEvent(body, (event, type) => {
     if (event === '[DONE]') return
-    const parsed: unknown = JSON.parse(event)
+    const parsed = parseImageApiPayload(event, type)
     const delta = chatDeltaText(parsed)
     if (delta === '') return
     text += delta
@@ -249,26 +250,53 @@ async function readChatCompletionStream(
 
 async function forEachSseEvent(
   body: ReadableStream<Uint8Array>,
-  onEvent: (data: string) => void,
+  onEvent: (data: string, type: string | undefined) => void,
 ): Promise<void> {
   const reader = body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
-  for (;;) {
-    const { done, value } = await reader.read()
-    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done })
-    const chunks = buffer.split('\n\n')
-    buffer = done ? '' : (chunks.pop() ?? '')
-    for (const chunk of chunks) {
-      const data = chunk
-        .split('\n')
-        .filter((line) => line.startsWith('data:'))
-        .map((line) => line.slice(5).trim())
-        .join('\n')
-      if (data !== '') onEvent(data)
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done })
+      const chunks = buffer.split(/\r?\n\r?\n/)
+      buffer = done ? '' : (chunks.pop() ?? '')
+      for (const chunk of chunks) {
+        const lines = chunk.split(/\r?\n/)
+        const type = lines.find((line) => line.startsWith('event:'))?.slice(6).trim()
+        const data = lines
+          .filter((line) => line.startsWith('data:'))
+          .map((line) => line.slice(5).replace(/^ /, ''))
+          .join('\n')
+        if (data !== '') onEvent(data, type)
+      }
+      if (done) break
     }
-    if (done) break
+  } catch (error) {
+    try {
+      await reader.cancel(error)
+    } catch {
+      // A cleanup failure must not replace the original service error.
+    }
+    throw error
+  } finally {
+    reader.releaseLock()
   }
+}
+
+function parseImageApiPayload(raw: string, eventType?: string): unknown {
+  if (eventType === 'error') throw new Error(raw)
+  let payload: unknown
+  try {
+    payload = JSON.parse(raw)
+  } catch (error) {
+    throw raw === '' ? error : new Error(raw)
+  }
+  const record = asRecord(payload)
+  if (record?.['error'] != null || record?.['type'] === 'error') {
+    throw new Error(raw)
+  }
+  return payload
 }
 
 function imageFromPayload(payload: unknown): ImageBytes {
@@ -314,7 +342,7 @@ function stringField(record: Record<string, unknown> | undefined, key: string): 
 function isRetryableStreamError(error: unknown): boolean {
   const status = (error as { status?: number }).status
   const message = error instanceof Error ? error.message.toLowerCase() : ''
-  return status === 400 || status === 404 || status === 415 || status === 422
-    || message.includes('stream')
+  return (status === undefined || status === 400 || status === 415 || status === 422)
+    && message.includes('stream')
+    && /unsupported|not supported|not allowed/.test(message)
 }
-

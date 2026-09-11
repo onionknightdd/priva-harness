@@ -20,6 +20,7 @@ import { useTranslation } from "react-i18next"
 
 import { AgentDisclosure } from "@/components/agents/agent-disclosure"
 import { ActionSwapRollText } from "@/components/motion/action-swap-roll"
+import { OverflowMarquee } from "@/components/motion/overflow-marquee"
 import { CodeBlock } from "@/components/agents/code-block"
 import type { AgentCodeLanguage } from "@/components/agents/agent-code"
 import { StatusGlyphSwap } from "@/components/agents/status-glyph-swap"
@@ -72,6 +73,7 @@ export function FileRead({
   className,
 }: FileReadProps) {
   const { t } = useTranslation()
+  const [headerHovered, setHeaderHovered] = useState(false)
   const reduce = useReducedMotion() ?? false
   const baseId = useId()
   const triggerId = `${baseId}-trigger`
@@ -133,9 +135,11 @@ export function FileRead({
     <div
       data-state={status}
       aria-busy={streaming}
-      className={cn("w-full text-ui", className)}
+      className={cn("w-full min-w-0 text-ui", className)}
     >
-      <div className="group/item relative flex w-fit max-w-full min-h-0 items-center gap-1">
+      <div className="group/item relative flex w-fit max-w-full min-h-0 items-center gap-1"
+        onPointerEnter={(event) => { if (event.pointerType === "mouse" && window.matchMedia("(hover: hover)").matches) setHeaderHovered(true) }}
+        onPointerLeave={() => setHeaderHovered(false)}>
         <button
           id={triggerId}
           type="button"
@@ -153,7 +157,7 @@ export function FileRead({
             aria-hidden="true"
             className="block size-[1em] shrink-0 text-muted-foreground/70"
           />
-          <span className="flex min-w-0 flex-none items-center gap-2 leading-none">
+          <span className="flex min-w-0 flex-1 items-center gap-2 leading-none">
             {tool ? (
               <span className="shrink-0 font-normal text-muted-foreground/70">
                 {typeof tool === "string" || typeof tool === "number" ? (
@@ -165,8 +169,8 @@ export function FileRead({
                 )}
               </span>
             ) : null}
-            <span className="min-w-0 truncate font-normal text-muted-foreground/70">
-              {file}
+            <span className="min-w-0 flex-1 truncate font-normal text-muted-foreground/70">
+              {typeof file === "string" ? <OverflowMarquee active={headerHovered}>{file}</OverflowMarquee> : file}
             </span>
           </span>
           <StatusGlyphSwap

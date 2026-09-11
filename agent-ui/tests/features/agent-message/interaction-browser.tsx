@@ -82,6 +82,14 @@ async function runChecks() {
     await start()
     const composer = host.querySelector<HTMLElement>("[data-composer-line]")!
     const width = composer.getBoundingClientRect().width
+    const prompt = host.querySelector<HTMLTextAreaElement>('textarea')!
+    for (const draft of ["Short draft", "A draft\nwith multiple lines"]) {
+      await fill(prompt, draft)
+      await act(async () => prompt.blur()); await settle()
+      const unfocused = { border: getComputedStyle(composer).borderColor, shadow: getComputedStyle(composer).boxShadow }
+      await act(async () => prompt.focus()); await settle()
+      check(`composer focus keeps its border and shadow (${draft.includes("\n") ? "multi" : "single"})`, getComputedStyle(composer).borderColor === unfocused.border && getComputedStyle(composer).boxShadow === unfocused.shadow)
+    }
     await fill(host.querySelector<HTMLTextAreaElement>("textarea")!, "保留这段未发送草稿")
     const ask = question(); await show(ask)
     const card = () => host.querySelector<HTMLElement>("[data-interaction-card]")!
@@ -139,6 +147,20 @@ async function runChecks() {
     const edited = socket().sent.at(-1)?.answers as Record<string, { text: string }>
     check("Pi editor submissions preserve whitespace and line breaks", edited.q0.text === "  修改后的说明\n保持换行\n")
     await resolve(editor, "allow", edited)
+    const restoredAnswers = Object.fromEntries(Object.entries(answers).map(([id, answer]) => [id, { selected: [], text: [...answer.selected, ...(answer.text ? [answer.text] : [])].join(", ") }]))
+    await frame({ type: "session.snapshot", activeRunId: runId, tasks: [], interactions: [], messages: [
+      { id: "history-user", role: "user", content: "查看已保存的问答", createdAt: new Date(0).toISOString(), status: "complete" },
+      { id: "history-assistant", role: "assistant", content: "收到这些答案。", createdAt: new Date(0).toISOString(), status: "complete",
+        blocks: [{ type: "tool_use", blockId: ask.toolUseId, index: 0, id: ask.toolUseId, name: "AskUserQuestion", tool: { id: ask.toolUseId, name: "AskUserQuestion", status: "completed", ok: true, input: { questions: ask.questions }, output: "Your questions have been answered: provider receipt. You can now continue with the answers in mind." } }],
+        interactions: [{ request: { ...ask, requestId: `history:${ask.toolUseId}`, expiresAt: 0 }, decision: "allow", reason: "answered", answers: restoredAnswers }],
+      },
+    ] })
+    const historyProcess = [...host.querySelectorAll<HTMLButtonElement>('button.group\\/process-trigger')].at(-1)!
+    await click(historyProcess)
+    const restored = host.querySelector<HTMLElement>('[data-question-summary="answered"]')!
+    await click(restored.querySelector<HTMLButtonElement>('[data-slot="collapsible-trigger"]')!)
+    check("restored history shows separate questions and answers, not the provider receipt", restored.querySelectorAll('[data-question-pair]').length === 3 && restored.textContent!.includes('中文 -> 东京，含 "引号"') && !restored.textContent!.includes("Your questions have been answered"))
+    check("restored question summaries stay within the message column", restored.scrollWidth <= restored.clientWidth && document.documentElement.scrollWidth <= innerWidth)
     await show(question())
     check("the page does not overflow horizontally", document.documentElement.scrollWidth <= innerWidth)
     check("card footer stays inside the viewport", card().getBoundingClientRect().bottom <= innerHeight)

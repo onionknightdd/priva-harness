@@ -1,21 +1,24 @@
 import * as React from "react"
 import { motion, useReducedMotion } from "motion/react"
 
+import { EASE_OUT } from "@/lib/ease"
 import { cn } from "@/lib/utils"
 
 export function OverflowMarquee({
-  active,
+  active: controlledActive,
   children,
   className,
   playback = "loop",
 }: {
-  active: boolean
+  active?: boolean
   children: string
   className?: string
   playback?: "loop" | "once"
 }) {
   const viewportRef = React.useRef<HTMLSpanElement>(null)
   const contentRef = React.useRef<HTMLSpanElement>(null)
+  const [hovered, setHovered] = React.useState(false)
+  const active = controlledActive ?? hovered
   const [overflowDistance, setOverflowDistance] = React.useState(0)
   const [completed, setCompleted] = React.useState(false)
   const shouldReduceMotion = Boolean(useReducedMotion())
@@ -68,7 +71,12 @@ export function OverflowMarquee({
   return (
     <span
       ref={viewportRef}
+      data-slot="overflow-marquee"
       data-overflowing={overflowDistance > 0 || undefined}
+      onPointerEnter={(event) => {
+        if (controlledActive === undefined && event.pointerType === "mouse" && window.matchMedia("(hover: hover)").matches) setHovered(true)
+      }}
+      onPointerLeave={() => setHovered(false)}
       className={cn(
         "block min-w-0 overflow-hidden whitespace-nowrap",
         className
@@ -86,8 +94,8 @@ export function OverflowMarquee({
         initial={false}
         animate={
           shouldAnimate
-            ? { x: [0, -overflowDistance] }
-            : { x: 0 }
+            ? { transform: ["translateX(0px)", `translateX(-${overflowDistance}px)`] }
+            : { transform: "translateX(0px)" }
         }
         transition={
           shouldAnimate
@@ -100,7 +108,7 @@ export function OverflowMarquee({
                   repeatType: "reverse",
                 }
               : { duration, ease: "linear" }
-            : { duration: shouldReduceMotion ? 0 : 0.18, ease: "easeOut" }
+            : { duration: shouldReduceMotion ? 0 : 0.18, ease: EASE_OUT }
         }
         onAnimationComplete={() => {
           if (playback === "once" && shouldAnimate) {

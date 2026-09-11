@@ -4,8 +4,30 @@ import { foldThread } from '../../../../src/core/resource/fold-thread.js'
 import { replayClaudeSessionMessages } from '../../../../src/provider/claude/session/claude-thread-replay.js'
 import type { SessionMessage } from '../../../../src/core/resource/session.js'
 import type { ThreadBlock } from '../../../../src/core/resource/thread.js'
+import { mapClaudeMessage } from '../../../../src/provider/claude/session/claude-session-store.js'
+import { attachTranscriptToolUseResult, toolUseResultsFromTranscriptLines } from '../../../../src/provider/claude/session/claude-transcript.js'
 
 describe('replayClaudeSessionMessages', () => {
+  it('restores answered summaries from JSONL metadata omitted by the SDK history API', () => {
+    const questions = [{ question: 'Which region?', options: [{ label: 'Asia' }], multiSelect: false }, { question: 'Any details?', options: [] }]
+    const native = {
+      type: 'user', uuid: 'result-1',
+      message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'ask-1', content: 'Your questions have been answered: original provider receipt.' }] },
+      toolUseResult: { questions, answers: { 'Which region?': 'Asia', 'Any details?': 'Keep "quotes"\nand newlines.' } },
+    }
+    const hydrated = attachTranscriptToolUseResult({ type: native.type, uuid: native.uuid, message: native.message }, toolUseResultsFromTranscriptLines([JSON.stringify(native)]))
+    const thread = foldThread(replayClaudeSessionMessages([
+      session('user', 'u1', { content: 'Ask me about the project' }),
+      session('assistant', 'a1', { content: [{ type: 'tool_use', id: 'ask-1', name: 'AskUserQuestion', input: { questions } }] }),
+      mapClaudeMessage(hydrated, 'session-1'),
+    ]))
+    expect(thread).toHaveLength(2)
+    expect(thread[1]?.interactions).toMatchObject([{
+      request: { toolUseId: 'ask-1', questions: [{ question: 'Which region?', id: 'q0' }, { question: 'Any details?', id: 'q1' }] },
+      answers: { q0: { selected: [], text: 'Asia' }, q1: { selected: [], text: 'Keep "quotes"\nand newlines.' } },
+    }])
+  })
+
   it('folds user, tool result, nested agent, and async launch into one assistant turn', () => {
     const messages: SessionMessage[] = [
       session('user', 'u1', { role: 'user', content: 'ship it' }),

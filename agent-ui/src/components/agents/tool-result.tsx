@@ -32,6 +32,7 @@ import {
   type AgentCodeLanguage,
 } from "@/components/agents/agent-code";
 import { ActionSwapRollText } from "@/components/motion/action-swap-roll";
+import { OverflowMarquee } from "@/components/motion/overflow-marquee";
 import { AgentDisclosure } from "@/components/agents/agent-disclosure";
 import { StatusGlyphSwap } from "@/components/agents/status-glyph-swap";
 import {
@@ -331,7 +332,7 @@ export function ToolResult({
     <div
       data-state={status}
       aria-busy={running}
-      className={cn("w-full text-ui", className)}
+      className={cn("w-full min-w-0 text-ui", className)}
     >
       <button
         id={triggerId}
@@ -340,7 +341,7 @@ export function ToolResult({
         aria-controls={contentId}
         onClick={() => setOpen(!currentOpen)}
         className={cn(
-          "group/item flex w-fit max-w-full min-h-0 items-center gap-1 rounded-md py-0.5 text-left",
+          "group/item flex w-fit max-w-full min-w-0 min-h-0 items-center gap-1 rounded-md py-0.5 text-left",
           focusRing,
         )}
       >
@@ -350,16 +351,18 @@ export function ToolResult({
         >
           {icon ?? <KindIcon kind={kind} />}
         </span>
-        <span className="flex min-w-0 flex-none items-baseline gap-2">
+        <span className="flex min-w-0 flex-1 items-baseline gap-2">
           <span className="shrink-0 font-normal text-muted-foreground/70">
             <ActionSwapRollText value={toolKey}>
               {tool}
             </ActionSwapRollText>
           </span>
-          <span className="min-w-0 truncate font-normal text-muted-foreground/70">
-            <ActionSwapRollText value={titleKey}>
-              {title}
-            </ActionSwapRollText>
+          <span className="min-w-0 flex-1 truncate font-normal text-muted-foreground/70">
+            {typeof title === "string" ? (
+              <OverflowMarquee>{title}</OverflowMarquee>
+            ) : (
+              <ActionSwapRollText value={titleKey}>{title}</ActionSwapRollText>
+            )}
           </span>
           {meta ? (
             <span className="shrink-0 text-muted-foreground/60">

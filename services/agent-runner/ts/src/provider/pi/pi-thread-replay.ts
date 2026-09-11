@@ -2,6 +2,7 @@ import { TaskReplyTracker } from '../../core/resource/task-reply-tracker.js'
 import { piWorkflowToolResult } from './pi-workflow-data.js'
 import { piBackgroundLaunch, piTaskNotices } from './pi-background-tasks.js'
 import { BackgroundTasks } from '../../core/resource/background-task.js'
+import { questionResolutionFromToolResult } from '../../core/resource/interaction-history.js'
 import { asRecord, isRecord, stringField } from '../../core/event/json-record.js'
 import { isReadToolName } from '../../core/event/tool-names.js'
 import { patchFromToolDetails } from '../../core/event/tool-patch.js'
@@ -104,6 +105,8 @@ export function replayPiSessionMessages(messages: readonly SessionMessage[]): Th
         },
         createdAt: isoFromTimestamp(message.timestamp),
       })
+      const resolution = questionResolutionFromToolResult(id, name, inner['details'], inner['isError'] === true || inner['is_error'] === true)
+      if (resolution) items.push({ kind: 'frame', event: { type: 'permission.resolved', resolution }, createdAt: isoFromTimestamp(message.timestamp) })
     }
   }
 

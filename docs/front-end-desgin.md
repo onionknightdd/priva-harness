@@ -112,6 +112,10 @@ Main sidebar / Workspace sidebar
 焦点框不再叠加向外的 ring offset 或 outline；保留现有宽度、颜色和过渡。
 可视化沙箱内置按钮用等效的 inset box-shadow 绘制焦点框。
 
+2026-09-12：按用户要求，ChatComposer 输入区域不显示焦点环，聚焦时保持普通边框
+和阴影。附件、模型选择、发送等按钮仍保留各自的键盘焦点反馈；此调整只作用于
+`AgentMessageComposer` 外壳，不修改共享 InputGroup。
+
 用户消息气泡读取 `user-message` token：浅色为 `rgb(234, 243, 253)`（`#EAF3FD`），
 深色为 `rgb(34, 61, 114)`（`#223D72`）。深色弹出菜单共用 `popover` token，
 统一为 `rgb(53, 53, 53)`（`#353535`），覆盖下拉 / 右键 / 选择菜单、Popover、
@@ -239,6 +243,10 @@ AgentCode、AgentDisclosure 和主题 token；上游演示用 Button / foundatio
 答案，断线禁用操作；服务端确认后才移除卡片。工具显示原始参数，允许本次或跳过。
 所有文案支持中英文。卡片出现和问题切换使用 150–160 ms 透明度 / 小幅位移，悬浮层
 150 ms；键盘翻题与 reduced-motion 立即更新。正文限高并内部滚动，窄屏按钮可换行。
+2026-09-12：问答卡片的选项行间距为 2px，每行上下内边距各 6px；正文上下内边距
+减半为各 8px（sm 及以上各 10px），底部操作栏上下内边距减半为各 6px。标题、
+说明字号及自定义输入框保留原样。GlideMenu 继续测量实际选项位置，让悬浮高亮
+与紧凑后的行高对齐。
 协议和 provider 差异见 [权限审批与问答](agent-interactions.md)。
 
 2026-09-11：已回答摘要使用 `ml-auto` 整体右对齐，块内文字左对齐，保留原有
@@ -251,6 +259,10 @@ AgentCode、AgentDisclosure 和主题 token；上游演示用 Button / foundatio
 每个问题逐行添加 Markdown 的 `> ` 引用语法，复用 `MessageResponse` 静态渲染；
 回答保留原始文本和换行，用 CSS `::before` 生成装饰性 `>`，不写入回答内容。
 问题和回答正文使用 `text-sm`（14px），多个问题之间仅保留空白间距。
+2026-09-12：历史记录通过原生工具的结构化 metadata 恢复问答结果，Claude 的
+`toolUseResult.questions/answers` 和 Pi 的 `details.questions/answers` 统一进入
+现有 `InteractionResolution`。回放合并必须保留问答 resolution，并按 toolUseId 归属
+到对应消息；不能把英文工具回执反向解析成答案。原始答案保留标点、空白和换行。
 摘要出现时做 150 ms 淡入。
 展开 / 收起复用 Base UI Collapsible 的按钮语义，由 Motion 驱动：外框使用布局
 transform 过渡；正文通过带 20% 柔边的斜向 alpha 遮罩显隐，从右上的收起区域向
@@ -404,6 +416,55 @@ DirectoryPicker / Workspace / FileBrowserPage
 此范围适用于 `files/list` 驱动的文件浏览；Skills 使用独立的资源接口，继续按技能
 自身路径展示资源树。文件预览、上传、新建、删除及 Agent 执行的路径规则保持原有职责。
 
+### 文件树中的预览显隐按钮
+
+2026-09-12：Workspace 与“数据与用量 → 文件浏览器”共用的 FileTreePane，在刷新
+按钮右侧增加预览显隐按钮。预览显示时使用 Lucide `ArrowRightToLine`，提示“隐藏文件
+预览”；预览隐藏时使用 `ArrowLeftToLine`，提示“显示文件预览”。按钮沿用共享
+Button / Tooltip、32px 点击区域与 16px 图标，并提供对应的 `aria-controls` 和
+`aria-expanded`。
+
+```text
+Desktop: preview visible
++------------------------+----------------------+
+| Search  Refresh [->|]   | FilePreview          |
+| FileTree               |                      |
++------------------------+----------------------+
+Desktop: preview hidden
++-----------------------------------------------+
+| Search                              Refresh [|<-] |
+| FileTree                                      |
++-----------------------------------------------+
+
+Mobile
+Tree [Refresh] [|<-] -> Preview
+                   <- Existing file-tree toggle
+```
+
+桌面隐藏预览时文件树占满分栏，显示时恢复之前的树宽；隐藏预览不卸载组件，保留
+文件标签、预览模式和编辑内容。预览隐藏期间不再使用预览工具栏限制 Workspace 的
+最小宽度，也不自动扩宽文件树。收起文件树会显示预览，避免两个面板同时隐藏。
+从消息等外部入口打开 Workspace 文件时会显示预览；手动显隐不会重新触发该文件请求。
+窄屏沿用文件树 / 预览的单栏切换，两个组件保持挂载，隐藏部分使用 `inert` 和
+`aria-hidden`，不参与键盘焦点。
+
+显隐由 Motion 以 240ms 和共享 `EASE_IN_OUT` 驱动真实分栏尺寸，文件树、分隔线及
+预览位置同步移动。收起中的内容保持挂载和可见，直到边界移动结束；正在切换的面板
+固定阅读宽度，由外层裁剪逐渐显隐，避免文字被挤成窄列。文件树内容的右边缘和预览
+内容的左边缘分别锚定到分隔线，使两侧内容随边界平滑移动，不缩放文字。
+动画完成后恢复自适应宽度。连续切换从当前尺寸反向开始，不重置到 0；仅稳定的
+双栏尺寸用于下次恢复，并按预览工具栏的最小宽度限制目标，避免末尾跳动。
+键盘和减少动态效果立即切换。用户要求内容跟随分栏，因此这项过渡通过面板 API
+更新布局尺寸；不在每帧重建 React 内容或额外动画正文位移。
+
+```text
+Tree | Preview -> Tree      | Preview -> Tree fills the pane
+     +---------- shared divider / content progress ----------+
+```
+
+按用户要求不进行浏览器验证，运行下文文件树 / 预览和 Agent message 相关测试、
+`npm run lint` 和 `npm run build`。
+
 ### 文件预览大小限制
 
 2026-09-10：`GET /api/sandbox/files/preview` 的文本内容上限为 3 MiB
@@ -454,6 +515,93 @@ MCP 工具栏采用同一 Animate UI Radix Tabs 入口：工具栏高 36px、Tab
 两类资源最多保留三个最近详情；刷新或配置保存会使旧详情失效。
 连接重测时保留上次结果和滚动，显示忙碌状态并阻止重复测试；失败显示明确错误。
 项目 MCP 的编辑、连接与工具测试使用所选服务的 `source.cwd`，全局服务沿用默认范围。
+
+### 图片工具卡片
+
+2026-09-11：`image_gen`（含 MCP 别名）使用独立卡片。输入显示 `prompt` 与 `size`；
+未传尺寸时显示服务端当前默认值 `1024x1024`。输出通过文件下载接口加载图片，
+点击缩略图或按 Enter 打开现有 Lightbox，支持缩放、Esc 关闭和焦点恢复。
+
+```text
+[Image] 创建图片 / 状态                     v
+  prompt
+  图片描述
+  size  1024x1024
+  +---------------------------------------+
+  | 输出图片缩略图 -> 点击 / Enter -> 灯箱 |
+  +---------------------------------------+
+  生成中：占位；工具失败：错误内容
+  文件加载失败：错误提示 + 重新加载图片
+```
+
+桌面和手机保持相同顺序；图片使用 contain 保留完整内容，文本换行。
+卡片保留展开内容，整体过程区域沿用既有折叠行为。图像渐显尊重减少动态效果。
+复用 [ImageToolPreview](../agent-ui/src/features/agent-message/components/image-tool-preview.tsx)
+与 [Lightbox](../agent-ui/src/components/interior/lightbox.tsx)，不渲染原始路径作为生成结果。
+
+2026-09-12：`image_read` 的工具行接入用户指定的
+[Loading UI AnalyzingImage](../agent-ui/src/components/loading-ui/analyzing-image.tsx)，
+执行中显示扫描，成功 / 失败及减少动态效果时保持静止；`image_edit` 使用 Lucide
+Images。两者均覆盖 MCP 别名，图标复用工具行尺寸并作为装饰元素隐藏于辅助技术。
+中文名称固定为“查看图片 / 编辑图片 / 创建图片”，执行状态由旁边的状态图标表示。
+查看图片展开后依次显示输入 `prompt`、输入图片缩略图（点击打开灯箱）和模型输出。
+相对图片路径根据当前会话的工作目录解析。执行中显示流式模型内容，结束后保留展开状态；
+历史记录中的完成项默认折叠。Edit 的内容区域仍沿用通用输出布局。
+
+```text
+image_read / MCP alias -> AnalyzingImage -> running: scan / settled: static
+image_edit / MCP alias -> Images
+
+[AnalyzingImage] 查看图片 / 状态           v
+  prompt
+  用户输入的指令
+  +---------------------------------------+
+  | 输入图片缩略图 -> 点击 / Enter -> 灯箱 |
+  +---------------------------------------+
+  模型输出
+  模型内容 / 原始报错
+```
+
+Bash / shell 按用户最新要求恢复既有 Lucide SquareTerminal 图标。
+AnalyzingImage 通过 `agent-ui/components.json` 的 registry 安装：
+`npx shadcn@latest add @loading-ui/analyzing-image`。
+本地补充 `active` 和减少动态效果控制，更新上游组件时须保留这些行为。
+
+图片工具执行失败时展示原始输出文本，保留换行与 JSON 内容；生成结果不符合图片路径
+格式时也展示返回的原文。服务端同时识别 HTTP 错误、HTTP 200 中的 JSON / SSE 错误，
+不再因一般的 404 / 400 盲目重试而覆盖首个错误。只有明确不支持流式响应时才尝试非流式请求。
+Pi 适配层通过抛出原始文本通知运行时失败。上游 HTTP 响应体为空时保留 HTTP 状态提示；
+历史记录中未保存的响应内容不能从前端恢复。
+
+```text
+HTTP / JSON / SSE 原始错误
+  -> 图片工具 { ok: false, text: 原始报错 }
+  -> Claude/MCP 错误结果 / Pi 抛错
+  -> 工具卡片显示原始报错
+```
+
+### Agent 工具步骤的长输入
+
+2026-09-12：工具标题的输入摘要按可用宽度收缩，状态和展开按钮保留空间，
+长输入不再撑出 Agent 执行过程的水平滚动。ToolResult、文件读取和文件修改标题
+均使用可收缩的内容层；工具文件链接在可打开时支持悬停跑马灯。
+`AgentDisclosure` 的 Grid 列使用 `minmax(0, 1fr)`，子项设置 `min-w-0`，
+避免主聊天展开过程后由内容最小宽度撑开列；只约束文字视口，不裁掉状态或展开入口。
+
+```text
+Agent 执行过程（固定可用宽度）
+  [图标] [工具名] [超长输入……] [状态] [展开]
+                    |
+                    +-- 鼠标悬停：只在摘要区域内来回滚动
+                    +-- 鼠标移出：回到开头并省略
+```
+
+复用 [OverflowMarquee](../agent-ui/src/components/motion/overflow-marquee.tsx)，
+短文本保留自然宽度并保持静止。未传 `active` 时由鼠标悬停控制，已有传入 `active`
+的调用仍由外部控制。移动使用 transform，触摸和减少动态效果时保留静态摘要；
+完整文本保留在可访问名称及工具的展开内容中。
+inline 文件链接使用正常行高；单行省略容器不能使用 `leading-none`，否则字体的
+下伸部分（如 `g`、`p`、`y`）可能超出行框并被 `truncate` 裁切。
 
 ## Layout approval
 
@@ -764,7 +912,26 @@ Mermaid 浏览器回归：打开 `/tests/components/ai-elements/mermaid-browser.
 中性外框与状态图标、最长文本决定宽度、Markdown 引用与行内格式、CSS 回答前缀、
 问题间空白间距和窄屏无横向溢出，以及斜向柔边显隐与外框缩放同步、所有中间帧
 正文都在外框内、末尾无回弹和连续切换可反向。
+同时验证单行 / 多行 ChatComposer 聚焦前后边框和阴影一致，以及历史快照中的
+结构化问答逐题显示，不退回英文工具回执。
 相关数据和连接测试包含在下方 Agent message 的 `*.test.ts` 命令中。
+
+图片工具卡片浏览器回归：在 `agent-ui/` 运行
+`npm run dev -- --config tests/features/agent-message/image-tools-browser.config.ts --host 127.0.0.1`，
+打开 `http://127.0.0.1:5175/tests/features/agent-message/image-tools-browser.html` 并点击
+**Run image tool checks**。独立服务使用自己的依赖缓存和合成图片，覆盖加载、
+生成占位、原始错误、预览重试、灯箱关闭及焦点恢复，同时覆盖 Read 的 prompt、
+相对图片路径与模型输出、Read / Edit 的图标映射、MCP 别名、扫描停止，
+以及 Bash / shell 恢复 SquareTerminal。追加 `?zh&dark&reduced-motion`
+检查中文、深色和图标的减少动态效果分支；使用 390px 视口及真实 Tab / Enter / Esc
+检查窄屏与键盘操作。数据回归包含在 Agent message 的 `*.test.ts` 命令中。
+
+Agent 步骤长输入回归：打开 `/tests/components/agents/tool-result-browser.html`，点击
+**Run step overflow checks**。覆盖真实主聊天消息与 Workspace Agent 过程视图、
+长命令、短标题、Read / Edit 文件标题、inline 文件链接的字母下伸部分、悬停滚动、
+离开复位、触摸、展开操作及既有受控跑马灯。
+追加 `?zh&dark&reduced-motion` 并使用 390px 视口检查窄屏和减少动态效果；
+用真实 Tab / Enter 验证展开操作，标题及过程视口均不应产生水平滚动。
 
 目前没有前端全量自动化测试命令，也没有仓库级 formatter。
 `lint` 对应 `oxlint .`，`build` 对应 `tsc -b && vite build`，以

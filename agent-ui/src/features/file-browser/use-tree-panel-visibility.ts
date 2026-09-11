@@ -1,9 +1,8 @@
 import * as React from "react"
-import gsap from "gsap"
 import { animate } from "motion/react"
 import { usePanelRef } from "react-resizable-panels"
 
-import { SPRING_LAYOUT } from "@/lib/ease"
+import { EASE_IN_OUT, SPRING_LAYOUT } from "@/lib/ease"
 
 import { fileTreeTargetPanelWidth } from "./file-tree-content-width"
 
@@ -18,104 +17,138 @@ function clampTreeSize(size: number) {
 export function useTreePanelVisibility() {
   const treePanelRef = usePanelRef()
   const treePaneContentRef = React.useRef<HTMLDivElement>(null)
-  const panelAnimationRef = React.useRef<gsap.core.Timeline | null>(null)
+  const previewPaneContentRef = React.useRef<HTMLDivElement>(null)
+  const panelAnimationRef = React.useRef<{ stop: () => void } | null>(null)
+  const panelFrameRef = React.useRef(0)
+  const transitioningRef = React.useRef(false)
   const previousTreeSizeRef = React.useRef(TREE_DEFAULT_SIZE)
   const userOverrideRef = React.useRef(false)
   const fitAnimationRef = React.useRef<{ stop: () => void } | null>(null)
   const [treeVisible, setTreeVisible] = React.useState(true)
+  const [previewVisible, setPreviewVisible] = React.useState(true)
   const [panelTransitioning, setPanelTransitioning] = React.useState(false)
 
   React.useEffect(
     () => () => {
-      panelAnimationRef.current?.kill()
+      window.cancelAnimationFrame(panelFrameRef.current)
+      panelAnimationRef.current?.stop()
       fitAnimationRef.current?.stop()
     },
     []
   )
 
-  const setDesktopTreeVisibility = React.useCallback((visible: boolean) => {
-    const panel = treePanelRef.current
-    const treeContent = treePaneContentRef.current
-
-    if (!panel || !treeContent) {
-      setTreeVisible(visible)
-      return
-    }
-
-    panelAnimationRef.current?.kill()
+  const stopPanelAnimations = React.useCallback(() => {
+    window.cancelAnimationFrame(panelFrameRef.current)
+    panelAnimationRef.current?.stop()
+    panelAnimationRef.current = null
     fitAnimationRef.current?.stop()
     fitAnimationRef.current = null
+  }, [])
 
-    const currentSize = panel.getSize().asPercentage
-    if (!visible && currentSize > 0) {
+  const setDesktopPanelVisibility = React.useCallback((nextTreeVisible: boolean, nextPreviewVisible: boolean) => {
+    const panel = treePanelRef.current
+    const treeContent = treePaneContentRef.current
+    const previewContent = previewPaneContentRef.current
+    const currentSize = panel?.getSize().asPercentage ?? TREE_DEFAULT_SIZE
+
+    if (!transitioningRef.current && treeVisible && previewVisible && currentSize > 0 && currentSize < 100) {
       previousTreeSizeRef.current = clampTreeSize(currentSize)
     }
 
-    const targetSize = visible ? previousTreeSizeRef.current : 0
-    const reducedMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
-    ).matches
+    stopPanelAnimations()
+    setTreeVisible(nextTreeVisible)
+    setPreviewVisible(nextPreviewVisible)
+    if (!panel || !treeContent || !previewContent) {
+      transitioningRef.current = false
+      setPanelTransitioning(false)
+      return
+    }
 
+    const freezeTree = treeVisible !== nextTreeVisible || Boolean(treeContent.style.width)
+    const freezePreview = previewVisible !== nextPreviewVisible || Boolean(previewContent.style.width)
+    const instant = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      || document.activeElement?.matches(":focus-visible") === true
+    transitioningRef.current = true
     setPanelTransitioning(true)
-    setTreeVisible(visible)
 
-    window.requestAnimationFrame(() => {
-      if (reducedMotion) {
-        panel.resize(`${targetSize}%`)
-        gsap.set(treeContent, {
-          clearProps: "transform",
-          opacity: visible ? 1 : 0,
-        })
-        setPanelTransitioning(false)
+    const finish = () => {
+      for (const content of [treeContent, previewContent]) {
+        content.style.removeProperty("width")
+        content.style.removeProperty("flex")
+      }
+      transitioningRef.current = false
+      setPanelTransitioning(false)
+      panelAnimationRef.current = null
+    }
+
+    // Relax the panel constraints before moving the shared divider.
+    panelFrameRef.current = window.requestAnimationFrame(() => {
+      const activePanel = treePanelRef.current
+      if (!activePanel || !treeContent.isConnected || !previewContent.isConnected) {
+        finish()
+        return
+      }
+      const treeWidth = treeContent.parentElement!.getBoundingClientRect().width
+      const previewWidth = previewContent.parentElement!.getBoundingClientRect().width
+      const groupWidth = treeWidth + previewWidth
+      const previewMinimumWidth = Number.parseFloat(previewContent.style.minWidth) || 0
+      const targetSize = !nextTreeVisible ? 0 : !nextPreviewVisible ? 100 : Math.min(
+        previousTreeSizeRef.current,
+        Math.max(0, 100 * (1 - previewMinimumWidth / Math.max(1, groupWidth)))
+      )
+
+      if (instant) {
+        activePanel.resize(`${targetSize}%`)
+        finish()
         return
       }
 
-      if (visible) {
-        panel.resize("0%")
-        gsap.set(treeContent, { opacity: 0, x: -8 })
+      // Keep the collapsing pane at its reading width and reveal it by clipping.
+      // The opposite pane and divider follow the same live panel resize.
+      const freezeWidth = (content: HTMLElement, currentWidth: number, targetWidth: number) => {
+        const width = Math.max(Number.parseFloat(content.style.width) || 0, currentWidth, targetWidth)
+        content.style.width = `${width}px`
+        content.style.flex = "0 0 auto"
       }
+      if (freezeTree) freezeWidth(treeContent, treeWidth, groupWidth * targetSize / 100)
+      if (freezePreview) freezeWidth(previewContent, previewWidth, groupWidth * (1 - targetSize / 100))
 
-      const sizeState = { value: visible ? 0 : currentSize }
-      const timeline = gsap.timeline({
-        defaults: { duration: 0.3, ease: "power2.inOut" },
-        onComplete: () => {
-          setPanelTransitioning(false)
-          gsap.set(treeContent, { clearProps: "transform,opacity" })
-          panelAnimationRef.current = null
+      panelAnimationRef.current = animate(activePanel.getSize().asPercentage, targetSize, {
+        duration: 0.24,
+        ease: EASE_IN_OUT,
+        onUpdate: (size) => {
+          const activePanel = treePanelRef.current
+          if (!activePanel || !treeContent.isConnected || !previewContent.isConnected) {
+            panelAnimationRef.current?.stop()
+            finish()
+            return
+          }
+          activePanel.resize(`${size}%`)
         },
+        onComplete: finish,
       })
-
-      timeline.to(
-        sizeState,
-        {
-          value: targetSize,
-          onUpdate: () => panel.resize(`${sizeState.value}%`),
-        },
-        0
-      )
-      timeline.to(
-        treeContent,
-        {
-          opacity: visible ? 1 : 0,
-          x: visible ? 0 : -8,
-          duration: 0.2,
-        },
-        0
-      )
-
-      panelAnimationRef.current = timeline
     })
-  }, [treePanelRef])
+  }, [previewVisible, stopPanelAnimations, treePanelRef, treeVisible])
+
+  const setDesktopPreviewVisibility = React.useCallback((visible: boolean) => {
+    if (visible !== previewVisible) setDesktopPanelVisibility(true, visible)
+  }, [previewVisible, setDesktopPanelVisibility])
+
+  const setDesktopTreeVisibility = React.useCallback((visible: boolean) => {
+    if (visible !== treeVisible) setDesktopPanelVisibility(visible, !visible || previewVisible)
+  }, [previewVisible, setDesktopPanelVisibility, treeVisible])
 
   const rememberTreeSize = React.useCallback((sizePercentage: number) => {
     if (
       treeVisible &&
-      !panelTransitioning &&
-      sizePercentage >= TREE_MIN_SIZE
+      previewVisible &&
+      !transitioningRef.current &&
+      sizePercentage >= TREE_MIN_SIZE &&
+      sizePercentage < 100
     ) {
       previousTreeSizeRef.current = clampTreeSize(sizePercentage)
     }
-  }, [panelTransitioning, treeVisible])
+  }, [previewVisible, treeVisible])
 
   const markUserResizedTree = React.useCallback(() => {
     userOverrideRef.current = true
@@ -126,7 +159,9 @@ export function useTreePanelVisibility() {
   const fitTreeToNameOverflow = React.useCallback((overflowPx: number) => {
     if (
       !treeVisible ||
+      !previewVisible ||
       panelTransitioning ||
+      transitioningRef.current ||
       userOverrideRef.current
     ) {
       return
@@ -182,7 +217,7 @@ export function useTreePanelVisibility() {
     })
 
     fitAnimationRef.current = playback
-  }, [panelTransitioning, treePanelRef, treeVisible])
+  }, [panelTransitioning, previewVisible, treePanelRef, treeVisible])
 
   const onTreeStructureChange = React.useCallback(() => {
     userOverrideRef.current = false
@@ -193,7 +228,10 @@ export function useTreePanelVisibility() {
     markUserResizedTree,
     onTreeStructureChange,
     panelTransitioning,
+    previewPaneContentRef,
+    previewVisible,
     rememberTreeSize,
+    setDesktopPreviewVisibility,
     setDesktopTreeVisibility,
     setTreeVisible,
     treePaneContentRef,

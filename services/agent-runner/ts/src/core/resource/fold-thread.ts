@@ -24,7 +24,6 @@ const PASS_THROUGH_TYPES = new Set<AgentEvent['type']>([
   'run.usage',
   'suggestion.prompts',
   'permission.requested',
-  'permission.resolved',
   'ext',
 ])
 
@@ -94,6 +93,19 @@ export function foldThread(items: readonly ThreadReplayItem[]): ThreadMessage[] 
     }
 
     if (PASS_THROUGH_TYPES.has(item.event.type)) continue
+
+    if (item.event.type === 'permission.resolved') {
+      if (item.event.resolution.request.kind !== 'question') continue
+      const toolId = item.event.resolution.request.toolUseId
+      const target = toolId ? findAssistantForParent(messages, current, toolId) : current
+      if (target && target !== current) {
+        replaceMessage(messages, applyStreamFrame(target, item.event))
+      } else {
+        current ??= emptyAssistantMessage(assistantIdOf(item.event), item.createdAt ?? createdAtNow())
+        current = applyStreamFrame(current, item.event)
+      }
+      continue
+    }
 
     if (item.event.type === 'task.delivered') {
       const update: AgentEvent = { type: 'task.updated', task: item.event.task }

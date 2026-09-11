@@ -79,7 +79,18 @@ provider 退出或销毁会拒绝等待中的请求。运行取消/失败还会�
 确认的请求。后台工作不会仅因主回复 `run.completed` 而失去交互。
 
 待处理 Promise 不写入磁盘，服务重启后不恢复失效请求。问题结果在实时消息及会话
-快照中显示摘要；持久历史沿用 provider 原生工具输入/输出记录。
+快照中显示摘要；持久历史从 provider 的原生结构化工具结果恢复摘要：Claude 使用
+JSONL 根部的 `toolUseResult.questions/answers`，Pi 使用 `details.questions/answers`。
+回放时还原只读的 `InteractionResolution`，以工具 ID 归属到原消息，保留每个回答的
+完整文本。没有结构化记录时不反向解析英文工具回执，也不构造虚假答案。
+
+```text
+Claude toolUseResult / Pi details
+             -> questions + answers
+             -> permission.resolved replay frame
+             -> owning message.interactions
+             -> existing question summary
+```
 
 ## 迁移审查
 

@@ -41,6 +41,7 @@ export function FileBrowserPage({
   >(undefined)
   const isMobile = useIsMobile()
   const pageRef = React.useRef<HTMLDivElement>(null)
+  const previewPaneId = React.useId()
   const uploadInputRef = React.useRef<HTMLInputElement>(null)
   const uploadDirectoryRef = React.useRef<string | null>(null)
   const announcementTimerRef = React.useRef<number | null>(null)
@@ -59,13 +60,25 @@ export function FileBrowserPage({
     fitTreeToNameOverflow,
     markUserResizedTree,
     onTreeStructureChange,
+    previewPaneContentRef,
+    previewVisible,
     rememberTreeSize,
+    setDesktopPreviewVisibility,
     setDesktopTreeVisibility,
     setTreeVisible,
     treePaneContentRef,
     treePanelRef,
     treeVisible,
   } = useTreePanelVisibility()
+
+  const revealWorkspaceFile = React.useEffectEvent((mode: FilePreviewMode | undefined) => {
+    setPreviewMode(mode)
+    if (isMobile) {
+      setTreeVisible(false)
+    } else {
+      setDesktopPreviewVisibility(true)
+    }
+  })
 
   React.useLayoutEffect(() => {
     const page = pageRef.current
@@ -108,16 +121,12 @@ export function FileBrowserPage({
 
     const mode = workspaceFiles.pendingPreviewMode ?? undefined
     void openPath(path).then(() => {
-      setPreviewMode(mode)
-      if (isMobile) {
-        setTreeVisible(false)
-      }
+      revealWorkspaceFile(mode)
     })
   }, [
     compact,
     isMobile,
     openPath,
-    setTreeVisible,
     workspaceFiles?.fileOpenNonce,
     workspaceFiles?.pendingFilePath,
     workspaceFiles?.pendingPreviewMode,
@@ -166,6 +175,14 @@ export function FileBrowserPage({
 
     if (isMobile && item?.type === "file") {
       setTreeVisible(false)
+    }
+  }
+
+  const handlePreviewVisibilityChange = (visible: boolean) => {
+    if (isMobile) {
+      setTreeVisible(!visible)
+    } else {
+      setDesktopPreviewVisibility(visible)
     }
   }
 
@@ -262,11 +279,14 @@ export function FileBrowserPage({
       onDeleteRequest={setDeleteTarget}
       onDownload={handleDownload}
       onItemSelect={handleItemSelect}
+      onPreviewVisibilityChange={handlePreviewVisibilityChange}
       onRefresh={browser.refreshLoadedDirectories}
       onRetry={browser.loadInitialDirectory}
       onTreeStructureChange={onTreeStructureChange}
       onUpload={handleUploadRequest}
       onVisibleContentOverflow={fitTreeToNameOverflow}
+      previewPaneId={previewPaneId}
+      previewVisible={isMobile ? !treeVisible : previewVisible}
     />
   )
 
@@ -321,6 +341,9 @@ export function FileBrowserPage({
         onResizeTree={rememberTreeSize}
         onUserResizeTree={markUserResizedTree}
         panelTransitioning={panelTransitioning}
+        previewPaneContentRef={previewPaneContentRef}
+        previewPaneId={previewPaneId}
+        previewVisible={previewVisible}
         treeDefaultSize={TREE_DEFAULT_SIZE}
         treeMaxSize={TREE_MAX_SIZE}
         treeMinSize={TREE_MIN_SIZE}

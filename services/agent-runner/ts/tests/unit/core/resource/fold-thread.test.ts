@@ -5,6 +5,20 @@ import { foldThread } from '../../../../src/core/resource/fold-thread.js'
 import type { ThreadReplayItem } from '../../../../src/core/resource/thread.js'
 
 describe('foldThread', () => {
+  it('attaches replayed question resolutions to their tool owner across turns', () => {
+    const resolution = { request: { kind: 'question' as const, requestId: 'history:ask-1', tool: 'AskUserQuestion', toolUseId: 'ask-1', questions: [{ id: 'q0', question: 'Which region?', options: [], multiSelect: false }], expiresAt: 0 }, decision: 'allow' as const, reason: 'answered' as const, answers: { q0: { selected: [], text: 'Asia' } } }
+    const thread = foldThread([
+      user('u1', 'first'),
+      frame({ type: 'assistant.message', messageId: 'a1', blocks: [toolUse('ask-1', 'AskUserQuestion', 0)] }),
+      user('u2', 'second'),
+      frame({ type: 'assistant.message', messageId: 'a2', blocks: [textBlock('next turn', 'text-2', 0)] }),
+      frame({ type: 'permission.resolved', resolution }),
+      frame({ type: 'permission.resolved', resolution }),
+    ])
+    expect(thread[1]?.interactions).toEqual([resolution])
+    expect(thread[3]?.interactions).toBeUndefined()
+  })
+
   it('attaches nested frames that arrive after the next user turn', () => {
     const thread = foldThread([
       user('u1', 'first'),

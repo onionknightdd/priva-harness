@@ -33,6 +33,7 @@ import {
   TOOL_OUTPUT_INSET_CLASS,
 } from "@/components/agents/tool-output-frame";
 import { ActionSwapRollText } from "@/components/motion/action-swap-roll";
+import { OverflowMarquee } from "@/components/motion/overflow-marquee";
 import { writeClipboardText } from "@/lib/clipboard";
 import { SPRING_PRESS, SPRING_SWAP } from "@/lib/ease";
 import { focusRing } from "@/lib/surfaces";
@@ -114,6 +115,7 @@ export function FileDiff({
   className,
 }: FileDiffProps) {
   const { t } = useTranslation();
+  const [headerHovered, setHeaderHovered] = useState(false);
   const reduce = useReducedMotion() ?? false;
   const baseId = useId();
   const triggerId = `${baseId}-trigger`;
@@ -218,9 +220,11 @@ export function FileDiff({
     <div
       data-state={status}
       aria-busy={streaming}
-      className={cn("w-full text-ui", className)}
+      className={cn("w-full min-w-0 text-ui", className)}
     >
-      <div className="group/item relative flex w-fit max-w-full min-h-0 items-center gap-1">
+      <div className="group/item relative flex w-fit max-w-full min-h-0 items-center gap-1"
+        onPointerEnter={(event) => { if (event.pointerType === "mouse" && window.matchMedia("(hover: hover)").matches) setHeaderHovered(true); }}
+        onPointerLeave={() => setHeaderHovered(false)}>
         <button
           id={triggerId}
           type="button"
@@ -243,24 +247,26 @@ export function FileDiff({
               className="block size-[1em] shrink-0 text-muted-foreground/70"
             />
           )}
-          <span className="flex min-w-0 items-center gap-1 font-normal leading-none text-muted-foreground/70">
+          <span className="flex min-w-0 flex-1 items-center gap-1 font-normal leading-none text-muted-foreground/70">
             {tool ? (
               typeof tool === "string" || typeof tool === "number" ? (
-                <ActionSwapRollText value={String(tool)}>
+                <ActionSwapRollText value={String(tool)} className="shrink-0">
                   {tool}
                 </ActionSwapRollText>
               ) : (
                 tool
               )
             ) : null}
-            {file}
+            <span className="min-w-0 flex-1 truncate">
+              {typeof file === "string" ? <OverflowMarquee active={headerHovered}>{file}</OverflowMarquee> : file}
+            </span>
             {additions > 0 ? (
-              <span className="font-normal text-status-success tabular-nums lining-nums">
+              <span className="shrink-0 font-normal text-status-success tabular-nums lining-nums">
                 {`+${String(additions)}`}
               </span>
             ) : null}
             {deletions > 0 ? (
-              <span className="font-normal text-status-error tabular-nums lining-nums">
+              <span className="shrink-0 font-normal text-status-error tabular-nums lining-nums">
                 {`−${String(deletions)}`}
               </span>
             ) : null}

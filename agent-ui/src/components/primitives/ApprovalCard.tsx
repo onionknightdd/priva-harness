@@ -77,19 +77,19 @@ export default function ApprovalCard({ questions, labels, disabled = false, subm
 
   return (
     <section aria-labelledby={headingId} aria-busy={submitting} className="w-full min-w-0 overflow-hidden rounded-2xl border border-border bg-card text-card-foreground">
-      <div className="max-h-[min(50dvh,28rem)] overflow-y-auto overscroll-contain p-4 sm:p-5">
+      <div className="max-h-[min(50dvh,28rem)] overflow-y-auto overscroll-contain px-4 py-2 sm:px-5 sm:py-2.5">
         <AnimatePresence initial={false} mode="wait">
           <motion.div key={question.id}
             initial={reduce || keyboard.current ? false : { opacity: 0, transform: "translateY(6px)" }}
             animate={{ opacity: 1, transform: "translateY(0px)" }} exit={{ opacity: 0 }}
             transition={{ duration: reduce || keyboard.current ? 0 : 0.16, ease: EASE_OUT }}>
             <h3 ref={focusHeading} id={headingId} tabIndex={-1} className="pr-2 text-sm leading-6 font-medium break-words outline-none">{question.q}</h3>
-            <GlideMenu className="mt-2.5 flex flex-col gap-1" highlightClassName="inset-x-0 rounded-lg bg-muted">
+            <GlideMenu className="mt-2.5 flex flex-col gap-0.5" highlightClassName="inset-x-0 rounded-lg bg-muted">
               {question.options.map((option, index) => {
                 const on = selected.selected.includes(option.label)
                 return <button key={option.label} type="button" data-menu-row aria-pressed={on} disabled={locked}
                   onClick={(event) => toggle(index, event.detail === 0)}
-                  className="relative z-10 flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:opacity-60">
+                  className="relative z-10 flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:opacity-60">
                   <span aria-hidden="true" className={`mt-0.5 flex size-4 shrink-0 items-center justify-center border transition-colors duration-150 motion-reduce:transition-none ${question.type === "radio" ? "rounded-full" : "rounded"} ${on ? "border-primary bg-primary text-primary-foreground" : "border-input text-transparent"}`}>
                     {question.type === "radio" ? <span className={`size-1.5 rounded-full ${on ? "bg-primary-foreground" : "bg-transparent"}`} /> : <CheckIcon className="size-3" />}
                   </span>
@@ -113,7 +113,7 @@ export default function ApprovalCard({ questions, labels, disabled = false, subm
           </motion.div>
         </AnimatePresence>
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-1.5">
         <div className="flex items-center gap-1 text-muted-foreground">
           <Button size="icon-xs" variant="ghost" aria-label={labels.previous} disabled={locked || qi === 0} onClick={(event) => { keyboard.current = event.detail === 0; goTo(qi - 1) }}><ChevronUpIcon /></Button>
           <span aria-live="polite" className="min-w-10 text-center text-xs tabular-nums">{qi + 1} / {questions.length}</span>

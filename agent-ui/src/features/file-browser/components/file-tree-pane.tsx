@@ -1,6 +1,11 @@
 import * as React from "react"
 import gsap from "gsap"
-import { RefreshCwIcon, SearchIcon } from "lucide-react"
+import {
+  ArrowLeftToLineIcon,
+  ArrowRightToLineIcon,
+  RefreshCwIcon,
+  SearchIcon,
+} from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button"
@@ -30,11 +35,14 @@ export function FileTreePane({
   onDeleteRequest,
   onDownload,
   onItemSelect,
+  onPreviewVisibilityChange,
   onRefresh,
   onRetry,
   onTreeStructureChange,
   onUpload,
   onVisibleContentOverflow,
+  previewPaneId,
+  previewVisible,
   rootPath,
   selectedItemPath,
 }: {
@@ -49,15 +57,21 @@ export function FileTreePane({
     path: string,
     shouldLoadDirectory: boolean
   ) => Promise<void>
+  onPreviewVisibilityChange: (visible: boolean) => void
   onRefresh: () => Promise<void>
   onRetry: () => Promise<void>
   onTreeStructureChange?: () => void
   onUpload: (directory: string) => void
   onVisibleContentOverflow?: (overflowPx: number) => void
+  previewPaneId: string
+  previewVisible: boolean
   rootPath: string | null
   selectedItemPath: string | null
 }) {
   const { t } = useTranslation()
+  const previewToggleLabel = t(
+    previewVisible ? "fileBrowser.hidePreview" : "fileBrowser.showPreview"
+  )
   const refreshIconRef = React.useRef<SVGSVGElement>(null)
   const treeScrollRef = React.useRef<HTMLDivElement>(null)
   const announcementTimerRef = React.useRef<number | null>(null)
@@ -281,6 +295,29 @@ export function FileTreePane({
             <RefreshCwIcon ref={refreshIconRef} />
           </TooltipTrigger>
           <TooltipContent>{t("fileBrowser.refresh")}</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={previewToggleLabel}
+                aria-controls={previewPaneId}
+                aria-expanded={previewVisible}
+                onClick={() => onPreviewVisibilityChange(!previewVisible)}
+                className="focus-visible:transition-none focus-visible:active:scale-100 motion-reduce:transition-none motion-reduce:active:scale-100"
+              />
+            }
+          >
+            {previewVisible ? (
+              <ArrowRightToLineIcon aria-hidden="true" />
+            ) : (
+              <ArrowLeftToLineIcon aria-hidden="true" />
+            )}
+          </TooltipTrigger>
+          <TooltipContent>{previewToggleLabel}</TooltipContent>
         </Tooltip>
       </div>
       <div
