@@ -224,7 +224,7 @@ export function AssistantProcess({
             className="size-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-200 group-hover/process-trigger:opacity-100 group-focus-visible/process-trigger:opacity-100 group-data-open/process:rotate-180 motion-reduce:transition-none"
           />
         </CollapsibleTrigger>
-        <AgentDisclosure open={isStreaming || open} unmountOnClose>
+        <AgentDisclosure open={isStreaming || open} unmountOnClose overflowWhenOpen>
           {rows.length > 0 ? <ProcessItemGroup>{rows}</ProcessItemGroup> : null}
         </AgentDisclosure>
       </Collapsible>
@@ -717,7 +717,16 @@ function ProcessItemGroup({
         className
       )}
     >
-      {children}
+      {React.Children.toArray(children).map((child, index) => (
+        <motion.div
+          key={React.isValidElement(child) ? child.key ?? index : index}
+          layout="position"
+          layoutDependency={false}
+          className="flow-root min-w-0"
+        >
+          {child}
+        </motion.div>
+      ))}
     </ItemGroup>
   )
 }

@@ -10,6 +10,8 @@ import { cn } from "@/lib/utils";
 
 export interface AgentDisclosureProps extends HTMLAttributes<HTMLDivElement> {
   open: boolean;
+  /** Let nested layout transitions leave the fully opened panel. */
+  overflowWhenOpen?: boolean;
   /** Drop the subtree once the close transition ends. For heavy bodies
    * (process panels with dozens of tool rows); light bodies stay mounted and
    * `inert`, so re-opening never re-highlights code. */
@@ -25,6 +27,7 @@ const CLOSE_MS = 200;
  * panel reads as a curtain over real content instead of a blur. */
 export function AgentDisclosure({
   open,
+  overflowWhenOpen = false,
   unmountOnClose = false,
   className,
   style,
@@ -33,6 +36,7 @@ export function AgentDisclosure({
 }: AgentDisclosureProps) {
   const [mounted, setMounted] = useState(open);
   const [expanded, setExpanded] = useState(open);
+  const [settled, setSettled] = useState(open && overflowWhenOpen);
   const mountedRef = useRef(mounted);
   mountedRef.current = mounted;
 
@@ -53,7 +57,20 @@ export function AgentDisclosure({
     return () => window.clearTimeout(timeout);
   }, [open, unmountOnClose]);
 
+  useLayoutEffect(() => {
+    if (!expanded || !overflowWhenOpen) {
+      setSettled(false);
+      return;
+    }
+    // Clip the reveal, then let nested layout transitions move past this box.
+    const timeout = window.setTimeout(() => setSettled(true), CLOSE_MS);
+    return () => window.clearTimeout(timeout);
+  }, [expanded, overflowWhenOpen]);
+
   if (!mounted) return null;
+  const overflow = expanded && settled && overflowWhenOpen
+    ? "overflow-visible"
+    : "overflow-hidden";
 
   return (
     <div
@@ -61,7 +78,8 @@ export function AgentDisclosure({
       aria-hidden={!expanded}
       inert={!expanded}
       className={cn(
-        "grid origin-top overflow-hidden [overflow-anchor:none]",
+        "grid origin-top [overflow-anchor:none]",
+        overflow,
         "ease-out [transition-property:grid-template-rows,opacity] [transition-duration:200ms,120ms] motion-reduce:transition-none",
         expanded
           ? "grid-rows-[1fr] opacity-100 [transition-delay:0ms]"
@@ -73,7 +91,7 @@ export function AgentDisclosure({
         pointerEvents: expanded ? undefined : "none",
       }}
     >
-      <div className="min-h-0 overflow-hidden [overflow-anchor:none]">
+      <div className={cn("min-h-0 [overflow-anchor:none]", overflow)}>
         {children}
       </div>
     </div>

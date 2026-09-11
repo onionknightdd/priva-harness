@@ -250,12 +250,21 @@ AgentCode、AgentDisclosure 和主题 token；上游演示用 Button / foundatio
 黄色（含浅色 / 深色主题）。取消显示“已取消”，右侧箭头随展开 / 收起更新方向。
 每个问题逐行添加 Markdown 的 `> ` 引用语法，复用 `MessageResponse` 静态渲染；
 回答保留原始文本和换行，用 CSS `::before` 生成装饰性 `>`，不写入回答内容。
-多个问题之间使用共享 Separator。摘要出现时做 150 ms 淡入。
+多个问题之间仅保留空白间距。摘要出现时做 150 ms 淡入。
 展开 / 收起复用 Base UI Collapsible 的按钮语义，由 Motion 驱动：外框使用布局
-transform 过渡，正文展开 180 ms、淡出 100 ms，收起外框 120 ms，箭头同步旋转。
+transform 过渡，正文与外框展开 180 ms、收起 120 ms，箭头同步旋转。
 复用共享 `EASE_OUT`，不逐帧动画宽高、不缩放正文文字；连续点击可从当前进度反向。
-退出中的正文立即设为 `inert` 和 `aria-hidden`，完成淡出后卸载；键盘与辅助技术触发、
+正文使用 `AnimatePresence mode="popLayout"` 并向右锚定，退出时立即释放布局占位，
+文字淡出、外框收起及后续内容移动同时开始、同时结束。退出中的正文立即设为
+`inert` 和 `aria-hidden`，完成淡出后卸载；键盘与辅助技术触发、
 减少动态效果模式下立即切换。保留右对齐、最长文本决定宽度和现有状态图标。
+问题摘要与同一消息流共用 Motion `LayoutGroup`；后续工具行、正文、操作栏和后续
+消息只做位置过渡，与卡片采用相同的 180 / 120 ms 节奏。滚动容器通过 `layoutScroll`
+参与测量，保留展开触发点锚定。被动位置节点使用固定 `layoutDependency`，由卡片
+展开状态及正文退出触发布局测量，流式文本更新不主动触发布局动画。正文容器允许
+位移内容溢出，执行过程的 AgentDisclosure 通过 `overflowWhenOpen` 在自身展开完成后
+释放裁剪，收起时恢复裁剪，避免嵌套卡片切换时截断移动中的内容；键盘、辅助技术
+和减少动态效果分支仍立即更新。
 
 ```text
 Message area
@@ -263,7 +272,7 @@ Message area
                         | (?) Answered             ^ |
                         | | Markdown question        |
                         | > A longer answer text     |
-                        | -------------------------- |
+                        |                            |
                         | | Next question            |
                         | > Answer text              |
                         +----------------------------+
@@ -744,7 +753,8 @@ Mermaid 浏览器回归：打开 `/tests/components/ai-elements/mermaid-browser.
 视口检查中文、深色、减少动态效果和窄屏；**Show question / Show tool approval**
 可单独查看卡片。用真实 Tab / Enter 验证选择与翻题。
 **Show answered** 展示已回答摘要；检查包含收起 / 展开时与用户气泡右边缘对齐、
-中性外框与状态图标、最长文本决定宽度、Markdown 引用与行内格式、CSS 回答前缀、分割线和窄屏无横向溢出。
+中性外框与状态图标、最长文本决定宽度、Markdown 引用与行内格式、CSS 回答前缀、
+问题间空白间距和窄屏无横向溢出，以及文字淡出与外框收起同步。
 相关数据和连接测试包含在下方 Agent message 的 `*.test.ts` 命令中。
 
 目前没有前端全量自动化测试命令，也没有仓库级 formatter。

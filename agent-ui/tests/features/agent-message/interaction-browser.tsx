@@ -110,7 +110,7 @@ async function runChecks() {
     check("every question is rendered as a Markdown blockquote", answered.querySelectorAll("blockquote").length === 3 && answered.querySelector('blockquote [data-streamdown="strong"]')?.textContent === "哪个地区" && answered.querySelector("blockquote code")?.textContent === "上线顺序")
     const answerRows = [...answered.querySelectorAll<HTMLElement>("[data-question-answer]")]
     check("answer prefixes come from CSS and do not alter the answer text", answerRows[0].textContent === "亚洲" && answerRows.every((row) => getComputedStyle(row.firstElementChild!, "::before").content === '">"'))
-    check("multiple questions are separated by dividers", answered.querySelectorAll('[data-slot="separator"]').length === 2)
+    check("multiple questions use spacing without dividers", answered.querySelectorAll('[data-question-pair]').length === 3 && answered.querySelectorAll('[data-slot="separator"]').length === 0)
     check("expanded answered content keeps the right edge and does not overflow", Math.abs(answered.getBoundingClientRect().right - userBubble.getBoundingClientRect().right) < 1 && answered.scrollWidth <= answered.clientWidth)
     const one = tool(); await show(one)
     const two = { ...tool(), requestId: `second-${seq}` }; await show(two)

@@ -8,6 +8,12 @@ import {
 } from "react"
 import { flushSync } from "react-dom"
 import { ArrowDownIcon } from "lucide-react"
+import {
+  LayoutGroup,
+  MotionConfig,
+  motion,
+  useReducedMotionConfig,
+} from "motion/react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -22,6 +28,7 @@ import {
 import { useChatSession } from "@/features/chat-session"
 import { sessionDisplayTitle } from "@/features/sidebar/content/session-projects"
 import { useHarness } from "@/features/sidebar/header/harness-context"
+import { EASE_OUT } from "@/lib/ease"
 import { formatSessionRelativeTime, useTickingNow } from "@/lib/relative-time"
 import { cn } from "@/lib/utils"
 
@@ -45,6 +52,9 @@ import { StickyFreeze } from "./sticky-freeze"
 import { TaskPlanPopover } from "./task-plan-popover"
 import { WorkingStatusLine } from "./working-status-line"
 
+const MotionScrollerViewport = motion.create(MessageScrollerViewport)
+const MotionScrollerItem = motion.create(MessageScrollerItem)
+
 export function AgentMessageThread({
   messages,
   onQuote,
@@ -63,6 +73,8 @@ export function AgentMessageThread({
   } = useChatSession()
   const now = useTickingNow()
   const [followPaused, setFollowPaused] = useState(false)
+  const reduceMotion = Boolean(useReducedMotionConfig())
+  const [layoutDuration, setLayoutDuration] = useState(0.18)
   const untitled = t("sidebar.projects.untitledSession")
   const locale = i18n.resolvedLanguage ?? i18n.language
   const justNow = t("agentMessage.justNow")
@@ -90,44 +102,75 @@ export function AgentMessageThread({
   const renderMessage = (
     message: AgentThreadMessage,
     hideProcessHeader = false
-  ) => (
-    <AgentMessageItem
-      key={message.id}
-      message={message}
-      hideProcessHeader={hideProcessHeader}
-      relativeTime={formatSessionRelativeTime(
-        Date.parse(message.createdAt),
-        locale,
-        justNow,
-        now
-      )}
-      onFork={
-        canFork
-          ? () => {
-              void forkFrom({ message, messages, stem })
-            }
-          : undefined
-      }
-      forkDisabledReason={forkDisabledReason}
-    />
-  )
+  ) => {
+    const item = (
+      <AgentMessageItem
+        key={message.id}
+        message={message}
+        hideProcessHeader={hideProcessHeader}
+        relativeTime={formatSessionRelativeTime(
+          Date.parse(message.createdAt),
+          locale,
+          justNow,
+          now
+        )}
+        onFork={
+          canFork
+            ? () => {
+                void forkFrom({ message, messages, stem })
+              }
+            : undefined
+        }
+        forkDisabledReason={forkDisabledReason}
+      />
+    )
+    return message.role === "user" ? item : (
+      <motion.div
+        key={message.id}
+        layout="position"
+        layoutDependency={false}
+        className="min-w-0"
+      >
+        {item}
+      </motion.div>
+    )
+  }
 
   return (
     <MessageScrollerProvider autoScroll={!followPaused}>
       <MessageScroller>
-        <MessageScrollerViewport>
-          <MessageScrollerContent className="mx-auto w-full max-w-3xl gap-6 pt-6">
-            {turns.map((turn, index) => (
-              <ThreadTurnItem
-                key={turn.id}
-                isLast={index === turns.length - 1}
-                renderMessage={renderMessage}
-                turn={turn}
-              />
-            ))}
-            <ThreadEndSpacer />
-          </MessageScrollerContent>
-        </MessageScrollerViewport>
+        <MotionConfig
+          transition={{ layout: { duration: reduceMotion ? 0 : layoutDuration, ease: EASE_OUT } }}
+        >
+          <LayoutGroup inherit={false}>
+            <MotionScrollerViewport layoutScroll>
+              <MessageScrollerContent
+                className="mx-auto w-full max-w-3xl gap-6 pt-6"
+                onClickCapture={(event) => {
+                  const trigger = event.target instanceof Element
+                    ? event.target.closest('[data-question-summary] [data-slot="collapsible-trigger"]')
+                    : null
+                  if (trigger) {
+                    const closing = trigger.getAttribute("aria-expanded") === "true"
+                    setLayoutDuration(event.detail === 0 ? 0 : closing ? 0.12 : 0.18)
+                  }
+                }}
+              >
+                {/* Fixed layout dependencies keep streaming updates immediate;
+                    the disclosure's LayoutGroup coordinates position changes. */}
+                {turns.map((turn, index) => (
+                  <ThreadTurnItem
+                    key={turn.id}
+                    isLast={index === turns.length - 1}
+                    renderMessage={renderMessage}
+                    turn={turn}
+                  />
+                ))}
+                <ThreadEndSpacer />
+              </MessageScrollerContent>
+            </MotionScrollerViewport>
+          </LayoutGroup>
+        </MotionConfig>
         <KeepExpandAnchor onFollowPausedChange={setFollowPaused} />
         <PinLatestAtCenter messages={messages} />
         <div className="pointer-events-none absolute inset-x-0 bottom-2 z-20 flex justify-center">
@@ -188,7 +231,9 @@ function ThreadTurnItem({
   }, [working])
 
   return (
-    <MessageScrollerItem
+    <MotionScrollerItem
+      layout="position"
+      layoutDependency={false}
       messageId={turn.id}
       scrollAnchor={freezeTurn}
       className={cn(
@@ -218,7 +263,7 @@ function ThreadTurnItem({
       {turn.replies.map((message) =>
         renderMessage(message, message.status === "streaming")
       )}
-    </MessageScrollerItem>
+    </MotionScrollerItem>
   )
 }
 

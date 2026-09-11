@@ -1,11 +1,10 @@
-import { Fragment, useId, useRef, useState, type ReactNode } from "react"
+import { useId, useRef, useState, type ReactNode, type Ref } from "react"
 import { useTranslation } from "react-i18next"
 import { ChevronDown, MessageCircleQuestionMark, TriangleAlert } from "lucide-react"
-import { AnimatePresence, LayoutGroup, motion, useIsPresent, useReducedMotionConfig } from "motion/react"
+import { AnimatePresence, LayoutGroup, motion, useIsPresent, usePresenceData, useReducedMotionConfig } from "motion/react"
 import { MessageResponse } from "@/components/ai-elements/message"
 import ApprovalCard from "@/components/primitives/ApprovalCard"
 import { ToolApproval, ToolApprovalCode, type ToolApprovalStatus } from "@/components/agents/tool-approval"
-import { Separator } from "@/components/ui/separator"
 import { Collapsible, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { EASE_OUT } from "@/lib/ease"
 import { focusRing } from "@/lib/surfaces"
@@ -66,15 +65,15 @@ export function QuestionSummary({ resolution, output, skipped }: { resolution?: 
   const request = resolution?.request
   const denied = resolution ? resolution.decision === "deny" : skipped
   const statusLabel = t(denied ? (resolution?.reason === "cancelled" ? "toolCard.cancelled" : "interaction.skipped") : "interaction.answered")
-  return <LayoutGroup inherit={false}><Collapsible open={open} onOpenChange={(nextOpen, details) => {
+  return <LayoutGroup><Collapsible open={open} onOpenChange={(nextOpen, details) => {
     setKeyboard(!("detail" in details.event) || details.event.detail === 0)
     setOpen(nextOpen)
   }} data-question-summary={denied ? "skipped" : "answered"}
-    className="my-2 ml-auto w-max min-w-0 max-w-full rounded-lg border border-border px-3 py-2 text-ui text-foreground"
-    render={<motion.div layout initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }}
+    className="relative my-2 ml-auto w-max min-w-0 max-w-full rounded-lg border border-border px-3 py-2 text-ui text-foreground"
+    render={<motion.div layout layoutDependency={open} initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }}
       transition={{ opacity: { duration: reduce ? 0 : 0.15 }, layout: layoutTransition }} />}>
     <CollapsibleTrigger aria-controls={open ? contentId : undefined}
-      render={<motion.button layout="position" transition={{ layout: layoutTransition }} />}
+      render={<motion.button layout="position" layoutDependency={open} transition={{ layout: layoutTransition }} />}
       className={cn("flex w-full cursor-pointer items-center gap-2 rounded-sm text-left text-muted-foreground", focusRing)}>
       {denied ? <TriangleAlert aria-hidden="true" className="size-4 shrink-0 text-status-warning" />
         : <MessageCircleQuestionMark aria-hidden="true" className="size-4 shrink-0 text-background [&>path:first-child]:fill-status-success [&>path:first-child]:stroke-status-success" />}
@@ -84,23 +83,20 @@ export function QuestionSummary({ resolution, output, skipped }: { resolution?: 
         <ChevronDown className="size-full" />
       </motion.span>
     </CollapsibleTrigger>
-    <AnimatePresence initial={false} custom={instant}>
-    {open ? <QuestionSummaryBody key="answers" id={contentId} instant={instant}>
-    {request?.kind === "question" ? <div className="pt-3 min-w-0">
-      {request.questions.map((question, index) => {
+    <AnimatePresence initial={false} custom={instant} mode="popLayout" anchorX="right">
+    {open ? <QuestionSummaryBody key="answers" id={contentId}>
+    {request?.kind === "question" ? <div className="min-w-0 space-y-3 pt-3">
+      {request.questions.map((question) => {
         const answer = resolution?.answers?.[question.id]
         const text = answer ? [...answer.selected, ...(answer.text.trim() ? [answer.text] : [])].join("; ") : denied ? statusLabel : t("interaction.skipped")
         const quote = question.question.split(/\r\n?|\n/).map((line) => `> ${line}`).join("\n")
-        return <Fragment key={question.id}>
-          {index > 0 ? <Separator className="my-3" /> : null}
-          <div data-question-pair className="min-w-0">
+        return <div key={question.id} data-question-pair className="min-w-0">
             <MessageResponse mode="static" animated={false} isAnimating={false}
               className="[overflow-wrap:anywhere] [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground [&_blockquote]:not-italic [&_p]:leading-6">
               {quote}
             </MessageResponse>
             <QuestionAnswerText>{text}</QuestionAnswerText>
-          </div>
-        </Fragment>
+        </div>
       })}
     </div> : output ? <QuestionAnswerText>{output}</QuestionAnswerText> : null}
     </QuestionSummaryBody> : null}
@@ -109,15 +105,16 @@ export function QuestionSummary({ resolution, output, skipped }: { resolution?: 
 }
 
 const questionBodyMotion = {
-  open: (instant: boolean) => ({ opacity: 1, transform: "translateY(0px)", transition: { duration: instant ? 0 : 0.18, ease: EASE_OUT } }),
-  closed: (instant: boolean) => ({ opacity: 0, transform: instant ? "translateY(0px)" : "translateY(-4px)", transition: { duration: instant ? 0 : 0.1, ease: EASE_OUT } }),
+  open: (instant: boolean) => ({ opacity: 1, transition: { duration: instant ? 0 : 0.18, ease: EASE_OUT } }),
+  closed: (instant: boolean) => ({ opacity: 0, transition: { duration: instant ? 0 : 0.12, ease: EASE_OUT } }),
 }
 
-function QuestionSummaryBody({ children, id, instant }: { children: ReactNode; id: string; instant: boolean }) {
+function QuestionSummaryBody({ children, id, ref }: { children: ReactNode; id: string; ref?: Ref<HTMLDivElement> }) {
   const present = useIsPresent()
-  return <motion.div id={id} layout="position" custom={instant} variants={questionBodyMotion}
+  const instant = Boolean(usePresenceData())
+  return <motion.div ref={ref} id={id} layout="position" layoutDependency={false} custom={instant} variants={questionBodyMotion}
     initial="closed" animate="open" exit="closed" aria-hidden={!present} inert={!present}
-    className="min-w-0" transition={{ layout: { duration: instant ? 0 : 0.18, ease: EASE_OUT } }}>
+    className="min-w-0" transition={{ layout: { duration: instant ? 0 : present ? 0.18 : 0.12, ease: EASE_OUT } }}>
     {children}
   </motion.div>
 }

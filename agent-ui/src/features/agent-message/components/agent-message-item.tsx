@@ -40,6 +40,8 @@ import { AssistantMarkdownCode } from "./assistant-markdown-code"
 import { QuoteSelectable } from "./quote-selectable"
 import { UserMessageAttachments } from "./user-message-attachments"
 
+const MotionMessageActions = motion.create(MessageActions)
+
 function animateControl(control: HTMLButtonElement) {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
     return
@@ -279,7 +281,7 @@ export function AgentMessageItem({
             aria-live={message.role === "assistant" ? "polite" : undefined}
             aria-busy={isStreaming || undefined}
             className={
-              message.role === "user" ? "whitespace-pre-wrap" : undefined
+              message.role === "user" ? "whitespace-pre-wrap" : "overflow-visible"
             }
           >
             {message.role === "assistant" ? (
@@ -296,7 +298,7 @@ export function AgentMessageItem({
             )}
           </MessageContent>
           {message.role === "assistant" && message.status === "complete" ? (
-            <MessageActions>
+            <MotionMessageActions layout="position" layoutDependency={false}>
               <AgentMessageCopyAction text={message.role === "assistant" ? assistantTimeline(message).map((section) => section.message.content).filter(Boolean).join("\n\n") : message.content} />
               <AgentMessageSplitAction
                 onFork={onFork}
@@ -305,7 +307,7 @@ export function AgentMessageItem({
               {relativeTime ? (
                 <AgentMessageRelativeTime relativeTime={relativeTime} />
               ) : null}
-            </MessageActions>
+            </MotionMessageActions>
           ) : null}
         </>
       )}
@@ -340,11 +342,11 @@ function AssistantStreamBody({
 }) {
   const sections = assistantTimeline(message)
   return <div className="flex flex-col gap-3">
-    {sections.map((section, index) => <div key={section.id} className="flex flex-col gap-3">
+    {sections.map((section, index) => <motion.div key={section.id} layout="position" layoutDependency={false} className="flex flex-col gap-3">
       {section.notification ? <TaskNotificationCard notification={section.notification} /> : null}
       <AssistantSegment message={section.message} isStreaming={isStreaming && index === sections.length - 1}
         hideProcessHeader={hideProcessHeader || index > 0} />
-    </div>)}
+    </motion.div>)}
   </div>
 }
 
@@ -372,17 +374,19 @@ function AssistantSegment({
         />
       ) : null}
       {text.trim() !== "" ? (
-        <QuoteSelectable>
-          <MessageResponse
-            className="[&_p]:[line-height:1.5em] [&_p+p]:mt-[2px]"
-            animated={isStreaming && !shouldReduceMotion}
-            isAnimating={isStreaming}
-            mode={isStreaming ? "streaming" : "static"}
-            components={{ code: AssistantMarkdownCode }}
-          >
-            {text}
-          </MessageResponse>
-        </QuoteSelectable>
+        <motion.div layout="position" layoutDependency={false} className="min-w-0">
+          <QuoteSelectable>
+            <MessageResponse
+              className="[&_p]:[line-height:1.5em] [&_p+p]:mt-[2px]"
+              animated={isStreaming && !shouldReduceMotion}
+              isAnimating={isStreaming}
+              mode={isStreaming ? "streaming" : "static"}
+              components={{ code: AssistantMarkdownCode }}
+            >
+              {text}
+            </MessageResponse>
+          </QuoteSelectable>
+        </motion.div>
       ) : null}
     </div>
   )
