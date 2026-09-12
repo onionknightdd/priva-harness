@@ -70,13 +70,19 @@ export const en = {
     loading: "Loading usage",
     retry: "Retry",
     heatmap: {
-      title: "Processed tokens by day",
-      less: "Less",
-      more: "More",
-      cellLabel: "{{date}}: {{value}} tokens",
-      ariaLabel: "Processed tokens heatmap for {{year}}",
-      legendLabel: "Token intensity",
-      legendLevelLabel: "Level {{level}}",
+      title: "Token activity",
+      modeLabel: "Heatmap mode",
+      mode: {
+        daily: "Daily",
+        weekly: "Weekly",
+        cumulative: "Cumulative",
+      },
+      cellLabel: {
+        daily: "{{date}}: {{value}} tokens",
+        weekly: "Week of {{date}}: {{value}} tokens",
+        cumulative: "Through {{date}}: {{value}} tokens in total",
+      },
+      ariaLabel: "Token activity heatmap for {{year}}",
     },
   },
   agentMessage: {

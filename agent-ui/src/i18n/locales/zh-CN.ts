@@ -70,13 +70,19 @@ export const zhCN = {
     loading: "正在加载用量",
     retry: "重试",
     heatmap: {
-      title: "每日处理 Token",
-      less: "少",
-      more: "多",
-      cellLabel: "{{date}}：{{value}} tokens",
-      ariaLabel: "{{year}} 年处理 Token 热力图",
-      legendLabel: "Token 用量强度",
-      legendLevelLabel: "等级 {{level}}",
+      title: "Token 活动",
+      modeLabel: "热力图模式",
+      mode: {
+        daily: "每日",
+        weekly: "每周",
+        cumulative: "累计",
+      },
+      cellLabel: {
+        daily: "{{date}}：{{value}} tokens",
+        weekly: "{{date}} 所在周：{{value}} tokens",
+        cumulative: "截至 {{date}}：累计 {{value}} tokens",
+      },
+      ariaLabel: "{{year}} 年 Token 活动热力图",
     },
   },
   agentMessage: {

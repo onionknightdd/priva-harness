@@ -134,8 +134,40 @@ export async function fetchUsageOverview(
   return (await response.json()) as UsageOverview
 }
 
-// Heatmap cells carry the tokens the models processed that day; zero renders
-// as an empty cell, so the grid itself is the "no activity yet" state.
-export function heatmapActivities(days: readonly UsageDay[]): Activity[] {
+export const HEATMAP_MODES = ["daily", "weekly", "cumulative"] as const
+export type HeatmapMode = (typeof HEATMAP_MODES)[number]
+
+// Monday-start week key so a whole column of the grid shares one value.
+function weekKey(date: string) {
+  const day = new Date(`${date}T00:00:00Z`)
+  const offset = (day.getUTCDay() + 6) % 7
+  day.setUTCDate(day.getUTCDate() - offset)
+  return day.toISOString().slice(0, 10)
+}
+
+// Heatmap cells carry the tokens the models processed; zero renders as an
+// empty cell, so the grid itself is the "no activity yet" state.
+//   daily      - that day's processed tokens
+//   weekly     - the Monday–Sunday total, repeated on each day of the week
+//   cumulative - running total from the first day of the window
+export function heatmapActivities(
+  days: readonly UsageDay[],
+  mode: HeatmapMode = "daily"
+): Activity[] {
+  if (mode === "weekly") {
+    const totals = new Map<string, number>()
+    for (const day of days) {
+      const key = weekKey(day.date)
+      totals.set(key, (totals.get(key) ?? 0) + day.processedTokens)
+    }
+    return days.map((day) => ({ date: day.date, value: totals.get(weekKey(day.date)) ?? 0 }))
+  }
+  if (mode === "cumulative") {
+    let running = 0
+    return days.map((day) => {
+      running += day.processedTokens
+      return { date: day.date, value: running }
+    })
+  }
   return days.map((day) => ({ date: day.date, value: day.processedTokens }))
 }

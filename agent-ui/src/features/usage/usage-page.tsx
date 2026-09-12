@@ -18,9 +18,12 @@ export function UsagePage() {
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-6 pt-3">
       <section aria-label={t("usage.heatmap.title")} className="flex flex-col">
         {overview.loading ? (
-          <div role="status" aria-label={t("usage.loading")} className="flex flex-col gap-2">
-            <Skeleton className="h-[120px] w-full max-w-[748px]" />
-            <Skeleton className="h-4 w-32" />
+          <div role="status" aria-label={t("usage.loading")} className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <Skeleton className="h-5 w-24" />
+              <Skeleton className="h-5 w-32" />
+            </div>
+            <Skeleton className="h-[138px] w-full max-w-[850px]" />
           </div>
         ) : overview.error ? (
           <div role="alert" className="flex flex-col items-start gap-3 text-sm">

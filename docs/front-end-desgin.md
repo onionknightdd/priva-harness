@@ -179,20 +179,36 @@ Base UI 工程中转换出的 `render`。文件正文不做高度布局动画或
 
 ```text
 数据与用量 / 用量
-+------------------------------------------------------------------+
-| Jan   Feb   Mar   ...                                   Sep      |
-| [][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][]   |
-| [][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][]   |
-|  ... 7 行 × 53 周，单元 11px、间距 3px，颜色 = 当日处理 token     |
-| 少 [][][][][] 多                                                  |
-+------------------------------------------------------------------+
+Token 活动                                          每日  每周  累计
+[][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][]
+[][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][]
+ ... 7 行 × 53 周，单元 12px、间距 4px、圆角 3px，一条连续的滚动年
+10月   11月   12月   1月   2月   3月   4月   5月   6月   7月   8月   9月
 窄屏：热力图容器横向滚动，其余不变。
 ```
 
-复用 [CalendarHeatmap](../agent-ui/src/components/heatmap/calendar-heatmap.tsx)，
-周一起始，隐藏星期与年份标签，月份标签使用二级文本色。单元颜色读取新增的共享
-`heatmap` token（浅色 / 深色均为 `rgb(78, 130, 239)`），空日读取 `muted`；
-全部为 0 时仍渲染空网格，网格本身即“尚无记录”状态。加载中显示与热力图同高的
+按用户提供的截图形式实现：左侧 14px 半粗标题「Token 活动」，右侧
+`assistant-ui/tabs` 的 `ghost` / `sm` 变体切换「每日 / 每周 / 累计」（列表底色透明），
+月份标签位于网格下方，隐藏星期、年份标签和 Less / More 图例。三种模式都由同一份
+`heatmap` 数据在前端换算：每日为当日处理 token，每周为周一至周日合计并在整列重复，
+累计为窗口内的滚动总和；单元 `aria-label` 随模式切换措辞。切换模式时单元填充做 200ms
+`ease-out` 过渡，减少动态效果时立即变色。
+
+热力图组件通过 shadcn CLI 从 `@heatmap` registry 安装
+（[rutopio/shadcn-heatmap](https://github.com/rutopio/shadcn-heatmap)）：
+
+```sh
+npx shadcn@latest add @heatmap/calendar-heatmap
+```
+
+本地在上游基础上保留 / 增加了以下内容，重新安装后必须审阅差异并恢复：焦点框使用
+`ring-inset`；`ref` 类型为 `Ref<SVGRectElement>`；新增 `monthLabelPosition="bottom"`
+把月份标签画在网格下方；新增 `splitYears={false}` 让跨年的滚动窗口保持一条连续的
+网格，而不是在元旦处拆成两行。CLI 同时会向 `index.css` 注入 registry 自带的
+`--secondary` / `--chart-1` / `--muted-foreground`，这些必须丢弃，继续使用项目 token。
+
+单元颜色读取共享 `heatmap` token（浅色 / 深色均为 `rgb(78, 130, 239)`），空日读取
+`muted`；全部为 0 时仍渲染空网格，网格本身即“尚无记录”状态。加载中显示同高的
 Skeleton，失败显示 `role="alert"` 的错误文本与重试按钮。数据到达时仅做 200ms
 透明度淡入（`@starting-style`），减少动态效果时立即显示；单元悬浮沿用组件的
 透明度反馈。Profile 对话框中的 mock 热力图仍传固定蓝色，后续收敛到同一 token。
@@ -748,9 +764,9 @@ transcript -> attachmentsFromMessageText -> body + attachment cards
 | 本地领域组件 | [agents](../agent-ui/src/components/agents)、[elements](../agent-ui/src/components/elements)、[motion](../agent-ui/src/components/motion)、[heatmap](../agent-ui/src/components/heatmap)、[interior](../agent-ui/src/components/interior) | 工具结果、Diff、任务计划、状态交换、热力图、Lightbox；没有明确来源证据的组件按本地实现记录，不推断上游。 |
 | 专业运行时库 | Recharts、Shiki、EmbedPDF、DocxEditor、PPTX Renderer、GrapesJS、SheetJS、TanStack Virtual | 分别负责图表、代码和文件内容；部分自带工具栏/视觉，见下表。 |
 
-[components.json](../agent-ui/components.json) 配置了 7 个扩展 registry：
-`@reui`、`@assistant-ui`、`@animate-ui`、`@ai-elements`、`@beui`、`@diceui`、
-`@shadcnblocks`。上表能找到对应的本地使用或来源记录。Kibo 命名空间存在于源码中，
+[components.json](../agent-ui/components.json) 配置了 9 个扩展 registry：
+`@loading-ui`、`@heatmap`、`@reui`、`@assistant-ui`、`@animate-ui`、`@ai-elements`、
+`@beui`、`@diceui`、`@shadcnblocks`。上表能找到对应的本地使用或来源记录。Kibo 命名空间存在于源码中，
 但不在当前 registry 配置中。`radix-ui` 是 Switch 的直接运行时依赖；其他通用组件
 仍以 Base UI 为主，不能因为某个 registry 同时支持多个原语就将它们全记为实际使用。
 
@@ -831,7 +847,7 @@ App TooltipProvider -> 首次悬浮 2s -> 连续切换 0ms
 | Card / Item / Separator | [ui/card](../agent-ui/src/components/ui/card.tsx)、[ui/item](../agent-ui/src/components/ui/item.tsx)、[ui/separator](../agent-ui/src/components/ui/separator.tsx) | token 化卡片、列表项、分隔线；Separator 用 Base UI | 工具结果、模型列表、Profile |
 | Avatar | [ui/avatar](../agent-ui/src/components/ui/avatar.tsx)，Base UI Avatar | 圆形头像及 fallback | 用户菜单、Profile |
 | Chart | [ui/chart](../agent-ui/src/components/ui/chart.tsx) + Recharts | `chart-*` token 与本地图表 Tooltip；这里的 Tooltip 是图表数据提示 | 模型用量图表 |
-| CalendarHeatmap | [heatmap/calendar-heatmap](../agent-ui/src/components/heatmap/calendar-heatmap.tsx)，本地 SVG + date-fns | 网格热力图；基础默认读 chart token，用量页读取共享 `heatmap` token，Profile 调用点仍传固定蓝色 | 用量页每日处理 Token、Profile Token 日历 |
+| CalendarHeatmap | [heatmap/calendar-heatmap](../agent-ui/src/components/heatmap/calendar-heatmap.tsx)，`@heatmap` registry（SVG + date-fns）+ 本地 `ring-inset` / `monthLabelPosition` / `splitYears` | 网格热力图；基础默认读 chart token，用量页读取共享 `heatmap` token，Profile 调用点仍传固定蓝色 | 用量页 Token 活动、Profile Token 日历 |
 | Table / 数据网格 | [spreadsheet-renderer](../agent-ui/src/features/files/preview/renderers/spreadsheet-renderer.tsx)，SheetJS + TanStack Virtual + 原生 table | 工作簿解析、虚拟行列、粘性表头、本地单元格样式 | 表格文件预览；尚无通用 `ui/table` 或 DataTable 入口 |
 | ScrollArea / 消息滚动 | [agents/code-block](../agent-ui/src/components/agents/code-block.tsx) 直接使用 Base UI ScrollArea；[ui/message-scroller](../agent-ui/src/components/ui/message-scroller.tsx) 包装 `@shadcn/react/message-scroller` | 代码滚动区与聊天跟随滚动；其余区域多用原生 overflow | 代码块、聊天历史 |
 | Direction | [ui/direction](../agent-ui/src/components/ui/direction.tsx)，Base UI DirectionProvider | 无独立视觉，仅方向上下文 | FileUpload 的内部依赖 |
@@ -1126,11 +1142,16 @@ MCP 页面浏览器回归：打开 `/tests/features/resources/mcp-browser.html`�
 项目连接的 cwd、最近详情数量上限，以及 390px iframe 的搜索、Tab 和返回操作。
 附加 `?reduced-motion=1&dark=1` 检查深色和减少动态效果；不会连接或修改真实服务。
 
-用量页请求参数与热力图映射：
+用量页请求参数与热力图每日 / 每周 / 累计换算：
 
 ```sh
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/usage/usage-api.test.ts
 ```
+
+用量热力图浏览器回归：在开发服务器打开 `/tests/features/usage/usage-heatmap-browser.html`，
+点击 **Run usage heatmap checks**。使用一年的合成数据，覆盖标题、三种模式、月份标签
+在网格下方、隐藏星期标签、365 个单元、跨年不拆行、每周整列同色、累计单调递增及
+切回每日恢复原色；追加 `?zh&dark` 检查中文与深色，`&auto` 在加载后自动运行。
 
 Subagent 测试流客户端：
 

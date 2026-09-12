@@ -53,6 +53,8 @@ type MonthLabel = {
   year?: number;
 };
 
+export type MonthLabelPosition = "top" | "bottom";
+
 // Non-normalized: 1 empty + (levels-1) colored steps. Normalized: levels colored steps, no empty.
 const colorStepCount = (levels: number, isNormalized: boolean) =>
   Math.max(1, isNormalized ? levels : levels - 1);
@@ -122,6 +124,10 @@ type CalendarHeatmapContextType = {
   fontSize: number;
   labels: Labels;
   labelHeight: number;
+  monthLabelPosition: MonthLabelPosition;
+  // Vertical offset of the first day row: the month label row when labels sit
+  // on top, zero when they sit below the grid.
+  blockOffsetY: number;
   levels: number;
   isNormalized: boolean;
   totalCount: number;
@@ -305,6 +311,7 @@ const groupByYearAndMonth = (
 const groupContinuous = (
   activities: ActivityWithLevel[],
   weekStart: WeekDay = 0,
+  splitYears = true,
 ): YearRow[] => {
   if (activities.length === 0) return [];
 
@@ -328,6 +335,12 @@ const groupContinuous = (
   const allWeeks: Week[] = new Array(numberOfWeeks)
     .fill(undefined)
     .map((_, i) => padded.slice(i * 7, i * 7 + 7));
+
+  // A rolling window (e.g. the last 365 days) reads as one strip; splitting it
+  // at New Year would stack two partial grids.
+  if (!splitYears) {
+    return [{ year: getYear(firstDate), startMonth: 0, weeks: allWeeks }];
+  }
 
   const yearMap = new Map<number, Week[]>();
   for (const week of allWeeks) {
@@ -400,6 +413,7 @@ export type CalendarHeatmapProps = HTMLAttributes<HTMLDivElement> & {
   data: Activity[];
   weekStart?: WeekDay;
   continuousMonths?: boolean;
+  splitYears?: boolean;
   hasEmptyColumn?: boolean;
   blockSize?: number;
   blockMargin?: number;
@@ -411,6 +425,7 @@ export type CalendarHeatmapProps = HTMLAttributes<HTMLDivElement> & {
   locale?: Locale;
   labels?: Labels;
   fontSize?: number;
+  monthLabelPosition?: MonthLabelPosition;
   emptyState?: ReactNode;
   totalCount?: number;
   style?: CSSProperties;
@@ -446,8 +461,10 @@ export type CalendarHeatmapProps = HTMLAttributes<HTMLDivElement> & {
  * @param data - Array of activities with date (YYYY-MM-DD) and value
  * @param weekStart - First day of week (0=Sunday, 1=Monday). Default: 0
  * @param continuousMonths - Display months continuously vs. grouped by year. Default: true
+ * @param splitYears - With continuousMonths, start a new row at each calendar year. Default: true
  * @param hasEmptyColumn - Add empty column between months. Default: false
  * @param blockAspectRatio - Width/height ratio of blocks. Default: 1
+ * @param monthLabelPosition - Draw month labels above or below the day grid. Default: "top"
  * @param levels - Total number of legend cells (including empty when not normalized). Default: 5
  * @param isNormalized - When true, uses min-max normalization across the dataset (suitable for signed values). When false (default), treats 0 as empty and scales from 0 to max.
  */
@@ -455,6 +472,7 @@ export const CalendarHeatmap = ({
   data,
   weekStart = 0,
   continuousMonths = true,
+  splitYears = true,
   hasEmptyColumn = false,
   blockSize = 12,
   blockMargin = 4,
@@ -466,6 +484,7 @@ export const CalendarHeatmap = ({
   locale,
   labels: labelsProp,
   fontSize = 14,
+  monthLabelPosition = "top",
   emptyState,
   totalCount: totalCountProp,
   style = EMPTY_STYLE,
@@ -498,9 +517,9 @@ export const CalendarHeatmap = ({
   const yearRows = useMemo(
     () =>
       continuousMonths
-        ? groupContinuous(dataWithLevels, weekStart)
+        ? groupContinuous(dataWithLevels, weekStart, splitYears)
         : groupByYearAndMonth(dataWithLevels, weekStart, hasEmptyColumn),
-    [dataWithLevels, weekStart, hasEmptyColumn, continuousMonths],
+    [dataWithLevels, weekStart, hasEmptyColumn, continuousMonths, splitYears],
   );
   const weeks = useMemo(() => yearRows.flatMap((r) => r.weeks), [yearRows]);
 
@@ -517,6 +536,7 @@ export const CalendarHeatmap = ({
     [locale, labelsProp],
   );
   const labelHeight = fontSize + LABEL_MARGIN;
+  const blockOffsetY = monthLabelPosition === "top" ? labelHeight : 0;
 
   const year =
     data.length > 0
@@ -545,6 +565,8 @@ export const CalendarHeatmap = ({
       fontSize,
       labels,
       labelHeight,
+      monthLabelPosition,
+      blockOffsetY,
       levels,
       isNormalized,
       totalCount,
@@ -569,6 +591,8 @@ export const CalendarHeatmap = ({
       fontSize,
       labels,
       labelHeight,
+      monthLabelPosition,
+      blockOffsetY,
       levels,
       isNormalized,
       totalCount,
@@ -633,7 +657,7 @@ export const CalendarHeatmapBlock = ({
     blockWidth,
     blockMargin,
     blockRadius,
-    labelHeight,
+    blockOffsetY,
     labels,
     levels,
     isNormalized,
@@ -671,7 +695,7 @@ export const CalendarHeatmapBlock = ({
       ry={blockRadius}
       width={blockWidth}
       x={(blockWidth + blockMargin) * weekIndex}
-      y={labelHeight + (blockSize + blockMargin) * dayIndex}
+      y={blockOffsetY + (blockSize + blockMargin) * dayIndex}
       style={{
         fill: getLevelFill(level, levels, isNormalized, highlighted, colors),
         ...styleProp,
@@ -737,6 +761,8 @@ export const CalendarHeatmapBody = ({
     blockMargin,
     labels,
     labelHeight,
+    monthLabelPosition,
+    blockOffsetY,
     fontSize,
     weekStart,
     data,
@@ -744,6 +770,9 @@ export const CalendarHeatmapBody = ({
 
   const weekdayLabelWidth = hideWeekdayLabels ? 0 : 40;
   const strokePadding = 3;
+  const gridHeight = (blockSize + blockMargin) * 7 - blockMargin;
+  const monthLabelY =
+    monthLabelPosition === "top" ? 0 : gridHeight + LABEL_MARGIN;
 
   const rowData = useMemo(() => {
     return yearRows.map((yearRow) => {
@@ -814,6 +843,7 @@ export const CalendarHeatmapBody = ({
                         strokePadding +
                         (blockWidth + blockMargin) * weekIndex
                       }
+                      y={monthLabelY}
                       style={{ fontSize: `${fontSize * 0.75}px` }}
                     >
                       {label}
@@ -838,7 +868,7 @@ export const CalendarHeatmapBody = ({
                         key={`weekday-${yearRow.year}-${label}`}
                         x={0}
                         y={
-                          labelHeight +
+                          blockOffsetY +
                           (blockSize + blockMargin) * dayIndex +
                           blockSize / 2
                         }
