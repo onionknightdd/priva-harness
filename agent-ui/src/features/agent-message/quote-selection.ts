@@ -13,17 +13,24 @@ export function toQuotedMarkdown(text: string) {
     .join("\n")
 }
 
-export function appendQuotedDraft(draft: string, quoted: string) {
+export function appendQuotedDraft(draft: string, quoted: string, instruction = "") {
   const block = toQuotedMarkdown(quoted)
   if (block === "") {
     return draft
   }
 
-  if (draft.trim() === "") {
-    return `${block}\n\n`
-  }
+  const prefix = draft.trim() === "" ? "" : `${draft.replace(/\s+$/, "")}\n\n`
+  return `${prefix}${block}\n\n${instruction ? `${instruction}\n` : ""}`
+}
 
-  return `${draft.replace(/\s+$/, "")}\n\n${block}\n\n`
+export function selectionActionsPosition(rect: { left: number; top: number; bottom: number; width: number },
+  menu: { width: number; height: number }, viewport: { width: number; height: number }) {
+  const padding = 8
+  const left = Math.max(padding, Math.min(rect.left + rect.width / 2 - menu.width / 2, viewport.width - menu.width - padding))
+  const below = rect.bottom + padding
+  const placeAbove = below + menu.height > viewport.height - padding
+  const top = Math.max(padding, Math.min(placeAbove ? rect.top - menu.height - padding : below, viewport.height - menu.height - padding))
+  return { left, top, placeAbove }
 }
 
 export function focusAgentComposer() {
@@ -52,10 +59,8 @@ export function readAssistantSelection() {
 
   const anchor = nodeElement(selection.anchorNode)
   const focus = nodeElement(selection.focusNode)
-  if (
-    !anchor?.closest(`[${ASSISTANT_SELECTABLE_ATTR}]`) ||
-    !focus?.closest(`[${ASSISTANT_SELECTABLE_ATTR}]`)
-  ) {
+  const surface = anchor?.closest(`[${ASSISTANT_SELECTABLE_ATTR}]`)
+  if (!surface || focus?.closest(`[${ASSISTANT_SELECTABLE_ATTR}]`) !== surface) {
     return null
   }
 

@@ -133,8 +133,10 @@ export function AgentMessage({
             >
               <AgentMessageThread
                 messages={messages}
-                onQuote={(text) => {
-                  onDraftChange(appendQuotedDraft(draft, text))
+                onSelectionAction={(action, text) => {
+                  const instruction = action === "explain" ? t("agentMessage.explainSelectionPrompt")
+                    : action === "improve" ? t("agentMessage.improveSelectionPrompt") : ""
+                  onDraftChange(appendQuotedDraft(draft, text, instruction))
                   requestAnimationFrame(() => {
                     focusAgentComposer()
                   })

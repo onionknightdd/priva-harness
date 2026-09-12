@@ -7,10 +7,11 @@ import {
 } from "react"
 
 import { StreamdownMarkdownCode } from "@/components/ai-elements/streamdown-markdown-code"
-import { FilePathLink } from "@/features/files/file-path-link"
 import { useChatSession } from "@/features/chat-session"
 import { fileNameFromPath, looksLikeFilePath, resolveAgainstCwd } from "@/lib/file-path"
 import { cn } from "@/lib/utils"
+
+import { AssistantFileReference } from "./assistant-file-reference"
 
 const assistantInlineCodeClassName = "bg-[rgb(236,236,236)] dark:bg-muted"
 
@@ -50,11 +51,9 @@ export function AssistantMarkdownCode({
     const text = collectText(children).trim()
     if (looksLikeFilePath(text)) {
       return (
-        <FilePathLink
+        <AssistantFileReference
           path={resolveAgainstCwd(text, runCwd)}
           label={fileNameFromPath(text)}
-          showIcon
-          variant="code"
           className={cn(assistantInlineCodeClassName, className)}
         />
       )

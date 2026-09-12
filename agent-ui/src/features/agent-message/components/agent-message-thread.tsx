@@ -41,13 +41,14 @@ import {
 } from "../expand-down-anchor"
 import { foldCommandSurfaces } from "../slash-command-envelope"
 import { questionSummaryTransition } from "../question-summary-motion"
+import { AssistantSelectionActionContext, type OnAssistantSelectionAction } from "../selection-actions-context"
 import {
   groupThreadTurns,
   turnStickyParts,
   type ThreadTurn,
 } from "../thread-turns"
 import { AgentMessageItem } from "./agent-message-item"
-import { AssistantQuoteMenu } from "./assistant-quote-menu"
+import { AssistantSelectionActions } from "./assistant-selection-actions"
 import { StickyFreeze } from "./sticky-freeze"
 import { TaskPlanPopover } from "./task-plan-popover"
 import { WorkingStatusLine } from "./working-status-line"
@@ -57,10 +58,10 @@ const MotionScrollerItem = motion.create(MessageScrollerItem)
 
 export function AgentMessageThread({
   messages,
-  onQuote,
+  onSelectionAction,
 }: {
   messages: AgentThreadMessage[]
-  onQuote?: (text: string) => void
+  onSelectionAction?: OnAssistantSelectionAction
 }) {
   const { t, i18n } = useTranslation()
   const { runHarnessId } = useHarness()
@@ -137,6 +138,7 @@ export function AgentMessageThread({
   }
 
   return (
+    <AssistantSelectionActionContext.Provider value={onSelectionAction ?? null}>
     <MessageScrollerProvider autoScroll={!followPaused}>
       <MessageScroller>
         <MotionConfig
@@ -183,8 +185,9 @@ export function AgentMessageThread({
           </div>
         </div>
       </MessageScroller>
-      {onQuote ? <AssistantQuoteMenu onQuote={onQuote} /> : null}
+      {onSelectionAction ? <AssistantSelectionActions onAction={onSelectionAction} /> : null}
     </MessageScrollerProvider>
+    </AssistantSelectionActionContext.Provider>
   )
 }
 
