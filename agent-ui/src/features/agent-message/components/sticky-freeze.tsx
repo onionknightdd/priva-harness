@@ -1,8 +1,27 @@
 import * as React from "react"
+import { flushSync } from "react-dom"
 import { motion, useReducedMotion } from "motion/react"
 
 import { EASE_OUT } from "@/lib/ease"
 import { cn } from "@/lib/utils"
+
+const pendingInitialSyncs = new Set<() => void>()
+
+function scheduleInitialSync(sync: () => void) {
+  pendingInitialSyncs.add(sync)
+  if (pendingInitialSyncs.size === 1) {
+    // Ancestor layout effects restore the transcript's scroll position after
+    // the bars mount. Read that position before paint, committing all bars in
+    // one batch instead of forcing a render for every historical message.
+    queueMicrotask(() => {
+      if (pendingInitialSyncs.size === 0) return
+      const syncs = [...pendingInitialSyncs]
+      pendingInitialSyncs.clear()
+      flushSync(() => syncs.forEach((run) => run()))
+    })
+  }
+  return () => { pendingInitialSyncs.delete(sync) }
+}
 
 export const StickyFreeze = React.forwardRef<
   HTMLDivElement,
@@ -28,7 +47,7 @@ export const StickyFreeze = React.forwardRef<
   const shouldReduceMotion = Boolean(useReducedMotion())
   const showEdge = stuck && showBelowMask
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     const sentinel = sentinelRef.current
     if (!sentinel) {
       return
@@ -37,6 +56,12 @@ export const StickyFreeze = React.forwardRef<
     const root = sentinel.closest<HTMLElement>(
       '[data-slot="message-scroller-viewport"]'
     )
+    const cancelInitialSync = scheduleInitialSync(() => {
+      const next = sentinel.getBoundingClientRect().bottom <=
+        (root?.getBoundingClientRect().top ?? 0) + top
+      setStuck(next)
+      onStuckChange?.(next)
+    })
     const observer = new IntersectionObserver(
       ([entry]) => {
         const rootTop = entry?.rootBounds?.top ?? 0
@@ -50,7 +75,10 @@ export const StickyFreeze = React.forwardRef<
     )
 
     observer.observe(sentinel)
-    return () => observer.disconnect()
+    return () => {
+      cancelInitialSync()
+      observer.disconnect()
+    }
   }, [onStuckChange, top])
 
   // Sentinel and bar are siblings of the turn item. Wrapping them in a

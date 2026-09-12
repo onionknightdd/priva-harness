@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="UTF-8" /><title>Sticky freeze lifecycle checks</title></head>
+  <body>
+    <button id="run">Run sticky freeze checks</button>
+    <pre id="results"></pre>
+    <script type="module">
+      import { runStickyFreezeChecks } from "./sticky-freeze-checks.tsx"
+      Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
+      document.querySelector("#run").onclick = async (event) => {
+        event.target.disabled = true
+        const results = document.querySelector("#results")
+        const passed = []
+        try {
+          await runStickyFreezeChecks((name, condition) => {
+            if (!condition) throw new Error(name)
+            passed.push(name)
+          })
+          results.textContent = `PASS (${passed.length})\n${passed.join("\n")}`
+        } catch (error) {
+          results.textContent = `FAIL after ${passed.length} checks\n${error.stack}`
+        } finally {
+          event.target.disabled = false
+        }
+      }
+    </script>
+  </body>
+</html>
