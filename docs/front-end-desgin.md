@@ -128,6 +128,21 @@ User MessageContent -> user-message -> light: #EAF3FD
 Dark popup menus -> popover -> #353535
 ```
 
+### 悬浮高亮的跟手速度
+
+2026-09-12：侧栏菜单、文件树和 Slash 菜单的滑动悬浮高亮共用
+`components/motion/menu-highlight-transition.ts`。原弹簧（stiffness 350 /
+damping 35）从相邻行移到下一行要 ~290ms 才停稳，100ms 时只走了一半，
+明显滞后于指针。按用户两轮试用后定为 stiffness 2800 / damping 106（临界
+阻尼、无回弹）：90% 位移约 85–90ms，相邻行 ~130ms 停稳，大跨度跳转 ~200ms；
+保留弹簧是为了指针快速掠过多行时速度可以连续，不会像 tween 那样每次从零
+重启。减少动态效果时仍为 0 时长。
+
+```text
+pointermove -> active row -> highlight spring (2800 / 106, no overshoot)
+                              ~88ms reach 90%  ->  ~130ms settle (adjacent row)
+```
+
 ### Skills 搜索与预览 Tab
 
 2026-09-10：按最新调整，Skills 移除项目范围筛选及对应的 Combobox / Command 组件。
