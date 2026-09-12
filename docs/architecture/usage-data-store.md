@@ -167,14 +167,27 @@ Pi 对无报价模型给出 `cost.total = 0` 而非缺失，因此 Pi 侧无法�
 `run.finished` 的 `details`。一个 run 只会 finish 一次，后到的终态被忽略。`AgentHarness` 的
 `recorder` 选项缺省为无，此时 ledger 全部为空操作。
 
+同一个 ledger 还从事件流中采集以下审计（均带 `run_id` 与当时已知的 `session_id`）：
+
+| 事件 | 记录 | 说明 |
+| --- | --- | --- |
+| `tool.started` / `tool.updated` / `tool.running` | 暂存 | 记住 input 与时间戳 |
+| `tool.completed` | `tool` 事实 + `tool.invoked` 审计 | 每个 `tool_use_id` 只记一次（Claude 的 Skill 结果会到两次）；`duration_ms` 优先用事件值，否则按 `tool.running`（Pi）或 `tool.started` 起算；`output_tokens` 目前只有 Claude 的 Agent 工具结果提供；details 存完整 input、前 200 字符 output、`outputChars` |
+| `tool.completed` 且工具名为 `Skill` | 额外 `skill.invoked`，target = input.skill，`via: 'tool'` | |
+| 提示词以 `/name` 开头 | `skill.invoked`，`via: 'prompt'` | 只有 `name` 出现在该 provider 最近一次 `listSlashCommands` 结果的 `kind = 'skill'` 名单（含别名）中才记，避免把路径或内建命令当成技能；harness 从未列过该 provider 的命令时不记 |
+| `permission.resolved`（`kind = 'tool'`） | `permission.resolved`，target = 工具名 | details：decision、reason（answered / skipped / timeout / cancelled）、requestReason、从 `permission.requested` 起算的 `latencyMs` |
+| `permission.resolved`（`kind = 'question'`） | `question.answered`，target = 工具名 | 与权限分开计数；details 含 answers |
+| `session.compacted` | `session.compacted` | details 只有 `summaryChars` |
+| `agent.started` / `agent.completed` | `agent.completed`，target = 子代理名 | details：agentId、ok、status、durationMs |
+| `workflow.started` / `workflow.completed` | `workflow.completed`，target = 工作流名 | details：workflowToolUseId、status、durationMs |
+
 ## 当前范围与后续
 
 已完成：存储层、worker 管道、主线程代理、保留期清理、启动回收、`main.ts` 接线；provider 事件层
-的用量求和 / 按模型拆分 / 失败码归一化 / `source`；harness 的 run 级采集。每个用户轮次现在都会
-落一行 `run_fact`。
+的用量求和 / 按模型拆分 / 失败码归一化 / `source`；harness 的 run 级采集与事件流审计（工具、技能、
+权限、问答、压缩、子代理、工作流）。
 
 后续步骤：
 
-1. 工具、技能、权限、问答、压缩、子代理、工作流审计。
-2. 路由层审计（session 生命周期、配置变更）。
-3. 查询接口（时区由请求携带）与前端概览页。
+1. 路由层审计（session 生命周期、配置变更）。
+2. 查询接口（时区由请求携带）与前端概览页。

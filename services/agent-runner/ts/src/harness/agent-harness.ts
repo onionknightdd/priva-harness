@@ -66,6 +66,10 @@ export class AgentHarness {
   private readonly pool: WarmRuntimePool | undefined
   private readonly streams = new Map<string, SessionStream>()
   private readonly loadingStreams = new Map<string, Promise<SessionStream>>()
+  // Skill names seen in the latest slash-command listing per provider. Used
+  // to tell a "/skill" prompt from a path or an unknown command without
+  // paying for a listing on every turn.
+  private readonly knownSkills = new Map<ProviderId, Set<string>>()
 
   constructor(private readonly options: AgentHarnessOptions) {
     this.liveRuns = options.liveRuns
@@ -218,6 +222,7 @@ export class AgentHarness {
       cwd: options.cwd,
       ...(options.spec === undefined ? {} : { spec: options.spec }),
     })
+    this.rememberSkills(options.provider, commands)
     return {
       harness: options.provider,
       cwd: options.cwd,
@@ -256,10 +261,12 @@ export class AgentHarness {
     // Opened before the provider so a session that fails to open still counts
     // as a user turn that failed.
     const preassigned = sessionRefOf(session)?.id
+    const knownSkills = this.knownSkills.get(spec.provider)
     const ledger = new RunLedger(this.options.recorder, {
       runId, spec, source: runOptions.source,
       turn: { text: userTurn.text, ...(attachments ? { attachments } : {}) },
       ...(preassigned === undefined ? {} : { sessionId: preassigned }),
+      ...(knownSkills === undefined ? {} : { knownSkills }),
     })
     try {
       const provider = this.options.providers[spec.provider]
@@ -429,6 +436,16 @@ export class AgentHarness {
         })
       }
     }
+  }
+
+  private rememberSkills(provider: ProviderId, commands: readonly SlashCommand[]): void {
+    const names = new Set<string>()
+    for (const command of commands) {
+      if (command.kind !== 'skill') continue
+      names.add(command.name.toLowerCase())
+      for (const alias of command.aliases ?? []) names.add(alias.toLowerCase())
+    }
+    this.knownSkills.set(provider, names)
   }
 
   private prepareSession(

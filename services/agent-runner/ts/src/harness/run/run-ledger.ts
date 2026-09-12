@@ -1,10 +1,14 @@
 import type { ProviderRunSpec } from '../../core/contract/agent-provider.js'
 import type { DataRecorder } from '../../core/contract/data-recorder.js'
 import type { AgentEvent } from '../../core/event/agent-event.js'
+import { asRecord, stringField } from '../../core/event/json-record.js'
 import type { RunFinishedRecord, RunSource } from '../../core/resource/data-store.js'
+import type { InteractionRequest } from '../../core/resource/interaction.js'
 import type { UserTurn } from '../../core/run/user-turn.js'
 
 const PROMPT_PREVIEW_CHARS = 200
+const TOOL_OUTPUT_PREVIEW_CHARS = 200
+const SLASH_SKILL = /^\/([a-z0-9][a-z0-9_-]*)(?:\s|$)/i
 
 export interface RunLedgerStart {
   readonly runId: string
@@ -12,16 +16,31 @@ export interface RunLedgerStart {
   readonly source: RunSource
   readonly turn: UserTurn
   readonly sessionId?: string
+  // Skill names known for this provider; a "/name" prompt is only counted
+  // as a skill invocation when it matches one of them.
+  readonly knownSkills?: ReadonlySet<string>
+}
+
+interface PendingTool {
+  name: string
+  input: unknown
+  readonly seenAt: number
+  runningAt: number | undefined
 }
 
 // Per-run bookkeeping for the usage store: one run.started, at most one
-// run.session back-fill and exactly one run.finished, whatever path the run
-// takes to its end. Recording is fire-and-forget; nothing here can fail the
-// run.
+// run.session back-fill, exactly one run.finished, plus the tool, skill,
+// permission, compaction, subagent and workflow audits observed on the way.
+// Recording is fire-and-forget; nothing here can fail the run.
 export class RunLedger {
   private readonly startedAt = Date.now()
   private sessionId: string | undefined
   private closed = false
+  private readonly tools = new Map<string, PendingTool>()
+  private readonly recordedTools = new Set<string>()
+  private readonly interactions = new Map<string, { request: InteractionRequest; at: number }>()
+  private readonly agents = new Map<string, { name: string | undefined; at: number }>()
+  private readonly workflows = new Map<string, { name: string | undefined; at: number }>()
 
   constructor(
     private readonly recorder: DataRecorder | undefined,
@@ -46,6 +65,7 @@ export class RunLedger {
         cwd: start.spec.cwd,
       },
     })
+    this.recordSlashSkill(start.turn.text)
   }
 
   attachSession(sessionId: string): void {
@@ -70,6 +90,65 @@ export class RunLedger {
       case 'error':
         this.finish({ outcome: 'failed', failureCode: 'transport_error' }, event)
         return
+      case 'tool.started':
+        this.tools.set(event.id, { name: event.name, input: event.input, seenAt: Date.now(), runningAt: undefined })
+        return
+      case 'tool.updated': {
+        const pending = this.tools.get(event.id)
+        if (pending === undefined) {
+          this.tools.set(event.id, { name: event.name, input: event.input, seenAt: Date.now(), runningAt: undefined })
+        } else {
+          pending.name = event.name
+          pending.input = event.input
+        }
+        return
+      }
+      case 'tool.running': {
+        const pending = this.tools.get(event.id)
+        if (pending !== undefined && pending.runningAt === undefined) pending.runningAt = Date.now()
+        return
+      }
+      case 'tool.completed':
+        this.recordTool(event)
+        return
+      case 'permission.requested':
+        this.interactions.set(event.request.requestId, { request: event.request, at: Date.now() })
+        return
+      case 'permission.resolved':
+        this.recordInteraction(event.resolution.request, event.resolution.decision, event.resolution.reason, event.resolution.answers)
+        return
+      case 'session.compacted':
+        this.audit('session.compacted', undefined, {
+          ...(event.summary === undefined ? {} : { summaryChars: event.summary.length }),
+        })
+        return
+      case 'agent.started':
+        this.agents.set(event.agentId, { name: event.name, at: Date.now() })
+        return
+      case 'agent.completed': {
+        const started = this.agents.get(event.agentId)
+        this.agents.delete(event.agentId)
+        this.audit('agent.completed', started?.name, {
+          agentId: event.agentId,
+          ...(event.ok === undefined ? {} : { ok: event.ok }),
+          ...(event.status === undefined ? {} : { status: event.status }),
+          ...(started === undefined ? {} : { durationMs: Date.now() - started.at }),
+        })
+        return
+      }
+      case 'workflow.started':
+        this.workflows.set(event.workflowToolUseId, { name: event.name, at: Date.now() })
+        return
+      case 'workflow.completed': {
+        const started = this.workflows.get(event.workflowToolUseId)
+        this.workflows.delete(event.workflowToolUseId)
+        this.audit('workflow.completed', started?.name, {
+          workflowToolUseId: event.workflowToolUseId,
+          status: event.status,
+          ...(started === undefined ? {} : { durationMs: Date.now() - started.at }),
+        })
+        return
+      }
       default:
     }
   }
@@ -87,6 +166,84 @@ export class RunLedger {
     if (this.closed) return
     if (aborted) this.finish({ outcome: 'aborted' }, { reason: 'stream closed after abort' })
     else this.finish({ outcome: 'failed', failureCode: 'unknown' }, { reason: 'stream ended without a result' })
+  }
+
+  private recordTool(event: Extract<AgentEvent, { type: 'tool.completed' }>): void {
+    // Claude reports a Skill tool's result twice (expanded prompt, then the
+    // regular tool_result); one fact per tool_use_id.
+    if (this.recordedTools.has(event.id)) return
+    this.recordedTools.add(event.id)
+    const pending = this.tools.get(event.id)
+    this.tools.delete(event.id)
+    const now = Date.now()
+    const durationMs = event.durationMs
+      ?? (pending === undefined ? undefined : now - (pending.runningAt ?? pending.seenAt))
+    this.recorder?.record({
+      kind: 'tool',
+      tsUtc: new Date(now).toISOString(),
+      runId: this.start.runId,
+      toolUseId: event.id,
+      toolName: event.name,
+      ok: event.ok,
+      ...(durationMs === undefined ? {} : { durationMs }),
+      ...(event.tokens === undefined ? {} : { outputTokens: event.tokens }),
+      ...(event.agentId === undefined ? {} : { agentId: event.agentId }),
+      details: {
+        input: pending?.input ?? null,
+        output: event.output.slice(0, TOOL_OUTPUT_PREVIEW_CHARS),
+        outputChars: event.output.length,
+        ...(event.status === undefined ? {} : { status: event.status }),
+        ...(this.sessionId === undefined ? {} : { sessionId: this.sessionId }),
+      },
+    })
+    if (event.name.toLowerCase() === 'skill') {
+      const skill = stringField(asRecord(pending?.input) ?? {}, 'skill')
+      if (skill !== undefined && skill !== '') {
+        this.audit('skill.invoked', skill, { via: 'tool', toolUseId: event.id, input: pending?.input ?? null })
+      }
+    }
+  }
+
+  private recordSlashSkill(text: string): void {
+    const name = SLASH_SKILL.exec(text)?.[1]?.toLowerCase()
+    if (name === undefined || this.start.knownSkills?.has(name) !== true) return
+    this.audit('skill.invoked', name, { via: 'prompt', promptPreview: text.slice(0, PROMPT_PREVIEW_CHARS) })
+  }
+
+  private recordInteraction(
+    request: InteractionRequest,
+    decision: 'allow' | 'deny',
+    reason: string,
+    answers: unknown,
+  ): void {
+    const requested = this.interactions.get(request.requestId)
+    this.interactions.delete(request.requestId)
+    const latency = requested === undefined ? {} : { latencyMs: Date.now() - requested.at }
+    if (request.kind === 'question') {
+      this.audit('question.answered', request.tool, {
+        requestId: request.requestId, decision, reason, questions: request.questions.length,
+        ...(answers === undefined ? {} : { answers }), ...latency,
+      })
+      return
+    }
+    this.audit('permission.resolved', request.tool, {
+      requestId: request.requestId, decision, reason,
+      ...(request.toolUseId === undefined ? {} : { toolUseId: request.toolUseId }),
+      ...(request.reason === undefined ? {} : { requestReason: request.reason }),
+      ...latency,
+    })
+  }
+
+  private audit(action: string, target: string | undefined, details: unknown): void {
+    this.recorder?.record({
+      kind: 'audit',
+      tsUtc: new Date().toISOString(),
+      action,
+      runId: this.start.runId,
+      ...(this.sessionId === undefined ? {} : { sessionId: this.sessionId }),
+      ...(target === undefined ? {} : { target }),
+      details,
+    })
   }
 
   private finish(
