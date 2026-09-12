@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "../../../src/components
 import { ComposerContextRing } from "../../../src/features/agent-message/components/composer-context-ring"
 import { ComposerSlashChip } from "../../../src/features/agent-message/components/composer-slash-chip"
 import { en } from "../../../src/i18n/locales/en"
+import { runFilePathLinkChecks } from "../../features/files/file-path-link-checks"
 import "../../../src/index.css"
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
@@ -134,6 +135,7 @@ async function runChecks() {
     await wait(2100)
     check("empty hints stay disabled", !popup())
     await hover(null)
+    await runFilePathLinkChecks(check)
     await act(async () => { target("popover").click() })
     await until(() => Boolean(document.querySelector('[data-slot="popover-content"][data-open]')))
     check("composed popover triggers retain their original action", document.querySelector('[data-slot="popover-content"]')?.textContent?.includes("Popover opened") === true)
