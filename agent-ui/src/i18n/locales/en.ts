@@ -69,9 +69,27 @@ export const en = {
   usage: {
     loading: "Loading usage",
     retry: "Retry",
+    activity: {
+      label: "Activity",
+      tokens: "Token activity",
+      models: "Model activity",
+    },
+    models: {
+      other: "Others",
+      empty: "No model usage recorded yet.",
+    },
     heatmap: {
       title: "Token activity",
       modeLabel: "Heatmap mode",
+      weekday: {
+        sun: "SUN",
+        mon: "MON",
+        tue: "TUE",
+        wed: "WED",
+        thu: "THU",
+        fri: "FRI",
+        sat: "SAT",
+      },
       mode: {
         daily: "Daily",
         weekly: "Weekly",

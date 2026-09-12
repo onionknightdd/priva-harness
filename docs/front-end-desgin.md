@@ -179,22 +179,45 @@ Base UI 工程中转换出的 `render`。文件正文不做高度布局动画或
 
 ```text
 数据与用量 / 用量
-Token 活动                                          每日  每周  累计
-[][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][]
-[][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][]
- ... 7 行 × 53 周，单元 12px、间距 4px、圆角 3px，一条连续的滚动年
-10月   11月   12月   1月   2月   3月   4月   5月   6月   7月   8月   9月
-窄屏：热力图容器横向滚动，其余不变。
+[~ Token 活动 | 模型活动]                              每日  每周  累计
+周一 [][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][]
+周二 [][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][]
+ ...  7 行 × 53 周，单元 12px、间距 4px、圆角 3px，一条连续的滚动年
+周日 [][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][]
+     10月  11月  12月  1月  2月  3月  4月  5月  6月  7月  8月     9月
+
+[Token 活动 | ▥ 模型活动]
+      ▄▄        每月一根堆叠柱，最多 4 个模型 + 其他
+  ▄▄  ██  ▄▄    hover 显示该月各模型处理 token
+ 10月 11月 12月 ...                       ● claude ● gpt ● … ● 其他
+窄屏：热力图容器横向滚动，柱状图随宽度收缩。
 ```
 
-按用户提供的截图形式实现：左侧 14px 半粗标题「Token 活动」，右侧
-`assistant-ui/tabs` 的 `ghost` / `sm` 变体切换「每日 / 每周 / 累计」（列表底色透明），
-月份标签位于网格下方，隐藏星期、年份标签和 Less / More 图例。整块宽度等于年网格
-（`w-max`）并在页面中居中；标题左缘与网格左缘、末个 Tab 的文字右缘与网格右缘对齐
-（标题行内缩 3px 抵消 SVG 描边留白，Tab 列表 `-mr-2` 抵消末项内边距）。三种模式都由同一份
-`heatmap` 数据在前端换算：每日为当日处理 token，每周为周一至周日合计并在整列重复，
-累计为窗口内的滚动总和；单元 `aria-label` 随模式切换措辞。切换模式时单元填充做 200ms
-`ease-out` 过渡，减少动态效果时立即变色。
+2026-09-12：按用户要求，整块放入与侧栏 Agent / Code 相同样式的 Tabs
+（`assistant-ui/tabs` `default` 变体、`size="sm"`、`TabsTriggerContent` 激活图标弹入），
+两个面板为「Token 活动」和「模型活动」。右侧「每日 / 每周 / 累计」只属于热力图面板，
+使用新增的 `text` 变体：列表无底色、无滑块，激活态仅由文字颜色表达；切到模型面板时
+随面板一起移除，切回时和面板同样淡入。面板切换不做交叉淡出（会让两块内容在列中
+叠一帧并推动布局），只让进入的面板做 200ms 透明度淡入。
+
+热力图左侧显示星期：中文「周一 … 周日」，英文「MON … SUN」，周一起始；月份标签位于
+网格下方。当前月份始终显示：上游会在月末剩余不足 3 列时丢掉末尾标签，本地改为保留并
+右对齐到网格右缘（相邻月份标签至少相隔 4 列，不会重叠）；首月标签沿用上游规则。
+整块宽度固定为年网格宽度（`USAGE_HEATMAP_WIDTH` = 星期标签 40px + 53 列 × 16px −
+4px + 描边留白 6px = 890px），在页面中居中；面板 Tabs 左缘对齐星期标签左缘，
+末个模式 Tab 的文字右缘对齐网格右缘（标题行右侧内缩 3px 抵消 SVG 描边留白，
+Tab 列表 `-mr-2` 抵消末项内边距）。三种模式都由同一份 `heatmap` 数据在前端换算：
+每日为当日处理 token，每周为周一至周日合计并在整列重复，累计为窗口内的滚动总和；
+单元 `aria-label` 随模式切换措辞。切换模式时单元填充做 200ms `ease-out` 过渡，
+减少动态效果时立即变色。
+
+模型活动使用 shadcn 堆叠柱状图（`ui/chart` + Recharts `BarChart`），不套 Card：
+X 轴为窗口内的每个月（无用量的月份保留空柱位），按处理 token 从高到低取前 4 个模型，
+其余合并为「其他」；系列颜色读取共享 `usage-series-1…5` token（蓝色由深到浅），
+图例与悬浮提示复用 `ChartLegendContent` / `ChartTooltipContent`，提示标题为
+「2026年9月 / Sep 2026」。模型 id 可能含 `.` 和 `/`，图表内部按位置命名系列
+（`series1…`），只在图例中显示模型名。柱条不做 Recharts 默认 1.5s 生长动画。
+无任何模型记录时显示「暂无模型用量记录。」。
 
 热力图组件通过 shadcn CLI 从 `@heatmap` registry 安装
 （[rutopio/shadcn-heatmap](https://github.com/rutopio/shadcn-heatmap)）：
@@ -206,7 +229,8 @@ npx shadcn@latest add @heatmap/calendar-heatmap
 本地在上游基础上保留 / 增加了以下内容，重新安装后必须审阅差异并恢复：焦点框使用
 `ring-inset`；`ref` 类型为 `Ref<SVGRectElement>`；新增 `monthLabelPosition="bottom"`
 把月份标签画在网格下方；新增 `splitYears={false}` 让跨年的滚动窗口保持一条连续的
-网格，而不是在元旦处拆成两行。CLI 同时会向 `index.css` 注入 registry 自带的
+网格，而不是在元旦处拆成两行；末尾月份标签不再按剩余列数过滤，列数不足时以
+`text-anchor: end` 右对齐到网格右缘。CLI 同时会向 `index.css` 注入 registry 自带的
 `--secondary` / `--chart-1` / `--muted-foreground`，这些必须丢弃，继续使用项目 token。
 
 单元颜色读取共享 `heatmap` token（浅色 / 深色均为 `rgb(78, 130, 239)`），空日读取
@@ -840,7 +864,7 @@ App TooltipProvider -> 首次悬浮 1s -> 连续切换 0ms
 
 | 组件类型 | 当前入口 / 来源 | 当前样式和反馈 | 代表场景 |
 | --- | --- | --- | --- |
-| Tabs | [assistant-ui/tabs](../agent-ui/src/components/assistant-ui/tabs.tsx)，Base UI + Motion | 多种变体，共享选中/悬浮滑块；属于本地通用封装 | 侧栏模式、文件标签、工作表、工作流详情 |
+| Tabs | [assistant-ui/tabs](../agent-ui/src/components/assistant-ui/tabs.tsx)，Base UI + Motion | default / line / ghost / pills / outline 共享选中/悬浮滑块；`text` 变体无底色无滑块，仅文字颜色表达激活态；属于本地通用封装 | 侧栏模式、文件标签、工作表、工作流详情、用量面板与热力图模式切换 |
 | 资源 Tabs | [animate-ui/components/radix/tabs](../agent-ui/src/components/animate-ui/components/radix/tabs.tsx)，Radix + Motion | 24px 标签栏、共享底色和滑块；键盘及减少动态效果时立即切换 | Skill 文件预览、MCP 工具 / 提示词 / 资源 / 配置 |
 | ExpandableTabs | [motion/expandable-tabs](../agent-ui/src/components/motion/expandable-tabs.tsx)，BE UI 衍生 | 胶囊图标展开标签；固定 26px 外框 / 18px 内容圆角、本地 tab 语义和动画 | Workspace 模块切换 |
 | Sidebar | [ui/sidebar](../agent-ui/src/components/ui/sidebar.tsx)，shadcn 衍生组合 | `sidebar-*` token；Base UI Sheet 处理移动端，GSAP 调整桌面宽度，Motion 处理行高亮 | 主侧栏、工作区侧栏 |
@@ -850,7 +874,7 @@ App TooltipProvider -> 首次悬浮 1s -> 连续切换 0ms
 | Tree | [reui/tree](../agent-ui/src/components/reui/tree.tsx) + [file-browser-tree](../agent-ui/src/features/file-browser/components/file-browser-tree.tsx) | Headless Tree 的树模型 + ReUI 外观 + Motion 高亮 / 文字溢出反馈 | 文件浏览器；[SkillResourceTree](../agent-ui/src/features/resources/skill-resource-tree.tsx) 也复用 FileBrowserTree，使用 compact 变体 |
 | Card / Item / Separator | [ui/card](../agent-ui/src/components/ui/card.tsx)、[ui/item](../agent-ui/src/components/ui/item.tsx)、[ui/separator](../agent-ui/src/components/ui/separator.tsx) | token 化卡片、列表项、分隔线；Separator 用 Base UI | 工具结果、模型列表、Profile |
 | Avatar | [ui/avatar](../agent-ui/src/components/ui/avatar.tsx)，Base UI Avatar | 圆形头像及 fallback | 用户菜单、Profile |
-| Chart | [ui/chart](../agent-ui/src/components/ui/chart.tsx) + Recharts | `chart-*` token 与本地图表 Tooltip；这里的 Tooltip 是图表数据提示 | 模型用量图表 |
+| Chart | [ui/chart](../agent-ui/src/components/ui/chart.tsx) + Recharts | `chart-*` token 与本地图表 Tooltip；用量页堆叠柱读取 `usage-series-1…5` token；这里的 Tooltip 是图表数据提示 | 用量页模型活动、Profile 模型用量 |
 | CalendarHeatmap | [heatmap/calendar-heatmap](../agent-ui/src/components/heatmap/calendar-heatmap.tsx)，`@heatmap` registry（SVG + date-fns）+ 本地 `ring-inset` / `monthLabelPosition` / `splitYears` | 网格热力图；基础默认读 chart token，用量页读取共享 `heatmap` token，Profile 调用点仍传固定蓝色 | 用量页 Token 活动、Profile Token 日历 |
 | Table / 数据网格 | [spreadsheet-renderer](../agent-ui/src/features/files/preview/renderers/spreadsheet-renderer.tsx)，SheetJS + TanStack Virtual + 原生 table | 工作簿解析、虚拟行列、粘性表头、本地单元格样式 | 表格文件预览；尚无通用 `ui/table` 或 DataTable 入口 |
 | ScrollArea / 消息滚动 | [agents/code-block](../agent-ui/src/components/agents/code-block.tsx) 直接使用 Base UI ScrollArea；[ui/message-scroller](../agent-ui/src/components/ui/message-scroller.tsx) 包装 `@shadcn/react/message-scroller` | 代码滚动区与聊天跟随滚动；其余区域多用原生 overflow | 代码块、聊天历史 |
@@ -1155,9 +1179,13 @@ MCP 页面浏览器回归：打开 `/tests/features/resources/mcp-browser.html`�
 ```
 
 用量热力图浏览器回归：在开发服务器打开 `/tests/features/usage/usage-heatmap-browser.html`，
-点击 **Run usage heatmap checks**。使用一年的合成数据，覆盖标题、三种模式、月份标签
-在网格下方、隐藏星期标签、365 个单元、跨年不拆行、标题 / Tab 文字与网格两缘对齐、
-整块居中、每周整列同色、累计单调递增及切回每日恢复原色；追加 `?zh&dark` 检查中文与深色，`&auto` 在加载后自动运行。
+点击 **Run usage heatmap checks**。使用一年的合成数据与六个模型，覆盖面板 Tabs
+的文案与 default 变体、模式切换的 `text` 变体与透明底色、星期标签周一至周日、月份标签
+在网格下方、当前月份保留且不越出网格、365 个单元、跨年不拆行、面板 Tabs / 模式 Tab
+文字与网格两缘对齐、整块居中、每周整列同色、累计单调递增、切回每日恢复原色，以及
+模型面板卸载热力图与模式切换、前 4 个模型 + 其他的图例、12–13 个月份柱位、系列 token
+和切回热力图的恢复；追加 `?zh&dark` 检查中文与深色，`&panel=models` 直接打开模型面板，
+`&auto` 在加载后自动运行。
 
 Subagent 测试流客户端：
 

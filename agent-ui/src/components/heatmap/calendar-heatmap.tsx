@@ -51,6 +51,8 @@ type MonthLabel = {
   weekIndex: number;
   label: string;
   year?: number;
+  // Too few columns remain to fit the text; anchor it to the grid's right edge.
+  anchorEnd?: boolean;
 };
 
 export type MonthLabelPosition = "top" | "bottom";
@@ -401,12 +403,17 @@ const getMonthLabels = (
         return labels[1] && labels[1].weekIndex - weekIndex >= minWeeks;
       }
 
-      if (index === labels.length - 1) {
-        return weeks.slice(weekIndex).length >= minWeeks;
-      }
-
       return true;
-    });
+    })
+    // The current month is the one the reader cares about most, so it stays
+    // even in its first week; it is right-anchored instead of dropped when
+    // the remaining columns cannot hold the text. Adjacent month labels are at
+    // least four columns apart, so the anchored label cannot collide.
+    .map((label, index, labels) =>
+      index === labels.length - 1 && weeks.length - label.weekIndex < 3
+        ? { ...label, anchorEnd: true }
+        : label,
+    );
 };
 
 export type CalendarHeatmapProps = HTMLAttributes<HTMLDivElement> & {
@@ -814,7 +821,7 @@ export const CalendarHeatmapBody = ({
       )}
       {...props}
     >
-      {rowData.map(({ yearRow, height, monthLabels, yearTotalCount }) => (
+      {rowData.map(({ yearRow, width, height, monthLabels, yearTotalCount }) => (
         <div key={`year-row-${yearRow.year}`}>
           {!hideYearLabels && (
             <div className={cn("mb-2 text-muted-foreground", yearClassName)}>
@@ -834,16 +841,19 @@ export const CalendarHeatmapBody = ({
             <g transform={`translate(0, ${strokePadding})`}>
               {!hideMonthLabels && (
                 <g className={cn("fill-current font-mono", labelClassName)}>
-                  {monthLabels.map(({ label, weekIndex }) => (
+                  {monthLabels.map(({ label, weekIndex, anchorEnd }) => (
                     <text
                       dominantBaseline="hanging"
                       key={`${yearRow.year}-${weekIndex}`}
                       x={
                         weekdayLabelWidth +
                         strokePadding +
-                        (blockWidth + blockMargin) * weekIndex
+                        (anchorEnd
+                          ? width
+                          : (blockWidth + blockMargin) * weekIndex)
                       }
                       y={monthLabelY}
+                      textAnchor={anchorEnd ? "end" : undefined}
                       style={{ fontSize: `${fontSize * 0.75}px` }}
                     >
                       {label}

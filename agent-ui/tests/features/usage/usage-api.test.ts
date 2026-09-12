@@ -4,8 +4,16 @@ import { test } from "node:test"
 import {
   browserTimeZone,
   heatmapActivities,
+  modelSeries,
+  OTHER_MODELS_KEY,
   usageOverviewUrl,
+  type UsageModel,
 } from "../../../src/features/usage/usage-api.ts"
+
+const model = (name: string, processedTokens: number): UsageModel => ({
+  model: name, runs: 1, share: 0, inputTokens: processedTokens, outputTokens: 0,
+  cacheReadTokens: 0, cacheWriteTokens: 0, processedTokens, costUsd: null, runsWithoutCost: 0,
+})
 
 test("overview URL carries the IANA zone and requested day count", () => {
   const url = new URL(
@@ -56,4 +64,41 @@ test("cumulative mode carries a running total across the window", () => {
     heatmapActivities(week, "cumulative").map((cell) => cell.value),
     [100, 300, 1_300, 1_300, 6_300]
   )
+})
+
+test("model series buckets days into months and keeps empty months in the window", () => {
+  const window = [
+    { date: "2026-07-30" }, { date: "2026-07-31" }, { date: "2026-08-01" }, { date: "2026-09-01" },
+  ]
+  const series = modelSeries(
+    window,
+    [
+      { date: "2026-07-30", byModel: { a: 10, b: 1 } },
+      { date: "2026-07-31", byModel: { a: 5 } },
+      { date: "2026-09-01", byModel: { b: 2 } },
+    ],
+    [model("a", 15), model("b", 3)]
+  )
+  assert.deepEqual(series.keys, ["a", "b"])
+  assert.deepEqual(series.months, [
+    { month: "2026-07-01", byModel: { a: 15, b: 1 } },
+    { month: "2026-08-01", byModel: { a: 0, b: 0 } },
+    { month: "2026-09-01", byModel: { a: 0, b: 2 } },
+  ])
+})
+
+test("model series ranks by processed tokens and folds the tail into others", () => {
+  const models = ["m1", "m2", "m3", "m4", "m5", "m6"].map((name, index) => model(name, 100 - index))
+  const series = modelSeries(
+    [{ date: "2026-09-01" }],
+    [{ date: "2026-09-01", byModel: { m6: 1, m5: 2, m1: 50, m4: 4 } }],
+    [...models].reverse()
+  )
+  assert.deepEqual(series.keys, ["m1", "m2", "m3", "m4", OTHER_MODELS_KEY])
+  assert.deepEqual(series.months[0]?.byModel, { m1: 50, m2: 0, m3: 0, m4: 4, [OTHER_MODELS_KEY]: 3 })
+})
+
+test("model series has no others bucket when every model fits", () => {
+  const series = modelSeries([{ date: "2026-09-01" }], [], [model("a", 1), model("b", 2)])
+  assert.deepEqual(series.keys, ["b", "a"])
 })

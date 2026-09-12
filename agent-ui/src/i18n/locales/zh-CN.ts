@@ -69,9 +69,27 @@ export const zhCN = {
   usage: {
     loading: "正在加载用量",
     retry: "重试",
+    activity: {
+      label: "活动",
+      tokens: "Token 活动",
+      models: "模型活动",
+    },
+    models: {
+      other: "其他",
+      empty: "暂无模型用量记录。",
+    },
     heatmap: {
       title: "Token 活动",
       modeLabel: "热力图模式",
+      weekday: {
+        sun: "周日",
+        mon: "周一",
+        tue: "周二",
+        wed: "周三",
+        thu: "周四",
+        fri: "周五",
+        sat: "周六",
+      },
       mode: {
         daily: "每日",
         weekly: "每周",

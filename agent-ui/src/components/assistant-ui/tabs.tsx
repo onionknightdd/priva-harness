@@ -77,6 +77,9 @@ const tabsListVariants = cva(
         ghost: "gap-1.5 dark:bg-transparent",
         pills: "gap-2 dark:bg-transparent",
         outline: "border-border gap-1 rounded-lg border p-1 dark:bg-transparent",
+        // Bare labels: the active state is carried by text colour alone, for
+        // mode switches that sit beside a chart or table.
+        text: "gap-1 bg-transparent dark:bg-transparent",
       },
       size: {
         sm: "h-8",
@@ -102,6 +105,7 @@ const tabsActiveIndicatorVariants = cva(
         ghost: "bg-foreground/8 inset-y-1 rounded-md",
         pills: "bg-primary inset-y-0 rounded-full",
         outline: "border-border bg-background inset-y-1 rounded-md border",
+        text: "hidden",
       },
     },
     defaultVariants: {
@@ -288,6 +292,7 @@ function TabsTrigger({
         "group-data-[variant=ghost]/tabs-list:rounded-md group-data-[variant=ghost]/tabs-list:bg-transparent",
         "group-data-[variant=pills]/tabs-list:data-active:text-primary-foreground dark:group-data-[variant=pills]/tabs-list:data-active:text-primary-foreground group-data-[variant=pills]/tabs-list:rounded-full",
         "group-data-[variant=outline]/tabs-list:rounded-md",
+        "group-data-[variant=text]/tabs-list:rounded-md group-data-[variant=text]/tabs-list:bg-transparent",
         "group-data-[size=sm]/tabs-list:h-[calc(100%-8px)] group-data-[size=sm]/tabs-list:px-2 group-data-[size=sm]/tabs-list:py-0.5 group-data-[size=sm]/tabs-list:text-xs",
         "group-data-[size=default]/tabs-list:h-[calc(100%-8px)] group-data-[size=default]/tabs-list:px-3 group-data-[size=default]/tabs-list:py-1 group-data-[size=default]/tabs-list:text-sm",
         "group-data-[size=lg]/tabs-list:h-[calc(100%-8px)] group-data-[size=lg]/tabs-list:px-4 group-data-[size=lg]/tabs-list:py-1.5 group-data-[size=lg]/tabs-list:text-sm",

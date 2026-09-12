@@ -134,6 +134,56 @@ export async function fetchUsageOverview(
   return (await response.json()) as UsageOverview
 }
 
+// Stacked model chart: one bar per calendar month, one series per model.
+export const MODEL_SERIES_LIMIT = 4
+export const OTHER_MODELS_KEY = "__other__"
+
+export type ModelMonth = {
+  // First day of the month, YYYY-MM-01, so callers can format it in any locale.
+  month: string
+  byModel: Record<string, number>
+}
+
+export type ModelSeries = {
+  // Series keys in stacking order (largest share first), ending with the
+  // aggregated "others" bucket when more than `limit` models were used.
+  keys: string[]
+  months: ModelMonth[]
+}
+
+// `window` is the full run of days the overview covers (the heatmap), so every
+// month in range gets a bar even when no model was used in it.
+export function modelSeries(
+  window: readonly { date: string }[],
+  days: readonly UsageDailyModels[],
+  models: readonly UsageModel[],
+  limit = MODEL_SERIES_LIMIT
+): ModelSeries {
+  const ranked = [...models]
+    .sort((left, right) => right.processedTokens - left.processedTokens)
+    .map((model) => model.model)
+  const shown = ranked.slice(0, limit)
+  const keys = ranked.length > limit ? [...shown, OTHER_MODELS_KEY] : shown
+  const monthOf = (date: string) => `${date.slice(0, 7)}-01`
+  const byMonth = new Map<string, Record<string, number>>()
+  for (const day of window) {
+    const month = monthOf(day.date)
+    if (!byMonth.has(month)) byMonth.set(month, Object.fromEntries(keys.map((key) => [key, 0])))
+  }
+  for (const day of days) {
+    const bucket = byMonth.get(monthOf(day.date))
+    if (!bucket) continue
+    for (const [model, tokens] of Object.entries(day.byModel)) {
+      const key = shown.includes(model) ? model : OTHER_MODELS_KEY
+      if (key in bucket) bucket[key] = (bucket[key] ?? 0) + tokens
+    }
+  }
+  const months = [...byMonth.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([month, values]) => ({ month, byModel: values }))
+  return { keys, months }
+}
+
 export const HEATMAP_MODES = ["daily", "weekly", "cumulative"] as const
 export type HeatmapMode = (typeof HEATMAP_MODES)[number]
 
