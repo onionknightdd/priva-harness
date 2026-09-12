@@ -36,6 +36,15 @@ const searchTransition: Transition = {
   mass: 0.75,
 }
 
+/** Trigger look shared with the pre-hover placeholder in the session row. */
+export function sessionTagTriggerClassName(tagged: boolean) {
+  return cn(
+    rowHoverActionButtonClassName,
+    "border-0 shadow-none focus-visible:border-0 focus-visible:ring-0",
+    tagged && "bg-sidebar-accent text-sidebar-accent-foreground opacity-100"
+  )
+}
+
 export function SessionTagPopover({
   session,
   knownTags,
@@ -164,12 +173,7 @@ export function SessionTagPopover({
           // the popup as the button springs back.
           <button
             type="button"
-            className={cn(
-              rowHoverActionButtonClassName,
-              "border-0 shadow-none focus-visible:border-0 focus-visible:ring-0",
-              tagged &&
-                "bg-sidebar-accent text-sidebar-accent-foreground opacity-100"
-            )}
+            className={sessionTagTriggerClassName(tagged)}
             aria-label={t("sidebar.projects.tag")}
             aria-pressed={tagged}
             onPointerDown={(event) => event.stopPropagation()}

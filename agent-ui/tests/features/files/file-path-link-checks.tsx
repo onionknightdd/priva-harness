@@ -24,12 +24,14 @@ export async function runFilePathLinkChecks(check: (name: string, condition: boo
   const i18n = createInstance()
   await i18n.use(initReactI18next).init({ lng: "en", resources: { en: { translation: en } } })
 
+  // Existence checks are batched per microtask; each scenario mounts a single
+  // link, so every batch here carries exactly one fixture path.
   globalThis.fetch = (input, init) => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, location.href)
-    const path = url.searchParams.get("path") ?? ""
-    return url.pathname === "/api/sandbox/files/preview" && path.startsWith(prefix)
-      ? new Promise((resolve) => pending.set(path, resolve))
-      : originalFetch(input, init)
+    if (url.pathname !== "/api/sandbox/files/exists") return originalFetch(input, init)
+    const { paths } = JSON.parse(String(init?.body)) as { paths: string[] }
+    const path = paths.find((candidate) => candidate.startsWith(prefix))
+    return path ? new Promise((resolve) => pending.set(path, resolve)) : originalFetch(input, init)
   }
 
   const wait = async (ms: number) => { await act(async () => { await new Promise((resolve) => setTimeout(resolve, ms)) }) }
@@ -58,11 +60,9 @@ export async function runFilePathLinkChecks(check: (name: string, condition: boo
   }
   const resolve = async (path: string, exists = true) => {
     const respond = pending.get(path)
-    if (!respond) throw new Error(`Missing preview request: ${path}`)
+    if (!respond) throw new Error(`Missing existence request: ${path}`)
     await act(async () => {
-      respond(exists
-        ? Response.json({ path, name: "file.ts", mime_type: "text/plain", size: 1, content: "x", is_binary: false, preview_url: null, preview_error: null })
-        : Response.json({ detail: "Not found" }, { status: 404 }))
+      respond(Response.json({ exists: { [path]: exists } }))
     })
   }
 

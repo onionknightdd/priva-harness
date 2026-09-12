@@ -159,6 +159,30 @@ describe('NodeUserFileSystem', () => {
     })
   })
 
+  it('reports file existence in one call, treating directories and missing paths as absent', async () => {
+    const filePath = join(workspace, 'notes.md')
+    const nested = join(workspace, 'nested')
+    await mkdir(nested)
+    await writeFile(filePath, 'hi')
+    await writeFile(join(nested, 'inner.ts'), 'export {}')
+
+    await expect(fileSystem.filesExist([
+      filePath,
+      'notes.md',
+      nested,
+      join(workspace, 'missing.txt'),
+      'nested/inner.ts',
+      '',
+    ])).resolves.toEqual({
+      [filePath]: true,
+      'notes.md': true,
+      [nested]: false,
+      [join(workspace, 'missing.txt')]: false,
+      'nested/inner.ts': true,
+      '': false,
+    })
+  })
+
   it.each(['large.txt', 'extensionless'])('previews %s through the 3 MiB boundary', async (name) => {
     const path = join(workspace, name)
     for (const size of [1024 * 1024 + 1, 3 * 1024 * 1024 - 1, 3 * 1024 * 1024]) {

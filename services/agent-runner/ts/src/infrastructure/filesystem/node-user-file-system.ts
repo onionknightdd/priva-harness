@@ -234,6 +234,21 @@ export class NodeUserFileSystem implements UserFileSystem {
     }
   }
 
+  async filesExist(paths: readonly string[]): Promise<Record<string, boolean>> {
+    const entries = await Promise.all(paths.map(async (requestedPath) => {
+      if (requestedPath.trim() === '') return [requestedPath, false] as const
+      try {
+        const stats = await stat(await realpath(this.resolveCandidate(requestedPath)))
+        return [requestedPath, stats.isFile()] as const
+      } catch (error) {
+        // previewFile reports EACCES as access-denied, which the UI treats as
+        // "exists"; keep that here so both paths agree.
+        return [requestedPath, isAccessError(error)] as const
+      }
+    }))
+    return Object.fromEntries(entries)
+  }
+
   async previewFile(requestedPath: string): Promise<UserFilePreview> {
     const opened = await this.openUserFile(requestedPath)
 

@@ -11,6 +11,7 @@ import {
   createDirectorySchema,
   deletePathSchema,
   downloadFileSchema,
+  filesExistSchema,
   listDirectorySchema,
   previewFileSchema,
   uploadFileSchema,
@@ -30,6 +31,10 @@ interface ListDirectoryQuery {
 interface CreateDirectoryBody {
   readonly directory: string
   readonly name: string
+}
+
+interface FilesExistBody {
+  readonly paths: readonly string[]
 }
 
 export interface UserFileRoutesOptions {
@@ -105,6 +110,16 @@ export const userFileRoutes: FastifyPluginCallback<UserFileRoutesOptions> = (
         preview_error: preview.previewError,
       }
     },
+  )
+
+  // Transcripts reference many files at once; one round trip replaces a
+  // preview request per link.
+  fastify.post<{ Body: FilesExistBody }>(
+    `${FILE_ROUTE_PREFIX}/exists`,
+    { schema: filesExistSchema },
+    async (request) => ({
+      exists: await fileSystem.filesExist(request.body.paths),
+    }),
   )
 
   fastify.post(

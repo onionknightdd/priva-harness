@@ -31,6 +31,7 @@ import {
   assistantHasProcess,
   type AgentThreadMessage,
 } from "../agent-message-data"
+import { PopupsArmedContext } from "../popups-armed-context"
 import { userMessageSurface } from "../slash-command-envelope"
 import { AssistantProcess } from "./assistant-process"
 import { assistantTimeline } from "../assistant-timeline"
@@ -229,6 +230,10 @@ export const AgentMessageItem = React.memo(function AgentMessageItem({
   const isFresh = useIsFreshMessage(message.createdAt)
   const isStreaming = message.status === "streaming"
   const isError = message.status === "error"
+  // Context menus on inline file references mount once the pointer or focus
+  // reaches this message; see PopupsArmedContext.
+  const [popupsArmed, setPopupsArmed] = React.useState(false)
+  const armPopups = () => setPopupsArmed(true)
 
   if (message.role === "user" && !message.attachments?.length) {
     const surface = userMessageSurface(message.content, message.compact)
@@ -262,7 +267,8 @@ export const AgentMessageItem = React.memo(function AgentMessageItem({
   }
 
   const body = (
-    <Message from={message.role}>
+    <PopupsArmedContext.Provider value={popupsArmed}>
+    <Message from={message.role} onPointerEnter={armPopups} onFocusCapture={armPopups}>
       {isError ? (
         <motion.div
           className="flex w-fit max-w-full flex-col items-start gap-1"
@@ -320,6 +326,7 @@ export const AgentMessageItem = React.memo(function AgentMessageItem({
         </>
       )}
     </Message>
+    </PopupsArmedContext.Provider>
   )
 
   if (message.role !== "user") {

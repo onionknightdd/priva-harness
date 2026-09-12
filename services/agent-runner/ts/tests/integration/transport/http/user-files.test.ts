@@ -123,6 +123,27 @@ describe('/api/sandbox/files', () => {
     })
   })
 
+  it('answers batched existence checks and rejects oversized batches', async () => {
+    await writeFile(join(workspace, 'a.txt'), 'a')
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/api/sandbox/files/exists',
+      payload: { paths: ['a.txt', 'missing.txt', workspace] },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(parseJson(response.body)).toEqual({
+      exists: { 'a.txt': true, 'missing.txt': false, [workspace]: false },
+    })
+
+    const tooMany = await server.inject({
+      method: 'POST',
+      url: '/api/sandbox/files/exists',
+      payload: { paths: Array.from({ length: 501 }, (_, index) => `f${index}`) },
+    })
+    expect(tooMany.statusCode).toBe(422)
+  })
+
   it('returns text content at the 3 MiB preview limit', async () => {
     const size = 3 * 1024 * 1024
     await writeFile(join(workspace, 'large.txt'), Buffer.alloc(size, 97))

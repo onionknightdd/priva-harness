@@ -3,7 +3,7 @@
 import { useHarness } from "../header/harness-context"
 import { useBackgroundTasks, taskIsActive } from "@/features/agent-message/background-task-store"
 import * as React from "react"
-import { MoreHorizontalIcon, PinIcon } from "lucide-react"
+import { MoreHorizontalIcon, PinIcon, TagIcon } from "lucide-react"
 import { motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
@@ -26,8 +26,9 @@ import {
   sessionHoverRevealClassName,
 } from "./row-hover-action"
 import { sessionDisplayTitle, type KnownSessionTag } from "./session-projects"
-import { SessionTagPopover } from "./session-tag-popover"
+import { SessionTagPopover, sessionTagTriggerClassName } from "./session-tag-popover"
 import { TooltipHint } from "@/components/ui/tooltip"
+import { cn } from "@/lib/utils"
 
 const renameTransition = {
   type: "spring" as const,
@@ -93,6 +94,12 @@ export const ProjectSessionItem = React.memo(function ProjectSessionItem({
   const inputRef = React.useRef<HTMLInputElement>(null)
   const skipBlurCommitRef = React.useRef(false)
   const tagged = session.tags.length > 0
+  // The tag popover and the "more" menu are Base UI roots with a dozen fibers
+  // each; a long session list pays for them on every row. Mount them once the
+  // pointer or keyboard focus reaches the row, which precedes any click on
+  // them. Until then, look-alike buttons keep the layout and hover reveal.
+  const [armed, setArmed] = React.useState(false)
+  const arm = () => setArmed(true)
 
   React.useEffect(() => {
     if (!editing) {
@@ -127,7 +134,7 @@ export const ProjectSessionItem = React.memo(function ProjectSessionItem({
   }
 
   return (
-    <SidebarMenuSubItem>
+    <SidebarMenuSubItem onPointerEnter={arm} onFocusCapture={arm}>
       {editing ? (
         <motion.div
           initial={
@@ -194,7 +201,29 @@ export const ProjectSessionItem = React.memo(function ProjectSessionItem({
           </SidebarMenuSubButton>
         </TooltipHint>
       )}
-      {editing ? null : (
+      {editing ? null : !armed ? (
+        <div className="absolute top-1/2 right-1 z-[2] flex -translate-y-1/2 items-center gap-px">
+          <div className={tagged ? undefined : sessionHoverRevealClassName}>
+            <button
+              type="button"
+              className={sessionTagTriggerClassName(tagged)}
+              aria-label={t("sidebar.projects.tag")}
+              aria-pressed={tagged}
+            >
+              <TagIcon className={cn("size-3.5", tagged && "fill-current")} aria-hidden="true" />
+            </button>
+          </div>
+          <div className={sessionHoverRevealClassName}>
+            <button
+              type="button"
+              className={rowHoverActionButtonClassName}
+              aria-label={t("common.more")}
+            >
+              <MoreHorizontalIcon className="size-3.5" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      ) : (
         <div className="absolute top-1/2 right-1 z-[2] flex -translate-y-1/2 items-center gap-px">
           <div className={tagged ? undefined : sessionHoverRevealClassName}>
             <SessionTagPopover

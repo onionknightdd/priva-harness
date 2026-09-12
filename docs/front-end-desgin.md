@@ -167,6 +167,37 @@ ChatSessionProvider
 174ms → 96ms。剩余成本是线程本体的首次挂载（每个工具卡一个 ContextMenu +
 TooltipHint、FilePathLink 的 Tooltip 等 Base UI 原语）。
 
+### 长会话：弹层根节点懒挂载与文件存在性批量查询
+
+2026-09-12：用 90 条消息 / 166 个工具卡 / 242 个行内文件引用的会话
+（`de14fd09…`，由脚本补入合成数据）复测。两项改动：
+
+- **弹层根节点按需挂载。** 侧栏每行的 `SessionTagPopover` 与「更多」`DropdownMenu`
+  在指针进入或焦点进入该行前只渲染同样式、同 `aria-label` 的普通按钮
+  （`ProjectSessionItem` 的 `armed`）；行内文件引用的 `ContextMenu` 由所在消息通过
+  `PopupsArmedContext` 控制，`AgentMessageItem` 在 `onPointerEnter` / `onFocusCapture`
+  时置为已挂载。两者的触发时机都早于点击 / 右键 / 长按 / Shift+F10，键盘进入时
+  `AssistantFileReference` 会把焦点放回重挂后的同一个按钮。消息之外（如
+  Workspace agent 视图、测试页）保持立即挂载。
+- **文件存在性批量查询。** `checkFileExists` 在同一微任务内收集路径，调用新的
+  `POST /api/sandbox/files/exists`（每次最多 500 条，后端只做 `stat`，EACCES 视为存在，
+  与原来 `previewFile` 的 403 语义一致），并分片（40 条 / 任务）交付结果，避免一次
+  把几百个链接同时切换成按钮。之前是每个链接各发一个 `/preview` 请求并下载文件内容。
+
+```text
+mount transcript ──► useFileExists ×N ──► checkFileExists (queueMicrotask 合并)
+                                             └─► POST /files/exists {paths}
+                                                   └─► 分片 40 条/任务 resolve ──► 链接逐批变为按钮
+hover / focus 进入消息 ──► PopupsArmedContext=true ──► ContextMenu 根节点挂载
+hover / focus 进入侧栏行 ──► 占位按钮 → Popover / DropdownMenu
+```
+
+实测（dev 构建，长会话）：热态数据帧 350ms → 280–300ms，后续帧 88–110ms → 64–80ms，
+切换合计 710ms → 570ms；冷态首次打开从 177 个 `/preview` 请求变为 1 个 `/exists`
+请求，慢帧合计 1417ms → 约 960ms。仍然剩下的两块不在本次范围内：数据帧本体
+（约 6000 个 DOM 节点、158 个 Tooltip 根、`ThreadTurnItem` 的 `syncHeight` 强制布局
+约 45ms）和冷态 Shiki 首次高亮约 40 个代码块的 ~250ms 一帧。
+
 ### 悬浮高亮的跟手速度
 
 2026-09-12：侧栏菜单、文件树和 Slash 菜单的滑动悬浮高亮共用
@@ -1085,11 +1116,13 @@ node --test agent-ui/tests/features/agent-message/composer-attachments.test.ts a
 node --test agent-ui/tests/features/file-browser/file-tree-content-width.test.ts
 ```
 
-文本预览响应映射、超限提示的中英文渲染，以及消息文件链接存在性回归：
+文本预览响应映射、超限提示的中英文渲染，以及消息文件链接存在性批量查询回归：
 
 ```sh
-./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/file-browser/file-preview.test.tsx
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/file-browser/file-preview.test.tsx agent-ui/tests/features/files/file-existence.test.ts
 ```
+
+后端 `POST /api/sandbox/files/exists` 的单元与 HTTP 集成用例包含在 Runner 的 `npm test` 中。
 
 选区操作的草稿保留、指令追加、绝对路径引用、浮层定位及选区范围回归：
 

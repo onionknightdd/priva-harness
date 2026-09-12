@@ -6,7 +6,6 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { I18nextProvider, initReactI18next } from "react-i18next"
 
 import { previewResponseToFile } from "../../../src/features/file-browser/file-browser-data.ts"
-import { checkFileExists } from "../../../src/features/files/file-existence.ts"
 import {
   canEditHtmlFile,
   canRenderFile,
@@ -78,11 +77,6 @@ test("binary files keep the unsupported state instead of a size error", () => {
   assert.equal(file.previewError, undefined)
   assert.equal(canShowFileSource(file), false)
   assert.equal(canRenderFile(file), false)
-})
-
-test("oversized files still exist for message file links", async (context) => {
-  context.mock.method(globalThis, "fetch", async () => Response.json(preview({ content: null, preview_error: "too-large" })))
-  assert.equal(await checkFileExists("/workspace/oversized-existing.txt"), true)
 })
 
 test("the preview error renders the oversized-content message in both languages", async () => {
