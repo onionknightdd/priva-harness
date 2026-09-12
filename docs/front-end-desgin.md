@@ -775,7 +775,7 @@ Tabs，选择预览操作模式时可使用 ToggleGroup。不要只根据组件�
 
 | 组件类型 | 当前入口 / 来源 | 当前样式和反馈 | 代表场景 |
 | --- | --- | --- | --- |
-| Tooltip | [ui/tooltip](../agent-ui/src/components/ui/tooltip.tsx)，Base UI Tooltip | 首次悬浮等待 2000ms，连续切换立即显示；全部离开 400ms 后重置。125ms 进入 / 75ms 退出，连续切换跳过进入动效 | 聊天工具栏、文件工具栏、侧栏动作、上下文用量 |
+| Tooltip | [ui/tooltip](../agent-ui/src/components/ui/tooltip.tsx)，Base UI Tooltip | 首次悬浮等待 1000ms，连续切换立即显示；全部离开 400ms 后重置。125ms 进入 / 75ms 退出，连续切换跳过进入动效 | 聊天工具栏、文件工具栏、侧栏动作、上下文用量 |
 | TooltipHint | 同一 [ui/tooltip](../agent-ui/src/components/ui/tooltip.tsx) 中的组合入口 | 替代浏览器原生 `title`，复用全局延迟组，不添加布局包裹元素，保留多行提示 | 图标按钮、路径、错误、状态、截断文字 |
 | 富内容提示 | [composer-slash-chip](../agent-ui/src/features/agent-message/components/composer-slash-chip.tsx)，Base UI Tooltip | 沿用 popover token 的卡片样式，与其他提示共享计时 | Slash command chip 预览；旧 HoverCard 入口当前无业务调用 |
 | Popover | [ui/popover](../agent-ui/src/components/ui/popover.tsx)，Base UI Popover | 浮层表单 / 信息面板，160ms 进入 / 100ms 退出 | 标签、上下文占用、任务计划、上传队列 |
@@ -796,7 +796,7 @@ Tooltip 应用于悬浮/键盘聚焦时的说明提示，包括不含操作的�
 不再使用 HTML `title`；iframe 的无障碍标题、组件的正文标题不属于悬浮提示。
 
 ```text
-App TooltipProvider -> 首次悬浮 2s -> 连续切换 0ms
+App TooltipProvider -> 首次悬浮 1s -> 连续切换 0ms
                     -> 全部离开 400ms -> 重置
                     -> 键盘聚焦 -> 立即显示
 ```
@@ -1068,7 +1068,7 @@ CodeBlock 自动换行浏览器回归：在开发服务器打开
 按 Space / Enter 检查键盘切换和 inset 焦点框。
 
 悬浮提示计时回归：打开 `/tests/components/ui/tooltip-browser.html`，点击
-**Run tooltip checks**。使用真实计时检查首次 2s、跨组件连续切换、400ms 重置、
+**Run tooltip checks**。使用真实计时检查首次 1s、跨组件连续切换、400ms 重置、
 短暂悬浮取消、嵌套提示，以及按钮和 Popover 的组合行为；追加 `?dark=1` 检查深色主题。
 文件链接追加覆盖检查完成后首次悬停、检查期间悬停、文件不存在、缓存命中、再次悬停
 及点击打开 Workspace，使用隔离的文件预览响应。
