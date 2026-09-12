@@ -127,7 +127,7 @@ export function UsageOverviewCards() {
 
   const pickerTrigger = (label: string) => ({ value, setOpen }: { value: Date | undefined; setOpen: (open: boolean) => void }) => (
     <Button
-      variant="outline"
+      variant="secondary"
       size="xs"
       // Fixed width with room to spare: "2026年12月31日" and "Sep 1, 2026"
       // must not resize the row when the range changes.

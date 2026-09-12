@@ -290,6 +290,10 @@ async function runChecks() {
     check("choosing 7 days re-requests the last seven local days", await waitFor(() => rangeRequests.some((url) => url.includes(`from=${shiftLocalDate(todayIso, -6)}&to=${todayIso}`))))
     check("the pickers follow the preset", await waitFor(() => pickerButtons()[0]?.textContent === dayLabel(shiftLocalDate(todayIso, -6))))
     check("date buttons keep one fixed width across ranges", pickerButtons().every((button) => Math.abs(button.getBoundingClientRect().width - 128) < 0.5))
+    check("date buttons are filled, not outlined", pickerButtons().every((button) => {
+      const style = getComputedStyle(button)
+      return style.borderTopColor === "rgba(0, 0, 0, 0)" && style.backgroundColor !== "rgba(0, 0, 0, 0)"
+    }))
     check("the leaving date rolls out and only the new one remains", await waitFor(() => pickerButtons()[0]!.querySelectorAll("span span").length === 1))
     check("card values change with the range", await waitFor(() => cardValues()[0] !== yearTokens))
 

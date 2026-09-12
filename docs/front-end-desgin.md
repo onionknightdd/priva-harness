@@ -267,7 +267,7 @@ CLI 会同时想安装 `@radix-ui/react-icons` 和一个名为 `cn` 的无关包
 `CalendarIcon` 改用 lucide，新增 `doneLabel` 让确认按钮跟随应用语言，月份标题使用传入的
 `locale`；日历收紧为 32px 日格、`text-xs` 星期、`icon-sm` 翻月按钮、14px 半粗月份标题，
 比上游的 36px 网格窄约 30px。用量页只用 `hideTime` 的日期模式，传 `locale`（zhCN / enUS）与 `min` / `max`，
-触发器为 `outline` / `xs` 的 Button，显示「2026年9月13日 / Sep 13, 2026」。
+触发器为 `secondary` / `xs` 的 Button（无边框、`secondary` 底色），显示「2026年9月13日 / Sep 13, 2026」。
 `ui/scroll-area.tsx` 为其依赖一同安装（Base UI ScrollArea），生成的 `import { cn } from "cn"`
 需改回 `@/lib/utils`。
 
@@ -945,7 +945,7 @@ App TooltipProvider -> 首次悬浮 1s -> 连续切换 0ms
 | Resizable | [ui/resizable](../agent-ui/src/components/ui/resizable.tsx)，`react-resizable-panels` | 本地分隔手柄、伸缩面板 | 文件浏览器、资源列表/详情分栏 |
 | Tree | [reui/tree](../agent-ui/src/components/reui/tree.tsx) + [file-browser-tree](../agent-ui/src/features/file-browser/components/file-browser-tree.tsx) | Headless Tree 的树模型 + ReUI 外观 + Motion 高亮 / 文字溢出反馈 | 文件浏览器；[SkillResourceTree](../agent-ui/src/features/resources/skill-resource-tree.tsx) 也复用 FileBrowserTree，使用 compact 变体 |
 | Card / Item / Separator | [ui/card](../agent-ui/src/components/ui/card.tsx)、[ui/item](../agent-ui/src/components/ui/item.tsx)、[ui/separator](../agent-ui/src/components/ui/separator.tsx) | token 化卡片、列表项、分隔线；Separator 用 Base UI | 工具结果、模型列表、Profile、用量概览卡片 |
-| DatePicker | [datetime-picker](../agent-ui/src/components/datetime-picker.tsx)，shadcn-datetime-picker（react-day-picker v9 + date-fns）+ 本地 Base UI 适配 | 日历弹层，支持 min / max、时区、可选时间；用量页只用日期模式、`outline` / `xs` 触发按钮 | 用量概览区间起止 |
+| DatePicker | [datetime-picker](../agent-ui/src/components/datetime-picker.tsx)，shadcn-datetime-picker（react-day-picker v9 + date-fns）+ 本地 Base UI 适配 | 日历弹层，支持 min / max、时区、可选时间；用量页只用日期模式、`secondary` / `xs` 触发按钮 | 用量概览区间起止 |
 | ScrollArea | [ui/scroll-area](../agent-ui/src/components/ui/scroll-area.tsx)，Base UI ScrollArea | shadcn 滚动区与滚动条 | datetime-picker 时间列（用量页未启用） |
 | Avatar | [ui/avatar](../agent-ui/src/components/ui/avatar.tsx)，Base UI Avatar | 圆形头像及 fallback | 用户菜单、Profile |
 | Chart | [ui/chart](../agent-ui/src/components/ui/chart.tsx) + Recharts | `chart-*` token 与本地图表 Tooltip；用量页堆叠柱读取 `usage-series-1…5` token；这里的 Tooltip 是图表数据提示 | 用量页模型活动、Profile 模型用量 |
