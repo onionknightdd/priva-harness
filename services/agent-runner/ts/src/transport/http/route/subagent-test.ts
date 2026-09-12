@@ -46,7 +46,7 @@ export const subagentTestRoutes: FastifyPluginCallback<{
           provider: query.harness, cwd, model: resolved.model,
           baseUrl: rewriteProviderBaseUrl(resolved.profile.baseUrl, query.harness), authToken: resolved.profile.authToken,
           profileId: resolved.profile.id, modelContext: resolved.capabilities.context, queueBehavior: profile.queueBehavior,
-        }, { keepRuntimeWarm: false })) yield `data: ${JSON.stringify(frame)}\n\n`
+        }, { source: 'subagent-test', keepRuntimeWarm: false })) yield `data: ${JSON.stringify(frame)}\n\n`
       } catch (error) {
         if (!controller.signal.aborted) yield `data: ${JSON.stringify({ type: 'run.failed', message: error instanceof Error ? error.message : String(error) })}\n\n`
       } finally { reply.raw.off('close', abort); controller.abort() }

@@ -28,11 +28,42 @@ export const STREAM_PROTOCOL_VERSION = 2 as const
 // Pi compaction_start / compaction_end             → session.compacting / session.compacted | run.failed
 
 
+// Raw provider components for one turn. input excludes cache traffic, so the
+// tokens the model actually processed are input + cacheRead + cacheWrite.
 export interface TokenUsage {
   readonly input: number
   readonly output: number
   readonly cacheRead?: number
   readonly cacheWrite?: number
+}
+
+export interface ModelTokenUsage extends TokenUsage {
+  readonly costUsd?: number
+}
+
+export const RUN_FAILURE_CODES = [
+  'max_turns',
+  'max_budget',
+  'api_error',
+  'auth_error',
+  'compaction_failed',
+  'provider_error',
+  'transport_error',
+  'runtime_crash',
+  'unknown',
+] as const
+export type RunFailureCode = (typeof RUN_FAILURE_CODES)[number]
+
+// Turn-level accounting shared by run.completed and run.failed: a failed turn
+// was still billed for whatever it consumed before failing.
+export interface RunAccounting {
+  readonly durationMs?: number
+  readonly apiDurationMs?: number
+  // Model round-trips within the turn (Claude num_turns; Pi assistant messages).
+  readonly numTurns?: number
+  readonly costUsd?: number
+  readonly usage?: TokenUsage
+  readonly byModel?: Readonly<Record<string, ModelTokenUsage>>
 }
 
 export type BlockKind = 'text' | 'thinking' | 'tool_use' | 'image' | 'unknown'
@@ -164,24 +195,20 @@ export type AgentEvent = (
       readonly status?: string
     } & Partial<BlockAddress> &
       EventChannel)
-  | {
+  | ({
       readonly type: 'run.completed'
       readonly sessionId?: string
       readonly model: string
       readonly durationMs: number
-      readonly costUsd?: number
-      readonly usage?: TokenUsage
-    }
-  | {
+    } & RunAccounting)
+  | ({
       readonly type: 'run.failed'
       readonly message: string
-      readonly code?: string
+      readonly code?: RunFailureCode
+      readonly apiErrorStatus?: number
       readonly sessionId?: string
       readonly model?: string
-      readonly durationMs?: number
-      readonly costUsd?: number
-      readonly usage?: TokenUsage
-    }
+    } & RunAccounting)
   | {
       readonly type: 'run.aborted'
       readonly message?: string

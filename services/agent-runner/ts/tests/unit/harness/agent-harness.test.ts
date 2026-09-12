@@ -40,6 +40,7 @@ describe('AgentHarness', () => {
       { text: 'hi' },
       { signal: new AbortController().signal },
       testRunSpec({ cwd: '/tmp' }),
+      { source: 'web' },
     )) {
       events.push(event)
     }
@@ -81,6 +82,7 @@ describe('AgentHarness', () => {
       { signal: new AbortController().signal },
       testRunSpec({ cwd: '/work/repo' }),
       {
+        source: 'web',
         session: {
           kind: 'resume',
           session: { provider: 'claude', id: 'sess-1' },
@@ -102,6 +104,7 @@ describe('AgentHarness', () => {
       { signal: new AbortController().signal },
       testRunSpec({ cwd: '/work/repo' }),
       {
+        source: 'web',
         session: {
           kind: 'fork',
           source: { provider: 'claude', id: 'sess-1' },
@@ -141,13 +144,13 @@ describe('AgentHarness', () => {
     const live = harness.launch(
       { text: 'hi' },
       testRunSpec({ cwd: '/tmp' }),
-      { session: { kind: 'resume', session: { provider: 'claude', id: 'sess-1' } } },
+      { source: 'web', session: { kind: 'resume', session: { provider: 'claude', id: 'sess-1' } } },
     )
     expect(liveRuns.listActive()).toHaveLength(1)
     expect(() => harness.launch(
       { text: 'again' },
       testRunSpec({ cwd: '/tmp' }),
-      { session: { kind: 'resume', session: { provider: 'claude', id: 'sess-1' } } },
+      { source: 'web', session: { kind: 'resume', session: { provider: 'claude', id: 'sess-1' } } },
     )).toThrow('Session has a live run')
     releaseGate()
     await live.waitForComplete()
@@ -189,7 +192,7 @@ describe('AgentHarness', () => {
     const live = harness.launch(
       { text: 'hi' },
       testRunSpec({ cwd: '/tmp' }),
-      { session: { kind: 'resume', session: { provider: 'claude', id: 'sess-drain' } } },
+      { source: 'web', session: { kind: 'resume', session: { provider: 'claude', id: 'sess-drain' } } },
     )
     await live.waitForComplete()
     expect(live.status).toBe('complete')
@@ -314,6 +317,7 @@ describe('AgentHarness', () => {
       { text: 'hi' },
       { signal: new AbortController().signal },
       testRunSpec({ cwd: '/tmp' }),
+      { source: 'web' },
     )) {
       void _event
     }
@@ -390,7 +394,7 @@ describe('AgentHarness', () => {
     const live = harness.launch(
       { text: 'again' },
       testRunSpec({ cwd: '/tmp' }),
-      { session: { kind: 'resume', session: { provider: 'claude', id: 'running-1' } } },
+      { source: 'web', session: { kind: 'resume', session: { provider: 'claude', id: 'running-1' } } },
     )
     expect(await harness.readContextUsage(
       { provider: 'claude', id: 'running-1' },
@@ -423,7 +427,7 @@ async function warmAfterLaunch(sessionId: string) {
   const live = harness.launch(
     { text: 'hi' },
     testRunSpec({ cwd: '/tmp' }),
-    { session: { kind: 'resume', session: { provider: 'claude', id: sessionId } } },
+    { source: 'web', session: { kind: 'resume', session: { provider: 'claude', id: sessionId } } },
   )
   await live.waitForComplete()
   await waitForReleased(provider, ['warm'])

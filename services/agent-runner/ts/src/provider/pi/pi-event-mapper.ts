@@ -8,7 +8,9 @@ import type {
   AgentEvent,
   BlockKind,
   ContentBlock,
-  TokenUsage,
+  ModelTokenUsage,
+  RunAccounting,
+  RunFailureCode,
 } from '../../core/event/agent-event.js'
 import {
   asRecord,
@@ -387,6 +389,7 @@ export class PiEventMapper {
       {
         type: 'run.failed',
         message: event.errorMessage ?? 'Conversation compaction failed',
+        code: 'compaction_failed',
         ...(sessionId === undefined ? {} : { sessionId }),
         model: this.model === '' ? this.options.model : this.model,
       },
@@ -394,9 +397,11 @@ export class PiEventMapper {
   }
 
   private mapAgentEnd(messages: unknown): AgentEvent {
-    const usage = usageFromMessages(messages)
-    const durationMs = Math.max(0, Date.now() - this.startedAt)
     const model = this.model === '' ? this.options.model : this.model
+    const accounting: RunAccounting = {
+      durationMs: Math.max(0, Date.now() - this.startedAt),
+      ...usageFromMessages(messages, model),
+    }
     const sessionId = this.options.sessionId === '' ? undefined : this.options.sessionId
     const failure = assistantFailure(messages)
     if (failure !== undefined) {
@@ -411,20 +416,18 @@ export class PiEventMapper {
       return {
         type: 'run.failed',
         message: failure.message,
+        code: classifyPiFailure(failure.message),
         ...(sessionId === undefined ? {} : { sessionId }),
         model,
-        durationMs,
-        ...(usage?.costUsd === undefined ? {} : { costUsd: usage.costUsd }),
-        ...(usage === undefined ? {} : { usage: usage.tokens }),
+        ...accounting,
       }
     }
     return {
       type: 'run.completed',
       ...(sessionId === undefined ? {} : { sessionId }),
       model,
-      durationMs,
-      ...(usage?.costUsd === undefined ? {} : { costUsd: usage.costUsd }),
-      ...(usage === undefined ? {} : { usage: usage.tokens }),
+      durationMs: accounting.durationMs ?? 0,
+      ...accounting,
     }
   }
 
@@ -628,31 +631,63 @@ function assistantFailure(
   return undefined
 }
 
-function usageFromMessages(
-  messages: unknown,
-): { tokens: TokenUsage; costUsd?: number } | undefined {
-  if (!Array.isArray(messages)) return undefined
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = asRecord(messages[index])
-    if (message === undefined) continue
+// agent_end carries every message the run produced. Each assistant message is
+// one model round-trip with its own usage, so the turn total is their sum,
+// bucketed by the model that answered (a run can switch models mid-way).
+function usageFromMessages(messages: unknown, fallbackModel: string): RunAccounting {
+  if (!Array.isArray(messages)) return {}
+  const byModel: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number; costUsd: number | undefined }> = {}
+  let numTurns = 0
+  for (const raw of messages) {
+    const message = asRecord(raw)
+    if (message === undefined || stringField(message, 'role') !== 'assistant') continue
+    numTurns += 1
     const usage = asRecord(message['usage'])
     if (usage === undefined) continue
     const input = numberField(usage, 'input')
     const output = numberField(usage, 'output')
     if (input === undefined || output === undefined) continue
-    const cacheRead = numberField(usage, 'cacheRead')
-    const cacheWrite = numberField(usage, 'cacheWrite')
+    const model = stringField(message, 'model') ?? fallbackModel
     const cost = asRecord(usage['cost'])
     const costUsd = cost === undefined ? undefined : numberField(cost, 'total')
-    return {
-      tokens: {
-        input,
-        output,
-        ...(cacheRead === undefined ? {} : { cacheRead }),
-        ...(cacheWrite === undefined ? {} : { cacheWrite }),
-      },
-      ...(costUsd === undefined ? {} : { costUsd }),
+    const bucket = byModel[model] ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, costUsd: undefined }
+    bucket.input += input
+    bucket.output += output
+    bucket.cacheRead += numberField(usage, 'cacheRead') ?? 0
+    bucket.cacheWrite += numberField(usage, 'cacheWrite') ?? 0
+    if (costUsd !== undefined) bucket.costUsd = (bucket.costUsd ?? 0) + costUsd
+    byModel[model] = bucket
+  }
+  if (numTurns === 0) return {}
+  const models = Object.entries(byModel)
+  if (models.length === 0) return { numTurns }
+
+  const total = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+  let costUsd: number | undefined
+  const perModel: Record<string, ModelTokenUsage> = {}
+  for (const [model, bucket] of models) {
+    total.input += bucket.input
+    total.output += bucket.output
+    total.cacheRead += bucket.cacheRead
+    total.cacheWrite += bucket.cacheWrite
+    if (bucket.costUsd !== undefined) costUsd = (costUsd ?? 0) + bucket.costUsd
+    perModel[model] = {
+      input: bucket.input, output: bucket.output, cacheRead: bucket.cacheRead, cacheWrite: bucket.cacheWrite,
+      ...(bucket.costUsd === undefined ? {} : { costUsd: bucket.costUsd }),
     }
   }
-  return undefined
+  return {
+    numTurns,
+    usage: total,
+    byModel: perModel,
+    ...(costUsd === undefined ? {} : { costUsd }),
+  }
+}
+
+// Pi only exposes a free-text errorMessage, so the code is a best-effort read
+// of it; the full text still travels in run.failed.message.
+function classifyPiFailure(message: string): RunFailureCode {
+  if (/\b(401|403)\b|unauthori[sz]ed|forbidden|invalid (api )?key|authentication/i.test(message)) return 'auth_error'
+  if (/\b(4\d\d|5\d\d)\b|rate limit|overloaded|timed? ?out|ECONNRESET|ENOTFOUND|fetch failed/i.test(message)) return 'api_error'
+  return 'provider_error'
 }

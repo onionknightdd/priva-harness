@@ -109,7 +109,7 @@ function handleRunSocket(socket: WebSocket, options: RunRouteOptions): void {
     if (closed) return
     const live = options.harness.launch(
       { text: frame.text, ...(attachments ? { attachments } : {}) }, spec,
-      { session: sessionTargetFromInit(frame), ...(frame.runId ? { runId: frame.runId } : {}) },
+      { source: 'web', session: sessionTargetFromInit(frame), ...(frame.runId ? { runId: frame.runId } : {}) },
     )
     if (stream) return
     const id = await sessionOfLive(live)

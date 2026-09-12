@@ -118,16 +118,38 @@ tests/unit/infrastructure/data/             存储与 worker 的单元测试
 开发和测试从 `.ts` 源码运行时，worker 以 `execArgv: ['--import', 'tsx']` 启动以解析 `.js` 导入
 说明符；生产从 `dist/` 加载 `.js`。
 
+## 事件层：provider 如何上报一轮的用量
+
+`run.completed` 与 `run.failed` 共享 `RunAccounting`（`core/event/agent-event.ts`）：
+`durationMs`、`apiDurationMs?`、`numTurns?`、`usage?`、`byModel?`、`costUsd?`。失败事件另有
+`code: RunFailureCode` 与 `apiErrorStatus?`。
+
+**Claude**：`result.modelUsage` 与 `total_cost_usd` 是同一个 `query()` 生命周期内的**累计值**
+（warm runtime 跨多轮复用同一个 query），而 `result.usage` 只覆盖主循环、不含子代理。因此
+mapper 保存上一次 result 的 `modelUsage` 快照，本轮 = 累计 − 快照；任一计数器小于快照视为 CLI
+重置了计数（`/clear`、resume），此时累计值即本轮值。runtime 每次新建 `query()` 调用
+`mapper.resetUsageBaseline()`。`usage` 取各模型增量之和（含子代理与压缩调用），只有 result 不带
+`modelUsage` 时才回退到 `result.usage` 与 `total_cost_usd` 差值。失败码：`error_max_turns` →
+`max_turns`，`error_max_budget_usd` → `max_budget`，`api_error_status` 401/403 → `auth_error`，
+其他状态码 → `api_error`，否则 `provider_error`；压缩失败 → `compaction_failed`。
+
+**Pi**：`agent_end.messages` 是本轮新产生的全部消息，每条 assistant message 带一次 API 调用的
+`usage` 与 `model`。mapper 遍历求和并按模型分桶，`numTurns` = assistant message 数。Pi 只给
+自由文本 `errorMessage`，失败码按文本启发式归类（401/403/unauthorized → `auth_error`，HTTP
+状态码 / rate limit / 网络错误 → `api_error`，其余 `provider_error`）；原文仍在 `message` 里。
+Pi 对无报价模型给出 `cost.total = 0` 而非缺失，因此 Pi 侧无法区分"零成本"与"无报价"。
+
+**来源**：`AgentRunOptions.source: RunSource` 为必填，`run-route.ts` 传 `'web'`，
+`subagent-test.ts` 传 `'subagent-test'`；`'channel'`、`'scheduled'` 已预留在类型中。
+
 ## 当前范围与后续
 
-已完成：存储层、worker 管道、主线程代理、保留期清理、启动回收、`main.ts` 接线。此时还没有
-任何业务事件进入 `record()`。
+已完成：存储层、worker 管道、主线程代理、保留期清理、启动回收、`main.ts` 接线；provider 事件层
+的用量求和 / 按模型拆分 / 失败码归一化 / `source`。此时还没有任何业务事件进入 `record()`。
 
 后续步骤：
 
-1. provider 事件层修复：Pi mapper 按 assistant message 求和并按模型分桶；Claude mapper 映射
-   `modelUsage` 为 `byModel`；两个 mapper 归一化 `run.failed.code`；`AgentRunOptions` 增加必填 `source`。
-2. harness 采集：`run.started` / `run.session` / `run.finished`（含 `runtime_crash` 分支）。
-3. 工具、技能、权限、问答、压缩、子代理、工作流审计。
-4. 路由层审计（session 生命周期、配置变更）。
-5. 查询接口（时区由请求携带）与前端概览页。
+1. harness 采集：`run.started` / `run.session` / `run.finished`（含 `runtime_crash` 分支）。
+2. 工具、技能、权限、问答、压缩、子代理、工作流审计。
+3. 路由层审计（session 生命周期、配置变更）。
+4. 查询接口（时区由请求携带）与前端概览页。

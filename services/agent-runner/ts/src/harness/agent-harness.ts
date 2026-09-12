@@ -14,6 +14,7 @@ import type { AgentEvent } from '../core/event/agent-event.js'
 import type { StreamFrame } from '../core/event/agent-event.js'
 import { emptyContextUsage } from '../core/resource/context-usage.js'
 import type { ContextUsage } from '../core/resource/context-usage.js'
+import type { RunSource } from '../core/resource/data-store.js'
 import { isRunResultEvent } from '../core/event/agent-event.js'
 import type { SlashCommand } from '../core/resource/slash-command.js'
 import type { UserTurn } from '../core/run/user-turn.js'
@@ -37,6 +38,9 @@ export interface AgentHarnessOptions {
 }
 
 export interface AgentRunOptions {
+  // Who initiated the turn; recorded with every usage fact so totals can be
+  // split by entry point. Required so a new caller cannot forget it.
+  readonly source: RunSource
   readonly runId?: string
   readonly session?: SessionTarget
   readonly keepRuntimeWarm?: boolean
@@ -130,12 +134,12 @@ export class AgentHarness {
   launch(
     turn: UserTurn,
     spec: ProviderRunSpec,
-    runOptions?: AgentRunOptions,
+    runOptions: AgentRunOptions,
   ): LiveRun {
     const liveRuns = this.requireLiveRuns()
-    const session = this.prepareSession(spec, runOptions?.session, true)
+    const session = this.prepareSession(spec, runOptions.session, true)
     this.rejectBusy(session)
-    const runId = runOptions?.runId ?? randomUUID()
+    const runId = runOptions.runId ?? randomUUID()
     const abort = new AbortController()
     const live = liveRuns.create({
       runId,
@@ -144,7 +148,7 @@ export class AgentHarness {
       abort,
     })
     this.bindPreparedSession(liveRuns, runId, session)
-    void this.pumpLive(live, turn, spec, session)
+    void this.pumpLive(live, turn, spec, session, runOptions.source)
     return live
   }
 
@@ -239,14 +243,14 @@ export class AgentHarness {
     turn: UserTurn,
     context: TurnContext,
     spec: ProviderRunSpec,
-    runOptions?: AgentRunOptions,
+    runOptions: AgentRunOptions,
   ): AsyncIterable<StreamFrame> {
-    const runId = runOptions?.runId ?? randomUUID()
+    const runId = runOptions.runId ?? randomUUID()
 
-    const session = this.prepareSession(spec, runOptions?.session, false)
+    const session = this.prepareSession(spec, runOptions.session, false)
     const provider = this.options.providers[spec.provider]
     const poolKey = sessionRefOf(session)
-    const pool = runOptions?.keepRuntimeWarm === false ? undefined : this.pool
+    const pool = runOptions.keepRuntimeWarm === false ? undefined : this.pool
     const runtime = pool === undefined
       ? await provider.openSession(session, spec)
       : await pool.acquire(poolKey, spec, () => provider.openSession(session, spec))
@@ -279,10 +283,12 @@ export class AgentHarness {
     turn: UserTurn,
     spec: ProviderRunSpec,
     session: SessionTarget,
+    source: RunSource,
   ): Promise<void> {
     let sawResult = false
     try {
       for await (const frame of this.run(turn, { signal: live.abort.signal }, spec, {
+        source,
         runId: live.runId,
         session,
       })) {

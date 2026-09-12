@@ -1,4 +1,4 @@
-import type { TokenUsage } from '../event/agent-event.js'
+import type { ModelTokenUsage, RunFailureCode, TokenUsage } from '../event/agent-event.js'
 
 // Usage and audit facts recorded by the runner. Every record produces one
 // immutable audit_event row; run/tool records additionally project into the
@@ -9,23 +9,6 @@ export type RunSource = (typeof RUN_SOURCES)[number]
 
 export const RUN_OUTCOMES = ['running', 'completed', 'failed', 'aborted'] as const
 export type RunOutcome = (typeof RUN_OUTCOMES)[number]
-
-export const RUN_FAILURE_CODES = [
-  'max_turns',
-  'max_budget',
-  'api_error',
-  'auth_error',
-  'compaction_failed',
-  'provider_error',
-  'transport_error',
-  'runtime_crash',
-  'unknown',
-] as const
-export type RunFailureCode = (typeof RUN_FAILURE_CODES)[number]
-
-export interface ModelTokenUsage extends TokenUsage {
-  readonly costUsd?: number
-}
 
 interface RecordBase {
   readonly tsUtc: string

@@ -102,10 +102,65 @@ describe('PiEventMapper', () => {
       expect.objectContaining({
         type: 'run.failed',
         message: 'Responses API 404',
+        code: 'api_error',
         sessionId: 'pi-sess',
         model: 'm',
       }),
     ])
+  })
+
+  it('classifies assistant errors from their message text', () => {
+    const codeFor = (errorMessage: string): unknown => {
+      const event = new PiEventMapper({ sessionId: 's', model: 'm' }).push({
+        type: 'agent_end',
+        messages: [{ role: 'assistant', stopReason: 'error', errorMessage, content: [] }],
+      })[0]
+      return event?.type === 'run.failed' ? event.code : undefined
+    }
+    expect(codeFor('401 Unauthorized')).toBe('auth_error')
+    expect(codeFor('Invalid API key provided')).toBe('auth_error')
+    expect(codeFor('529 overloaded_error')).toBe('api_error')
+    expect(codeFor('rate limit exceeded')).toBe('api_error')
+    expect(codeFor('fetch failed')).toBe('api_error')
+    expect(codeFor('model returned malformed tool call')).toBe('provider_error')
+  })
+
+  it('sums usage across every assistant message of the run and buckets it by model', () => {
+    const mapper = new PiEventMapper({ sessionId: 'pi-sess', model: 'main' })
+    const usage = (input: number, output: number, cacheRead: number, cacheWrite: number, total: number) =>
+      ({ input, output, cacheRead, cacheWrite, cost: { total } })
+    const event = mapper.push({
+      type: 'agent_end',
+      messages: [
+        { role: 'user', content: [] },
+        { role: 'assistant', model: 'main', usage: usage(0, 100, 0, 1000, 0.02), content: [] },
+        { role: 'toolResult', content: [] },
+        { role: 'assistant', model: 'main', usage: usage(0, 50, 1000, 200, 0.01), content: [] },
+        { role: 'assistant', model: 'small', usage: usage(30, 10, 0, 0, 0.001), content: [] },
+        { role: 'assistant', content: [] },
+      ],
+    })[0]
+
+    expect(event).toMatchObject({
+      type: 'run.completed',
+      model: 'main',
+      numTurns: 4,
+      usage: { input: 30, output: 160, cacheRead: 1000, cacheWrite: 1200 },
+      byModel: {
+        main: { input: 0, output: 150, cacheRead: 1000, cacheWrite: 1200, costUsd: expect.closeTo(0.03, 6) as number },
+        small: { input: 30, output: 10, cacheRead: 0, cacheWrite: 0, costUsd: 0.001 },
+      },
+      costUsd: expect.closeTo(0.031, 6) as number,
+    })
+  })
+
+  it('reports numTurns without usage when assistant messages carry none', () => {
+    const event = new PiEventMapper({ sessionId: 's', model: 'm' }).push({
+      type: 'agent_end',
+      messages: [{ role: 'assistant', content: [] }],
+    })[0]
+    expect(event).toMatchObject({ type: 'run.completed', numTurns: 1 })
+    expect(event !== undefined && 'usage' in event ? event.usage : undefined).toBeUndefined()
   })
 
   it('defers tool.started until id is known and maps execution progress', () => {

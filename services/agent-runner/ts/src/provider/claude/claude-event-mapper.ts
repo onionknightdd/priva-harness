@@ -7,6 +7,9 @@ import type {
   BlockKind,
   ContentBlock,
   EventChannel,
+  ModelTokenUsage,
+  RunAccounting,
+  RunFailureCode,
   TokenUsage,
 } from '../../core/event/agent-event.js'
 import {
@@ -46,8 +49,12 @@ export interface ClaudeSdkMessage {
   readonly tool_use_result?: unknown
   readonly toolUseResult?: unknown
   readonly duration_ms?: number
+  readonly duration_api_ms?: number
+  readonly num_turns?: number
   readonly total_cost_usd?: number
   readonly usage?: unknown
+  readonly modelUsage?: unknown
+  readonly api_error_status?: number | null
   readonly is_error?: boolean
   readonly result?: string
   readonly errors?: readonly string[]
@@ -77,8 +84,14 @@ export class ClaudeEventMapper {
   private readonly workflows = new ClaudeWorkflows()
   readonly backgroundTasks = new ClaudeBackgroundTasks()
   private readonly replies = new TaskReplyTracker()
+  // Result messages report modelUsage and total_cost_usd as running totals
+  // for the life of one query(); per-turn figures are the delta from here.
+  private usageBaseline: UsageBaseline = emptyUsageBaseline()
 
   beginUserTurn(): void { this.replies.clear() }
+
+  // Call whenever a new query() starts: its counters begin at zero again.
+  resetUsageBaseline(): void { this.usageBaseline = emptyUsageBaseline() }
 
   activeMessageId(): string {
     return this.ensureMessageId()
@@ -526,6 +539,7 @@ export class ClaudeEventMapper {
         {
           type: 'run.failed',
           message: stringField(record, 'compact_error') ?? 'Conversation compaction failed',
+          code: 'compaction_failed',
           ...(sessionId === undefined ? {} : { sessionId }),
           ...(this.model === undefined ? {} : { model: this.model }),
         },
@@ -538,8 +552,6 @@ export class ClaudeEventMapper {
     const sessionId = omitEmpty(message.session_id ?? this.sessionId)
     const model = this.model ?? 'unknown'
     const durationMs = message.duration_ms ?? 0
-    const usage = mapUsage(message.usage)
-    const costUsd = message.total_cost_usd
     if (isAbortResult(message)) {
       return {
         type: 'run.aborted',
@@ -548,18 +560,25 @@ export class ClaudeEventMapper {
         ...(message.result ? { message: message.result } : {}),
       }
     }
+    const accounting: RunAccounting = {
+      durationMs,
+      ...(message.duration_api_ms === undefined ? {} : { apiDurationMs: message.duration_api_ms }),
+      ...(message.num_turns === undefined ? {} : { numTurns: message.num_turns }),
+      ...this.turnAccounting(message),
+    }
     const failed =
       message.is_error === true ||
       (message.subtype !== undefined && message.subtype !== 'success')
     if (failed) {
+      const apiErrorStatus = message.api_error_status ?? undefined
       return {
         type: 'run.failed',
         message: failureMessage(message),
+        code: classifyClaudeFailure(message.subtype, apiErrorStatus),
+        ...(apiErrorStatus === undefined ? {} : { apiErrorStatus }),
         ...(sessionId === undefined ? {} : { sessionId }),
         model,
-        durationMs,
-        ...(costUsd === undefined ? {} : { costUsd }),
-        ...(usage === undefined ? {} : { usage }),
+        ...accounting,
       }
     }
     return {
@@ -567,9 +586,60 @@ export class ClaudeEventMapper {
       ...(sessionId === undefined ? {} : { sessionId }),
       model,
       durationMs,
-      ...(costUsd === undefined ? {} : { costUsd }),
-      ...(usage === undefined ? {} : { usage }),
+      ...accounting,
     }
+  }
+
+  // modelUsage covers every model call of the query pipeline (main loop,
+  // Task subagents, compaction); result.usage covers the main loop only. So
+  // the turn total is the modelUsage delta, and result.usage is only a
+  // fallback for results that carry no modelUsage at all.
+  private turnAccounting(message: ClaudeSdkMessage): RunAccounting {
+    const cumulative = parseModelUsage(message.modelUsage)
+    const cumulativeCost = message.total_cost_usd
+    if (cumulative === undefined) {
+      const usage = mapUsage(message.usage)
+      const costUsd = deltaCost(cumulativeCost, this.usageBaseline.costUsd)
+      this.usageBaseline = { byModel: {}, costUsd: cumulativeCost ?? this.usageBaseline.costUsd }
+      return {
+        ...(usage === undefined ? {} : { usage }),
+        ...(costUsd === undefined ? {} : { costUsd }),
+      }
+    }
+
+    // A counter below its baseline means the CLI restarted its totals
+    // (/clear, resume); the cumulative values are then this turn's values.
+    const previous = usageCountersReset(cumulative, this.usageBaseline.byModel) ? {} : this.usageBaseline.byModel
+    const byModel: Record<string, ModelTokenUsage> = {}
+    const total = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+    let costUsd = 0
+    let sawCost = false
+    for (const [model, now] of Object.entries(cumulative)) {
+      const before = previous[model]
+      const delta = {
+        input: now.input - (before?.input ?? 0),
+        output: now.output - (before?.output ?? 0),
+        cacheRead: now.cacheRead - (before?.cacheRead ?? 0),
+        cacheWrite: now.cacheWrite - (before?.cacheWrite ?? 0),
+        costUsd: now.costUsd - (before?.costUsd ?? 0),
+      }
+      if (delta.input === 0 && delta.output === 0 && delta.cacheRead === 0 && delta.cacheWrite === 0) continue
+      byModel[model] = delta
+      total.input += delta.input
+      total.output += delta.output
+      total.cacheRead += delta.cacheRead
+      total.cacheWrite += delta.cacheWrite
+      costUsd += delta.costUsd
+      sawCost = true
+    }
+    this.usageBaseline = { byModel: cumulative, costUsd: cumulativeCost ?? this.usageBaseline.costUsd }
+    if (!sawCost) {
+      // Nothing billed this turn (e.g. a zeroed crash result): fall back to
+      // whatever the main-loop usage says rather than reporting nothing.
+      const usage = mapUsage(message.usage)
+      return usage === undefined ? {} : { usage }
+    }
+    return { usage: total, byModel, costUsd }
   }
 
   private deliveryEvents(blocks: JsonRecord[], channel: EventChannel, deliveryId?: string): AgentEvent[] {
@@ -765,6 +835,72 @@ function mapUsage(usage: unknown): TokenUsage | undefined {
     ...(cacheRead === undefined ? {} : { cacheRead }),
     ...(cacheWrite === undefined ? {} : { cacheWrite }),
   }
+}
+
+interface ModelCounters {
+  readonly input: number
+  readonly output: number
+  readonly cacheRead: number
+  readonly cacheWrite: number
+  readonly costUsd: number
+}
+
+interface UsageBaseline {
+  readonly byModel: Readonly<Record<string, ModelCounters>>
+  readonly costUsd: number
+}
+
+function emptyUsageBaseline(): UsageBaseline {
+  return { byModel: {}, costUsd: 0 }
+}
+
+function parseModelUsage(value: unknown): Record<string, ModelCounters> | undefined {
+  const record = asRecord(value)
+  if (record === undefined) return undefined
+  const out: Record<string, ModelCounters> = {}
+  for (const [model, raw] of Object.entries(record)) {
+    const entry = asRecord(raw)
+    if (entry === undefined) continue
+    const input = numberField(entry, 'inputTokens')
+    const output = numberField(entry, 'outputTokens')
+    if (input === undefined || output === undefined) continue
+    out[model] = {
+      input,
+      output,
+      cacheRead: numberField(entry, 'cacheReadInputTokens') ?? 0,
+      cacheWrite: numberField(entry, 'cacheCreationInputTokens') ?? 0,
+      costUsd: numberField(entry, 'costUSD') ?? 0,
+    }
+  }
+  return Object.keys(out).length === 0 ? undefined : out
+}
+
+function usageCountersReset(
+  cumulative: Readonly<Record<string, ModelCounters>>,
+  baseline: Readonly<Record<string, ModelCounters>>,
+): boolean {
+  for (const [model, before] of Object.entries(baseline)) {
+    const now = cumulative[model]
+    if (now === undefined) return true
+    if (now.input < before.input || now.output < before.output
+      || now.cacheRead < before.cacheRead || now.cacheWrite < before.cacheWrite || now.costUsd < before.costUsd) {
+      return true
+    }
+  }
+  return false
+}
+
+function deltaCost(cumulative: number | undefined, baseline: number): number | undefined {
+  if (cumulative === undefined) return undefined
+  return cumulative < baseline ? cumulative : cumulative - baseline
+}
+
+function classifyClaudeFailure(subtype: string | undefined, apiErrorStatus: number | undefined): RunFailureCode {
+  if (subtype === 'error_max_turns') return 'max_turns'
+  if (subtype === 'error_max_budget_usd') return 'max_budget'
+  if (apiErrorStatus === 401 || apiErrorStatus === 403) return 'auth_error'
+  if (apiErrorStatus !== undefined) return 'api_error'
+  return 'provider_error'
 }
 
 function failureMessage(message: ClaudeSdkMessage): string {

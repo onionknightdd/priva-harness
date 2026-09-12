@@ -208,6 +208,7 @@ export class ClaudeRuntime implements AgentRuntime {
       },
     })
     this.query = active
+    this.mapper.resetUsageBaseline()
     void this.pump(active)
   }
 

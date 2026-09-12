@@ -494,10 +494,80 @@ describe('ClaudeEventMapper', () => {
     expect(events).toEqual([{
       type: 'run.failed',
       message: 'boom',
+      code: 'provider_error',
       sessionId: 'sess-err',
       model: 'unknown',
       durationMs: 9,
     }])
+  })
+
+  it('classifies result failures by subtype and API status', () => {
+    const code = (message: Parameters<ClaudeEventMapper['push']>[0]): unknown =>
+      new ClaudeEventMapper().push(message)[0]
+    expect(code({ type: 'result', subtype: 'error_max_turns', is_error: true })).toMatchObject({ code: 'max_turns' })
+    expect(code({ type: 'result', subtype: 'error_max_budget_usd', is_error: true })).toMatchObject({ code: 'max_budget' })
+    expect(code({ type: 'result', subtype: 'success', is_error: true, api_error_status: 401 }))
+      .toMatchObject({ code: 'auth_error', apiErrorStatus: 401 })
+    expect(code({ type: 'result', subtype: 'success', is_error: true, api_error_status: 529 }))
+      .toMatchObject({ code: 'api_error', apiErrorStatus: 529 })
+    expect(code({ type: 'result', subtype: 'error_during_execution', is_error: true, api_error_status: null }))
+      .toEqual(expect.not.objectContaining({ apiErrorStatus: expect.anything() as unknown }))
+  })
+
+  it('reports per-turn accounting as the delta of the cumulative modelUsage', () => {
+    const mapper = new ClaudeEventMapper()
+    const result = (modelUsage: Record<string, unknown>, total_cost_usd: number, extra: Record<string, unknown> = {}) =>
+      mapper.push({
+        type: 'result', subtype: 'success', session_id: 's', duration_ms: 10, duration_api_ms: 7, num_turns: 2,
+        total_cost_usd, modelUsage,
+        usage: { input_tokens: 1, output_tokens: 1 },
+        ...extra,
+      })[0]
+    const sonnet = (input: number, output: number, cacheRead: number, cacheWrite: number, costUSD: number) =>
+      ({ inputTokens: input, outputTokens: output, cacheReadInputTokens: cacheRead, cacheCreationInputTokens: cacheWrite, costUSD })
+
+    // Turn 1: subagent on haiku is included even though result.usage would miss it.
+    expect(result({ sonnet: sonnet(0, 100, 0, 1000, 0.02), haiku: sonnet(50, 20, 0, 0, 0.001) }, 0.021)).toEqual({
+      type: 'run.completed', sessionId: 's', model: 'unknown', durationMs: 10, apiDurationMs: 7, numTurns: 2,
+      usage: { input: 50, output: 120, cacheRead: 0, cacheWrite: 1000 },
+      byModel: {
+        sonnet: { input: 0, output: 100, cacheRead: 0, cacheWrite: 1000, costUsd: 0.02 },
+        haiku: { input: 50, output: 20, cacheRead: 0, cacheWrite: 0, costUsd: 0.001 },
+      },
+      costUsd: 0.021,
+    })
+
+    // Turn 2: only sonnet moved; haiku's unchanged counters are not reported again.
+    expect(result({ sonnet: sonnet(0, 300, 1000, 1150, 0.05), haiku: sonnet(50, 20, 0, 0, 0.001) }, 0.051)).toMatchObject({
+      usage: { input: 0, output: 200, cacheRead: 1000, cacheWrite: 150 },
+      byModel: { sonnet: { input: 0, output: 200, cacheRead: 1000, cacheWrite: 150, costUsd: expect.closeTo(0.03, 6) as number } },
+      costUsd: expect.closeTo(0.03, 6) as number,
+    })
+    expect((result({ sonnet: sonnet(0, 300, 1000, 1150, 0.05), haiku: sonnet(50, 20, 0, 0, 0.001) }, 0.051) as { byModel?: object }).byModel)
+      .toBeUndefined()
+
+    // Counters restarted (e.g. /clear): the cumulative values are the turn's values.
+    expect(result({ sonnet: sonnet(0, 40, 0, 500, 0.004) }, 0.004)).toMatchObject({
+      usage: { input: 0, output: 40, cacheRead: 0, cacheWrite: 500 },
+      costUsd: 0.004,
+    })
+
+    // A new query() starts from zero again.
+    mapper.resetUsageBaseline()
+    expect(result({ sonnet: sonnet(0, 10, 0, 100, 0.001) }, 0.001)).toMatchObject({
+      usage: { input: 0, output: 10, cacheRead: 0, cacheWrite: 100 }, costUsd: 0.001,
+    })
+  })
+
+  it('falls back to result.usage and cumulative cost when modelUsage is missing', () => {
+    const mapper = new ClaudeEventMapper()
+    const push = (total_cost_usd: number) => mapper.push({
+      type: 'result', subtype: 'success', duration_ms: 1, total_cost_usd,
+      usage: { input_tokens: 12, output_tokens: 4, cache_read_input_tokens: 3 },
+    })[0]
+    expect(push(0.01)).toMatchObject({ usage: { input: 12, output: 4, cacheRead: 3 }, costUsd: 0.01 })
+    expect(push(0.015)).toMatchObject({ costUsd: expect.closeTo(0.005, 6) as number })
+    expect((push(0.015) as { byModel?: object }).byModel).toBeUndefined()
   })
 
   it('keeps TaskCreate JSONL toolUseResult so the plan can recover the task id', () => {
