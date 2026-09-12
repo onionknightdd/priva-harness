@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 import { UsageActivity } from "./usage-activity"
 import { USAGE_HEATMAP_WIDTH } from "./usage-heatmap"
+import { UsageModelTable } from "./usage-model-table"
 import { UsageOverviewCards } from "./usage-overview-cards"
 import { useUsageOverview } from "./use-usage-overview"
 
@@ -41,8 +42,9 @@ export function UsagePage() {
             </Button>
           </div>
         ) : overview.data ? (
-          <div className="motion-safe:transition-opacity motion-safe:duration-200 motion-safe:ease-out starting:opacity-0">
+          <div className="flex flex-col gap-8 motion-safe:transition-opacity motion-safe:duration-200 motion-safe:ease-out starting:opacity-0">
             <UsageActivity overview={overview.data} />
+            <UsageModelTable models={overview.data.models} />
           </div>
         ) : null}
       </section>

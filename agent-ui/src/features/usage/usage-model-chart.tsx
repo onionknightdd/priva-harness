@@ -21,6 +21,7 @@ import {
   type UsageDay,
   type UsageModel,
 } from "./usage-api"
+import { seriesColor } from "./usage-series-colors"
 
 // Series are addressed by position rather than by model name: model ids can
 // contain "." and "/", which are not valid inside the CSS custom property the
@@ -31,15 +32,6 @@ const seriesKey = (index: number) => `series${index + 1}`
 // reads as sluggish, so the reveal is kept close to the heatmap's.
 const BAR_REVEAL_MS = 320
 
-// Spelled out so Tailwind sees each theme variable referenced and emits it; a
-// template literal would leave the tokens out of the generated CSS.
-const SERIES_COLORS = [
-  "var(--color-usage-series-1)",
-  "var(--color-usage-series-2)",
-  "var(--color-usage-series-3)",
-  "var(--color-usage-series-4)",
-  "var(--color-usage-series-5)",
-] as const
 
 export function UsageModelChart({
   window,
@@ -63,7 +55,7 @@ export function UsageModelChart({
           seriesKey(index),
           {
             label: model === OTHER_MODELS_KEY ? t("usage.models.other") : model,
-            color: SERIES_COLORS[Math.min(index, SERIES_COLORS.length - 1)],
+            color: seriesColor(index),
           },
         ])
       ),

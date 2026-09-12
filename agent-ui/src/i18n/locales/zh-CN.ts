@@ -78,6 +78,15 @@ export const zhCN = {
       other: "其他",
       empty: "暂无模型用量记录。",
     },
+    modelTable: {
+      title: "模型",
+      description: "近一年，按处理 token 排序；前 4 个模型与其余合计。",
+      model: "模型",
+      share: "份额",
+      tokens: "Token",
+      cost: "成本",
+      runs: "轮次",
+    },
     overview: {
       title: "概览",
       rangeLabel: "时间区间",

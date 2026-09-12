@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client"
 import i18n from "../../../src/i18n"
 import "../../../src/index.css"
 import { UsageActivity } from "../../../src/features/usage/usage-activity"
+import { UsageModelTable } from "../../../src/features/usage/usage-model-table"
 import { UsageOverviewCards } from "../../../src/features/usage/usage-overview-cards"
 import {
   shiftLocalDate,
@@ -115,6 +116,7 @@ await act(async () => {
     <div className="flex flex-col gap-8">
       <div data-test="cards"><UsageOverviewCards /></div>
       <div data-test="activity"><UsageActivity overview={overview} /></div>
+      <div data-test="models"><UsageModelTable models={overview.models} /></div>
     </div>
   )
 })
@@ -314,6 +316,24 @@ async function runChecks() {
     await act(async () => { done.click() })
     check("picking a start date makes the range custom and deselects presets", await waitFor(() => rangeRequests.some((url) => url.includes(`from=${target}&to=${todayIso}`))) && presetTabs().every((tab) => tab.getAttribute("aria-selected") !== "true"))
     check("the start picker shows the chosen day", await waitFor(() => pickerButtons()[0]?.textContent === dayLabel(target)))
+
+    // --- model table -------------------------------------------------------
+    const table = host.querySelector<HTMLElement>('[data-test="models"] table')!
+    const tableRows = Array.from(table.querySelectorAll("tbody tr"))
+    const ranked = [...overview.models].sort((left, right) => right.processedTokens - left.processedTokens)
+    check("model table lists the top four models then others", tableRows.map((row) => row.querySelector("td")!.textContent).join("|") === [...ranked.slice(0, 4).map((m) => m.model), i18n.t("usage.models.other")].join("|"))
+    check("model table rows are 26px with right-aligned tabular numbers", tableRows.every((row) => Math.abs(row.getBoundingClientRect().height - 26) < 1) && Array.from(table.querySelectorAll("tbody td:nth-child(3)")).every((cell) => getComputedStyle(cell).textAlign === "right"))
+    check("model table shares add up to the whole", (() => {
+      const total = tableRows.reduce((sum, row) => sum + Number(row.querySelector("td:nth-child(2) span:last-child")!.textContent!.replace("%", "")), 0)
+      return Math.abs(total - 100) <= tableRows.length
+    })())
+    check("model table row swatches follow the chart palette", tableRows.every((row, index) => (row.querySelector<HTMLElement>("td span span")!.style.backgroundColor || "").includes(`usage-series-${Math.min(index + 1, 5)}`)))
+    check("share bars settle at their share width", await waitFor(() => tableRows.every((row) => {
+      const bar = row.querySelector<HTMLElement>("td:nth-child(2) span span span")!
+      const track = bar.parentElement!
+      const share = Number(bar.style.getPropertyValue("--share"))
+      return Math.abs(bar.getBoundingClientRect().width - track.getBoundingClientRect().width * share) < 1.5
+    })))
 
     results.textContent = `PASS\n${passed.map((name) => `✔ ${name}`).join("\n")}`
   } catch (error) {

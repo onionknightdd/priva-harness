@@ -246,6 +246,36 @@ export function modelSeries(
   return { keys, months }
 }
 
+export type ModelRow = {
+  key: string
+  processedTokens: number
+  share: number
+  costUsd: number | null
+  runsWithoutCost: number
+  runs: number
+}
+
+// Top models by processed tokens; the tail is folded into one "others" row so
+// the table matches the chart's series.
+export function modelRows(models: readonly UsageModel[], limit = MODEL_SERIES_LIMIT): ModelRow[] {
+  const ranked = [...models].sort((left, right) => right.processedTokens - left.processedTokens)
+  const shown = ranked.slice(0, limit).map((model) => ({
+    key: model.model, processedTokens: model.processedTokens, share: model.share,
+    costUsd: model.costUsd, runsWithoutCost: model.runsWithoutCost, runs: model.runs,
+  }))
+  const rest = ranked.slice(limit)
+  if (rest.length === 0) return shown
+  const others = rest.reduce<ModelRow>((sum, model) => ({
+    key: OTHER_MODELS_KEY,
+    processedTokens: sum.processedTokens + model.processedTokens,
+    share: sum.share + model.share,
+    costUsd: model.costUsd === null ? sum.costUsd : (sum.costUsd ?? 0) + model.costUsd,
+    runsWithoutCost: sum.runsWithoutCost + model.runsWithoutCost,
+    runs: sum.runs + model.runs,
+  }), { key: OTHER_MODELS_KEY, processedTokens: 0, share: 0, costUsd: null, runsWithoutCost: 0, runs: 0 })
+  return [...shown, others]
+}
+
 export const HEATMAP_MODES = ["daily", "weekly", "cumulative"] as const
 export type HeatmapMode = (typeof HEATMAP_MODES)[number]
 

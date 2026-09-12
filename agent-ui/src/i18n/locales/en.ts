@@ -78,6 +78,15 @@ export const en = {
       other: "Others",
       empty: "No model usage recorded yet.",
     },
+    modelTable: {
+      title: "Models",
+      description: "Last year, ranked by processed tokens; the top four models plus the rest.",
+      model: "Model",
+      share: "Share",
+      tokens: "Tokens",
+      cost: "Cost",
+      runs: "Turns",
+    },
     overview: {
       title: "Overview",
       rangeLabel: "Date range",

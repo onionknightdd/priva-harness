@@ -271,6 +271,26 @@ CLI 会同时想安装 `@radix-ui/react-icons` 和一个名为 `cn` 的无关包
 `ui/scroll-area.tsx` 为其依赖一同安装（Base UI ScrollArea），生成的 `import { cn } from "cn"`
 需改回 `@/lib/utils`。
 
+### 模型表
+
+2026-09-13：活动块下方增加「模型」表，回答"总共用了多少、花了多少"（柱状图回答"什么时候用了
+什么"）。近一年窗口，按处理 token 排序，前 4 个模型 + 「其他」合计，与堆叠柱共用
+`usage-series` 色板与顺序（`usage-series-colors.ts`）；列为 模型（色块 + 名称）、份额
+（4px 进度条 + 百分比）、Token、成本、轮次。行高 26px、表头 12px 二级文本、数字右对齐
+tabular，与 Skills / MCP 列表一致。成本为部分已知时显示 `$x.xx+` 并以共享 Tooltip 说明
+「N 轮无成本」；无报价显示 —。份额条出现时从左侧以 `scaleX` 生长 300ms（份额通过
+`--share` 变量传入，`@starting-style` 才能覆盖），reduced-motion 直接显示。
+无任何模型记录时显示「暂无模型用量记录。」。
+
+```text
+模型
+近一年，按处理 token 排序；前 4 个模型与其余合计。
+模型                    份额              Token      成本     轮次
+■ claude-sonnet-4.5   ████████░░  38%     3.8M    $11.40+    201
+■ …
+■ 其他                 █░░░░░░░░░   9%   866.3K       —       22
+```
+
 模型活动使用 shadcn 堆叠柱状图（`ui/chart` + Recharts `BarChart`），不套 Card：
 X 轴为窗口内的每个月（无用量的月份保留空柱位），按处理 token 从高到低取前 4 个模型，
 其余合并为「其他」；系列颜色读取共享 `usage-series-1…5` token（蓝色由深到浅），
@@ -1251,10 +1271,10 @@ MCP 页面浏览器回归：打开 `/tests/features/resources/mcp-browser.html`�
 项目连接的 cwd、最近详情数量上限，以及 390px iframe 的搜索、Tab 和返回操作。
 附加 `?reduced-motion=1&dark=1` 检查深色和减少动态效果；不会连接或修改真实服务。
 
-用量页请求参数与热力图每日 / 每周 / 累计换算：
+用量页请求参数、热力图每日 / 每周 / 累计换算、区间预设与模型表行聚合：
 
 ```sh
-./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/usage/usage-api.test.ts
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/usage/usage-api.test.ts agent-ui/tests/features/usage/usage-model-table.test.ts
 ```
 
 用量热力图浏览器回归：在开发服务器打开 `/tests/features/usage/usage-heatmap-browser.html`，
@@ -1267,7 +1287,8 @@ MCP 页面浏览器回归：打开 `/tests/features/resources/mcp-browser.html`�
 token 提示及离开后关闭、模型面板卸载热力图与模式切换、前 4 个模型 + 其他的图例、
 12–13 个月份柱位、系列 token 和切回热力图的恢复，以及概览六张卡的顺序、默认一年区间与
 预设高亮、选择器跟随预设、7 天重请求与数值变化、日期按钮固定宽度与滚动切换后只剩新值、
-概览位于活动块上方、Gauge 图标、日历 32px 日格、打开开始日期日历并选日后变为自定义区间；
+概览位于活动块上方、Gauge 图标、日历 32px 日格、打开开始日期日历并选日后变为自定义区间，
+以及模型表的排序与「其他」行、26px 行高与右对齐、份额合计、色板对应和份额条终态宽度；
 页面用同一份合成数据拦截 `/api/sandbox/usage/range`；追加 `?zh&dark` 检查中文与深色，`&panel=models` 直接打开模型面板，
 `&auto` 在加载后自动运行。
 
