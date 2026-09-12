@@ -37,46 +37,51 @@ export function FilePathLink({
   const canOpen = exists && workspaceFiles !== null && path.trim() !== ""
   const openLabel = t("agentMessage.openFile", { name: label })
 
-  if (!canOpen) {
-    const content = variant === "code" ? (
+  const content = !canOpen ? (
+    variant === "code" ? (
       <code className={cn("rounded bg-muted px-1.5 py-0.5 font-mono text-[1em]", className)}>
         {label}
       </code>
     ) : <span className={cn(marquee && "inline-block max-w-full min-w-0 truncate align-middle", className)}>{label}</span>
-    return tooltip ? <TooltipHint content={tooltip}>{content}</TooltipHint> : content
-  }
+  ) : (
+    <motion.button
+      type="button"
+      aria-label={openLabel}
+      onClick={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        workspaceFiles.openFileInWorkspace(path)
+      }}
+      whileTap={shouldReduceMotion ? undefined : { scale: 0.98 }}
+      transition={{ duration: shouldReduceMotion ? 0 : 0.16 }}
+      className={cn(
+        "relative z-10 inline-flex max-w-full min-w-0 pointer-events-auto items-center gap-0.5 align-middle text-left font-normal leading-normal outline-none",
+        className,
+        "cursor-pointer bg-transparent p-0 underline-offset-2",
+        focusRing,
+        variant === "code"
+          ? "text-sky-600 underline decoration-sky-600/50 hover:decoration-sky-600 dark:text-sky-400 dark:decoration-sky-400/50 dark:hover:decoration-sky-400"
+          : "hover:underline"
+      )}
+    >
+      {showIcon ? (
+        <FileTypeIcon
+          name={fileNameFromPath(path)}
+          path={path}
+          className="block size-[0.875em]"
+        />
+      ) : null}
+      {marquee ? <OverflowMarquee className="flex-1">{label}</OverflowMarquee> : <span className="min-w-0 truncate">{label}</span>}
+    </motion.button>
+  )
 
   return (
-    <TooltipHint content={tooltip ?? openLabel}>
-      <motion.button
-        type="button"
-        aria-label={openLabel}
-        onClick={(event) => {
-          event.preventDefault()
-          event.stopPropagation()
-          workspaceFiles.openFileInWorkspace(path)
-        }}
-        whileTap={shouldReduceMotion ? undefined : { scale: 0.98 }}
-        transition={{ duration: shouldReduceMotion ? 0 : 0.16 }}
-        className={cn(
-          "relative z-10 inline-flex max-w-full min-w-0 pointer-events-auto items-center gap-0.5 align-middle text-left font-normal leading-normal outline-none",
-          className,
-          "cursor-pointer bg-transparent p-0 underline-offset-2",
-          focusRing,
-          variant === "code"
-            ? "text-sky-600 underline decoration-sky-600/50 hover:decoration-sky-600 dark:text-sky-400 dark:decoration-sky-400/50 dark:hover:decoration-sky-400"
-            : "hover:underline"
-        )}
-      >
-        {showIcon ? (
-          <FileTypeIcon
-            name={fileNameFromPath(path)}
-            path={path}
-            className="block size-[0.875em]"
-          />
-        ) : null}
-        {marquee ? <OverflowMarquee className="flex-1">{label}</OverflowMarquee> : <span className="min-w-0 truncate">{label}</span>}
-      </motion.button>
+    <TooltipHint content={tooltip ?? (canOpen ? openLabel : undefined)}>
+      {/* Keep the native hover target mounted when the existence check replaces
+          plain text with a button; Base UI attaches listeners to this element. */}
+      <span className="inline-flex max-w-full min-w-0 align-middle">
+        {content}
+      </span>
     </TooltipHint>
   )
 }
