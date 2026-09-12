@@ -618,9 +618,49 @@ inline 文件链接使用正常行高；单行省略容器不能使用 `leading-
 
 2026-09-12：助手正文中识别为文件路径的 inline code 只显示文件名，使用共享
 `fileNameFromPath` 提取；点击打开时仍使用相对会话 cwd 解析后的完整路径。
+右键菜单复用文件树的 `ContextMenu`，菜单文字为 12px，依次提供“打开”“复制文件路径”
+“在对话中引用”。打开复用 `openFileInWorkspace`，桌面进入右侧 Files，窄屏进入现有
+Workspace 抽屉；复制使用绝对路径，失败保留菜单并显示错误。引用把完整路径追加为
+Markdown 引用并聚焦输入框；未能解析为绝对路径时不执行文件操作。
+
+助手文本选区操作采用 [Beautiful UI Selection Actions](https://www.beautifului.dev/r/selection-actions.json)
+的 36px 胶囊、4px 内边距和 28px 圆角按钮，提取为本地
+`components/primitives/SelectionActions.tsx`，复用 Button、Lucide 与主题 token。
+只提供 12px 的“引用”“解释”“优化”；三个操作都写入草稿，解释 / 优化在选区引用后
+追加对应指令，由用户发送。工具条优先显示在选区下方，底部空间不足时向上翻转，
+水平位置按实际宽度限制在视口内。Tab 进入工具条，左右方向键 / Home / End 移动，
+Esc、滚动及右键菜单打开时关闭。进入 160ms、退出 100ms，复用 `EASE_OUT`；
+键盘和减少动态效果立即切换。退出中的按钮设为 inert，取消未执行的定位帧。
 
 ```text
-src/components/example.tsx -> [example.tsx] -> open resolved full path
+src/components/example.tsx -> [example.tsx] --click / Open--> Workspace / Files
+                                          |-- Copy path --> absolute path
+                                          +-- Quote ----> composer draft
+Assistant selection -> ( Quote | Explain | Improve ) ----> composer draft
+                                                        -> user sends
+```
+
+附件发送格式：上传成功后，`messageTextWithAttachments` 将 `AgentAttachments` 围栏追加到
+原始用户文本后；`run.start` 通过 `text` 发送这份清单，文件字节不嵌入文本，也不发送独立
+attachments 数组。每个条目使用 name、path、MIME、size 四个字段；path 是上传返回的
+绝对路径，size 是字节数。多个条目用空行分开，字段内的反斜杠、CR、LF 分别转义为
+`\\`、`\r`、`\n`。历史回放将完整有效的标记还原为附件卡片；不完整或无效标记保留为正文。
+当前文件 / 文本引用使用 Markdown `>`，没有额外的引用协议标记。
+
+````text
+用户正文
+
+```AgentAttachments
+- name: 销售.csv
+  path: /workspace/.priva-attachments/file-a/销售.csv
+  MIME: text/csv
+  size: 12 bytes
+```
+````
+
+```text
+upload -> absolute file path -> AgentAttachments -> run.start.text
+transcript -> attachmentsFromMessageText -> body + attachment cards
 ```
 
 ## Layout approval
@@ -722,8 +762,8 @@ Tabs，选择预览操作模式时可使用 ToggleGroup。不要只根据组件�
 | Popover | [ui/popover](../agent-ui/src/components/ui/popover.tsx)，Base UI Popover | 浮层表单 / 信息面板，160ms 进入 / 100ms 退出 | 标签、上下文占用、任务计划、上传队列 |
 | DropdownMenu | [ui/dropdown-menu](../agent-ui/src/components/ui/dropdown-menu.tsx)，Base UI Menu | `ring-1`、共享 CSS 弹层动画、焦点行背景 | 模型、会话、账户、路径、Harness 菜单 |
 | 附件 Menu | [animate-ui/components/base/menu](../agent-ui/src/components/animate-ui/components/base/menu.tsx)，Base UI Menu + Animate UI | `border`、200ms 弹层、Motion 滑动高亮；与通用 DropdownMenu 的分组字号等不同 | 聊天附件菜单 |
-| ContextMenu | [ui/context-menu](../agent-ui/src/components/ui/context-menu.tsx)，Base UI ContextMenu | shadcn 风格的右键菜单 | 文件树节点操作 |
-| Slash / 选区动作菜单 | [composer-slash-menu](../agent-ui/src/features/agent-message/components/composer-slash-menu.tsx)、[assistant-quote-menu](../agent-ui/src/features/agent-message/components/assistant-quote-menu.tsx)，本地 Portal + Motion | 定位、键盘/焦点处理由业务实现；Slash 保留输入框焦点并提供 listbox | 输入 `/`、引用所选文本 |
+| ContextMenu | [ui/context-menu](../agent-ui/src/components/ui/context-menu.tsx)，Base UI ContextMenu | shadcn 风格的右键菜单；行内文件菜单为 12px | 文件树节点、助手行内文件引用 |
+| Slash / 选区动作菜单 | [composer-slash-menu](../agent-ui/src/features/agent-message/components/composer-slash-menu.tsx)、[assistant-selection-actions](../agent-ui/src/features/agent-message/components/assistant-selection-actions.tsx)，本地 Portal + Motion | Slash 保留输入框焦点；选区复用 Beautiful UI 胶囊外观与工具条键盘操作 | 输入 `/`、引用 / 解释 / 优化所选文本 |
 | Dialog / AlertDialog | [ui/dialog](../agent-ui/src/components/ui/dialog.tsx)、[ui/alert-dialog](../agent-ui/src/components/ui/alert-dialog.tsx)，Base UI | 居中模态框 + 遮罩；200ms 进入 / 150ms 退出 | 设置、资源表单、重命名、删除确认 |
 | Sheet | [ui/sheet](../agent-ui/src/components/ui/sheet.tsx)，Base UI Dialog | 边缘滑入；共享 `sheetMotion`，380ms 进入 / 220ms 退出 | 移动端侧栏、资源详情抽屉 |
 | Badge / Status | [ui/badge](../agent-ui/src/components/ui/badge.tsx)、[kibo-ui/status](../agent-ui/src/components/kibo-ui/status/index.tsx)、[workflow-status](../agent-ui/src/features/agent-message/components/workflow-status.tsx) | 标签 pill、状态圆点、带图标状态组合；Kibo 状态点使用语义 token | 会话状态、资源类型、工作流状态 |
@@ -991,6 +1031,12 @@ node --test agent-ui/tests/features/file-browser/file-tree-content-width.test.ts
 
 ```sh
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/file-browser/file-preview.test.tsx
+```
+
+选区操作的草稿保留、指令追加、绝对路径引用、浮层定位及选区范围回归：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/quote-selection.test.ts
 ```
 
 后端文件系统与 HTTP 回归覆盖 1–3 MiB、3 MiB 边界、UTF-8 字节数、无扩展名文本、
