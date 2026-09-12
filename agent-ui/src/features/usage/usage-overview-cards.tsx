@@ -1,5 +1,6 @@
 import { format, parseISO } from "date-fns"
 import { enUS, zhCN } from "date-fns/locale"
+import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { useId, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -8,6 +9,7 @@ import { DateTimePicker } from "@/components/datetime-picker"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { formatTokenCount } from "@/features/agent-message/context-usage"
+import { EASE_OUT } from "@/lib/ease"
 import { cn } from "@/lib/utils"
 
 import {
@@ -38,6 +40,28 @@ function localToday() {
   return format(new Date(), "yyyy-MM-dd")
 }
 
+// A date that changes rolls vertically: the old text leaves upward while the
+// new one enters from below, like a counter ticking over. `popLayout` frees
+// the leaving text's slot at once so the button never widens mid-swap.
+function RollingText({ text, reduceMotion }: { text: string; reduceMotion: boolean }) {
+  return (
+    <span className="relative inline-grid overflow-hidden leading-4">
+      <AnimatePresence initial={false} mode="popLayout">
+        <motion.span
+          key={text}
+          className="col-start-1 row-start-1 whitespace-nowrap"
+          initial={reduceMotion ? false : { y: 10, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={reduceMotion ? { opacity: 0 } : { y: -10, opacity: 0 }}
+          transition={{ duration: reduceMotion ? 0 : 0.18, ease: EASE_OUT }}
+        >
+          {text}
+        </motion.span>
+      </AnimatePresence>
+    </span>
+  )
+}
+
 function StatCard({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
     <Card size="sm" className="gap-1 rounded-lg shadow-none [--card-spacing:--spacing(3)]">
@@ -57,6 +81,7 @@ export function UsageOverviewCards() {
   const zh = i18n.language.startsWith("zh")
   const locale = zh ? zhCN : enUS
   const titleId = useId()
+  const reduceMotion = Boolean(useReducedMotion())
   const today = useMemo(localToday, [])
   const [range, setRange] = useState<LocalDateRange>(() => presetRange(DEFAULT_PRESET, today))
   const preset = matchingPreset(range, today)
@@ -104,11 +129,13 @@ export function UsageOverviewCards() {
     <Button
       variant="outline"
       size="xs"
-      className="tabular-nums"
+      // Fixed width with room to spare: "2026年12月31日" and "Sep 1, 2026"
+      // must not resize the row when the range changes.
+      className="w-32 justify-center overflow-hidden tabular-nums"
       aria-label={label}
       onClick={() => setOpen(true)}
     >
-      {value ? dayLabel(format(value, "yyyy-MM-dd")) : none}
+      <RollingText text={value ? dayLabel(format(value, "yyyy-MM-dd")) : none} reduceMotion={reduceMotion} />
     </Button>
   )
 

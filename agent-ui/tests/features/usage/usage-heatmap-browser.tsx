@@ -113,8 +113,8 @@ const root = createRoot(host)
 await act(async () => {
   root.render(
     <div className="flex flex-col gap-8">
-      <UsageActivity overview={overview} />
-      <UsageOverviewCards />
+      <div data-test="cards"><UsageOverviewCards /></div>
+      <div data-test="activity"><UsageActivity overview={overview} /></div>
     </div>
   )
 })
@@ -135,7 +135,7 @@ async function runChecks() {
   const rects = () => Array.from(host.querySelectorAll<SVGRectElement>("rect[data-date]"))
   const fillOf = (rect: SVGRectElement) => rect.style.fill
   // Scope to the activity block; the overview cards below carry their own tabs.
-  const activity = host.querySelector<HTMLElement>('[data-slot="tabs"]')!
+  const activity = host.querySelector<HTMLElement>('[data-test="activity"]')!
   const triggers = () => Array.from(activity.querySelectorAll<HTMLButtonElement>('[data-slot="tabs-trigger"]'))
   const clickTab = async (name: string) => {
     const tab = triggers().find((element) => element.textContent === name)
@@ -224,7 +224,7 @@ async function runChecks() {
     })())
     check("panel tabs start on the weekday labels' left edge", Math.abs(panelTabs[0]!.closest('[data-slot="tabs-list"]')!.getBoundingClientRect().left - host.querySelector('[data-slot="calendar-heatmap-body"] svg')!.getBoundingClientRect().left) <= 1)
     check("the block is centred in its container", (() => {
-      const block = host.querySelector('[data-slot="tabs"]')!.getBoundingClientRect()
+      const block = activity.querySelector('[data-slot="tabs"]')!.getBoundingClientRect()
       const container = host.getBoundingClientRect()
       return Math.abs((block.left - container.left) - (container.right - block.right)) <= 1 && block.width < container.width
     })())
@@ -270,7 +270,9 @@ async function runChecks() {
     const today = new Date()
     const iso = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
     const todayIso = iso(today)
-    const cardsSection = host.querySelector<HTMLElement>('section[aria-labelledby]')!
+    const cardsSection = host.querySelector<HTMLElement>('[data-test="cards"] section')!
+    check("the overview sits above the activity block", cardsSection.getBoundingClientRect().bottom <= activity.getBoundingClientRect().top)
+    check("the Token activity tab uses the gauge icon", panelTabs[0]!.querySelector("svg.lucide-gauge") !== null)
     const cardValues = () => Array.from(cardsSection.querySelectorAll<HTMLElement>('[data-slot="card"] p:nth-child(2)')).map((node) => node.textContent)
     const pickerButtons = () => Array.from(cardsSection.querySelectorAll<HTMLButtonElement>('button[aria-label]')).filter((button) => [i18n.t("usage.overview.from"), i18n.t("usage.overview.to")].includes(button.getAttribute("aria-label")!))
     const presetTabs = () => Array.from(cardsSection.querySelectorAll<HTMLButtonElement>('[data-slot="tabs-trigger"]'))
@@ -286,12 +288,19 @@ async function runChecks() {
 
     await act(async () => { presetTabs()[0]!.click() })
     check("choosing 7 days re-requests the last seven local days", await waitFor(() => rangeRequests.some((url) => url.includes(`from=${shiftLocalDate(todayIso, -6)}&to=${todayIso}`))))
-    check("the pickers follow the preset", pickerButtons()[0]?.textContent === dayLabel(shiftLocalDate(todayIso, -6)))
+    check("the pickers follow the preset", await waitFor(() => pickerButtons()[0]?.textContent === dayLabel(shiftLocalDate(todayIso, -6))))
+    check("date buttons keep one fixed width across ranges", pickerButtons().every((button) => Math.abs(button.getBoundingClientRect().width - 128) < 0.5))
+    check("the leaving date rolls out and only the new one remains", await waitFor(() => pickerButtons()[0]!.querySelectorAll("span span").length === 1))
     check("card values change with the range", await waitFor(() => cardValues()[0] !== yearTokens))
 
     await act(async () => { pickerButtons()[0]!.click() })
     const dayCell = await waitFor(() => document.querySelector(`[data-day] button, [data-day]`) !== null)
     check("the start-date picker opens a calendar", dayCell)
+    // Measured once the popover's scale-in has settled.
+    check("the calendar is compact: 32px day cells", await waitFor(() => {
+      const cell = document.querySelector<HTMLElement>('[data-slot="popover-content"] [data-day] button')
+      return cell !== null && Math.abs(cell.getBoundingClientRect().width - 32) < 0.5 && Math.abs(cell.getBoundingClientRect().height - 32) < 0.5
+    }))
     const target = shiftLocalDate(todayIso, -2)
     const targetButton = document.querySelector<HTMLButtonElement>(`[data-day="${target}"] button`) ?? Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.getAttribute("aria-label")?.includes(String(Number(target.slice(-2)))) && button.closest('[data-slot="popover-content"]'))
     if (!targetButton) throw new Error("day button not found")
@@ -300,7 +309,7 @@ async function runChecks() {
     if (!done) throw new Error("done button not found")
     await act(async () => { done.click() })
     check("picking a start date makes the range custom and deselects presets", await waitFor(() => rangeRequests.some((url) => url.includes(`from=${target}&to=${todayIso}`))) && presetTabs().every((tab) => tab.getAttribute("aria-selected") !== "true"))
-    check("the start picker shows the chosen day", pickerButtons()[0]?.textContent === dayLabel(target))
+    check("the start picker shows the chosen day", await waitFor(() => pickerButtons()[0]?.textContent === dayLabel(target)))
 
     results.textContent = `PASS\n${passed.map((name) => `✔ ${name}`).join("\n")}`
   } catch (error) {

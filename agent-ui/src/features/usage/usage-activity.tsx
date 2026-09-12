@@ -1,4 +1,4 @@
-import { ActivityIcon, ChartColumnStackedIcon } from "lucide-react"
+import { ChartColumnStackedIcon, GaugeIcon } from "lucide-react"
 import { useReducedMotion } from "motion/react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -14,7 +14,7 @@ import { UsageModelChart } from "./usage-model-chart"
 const PANELS = ["tokens", "models"] as const
 type Panel = (typeof PANELS)[number]
 
-const PANEL_ICONS = { tokens: ActivityIcon, models: ChartColumnStackedIcon } as const
+const PANEL_ICONS = { tokens: GaugeIcon, models: ChartColumnStackedIcon } as const
 
 // Panels swap instantly and the incoming one fades in; a crossfade would
 // stack both panels in the column for a frame and shift the layout.

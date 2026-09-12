@@ -18,6 +18,7 @@ export function UsagePage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto px-4 pb-6 pt-3">
+      <UsageOverviewCards />
       <section aria-label={t("usage.activity.label")} className="flex flex-col">
         {overview.loading ? (
           <div
@@ -45,7 +46,6 @@ export function UsagePage() {
           </div>
         ) : null}
       </section>
-      <UsageOverviewCards />
     </div>
   )
 }

@@ -278,7 +278,7 @@ export function DateTimePicker({
       />
       <PopoverContent className="w-auto p-2">
         <div className="flex items-center justify-between">
-          <div className="text-md font-bold ms-2 flex items-center cursor-pointer">
+          <div className="text-sm font-semibold ms-1.5 flex items-center cursor-pointer">
             <div>
               <span onClick={() => setMonthYearPicker(monthYearPicker === 'month' ? false : 'month')}>
                 {format(month, 'MMMM', { locale: props.locale as Locale | undefined })}
@@ -287,15 +287,15 @@ export function DateTimePicker({
                 {format(month, 'yyyy', { locale: props.locale as Locale | undefined })}
               </span>
             </div>
-            <Button variant="ghost" size="icon" onClick={() => setMonthYearPicker(monthYearPicker ? false : 'year')}>
+            <Button variant="ghost" size="icon-sm" onClick={() => setMonthYearPicker(monthYearPicker ? false : 'year')}>
               {monthYearPicker ? <ChevronUpIcon /> : <ChevronDownIcon />}
             </Button>
           </div>
-          <div className={cn('flex space-x-2', monthYearPicker ? 'hidden' : '')}>
-            <Button variant="ghost" size="icon" onClick={onPrevMonth}>
+          <div className={cn('flex space-x-1', monthYearPicker ? 'hidden' : '')}>
+            <Button variant="ghost" size="icon-sm" onClick={onPrevMonth}>
               <ChevronLeftIcon />
             </Button>
-            <Button variant="ghost" size="icon" onClick={onNextMonth}>
+            <Button variant="ghost" size="icon-sm" onClick={onNextMonth}>
               <ChevronRightIcon />
             </Button>
           </div>
@@ -318,13 +318,13 @@ export function DateTimePicker({
               button_previous: 'hidden',
               button_next: 'hidden',
               month_grid: 'w-full border-collapse',
-              weekdays: 'flex justify-between mt-2',
-              weekday: 'text-muted-foreground rounded-md w-9 font-normal text-[0.8rem]',
-              week: 'flex w-full justify-between mt-2',
-              day: 'h-9 w-9 text-center text-sm p-0 relative flex items-center justify-center [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20 rounded-1',
+              weekdays: 'flex justify-between mt-1',
+              weekday: 'text-muted-foreground rounded-md w-8 font-normal text-xs',
+              week: 'flex w-full justify-between mt-1',
+              day: 'h-8 w-8 text-center text-sm p-0 relative flex items-center justify-center [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20 rounded-1',
               day_button: cn(
                 buttonVariants({ variant: 'ghost' }),
-                'size-9 rounded-md p-0 font-normal aria-selected:opacity-100'
+                'size-8 rounded-md p-0 text-sm font-normal aria-selected:opacity-100'
               ),
               range_end: 'day-range-end',
               selected:
