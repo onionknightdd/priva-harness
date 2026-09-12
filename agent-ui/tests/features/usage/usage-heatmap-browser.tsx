@@ -4,11 +4,14 @@ import { createRoot } from "react-dom/client"
 import i18n from "../../../src/i18n"
 import "../../../src/index.css"
 import { UsageActivity } from "../../../src/features/usage/usage-activity"
-import type {
-  UsageDailyModels,
-  UsageDay,
-  UsageModel,
-  UsageOverview,
+import { UsageOverviewCards } from "../../../src/features/usage/usage-overview-cards"
+import {
+  shiftLocalDate,
+  type UsageDailyModels,
+  type UsageDay,
+  type UsageModel,
+  type UsageOverview,
+  type UsageRangeSummary,
 } from "../../../src/features/usage/usage-api"
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
@@ -65,10 +68,55 @@ function syntheticOverview(count: number): UsageOverview {
 }
 
 const overview = syntheticOverview(365)
+
+// The cards fetch their own range; answer from the same synthetic days so the
+// numbers can be checked against the heatmap.
+const rangeRequests: string[] = []
+function syntheticRange(from: string, to: string): UsageRangeSummary {
+  const days = overview.heatmap.filter((day) => day.date >= from && day.date <= to)
+  const active = days.filter((day) => day.processedTokens > 0)
+  const processedTokens = days.reduce((sum, day) => sum + day.processedTokens, 0)
+  const runs = days.reduce((sum, day) => sum + day.runs, 0)
+  const peak = active.reduce<UsageDay | null>((best, day) => (best === null || day.processedTokens > best.processedTokens ? day : best), null)
+  let streak: UsageRangeSummary["longestStreak"] = null
+  let start = 0
+  for (let index = 1; index <= active.length; index += 1) {
+    const previous = active[index - 1]!
+    const current = active[index]
+    if (current && shiftLocalDate(previous.date, 1) === current.date) continue
+    const length = index - start
+    if (!streak || length > streak.days) streak = { days: length, from: active[start]!.date, to: previous.date }
+    start = index
+  }
+  return {
+    from, to, days: days.length, runs, completed: Math.round(runs * 0.94), failed: runs - Math.round(runs * 0.94), aborted: 0,
+    activeSessions: Math.ceil(runs / 3), activeDays: active.length, projects: Math.min(6, active.length),
+    inputTokens: processedTokens, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, processedTokens,
+    costUsd: runs === 0 ? null : Math.round(processedTokens / 1_000_000 * 150) / 100, runsWithoutCost: Math.floor(runs / 10),
+    peakDay: peak ? { date: peak.date, processedTokens: peak.processedTokens } : null, longestStreak: streak,
+  }
+}
+const realFetch = globalThis.fetch.bind(globalThis)
+globalThis.fetch = async (input, init) => {
+  const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url
+  if (url.includes("/api/sandbox/usage/range")) {
+    rangeRequests.push(url)
+    const params = new URL(url, location.origin).searchParams
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    return new Response(JSON.stringify(syntheticRange(params.get("from")!, params.get("to")!)), { headers: { "Content-Type": "application/json" } })
+  }
+  return realFetch(input, init)
+}
+
 const host = document.querySelector<HTMLDivElement>("#heatmap")!
 const root = createRoot(host)
 await act(async () => {
-  root.render(<UsageActivity overview={overview} />)
+  root.render(
+    <div className="flex flex-col gap-8">
+      <UsageActivity overview={overview} />
+      <UsageOverviewCards />
+    </div>
+  )
 })
 // `?panel=models` opens the model chart for visual inspection.
 if (params.get("panel") === "models") {
@@ -86,7 +134,9 @@ async function runChecks() {
   }
   const rects = () => Array.from(host.querySelectorAll<SVGRectElement>("rect[data-date]"))
   const fillOf = (rect: SVGRectElement) => rect.style.fill
-  const triggers = () => Array.from(host.querySelectorAll<HTMLButtonElement>('[data-slot="tabs-trigger"]'))
+  // Scope to the activity block; the overview cards below carry their own tabs.
+  const activity = host.querySelector<HTMLElement>('[data-slot="tabs"]')!
+  const triggers = () => Array.from(activity.querySelectorAll<HTMLButtonElement>('[data-slot="tabs-trigger"]'))
   const clickTab = async (name: string) => {
     const tab = triggers().find((element) => element.textContent === name)
     if (!tab) throw new Error(`missing tab ${name}`)
@@ -174,7 +224,7 @@ async function runChecks() {
     })())
     check("panel tabs start on the weekday labels' left edge", Math.abs(panelTabs[0]!.closest('[data-slot="tabs-list"]')!.getBoundingClientRect().left - host.querySelector('[data-slot="calendar-heatmap-body"] svg')!.getBoundingClientRect().left) <= 1)
     check("the block is centred in its container", (() => {
-      const block = host.firstElementChild!.getBoundingClientRect()
+      const block = host.querySelector('[data-slot="tabs"]')!.getBoundingClientRect()
       const container = host.getBoundingClientRect()
       return Math.abs((block.left - container.left) - (container.right - block.right)) <= 1 && block.width < container.width
     })())
@@ -215,6 +265,42 @@ async function runChecks() {
 
     await clickTab(i18n.t("usage.activity.tokens"))
     check("returning to the heatmap restores the grid and the mode switch", rects().length === 365 && triggers().length === 5)
+
+    // --- overview cards ---------------------------------------------------
+    const today = new Date()
+    const iso = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
+    const todayIso = iso(today)
+    const cardsSection = host.querySelector<HTMLElement>('section[aria-labelledby]')!
+    const cardValues = () => Array.from(cardsSection.querySelectorAll<HTMLElement>('[data-slot="card"] p:nth-child(2)')).map((node) => node.textContent)
+    const pickerButtons = () => Array.from(cardsSection.querySelectorAll<HTMLButtonElement>('button[aria-label]')).filter((button) => [i18n.t("usage.overview.from"), i18n.t("usage.overview.to")].includes(button.getAttribute("aria-label")!))
+    const presetTabs = () => Array.from(cardsSection.querySelectorAll<HTMLButtonElement>('[data-slot="tabs-trigger"]'))
+    const dayLabel = (date: string) => {
+      const [year, month, day] = date.split("-").map(Number)
+      return i18n.language.startsWith("zh") ? `${year}年${month}月${day}日` : new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short", day: "numeric" }).format(new Date(year!, month! - 1, day))
+    }
+    check("overview renders six cards in the requested order", Array.from(cardsSection.querySelectorAll('[data-slot="card"] p:first-child')).map((node) => node.textContent).join("|") === ["tokens", "projects", "sessions", "runs", "peakDay", "longestStreak"].map((key) => i18n.t(`usage.overview.cards.${key}`)).join("|"))
+    check("the default range is one year ending today", await waitFor(() => rangeRequests.some((url) => url.includes(`from=${shiftLocalDate(todayIso, -364)}&to=${todayIso}`))))
+    check("the one-year preset is active and both pickers show its dates", presetTabs()[2]?.getAttribute("aria-selected") === "true" && pickerButtons().map((button) => button.textContent).join("|") === `${dayLabel(shiftLocalDate(todayIso, -364))}|${dayLabel(todayIso)}`)
+    check("card values arrive from the range summary", await waitFor(() => cardValues()[0] !== i18n.t("usage.overview.none") && cardValues()[5]?.includes(String(syntheticRange(shiftLocalDate(todayIso, -364), todayIso).longestStreak?.days)) === true))
+    const yearTokens = cardValues()[0]
+
+    await act(async () => { presetTabs()[0]!.click() })
+    check("choosing 7 days re-requests the last seven local days", await waitFor(() => rangeRequests.some((url) => url.includes(`from=${shiftLocalDate(todayIso, -6)}&to=${todayIso}`))))
+    check("the pickers follow the preset", pickerButtons()[0]?.textContent === dayLabel(shiftLocalDate(todayIso, -6)))
+    check("card values change with the range", await waitFor(() => cardValues()[0] !== yearTokens))
+
+    await act(async () => { pickerButtons()[0]!.click() })
+    const dayCell = await waitFor(() => document.querySelector(`[data-day] button, [data-day]`) !== null)
+    check("the start-date picker opens a calendar", dayCell)
+    const target = shiftLocalDate(todayIso, -2)
+    const targetButton = document.querySelector<HTMLButtonElement>(`[data-day="${target}"] button`) ?? Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.getAttribute("aria-label")?.includes(String(Number(target.slice(-2)))) && button.closest('[data-slot="popover-content"]'))
+    if (!targetButton) throw new Error("day button not found")
+    await act(async () => { targetButton.click() })
+    const done = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-slot="popover-content"] button')).find((button) => button.textContent === i18n.t("usage.overview.done"))
+    if (!done) throw new Error("done button not found")
+    await act(async () => { done.click() })
+    check("picking a start date makes the range custom and deselects presets", await waitFor(() => rangeRequests.some((url) => url.includes(`from=${target}&to=${todayIso}`))) && presetTabs().every((tab) => tab.getAttribute("aria-selected") !== "true"))
+    check("the start picker shows the chosen day", pickerButtons()[0]?.textContent === dayLabel(target))
 
     results.textContent = `PASS\n${passed.map((name) => `✔ ${name}`).join("\n")}`
   } catch (error) {

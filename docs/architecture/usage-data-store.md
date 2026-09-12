@@ -54,12 +54,12 @@ SQLite 数据库。本文记录已确认的设计决策和当前实现范围；�
 `run.finished` / `run.session` 找不到对应的 `running` 行时（例如 `run.started`
 被满队列丢弃），审计行照常写入，事实表不动，worker 记 warn。
 
-## Schema（`PRAGMA user_version = 1`）
+## Schema（`PRAGMA user_version = 2`）
 
 ```
 audit_event      id, ts_utc, action, session_id, run_id, target, details(JSON)
 run_fact         id, run_id, started_audit_id, finished_audit_id, started_utc, finished_utc,
-                 session_id, provider, profile_id, model, source, prompt_chars, attachment_count,
+                 session_id, provider, profile_id, model, source, cwd, prompt_chars, attachment_count,
                  outcome, failure_code, duration_ms, api_duration_ms, num_turns,
                  input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd
 run_model_usage  run_fact_id → run_fact (CASCADE), model, 四个 token 列, cost_usd
@@ -76,6 +76,8 @@ meta             key, value          (last_prune_utc)
 - token 四列存 provider 上报的原始分量，不预先合并。处理量 = `input + cache_read + cache_write`，
   缓存命中率 = `cache_read / 处理量`，均在查询时计算。`cost_usd` 为 `NULL` 表示无报价，不是 0。
 - 迁移只向前：`src/infrastructure/data/sqlite-schema.ts` 里按位置追加函数，`user_version` 记录已应用数量。
+  v2 给 `run_fact` 加 `cwd`（运行时的工作目录，即侧栏意义上的"项目"）；`RunLedger` 从 `spec.cwd`
+  写入，旧行保持 NULL。
 - 建库时 `auto_vacuum = INCREMENTAL`（必须在任何表存在之前设置），之后 `journal_mode = WAL`、
   `synchronous = NORMAL`、`foreign_keys = ON`。
 
@@ -117,8 +119,9 @@ src/transport/http/route-audit.ts           路由层成功请求的审计助手
 src/core/resource/local-time.ts             UTC → 调用方时区的本地日期 / 小时
 src/core/resource/usage-overview.ts         查询输入 / 输出与行类型
 src/core/resource/usage-overview-builder.ts 行 → 概览的纯聚合
-src/core/contract/usage-reader.ts           UsageReader { overview, auditPage }
-src/transport/http/route/usage.ts           GET /api/sandbox/usage/overview | /audit
+src/core/resource/usage-range-builder.ts    行 → 任意本地日期区间摘要的纯聚合
+src/core/contract/usage-reader.ts           UsageReader { overview, range, auditPage }
+src/transport/http/route/usage.ts           GET /api/sandbox/usage/overview | /range | /audit
 tests/unit/infrastructure/data/             存储与 worker 的单元测试
 tests/unit/harness/run/run-ledger.test.ts   harness 采集路径
 tests/integration/data/                     harness → worker → SQLite 端到端
@@ -219,6 +222,7 @@ Pi 对无报价模型给出 `cost.total = 0` 而非缺失，因此 Pi 侧无法�
 
 ```
 GET /api/sandbox/usage/overview?tz=<IANA>&days=<1..365, 默认 183>
+GET /api/sandbox/usage/range?tz=<IANA>&from=<YYYY-MM-DD>&to=<YYYY-MM-DD>
 GET /api/sandbox/usage/audit?limit=<1..200>&before=<id>&action=<前缀>&session_id=<id>
 ```
 
@@ -232,6 +236,12 @@ GET /api/sandbox/usage/audit?limit=<1..200>&before=<id>&action=<前缀>&session_
   `durationP50Ms / P95Ms` 只统计 completed 的 run；`permissions` 计 asked / denied / timedOut；
   `compactions` 计 `session.compacted`。`outcome = 'running'` 的行不参与统计。
 - `retentionDays` 随响应返回（即 `factRetentionDays`），365 天窗口在 UI 上应表述为"近一年"而不是"全部"。
+- `range` 为概览卡片服务：`from` / `to` 是调用方时区的本地日期（含两端），必须是真实日期、`from <= to`、
+  跨度不超过 3660 天，否则 422。SQL 取 `started_utc` 落在 `[from − 1d, to + 2d)` 的已结束 run，
+  `core/resource/usage-range-builder.ts` 再精确折成本地日期。返回 token 分项与 `processedTokens`、
+  `costUsd` / `runsWithoutCost`、`runs` 及三种终态、`activeSessions`、`activeDays`、`projects`
+  （`run_fact.cwd` 去重；v2 之前的行 cwd 为 NULL、不计入）、`peakDay`（并列取最早一天）、
+  `longestStreak`（区间内最长连续活跃天及其起止）。前端的 7 / 30 / 365 天预设只是三组 from / to。
 - 审计分页按 `id` 倒序，`nextBefore` 为下一页游标（无更多为 `null`）；`action` 为前缀匹配。
 
 ## 当前范围与后续

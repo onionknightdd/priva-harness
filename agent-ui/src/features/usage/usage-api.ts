@@ -88,6 +88,64 @@ export type UsageOverviewQuery = {
   days: number
 }
 
+// --- arbitrary local date range for the overview cards ---------------------
+
+export type UsagePeakDay = { date: string; processedTokens: number }
+export type UsageStreak = { days: number; from: string; to: string }
+
+export type UsageRangeSummary = TokenTotals & {
+  from: string
+  to: string
+  days: number
+  runs: number
+  completed: number
+  failed: number
+  aborted: number
+  activeSessions: number
+  activeDays: number
+  projects: number
+  peakDay: UsagePeakDay | null
+  longestStreak: UsageStreak | null
+}
+
+export type LocalDateRange = { from: string; to: string }
+
+export type UsageRangeQuery = LocalDateRange & { timeZone: string }
+
+export const RANGE_PRESETS = [7, 30, 365] as const
+export type RangePreset = (typeof RANGE_PRESETS)[number]
+
+// Presets end today and cover exactly `days` local days, so "7 天" is today
+// plus the six days before it.
+export function presetRange(days: RangePreset, today: string): LocalDateRange {
+  return { from: shiftLocalDate(today, -(days - 1)), to: today }
+}
+
+export function matchingPreset(range: LocalDateRange, today: string): RangePreset | null {
+  return RANGE_PRESETS.find((days) => {
+    const preset = presetRange(days, today)
+    return preset.from === range.from && preset.to === range.to
+  }) ?? null
+}
+
+// Calendar arithmetic on YYYY-MM-DD strings without touching the browser zone.
+export function shiftLocalDate(date: string, days: number): string {
+  const [year, month, day] = date.split("-").map(Number)
+  return new Date(Date.UTC(year!, month! - 1, day! + days)).toISOString().slice(0, 10)
+}
+
+export function usageRangeUrl(query: UsageRangeQuery) {
+  const params = new URLSearchParams({ tz: query.timeZone, from: query.from, to: query.to })
+  return `${USAGE_API_PREFIX}/range?${params.toString()}`
+}
+
+export async function fetchUsageRange(
+  query: UsageRangeQuery,
+  init?: RequestInit
+): Promise<UsageRangeSummary> {
+  return requestJson<UsageRangeSummary>(usageRangeUrl(query), init)
+}
+
 export class UsageApiError extends Error {
   readonly status: number
 
@@ -114,11 +172,8 @@ export function usageOverviewUrl(query: UsageOverviewQuery) {
   return `${USAGE_API_PREFIX}/overview?${params.toString()}`
 }
 
-export async function fetchUsageOverview(
-  query: UsageOverviewQuery,
-  init?: RequestInit
-): Promise<UsageOverview> {
-  const response = await fetch(usageOverviewUrl(query), { cache: "no-store", ...init })
+async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, { cache: "no-store", ...init })
 
   if (!response.ok) {
     let detail = response.statusText || `HTTP ${response.status}`
@@ -131,7 +186,14 @@ export async function fetchUsageOverview(
     throw new UsageApiError(response.status, detail)
   }
 
-  return (await response.json()) as UsageOverview
+  return (await response.json()) as T
+}
+
+export async function fetchUsageOverview(
+  query: UsageOverviewQuery,
+  init?: RequestInit
+): Promise<UsageOverview> {
+  return requestJson<UsageOverview>(usageOverviewUrl(query), init)
 }
 
 // Stacked model chart: one bar per calendar month, one series per model.

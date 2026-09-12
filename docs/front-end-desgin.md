@@ -225,6 +225,46 @@ Tab 列表 `-mr-2` 抵消末项内边距）。三种模式都由同一份 `heatm
 主线程、结束后不留内联样式；`transform-box: fill-box` 让 SVG rect 围绕自身中心缩放。
 减少动态效果时直接显示；切换模式只重着色，不重放。
 
+### 用量概览卡片
+
+2026-09-13：按用户确认，热力图块下方增加「概览」：六张 `ui/card`（`size="sm"`、间距 12px、
+无阴影）依次为总 Token、项目、会话、对话轮数、单日最高、最长连续；标签 12px 二级文本，
+数值 20px 半粗 tabular，副行 11px（成本与「N 轮无成本」、活跃天数、完成率、峰值日期、连续起止）。
+桌面 6 列，≤ 1024px 3 列，手机 2 列；整块与热力图同宽（890px）居中。
+
+```text
+概览                                 7 天  30 天  1 年  [2025年9月14日] – [2026年9月13日]
++----------+----------+----------+----------+----------+----------+
+| 总 Token | 项目     | 会话     | 对话轮数 | 单日最高 | 最长连续 |
+| 10.1M    | 6        | 174      | 520      | 163.9K   | 10 天    |
+| $15.15 · | —        | 活跃 173 | 94% 完成 | 2026年   | 5月26日 –|
+| 52 轮无… |          | 天       |          | 8月31日  | 6月4日   |
++----------+----------+----------+----------+----------+----------+
+```
+
+区间由 `GET /api/sandbox/usage/range?tz&from&to` 单独请求，默认「1 年」（今天及之前 364 天），
+7 / 30 / 1 年是三组 from / to 预设，用 `text` 变体 Tabs 切换；右侧两个日期选择器始终显示当前
+区间的起止，预设选中后同样更新；改动任一端即为自定义区间，预设全部取消高亮。结束日不晚于
+今天，开始日不晚于结束日。「项目」= 不同工作目录（后端 `run_fact.cwd`），「最长连续」按所选
+区间内计算。切换时保留上一组数字并降到 60% 透明度，新值到达后逐个 150ms 淡入（按文本 key），
+不做数字滚动；reduced-motion 直接替换。区间只作用于卡片，热力图与模型活动不变。
+
+日期选择器按用户指定使用 [shadcn-datetime-picker](https://github.com/huybuidac/shadcn-datetime-picker)：
+
+```sh
+npx shadcn@latest add https://shadcn-datetime-picker-pro.vercel.app/r/datetime-picker.json
+npx shadcn@latest add scroll-area
+```
+
+源码位于 `components/datetime-picker.tsx`，依赖 `react-day-picker@^9` 与既有 `date-fns`；
+CLI 会同时想安装 `@radix-ui/react-icons` 和一个名为 `cn` 的无关包，并提示覆盖 `button.tsx`，
+这些都要拒绝。本地改动（重装后需恢复）：`PopoverTrigger asChild` 改为 Base UI 的 `render`，
+`CalendarIcon` 改用 lucide，新增 `doneLabel` 让确认按钮跟随应用语言，月份标题使用传入的
+`locale`。用量页只用 `hideTime` 的日期模式，传 `locale`（zhCN / enUS）与 `min` / `max`，
+触发器为 `outline` / `xs` 的 Button，显示「2026年9月13日 / Sep 13, 2026」。
+`ui/scroll-area.tsx` 为其依赖一同安装（Base UI ScrollArea），生成的 `import { cn } from "cn"`
+需改回 `@/lib/utils`。
+
 模型活动使用 shadcn 堆叠柱状图（`ui/chart` + Recharts `BarChart`），不套 Card：
 X 轴为窗口内的每个月（无用量的月份保留空柱位），按处理 token 从高到低取前 4 个模型，
 其余合并为「其他」；系列颜色读取共享 `usage-series-1…5` token（蓝色由深到浅），
@@ -286,6 +326,16 @@ token，浅色 / 深色均为 `rgb(77, 159, 240)`（`#4D9FF0`）。
 
 流式输出时，工作状态吸附在用户消息下方，偏移使用用户消息的实际测量高度，
 保留小数像素，避免高度取整后两层背景之间出现缝隙。
+
+重新加载会话时，`StickyFreeze` 在消息挂载和滚动位置恢复后、首帧绘制前同步
+初始吸附状态；多个吸附条合并为一次更新，让消息与底部渐变遮罩同时出现。
+后续滚动继续由 IntersectionObserver 更新，未吸附时不显示遮罩。
+
+```text
+Mount history -> restore scroll in layout effects -> pre-paint batch
+                                                          |
+                                                   message + mask
+```
 
 ```text
 [User message background]
@@ -888,7 +938,9 @@ App TooltipProvider -> 首次悬浮 1s -> 连续切换 0ms
 | Collapsible / Disclosure | [ui/collapsible](../agent-ui/src/components/ui/collapsible.tsx)，Base UI；[AgentDisclosure](../agent-ui/src/components/agents/agent-disclosure.tsx)，本地 CSS | 普通折叠与对话内容向下展开分别实现；`collapsePanel` 是可复用样式 | 项目/文件夹、工作流、工具结果 |
 | Resizable | [ui/resizable](../agent-ui/src/components/ui/resizable.tsx)，`react-resizable-panels` | 本地分隔手柄、伸缩面板 | 文件浏览器、资源列表/详情分栏 |
 | Tree | [reui/tree](../agent-ui/src/components/reui/tree.tsx) + [file-browser-tree](../agent-ui/src/features/file-browser/components/file-browser-tree.tsx) | Headless Tree 的树模型 + ReUI 外观 + Motion 高亮 / 文字溢出反馈 | 文件浏览器；[SkillResourceTree](../agent-ui/src/features/resources/skill-resource-tree.tsx) 也复用 FileBrowserTree，使用 compact 变体 |
-| Card / Item / Separator | [ui/card](../agent-ui/src/components/ui/card.tsx)、[ui/item](../agent-ui/src/components/ui/item.tsx)、[ui/separator](../agent-ui/src/components/ui/separator.tsx) | token 化卡片、列表项、分隔线；Separator 用 Base UI | 工具结果、模型列表、Profile |
+| Card / Item / Separator | [ui/card](../agent-ui/src/components/ui/card.tsx)、[ui/item](../agent-ui/src/components/ui/item.tsx)、[ui/separator](../agent-ui/src/components/ui/separator.tsx) | token 化卡片、列表项、分隔线；Separator 用 Base UI | 工具结果、模型列表、Profile、用量概览卡片 |
+| DatePicker | [datetime-picker](../agent-ui/src/components/datetime-picker.tsx)，shadcn-datetime-picker（react-day-picker v9 + date-fns）+ 本地 Base UI 适配 | 日历弹层，支持 min / max、时区、可选时间；用量页只用日期模式、`outline` / `xs` 触发按钮 | 用量概览区间起止 |
+| ScrollArea | [ui/scroll-area](../agent-ui/src/components/ui/scroll-area.tsx)，Base UI ScrollArea | shadcn 滚动区与滚动条 | datetime-picker 时间列（用量页未启用） |
 | Avatar | [ui/avatar](../agent-ui/src/components/ui/avatar.tsx)，Base UI Avatar | 圆形头像及 fallback | 用户菜单、Profile |
 | Chart | [ui/chart](../agent-ui/src/components/ui/chart.tsx) + Recharts | `chart-*` token 与本地图表 Tooltip；用量页堆叠柱读取 `usage-series-1…5` token；这里的 Tooltip 是图表数据提示 | 用量页模型活动、Profile 模型用量 |
 | CalendarHeatmap | [heatmap/calendar-heatmap](../agent-ui/src/components/heatmap/calendar-heatmap.tsx)，`@heatmap` registry（SVG + date-fns）+ 本地 `ring-inset` / `monthLabelPosition` / `splitYears` | 网格热力图；基础默认读 chart token，用量页读取共享 `heatmap` token，Profile 调用点仍传固定蓝色 | 用量页 Token 活动、Profile Token 日历 |
@@ -939,7 +991,7 @@ Chat composer 单行上下内边距各为 7px，高度由 50px 减至 48px；多
 - [ai-elements/jsx-preview.tsx](../agent-ui/src/components/ai-elements/jsx-preview.tsx)：未发现调用；实际可视化内容使用 `visualize-sandbox`，不能将 `react-jsx-parser` 记为当前页面渲染路径。
 - `Toggle` 组件没有独立业务实例，但 `toggleVariants` 正在被 ToggleGroup 使用，不能将整个文件当成未使用。
 - Animate UI 的 `IconButton` / 粒子按钮没有业务实例；主题按钮只复用该文件的 `buttonVariants`，不能将粒子效果记为已展示。
-- 尚无独立通用入口的类型包括 Checkbox、RadioGroup、Slider、Accordion、Command、Calendar/DatePicker、Toast、Table/DataTable。菜单中的 CheckboxItem / RadioItem 不等于已经建立了通用表单组件；当前错误反馈主要是页面内提示。需要时先核对 shadcn 的 Base UI 实现及本地依赖，不预装整套组件。
+- 尚无独立通用入口的类型包括 Checkbox、RadioGroup、Slider、Accordion、Command、Toast、Table/DataTable。日期选择使用 [datetime-picker](../agent-ui/src/components/datetime-picker.tsx)（用量页区间）。菜单中的 CheckboxItem / RadioItem 不等于已经建立了通用表单组件；当前错误反馈主要是页面内提示。需要时先核对 shadcn 的 Base UI 实现及本地依赖，不预装整套组件。
 
 ## Recommendations
 
@@ -1066,6 +1118,11 @@ Mermaid 浏览器回归：打开 `/tests/components/ai-elements/mermaid-browser.
 同时验证单行 / 多行 ChatComposer 聚焦前后边框和阴影一致，以及历史快照中的
 结构化问答逐题显示，不退回英文工具回执。
 相关数据和连接测试包含在下方 Agent message 的 `*.test.ts` 命令中。
+
+吸附遮罩时序回归入口为 `/tests/features/agent-message/sticky-freeze.html`，点击
+**Run sticky freeze checks**。检查函数 `runStickyFreezeChecks` 使用真实 React 提交，
+受控 DOM 几何和延迟的 IntersectionObserver，亦可在 jsdom 中调用；覆盖历史滚动
+恢复后首帧前出现遮罩、未吸附状态、小数偏移、流式双层遮罩交接、卸载与 StrictMode。
 
 图片工具卡片浏览器回归：在 `agent-ui/` 运行
 `npm run dev -- --config tests/features/agent-message/image-tools-browser.config.ts --host 127.0.0.1`，
@@ -1202,7 +1259,9 @@ MCP 页面浏览器回归：打开 `/tests/features/resources/mcp-browser.html`�
 星期标签 10px / 月份 12px、揭示动效沿对角线推进且 1s 内结束、结束后单元恢复原尺寸与
 透明度、悬浮单元的日期与
 token 提示及离开后关闭、模型面板卸载热力图与模式切换、前 4 个模型 + 其他的图例、
-12–13 个月份柱位、系列 token 和切回热力图的恢复；追加 `?zh&dark` 检查中文与深色，`&panel=models` 直接打开模型面板，
+12–13 个月份柱位、系列 token 和切回热力图的恢复，以及概览六张卡的顺序、默认一年区间与
+预设高亮、选择器跟随预设、7 天重请求与数值变化、打开开始日期日历并选日后变为自定义区间；
+页面用同一份合成数据拦截 `/api/sandbox/usage/range`；追加 `?zh&dark` 检查中文与深色，`&panel=models` 直接打开模型面板，
 `&auto` 在加载后自动运行。
 
 Subagent 测试流客户端：

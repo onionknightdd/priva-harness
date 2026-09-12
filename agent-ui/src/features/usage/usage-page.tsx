@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 import { UsageActivity } from "./usage-activity"
 import { USAGE_HEATMAP_WIDTH } from "./usage-heatmap"
+import { UsageOverviewCards } from "./usage-overview-cards"
 import { useUsageOverview } from "./use-usage-overview"
 
 // One calendar year of local days, matching the streak / heatmap window the
@@ -16,7 +17,7 @@ export function UsagePage() {
   const overview = useUsageOverview(HEATMAP_DAYS)
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-6 pt-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto px-4 pb-6 pt-3">
       <section aria-label={t("usage.activity.label")} className="flex flex-col">
         {overview.loading ? (
           <div
@@ -44,6 +45,7 @@ export function UsagePage() {
           </div>
         ) : null}
       </section>
+      <UsageOverviewCards />
     </div>
   )
 }

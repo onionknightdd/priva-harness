@@ -4,9 +4,12 @@ import { test } from "node:test"
 import {
   browserTimeZone,
   heatmapActivities,
+  matchingPreset,
   modelSeries,
   OTHER_MODELS_KEY,
+  presetRange,
   usageOverviewUrl,
+  usageRangeUrl,
   type UsageModel,
 } from "../../../src/features/usage/usage-api.ts"
 
@@ -101,4 +104,24 @@ test("model series ranks by processed tokens and folds the tail into others", ()
 test("model series has no others bucket when every model fits", () => {
   const series = modelSeries([{ date: "2026-09-01" }], [], [model("a", 1), model("b", 2)])
   assert.deepEqual(series.keys, ["b", "a"])
+})
+
+test("range presets end today and cover exactly the preset length", () => {
+  assert.deepEqual(presetRange(7, "2026-09-13"), { from: "2026-09-07", to: "2026-09-13" })
+  assert.deepEqual(presetRange(30, "2026-03-01"), { from: "2026-01-31", to: "2026-03-01" })
+  assert.deepEqual(presetRange(365, "2026-09-13"), { from: "2025-09-14", to: "2026-09-13" })
+})
+
+test("a range matches a preset only when both ends line up", () => {
+  assert.equal(matchingPreset({ from: "2026-09-07", to: "2026-09-13" }, "2026-09-13"), 7)
+  assert.equal(matchingPreset({ from: "2026-09-07", to: "2026-09-12" }, "2026-09-13"), null)
+  assert.equal(matchingPreset({ from: "2026-09-01", to: "2026-09-13" }, "2026-09-13"), null)
+})
+
+test("range URL carries the zone and both inclusive dates", () => {
+  const url = new URL(usageRangeUrl({ timeZone: "Asia/Shanghai", from: "2026-08-01", to: "2026-09-13" }), "http://localhost")
+  assert.equal(url.pathname, "/api/sandbox/usage/range")
+  assert.equal(url.searchParams.get("tz"), "Asia/Shanghai")
+  assert.equal(url.searchParams.get("from"), "2026-08-01")
+  assert.equal(url.searchParams.get("to"), "2026-09-13")
 })
