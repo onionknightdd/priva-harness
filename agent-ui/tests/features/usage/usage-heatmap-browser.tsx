@@ -162,7 +162,11 @@ async function runChecks() {
     const panelTabs = triggers().slice(0, 2)
     check("panel tabs read Token activity / Model activity", panelTabs.map((tab) => tab.textContent).join("|") === `${i18n.t("usage.activity.tokens")}|${i18n.t("usage.activity.models")}`)
     check("panel tabs use the default list variant like the sidebar", panelTabs[0]!.closest('[data-slot="tabs-list"]')?.getAttribute("data-variant") === "default")
-    check("the mode switch uses the bare text variant", triggers()[2]!.closest('[data-slot="tabs-list"]')?.getAttribute("data-variant") === "text" && !triggers()[2]!.closest('[data-slot="tabs-list"]')!.querySelector('[data-slot="tabs-active-indicator"]:not(.hidden)'))
+    check("the selected mode carries a pill while the list stays bare", await waitFor(() => {
+      const list = triggers()[2]!.closest<HTMLElement>('[data-slot="tabs-list"]')!
+      const indicator = list.querySelector<HTMLElement>('[data-slot="tabs-active-indicator"]')
+      return list.getAttribute("data-variant") === "ghost" && indicator !== null && getComputedStyle(indicator).backgroundColor !== "rgba(0, 0, 0, 0)" && indicator.getBoundingClientRect().width > 0
+    }))
     check("the mode switch list has no background", getComputedStyle(triggers()[2]!.closest('[data-slot="tabs-list"]')!).backgroundColor === "rgba(0, 0, 0, 0)")
     check("three mode tabs are rendered", triggers().length === 5)
     check("weekday labels run Monday to Sunday", weekdayLabels().map((label) => label.textContent).join(",") === ["mon", "tue", "wed", "thu", "fri", "sat", "sun"].map((key) => i18n.t(`usage.heatmap.weekday.${key}`)).join(","))

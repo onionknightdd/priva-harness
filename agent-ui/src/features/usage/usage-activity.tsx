@@ -77,7 +77,9 @@ export function UsageActivity({ overview }: { overview: UsageOverview }) {
             }}
             className={cn("gap-0", PANEL_ENTER_CLASS_NAME)}
           >
-            <TabsList variant="text" size="sm" aria-label={t("usage.heatmap.modeLabel")} className="-mr-2 h-7">
+            {/* Ghost: no list background, but the selected mode carries a soft
+                pill so the current period is visible at a glance. */}
+            <TabsList variant="ghost" size="sm" aria-label={t("usage.heatmap.modeLabel")} className="-mr-2 h-7 bg-transparent">
               {HEATMAP_MODES.map((value) => (
                 <TabsTrigger key={value} value={value} className="text-xs">
                   {t(`usage.heatmap.mode.${value}`)}
