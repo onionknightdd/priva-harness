@@ -6,6 +6,7 @@ import Fastify, {
 } from 'fastify'
 
 import type { DataRecorder } from '../../core/contract/data-recorder.js'
+import type { UsageReader } from '../../core/contract/usage-reader.js'
 import type { UserFileSystem } from '../../core/contract/user-file-system.js'
 import type { ResourceService } from '../../core/contract/resource-service.js'
 import { ResourceError } from '../../core/resource/resource-catalog.js'
@@ -29,6 +30,7 @@ import { agentProfileRoutes } from './route/agent-profile.js'
 import { modelProfileRoutes } from './route/model-profiles.js'
 import { sessionRoutes } from './route/sessions.js'
 import { slashCommandRoutes } from './route/slash-commands.js'
+import { usageRoutes } from './route/usage.js'
 import { userFileRoutes } from './route/user-files.js'
 import { resourceRoutes } from './route/resources.js'
 import { subagentTestRoutes } from './route/subagent-test.js'
@@ -42,6 +44,7 @@ export interface BuildHttpServerOptions {
   readonly configDistributor?: ConfigDistributor
   readonly resourceService?: ResourceService
   readonly recorder?: DataRecorder
+  readonly usageReader?: UsageReader
   readonly logger?: FastifyServerOptions['logger']
 }
 
@@ -123,6 +126,9 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
   }
   if (options.sessionService !== undefined) {
     void server.register(sessionRoutes, { sessionService: options.sessionService, ...(recorder === undefined ? {} : { recorder }) })
+  }
+  if (options.usageReader !== undefined) {
+    void server.register(usageRoutes, { reader: options.usageReader })
   }
   if (options.agentHarness !== undefined) {
     void server.register(websocket)

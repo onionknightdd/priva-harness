@@ -128,6 +128,7 @@ export async function startServer(): Promise<void> {
     sessionService,
     configDistributor,
     recorder: dataRecorder,
+    usageReader: dataRecorder,
     logger: true,
   })
   dataLog.target = server.log

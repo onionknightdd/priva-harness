@@ -9,6 +9,19 @@ import type {
   RunStartedRecord,
   ToolRecord,
 } from '../../core/resource/data-store.js'
+import {
+  USAGE_RANGE_DAYS,
+  type AuditCountRow,
+  type AuditEntry,
+  type AuditPage,
+  type AuditPageInput,
+  type RunFactRow,
+  type RunModelRow,
+  type ToolFactRow,
+  type UsageOverview,
+  type UsageOverviewInput,
+} from '../../core/resource/usage-overview.js'
+import { buildUsageOverview } from '../../core/resource/usage-overview-builder.js'
 import { migrateSchema } from './sqlite-schema.js'
 
 const MCP_TOOL_SERVER = /^mcp__([a-zA-Z0-9_-]+)__/
@@ -237,6 +250,58 @@ export class SqliteDataStore {
         return true
       },
     }
+  }
+
+  overview(input: UsageOverviewInput, retention: DataRetention): UsageOverview {
+    const now = input.now ?? new Date()
+    // One extra day of slack so a local day straddling UTC midnight is complete.
+    const since = new Date(now.getTime() - (Math.max(...USAGE_RANGE_DAYS) + 1) * 86_400_000).toISOString()
+    const runs = this.db.prepare(`
+      SELECT started_utc AS startedUtc, session_id AS sessionId, outcome, failure_code AS failureCode,
+             duration_ms AS durationMs, model, input_tokens AS inputTokens, output_tokens AS outputTokens,
+             cache_read_tokens AS cacheReadTokens, cache_write_tokens AS cacheWriteTokens, cost_usd AS costUsd
+        FROM run_fact WHERE started_utc >= ? AND outcome != 'running'`).all(since) as unknown as RunFactRow[]
+    const models = this.db.prepare(`
+      SELECT r.started_utc AS startedUtc, m.model, m.input_tokens AS inputTokens, m.output_tokens AS outputTokens,
+             m.cache_read_tokens AS cacheReadTokens, m.cache_write_tokens AS cacheWriteTokens, m.cost_usd AS costUsd
+        FROM run_model_usage m JOIN run_fact r ON r.id = m.run_fact_id
+       WHERE r.started_utc >= ?`).all(since) as unknown as RunModelRow[]
+    const tools = (this.db.prepare(`
+      SELECT ts_utc AS tsUtc, tool_name AS toolName, mcp_server AS mcpServer, ok, duration_ms AS durationMs
+        FROM tool_fact WHERE ts_utc >= ?`).all(since) as unknown as (Omit<ToolFactRow, 'ok'> & { ok: number })[])
+      .map((row) => ({ ...row, ok: row.ok === 1 }))
+    const audits = this.db.prepare(`
+      SELECT ts_utc AS tsUtc, action, target,
+             json_extract(details, '$.decision') AS decision, json_extract(details, '$.reason') AS reason
+        FROM audit_event
+       WHERE ts_utc >= ? AND action IN ('skill.invoked', 'permission.resolved', 'session.compacted')`)
+      .all(since) as unknown as AuditCountRow[]
+    return buildUsageOverview({ runs, models, tools, audits }, input, retention.factRetentionDays)
+  }
+
+  auditPage(input: AuditPageInput): AuditPage {
+    const clauses: string[] = []
+    const params: (string | number)[] = []
+    if (input.before !== undefined) {
+      clauses.push('id < ?')
+      params.push(input.before)
+    }
+    if (input.action !== undefined) {
+      clauses.push('action LIKE ?')
+      params.push(`${input.action}%`)
+    }
+    if (input.sessionId !== undefined) {
+      clauses.push('session_id = ?')
+      params.push(input.sessionId)
+    }
+    const where = clauses.length === 0 ? '' : `WHERE ${clauses.join(' AND ')}`
+    const rows = this.db.prepare(`
+      SELECT id, ts_utc AS tsUtc, action, session_id AS sessionId, run_id AS runId, target, details
+        FROM audit_event ${where} ORDER BY id DESC LIMIT ?`).all(...params, input.limit + 1) as unknown as (Omit<AuditEntry, 'details'> & { details: string })[]
+    const hasMore = rows.length > input.limit
+    const page = rows.slice(0, input.limit).map((row) => ({ ...row, details: JSON.parse(row.details) as unknown }))
+    const last = page.at(-1)
+    return { entries: page, nextBefore: hasMore && last !== undefined ? last.id : null }
   }
 
   status(): DataStoreStatus {

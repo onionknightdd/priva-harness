@@ -114,6 +114,11 @@ src/infrastructure/data/worker-data-recorder.ts 主线程代理（队列、重�
 src/infrastructure/data/data-worker-protocol.ts 主线程 ↔ worker 消息
 src/harness/run/run-ledger.ts               每次 run 的 started / session / finished 记账与事件流审计
 src/transport/http/route-audit.ts           路由层成功请求的审计助手
+src/core/resource/local-time.ts             UTC → 调用方时区的本地日期 / 小时
+src/core/resource/usage-overview.ts         查询输入 / 输出与行类型
+src/core/resource/usage-overview-builder.ts 行 → 概览的纯聚合
+src/core/contract/usage-reader.ts           UsageReader { overview, auditPage }
+src/transport/http/route/usage.ts           GET /api/sandbox/usage/overview | /audit
 tests/unit/infrastructure/data/             存储与 worker 的单元测试
 tests/unit/harness/run/run-ledger.test.ts   harness 采集路径
 tests/integration/data/                     harness → worker → SQLite 端到端
@@ -207,13 +212,35 @@ Pi 对无报价模型给出 `cost.total = 0` 而非缺失，因此 Pi 侧无法�
 | `/resource/skills` | `skill.uploaded` / `toggled` / `deleted` | id | harness, cwd, name, scope, filename, bytes / enabled |
 | `/resource/mcp` | `mcp.created` / `updated` / `deleted` | id | harness, cwd, name, scope |
 
+## 查询接口
+
+读取也经过 worker（同一个连接），主线程只 `await` 一个带超时（5 秒）的 Promise。`WorkerDataRecorder`
+同时实现 `DataRecorder` 与 `UsageReader`。
+
+```
+GET /api/sandbox/usage/overview?tz=<IANA>&days=<1..365, 默认 183>
+GET /api/sandbox/usage/audit?limit=<1..200>&before=<id>&action=<前缀>&session_id=<id>
+```
+
+- `tz` 必填且必须是合法的 IANA 时区，否则 422。SQL 只按 `ts_utc >= now − 366d` 取行；
+  `core/resource/usage-overview-builder.ts` 用 `Intl.DateTimeFormat` 把每行折成该时区的本地日期和小时，
+  再算 7 / 30 / 365 天窗口、heatmap、streak、高峰时段。所有日历逻辑都在这个纯函数里，测试不需要数据库。
+- `processedTokens = input + cacheRead + cacheWrite + output`；`costUsd` 为窗口内有报价的 run 之和，
+  一个都没有时为 `null`，并另给 `runsWithoutCost` 让前端标注"部分成本未知"。
+- `models` 按 `processedTokens` 降序并给出 `share`；`dailyModels` 只覆盖 `days` 天；`tools` 取前 10
+  （按小写工具名合并 Claude/Pi 的大小写差异）；`skills` 取前 5；`failures` 按失败码计数；
+  `durationP50Ms / P95Ms` 只统计 completed 的 run；`permissions` 计 asked / denied / timedOut；
+  `compactions` 计 `session.compacted`。`outcome = 'running'` 的行不参与统计。
+- `retentionDays` 随响应返回（即 `factRetentionDays`），365 天窗口在 UI 上应表述为"近一年"而不是"全部"。
+- 审计分页按 `id` 倒序，`nextBefore` 为下一页游标（无更多为 `null`）；`action` 为前缀匹配。
+
 ## 当前范围与后续
 
 已完成：存储层、worker 管道、主线程代理、保留期清理、启动回收、`main.ts` 接线；provider 事件层
 的用量求和 / 按模型拆分 / 失败码归一化 / `source`；harness 的 run 级采集与事件流审计（工具、技能、
 权限、问答、压缩、子代理、工作流、session 创建 / fork）；路由层的 session 生命周期与配置变更审计。
-写入侧至此完整。
+写入侧至此完整；查询接口（overview / audit）已就绪。
 
 后续步骤：
 
-1. 查询接口（时区由请求携带）与前端概览页。
+1. 前端概览页与审计时间线（需先按 `docs/front-end-desgin.md` 的流程提交线框图并获批准）。

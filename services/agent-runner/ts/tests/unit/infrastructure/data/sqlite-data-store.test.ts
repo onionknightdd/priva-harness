@@ -228,6 +228,51 @@ describe('SqliteDataStore', () => {
     db.close()
   })
 
+  describe('queries', () => {
+    it('builds the overview from facts, skipping runs that are still running', () => {
+      store.writeBatch([
+        started('done', daysAgo(1)), finished('done', daysAgo(1), {
+          byModel: { 'gpt-x': { input: 10, output: 20, cacheRead: 1000, cacheWrite: 150, costUsd: 0.01 } },
+        }),
+        started('live', NOW.toISOString()),
+        tool('done', 't1', 'Read', daysAgo(1)),
+        { kind: 'audit', tsUtc: daysAgo(1), action: 'permission.resolved', target: 'Bash', details: { decision: 'deny', reason: 'timeout' } },
+        { kind: 'audit', tsUtc: daysAgo(1), action: 'skill.invoked', target: 'pdf', details: {} },
+        { kind: 'audit', tsUtc: daysAgo(1), action: 'session.compacted', details: {} },
+      ])
+      const overview = store.overview({ timeZone: 'UTC', heatmapDays: 2, now: NOW }, defaultDataRetention())
+      expect(overview.ranges[0]).toMatchObject({ days: 7, runs: 1, completed: 1, processedTokens: 1180, costUsd: 0.01 })
+      expect(overview.models).toEqual([expect.objectContaining({ model: 'gpt-x', runs: 1, processedTokens: 1180, share: 1 })])
+      expect(overview.tools).toEqual([{ tool: 'read', mcpServer: null, calls: 1, errors: 0, avgDurationMs: 40 }])
+      expect(overview.skills).toEqual([{ skill: 'pdf', count: 1 }])
+      expect(overview.permissions).toEqual({ asked: 1, denied: 1, timedOut: 1 })
+      expect(overview.compactions).toBe(1)
+      expect(overview.retentionDays).toBe(365)
+    })
+
+    it('pages the audit log newest first with action and session filters', () => {
+      store.writeBatch([
+        { kind: 'audit', tsUtc: daysAgo(3), action: 'session.renamed', sessionId: 'a', details: { title: 'x' } },
+        { kind: 'audit', tsUtc: daysAgo(2), action: 'session.deleted', sessionId: 'b', details: null },
+        { kind: 'audit', tsUtc: daysAgo(1), action: 'mcp.created', target: 'm1', details: { name: 'echo' } },
+        { kind: 'audit', tsUtc: NOW.toISOString(), action: 'session.pinned', sessionId: 'a', details: { pinned: true } },
+      ])
+      const first = store.auditPage({ limit: 2 })
+      expect(first.entries.map((entry) => entry.action)).toEqual(['session.pinned', 'mcp.created'])
+      expect(first.entries[1]).toMatchObject({ target: 'm1', details: { name: 'echo' }, sessionId: null, runId: null })
+      expect(first.nextBefore).toBe(first.entries[1]?.id)
+
+      const second = store.auditPage({ limit: 2, before: first.nextBefore ?? 0 })
+      expect(second.entries.map((entry) => entry.action)).toEqual(['session.deleted', 'session.renamed'])
+      expect(second.nextBefore).toBeNull()
+
+      expect(store.auditPage({ limit: 10, action: 'session.' }).entries.map((entry) => entry.action))
+        .toEqual(['session.pinned', 'session.deleted', 'session.renamed'])
+      expect(store.auditPage({ limit: 10, sessionId: 'a' }).entries.map((entry) => entry.action))
+        .toEqual(['session.pinned', 'session.renamed'])
+    })
+  })
+
   describe('retention pruning', () => {
     const retention = { auditRetentionDays: 90, toolAuditRetentionDays: 30, factRetentionDays: 365 }
 

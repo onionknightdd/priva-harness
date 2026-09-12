@@ -1,12 +1,19 @@
 import { Worker } from 'node:worker_threads'
 
 import type { DataRecorder } from '../../core/contract/data-recorder.js'
+import type { UsageReader } from '../../core/contract/usage-reader.js'
 import type {
   DataRecord,
   DataRetention,
   DataStoreLogger,
   DataStoreStatus,
 } from '../../core/resource/data-store.js'
+import type {
+  AuditPage,
+  AuditPageInput,
+  UsageOverview,
+  UsageOverviewInput,
+} from '../../core/resource/usage-overview.js'
 import type { DataWorkerInit, MainToWorkerMessage, WorkerToMainMessage } from './data-worker-protocol.js'
 
 const DEFAULT_QUEUE_LIMIT = 10_000
@@ -38,7 +45,7 @@ interface Pending<T> {
 // in-memory queue and returns; everything else happens on the worker. The
 // business flow is never awaited on, never blocked by and never failed by
 // anything in here.
-export class WorkerDataRecorder implements DataRecorder {
+export class WorkerDataRecorder implements DataRecorder, UsageReader {
   private readonly options: Required<Omit<WorkerDataRecorderOptions, 'logger'>>
   private readonly logger: DataStoreLogger
   private readonly queue: DataRecord[] = []
@@ -105,7 +112,7 @@ export class WorkerDataRecorder implements DataRecorder {
     if (!(await this.awaitReady(timeoutMs))) return false
     this.sendQueued()
     try {
-      await this.request('flush', 'flushed', Math.max(1, timeoutMs - (Date.now() - startedAt)))
+      await this.request({ type: 'flush', id: 0 }, 'flushed', Math.max(1, timeoutMs - (Date.now() - startedAt)))
       return true
     } catch {
       return false
@@ -113,11 +120,31 @@ export class WorkerDataRecorder implements DataRecorder {
   }
 
   async status(timeoutMs = this.options.queryTimeoutMs): Promise<DataStoreStatus> {
-    const startedAt = Date.now()
-    if (!(await this.awaitReady(timeoutMs))) throw new Error('Data store worker is not running')
-    const reply = await this.request('status', 'status', Math.max(1, timeoutMs - (Date.now() - startedAt)))
+    const reply = await this.query({ type: 'status', id: 0 }, 'status', timeoutMs)
     if (reply.type !== 'status') throw new Error('Unexpected data store reply')
     return reply.status
+  }
+
+  async overview(input: UsageOverviewInput): Promise<UsageOverview> {
+    const reply = await this.query({ type: 'overview', id: 0, input }, 'overview', this.options.queryTimeoutMs)
+    if (reply.type !== 'overview') throw new Error('Unexpected data store reply')
+    return reply.overview
+  }
+
+  async auditPage(input: AuditPageInput): Promise<AuditPage> {
+    const reply = await this.query({ type: 'auditPage', id: 0, input }, 'auditPage', this.options.queryTimeoutMs)
+    if (reply.type !== 'auditPage') throw new Error('Unexpected data store reply')
+    return reply.page
+  }
+
+  private async query(
+    message: Extract<MainToWorkerMessage, { id: number }>,
+    expected: WorkerToMainMessage['type'],
+    timeoutMs: number,
+  ): Promise<WorkerToMainMessage> {
+    const startedAt = Date.now()
+    if (!(await this.awaitReady(timeoutMs))) throw new Error('Data store worker is not running')
+    return await this.request(message, expected, Math.max(1, timeoutMs - (Date.now() - startedAt)))
   }
 
   async close(): Promise<void> {
@@ -132,7 +159,7 @@ export class WorkerDataRecorder implements DataRecorder {
     await this.flush()
     this.settleReadyWaiters(false)
     try {
-      await this.request('close', 'closed', this.options.flushTimeoutMs)
+      await this.request({ type: 'close' }, 'closed', this.options.flushTimeoutMs)
     } catch {
       // Falling through to terminate is the whole point of the timeout.
     }
@@ -218,6 +245,8 @@ export class WorkerDataRecorder implements DataRecorder {
         return
       case 'flushed':
       case 'status':
+      case 'overview':
+      case 'auditPage':
       case 'failed':
         this.settle(message.id, message)
         return
@@ -258,7 +287,7 @@ export class WorkerDataRecorder implements DataRecorder {
   }
 
   private request(
-    kind: 'flush' | 'status' | 'close',
+    message: MainToWorkerMessage,
     expected: WorkerToMainMessage['type'],
     timeoutMs: number,
   ): Promise<WorkerToMainMessage> {
@@ -266,8 +295,8 @@ export class WorkerDataRecorder implements DataRecorder {
     if (worker === undefined || !this.ready) {
       return Promise.reject(new Error('Data store worker is not running'))
     }
-    const id = kind === 'close' ? 0 : this.nextRequestId++
-    const outgoing: MainToWorkerMessage = kind === 'close' ? { type: 'close' } : { type: kind, id }
+    const id = 'id' in message ? this.nextRequestId++ : 0
+    const outgoing: MainToWorkerMessage = 'id' in message ? { ...message, id } : message
     return new Promise<WorkerToMainMessage>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id)

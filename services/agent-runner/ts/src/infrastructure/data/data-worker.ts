@@ -104,6 +104,22 @@ function handle(message: MainToWorkerMessage): void {
       }
       return
     }
+    case 'overview': {
+      try {
+        post({ type: 'overview', id: message.id, overview: store.overview(message.input, init.retention) })
+      } catch (error) {
+        post({ type: 'failed', id: message.id, message: describe(error) })
+      }
+      return
+    }
+    case 'auditPage': {
+      try {
+        post({ type: 'auditPage', id: message.id, page: store.auditPage(message.input) })
+      } catch (error) {
+        post({ type: 'failed', id: message.id, message: describe(error) })
+      }
+      return
+    }
     case 'close': {
       pruneJob = undefined
       try {
