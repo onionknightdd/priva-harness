@@ -215,6 +215,16 @@ token，浅色 / 深色均为 `rgb(77, 159, 240)`（`#4D9FF0`）。
 流式输出时，工作状态吸附在用户消息下方，偏移使用用户消息的实际测量高度，
 保留小数像素，避免高度取整后两层背景之间出现缝隙。
 
+重新加载会话时，`StickyFreeze` 在消息挂载和滚动位置恢复后、首帧绘制前同步
+初始吸附状态；多个吸附条合并为一次更新，让消息与底部渐变遮罩同时出现。
+后续滚动继续由 IntersectionObserver 更新，未吸附时不显示遮罩。
+
+```text
+Mount history -> restore scroll in layout effects -> pre-paint batch
+                                                          |
+                                                   message + mask
+```
+
 ```text
 [User message background]
             | exact measured height (including fractional pixels)
@@ -994,6 +1004,11 @@ Mermaid 浏览器回归：打开 `/tests/components/ai-elements/mermaid-browser.
 同时验证单行 / 多行 ChatComposer 聚焦前后边框和阴影一致，以及历史快照中的
 结构化问答逐题显示，不退回英文工具回执。
 相关数据和连接测试包含在下方 Agent message 的 `*.test.ts` 命令中。
+
+吸附遮罩时序回归入口为 `/tests/features/agent-message/sticky-freeze.html`，点击
+**Run sticky freeze checks**。检查函数 `runStickyFreezeChecks` 使用真实 React 提交，
+受控 DOM 几何和延迟的 IntersectionObserver，亦可在 jsdom 中调用；覆盖历史滚动
+恢复后首帧前出现遮罩、未吸附状态、小数偏移、流式双层遮罩交接、卸载与 StrictMode。
 
 图片工具卡片浏览器回归：在 `agent-ui/` 运行
 `npm run dev -- --config tests/features/agent-message/image-tools-browser.config.ts --host 127.0.0.1`，
