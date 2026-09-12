@@ -4,7 +4,7 @@ import type { ReactElement, ReactNode } from "react"
 import { tooltipMotion } from "@/lib/popup-motion"
 import { cn } from "@/lib/utils"
 
-const TOOLTIP_DELAY = 2000
+const TOOLTIP_DELAY = 1000
 const TOOLTIP_RESET_TIMEOUT = 400
 
 // One delay group spans the app: wait on first hover, skip the delay between

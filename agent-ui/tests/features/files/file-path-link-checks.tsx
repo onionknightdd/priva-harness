@@ -87,7 +87,7 @@ export async function runFilePathLinkChecks(check: (name: string, condition: boo
       }
       if (scenario !== "cached") await resolve(path, scenario !== "missing")
       if (scenario !== "resolved-during-hover") await hover(trigger())
-      await wait(2100)
+      await wait(1100)
       check(`${scenario}: hover shows the absolute path`, hint()?.textContent === path)
       check(`${scenario}: the hover target survives file resolution`, trigger() === initialTrigger)
       check(`${scenario}: file availability controls the open action`, Boolean(host.querySelector("button")) === (scenario !== "missing"))
@@ -96,7 +96,7 @@ export async function runFilePathLinkChecks(check: (name: string, condition: boo
       check(`${scenario}: leaving closes the hint`, !hint())
       if (scenario === "resolved-before-hover") {
         await hover(trigger())
-        await wait(2100)
+        await wait(1100)
         check("resolved file hints reopen on subsequent hover", hint()?.textContent === path)
         await act(async () => host.querySelector<HTMLButtonElement>("button")!.click())
         check("click still opens the absolute path in Workspace", host.querySelector("output")?.textContent === path)
