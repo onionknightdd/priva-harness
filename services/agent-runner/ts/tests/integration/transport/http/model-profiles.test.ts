@@ -14,12 +14,14 @@ import {
 } from '../../../../src/core/resource/model-profile.js'
 import { NodeUserFileSystem } from '../../../../src/infrastructure/filesystem/node-user-file-system.js'
 import { buildHttpServer } from '../../../../src/transport/http/server.js'
+import { MemoryDataRecorder } from '../../../support/memory-data-recorder.js'
 import { createTestAgentServices } from '../../../support/model-profile.js'
 
 describe('/api/sandbox/credentials/profiles', () => {
   let testRoot: string
   let server: FastifyInstance
   let endpointClient: RecordingEndpointClient
+  let recorder: MemoryDataRecorder
 
   beforeEach(async () => {
     testRoot = await mkdtemp(join(tmpdir(), 'priva-model-profile-http-test-'))
@@ -30,10 +32,12 @@ describe('/api/sandbox/credentials/profiles', () => {
       join(testRoot, 'runtime'),
       endpointClient,
     )
+    recorder = new MemoryDataRecorder()
     server = buildHttpServer({
       userFileSystem: new NodeUserFileSystem({ initialDirectory: workspace }),
       modelProfileService: services.modelProfileService,
       agentProfileService: services.agentProfileService,
+      recorder,
     })
     await server.ready()
   })
@@ -125,6 +129,21 @@ describe('/api/sandbox/credentials/profiles', () => {
     })
     expect(clientSuppliedId.statusCode).toBe(201)
     expect(generatedProfileId(clientSuppliedId.json())).not.toBe('custom-id')
+
+    const audits = recorder.ofKind('audit')
+    expect(audits.map((audit) => audit.action)).toEqual([
+      'llm_profile.created', 'llm_profile.updated', 'llm_profile.created', 'llm_profile.created',
+    ])
+    expect(audits[0]).toMatchObject({
+      target: createdId,
+      details: { label: 'gateway', baseUrl: 'https://api.example.com', defaultModel: 'model-a', imageUnderstandingModel: 'vision-a' },
+    })
+    expect(audits[1]).toMatchObject({
+      target: createdId,
+      details: { label: 'Renamed', defaultModel: null, fields: ['label', 'default_model', 'image_edit_model'] },
+    })
+    // The audit log must never carry credentials.
+    expect(JSON.stringify(audits)).not.toContain('secret')
   })
 
   it('rejects harness-specific fixed model slots', async () => {
@@ -367,6 +386,15 @@ describe('/api/sandbox/credentials/profiles', () => {
       url: '/api/sandbox/credentials/profiles',
     })
     expect(listing.json()).toMatchObject({ default_profile_id: firstId })
+
+    // The rejected default change (409) is not audited; the accepted one and the delete are.
+    expect(recorder.ofKind('audit').map(({ action, target }) => ({ action, target }))).toEqual([
+      { action: 'llm_profile.created', target: firstId },
+      { action: 'llm_profile.created', target: secondId },
+      { action: 'llm_profile.updated', target: secondId },
+      { action: 'llm_profile.default_changed', target: secondId },
+      { action: 'llm_profile.deleted', target: secondId },
+    ])
   })
 })
 

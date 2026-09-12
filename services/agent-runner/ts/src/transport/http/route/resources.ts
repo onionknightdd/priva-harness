@@ -1,7 +1,9 @@
 import type { FastifyPluginCallback } from 'fastify'
 import { z } from 'zod'
 
+import type { DataRecorder } from '../../../core/contract/data-recorder.js'
 import type { ResourceService } from '../../../core/contract/resource-service.js'
+import { auditRoute } from '../route-audit.js'
 import { ResourceError, type ResourceQuery } from '../../../core/resource/resource-catalog.js'
 
 const prefix = '/api/sandbox/resource'
@@ -26,26 +28,35 @@ function id(value: unknown): string {
   return parse(z.object({ id: z.string().regex(/^[A-Za-z0-9_-]{32}$/u) }), value).id
 }
 
-export const resourceRoutes: FastifyPluginCallback<{ service: ResourceService; onChanged?: () => Promise<void> }> = (server, { service, onChanged }, done) => {
+export const resourceRoutes: FastifyPluginCallback<{ service: ResourceService; onChanged?: () => Promise<void>; recorder?: DataRecorder }> = (server, { service, onChanged, recorder }, done) => {
+  const audit = (action: string, context: ResourceQuery, target: string, details: Record<string, unknown> = {}): void => {
+    auditRoute(recorder, action, { target, details: { harness: context.harness, ...(context.cwd === undefined ? {} : { cwd: context.cwd }), ...details } })
+  }
   server.get(`${prefix}/skills`, async (request) => await service.skills.list(query(request.query)))
   server.get(`${prefix}/subagents/catalog`, (request) => service.subagents.catalog(query(request.query)))
   server.get(`${prefix}/subagents`, async (request) => await service.subagents.list(query(request.query)))
   server.get(`${prefix}/subagents/:id`, async (request) => await service.subagents.get(query(request.query), id(request.params)))
   server.post(`${prefix}/subagents`, async (request, reply) => {
     const input = parse(agentDraft.extend({ sourceId: revisionSchema }).strict(), request.body)
-    const result = await service.subagents.create(query(request.query), input)
+    const context = query(request.query)
+    const result = await service.subagents.create(context, input)
+    audit('agents.created', context, result.id, { name: result.name })
     await onChanged?.()
     return await reply.code(201).send(result)
   })
   server.patch(`${prefix}/subagents/:id`, async (request) => {
     const input = parse(agentDraft.extend({ revision: revisionSchema }).strict(), request.body)
-    const result = await service.subagents.update(query(request.query), id(request.params), input)
+    const context = query(request.query)
+    const result = await service.subagents.update(context, id(request.params), input)
+    audit('agents.updated', context, result.id, { name: result.name })
     await onChanged?.()
     return result
   })
   server.delete(`${prefix}/subagents/:id`, async (request, reply) => {
     const { revision } = parse(z.object({ revision: revisionSchema }).strict(), request.body)
-    await service.subagents.delete(query(request.query), id(request.params), revision)
+    const context = query(request.query)
+    await service.subagents.delete(context, id(request.params), revision)
+    audit('agents.deleted', context, id(request.params))
     await onChanged?.()
     return await reply.code(204).send()
   })
@@ -53,19 +64,25 @@ export const resourceRoutes: FastifyPluginCallback<{ service: ResourceService; o
   server.get(`${prefix}/memory/:id`, async (request) => await service.memory.get(query(request.query), id(request.params)))
   server.patch(`${prefix}/memory/:id`, async (request) => {
     const { content, revision } = parse(z.object({ content: z.string().max(1024 * 1024), revision: revisionSchema }).strict(), request.body)
-    const result = await service.memory.update(query(request.query), id(request.params), content, revision)
+    const context = query(request.query)
+    const result = await service.memory.update(context, id(request.params), content, revision)
+    audit('memory.updated', context, result.id, { name: result.name, contentChars: content.length })
     await onChanged?.()
     return result
   })
   server.delete(`${prefix}/memory/:id`, async (request, reply) => {
     const { revision } = parse(z.object({ revision: revisionSchema }).strict(), request.body)
-    await service.memory.delete(query(request.query), id(request.params), revision)
+    const context = query(request.query)
+    await service.memory.delete(context, id(request.params), revision)
+    audit('memory.deleted', context, id(request.params))
     await onChanged?.()
     return await reply.code(204).send()
   })
   server.put(`${prefix}/memory/auto/enabled`, async (request) => {
     const { enabled } = parse(z.object({ enabled: z.boolean() }).strict(), request.body)
-    const result = await service.memory.toggle(query(request.query), enabled)
+    const context = query(request.query)
+    const result = await service.memory.toggle(context, enabled)
+    audit('memory.auto_toggled', context, 'auto', { enabled })
     await onChanged?.()
     return result
   })
@@ -95,17 +112,22 @@ export const resourceRoutes: FastifyPluginCallback<{ service: ResourceService; o
     let data: Buffer
     try { data = await file.toBuffer() } catch { throw new ResourceError(413, 'Skill archives must be 3 MB or smaller') }
     const result = await service.uploadSkill(context, scope, file.filename, data)
+    audit('skill.uploaded', context, result.id, { name: result.name, scope, filename: file.filename, bytes: data.byteLength })
     await onChanged?.()
     return await reply.code(201).send(result)
   })
   server.patch(`${prefix}/skills/:id`, async (request) => {
     const { enabled } = parse(z.object({ enabled: z.boolean() }).strict(), request.body)
-    const result = await service.skills.toggle(query(request.query), id(request.params), enabled)
+    const context = query(request.query)
+    const result = await service.skills.toggle(context, id(request.params), enabled)
+    audit('skill.toggled', context, result.id, { name: result.name, enabled })
     await onChanged?.()
     return result
   })
   server.delete(`${prefix}/skills/:id`, async (request, reply) => {
-    await service.skills.delete(query(request.query), id(request.params))
+    const context = query(request.query)
+    await service.skills.delete(context, id(request.params))
+    audit('skill.deleted', context, id(request.params))
     await onChanged?.()
     return await reply.code(204).send()
   })
@@ -113,22 +135,28 @@ export const resourceRoutes: FastifyPluginCallback<{ service: ResourceService; o
   server.get(`${prefix}/mcp/:id`, async (request) => await service.mcp.get(query(request.query), id(request.params)))
   server.post(`${prefix}/mcp`, async (request, reply) => {
     const value = parse(z.object({ name: z.string(), definition: definitionSchema, sourceId: z.string().optional(), scope: z.enum(['global', 'project', 'local']).optional() }).strict(), request.body)
-    const result = await service.mcp.create(query(request.query), {
+    const context = query(request.query)
+    const result = await service.mcp.create(context, {
       name: value.name, definition: value.definition,
       ...(value.sourceId === undefined ? {} : { sourceId: value.sourceId }),
       ...(value.scope === undefined ? {} : { scope: value.scope }),
     })
+    audit('mcp.created', context, result.id, { name: result.name, ...(value.scope === undefined ? {} : { scope: value.scope }) })
     await onChanged?.()
     return await reply.code(201).send(result)
   })
   server.patch(`${prefix}/mcp/:id`, async (request) => {
     const { definition } = parse(z.object({ definition: definitionSchema }).strict(), request.body)
-    const result = await service.mcp.update(query(request.query), id(request.params), definition)
+    const context = query(request.query)
+    const result = await service.mcp.update(context, id(request.params), definition)
+    audit('mcp.updated', context, result.id, { name: result.name })
     await onChanged?.()
     return result
   })
   server.delete(`${prefix}/mcp/:id`, async (request, reply) => {
-    await service.mcp.delete(query(request.query), id(request.params))
+    const context = query(request.query)
+    await service.mcp.delete(context, id(request.params))
+    audit('mcp.deleted', context, id(request.params))
     await onChanged?.()
     return await reply.code(204).send()
   })

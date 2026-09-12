@@ -22,7 +22,20 @@ import {
   updateModelProfileSchema,
 } from '../schema/model-profile-schema.js'
 
+import type { DataRecorder } from '../../../core/contract/data-recorder.js'
+import { auditRoute } from '../route-audit.js'
+
 const MODEL_PROFILE_ROUTE_PREFIX = '/api/sandbox/credentials/profiles'
+
+// Never the auth token: the audit log is not a credential store.
+function profileAuditDetails(profile: ModelProfile): Record<string, unknown> {
+  return {
+    label: profile.label,
+    baseUrl: profile.baseUrl,
+    defaultModel: profile.defaultModel,
+    imageUnderstandingModel: profile.imageUnderstandingModel,
+  }
+}
 
 interface ProfileIdParams {
   readonly profileId: string
@@ -73,6 +86,7 @@ interface SavedModelCapabilityProbeBody
 
 export interface ModelProfileRoutesOptions {
   readonly service: ModelProfileService
+  readonly recorder?: DataRecorder
 }
 
 export const modelProfileRoutes: FastifyPluginCallback<ModelProfileRoutesOptions> = (
@@ -80,7 +94,7 @@ export const modelProfileRoutes: FastifyPluginCallback<ModelProfileRoutesOptions
   options,
   done,
 ) => {
-  const { service } = options
+  const { service, recorder } = options
 
   fastify.get(
     MODEL_PROFILE_ROUTE_PREFIX,
@@ -99,6 +113,7 @@ export const modelProfileRoutes: FastifyPluginCallback<ModelProfileRoutesOptions
     { schema: createModelProfileSchema },
     async (request, reply) => {
       const profile = await service.createProfile(fromCreateBody(request.body))
+      auditRoute(recorder, 'llm_profile.created', { target: profile.id, details: profileAuditDetails(profile) })
       return await reply.code(201).send(toProfileSummaryResponse(profile))
     },
   )
@@ -134,20 +149,27 @@ export const modelProfileRoutes: FastifyPluginCallback<ModelProfileRoutesOptions
   fastify.patch<{ Params: ProfileIdParams; Body: ModelProfilePatchBody }>(
     `${MODEL_PROFILE_ROUTE_PREFIX}/:profileId`,
     { schema: updateModelProfileSchema },
-    async (request) => toProfileSummaryResponse(
-      await service.updateProfile(
+    async (request) => {
+      const profile = await service.updateProfile(
         request.params.profileId,
         fromPatchBody(request.body),
-      ),
-    ),
+      )
+      auditRoute(recorder, 'llm_profile.updated', {
+        target: profile.id,
+        details: { ...profileAuditDetails(profile), fields: Object.keys(request.body) },
+      })
+      return toProfileSummaryResponse(profile)
+    },
   )
 
   fastify.put<{ Params: ProfileIdParams }>(
     `${MODEL_PROFILE_ROUTE_PREFIX}/:profileId/default`,
     { schema: setDefaultModelProfileSchema },
-    async (request) => ({
-      default_profile_id: await service.setDefaultProfile(request.params.profileId),
-    }),
+    async (request) => {
+      const defaultProfileId = await service.setDefaultProfile(request.params.profileId)
+      auditRoute(recorder, 'llm_profile.default_changed', { target: request.params.profileId })
+      return { default_profile_id: defaultProfileId }
+    },
   )
 
   fastify.delete<{ Params: ProfileIdParams }>(
@@ -155,6 +177,7 @@ export const modelProfileRoutes: FastifyPluginCallback<ModelProfileRoutesOptions
     { schema: deleteModelProfileSchema },
     async (request, reply) => {
       await service.deleteProfile(request.params.profileId)
+      auditRoute(recorder, 'llm_profile.deleted', { target: request.params.profileId })
       return await reply.code(204).send()
     },
   )

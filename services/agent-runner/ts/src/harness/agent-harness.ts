@@ -263,7 +263,7 @@ export class AgentHarness {
     const preassigned = sessionRefOf(session)?.id
     const knownSkills = this.knownSkills.get(spec.provider)
     const ledger = new RunLedger(this.options.recorder, {
-      runId, spec, source: runOptions.source,
+      runId, spec, source: runOptions.source, sessionTarget: session,
       turn: { text: userTurn.text, ...(attachments ? { attachments } : {}) },
       ...(preassigned === undefined ? {} : { sessionId: preassigned }),
       ...(knownSkills === undefined ? {} : { knownSkills }),

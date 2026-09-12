@@ -112,7 +112,8 @@ src/infrastructure/data/sqlite-data-store.ts 同步存储（writeBatch / reconci
 src/infrastructure/data/data-worker.ts      worker 入口
 src/infrastructure/data/worker-data-recorder.ts 主线程代理（队列、重启、flush、status）
 src/infrastructure/data/data-worker-protocol.ts 主线程 ↔ worker 消息
-src/harness/run/run-ledger.ts               每次 run 的 started / session / finished 记账
+src/harness/run/run-ledger.ts               每次 run 的 started / session / finished 记账与事件流审计
+src/transport/http/route-audit.ts           路由层成功请求的审计助手
 tests/unit/infrastructure/data/             存储与 worker 的单元测试
 tests/unit/harness/run/run-ledger.test.ts   harness 采集路径
 tests/integration/data/                     harness → worker → SQLite 端到端
@@ -180,14 +181,39 @@ Pi 对无报价模型给出 `cost.total = 0` 而非缺失，因此 Pi 侧无法�
 | `session.compacted` | `session.compacted` | details 只有 `summaryChars` |
 | `agent.started` / `agent.completed` | `agent.completed`，target = 子代理名 | details：agentId、ok、status、durationMs |
 | `workflow.started` / `workflow.completed` | `workflow.completed`，target = 工作流名 | details：workflowToolUseId、status、durationMs |
+| session id 首次可知且目标为 `new` / `fork` | `session.created` / `session.forked` | fork 的 details 含 `sourceSessionId`；resume 不记 |
+
+`run.finished` 与 `tool.invoked` 的审计行也带当时已知的 `session_id`，便于按 session 过滤时间线。
+
+## 路由层审计
+
+`transport/http/route-audit.ts` 的 `auditRoute()` 在服务调用**成功返回后**记一条 `audit`；失败的请求
+（404 / 409 / 422）不会出现在审计里。details 只放 id、名称与标志位，**绝不放请求体**：模型 profile 的
+`authToken`、MCP 的 `definition`（命令、env、headers）都不进审计。
+
+| 路由 | action | target | details |
+| --- | --- | --- | --- |
+| `PATCH /sessions/:id` | `session.renamed` | — (`session_id`) | harness, title |
+| `DELETE /sessions/:id` | `session.deleted` | — | harness |
+| `POST /sessions/:id/fork` | `session.forked` | 新 session id | harness, stem, upToMessageId |
+| `PUT /sessions/:id/tag` | `session.tagged` | — | harness, tags |
+| `PUT /sessions/:id/add_dirs` | `session.add_dirs_set` | — | harness, addDirs |
+| `PUT /sessions/:id/pin` / `archive` | `session.pinned` / `session.archived` | — | harness, pinned / archived |
+| `POST/PATCH/DELETE /credentials/profiles` | `llm_profile.created` / `updated` / `deleted` | profile id | label, baseUrl, defaultModel, imageUnderstandingModel；updated 另有 `fields` |
+| `PUT /credentials/profiles/:id/default` | `llm_profile.default_changed` | profile id | — |
+| `PATCH /agent/profile` | `agent_profile.updated` | — | queueBehavior |
+| `/resource/subagents` | `agents.created` / `updated` / `deleted` | id | harness, cwd, name |
+| `/resource/memory` | `memory.updated` / `deleted` / `auto_toggled` | id / `auto` | harness, cwd, name, contentChars / enabled |
+| `/resource/skills` | `skill.uploaded` / `toggled` / `deleted` | id | harness, cwd, name, scope, filename, bytes / enabled |
+| `/resource/mcp` | `mcp.created` / `updated` / `deleted` | id | harness, cwd, name, scope |
 
 ## 当前范围与后续
 
 已完成：存储层、worker 管道、主线程代理、保留期清理、启动回收、`main.ts` 接线；provider 事件层
 的用量求和 / 按模型拆分 / 失败码归一化 / `source`；harness 的 run 级采集与事件流审计（工具、技能、
-权限、问答、压缩、子代理、工作流）。
+权限、问答、压缩、子代理、工作流、session 创建 / fork）；路由层的 session 生命周期与配置变更审计。
+写入侧至此完整。
 
 后续步骤：
 
-1. 路由层审计（session 生命周期、配置变更）。
-2. 查询接口（时区由请求携带）与前端概览页。
+1. 查询接口（时区由请求携带）与前端概览页。

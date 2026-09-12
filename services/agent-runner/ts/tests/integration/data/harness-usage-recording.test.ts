@@ -69,9 +69,13 @@ describe('harness usage recording end to end', () => {
         { model: 'haiku', output_tokens: 5, cost_usd: 0.001 },
         { model: 'sonnet', output_tokens: 15, cost_usd: 0.019 },
       ])
-      expect(db.prepare('SELECT action, run_id FROM audit_event ORDER BY id').all()).toEqual([
-        { action: 'run.started', run_id: 'r-ok' }, { action: 'run.finished', run_id: 'r-ok' },
-        { action: 'run.started', run_id: 'r-bad' }, { action: 'run.finished', run_id: 'r-bad' },
+      expect(db.prepare('SELECT action, run_id, session_id FROM audit_event ORDER BY id').all()).toEqual([
+        { action: 'run.started', run_id: 'r-ok', session_id: null },
+        { action: 'session.created', run_id: 'r-ok', session_id: 'session-1' },
+        { action: 'run.finished', run_id: 'r-ok', session_id: 'session-1' },
+        { action: 'run.started', run_id: 'r-bad', session_id: null },
+        { action: 'session.created', run_id: 'r-bad', session_id: 'session-1' },
+        { action: 'run.finished', run_id: 'r-bad', session_id: 'session-1' },
       ])
     } finally {
       db.close()

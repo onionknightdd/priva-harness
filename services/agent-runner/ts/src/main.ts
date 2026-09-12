@@ -127,6 +127,7 @@ export async function startServer(): Promise<void> {
     agentHarness,
     sessionService,
     configDistributor,
+    recorder: dataRecorder,
     logger: true,
   })
   dataLog.target = server.log

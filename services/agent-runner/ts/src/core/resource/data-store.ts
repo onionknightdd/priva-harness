@@ -46,6 +46,7 @@ export interface RunSessionRecord {
 export interface RunFinishedRecord extends RecordBase {
   readonly kind: 'run.finished'
   readonly runId: string
+  readonly sessionId?: string
   readonly outcome: Exclude<RunOutcome, 'running'>
   readonly failureCode?: RunFailureCode
   readonly durationMs: number
@@ -59,6 +60,7 @@ export interface RunFinishedRecord extends RecordBase {
 export interface ToolRecord extends RecordBase {
   readonly kind: 'tool'
   readonly runId: string
+  readonly sessionId?: string
   readonly toolUseId: string
   readonly toolName: string
   readonly ok: boolean

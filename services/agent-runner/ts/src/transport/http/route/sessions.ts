@@ -21,10 +21,14 @@ import {
   workflowAgentSchema,
 } from '../schema/session-schema.js'
 
+import type { DataRecorder } from '../../../core/contract/data-recorder.js'
+import { auditRoute } from '../route-audit.js'
+
 const SESSION_ROUTE_PREFIX = '/api/sandbox/agent/sessions'
 
 export interface SessionRoutesOptions {
   readonly sessionService: SessionService
+  readonly recorder?: DataRecorder
 }
 
 interface HarnessQuery {
@@ -44,7 +48,7 @@ export const sessionRoutes: FastifyPluginCallback<SessionRoutesOptions> = (
   options,
   done,
 ) => {
-  const { sessionService } = options
+  const { sessionService, recorder } = options
 
   fastify.get<{ Querystring: HarnessQuery }>(
     SESSION_ROUTE_PREFIX,
@@ -200,6 +204,7 @@ export const sessionRoutes: FastifyPluginCallback<SessionRoutesOptions> = (
     { schema: deleteSessionSchema },
     async (request) => {
       await sessionService.delete(request.query.harness, request.params.session_id)
+      auditRoute(recorder, 'session.deleted', { sessionId: request.params.session_id, details: { harness: request.query.harness } })
       return { status: 'ok' }
     },
   )
@@ -213,6 +218,9 @@ export const sessionRoutes: FastifyPluginCallback<SessionRoutesOptions> = (
         request.params.session_id,
         request.body.title,
       )
+      auditRoute(recorder, 'session.renamed', {
+        sessionId: request.params.session_id, details: { harness: request.query.harness, title: request.body.title },
+      })
       return { status: 'ok' }
     },
   )
@@ -224,8 +232,8 @@ export const sessionRoutes: FastifyPluginCallback<SessionRoutesOptions> = (
   }>(
     `${SESSION_ROUTE_PREFIX}/:session_id/fork`,
     { schema: forkSessionSchema },
-    async (request) => toSessionInfoResponse(
-      await sessionService.fork(
+    async (request) => {
+      const forked = await sessionService.fork(
         request.query.harness,
         request.params.session_id,
         {
@@ -234,8 +242,16 @@ export const sessionRoutes: FastifyPluginCallback<SessionRoutesOptions> = (
             ? {}
             : { upToMessageId: request.body.up_to_message_id }),
         },
-      ),
-    ),
+      )
+      auditRoute(recorder, 'session.forked', {
+        sessionId: request.params.session_id, target: forked.sessionId,
+        details: {
+          harness: request.query.harness, stem: request.body.stem,
+          ...(request.body.up_to_message_id === undefined ? {} : { upToMessageId: request.body.up_to_message_id }),
+        },
+      })
+      return toSessionInfoResponse(forked)
+    },
   )
 
   fastify.put<{
@@ -252,6 +268,9 @@ export const sessionRoutes: FastifyPluginCallback<SessionRoutesOptions> = (
         request.params.session_id,
         raw,
       )
+      auditRoute(recorder, 'session.tagged', {
+        sessionId: request.params.session_id, details: { harness: request.query.harness, tags: result.tags },
+      })
       return {
         status: 'ok',
         tags: result.tags,
@@ -273,6 +292,9 @@ export const sessionRoutes: FastifyPluginCallback<SessionRoutesOptions> = (
         request.params.session_id,
         request.body.add_dirs,
       )
+      auditRoute(recorder, 'session.add_dirs_set', {
+        sessionId: request.params.session_id, details: { harness: request.query.harness, addDirs },
+      })
       return { status: 'ok', add_dirs: addDirs }
     },
   )
@@ -290,6 +312,9 @@ export const sessionRoutes: FastifyPluginCallback<SessionRoutesOptions> = (
         request.params.session_id,
         request.body.pinned,
       )
+      auditRoute(recorder, 'session.pinned', {
+        sessionId: request.params.session_id, details: { harness: request.query.harness, pinned: flags.pinned },
+      })
       return { status: 'ok', pinned: flags.pinned, archived: flags.archived }
     },
   )
@@ -307,6 +332,9 @@ export const sessionRoutes: FastifyPluginCallback<SessionRoutesOptions> = (
         request.params.session_id,
         request.body.archived,
       )
+      auditRoute(recorder, 'session.archived', {
+        sessionId: request.params.session_id, details: { harness: request.query.harness, archived: flags.archived },
+      })
       return { status: 'ok', pinned: flags.pinned, archived: flags.archived }
     },
   )

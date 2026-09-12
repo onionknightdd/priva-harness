@@ -1,4 +1,4 @@
-import type { ProviderRunSpec } from '../../core/contract/agent-provider.js'
+import type { ProviderRunSpec, SessionTarget } from '../../core/contract/agent-provider.js'
 import type { DataRecorder } from '../../core/contract/data-recorder.js'
 import type { AgentEvent } from '../../core/event/agent-event.js'
 import { asRecord, stringField } from '../../core/event/json-record.js'
@@ -16,6 +16,9 @@ export interface RunLedgerStart {
   readonly source: RunSource
   readonly turn: UserTurn
   readonly sessionId?: string
+  // How the run reaches its session; new and fork sessions are audited as
+  // created / forked the moment their id is known.
+  readonly sessionTarget: SessionTarget
   // Skill names known for this provider; a "/name" prompt is only counted
   // as a skill invocation when it matches one of them.
   readonly knownSkills?: ReadonlySet<string>
@@ -66,13 +69,25 @@ export class RunLedger {
       },
     })
     this.recordSlashSkill(start.turn.text)
+    if (this.sessionId !== undefined) this.auditSessionOrigin(this.sessionId)
   }
 
   attachSession(sessionId: string): void {
     const id = emptyToUndefined(sessionId)
     if (id === undefined || id === this.sessionId) return
+    const first = this.sessionId === undefined
     this.sessionId = id
     this.recorder?.record({ kind: 'run.session', runId: this.start.runId, sessionId: id })
+    if (first) this.auditSessionOrigin(id)
+  }
+
+  private auditSessionOrigin(id: string): void {
+    const target = this.start.sessionTarget
+    if (target.kind === 'new') {
+      this.audit('session.created', undefined, { provider: this.start.spec.provider, cwd: this.start.spec.cwd })
+    } else if (target.kind === 'fork') {
+      this.audit('session.forked', id, { sourceSessionId: target.source.id, provider: this.start.spec.provider })
+    }
   }
 
   // Observes the forwarded stream; terminal events close the ledger.
@@ -182,6 +197,7 @@ export class RunLedger {
       kind: 'tool',
       tsUtc: new Date(now).toISOString(),
       runId: this.start.runId,
+      ...(this.sessionId === undefined ? {} : { sessionId: this.sessionId }),
       toolUseId: event.id,
       toolName: event.name,
       ok: event.ok,
@@ -193,7 +209,6 @@ export class RunLedger {
         output: event.output.slice(0, TOOL_OUTPUT_PREVIEW_CHARS),
         outputChars: event.output.length,
         ...(event.status === undefined ? {} : { status: event.status }),
-        ...(this.sessionId === undefined ? {} : { sessionId: this.sessionId }),
       },
     })
     if (event.name.toLowerCase() === 'skill') {
@@ -257,6 +272,7 @@ export class RunLedger {
       kind: 'run.finished',
       tsUtc: new Date(now).toISOString(),
       runId: this.start.runId,
+      ...(this.sessionId === undefined ? {} : { sessionId: this.sessionId }),
       durationMs: Math.max(0, now - this.startedAt),
       ...fields,
       details,

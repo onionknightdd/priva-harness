@@ -11,6 +11,7 @@ import { NodeUserFileSystem } from '../../../../src/infrastructure/filesystem/no
 import { LocalResourceService } from '../../../../src/infrastructure/resources/local-resource-service.js'
 import { buildHttpServer } from '../../../../src/transport/http/server.js'
 import { FakeAgentProvider } from '../../../support/fake-agent-provider.js'
+import { MemoryDataRecorder } from '../../../support/memory-data-recorder.js'
 import { createTestAgentServices } from '../../../support/model-profile.js'
 
 describe('agent resource HTTP endpoints', () => {
@@ -19,6 +20,7 @@ describe('agent resource HTTP endpoints', () => {
   let service: LocalResourceService
   let provider: FakeAgentProvider
   let harness: AgentHarness
+  let recorder: MemoryDataRecorder
   const url = (path: string) => `/api/sandbox/resource/${path}?harness=claude&cwd=${encodeURIComponent(root)}`
   beforeEach(async () => {
     root = await realpath(await mkdtemp(join(tmpdir(), 'agent-resource-http-')))
@@ -33,7 +35,8 @@ describe('agent resource HTTP endpoints', () => {
       model: 'fixture-model', modelId: 'fixture/model', capabilities: { context: null },
     })
     service = new LocalResourceService({ activeCwd: root, claudeDir, piDir, discoverProjects: () => Promise.resolve([]) })
-    server = buildHttpServer({ ...services, userFileSystem: new NodeUserFileSystem({ initialDirectory: root }), agentHarness: harness, resourceService: service })
+    recorder = new MemoryDataRecorder()
+    server = buildHttpServer({ ...services, userFileSystem: new NodeUserFileSystem({ initialDirectory: root }), agentHarness: harness, resourceService: service, recorder })
     await server.ready()
   })
   afterEach(async () => { await server.close(); await harness.disposePool(); vi.unstubAllEnvs(); await rm(root, { recursive: true, force: true }) })
@@ -56,6 +59,12 @@ describe('agent resource HTTP endpoints', () => {
     expect(stale.statusCode).toBe(409)
     expect((await server.inject({ method: 'DELETE', url: url(`subagents/${agent.id}`), payload: { revision: updated.json<SubagentDetail>().revision } })).statusCode).toBe(204)
     expect(invalidated).toHaveBeenCalledTimes(3)
+    // The stale (409) update is not audited.
+    expect(recorder.ofKind('audit').map(({ action, target, details }) => ({ action, target, details }))).toEqual([
+      { action: 'agents.created', target: agent.id, details: { harness: 'claude', cwd: root, name: 'reviewer' } },
+      { action: 'agents.updated', target: agent.id, details: { harness: 'claude', cwd: root, name: 'reviewer' } },
+      { action: 'agents.deleted', target: agent.id, details: { harness: 'claude', cwd: root } },
+    ])
   })
 
   it('streams through the selected harness with the project cwd and disposes the test runtime', async () => {
@@ -81,5 +90,9 @@ describe('agent resource HTTP endpoints', () => {
     expect(updated.json<MemoryDetail>().content).toBe('Project instructions')
     expect((await server.inject({ method: 'PUT', url: url('memory/auto/enabled'), payload: { enabled: false } })).statusCode).toBe(200)
     expect((await server.inject({ url: '/api/sandbox/resource/memory?harness=invalid' })).statusCode).toBe(422)
+    expect(recorder.ofKind('audit').map(({ action, target, details }) => ({ action, target, details }))).toEqual([
+      { action: 'memory.updated', target: detail.id, details: { harness: 'claude', cwd: root, name: detail.name, contentChars: 'Project instructions'.length } },
+      { action: 'memory.auto_toggled', target: 'auto', details: { harness: 'claude', cwd: root, enabled: false } },
+    ])
   })
 })

@@ -14,12 +14,14 @@ import { NodeUserFileSystem } from '../../../../src/infrastructure/filesystem/no
 import { LocalResourceService } from '../../../../src/infrastructure/resources/local-resource-service.js'
 import { buildHttpServer } from '../../../../src/transport/http/server.js'
 import { FakeAgentProvider } from '../../../support/fake-agent-provider.js'
+import { MemoryDataRecorder } from '../../../support/memory-data-recorder.js'
 import { createTestAgentServices } from '../../../support/model-profile.js'
 
 describe('resource HTTP routes', () => {
   let root: string
   let server: FastifyInstance
   let harness: AgentHarness
+  let recorder: MemoryDataRecorder
   const url = (path: string) => `/api/sandbox/resource/${path}?harness=claude&cwd=${encodeURIComponent(root)}`
 
   beforeEach(async () => {
@@ -30,10 +32,12 @@ describe('resource HTTP routes', () => {
     vi.stubEnv('CLAUDE_CONFIG_DIR', claudeDir)
     vi.stubEnv('PI_CODING_AGENT_DIR', piDir)
     harness = new AgentHarness({ providers: { claude: new FakeAgentProvider('claude', []), pi: new FakeAgentProvider('pi', []) }, cwd: root, liveRuns: new LiveRunRegistry() })
+    recorder = new MemoryDataRecorder()
     server = buildHttpServer({
       ...createTestAgentServices(join(root, 'runtime')),
       userFileSystem: new NodeUserFileSystem({ initialDirectory: root }), agentHarness: harness,
       resourceService: new LocalResourceService({ activeCwd: root, claudeDir, piDir, discoverProjects: () => Promise.resolve([]) }),
+      recorder,
     })
     await server.ready()
   })
@@ -70,6 +74,13 @@ describe('resource HTTP routes', () => {
     expect((await server.inject({ method: 'DELETE', url: url(`mcp/${detail.id}`) })).statusCode).toBe(204)
     expect((await server.inject({ method: 'GET', url: url(`mcp/${detail.id}`) })).statusCode).toBe(404)
     expect(invalidated).toHaveBeenCalledTimes(3)
+    expect(recorder.ofKind('audit').map(({ action, target, details }) => ({ action, target, details }))).toEqual([
+      { action: 'mcp.created', target: detail.id, details: { harness: 'claude', cwd: root, name: 'echo', scope: 'project' } },
+      { action: 'mcp.updated', target: detail.id, details: { harness: 'claude', cwd: root, name: 'echo' } },
+      { action: 'mcp.deleted', target: detail.id, details: { harness: 'claude', cwd: root } },
+    ])
+    // Definitions (commands, env, headers) never reach the audit log.
+    expect(JSON.stringify(recorder.records)).not.toContain('RESOURCE_TEST')
   })
 
   it('serves bounded image/PDF assets while retaining text and path validation', async () => {
@@ -128,5 +139,10 @@ describe('resource HTTP routes', () => {
     expect((await server.inject({ method: 'PATCH', url: url(`skills/${skill.id}`), payload: { enabled: false } })).json<SkillDetail>().enabled).toBe(false)
     expect((await server.inject({ method: 'DELETE', url: url(`skills/${skill.id}`) })).statusCode).toBe(204)
     expect(invalidated).toHaveBeenCalledTimes(3)
+    expect(recorder.ofKind('audit').map(({ action, target, details }) => ({ action, target, details }))).toEqual([
+      { action: 'skill.uploaded', target: skill.id, details: { harness: 'claude', cwd: root, name: 'test-skill', scope: 'project', filename: 'test.zip', bytes: archive.byteLength } },
+      { action: 'skill.toggled', target: skill.id, details: { harness: 'claude', cwd: root, name: 'test-skill', enabled: false } },
+      { action: 'skill.deleted', target: skill.id, details: { harness: 'claude', cwd: root } },
+    ])
   })
 })

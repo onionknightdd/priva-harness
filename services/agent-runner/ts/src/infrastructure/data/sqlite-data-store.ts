@@ -288,7 +288,7 @@ export class SqliteDataStore {
 
   private writeRunFinished(record: RunFinishedRecord): 'ok' | 'orphan' {
     const ts = normalizeUtc(record.tsUtc)
-    const auditId = this.audit(ts, 'run.finished', null, record.runId, null, record.details)
+    const auditId = this.audit(ts, 'run.finished', record.sessionId ?? null, record.runId, null, record.details)
     const failureCode = record.outcome === 'failed' ? (record.failureCode ?? 'unknown') : null
     const usage = record.usage
     const { changes } = this.finishRun.run(
@@ -316,7 +316,7 @@ export class SqliteDataStore {
 
   private writeTool(record: ToolRecord): 'ok' {
     const ts = normalizeUtc(record.tsUtc)
-    const auditId = this.audit(ts, 'tool.invoked', null, record.runId, record.toolName, record.details)
+    const auditId = this.audit(ts, 'tool.invoked', record.sessionId ?? null, record.runId, record.toolName, record.details)
     this.insertTool.run(
       auditId, record.runId, ts, record.toolUseId, record.toolName,
       MCP_TOOL_SERVER.exec(record.toolName)?.[1] ?? null,

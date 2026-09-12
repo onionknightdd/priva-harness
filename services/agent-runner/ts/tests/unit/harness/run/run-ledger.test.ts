@@ -40,7 +40,10 @@ describe('RunLedger through AgentHarness', () => {
     ], recorder)
     await drain(harness)
 
-    expect(recorder.records.map((record) => record.kind)).toEqual(['run.started', 'run.session', 'run.finished'])
+    expect(recorder.records.map((record) => record.kind)).toEqual(['run.started', 'run.session', 'audit', 'run.finished'])
+    expect(recorder.ofKind('audit')[0]).toMatchObject({
+      action: 'session.created', runId: 'run-1', sessionId: 'session-1', details: { provider: 'claude', cwd: '/work' },
+    })
     expect(recorder.ofKind('run.started')[0]).toMatchObject({
       runId: 'run-1', provider: 'claude', profileId: 'p1', model: 'sonnet', source: 'subagent-test',
       promptChars: 'hello there'.length, attachmentCount: 1,
@@ -49,7 +52,7 @@ describe('RunLedger through AgentHarness', () => {
     expect(recorder.ofKind('run.started')[0]).not.toHaveProperty('sessionId')
     expect(recorder.ofKind('run.session')[0]).toEqual({ kind: 'run.session', runId: 'run-1', sessionId: 'session-1' })
     expect(recorder.ofKind('run.finished')[0]).toMatchObject({
-      runId: 'run-1', outcome: 'completed', apiDurationMs: 4, numTurns: 2,
+      runId: 'run-1', sessionId: 'session-1', outcome: 'completed', apiDurationMs: 4, numTurns: 2,
       usage: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4 }, costUsd: 0.5,
       byModel: { sonnet: { input: 1, output: 2 } },
       details: { type: 'run.completed' },
@@ -68,6 +71,23 @@ describe('RunLedger through AgentHarness', () => {
     for await (const frame of frames) expect(frame.runId).toBeDefined()
     expect(recorder.ofKind('run.started')[0]?.sessionId).toBe('sess-9')
     expect(recorder.ofKind('run.session')).toEqual([])
+    expect(recorder.ofKind('audit')).toEqual([])
+  })
+
+  it('audits a forked session once its id is known', async () => {
+    const recorder = new MemoryDataRecorder()
+    const { harness } = harnessWith([{ type: 'run.completed', model: 'm', durationMs: 1 }], recorder)
+    const frames = harness.run(
+      { text: 'branch' }, { signal: new AbortController().signal }, testRunSpec(),
+      { source: 'web', session: { kind: 'fork', source: { provider: 'claude', id: 'sess-1' } } },
+    )
+    for await (const frame of frames) expect(frame.runId).toBeDefined()
+    expect(recorder.ofKind('audit')).toEqual([
+      expect.objectContaining({
+        action: 'session.forked', sessionId: 'fork-sess-1', target: 'fork-sess-1',
+        details: { sourceSessionId: 'sess-1', provider: 'claude' },
+      }),
+    ])
   })
 
   it('maps run.failed, run.aborted and error events onto outcomes and codes', async () => {
@@ -157,7 +177,8 @@ describe('RunLedger through AgentHarness', () => {
     expect(tools.map((tool) => tool.toolUseId)).toEqual(['t1', 't2', 't3'])
     expect(tools[0]).toMatchObject({
       toolName: 'Bash', ok: false,
-      details: { input: { command: 'ls -la' }, output: 'x'.repeat(200), outputChars: 500, status: 'error', sessionId: 'session-1' },
+      sessionId: 'session-1',
+      details: { input: { command: 'ls -la' }, output: 'x'.repeat(200), outputChars: 500, status: 'error' },
     })
     expect(tools[0]?.durationMs).toBeGreaterThanOrEqual(0)
     expect(tools[2]).toMatchObject({ toolName: 'mcp__github__search', outputTokens: 321, agentId: 'agent-9', details: { input: null } })
@@ -212,6 +233,7 @@ describe('RunLedger through AgentHarness', () => {
 
     const audits = recorder.ofKind('audit').map(({ action, target, details }) => ({ action, target, details }))
     expect(audits).toEqual([
+      { action: 'session.created', target: undefined, details: { provider: 'claude', cwd: '/work' } },
       {
         action: 'permission.resolved', target: 'Bash',
         details: { requestId: 'req-1', decision: 'deny', reason: 'answered', toolUseId: 't1', requestReason: 'rm -rf', latencyMs: expect.any(Number) as number },

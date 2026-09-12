@@ -8,6 +8,9 @@ import {
   patchAgentProfileSchema,
 } from '../schema/agent-profile-schema.js'
 
+import type { DataRecorder } from '../../../core/contract/data-recorder.js'
+import { auditRoute } from '../route-audit.js'
+
 export const AGENT_PROFILE_ROUTE = '/api/sandbox/agent/profile'
 
 interface AgentProfilePatchBody {
@@ -16,6 +19,7 @@ interface AgentProfilePatchBody {
 
 export interface AgentProfileRoutesOptions {
   readonly service: AgentProfileService
+  readonly recorder?: DataRecorder
 }
 
 export const agentProfileRoutes: FastifyPluginCallback<AgentProfileRoutesOptions> = (
@@ -23,7 +27,7 @@ export const agentProfileRoutes: FastifyPluginCallback<AgentProfileRoutesOptions
   options,
   done,
 ) => {
-  const { service } = options
+  const { service, recorder } = options
 
   fastify.get(
     AGENT_PROFILE_ROUTE,
@@ -34,9 +38,11 @@ export const agentProfileRoutes: FastifyPluginCallback<AgentProfileRoutesOptions
   fastify.patch<{ Body: AgentProfilePatchBody }>(
     AGENT_PROFILE_ROUTE,
     { schema: patchAgentProfileSchema },
-    async (request) => toAgentProfileResponse(
-      await service.updateQueueBehavior(request.body.queue_behavior),
-    ),
+    async (request) => {
+      const profile = await service.updateQueueBehavior(request.body.queue_behavior)
+      auditRoute(recorder, 'agent_profile.updated', { details: { queueBehavior: profile.queueBehavior } })
+      return toAgentProfileResponse(profile)
+    },
   )
 
   done()

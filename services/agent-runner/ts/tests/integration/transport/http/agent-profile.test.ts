@@ -9,12 +9,14 @@ import { NodeUserFileSystem } from '../../../../src/infrastructure/filesystem/no
 import { createRuntimeConfig } from '../../../../src/runtime-config.js'
 import { AGENT_PROFILE_ROUTE } from '../../../../src/transport/http/route/agent-profile.js'
 import { buildHttpServer } from '../../../../src/transport/http/server.js'
+import { MemoryDataRecorder } from '../../../support/memory-data-recorder.js'
 import { createTestAgentServices } from '../../../support/model-profile.js'
 
 describe('/api/sandbox/agent/profile', () => {
   let testRoot: string
   let runtimeHome: string
   let server: FastifyInstance
+  let recorder: MemoryDataRecorder
 
   beforeEach(async () => {
     testRoot = await mkdtemp(join(tmpdir(), 'priva-agent-profile-http-test-'))
@@ -22,10 +24,12 @@ describe('/api/sandbox/agent/profile', () => {
     const workspace = join(testRoot, 'workspace')
     await mkdir(workspace)
     const services = createTestAgentServices(runtimeHome)
+    recorder = new MemoryDataRecorder()
     server = buildHttpServer({
       userFileSystem: new NodeUserFileSystem({ initialDirectory: workspace }),
       modelProfileService: services.modelProfileService,
       agentProfileService: services.agentProfileService,
+      recorder,
     })
     await server.ready()
   })
@@ -71,6 +75,9 @@ describe('/api/sandbox/agent/profile', () => {
       url: AGENT_PROFILE_ROUTE,
     })
     expect(getResponse.json()).toEqual({ queue_behavior: 'steer' })
+    expect(recorder.ofKind('audit')).toEqual([
+      expect.objectContaining({ action: 'agent_profile.updated', details: { queueBehavior: 'steer' } }),
+    ])
   })
 
   it('rejects an invalid queue behavior', async () => {
@@ -80,5 +87,6 @@ describe('/api/sandbox/agent/profile', () => {
       payload: { queue_behavior: 'later' },
     })
     expect(response.statusCode).toBe(422)
+    expect(recorder.records).toEqual([])
   })
 })

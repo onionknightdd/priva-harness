@@ -14,6 +14,7 @@ import { NodeUserFileSystem } from '../../../../src/infrastructure/filesystem/no
 import { buildHttpServer } from '../../../../src/transport/http/server.js'
 import { FakeAgentProvider } from '../../../support/fake-agent-provider.js'
 import type { FakeSessionStore } from '../../../support/fake-session-store.js'
+import { MemoryDataRecorder } from '../../../support/memory-data-recorder.js'
 import { MemorySessionMetadataRepository } from '../../../support/memory-session-metadata.js'
 import { createTestAgentServices } from '../../../support/model-profile.js'
 import { userTurnText } from '../../../../src/core/run/user-turn.js'
@@ -27,6 +28,7 @@ describe('/api/sandbox/agent/sessions', () => {
   let metadata: MemorySessionMetadataRepository
   let extraDir: string
   let sessionService: SessionService
+  let recorder: MemoryDataRecorder
 
   beforeEach(async () => {
     testRoot = await mkdtemp(join(tmpdir(), 'priva-sessions-http-test-'))
@@ -74,12 +76,14 @@ describe('/api/sandbox/agent/sessions', () => {
     })
     sessionService.bindWarmListing((harness) => agentHarness.listWarm(harness))
     sessionService.bindContextUsageReader((ref, spec) => agentHarness.readContextUsage(ref, spec))
+    recorder = new MemoryDataRecorder()
     server = buildHttpServer({
       userFileSystem: new NodeUserFileSystem({ initialDirectory: testRoot }),
       modelProfileService,
       agentProfileService,
       agentHarness,
       sessionService,
+      recorder,
     })
     await server.ready()
   })
@@ -391,6 +395,17 @@ describe('/api/sandbox/agent/sessions', () => {
     expect(deleted.statusCode).toBe(200)
     expect(parseJson(deleted)).toEqual({ status: 'ok' })
     expect(pi.sessions.deleted).toEqual(['bb-1'])
+
+    // Only requests that succeeded are audited: the 404 and 409 deletes leave no trace.
+    expect(recorder.ofKind('audit').map(({ action, sessionId, details }) => ({ action, sessionId, details }))).toEqual([
+      { action: 'session.renamed', sessionId: 'claude-1', details: { harness: 'claude', title: ' New title ' } },
+      { action: 'session.tagged', sessionId: 'claude-1', details: { harness: 'claude', tags: ['Alpha', 'beta'] } },
+      { action: 'session.tagged', sessionId: 'bb-1', details: { harness: 'pi', tags: ['solo'] } },
+      { action: 'session.pinned', sessionId: 'claude-1', details: { harness: 'claude', pinned: false } },
+      { action: 'session.add_dirs_set', sessionId: 'claude-1', details: { harness: 'claude', addDirs: [extraDir] } },
+      { action: 'session.archived', sessionId: 'claude-1', details: { harness: 'claude', archived: true } },
+      { action: 'session.deleted', sessionId: 'bb-1', details: { harness: 'pi' } },
+    ])
   })
 
   it('rejects a non-directory add_dirs path', async () => {
@@ -450,6 +465,15 @@ describe('/api/sandbox/agent/sessions', () => {
     expect((messages['messages'] as { uuid: string }[]).map((message) => message.uuid)).toEqual([
       'u1',
       'a1',
+    ])
+
+    expect(recorder.ofKind('audit').filter((audit) => audit.action === 'session.forked')).toEqual([
+      expect.objectContaining({ sessionId: 'claude-1', target: firstBody['session_id'], details: { harness: 'claude', stem: 'Hello' } }),
+      expect.objectContaining({ sessionId: 'claude-1', details: { harness: 'claude', stem: 'Hello' } }),
+      expect.objectContaining({
+        sessionId: 'claude-1', target: truncatedBody['session_id'],
+        details: { harness: 'claude', stem: 'Hello', upToMessageId: 'a1' },
+      }),
     ])
   })
 

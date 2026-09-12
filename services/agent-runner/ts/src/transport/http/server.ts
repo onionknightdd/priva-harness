@@ -5,6 +5,7 @@ import Fastify, {
   type FastifyServerOptions,
 } from 'fastify'
 
+import type { DataRecorder } from '../../core/contract/data-recorder.js'
 import type { UserFileSystem } from '../../core/contract/user-file-system.js'
 import type { ResourceService } from '../../core/contract/resource-service.js'
 import { ResourceError } from '../../core/resource/resource-catalog.js'
@@ -40,6 +41,7 @@ export interface BuildHttpServerOptions {
   readonly sessionService?: SessionService
   readonly configDistributor?: ConfigDistributor
   readonly resourceService?: ResourceService
+  readonly recorder?: DataRecorder
   readonly logger?: FastifyServerOptions['logger']
 }
 
@@ -105,12 +107,14 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
     },
   })
   void server.register(userFileRoutes, { fileSystem: options.userFileSystem })
-  void server.register(modelProfileRoutes, { service: options.modelProfileService })
-  void server.register(agentProfileRoutes, { service: options.agentProfileService })
+  const recorder = options.recorder
+  void server.register(modelProfileRoutes, { service: options.modelProfileService, ...(recorder === undefined ? {} : { recorder }) })
+  void server.register(agentProfileRoutes, { service: options.agentProfileService, ...(recorder === undefined ? {} : { recorder }) })
   if (options.resourceService !== undefined) {
     void server.register(resourceRoutes, {
       service: options.resourceService,
       onChanged: async () => { await options.agentHarness?.invalidateResources() },
+      ...(recorder === undefined ? {} : { recorder }),
     })
     if (options.agentHarness !== undefined) void server.register(subagentTestRoutes, {
       service: options.resourceService, harness: options.agentHarness, models: options.modelProfileService,
@@ -118,7 +122,7 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
     })
   }
   if (options.sessionService !== undefined) {
-    void server.register(sessionRoutes, { sessionService: options.sessionService })
+    void server.register(sessionRoutes, { sessionService: options.sessionService, ...(recorder === undefined ? {} : { recorder }) })
   }
   if (options.agentHarness !== undefined) {
     void server.register(websocket)
