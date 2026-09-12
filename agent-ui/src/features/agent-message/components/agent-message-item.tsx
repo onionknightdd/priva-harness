@@ -31,7 +31,8 @@ import {
   assistantHasProcess,
   type AgentThreadMessage,
 } from "../agent-message-data"
-import { PopupsArmedContext } from "../popups-armed-context"
+import { PopupsArmedContext } from "@/components/ui/popups-armed-context"
+import { useForkAvailability } from "../fork-context"
 import { userMessageSurface } from "../slash-command-envelope"
 import { AssistantProcess } from "./assistant-process"
 import { assistantTimeline } from "../assistant-timeline"
@@ -119,15 +120,10 @@ function AgentMessageCopyAction({ text }: { text: string }) {
   )
 }
 
-function AgentMessageSplitAction({
-  onFork,
-  disabledReason,
-}: {
-  onFork?: () => void
-  disabledReason?: string
-}) {
+function AgentMessageSplitAction({ message }: { message: AgentThreadMessage }) {
   const { t } = useTranslation()
-  const enabled = onFork !== undefined
+  const { forkFrom, disabledReason } = useForkAvailability()
+  const enabled = forkFrom !== undefined
   const label = enabled
     ? t("agentMessage.forkChat")
     : (disabledReason ?? t("agentMessage.forkChat"))
@@ -143,7 +139,7 @@ function AgentMessageSplitAction({
         }
 
         animateControl(event.currentTarget)
-        onFork?.()
+        forkFrom?.(message)
       }}
     >
       <SplitIcon className="size-3.5" aria-hidden="true" />
@@ -216,13 +212,9 @@ function AgentMessageRelativeTime({ createdAt }: { createdAt: string }) {
 // re-render the messages whose props actually changed.
 export const AgentMessageItem = React.memo(function AgentMessageItem({
   message,
-  onFork,
-  forkDisabledReason,
   hideProcessHeader = false,
 }: {
   message: AgentThreadMessage
-  onFork?: (message: AgentThreadMessage) => void
-  forkDisabledReason?: string
   hideProcessHeader?: boolean
 }) {
   const { t } = useTranslation()
@@ -316,10 +308,7 @@ export const AgentMessageItem = React.memo(function AgentMessageItem({
           {message.role === "assistant" && message.status === "complete" ? (
             <MotionMessageActions layout="position" layoutDependency={false}>
               <AgentMessageCopyAction text={message.role === "assistant" ? assistantTimeline(message).map((section) => section.message.content).filter(Boolean).join("\n\n") : message.content} />
-              <AgentMessageSplitAction
-                onFork={onFork ? () => onFork(message) : undefined}
-                disabledReason={forkDisabledReason}
-              />
+              <AgentMessageSplitAction message={message} />
               <AgentMessageRelativeTime createdAt={message.createdAt} />
             </MotionMessageActions>
           ) : null}

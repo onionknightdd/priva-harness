@@ -198,6 +198,53 @@ hover / focus 进入侧栏行 ──► 占位按钮 → Popover / DropdownMenu
 （约 6000 个 DOM 节点、158 个 Tooltip 根、`ThreadTurnItem` 的 `syncHeight` 强制布局
 约 45ms）和冷态 Shiki 首次高亮约 40 个代码块的 ~250ms 一帧。
 
+### 长会话：Tooltip 延迟挂载与连接后的整线程重渲染
+
+2026-09-13：继续在同一会话上复测。数据帧里线程共有 461 个 Base UI Tooltip 根
+（242 个行内文件引用、90 个消息操作、45 个相对时间、80 个代码块按钮）；打开后
+约 2s 还有一帧 50–64ms，是 WebSocket 连上后的整线程重渲染。改动：
+
+- **Tooltip 随消息一起延迟挂载。** `PopupsArmedContext` 移到
+  `components/ui/popups-armed-context.ts`，`Tooltip` / `TooltipTrigger` /
+  `TooltipContent` / `TooltipHint` 在未 armed 的子树里只用 `useRender` 渲染触发元素
+  本身（保留 `render` 合成、`className`、`data-slot`），不挂 Root、Content；消息
+  armed 后重挂，`Tooltip` 通过 `HeldFocusContext` 记住触发元素是否持有焦点并把焦点
+  放回去。消息之外默认值为 `true`，行为不变。`Root.children` 为 payload 渲染函数时
+  不延迟。
+- **`ThreadTurnItem.syncHeight` 只在有流式回复时测量。** 用户气泡高度只用于把
+  工作状态行贴在它下面，历史 turn 不再逐个 `getBoundingClientRect`（会强制布局
+  `content-visibility:auto` 的项）也不再各排一次 `setState`。
+- **fork 可用性改为 context。** `runSessionId` 在连接后才有值，之前它改变了
+  `renderMessage` / 每条消息的 `forkDisabledReason` prop，整个线程重渲染；现在
+  `ForkContext`（`fork-context.ts`）只让 45 个 fork 按钮更新。
+- **`session.snapshot` 复用已有消息对象。** `mergeSnapshotMessages` 用 `dequal`
+  比较快照里每条消息与当前对象，完全一致时保留原对象，`AgentMessageItem` 的 memo
+  才能命中。
+- **稳定线程下的 context 值。** `AgentMessage.onSelectionAction` 用 `latest` ref 变为
+  稳定回调（242 个文件引用订阅它）；`AgentMessageThread` 的 `MotionConfig`
+  `transition` 用 `useMemo`；线程与空态之间的 `AnimatePresence` 设
+  `presenceAffectsLayout={false}`——两者都绝对定位，不会推挤兄弟，而默认值会在
+  `AgentMessage` 每次渲染时给线程里每个 motion 元素一个新的 presence context。
+
+```text
+WebSocket session.snapshot ──► mergeSnapshotMessages (dequal) ──► 同对象 ──► memo 命中
+runSessionId 变化 ──► ForkContext ──► 只有 45 个 fork 按钮重渲染
+AgentMessage 重渲染 ──► onSelectionAction / MotionConfig / PresenceContext 值不变 ──► 线程不动
+hover / focus 进入消息 ──► PopupsArmedContext=true ──► Tooltip 根 + ContextMenu 根挂载
+```
+
+实测（dev 构建，长会话，热态）：数据帧 300–312ms → 234–264ms，连接后的一帧
+56–64ms → 消失，后续帧 60–70ms → 40–44ms，切换合计 663–722ms → 444–462ms；
+Tooltip 根 523 → 66（仅侧栏与页头）。
+
+两项未做并说明原因：把 `layout="position"` 限制到最后一个 turn 会取消问答摘要
+折叠时下方消息的位移动画，且 profile 里归到 motion 的 ~20ms 只是首个读取者承担的
+一次强制布局；冷态仍有一帧 ~180–250ms 的 Shiki 高亮，实测是一段 3 行 tsx 代码
+——在页面空闲时预热同语言的样例只需 2ms，但大规模挂载后的 GC 会刷掉 V8 已编译的
+正则，首次分词要重新编译 TypeScript 语法的正则。要根治需换 `shiki/engine/oniguruma`
+（WASM，正则不经 V8），属于依赖层决策。回归页 `tooltip-browser.html` 新增
+`#deferred` 区块（未 armed 无 Tooltip 根、点击保留、arming 后焦点回位、hover 打开）。
+
 ### 悬浮高亮的跟手速度
 
 2026-09-12：侧栏菜单、文件树和 Slash 菜单的滑动悬浮高亮共用
@@ -1093,6 +1140,7 @@ Agent data / composer / attachments：
 node --import ./services/agent-runner/ts/node_modules/tsx/dist/loader.mjs --test agent-ui/tests/features/agent-message/agent-tool-data.test.ts
 node --test agent-ui/tests/features/agent-message/composer-attachments.test.ts agent-ui/tests/features/agent-message/composer-primary-action.test.ts agent-ui/tests/features/agent-message/slash-command-envelope.test.ts
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/message-attachments.test.ts
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/thread-turns.test.ts agent-ui/tests/features/agent-message/snapshot-messages.test.ts
 ```
 
 项目目录浏览器回归：在 `agent-ui/` 运行 `npm run dev`，打开
@@ -1143,7 +1191,8 @@ CodeBlock 自动换行浏览器回归：在开发服务器打开
 **Run tooltip checks**。使用真实计时检查首次 1s、跨组件连续切换、400ms 重置、
 短暂悬浮取消、嵌套提示，以及按钮和 Popover 的组合行为；追加 `?dark=1` 检查深色主题。
 文件链接追加覆盖检查完成后首次悬停、检查期间悬停、文件不存在、缓存命中、再次悬停
-及点击打开 Workspace，使用隔离的文件预览响应。
+及点击打开 Workspace，使用隔离的文件预览响应。`#deferred` 区块模拟未 armed 的消息：
+无 Tooltip 根、悬浮不出现提示、点击保留、arming 后焦点回到同一触发元素、随后 hover 打开。
 使用真实 Tab 聚焦按钮，确认提示立即出现，再按 Escape 关闭；程序调用 `focus()`
 不会在所有浏览器中切换键盘输入模式，因此这两项单独用真实按键验证。
 

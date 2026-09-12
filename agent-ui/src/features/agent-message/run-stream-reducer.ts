@@ -1,3 +1,5 @@
+import { dequal } from "dequal"
+
 import type { InteractionRequest, InteractionResolution } from './interaction-data'
 import type { BackgroundTask, TaskNotification, TaskReplyTarget } from "./background-task-store"
 import { isWorkflowStatus, settleWorkflowCards, workflowFromSnapshot } from "./workflow-data"
@@ -83,6 +85,22 @@ export function parseStreamFrame(raw: unknown): StreamFrame | undefined {
     return undefined
   }
   return frame
+}
+
+/**
+ * A session snapshot usually repeats the transcript the thread already shows.
+ * Keep the existing object for every message it reproduces exactly, so the
+ * memoized message tree does not re-render the whole thread on connect.
+ */
+export function mergeSnapshotMessages(
+  current: readonly AgentThreadMessage[],
+  snapshot: readonly AgentThreadMessage[]
+): AgentThreadMessage[] {
+  const byId = new Map(current.map((message) => [message.id, message]))
+  return snapshot.map((message) => {
+    const existing = byId.get(message.id)
+    return existing && dequal(existing, message) ? existing : message
+  })
 }
 
 export function applyThreadStreamFrame(

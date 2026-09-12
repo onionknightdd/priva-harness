@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react"
 import type { InteractionRequest, InteractionResponse } from '../interaction-data'
 import { InteractionCard } from './interaction-card'
 import type { ComposerAttachment } from "../composer-attachments"
@@ -19,6 +19,7 @@ import {
   appendQuotedDraft,
   focusAgentComposer,
 } from "../quote-selection"
+import type { OnAssistantSelectionAction } from "../selection-actions-context"
 import {
   AgentMessageComposer,
   composerDockTransition,
@@ -95,6 +96,21 @@ export function AgentMessage({
     hadInteraction.current = Boolean(pending)
   }, [pending])
   const isEmpty = messages.length === 0 && activeSession === null
+  // Every inline file reference subscribes to the selection action, so keep
+  // its identity stable while the draft and connection state change.
+  const selectionContext = useRef({ draft, onDraftChange, t })
+  useLayoutEffect(() => {
+    selectionContext.current = { draft, onDraftChange, t }
+  })
+  const onSelectionAction = useCallback<OnAssistantSelectionAction>((action, text) => {
+    const { draft, onDraftChange, t } = selectionContext.current
+    const instruction = action === "explain" ? t("agentMessage.explainSelectionPrompt")
+      : action === "improve" ? t("agentMessage.improveSelectionPrompt") : ""
+    onDraftChange(appendQuotedDraft(draft, text, instruction))
+    requestAnimationFrame(() => {
+      focusAgentComposer()
+    })
+  }, [])
   const dockTransition = shouldReduceMotion
     ? { duration: 0 }
     : composerDockTransition
@@ -108,7 +124,10 @@ export function AgentMessage({
       className="@container/agent-message flex min-h-0 flex-1 flex-col overflow-hidden pt-0 pr-2 pb-4 pl-4"
     >
       <div className="relative min-h-0 flex-1">
-        <AnimatePresence initial={false}>
+        {/* Both children are absolutely positioned, so presence never shifts
+            siblings; the default would hand every motion element in the
+            thread a fresh presence context on each render here. */}
+        <AnimatePresence initial={false} presenceAffectsLayout={false}>
           {isEmpty ? (
             <motion.div
               key="agent-message-empty"
@@ -134,14 +153,7 @@ export function AgentMessage({
             >
               <AgentMessageThread
                 messages={messages}
-                onSelectionAction={(action, text) => {
-                  const instruction = action === "explain" ? t("agentMessage.explainSelectionPrompt")
-                    : action === "improve" ? t("agentMessage.improveSelectionPrompt") : ""
-                  onDraftChange(appendQuotedDraft(draft, text, instruction))
-                  requestAnimationFrame(() => {
-                    focusAgentComposer()
-                  })
-                }}
+                onSelectionAction={onSelectionAction}
               />
             </motion.div>
           )}

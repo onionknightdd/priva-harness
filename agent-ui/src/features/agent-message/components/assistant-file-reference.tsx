@@ -9,7 +9,7 @@ import { useOptionalWorkspaceFiles } from "@/features/workspace/workspace-files-
 import { writeClipboardText } from "@/lib/clipboard"
 import { isAbsoluteFilePath } from "@/lib/file-path"
 
-import { PopupsArmedContext } from "../popups-armed-context"
+import { PopupsArmedContext } from "@/components/ui/popups-armed-context"
 import { AssistantSelectionActionContext } from "../selection-actions-context"
 
 export function AssistantFileReference({ path, label, className }: {

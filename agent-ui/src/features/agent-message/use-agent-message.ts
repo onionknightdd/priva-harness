@@ -20,7 +20,7 @@ import { connectAgentSession, type AgentSessionConnection, type AgentRunEffort }
 import { bindTaskStop, setBackgroundTasks, updateBackgroundTask } from "./background-task-store"
 import { isCompactCommandUserMessage } from "./slash-command-envelope"
 import { contextUsageFromApi, emptyContextUsage, type ContextUsage } from "./context-usage"
-import { applyThreadStreamFrame, type StreamFrame } from "./run-stream-reducer"
+import { applyThreadStreamFrame, mergeSnapshotMessages, type StreamFrame } from "./run-stream-reducer"
 
 export function useAgentMessage() {
   const { t } = useTranslation()
@@ -70,7 +70,7 @@ export function useAgentMessage() {
     if (frame.type === "session.snapshot") {
       hasSnapshotRef.current = true
       setMessages((current) => {
-        const snapshot = frame.messages ?? []
+        const snapshot = mergeSnapshotMessages(current, frame.messages ?? [])
         const ids = new Set(snapshot.map((message) => message.id))
         return [...snapshot, ...current.filter((message) => !ids.has(message.id) &&
           (pendingIdsRef.current.has(message.id) || pendingIdsRef.current.has(message.id.replace(/:user$/, ""))))]

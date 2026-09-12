@@ -40,6 +40,7 @@ import {
   keepExpandTriggerInPlace,
   releaseThreadFollow,
 } from "../expand-down-anchor"
+import { ForkContext, type ForkAvailability } from "../fork-context"
 import { foldCommandSurfaces } from "../slash-command-envelope"
 import { questionSummaryTransition } from "../question-summary-motion"
 import { AssistantSelectionActionContext, type OnAssistantSelectionAction } from "../selection-actions-context"
@@ -73,6 +74,12 @@ export function AgentMessageThread({
   const [followPaused, setFollowPaused] = useState(false)
   const reduceMotion = Boolean(useReducedMotionConfig())
   const [layoutTransition, setLayoutTransition] = useState(() => questionSummaryTransition(true, false))
+  // MotionConfig re-renders every motion element and useReducedMotion caller
+  // below it when its value changes, so only rebuild it when the inputs do.
+  const motionTransition = useMemo(
+    () => ({ layout: reduceMotion ? questionSummaryTransition(true, true) : layoutTransition }),
+    [layoutTransition, reduceMotion]
+  )
   const untitled = t("sidebar.projects.untitledSession")
   const forkDisabledReason = canFork
     ? undefined
@@ -113,6 +120,13 @@ export function AgentMessageThread({
     },
     [forkFrom]
   )
+  const forkAvailability = useMemo<ForkAvailability>(
+    () => ({
+      forkFrom: canFork ? forkFromMessage : undefined,
+      disabledReason: forkDisabledReason,
+    }),
+    [canFork, forkDisabledReason, forkFromMessage]
+  )
 
   const renderMessage = useCallback(
     (message: AgentThreadMessage, hideProcessHeader = false) => {
@@ -121,8 +135,6 @@ export function AgentMessageThread({
           key={message.id}
           message={message}
           hideProcessHeader={hideProcessHeader}
-          onFork={canFork ? forkFromMessage : undefined}
-          forkDisabledReason={forkDisabledReason}
         />
       )
       return message.role === "user" ? item : (
@@ -136,17 +148,16 @@ export function AgentMessageThread({
         </motion.div>
       )
     },
-    [canFork, forkDisabledReason, forkFromMessage]
+    []
   )
 
   return (
     <AssistantSelectionActionContext.Provider value={onSelectionAction ?? null}>
+    <ForkContext.Provider value={forkAvailability}>
     <TickingNowProvider value={now}>
     <MessageScrollerProvider autoScroll={!followPaused}>
       <MessageScroller>
-        <MotionConfig
-          transition={{ layout: reduceMotion ? questionSummaryTransition(true, true) : layoutTransition }}
-        >
+        <MotionConfig transition={motionTransition}>
           <LayoutGroup inherit={false}>
             <MotionScrollerViewport layoutScroll>
               <MessageScrollerContent
@@ -191,6 +202,7 @@ export function AgentMessageThread({
       {onSelectionAction ? <AssistantSelectionActions onAction={onSelectionAction} /> : null}
     </MessageScrollerProvider>
     </TickingNowProvider>
+    </ForkContext.Provider>
     </AssistantSelectionActionContext.Provider>
   )
 }
@@ -212,10 +224,15 @@ const ThreadTurnItem = memo(function ThreadTurnItem({
   const userRef = useRef<HTMLDivElement>(null)
   const [userHeight, setUserHeight] = useState(0)
   const [workingStuck, setWorkingStuck] = useState(false)
+  const hasWorking = working !== null
 
+  // The user bar height only positions the working line below it, so measure
+  // only while a reply is streaming. Reading it for every historical turn
+  // forced layout of each content-visibility:auto item and queued a second
+  // render per turn when a long transcript mounted.
   useLayoutEffect(() => {
     const userBar = userRef.current
-    if (!userBar) {
+    if (!userBar || !hasWorking) {
       setUserHeight(0)
       return
     }
@@ -229,7 +246,7 @@ const ThreadTurnItem = memo(function ThreadTurnItem({
     const observer = new ResizeObserver(syncHeight)
     observer.observe(userBar)
     return () => observer.disconnect()
-  }, [user?.id])
+  }, [hasWorking, user?.id])
 
   useLayoutEffect(() => {
     if (working === null) {
