@@ -8,8 +8,12 @@ import { TabsTriggerContent } from "@/components/assistant-ui/tabs-trigger-conte
 import { cn } from "@/lib/utils"
 
 import { HEATMAP_MODES, type HeatmapMode, type UsageOverview } from "./usage-api"
-import { UsageHeatmap, USAGE_HEATMAP_WIDTH } from "./usage-heatmap"
-import { UsageModelChart } from "./usage-model-chart"
+import { UsageHeatmap, USAGE_HEATMAP_HEIGHT, USAGE_HEATMAP_WIDTH } from "./usage-heatmap"
+import { UsageModelChart, USAGE_MODEL_CHART_HEIGHT } from "./usage-model-chart"
+
+// Both panels share the taller panel's height, so the table below does not
+// jump when the tab changes; the shorter heatmap is centred in the space.
+const PANEL_HEIGHT = Math.max(USAGE_HEATMAP_HEIGHT, USAGE_MODEL_CHART_HEIGHT)
 
 const PANELS = ["tokens", "models"] as const
 type Panel = (typeof PANELS)[number]
@@ -85,13 +89,13 @@ export function UsageActivity({ overview }: { overview: UsageOverview }) {
       </div>
       {/* The fade lives on an inner wrapper: a transition on the panel itself
           would make Base UI keep the leaving panel mounted until it ends. */}
-      <TabsContent value="tokens">
-        <div className={PANEL_ENTER_CLASS_NAME}>
+      <TabsContent value="tokens" className="flex-none" style={{ height: PANEL_HEIGHT }}>
+        <div className={cn(PANEL_ENTER_CLASS_NAME, "flex h-full flex-col justify-center")}>
           <UsageHeatmap days={overview.heatmap} mode={mode} />
         </div>
       </TabsContent>
-      <TabsContent value="models">
-        <div className={PANEL_ENTER_CLASS_NAME}>
+      <TabsContent value="models" className="flex-none" style={{ height: PANEL_HEIGHT }}>
+        <div className={cn(PANEL_ENTER_CLASS_NAME, "h-full")}>
           <UsageModelChart window={overview.heatmap} dailyModels={overview.dailyModels} models={overview.models} />
         </div>
       </TabsContent>

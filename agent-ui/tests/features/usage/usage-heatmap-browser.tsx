@@ -249,8 +249,11 @@ async function runChecks() {
     await clickTab(i18n.t("usage.heatmap.mode.daily"))
     check("returning to daily restores the original fills", rects().map(fillOf).every((fill, index) => fill === dailyFills[index]))
 
+    const tokensPanelHeight = activity.querySelector('[data-slot="tabs-content"]')!.getBoundingClientRect().height
+    const tableTopBefore = host.querySelector('[data-test="models"]')!.getBoundingClientRect().top
     await clickTab(i18n.t("usage.activity.models"))
     check("model panel unmounts the heatmap", rects().length === 0)
+    check("both panels share one height so the content below does not move", Math.abs(activity.querySelector('[data-slot="tabs-content"]')!.getBoundingClientRect().height - tokensPanelHeight) < 0.5 && Math.abs(host.querySelector('[data-test="models"]')!.getBoundingClientRect().top - tableTopBefore) < 0.5)
     check("model panel hides the heatmap mode switch", triggers().length === 2)
     // Bars grow in over 320ms; their paths only exist once they have height.
     check("model chart has rendered its bars", await waitFor(() => host.querySelectorAll(".recharts-bar-rectangle path").length > 0))

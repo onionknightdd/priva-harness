@@ -31,6 +31,9 @@ const seriesKey = (index: number) => `series${index + 1}`
 // Bars grow from the baseline when the chart appears; Recharts' 1.5s default
 // reads as sluggish, so the reveal is kept close to the heatmap's.
 const BAR_REVEAL_MS = 320
+// Plot plus legend; the activity block adopts this as the height of both
+// panels so switching tabs never moves what sits below.
+export const USAGE_MODEL_CHART_HEIGHT = 168
 
 
 export function UsageModelChart({
@@ -75,7 +78,8 @@ export function UsageModelChart({
   if (series.keys.length === 0) {
     return (
       <p
-        className="flex h-[168px] items-center justify-center text-sm text-muted-foreground"
+        className="flex items-center justify-center text-sm text-muted-foreground"
+        style={{ height: USAGE_MODEL_CHART_HEIGHT }}
       >
         {t("usage.models.empty")}
       </p>
@@ -85,7 +89,8 @@ export function UsageModelChart({
   return (
     <ChartContainer
       config={config}
-      className="aspect-auto h-[168px] w-full"
+      className="aspect-auto w-full"
+      style={{ height: USAGE_MODEL_CHART_HEIGHT }}
     >
       <BarChart accessibilityLayer data={rows} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
         <CartesianGrid vertical={false} />

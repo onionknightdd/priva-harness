@@ -30,6 +30,13 @@ export const USAGE_HEATMAP_WIDTH =
 
 // Month labels stay at 12px; weekday labels are a quieter 10px.
 const WEEKDAY_LABEL_FONT_SIZE = 10
+const HEATMAP_FONT_SIZE = 16
+const LABEL_MARGIN = 8
+// Month label row + seven day rows + the SVG's stroke padding.
+export const USAGE_HEATMAP_HEIGHT =
+  HEATMAP_FONT_SIZE + LABEL_MARGIN +
+  7 * (USAGE_HEATMAP_BLOCK_SIZE + USAGE_HEATMAP_BLOCK_MARGIN) - USAGE_HEATMAP_BLOCK_MARGIN +
+  STROKE_PADDING * 2
 
 // Reveal timing: each cell plays for REVEAL_DURATION_MS and starts
 // REVEAL_STEP_MS after the cell on its upper-left diagonal.
