@@ -9,7 +9,7 @@ const TZ = 'Asia/Shanghai'
 
 function run(startedUtc: string, overrides: Partial<RunFactRow> = {}): RunFactRow {
   return {
-    startedUtc, sessionId: 's1', outcome: 'completed', failureCode: null, durationMs: 1000, model: 'sonnet',
+    startedUtc, sessionId: 's1', cwd: '/work/demo', outcome: 'completed', failureCode: null, durationMs: 1000, model: 'sonnet',
     inputTokens: 10, outputTokens: 20, cacheReadTokens: 300, cacheWriteTokens: 40, costUsd: 0.01,
     ...overrides,
   }

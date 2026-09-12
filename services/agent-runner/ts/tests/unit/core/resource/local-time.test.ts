@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { daysBetween, isValidTimeZone, localDate, localDateParts, shiftDate } from '../../../../src/core/resource/local-time.js'
+import { daysBetween, isValidLocalDate, isValidTimeZone, localDate, localDateParts, shiftDate } from '../../../../src/core/resource/local-time.js'
 
 describe('local-time', () => {
   it('folds a UTC instant into the calendar day and hour of the given zone', () => {
@@ -24,6 +24,15 @@ describe('local-time', () => {
     expect(shiftDate('2026-01-01', -365)).toBe('2025-01-01')
     expect(daysBetween('2026-09-10', '2026-09-12')).toBe(2)
     expect(daysBetween('2026-12-31', '2027-01-01')).toBe(1)
+  })
+
+  it('accepts only real calendar dates written as YYYY-MM-DD', () => {
+    expect(isValidLocalDate('2026-09-12')).toBe(true)
+    expect(isValidLocalDate('2024-02-29')).toBe(true)
+    expect(isValidLocalDate('2026-02-29')).toBe(false)
+    expect(isValidLocalDate('2026-13-01')).toBe(false)
+    expect(isValidLocalDate('2026-9-1')).toBe(false)
+    expect(isValidLocalDate('20260912')).toBe(false)
   })
 
   it('rejects unknown zones without throwing', () => {

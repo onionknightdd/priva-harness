@@ -112,6 +112,14 @@ function handle(message: MainToWorkerMessage): void {
       }
       return
     }
+    case 'range': {
+      try {
+        post({ type: 'range', id: message.id, range: store.range(message.input) })
+      } catch (error) {
+        post({ type: 'failed', id: message.id, message: describe(error) })
+      }
+      return
+    }
     case 'auditPage': {
       try {
         post({ type: 'auditPage', id: message.id, page: store.auditPage(message.input) })

@@ -11,7 +11,7 @@ import { WorkerDataRecorder, type WorkerDataRecorderOptions } from '../../../../
 
 function started(runId: string): DataRecord {
   return {
-    kind: 'run.started', tsUtc: new Date().toISOString(), runId, provider: 'claude', model: 'm', source: 'web',
+    kind: 'run.started', tsUtc: new Date().toISOString(), runId, provider: 'claude', model: 'm', source: 'web', cwd: '/work',
     promptChars: 1, attachmentCount: 0, details: null,
   }
 }

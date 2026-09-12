@@ -13,6 +13,8 @@ import type {
   AuditPageInput,
   UsageOverview,
   UsageOverviewInput,
+  UsageRangeInput,
+  UsageRangeSummary,
 } from '../../core/resource/usage-overview.js'
 import type { DataWorkerInit, MainToWorkerMessage, WorkerToMainMessage } from './data-worker-protocol.js'
 
@@ -131,6 +133,12 @@ export class WorkerDataRecorder implements DataRecorder, UsageReader {
     return reply.overview
   }
 
+  async range(input: UsageRangeInput): Promise<UsageRangeSummary> {
+    const reply = await this.query({ type: 'range', id: 0, input }, 'range', this.options.queryTimeoutMs)
+    if (reply.type !== 'range') throw new Error('Unexpected data store reply')
+    return reply.range
+  }
+
   async auditPage(input: AuditPageInput): Promise<AuditPage> {
     const reply = await this.query({ type: 'auditPage', id: 0, input }, 'auditPage', this.options.queryTimeoutMs)
     if (reply.type !== 'auditPage') throw new Error('Unexpected data store reply')
@@ -246,6 +254,7 @@ export class WorkerDataRecorder implements DataRecorder, UsageReader {
       case 'flushed':
       case 'status':
       case 'overview':
+      case 'range':
       case 'auditPage':
       case 'failed':
         this.settle(message.id, message)

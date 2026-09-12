@@ -60,6 +60,7 @@ export class RunLedger {
       ...(start.spec.profileId === undefined ? {} : { profileId: start.spec.profileId }),
       model: start.spec.model,
       source: start.source,
+      cwd: start.spec.cwd,
       promptChars: start.turn.text.length,
       attachmentCount: attachments.length,
       details: {

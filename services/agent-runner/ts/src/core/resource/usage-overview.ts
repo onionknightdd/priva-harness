@@ -95,6 +95,43 @@ export interface UsageOverview {
   readonly compactions: number
 }
 
+// --- arbitrary local date range for the overview cards ---------------------
+
+export interface UsageRangeInput {
+  readonly timeZone: string
+  // Inclusive local calendar days, YYYY-MM-DD.
+  readonly from: string
+  readonly to: string
+}
+
+export interface UsagePeakDay {
+  readonly date: string
+  readonly processedTokens: number
+}
+
+export interface UsageStreak {
+  readonly days: number
+  readonly from: string
+  readonly to: string
+}
+
+export interface UsageRangeSummary extends TokenTotals {
+  readonly from: string
+  readonly to: string
+  readonly days: number
+  readonly runs: number
+  readonly completed: number
+  readonly failed: number
+  readonly aborted: number
+  readonly activeSessions: number
+  readonly activeDays: number
+  // Distinct working directories; runs recorded before cwd was stored are not counted.
+  readonly projects: number
+  readonly peakDay: UsagePeakDay | null
+  // Longest run of consecutive active days inside the range.
+  readonly longestStreak: UsageStreak | null
+}
+
 export interface AuditPageInput {
   readonly limit: number
   // Return rows with id strictly below this cursor (newest first).
@@ -122,6 +159,7 @@ export interface AuditPage {
 export interface RunFactRow {
   readonly startedUtc: string
   readonly sessionId: string | null
+  readonly cwd: string | null
   readonly outcome: RunOutcome
   readonly failureCode: RunFailureCode | null
   readonly durationMs: number | null

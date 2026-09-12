@@ -18,7 +18,7 @@ import {
 const TOP_TOOLS = 10
 const TOP_SKILLS = 5
 
-interface MutableTotals {
+export interface MutableTotals {
   inputTokens: number
   outputTokens: number
   cacheReadTokens: number
@@ -27,11 +27,11 @@ interface MutableTotals {
   runsWithoutCost: number
 }
 
-function emptyTotals(): MutableTotals {
+export function emptyTotals(): MutableTotals {
   return { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null, runsWithoutCost: 0 }
 }
 
-function addTokens(
+export function addTokens(
   totals: MutableTotals,
   row: { inputTokens: number | null; outputTokens: number | null; cacheReadTokens: number | null; cacheWriteTokens: number | null; costUsd: number | null },
 ): void {
@@ -43,11 +43,11 @@ function addTokens(
   else totals.costUsd = (totals.costUsd ?? 0) + row.costUsd
 }
 
-function processed(totals: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number }): number {
+export function processed(totals: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number }): number {
   return totals.inputTokens + totals.cacheReadTokens + totals.cacheWriteTokens + totals.outputTokens
 }
 
-function finishTotals(totals: MutableTotals): TokenTotals {
+export function finishTotals(totals: MutableTotals): TokenTotals {
   return { ...totals, processedTokens: processed(totals) }
 }
 

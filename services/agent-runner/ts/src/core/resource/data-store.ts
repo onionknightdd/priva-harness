@@ -31,6 +31,8 @@ export interface RunStartedRecord extends RecordBase {
   readonly profileId?: string
   readonly model: string
   readonly source: RunSource
+  // Working directory the run executed in; distinct values count as projects.
+  readonly cwd: string
   readonly promptChars: number
   readonly attachmentCount: number
 }

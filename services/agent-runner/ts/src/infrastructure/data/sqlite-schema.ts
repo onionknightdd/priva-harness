@@ -82,6 +82,11 @@ const MIGRATIONS: readonly ((db: DatabaseSync) => void)[] = [
       CREATE INDEX tool_fact_name ON tool_fact(tool_name, ts_utc);
     `)
   },
+  // The working directory identifies a "project" in the usage overview. Rows
+  // written before this column existed keep NULL and are not counted as one.
+  (db) => {
+    db.exec('ALTER TABLE run_fact ADD COLUMN cwd TEXT')
+  },
 ]
 
 export const SCHEMA_VERSION = MIGRATIONS.length

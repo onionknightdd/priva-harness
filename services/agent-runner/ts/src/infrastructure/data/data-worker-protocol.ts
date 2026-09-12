@@ -1,5 +1,7 @@
 import type { DataRecord, DataRetention, DataStoreStatus } from '../../core/resource/data-store.js'
-import type { AuditPage, AuditPageInput, UsageOverview, UsageOverviewInput } from '../../core/resource/usage-overview.js'
+import type {
+  AuditPage, AuditPageInput, UsageOverview, UsageOverviewInput, UsageRangeInput, UsageRangeSummary,
+} from '../../core/resource/usage-overview.js'
 
 export interface DataWorkerInit {
   readonly dbPath: string
@@ -12,6 +14,7 @@ export type MainToWorkerMessage =
   | { readonly type: 'flush'; readonly id: number }
   | { readonly type: 'status'; readonly id: number }
   | { readonly type: 'overview'; readonly id: number; readonly input: UsageOverviewInput }
+  | { readonly type: 'range'; readonly id: number; readonly input: UsageRangeInput }
   | { readonly type: 'auditPage'; readonly id: number; readonly input: AuditPageInput }
   | { readonly type: 'close' }
 
@@ -20,6 +23,7 @@ export type WorkerToMainMessage =
   | { readonly type: 'flushed'; readonly id: number }
   | { readonly type: 'status'; readonly id: number; readonly status: DataStoreStatus }
   | { readonly type: 'overview'; readonly id: number; readonly overview: UsageOverview }
+  | { readonly type: 'range'; readonly id: number; readonly range: UsageRangeSummary }
   | { readonly type: 'auditPage'; readonly id: number; readonly page: AuditPage }
   | { readonly type: 'failed'; readonly id: number; readonly message: string }
   | { readonly type: 'log'; readonly level: 'info' | 'warn' | 'error'; readonly message: string }

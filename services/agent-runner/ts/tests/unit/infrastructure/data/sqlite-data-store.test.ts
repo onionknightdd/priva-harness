@@ -23,7 +23,7 @@ function daysAgo(days: number): string {
 
 function started(runId: string, tsUtc = NOW.toISOString()): RunStartedRecord {
   return {
-    kind: 'run.started', tsUtc, runId, provider: 'pi', model: 'gpt-x', source: 'web',
+    kind: 'run.started', tsUtc, runId, provider: 'pi', model: 'gpt-x', source: 'web', cwd: '/work/demo',
     promptChars: 12, attachmentCount: 0, details: { text: 'hi' },
   }
 }
@@ -78,6 +78,21 @@ describe('SqliteDataStore', () => {
       .map((row) => (row as { name: string }).name)
     db.close()
     expect(tables).toEqual(['audit_event', 'meta', 'run_fact', 'run_model_usage', 'tool_fact'])
+  })
+
+  it('upgrades a version-1 database by adding run_fact.cwd and keeps old rows unprojected', () => {
+    store.close()
+    const db = new DatabaseSync(path)
+    db.exec('ALTER TABLE run_fact DROP COLUMN cwd')
+    db.exec('PRAGMA user_version = 1')
+    db.exec(`INSERT INTO run_fact (run_id, started_utc, provider, model, source, prompt_chars, attachment_count, outcome)
+             VALUES ('legacy', '${NOW.toISOString()}', 'pi', 'gpt-x', 'web', 1, 0, 'completed')`)
+    db.close()
+    store = SqliteDataStore.open(path)
+    expect(pragma('user_version')).toBe(SCHEMA_VERSION)
+    store.writeBatch([started('run-new')])
+    const rows = raw().prepare('SELECT run_id, cwd FROM run_fact ORDER BY id').all() as { run_id: string; cwd: string | null }[]
+    expect(rows).toEqual([{ run_id: 'legacy', cwd: null }, { run_id: 'run-new', cwd: '/work/demo' }])
   })
 
   it('refuses a database written by a newer schema', () => {

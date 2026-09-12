@@ -30,6 +30,11 @@ export function localDate(instant: Date, timeZone: string): string {
   return localDateParts(instant, timeZone).date
 }
 
+// A real calendar day written as YYYY-MM-DD; rejects 2026-02-30 and the like.
+export function isValidLocalDate(date: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) && shiftDate(date, 0) === date
+}
+
 // Calendar arithmetic on YYYY-MM-DD strings, independent of any zone.
 export function shiftDate(date: string, days: number): string {
   const [year, month, day] = date.split('-').map(Number)

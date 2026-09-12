@@ -20,8 +20,12 @@ import {
   type ToolFactRow,
   type UsageOverview,
   type UsageOverviewInput,
+  type UsageRangeInput,
+  type UsageRangeSummary,
 } from '../../core/resource/usage-overview.js'
+import { shiftDate } from '../../core/resource/local-time.js'
 import { buildUsageOverview } from '../../core/resource/usage-overview-builder.js'
+import { buildUsageRange } from '../../core/resource/usage-range-builder.js'
 import { migrateSchema } from './sqlite-schema.js'
 
 const MCP_TOOL_SERVER = /^mcp__([a-zA-Z0-9_-]+)__/
@@ -94,9 +98,9 @@ export class SqliteDataStore {
       VALUES (?, ?, ?, ?, ?, ?)`)
     this.insertRun = db.prepare(`
       INSERT INTO run_fact (
-        run_id, started_audit_id, started_utc, session_id, provider, profile_id, model, source,
+        run_id, started_audit_id, started_utc, session_id, provider, profile_id, model, source, cwd,
         prompt_chars, attachment_count, outcome
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'running')`)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'running')`)
     this.attachSession = db.prepare(`
       UPDATE run_fact SET session_id = ?
        WHERE id = (SELECT MAX(id) FROM run_fact WHERE run_id = ?)`)
@@ -256,11 +260,7 @@ export class SqliteDataStore {
     const now = input.now ?? new Date()
     // One extra day of slack so a local day straddling UTC midnight is complete.
     const since = new Date(now.getTime() - (Math.max(...USAGE_RANGE_DAYS) + 1) * 86_400_000).toISOString()
-    const runs = this.db.prepare(`
-      SELECT started_utc AS startedUtc, session_id AS sessionId, outcome, failure_code AS failureCode,
-             duration_ms AS durationMs, model, input_tokens AS inputTokens, output_tokens AS outputTokens,
-             cache_read_tokens AS cacheReadTokens, cache_write_tokens AS cacheWriteTokens, cost_usd AS costUsd
-        FROM run_fact WHERE started_utc >= ? AND outcome != 'running'`).all(since) as unknown as RunFactRow[]
+    const runs = this.finishedRunsSince(since)
     const models = this.db.prepare(`
       SELECT r.started_utc AS startedUtc, m.model, m.input_tokens AS inputTokens, m.output_tokens AS outputTokens,
              m.cache_read_tokens AS cacheReadTokens, m.cache_write_tokens AS cacheWriteTokens, m.cost_usd AS costUsd
@@ -277,6 +277,24 @@ export class SqliteDataStore {
        WHERE ts_utc >= ? AND action IN ('skill.invoked', 'permission.resolved', 'session.compacted')`)
       .all(since) as unknown as AuditCountRow[]
     return buildUsageOverview({ runs, models, tools, audits }, input, retention.factRetentionDays)
+  }
+
+  range(input: UsageRangeInput): UsageRangeSummary {
+    // Local days can start up to 14h before or after UTC midnight; a day of
+    // slack on each side covers every zone, and the builder folds exactly.
+    const since = `${shiftDate(input.from, -1)}T00:00:00.000Z`
+    const until = `${shiftDate(input.to, 2)}T00:00:00.000Z`
+    return buildUsageRange(this.finishedRunsSince(since, until), input)
+  }
+
+  private finishedRunsSince(since: string, until?: string): RunFactRow[] {
+    const upper = until === undefined ? '' : ' AND started_utc < ?'
+    const params = until === undefined ? [since] : [since, until]
+    return this.db.prepare(`
+      SELECT started_utc AS startedUtc, session_id AS sessionId, cwd, outcome, failure_code AS failureCode,
+             duration_ms AS durationMs, model, input_tokens AS inputTokens, output_tokens AS outputTokens,
+             cache_read_tokens AS cacheReadTokens, cache_write_tokens AS cacheWriteTokens, cost_usd AS costUsd
+        FROM run_fact WHERE started_utc >= ?${upper} AND outcome != 'running'`).all(...params) as unknown as RunFactRow[]
   }
 
   auditPage(input: AuditPageInput): AuditPage {
@@ -346,7 +364,7 @@ export class SqliteDataStore {
     const auditId = this.audit(ts, 'run.started', record.sessionId ?? null, record.runId, null, record.details)
     this.insertRun.run(
       record.runId, auditId, ts, record.sessionId ?? null, record.provider, record.profileId ?? null,
-      record.model, record.source, record.promptChars, record.attachmentCount,
+      record.model, record.source, record.cwd, record.promptChars, record.attachmentCount,
     )
     return 'ok'
   }
