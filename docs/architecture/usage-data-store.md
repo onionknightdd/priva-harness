@@ -112,7 +112,10 @@ src/infrastructure/data/sqlite-data-store.ts 同步存储（writeBatch / reconci
 src/infrastructure/data/data-worker.ts      worker 入口
 src/infrastructure/data/worker-data-recorder.ts 主线程代理（队列、重启、flush、status）
 src/infrastructure/data/data-worker-protocol.ts 主线程 ↔ worker 消息
+src/harness/run/run-ledger.ts               每次 run 的 started / session / finished 记账
 tests/unit/infrastructure/data/             存储与 worker 的单元测试
+tests/unit/harness/run/run-ledger.test.ts   harness 采集路径
+tests/integration/data/                     harness → worker → SQLite 端到端
 ```
 
 开发和测试从 `.ts` 源码运行时，worker 以 `execArgv: ['--import', 'tsx']` 启动以解析 `.js` 导入
@@ -142,14 +145,36 @@ Pi 对无报价模型给出 `cost.total = 0` 而非缺失，因此 Pi 侧无法�
 **来源**：`AgentRunOptions.source: RunSource` 为必填，`run-route.ts` 传 `'web'`，
 `subagent-test.ts` 传 `'subagent-test'`；`'channel'`、`'scheduled'` 已预留在类型中。
 
+## harness 采集：`RunLedger`
+
+`harness/run/run-ledger.ts` 为每次 `AgentHarness.run()` 维护一份账：
+
+```
+ run() 入口 (openSession 之前)  ──► run.started   promptChars / attachmentCount / source /
+                                                  details{promptPreview(200), attachments, cwd}
+ runtime.session.id 首次非空      ──► run.session   (resume / Claude 预分配时直接进 run.started)
+ forward() 中的终态事件           ──► run.finished
+   run.completed                       outcome=completed + RunAccounting
+   run.failed                          outcome=failed, failure_code=event.code ?? unknown
+   run.aborted                         outcome=aborted
+   error                               outcome=failed, failure_code=transport_error
+ forward() catch / openSession 抛错 ──► outcome=failed, failure_code=runtime_crash
+ 流结束但没有终态                 ──► signal 已 abort → aborted；否则 failed/unknown
+```
+
+`durationMs` 由 ledger 自己按墙钟计算（`run()` 入口到终态），provider 的 `durationMs` 不再使用；
+`apiDurationMs` / `numTurns` / `usage` / `byModel` / `costUsd` 原样取自终态事件。终态事件本身作为
+`run.finished` 的 `details`。一个 run 只会 finish 一次，后到的终态被忽略。`AgentHarness` 的
+`recorder` 选项缺省为无，此时 ledger 全部为空操作。
+
 ## 当前范围与后续
 
 已完成：存储层、worker 管道、主线程代理、保留期清理、启动回收、`main.ts` 接线；provider 事件层
-的用量求和 / 按模型拆分 / 失败码归一化 / `source`。此时还没有任何业务事件进入 `record()`。
+的用量求和 / 按模型拆分 / 失败码归一化 / `source`；harness 的 run 级采集。每个用户轮次现在都会
+落一行 `run_fact`。
 
 后续步骤：
 
-1. harness 采集：`run.started` / `run.session` / `run.finished`（含 `runtime_crash` 分支）。
-2. 工具、技能、权限、问答、压缩、子代理、工作流审计。
-3. 路由层审计（session 生命周期、配置变更）。
-4. 查询接口（时区由请求携带）与前端概览页。
+1. 工具、技能、权限、问答、压缩、子代理、工作流审计。
+2. 路由层审计（session 生命周期、配置变更）。
+3. 查询接口（时区由请求携带）与前端概览页。

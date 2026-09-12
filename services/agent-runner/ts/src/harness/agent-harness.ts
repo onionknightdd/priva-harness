@@ -14,7 +14,9 @@ import type { AgentEvent } from '../core/event/agent-event.js'
 import type { StreamFrame } from '../core/event/agent-event.js'
 import { emptyContextUsage } from '../core/resource/context-usage.js'
 import type { ContextUsage } from '../core/resource/context-usage.js'
+import type { DataRecorder } from '../core/contract/data-recorder.js'
 import type { RunSource } from '../core/resource/data-store.js'
+import { RunLedger } from './run/run-ledger.js'
 import { isRunResultEvent } from '../core/event/agent-event.js'
 import type { SlashCommand } from '../core/resource/slash-command.js'
 import type { UserTurn } from '../core/run/user-turn.js'
@@ -34,6 +36,7 @@ export interface AgentHarnessOptions {
   readonly cwd: string
   readonly liveRuns?: LiveRunRegistry
   readonly sessions?: SessionService
+  readonly recorder?: DataRecorder
   readonly pool?: WarmRuntimePool
 }
 
@@ -248,33 +251,49 @@ export class AgentHarness {
     const runId = runOptions.runId ?? randomUUID()
 
     const session = this.prepareSession(spec, runOptions.session, false)
-    const provider = this.options.providers[spec.provider]
-    const poolKey = sessionRefOf(session)
-    const pool = runOptions.keepRuntimeWarm === false ? undefined : this.pool
-    const runtime = pool === undefined
-      ? await provider.openSession(session, spec)
-      : await pool.acquire(poolKey, spec, () => provider.openSession(session, spec))
-
-    this.liveRuns?.attachSession(runId, runtime.session.id)
-    const stamper = new EnvelopeStamper(runId, spec.provider, Date.now, runtime.session.id)
     const userTurn = userTurnFromText(turn.text)
     const attachments = turn.attachments ?? userTurn.attachments
+    // Opened before the provider so a session that fails to open still counts
+    // as a user turn that failed.
+    const preassigned = sessionRefOf(session)?.id
+    const ledger = new RunLedger(this.options.recorder, {
+      runId, spec, source: runOptions.source,
+      turn: { text: userTurn.text, ...(attachments ? { attachments } : {}) },
+      ...(preassigned === undefined ? {} : { sessionId: preassigned }),
+    })
     try {
-      yield stamper.stamp({
-        type: 'run.started', model: spec.model,
-        userMessage: {
-          id: `${runId}:user`, role: 'user', content: userTurn.text,
-          ...(attachments ? { attachments } : {}),
-          createdAt: new Date().toISOString(), status: 'complete',
-        },
-      })
-      yield* this.forward(runtime, turn, context, spec, runId, stamper)
-    } finally {
-      if (pool === undefined || runtime.session.id === '') {
-        await runtime.release('dispose')
-      } else {
-        await pool.recycle(runtime, spec, runtime.session)
+      const provider = this.options.providers[spec.provider]
+      const poolKey = sessionRefOf(session)
+      const pool = runOptions.keepRuntimeWarm === false ? undefined : this.pool
+      const runtime = pool === undefined
+        ? await provider.openSession(session, spec)
+        : await pool.acquire(poolKey, spec, () => provider.openSession(session, spec))
+
+      this.liveRuns?.attachSession(runId, runtime.session.id)
+      ledger.attachSession(runtime.session.id)
+      const stamper = new EnvelopeStamper(runId, spec.provider, Date.now, runtime.session.id)
+      try {
+        yield stamper.stamp({
+          type: 'run.started', model: spec.model,
+          userMessage: {
+            id: `${runId}:user`, role: 'user', content: userTurn.text,
+            ...(attachments ? { attachments } : {}),
+            createdAt: new Date().toISOString(), status: 'complete',
+          },
+        })
+        yield* this.forward(runtime, turn, context, spec, runId, stamper, ledger)
+      } finally {
+        if (pool === undefined || runtime.session.id === '') {
+          await runtime.release('dispose')
+        } else {
+          await pool.recycle(runtime, spec, runtime.session)
+        }
       }
+    } catch (error) {
+      ledger.crashed(error)
+      throw error
+    } finally {
+      ledger.settle(context.signal.aborted)
     }
   }
 
@@ -382,6 +401,7 @@ export class AgentHarness {
     spec: ProviderRunSpec,
     runId: string,
     stamper: EnvelopeStamper,
+    ledger: RunLedger,
   ): AsyncIterable<StreamFrame> {
     let finished = false
     try {
@@ -389,17 +409,21 @@ export class AgentHarness {
         signal: context.signal,
       })) {
         this.liveRuns?.attachSession(runId, runtime.session.id)
+        ledger.attachSession(runtime.session.id)
         if (event.type === 'run.completed') {
           await this.recordCompleted(runtime.session, spec, event.model)
         }
+        ledger.observe(event)
         yield stamper.stamp(event)
         if (isRunResultEvent(event)) finished = true
       }
     } catch (error) {
       if (!finished) {
+        ledger.crashed(error)
         yield stamper.stamp({
           type: 'run.failed',
           message: errorMessage(error),
+          code: 'runtime_crash',
           ...(runtime.session.id === '' ? {} : { sessionId: runtime.session.id }),
           model: spec.model,
         })

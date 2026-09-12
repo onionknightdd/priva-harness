@@ -24,7 +24,7 @@ import { PiConfigAdapter } from './provider/pi/config-adapter/pi-config-adapter.
 import { PiProvider } from './provider/pi/pi-provider.js'
 import { PiSessionStore } from './provider/pi/pi-session-store.js'
 import { CodingAgentSessionFactory } from './provider/pi/pi-session-factory.js'
-import { defaultDataRetention, type DataRetention } from './core/resource/data-store.js'
+import { defaultDataRetention, type DataRetention, type DataStoreLogger } from './core/resource/data-store.js'
 import type { RuntimeSettingsStore } from './core/contract/runtime-settings.js'
 import { productTools } from './core/tool/product-tools.js'
 import {
@@ -92,11 +92,20 @@ export async function startServer(): Promise<void> {
     modelProfiles: modelProfileService,
     activeCwd: initialDirectory,
   })
+  // The recorder exists before the HTTP server so the harness can hold it;
+  // its log output is redirected to the server logger once that exists.
+  const dataLog = new ForwardingDataLogger()
+  const dataRecorder = new WorkerDataRecorder({
+    dbPath: runtimeConfig.dataFilePath,
+    retention: await readDataRetention(runtimeSettings, dataLog),
+    logger: dataLog,
+  })
   const agentHarness = new AgentHarness({
     providers,
     cwd: initialDirectory,
     liveRuns,
     sessions: sessionService,
+    recorder: dataRecorder,
   })
   sessionService.bindWarmListing((harness) => agentHarness.listWarm(harness))
   sessionService.bindContextUsageReader((ref, spec) => agentHarness.readContextUsage(ref, spec))
@@ -120,11 +129,7 @@ export async function startServer(): Promise<void> {
     configDistributor,
     logger: true,
   })
-  const dataRecorder = new WorkerDataRecorder({
-    dbPath: runtimeConfig.dataFilePath,
-    retention: await readDataRetention(runtimeSettings, server.log),
-    logger: server.log,
-  })
+  dataLog.target = server.log
   dataRecorder.start()
   const port = parsePort(process.env['PORT'])
   const host = process.env['HOST'] ?? '0.0.0.0'
@@ -153,6 +158,14 @@ async function readDataRetention(
       error instanceof Error ? error.message : String(error)}`)
     return defaultDataRetention()
   }
+}
+
+class ForwardingDataLogger implements DataStoreLogger {
+  target: DataStoreLogger = console
+
+  info(message: string): void { this.target.info(message) }
+  warn(message: string): void { this.target.warn(message) }
+  error(message: string): void { this.target.error(message) }
 }
 
 function parsePort(rawPort: string | undefined): number {
