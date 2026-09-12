@@ -292,6 +292,15 @@ describe('SqliteDataStore', () => {
       expect(store.status().auditEvents).toBe(1)
     })
 
+    it('records a baseline on a fresh database without touching an existing one', () => {
+      expect(store.lastPruneUtc()).toBeNull()
+      store.markPruneBaseline(NOW.toISOString())
+      expect(store.lastPruneUtc()).toBe(NOW.toISOString())
+      store.markPruneBaseline(daysAgo(-1))
+      expect(store.lastPruneUtc()).toBe(NOW.toISOString())
+      expect(store.status().auditEvents).toBe(0)
+    })
+
     it('does nothing destructive with default retention on fresh data', () => {
       store.writeBatch([started('r'), finished('r'), tool('r', 't', 'Bash')])
       const job = store.createPruneJob(defaultDataRetention(), NOW)

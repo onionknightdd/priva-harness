@@ -86,11 +86,13 @@ describe('WorkerDataRecorder', () => {
     expect(await recorder.flush()).toBe(true)
     expect(rows('SELECT run_id, session_id, outcome FROM run_fact')).toEqual([{ run_id: 'r1', session_id: 's1', outcome: 'completed' }])
     expect(rows('SELECT tool_name, ok FROM tool_fact')).toEqual([{ tool_name: 'Bash', ok: 0 }])
-    // A fresh database has never been pruned, so startup also writes one retention.pruned row.
-    expect(rows(`SELECT action FROM audit_event WHERE action != 'retention.pruned' ORDER BY id`)).toEqual([
+    expect(rows('SELECT action FROM audit_event ORDER BY id')).toEqual([
       { action: 'run.started' }, { action: 'run.finished' }, { action: 'tool.invoked' },
     ])
-    expect(await recorder.status()).toMatchObject({ auditEvents: 4, runFacts: 1, toolFacts: 1, runningRuns: 0 })
+    // A fresh database only records the retention baseline; no retention.pruned row.
+    expect(await recorder.status()).toMatchObject({
+      auditEvents: 3, runFacts: 1, toolFacts: 1, runningRuns: 0, lastPruneUtc: expect.any(String) as string,
+    })
     expect(logger.lines.filter((line) => line.startsWith('error'))).toEqual([])
   })
 
@@ -105,7 +107,7 @@ describe('WorkerDataRecorder', () => {
 
     recorder.start()
     expect(await recorder.flush()).toBe(true)
-    expect(rows(`SELECT action FROM audit_event WHERE action != 'retention.pruned' ORDER BY id`)).toEqual([{ action: 'a2' }, { action: 'a3' }, { action: 'a4' }])
+    expect(rows('SELECT action FROM audit_event ORDER BY id')).toEqual([{ action: 'a2' }, { action: 'a3' }, { action: 'a4' }])
   })
 
   it('never throws from record and reports worker-side rejections through the logger', async () => {
@@ -120,7 +122,7 @@ describe('WorkerDataRecorder', () => {
     await waitFor(() => logger.lines.some((line) => line.includes('rejected 1 record(s)')))
     expect(logger.lines.some((line) => line.includes('dropped unserializable audit record'))).toBe(true)
     expect(recorder.dropped).toBe(1)
-    expect(rows(`SELECT action FROM audit_event WHERE action != 'retention.pruned'`)).toEqual([{ action: 'ok' }])
+    expect(rows('SELECT action FROM audit_event')).toEqual([{ action: 'ok' }])
   })
 
   it('restarts the worker after a crash and drains the queue afterwards', async () => {
@@ -172,7 +174,7 @@ describe('WorkerDataRecorder', () => {
     recorder.record({ kind: 'audit', tsUtc: new Date().toISOString(), action: 'before', details: null })
     await recorder.close()
     recorder.record({ kind: 'audit', tsUtc: new Date().toISOString(), action: 'after', details: null })
-    expect(rows(`SELECT action FROM audit_event WHERE action != 'retention.pruned'`)).toEqual([{ action: 'before' }])
+    expect(rows('SELECT action FROM audit_event')).toEqual([{ action: 'before' }])
     await expect(recorder.status()).rejects.toThrow(/not running/)
   })
 })

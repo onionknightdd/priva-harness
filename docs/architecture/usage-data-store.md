@@ -87,8 +87,9 @@ meta             key, value          (last_prune_utc)
 { "dataRetention": { "auditRetentionDays": 90, "toolAuditRetentionDays": 90, "factRetentionDays": 365 } }
 ```
 
-三项均须为正整数天数，启动时读取一次。清理在 worker 里、每个写入批次之后检查：距 `meta.last_prune_utc`
-不足 24 小时则跳过，否则按顺序执行
+三项均须为正整数天数，启动时读取一次。全新数据库在 worker 启动时只把当前时间写入
+`meta.last_prune_utc` 作为基线，不执行清理、不写审计行。之后清理在 worker 里、每个写入批次之后
+检查：距 `meta.last_prune_utc` 不足 24 小时则跳过，否则按顺序执行
 
 1. `audit_event` 中 `action = 'tool.invoked'` 且早于 `toolAuditRetentionDays`
 2. 其余 `audit_event` 早于 `auditRetentionDays`

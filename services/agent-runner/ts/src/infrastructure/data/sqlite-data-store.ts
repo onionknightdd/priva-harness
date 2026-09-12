@@ -167,6 +167,13 @@ export class SqliteDataStore {
     return row?.value ?? null
   }
 
+  // A fresh database has nothing to prune; recording the baseline starts the
+  // retention clock without producing a retention.pruned audit row.
+  markPruneBaseline(nowUtc: string): void {
+    if (this.lastPruneUtc() !== null) return
+    this.setMeta.run(META_LAST_PRUNE, normalizeUtc(nowUtc))
+  }
+
   createPruneJob(retention: DataRetention, now: Date): PruneJob {
     const nowUtc = now.toISOString()
     const cutoff = (days: number): string => new Date(now.getTime() - days * 86_400_000).toISOString()

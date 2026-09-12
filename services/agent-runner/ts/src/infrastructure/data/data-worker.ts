@@ -30,6 +30,7 @@ function describe(error: unknown): string {
 
 const store = SqliteDataStore.open(init.dbPath)
 try {
+  store.markPruneBaseline(new Date().toISOString())
   const reconciled = store.reconcileRunning(new Date().toISOString())
   if (reconciled > 0) log('warn', `data store: closed ${reconciled} run(s) left running by a previous process`)
 } catch (error) {
