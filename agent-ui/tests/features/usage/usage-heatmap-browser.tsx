@@ -67,6 +67,22 @@ async function runChecks() {
     check("weekday labels are hidden", !host.querySelector("svg text[text-anchor='start']"))
     check("a full year renders one cell per day", rects().length === 365)
     check("the rolling year is one strip, not split at New Year", host.querySelectorAll("svg").length === 1)
+    check("mode tab text ends on the grid's right edge", (() => {
+      const grid = rects().reduce((edge, rect) => Math.max(edge, rect.getBoundingClientRect().right), 0)
+      const lastTab = host.querySelectorAll<HTMLButtonElement>('[data-slot="tabs-trigger"]')
+      const text = lastTab[lastTab.length - 1]!
+      const padding = parseFloat(getComputedStyle(text).paddingRight)
+      return Math.abs(text.getBoundingClientRect().right - padding - grid) <= 1
+    })())
+    check("title starts on the grid's left edge", (() => {
+      const grid = rects().reduce((edge, rect) => Math.min(edge, rect.getBoundingClientRect().left), Infinity)
+      return Math.abs(host.querySelector("h2")!.getBoundingClientRect().left - grid) <= 1
+    })())
+    check("the block is centred in its container", (() => {
+      const block = host.firstElementChild!.getBoundingClientRect()
+      const container = host.getBoundingClientRect()
+      return Math.abs((block.left - container.left) - (container.right - block.right)) <= 1 && block.width < container.width
+    })())
 
     const dailyFills = rects().map(fillOf)
     await clickMode(i18n.t("usage.heatmap.mode.weekly"))

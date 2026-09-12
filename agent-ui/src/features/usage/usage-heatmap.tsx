@@ -37,9 +37,14 @@ export function UsageHeatmap({ days }: { days: readonly UsageDay[] }) {
   const data = useMemo(() => heatmapActivities(days, mode), [days, mode])
   const titleId = useId()
 
+  // The block is exactly as wide as the year grid and centred in the page, so
+  // the title and mode tabs line up with the grid's edges instead of the
+  // viewport's. The header's 3px inset matches the SVG's stroke padding, and
+  // `-mr-2` cancels the last tab's padding so its text, not its hover pill,
+  // meets the grid's right edge.
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-4">
+    <div className="mx-auto flex w-max max-w-full flex-col gap-3">
+      <div className="flex items-center justify-between gap-4 px-[3px]">
         <h2 id={titleId} className="text-sm font-semibold">
           {t("usage.heatmap.title")}
         </h2>
@@ -54,7 +59,7 @@ export function UsageHeatmap({ days }: { days: readonly UsageDay[] }) {
             variant="ghost"
             size="sm"
             aria-label={t("usage.heatmap.modeLabel")}
-            className="h-7 bg-transparent"
+            className="-mr-2 h-7 bg-transparent"
           >
             {HEATMAP_MODES.map((value) => (
               <TabsTrigger key={value} value={value} className="text-xs">
@@ -83,7 +88,7 @@ export function UsageHeatmap({ days }: { days: readonly UsageDay[] }) {
           heatmapLabel: t("usage.heatmap.ariaLabel"),
         }}
         aria-labelledby={titleId}
-        className="w-full max-w-full gap-0 p-0"
+        className="w-max max-w-full gap-0 p-0"
       >
         <CalendarHeatmapBody
           hideWeekdayLabels
