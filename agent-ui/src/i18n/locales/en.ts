@@ -63,7 +63,21 @@ export const en = {
   },
   breadcrumb: {
     dataAndUsage: "Data and Usage",
+    usage: "Usage",
     fileBrowser: "File Browser",
+  },
+  usage: {
+    loading: "Loading usage",
+    retry: "Retry",
+    heatmap: {
+      title: "Processed tokens by day",
+      less: "Less",
+      more: "More",
+      cellLabel: "{{date}}: {{value}} tokens",
+      ariaLabel: "Processed tokens heatmap for {{year}}",
+      legendLabel: "Token intensity",
+      legendLevelLabel: "Level {{level}}",
+    },
   },
   agentMessage: {
     contentLabel: "Agent Message",

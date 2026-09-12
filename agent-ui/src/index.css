@@ -73,6 +73,7 @@
     --color-status-warning: var(--status-warning);
     --color-status-error: var(--status-error);
     --color-loading-state: var(--loading-state);
+    --color-heatmap: var(--heatmap);
     --color-tool-output: var(--tool-output);
     /* Tool spinners: the default 1s `animate-spin` reads as idle; 0.7s reads as work. */
     --animate-spin-fast: spin 0.7s linear infinite;
@@ -140,6 +141,7 @@
     --status-warning: oklch(0.681 0.162 75.834);
     --status-error: oklch(0.586 0.21 20);
     --loading-state: rgb(77 159 240);
+    --heatmap: rgb(78 130 239);
     --tool-output: oklch(0.964 0 0);
     --context-system: oklch(0.549 0 0);
     --context-tools: oklch(0.48 0.22 305);

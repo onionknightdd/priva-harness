@@ -39,6 +39,12 @@ const ResourcePage = React.lazy(async () => {
   return { default: module.ResourcePage }
 })
 
+const UsagePage = React.lazy(async () => {
+  const module = await import("@/features/usage")
+
+  return { default: module.UsagePage }
+})
+
 function MobileSidebarLogoTrigger({ onOpen }: { onOpen: () => void }) {
   const { t } = useTranslation()
 
@@ -82,7 +88,15 @@ export function AgentLayout({
   const { t } = useTranslation()
   const isFileBrowser = activeView === "file-browser"
   const isResource = activeView === "skills" || activeView === "mcp"
+  const isUsage = activeView === "usage"
   const workspaceEnabled = !isSidebarContentView(activeView)
+  const breadcrumb = isResource
+    ? { section: t("resources.plugins"), page: t(`resources.${activeView}`) }
+    : isFileBrowser
+      ? { section: t("breadcrumb.dataAndUsage"), page: t("breadcrumb.fileBrowser") }
+      : isUsage
+        ? { section: t("breadcrumb.dataAndUsage"), page: t("breadcrumb.usage") }
+        : null
 
   return (
     <WorkspaceShell workspaceEnabled={workspaceEnabled}>
@@ -102,17 +116,15 @@ export function AgentLayout({
               className="mr-2 data-[orientation=vertical]:h-4"
             />
           </div>
-          {isFileBrowser || isResource ? (
+          {breadcrumb ? (
             <Breadcrumb>
               <BreadcrumbList>
                 <BreadcrumbItem className="hidden md:block">
-                  <span>{t(isResource ? "resources.plugins" : "breadcrumb.dataAndUsage")}</span>
+                  <span>{breadcrumb.section}</span>
                 </BreadcrumbItem>
                 <BreadcrumbSeparator className="hidden md:block" />
                 <BreadcrumbItem>
-                  <BreadcrumbPage>
-                    {isResource ? t(`resources.${activeView}`) : t("breadcrumb.fileBrowser")}
-                  </BreadcrumbPage>
+                  <BreadcrumbPage>{breadcrumb.page}</BreadcrumbPage>
                 </BreadcrumbItem>
               </BreadcrumbList>
             </Breadcrumb>
@@ -124,6 +136,10 @@ export function AgentLayout({
       {isResource ? (
         <React.Suspense fallback={<AgentLayoutFallback />}>
           <ResourcePage key={activeView} kind={activeView} />
+        </React.Suspense>
+      ) : isUsage ? (
+        <React.Suspense fallback={<AgentLayoutFallback />}>
+          <UsagePage />
         </React.Suspense>
       ) : isFileBrowser ? (
         <React.Suspense fallback={<AgentLayoutFallback />}>

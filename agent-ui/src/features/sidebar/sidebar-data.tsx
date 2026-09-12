@@ -64,6 +64,7 @@ export const sidebarData = {
       items: [
         {
           titleKey: "sidebar.navigation.usage",
+          view: "usage",
           icon: <ChartNoAxesColumnIncreasingIcon />,
         },
         {

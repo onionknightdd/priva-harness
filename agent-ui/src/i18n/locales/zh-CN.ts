@@ -63,7 +63,21 @@ export const zhCN = {
   },
   breadcrumb: {
     dataAndUsage: "数据与用量",
+    usage: "用量",
     fileBrowser: "文件浏览器",
+  },
+  usage: {
+    loading: "正在加载用量",
+    retry: "重试",
+    heatmap: {
+      title: "每日处理 Token",
+      less: "少",
+      more: "多",
+      cellLabel: "{{date}}：{{value}} tokens",
+      ariaLabel: "{{year}} 年处理 Token 热力图",
+      legendLabel: "Token 用量强度",
+      legendLevelLabel: "等级 {{level}}",
+    },
   },
   agentMessage: {
     contentLabel: "Agent Message",

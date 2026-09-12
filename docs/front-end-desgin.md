@@ -168,6 +168,35 @@ Base UI 工程中转换出的 `render`。文件正文不做高度布局动画或
 做短时状态切换，减少动态效果时立即更新。Skill 分组复用 `ui/collapsible` 与现有
 `collapsePanel` 动效样式。
 
+### 数据与用量 → 用量
+
+2026-09-12：按用户要求逐步拼装用量页，第一步只在面包屑下方显示热力图。
+侧栏「数据与用量 → 用量」进入 `activeView: "usage"`，面包屑为「数据与用量 / 用量」，
+右侧 Workspace 与其他侧栏内容视图一样关闭。页面入口为
+[UsagePage](../agent-ui/src/features/usage/usage-page.tsx)，数据来自
+`GET /api/sandbox/usage/overview?tz=<IANA>&days=365`，`tz` 取
+`Intl.DateTimeFormat().resolvedOptions().timeZone`，由后端按本地日折算。
+
+```text
+数据与用量 / 用量
++------------------------------------------------------------------+
+| Jan   Feb   Mar   ...                                   Sep      |
+| [][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][]   |
+| [][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][]   |
+|  ... 7 行 × 53 周，单元 11px、间距 3px，颜色 = 当日处理 token     |
+| 少 [][][][][] 多                                                  |
++------------------------------------------------------------------+
+窄屏：热力图容器横向滚动，其余不变。
+```
+
+复用 [CalendarHeatmap](../agent-ui/src/components/heatmap/calendar-heatmap.tsx)，
+周一起始，隐藏星期与年份标签，月份标签使用二级文本色。单元颜色读取新增的共享
+`heatmap` token（浅色 / 深色均为 `rgb(78, 130, 239)`），空日读取 `muted`；
+全部为 0 时仍渲染空网格，网格本身即“尚无记录”状态。加载中显示与热力图同高的
+Skeleton，失败显示 `role="alert"` 的错误文本与重试按钮。数据到达时仅做 200ms
+透明度淡入（`@starting-style`），减少动态效果时立即显示；单元悬浮沿用组件的
+透明度反馈。Profile 对话框中的 mock 热力图仍传固定蓝色，后续收敛到同一 token。
+
 ### Mermaid 模块加载失败
 
 2026-09-11：Markdown 图表使用局部 `MermaidRenderBoundary`。异步模块加载或图表
@@ -802,7 +831,7 @@ App TooltipProvider -> 首次悬浮 2s -> 连续切换 0ms
 | Card / Item / Separator | [ui/card](../agent-ui/src/components/ui/card.tsx)、[ui/item](../agent-ui/src/components/ui/item.tsx)、[ui/separator](../agent-ui/src/components/ui/separator.tsx) | token 化卡片、列表项、分隔线；Separator 用 Base UI | 工具结果、模型列表、Profile |
 | Avatar | [ui/avatar](../agent-ui/src/components/ui/avatar.tsx)，Base UI Avatar | 圆形头像及 fallback | 用户菜单、Profile |
 | Chart | [ui/chart](../agent-ui/src/components/ui/chart.tsx) + Recharts | `chart-*` token 与本地图表 Tooltip；这里的 Tooltip 是图表数据提示 | 模型用量图表 |
-| CalendarHeatmap | [heatmap/calendar-heatmap](../agent-ui/src/components/heatmap/calendar-heatmap.tsx)，本地 SVG + date-fns | 网格热力图；基础默认读 chart token，Profile 调用点传入固定蓝色 | Token 使用日历 |
+| CalendarHeatmap | [heatmap/calendar-heatmap](../agent-ui/src/components/heatmap/calendar-heatmap.tsx)，本地 SVG + date-fns | 网格热力图；基础默认读 chart token，用量页读取共享 `heatmap` token，Profile 调用点仍传固定蓝色 | 用量页每日处理 Token、Profile Token 日历 |
 | Table / 数据网格 | [spreadsheet-renderer](../agent-ui/src/features/files/preview/renderers/spreadsheet-renderer.tsx)，SheetJS + TanStack Virtual + 原生 table | 工作簿解析、虚拟行列、粘性表头、本地单元格样式 | 表格文件预览；尚无通用 `ui/table` 或 DataTable 入口 |
 | ScrollArea / 消息滚动 | [agents/code-block](../agent-ui/src/components/agents/code-block.tsx) 直接使用 Base UI ScrollArea；[ui/message-scroller](../agent-ui/src/components/ui/message-scroller.tsx) 包装 `@shadcn/react/message-scroller` | 代码滚动区与聊天跟随滚动；其余区域多用原生 overflow | 代码块、聊天历史 |
 | Direction | [ui/direction](../agent-ui/src/components/ui/direction.tsx)，Base UI DirectionProvider | 无独立视觉，仅方向上下文 | FileUpload 的内部依赖 |
@@ -1096,6 +1125,12 @@ MCP 页面浏览器回归：打开 `/tests/features/resources/mcp-browser.html`�
 结果与滚动保留、防重复请求、Tab / 最近服务切换、复制配置、只读 / 禁用限制、
 项目连接的 cwd、最近详情数量上限，以及 390px iframe 的搜索、Tab 和返回操作。
 附加 `?reduced-motion=1&dark=1` 检查深色和减少动态效果；不会连接或修改真实服务。
+
+用量页请求参数与热力图映射：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/usage/usage-api.test.ts
+```
 
 Subagent 测试流客户端：
 
