@@ -36,7 +36,7 @@ export function AssistantFileReference({ path, label, className }: {
     }}>
       <ContextMenuTrigger className="select-text" tabIndex={exists && workspace ? undefined : 0}
         render={<span ref={triggerRef} className="inline-flex max-w-full min-w-0 align-middle" />}>
-        <FilePathLink path={path} label={label} showIcon variant="code" className={className} />
+        <FilePathLink path={path} label={label} tooltip={path} showIcon variant="code" className={className} />
       </ContextMenuTrigger>
       <ContextMenuContent finalFocus={() => quoted.current ? false : triggerRef.current?.querySelector("button") ?? triggerRef.current}>
         <ContextMenuItem className="text-xs" disabled={!absolute || !exists || !workspace}

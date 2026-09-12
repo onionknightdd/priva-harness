@@ -14,6 +14,7 @@ import { TooltipHint } from "@/components/ui/tooltip"
 export function FilePathLink({
   path,
   label,
+  tooltip,
   showIcon = false,
   recheckKey,
   variant = "text",
@@ -22,6 +23,7 @@ export function FilePathLink({
 }: {
   path: string
   label: string
+  tooltip?: string
   showIcon?: boolean
   recheckKey?: string
   variant?: "text" | "code"
@@ -36,19 +38,16 @@ export function FilePathLink({
   const openLabel = t("agentMessage.openFile", { name: label })
 
   if (!canOpen) {
-    if (variant === "code") {
-      return (
-        <code className={cn("rounded bg-muted px-1.5 py-0.5 font-mono text-[1em]", className)}>
-          {label}
-        </code>
-      )
-    }
-
-    return <span className={cn(marquee && "inline-block max-w-full min-w-0 truncate align-middle", className)}>{label}</span>
+    const content = variant === "code" ? (
+      <code className={cn("rounded bg-muted px-1.5 py-0.5 font-mono text-[1em]", className)}>
+        {label}
+      </code>
+    ) : <span className={cn(marquee && "inline-block max-w-full min-w-0 truncate align-middle", className)}>{label}</span>
+    return tooltip ? <TooltipHint content={tooltip}>{content}</TooltipHint> : content
   }
 
   return (
-    <TooltipHint content={openLabel}>
+    <TooltipHint content={tooltip ?? openLabel}>
       <motion.button
         type="button"
         aria-label={openLabel}

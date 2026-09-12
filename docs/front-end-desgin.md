@@ -618,6 +618,7 @@ inline 文件链接使用正常行高；单行省略容器不能使用 `leading-
 
 2026-09-12：助手正文中识别为文件路径的 inline code 只显示文件名，使用共享
 `fileNameFromPath` 提取；点击打开时仍使用相对会话 cwd 解析后的完整路径。
+悬停提示直接显示文件的绝对路径，在文件存在性检查完成前也可查看。
 右键菜单复用文件树的 `ContextMenu`，菜单文字为 12px，依次提供“打开”“复制文件路径”
 “在对话中引用”。打开复用 `openFileInWorkspace`，桌面进入右侧 Files，窄屏进入现有
 Workspace 抽屉；复制使用绝对路径，失败保留菜单并显示错误。引用把完整路径追加为
@@ -634,6 +635,7 @@ Esc、滚动及右键菜单打开时关闭。进入 160ms、退出 100ms，复�
 
 ```text
 src/components/example.tsx -> [example.tsx] --click / Open--> Workspace / Files
+                                          |-- Hover ----> absolute path
                                           |-- Copy path --> absolute path
                                           +-- Quote ----> composer draft
 Assistant selection -> ( Quote | Explain | Improve ) ----> composer draft
