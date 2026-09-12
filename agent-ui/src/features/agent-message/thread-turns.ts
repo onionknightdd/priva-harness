@@ -29,6 +29,37 @@ export function groupThreadTurns(
   return turns
 }
 
+/**
+ * Returns `next` with every turn whose user message and replies are the same
+ * objects as in `previous` replaced by the previous turn object, so memoized
+ * turn components bail out while a streaming update only touches the last turn.
+ */
+export function reuseThreadTurns(
+  previous: readonly ThreadTurn[],
+  next: ThreadTurn[]
+): ThreadTurn[] {
+  const previousById = new Map(previous.map((turn) => [turn.id, turn]))
+  let reused = 0
+
+  const merged = next.map((turn) => {
+    const before = previousById.get(turn.id)
+    if (
+      before &&
+      before.user === turn.user &&
+      before.replies.length === turn.replies.length &&
+      before.replies.every((message, index) => message === turn.replies[index])
+    ) {
+      reused += 1
+      return before
+    }
+    return turn
+  })
+
+  return reused === next.length && previous.length === next.length
+    ? (previous as ThreadTurn[])
+    : merged
+}
+
 export function turnStickyParts(turn: ThreadTurn): {
   user: AgentThreadMessage | null
   working: AgentThreadMessage | null

@@ -4,7 +4,8 @@ import * as React from "react"
 import gsap from "gsap"
 
 import type { AppView } from "@/lib/app-view"
-import { useChatSession } from "@/features/chat-session"
+import type { SessionInfo } from "@/lib/api/sandbox-sessions"
+import { useChatSessionActions } from "@/features/chat-session"
 
 import {
   Sidebar,
@@ -34,8 +35,15 @@ export function AppSidebar({
   onViewChange: (view: AppView) => void
 }) {
   const footerFadeRef = React.useRef<HTMLDivElement>(null)
-  const { openSession } = useChatSession()
+  const { openSession } = useChatSessionActions()
   const { isMobile, setOpenMobile } = useSidebar()
+  const selectSession = React.useCallback(
+    (session: SessionInfo) => {
+      onViewChange("agent-message")
+      openSession(session)
+    },
+    [onViewChange, openSession]
+  )
 
   React.useLayoutEffect(() => {
     const footerFade = footerFadeRef.current
@@ -77,10 +85,7 @@ export function AppSidebar({
           onViewChange={onViewChange}
         />
         <NavProjects
-          onSelectSession={(session) => {
-            onViewChange("agent-message")
-            openSession(session)
-          }}
+          onSelectSession={selectSession}
           onCreateSession={(cwd) => {
             onViewChange("agent-message")
             onCreateProjectSession?.(cwd)

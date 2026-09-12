@@ -22,7 +22,7 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { useChatSession } from "@/features/chat-session"
+import { useActiveSession, useSessionList } from "@/features/chat-session"
 import { useHarness } from "@/features/sidebar/header/harness-context"
 import type { SessionInfo } from "@/lib/api/sandbox-sessions"
 import { collapsePanel } from "@/lib/surfaces"
@@ -251,8 +251,8 @@ export function NavProjects({
     loadMore,
     setTags,
     rename,
-    highlightedSessionId,
-  } = useChatSession()
+  } = useSessionList()
+  const { highlightedSessionId } = useActiveSession()
 
   React.useEffect(() => {
     setCollapsedCwds(new Set())
@@ -310,6 +310,11 @@ export function NavProjects({
   const knownTags = React.useMemo(
     () => collectKnownTags(displayGroups),
     [displayGroups]
+  )
+  // Stable so memoized session rows do not re-render with the list.
+  const renameSession = React.useCallback(
+    (session: SessionInfo, title: string) => rename(session.sessionId, title),
+    [rename]
   )
 
   const allSessionsExpanded =
@@ -386,7 +391,7 @@ export function NavProjects({
         reduceMotion={shouldReduceMotion}
         untitled={untitled}
         onLoadMore={loadMore}
-        onRename={(session, title) => rename(session.sessionId, title)}
+        onRename={renameSession}
         onSaveTags={setTags}
         onSelect={onSelectSession}
         onCreateSession={onCreateSession}

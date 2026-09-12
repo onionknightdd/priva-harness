@@ -128,6 +128,45 @@ User MessageContent -> user-message -> light: #EAF3FD
 Dark popup menus -> popover -> #353535
 ```
 
+### 打开会话时的重渲染范围
+
+2026-09-12：从首页打开一个会话曾经触发三轮全 App 重渲染（点击、`useEffect`
+重复清空、数据到达），每轮都带着整个侧栏（每行 4 个 Tooltip + Popover +
+DropdownMenu）、Composer 和所有工具卡，实测 6 条消息的会话点击帧 73–90ms、
+数据帧 47–72ms、另有 23–29ms 的多余一帧。原因是 `ChatSessionContext` 把会话
+列表、当前会话、线程消息和全部回调放在一个 value 里，18 处消费者只取一两个
+字段却随任何变化重渲染。
+
+现在 `chat-session-context.tsx` 按变化频率拆成四个 context，按需订阅：
+
+```text
+ChatSessionProvider
+├─ useChatSessionActions()  openSession / closeSession / startNewChat / setDraftCwd /
+│                           forkFrom / bindRunSession / reloadThread   —— 身份稳定，永不变
+├─ useSessionList()         groups / status / refresh / setTags / rename / remove …
+│                           —— 列表刷新时变（侧栏、SessionMenuItems、header 重命名）
+├─ useActiveSession()       activeSession / runCwd / runSessionId / highlightedSessionId /
+│                           canFork / forking / forkError —— 打开、关闭、fork 时变
+└─ useChatThread()          threadMessages / messagesStatus / transcriptEpoch
+                            —— 每次流式更新都变，只有 useAgentMessage 订阅
+```
+
+回调通过一个在 `useLayoutEffect` 里同步的 `latest` ref 读取最新状态，因此
+`AppSidebar`（只需要 `openSession`）不再因为任何会话状态重渲染。配套规则：
+
+- `ProjectSessionItem`、`AgentMessageItem`、`ThreadTurnItem` 都是 `React.memo`；
+  传给它们的回调必须稳定（`AppSidebar.selectSession`、`NavProjects.renameSession`、
+  `AgentMessageThread.renderMessage` / `forkFromMessage` 均为 `useCallback`）。
+- `reuseThreadTurns` 在流式更新时复用未变化的 turn 对象，只有最后一个 turn 重渲染。
+- 相对时间由 `AgentMessageRelativeTime` 自己订阅 `TickingNowProvider`，15s 一次的
+  tick 只更新时间文字；`relative-time.ts` 按 locale 缓存 Intl 格式化器。
+- 打开会话的 `useEffect` 用函数式 `setState` 避免重复写入 `[]` / `"loading"`。
+
+实测（dev 构建，同一会话，热态）：点击帧 73–90ms → 44–47ms，数据帧 47–72ms
+→ 45–52ms，中间多余的一帧消失，long task 从 1–2 个降为 0；React 工作量
+174ms → 96ms。剩余成本是线程本体的首次挂载（每个工具卡一个 ContextMenu +
+TooltipHint、FilePathLink 的 Tooltip 等 Base UI 原语）。
+
 ### 悬浮高亮的跟手速度
 
 2026-09-12：侧栏菜单、文件树和 Slash 菜单的滑动悬浮高亮共用

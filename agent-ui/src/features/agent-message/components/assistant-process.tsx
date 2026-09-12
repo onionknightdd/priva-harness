@@ -30,7 +30,7 @@ import { MessageResponse } from "@/components/ai-elements/message"
 import { Badge } from "@/components/ui/badge"
 import { writeClipboardText } from "@/lib/clipboard"
 import { FilePathLink } from "@/features/files/file-path-link"
-import { useChatSession } from "@/features/chat-session"
+import { useActiveSession } from "@/features/chat-session"
 import { fileNameFromPath, resolveAgainstCwd } from "@/lib/file-path"
 import {
   Collapsible,
@@ -364,7 +364,7 @@ export function ToolItem({
 }
 
 function SessionImageReadToolItem({ block }: { block: Extract<StreamBlock, { type: "tool_use" }> }) {
-  const { runCwd } = useChatSession()
+  const { runCwd } = useActiveSession()
   return <ImageReadToolItem block={block} cwd={runCwd} />
 }
 
@@ -579,7 +579,7 @@ function ToolFileName({
   path: string | undefined
   status: string
 }) {
-  const { runCwd } = useChatSession()
+  const { runCwd } = useActiveSession()
   if (path === undefined || path.trim() === "") {
     return ""
   }

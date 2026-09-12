@@ -1,7 +1,7 @@
 import * as React from "react"
 
 import { AgentLayout } from "@/app/agent-layout"
-import { ChatSessionProvider, useChatSession } from "@/features/chat-session"
+import { ChatSessionProvider, useChatSessionActions } from "@/features/chat-session"
 import { AgentPreferencesProvider } from "@/features/settings"
 import { AppSidebar } from "@/features/sidebar"
 import { HarnessProvider } from "@/features/sidebar/header/harness-context"
@@ -13,7 +13,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 function AgentHarness() {
   const [activeView, setActiveView] = React.useState<AppView>("agent-message")
   const [agentMessageSessionKey, setAgentMessageSessionKey] = React.useState(0)
-  const { startNewChat } = useChatSession()
+  const { startNewChat } = useChatSessionActions()
   const startNewAgentMessage = React.useCallback(() => {
     startNewChat()
     setActiveView("agent-message")

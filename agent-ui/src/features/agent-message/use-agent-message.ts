@@ -2,7 +2,13 @@ import { updateInteractions, type InteractionRequest, type InteractionResponse }
 import * as React from "react"
 import { useTranslation } from "react-i18next"
 import { useAgentPreferences } from "@/features/settings/agent-preferences-context"
-import { useChatSession, useLiveSessions } from "@/features/chat-session"
+import {
+  useActiveSession,
+  useChatSessionActions,
+  useChatThread,
+  useLiveSessions,
+  useSessionList,
+} from "@/features/chat-session"
 import { useHarness } from "@/features/sidebar/header/harness-context"
 import { fetchSessionContextUsage } from "@/lib/api/sandbox-sessions"
 import type { SlashCommand } from "@/lib/api/slash-commands"
@@ -20,7 +26,10 @@ export function useAgentMessage() {
   const { t } = useTranslation()
   const { runHarnessId } = useHarness()
   const { queueBehavior, inputSuggestions, setLastModelReference } = useAgentPreferences()
-  const { threadMessages, messagesStatus, transcriptEpoch, runCwd, runSessionId, bindRunSession, refresh } = useChatSession()
+  const { threadMessages, messagesStatus, transcriptEpoch } = useChatThread()
+  const { runCwd, runSessionId } = useActiveSession()
+  const { bindRunSession } = useChatSessionActions()
+  const { refresh } = useSessionList()
   const { beginLiveSession, endLiveSession } = useLiveSessions()
   const composerAttachments = useComposerAttachments(runCwd, runHarnessId, runSessionId)
   const { attachments, clear: clearAttachments } = composerAttachments

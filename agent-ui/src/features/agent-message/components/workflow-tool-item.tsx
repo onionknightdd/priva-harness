@@ -1,5 +1,5 @@
 import { useCallback, useRef } from "react"
-import { useChatSession } from "@/features/chat-session"
+import { useActiveSession } from "@/features/chat-session"
 import { useHarness } from "@/features/sidebar/header/harness-context"
 import { fetchWorkflowAgentDetail } from "@/lib/api/sandbox-sessions"
 import type { WorkflowAgent, WorkflowAgentDetail, WorkflowCard } from "../workflow-data"
@@ -8,7 +8,7 @@ import { useWorkspaceWorkflow } from "@/features/workspace/use-workspace-workflo
 
 export function WorkflowToolItem({ workflow }: { workflow: WorkflowCard }) {
   const { openWorkflow } = useWorkspaceWorkflow()
-  const { runSessionId, activeSession } = useChatSession()
+  const { runSessionId, activeSession } = useActiveSession()
   const { runHarnessId } = useHarness()
   const sessionId = activeSession?.sessionId ?? runSessionId
   const cache = useRef(new Map<string, WorkflowAgentDetail>())

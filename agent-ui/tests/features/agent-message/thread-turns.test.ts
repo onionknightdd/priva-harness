@@ -2,7 +2,12 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import type { AgentThreadMessage } from "../../../src/features/agent-message/agent-message-data.ts"
-import { freezeBelowMaskTarget, groupThreadTurns, turnStickyParts } from "../../../src/features/agent-message/thread-turns.ts"
+import {
+  freezeBelowMaskTarget,
+  groupThreadTurns,
+  reuseThreadTurns,
+  turnStickyParts,
+} from "../../../src/features/agent-message/thread-turns.ts"
 
 function message(
   id: string,
@@ -117,5 +122,48 @@ describe("freezeBelowMaskTarget", () => {
       freezeBelowMaskTarget({ userStuck: false, workingStuck: false }),
       null
     )
+  })
+})
+
+describe("reuseThreadTurns", () => {
+  const u1 = message("u1", "user", "one")
+  const a1 = message("a1", "assistant", "a")
+  const u2 = message("u2", "user", "two")
+  const a2 = message("a2", "assistant", "b")
+
+  it("returns the previous array when nothing changed", () => {
+    const previous = groupThreadTurns([u1, a1, u2, a2])
+    const next = groupThreadTurns([u1, a1, u2, a2])
+
+    assert.equal(reuseThreadTurns(previous, next), previous)
+  })
+
+  it("keeps untouched turns and replaces only the turn with a changed reply", () => {
+    const previous = groupThreadTurns([u1, a1, u2, a2])
+    const streamed = { ...a2, content: "b more", status: "streaming" as const }
+    const merged = reuseThreadTurns(previous, groupThreadTurns([u1, a1, u2, streamed]))
+
+    assert.equal(merged[0], previous[0])
+    assert.notEqual(merged[1], previous[1])
+    assert.equal(merged[1]?.replies[0], streamed)
+  })
+
+  it("replaces a turn whose replies grew and appends new turns as new objects", () => {
+    const previous = groupThreadTurns([u1, a1])
+    const a1b = message("a1b", "assistant", "follow-up")
+    const merged = reuseThreadTurns(previous, groupThreadTurns([u1, a1, a1b, u2, a2]))
+
+    assert.notEqual(merged[0], previous[0])
+    assert.deepEqual(merged[0]?.replies, [a1, a1b])
+    assert.equal(merged.length, 2)
+  })
+
+  it("treats a removed trailing turn as a new array", () => {
+    const previous = groupThreadTurns([u1, a1, u2, a2])
+    const merged = reuseThreadTurns(previous, groupThreadTurns([u1, a1]))
+
+    assert.notEqual(merged, previous)
+    assert.equal(merged.length, 1)
+    assert.equal(merged[0], previous[0])
   })
 })

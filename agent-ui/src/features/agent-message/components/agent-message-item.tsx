@@ -25,7 +25,7 @@ import {
 import { writeClipboardText } from "@/lib/clipboard"
 import { EASE_OUT } from "@/lib/ease"
 
-import type { RelativeTimeLabel } from "@/lib/relative-time"
+import { formatSessionRelativeTime, useSharedNow } from "@/lib/relative-time"
 
 import {
   assistantHasProcess,
@@ -174,12 +174,22 @@ function useIsFreshMessage(createdAt: string) {
   return fresh
 }
 
-function AgentMessageRelativeTime({
-  relativeTime,
-}: {
-  relativeTime: RelativeTimeLabel
-}) {
+// Subscribes to the shared clock itself, so a tick re-renders only this label
+// and not the memoized message around it.
+function AgentMessageRelativeTime({ createdAt }: { createdAt: string }) {
+  const { t, i18n } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
+  const now = useSharedNow()
+  const relativeTime = formatSessionRelativeTime(
+    Date.parse(createdAt),
+    i18n.resolvedLanguage ?? i18n.language,
+    t("agentMessage.justNow"),
+    now
+  )
+
+  if (!relativeTime) {
+    return null
+  }
 
   return (
     <Tooltip>
@@ -201,16 +211,16 @@ function AgentMessageRelativeTime({
   )
 }
 
-export function AgentMessageItem({
+// Memoized so that streaming updates and thread-level state changes only
+// re-render the messages whose props actually changed.
+export const AgentMessageItem = React.memo(function AgentMessageItem({
   message,
-  relativeTime,
   onFork,
   forkDisabledReason,
   hideProcessHeader = false,
 }: {
   message: AgentThreadMessage
-  relativeTime?: RelativeTimeLabel | null
-  onFork?: () => void
+  onFork?: (message: AgentThreadMessage) => void
   forkDisabledReason?: string
   hideProcessHeader?: boolean
 }) {
@@ -301,12 +311,10 @@ export function AgentMessageItem({
             <MotionMessageActions layout="position" layoutDependency={false}>
               <AgentMessageCopyAction text={message.role === "assistant" ? assistantTimeline(message).map((section) => section.message.content).filter(Boolean).join("\n\n") : message.content} />
               <AgentMessageSplitAction
-                onFork={onFork}
+                onFork={onFork ? () => onFork(message) : undefined}
                 disabledReason={forkDisabledReason}
               />
-              {relativeTime ? (
-                <AgentMessageRelativeTime relativeTime={relativeTime} />
-              ) : null}
+              <AgentMessageRelativeTime createdAt={message.createdAt} />
             </MotionMessageActions>
           ) : null}
         </>
@@ -329,7 +337,7 @@ export function AgentMessageItem({
       {body}
     </motion.div>
   )
-}
+})
 
 function AssistantStreamBody({
   message,

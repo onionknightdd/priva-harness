@@ -3,7 +3,7 @@ import { motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
 import type { ToolResultStatus } from "@/components/agents/tool-result"
-import { useChatSession } from "@/features/chat-session"
+import { useActiveSession } from "@/features/chat-session"
 import { rememberFileExists } from "@/features/files/file-existence"
 import { useOptionalWorkspaceFiles } from "@/features/workspace"
 import { SPRING_PRESS } from "@/lib/ease"
@@ -26,7 +26,7 @@ export function CanvasToolItem({
 }) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
-  const { runCwd } = useChatSession()
+  const { runCwd } = useActiveSession()
   const workspaceFiles = useOptionalWorkspaceFiles()
   const tool = block.tool
   const running = isToolRunning(tool)

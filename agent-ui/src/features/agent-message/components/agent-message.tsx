@@ -9,7 +9,7 @@ import {
 } from "motion/react"
 import { useTranslation } from "react-i18next"
 
-import { useChatSession } from "@/features/chat-session"
+import { useActiveSession, useChatSessionActions } from "@/features/chat-session"
 import type { SlashCommand } from "@/lib/api/slash-commands"
 import { cn } from "@/lib/utils"
 
@@ -81,7 +81,8 @@ export function AgentMessage({
 }) {
   const { t } = useTranslation()
   const composerShellRef = useRef<HTMLDivElement>(null)
-  const { activeSession, forkError, runCwd, runSessionId, setDraftCwd } = useChatSession()
+  const { activeSession, forkError, runCwd, runSessionId } = useActiveSession()
+  const { setDraftCwd } = useChatSessionActions()
   const shouldReduceMotion = Boolean(useReducedMotion())
   const pending = interactions[0]
   const hadInteraction = useRef(false)

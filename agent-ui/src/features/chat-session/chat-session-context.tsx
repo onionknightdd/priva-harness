@@ -31,20 +31,35 @@ type LiveSessionProjectKey =
   | "runningSessionIds"
   | "warmSessionIds"
 
-type ChatSessionContextValue = Omit<
+type MessagesStatus = "idle" | "loading" | "ready" | "error"
+
+// The session state is published through four contexts so that a change in
+// one area does not re-render the others: the sidebar list only re-renders on
+// list changes, streaming thread updates stay inside the chat page, and the
+// actions never change identity, so `AppSidebar` and the tool cards that only
+// need a callback never re-render because of session state at all.
+export type SessionListValue = Omit<
   SessionProjectsValue,
   LiveSessionProjectKey
-> & {
+>
+
+export type ActiveSessionValue = {
   activeSession: SessionInfo | null
-  threadMessages: AgentThreadMessage[]
-  messagesStatus: "idle" | "loading" | "ready" | "error"
-  transcriptEpoch: number
   runCwd: string
   runSessionId: string | null
   highlightedSessionId: string | null
   canFork: boolean
   forking: boolean
   forkError: string | null
+}
+
+export type ChatThreadValue = {
+  threadMessages: AgentThreadMessage[]
+  messagesStatus: MessagesStatus
+  transcriptEpoch: number
+}
+
+export type ChatSessionActions = {
   openSession: (session: SessionInfo) => void
   closeSession: () => void
   startNewChat: (cwd?: string) => void
@@ -54,9 +69,25 @@ type ChatSessionContextValue = Omit<
   reloadThread: () => Promise<AgentThreadMessage[]>
 }
 
-const ChatSessionContext = React.createContext<ChatSessionContextValue | null>(
+const SessionListContext = React.createContext<SessionListValue | null>(null)
+const ActiveSessionContext = React.createContext<ActiveSessionValue | null>(
   null
 )
+const ChatThreadContext = React.createContext<ChatThreadValue | null>(null)
+const ChatSessionActionsContext =
+  React.createContext<ChatSessionActions | null>(null)
+
+// Actions read the latest state through this ref instead of closing over it,
+// which is what keeps their identity stable across renders.
+type LatestSessionState = {
+  activeCwd: string
+  activeSession: SessionInfo | null
+  groups: SessionProjectsValue["groups"]
+  messagesStatus: MessagesStatus
+  runCwd: string
+  runHarnessId: ReturnType<typeof useHarness>["runHarnessId"]
+  runSessionId: string | null
+}
 
 function liveSessionStub(sessionId: string, cwd: string): SessionInfo {
   return {
@@ -122,6 +153,27 @@ export function ChatSessionProvider({
   const skipTranscriptLoadRef = React.useRef(false)
   const viewedSessionIdRef = React.useRef<string | null>(null)
   const forkingRef = React.useRef(false)
+  const latest = React.useRef<LatestSessionState>({
+    activeCwd,
+    activeSession,
+    groups,
+    messagesStatus,
+    runCwd,
+    runHarnessId,
+    runSessionId,
+  })
+
+  React.useLayoutEffect(() => {
+    latest.current = {
+      activeCwd,
+      activeSession,
+      groups,
+      messagesStatus,
+      runCwd,
+      runHarnessId,
+      runSessionId,
+    }
+  })
 
   const bumpTranscript = React.useCallback(() => {
     setTranscriptEpoch((current) => current + 1)
@@ -134,10 +186,10 @@ export function ChatSessionProvider({
     setThreadMessages([])
     setMessagesStatus("idle")
     setRunSessionId(null)
-    setRunCwd(activeCwd)
+    setRunCwd(latest.current.activeCwd)
     setForkError(null)
     bumpTranscript()
-  }, [activeCwd, bumpTranscript])
+  }, [bumpTranscript])
 
   const startNewChat = React.useCallback(
     (cwd?: string) => {
@@ -147,18 +199,19 @@ export function ChatSessionProvider({
       setThreadMessages([])
       setMessagesStatus("idle")
       setRunSessionId(null)
-      setRunCwd(cwd?.trim() || activeCwd)
+      setRunCwd(cwd?.trim() || latest.current.activeCwd)
       setForkError(null)
       bumpTranscript()
     },
-    [activeCwd, bumpTranscript]
+    [bumpTranscript]
   )
 
   const setDraftCwd = React.useCallback((cwd: string) => {
-    if (activeSession || runSessionId || messagesStatus !== "idle") return
+    const state = latest.current
+    if (state.activeSession || state.runSessionId || state.messagesStatus !== "idle") return
     const path = cwd.trim()
     if (path) setRunCwd(path)
-  }, [activeSession, messagesStatus, runSessionId])
+  }, [])
 
   React.useEffect(() => {
     skipTranscriptLoadRef.current = false
@@ -219,8 +272,11 @@ export function ChatSessionProvider({
     }
 
     const controller = new AbortController()
-    setThreadMessages([])
-    setMessagesStatus("loading")
+    // openSession already cleared the thread and set "loading"; only write
+    // when something else selected the session, so no extra render happens
+    // between the click and the transcript response.
+    setThreadMessages((current) => (current.length === 0 ? current : []))
+    setMessagesStatus((current) => (current === "loading" ? current : "loading"))
 
     void listSessionThread(
       runHarnessId,
@@ -271,6 +327,7 @@ export function ChatSessionProvider({
 
   const forkFrom = React.useCallback(
     async (input: ForkFromInput) => {
+      const { runCwd, runHarnessId, runSessionId } = latest.current
       if (!runHarnessId || !runSessionId || forkingRef.current) {
         return
       }
@@ -341,14 +398,7 @@ export function ChatSessionProvider({
         setForking(false)
       }
     },
-    [
-      bumpTranscript,
-      prependSession,
-      refresh,
-      runCwd,
-      runHarnessId,
-      runSessionId,
-    ]
+    [bumpTranscript, prependSession, refresh]
   )
 
   const bindRunSession = React.useCallback(
@@ -360,6 +410,7 @@ export function ChatSessionProvider({
       viewedSessionIdRef.current = sessionId
       skipTranscriptLoadRef.current = true
       setRunSessionId(sessionId)
+      const { groups, runCwd } = latest.current
       const listed = groups
         .flatMap((group) => group.sessions)
         .find((session) => session.sessionId === sessionId)
@@ -379,18 +430,19 @@ export function ChatSessionProvider({
         prependSession(next)
       }
     },
-    [groups, prependSession, runCwd]
+    [prependSession]
   )
 
   const remove = React.useCallback(
     async (sessionId: string) => {
+      const { activeSession, runSessionId } = latest.current
       if (activeSession?.sessionId === sessionId || runSessionId === sessionId) {
         closeSession()
       }
 
       await removeProject(sessionId)
     },
-    [activeSession?.sessionId, closeSession, removeProject, runSessionId]
+    [closeSession, removeProject]
   )
 
   const highlightedSessionId = activeSession?.sessionId ?? runSessionId
@@ -428,6 +480,7 @@ export function ChatSessionProvider({
   }, [])
 
   const reloadThread = React.useCallback(async () => {
+    const { activeSession, runHarnessId } = latest.current
     if (!activeSession || !runHarnessId) {
       return [] as AgentThreadMessage[]
     }
@@ -436,7 +489,7 @@ export function ChatSessionProvider({
     setThreadMessages(next)
     bumpTranscript()
     return next
-  }, [activeSession, bumpTranscript, runHarnessId])
+  }, [bumpTranscript])
 
   const runningSessionIds = React.useMemo(() => {
     if (localLiveSessionIds.size === 0) {
@@ -449,7 +502,7 @@ export function ChatSessionProvider({
     return merged
   }, [localLiveSessionIds, polledRunningSessionIds])
 
-  const value = React.useMemo<ChatSessionContextValue>(
+  const listValue = React.useMemo<SessionListValue>(
     () => ({
       groups,
       activeCwd,
@@ -464,16 +517,52 @@ export function ChatSessionProvider({
       rename,
       remove,
       prependSession,
+    }),
+    [
+      activeCwd,
+      archive,
+      error,
+      groups,
+      loadMore,
+      prependSession,
+      refresh,
+      refreshing,
+      remove,
+      rename,
+      setPinned,
+      setTags,
+      status,
+    ]
+  )
+
+  const activeValue = React.useMemo<ActiveSessionValue>(
+    () => ({
       activeSession,
-      threadMessages,
-      messagesStatus,
-      transcriptEpoch,
       runCwd,
       runSessionId,
       highlightedSessionId,
       canFork,
       forking,
       forkError,
+    }),
+    [
+      activeSession,
+      canFork,
+      forkError,
+      forking,
+      highlightedSessionId,
+      runCwd,
+      runSessionId,
+    ]
+  )
+
+  const threadValue = React.useMemo<ChatThreadValue>(
+    () => ({ threadMessages, messagesStatus, transcriptEpoch }),
+    [messagesStatus, threadMessages, transcriptEpoch]
+  )
+
+  const actions = React.useMemo<ChatSessionActions>(
+    () => ({
       openSession,
       closeSession,
       startNewChat,
@@ -483,36 +572,13 @@ export function ChatSessionProvider({
       reloadThread,
     }),
     [
-      activeCwd,
-      activeSession,
-      archive,
       bindRunSession,
-      canFork,
       closeSession,
-      error,
-      forkError,
       forkFrom,
-      forking,
-      groups,
-      highlightedSessionId,
-      loadMore,
-      messagesStatus,
       openSession,
-      prependSession,
-      refresh,
-      refreshing,
       reloadThread,
-      remove,
-      rename,
-      runCwd,
-      runSessionId,
-      setPinned,
-      setTags,
-      startNewChat,
       setDraftCwd,
-      status,
-      threadMessages,
-      transcriptEpoch,
+      startNewChat,
     ]
   )
 
@@ -534,22 +600,48 @@ export function ChatSessionProvider({
   )
 
   return (
-    <ChatSessionContext.Provider value={value}>
-      <LiveSessionContext.Provider value={liveValue}>
-        <LiveSessionStatusContext.Provider value={liveStatusValue}>
-          {children}
-        </LiveSessionStatusContext.Provider>
-      </LiveSessionContext.Provider>
-    </ChatSessionContext.Provider>
+    <ChatSessionActionsContext.Provider value={actions}>
+      <SessionListContext.Provider value={listValue}>
+        <ActiveSessionContext.Provider value={activeValue}>
+          <ChatThreadContext.Provider value={threadValue}>
+            <LiveSessionContext.Provider value={liveValue}>
+              <LiveSessionStatusContext.Provider value={liveStatusValue}>
+                {children}
+              </LiveSessionStatusContext.Provider>
+            </LiveSessionContext.Provider>
+          </ChatThreadContext.Provider>
+        </ActiveSessionContext.Provider>
+      </SessionListContext.Provider>
+    </ChatSessionActionsContext.Provider>
   )
 }
 
-export function useChatSession() {
-  const context = React.useContext(ChatSessionContext)
+function useRequiredContext<T>(context: React.Context<T | null>, hook: string) {
+  const value = React.useContext(context)
 
-  if (!context) {
-    throw new Error("useChatSession must be used within a ChatSessionProvider.")
+  if (!value) {
+    throw new Error(`${hook} must be used within a ChatSessionProvider.`)
   }
 
-  return context
+  return value
+}
+
+/** Project groups and list operations; changes when the list refreshes. */
+export function useSessionList() {
+  return useRequiredContext(SessionListContext, "useSessionList")
+}
+
+/** The opened / bound session and its run cwd; changes on open, close and fork. */
+export function useActiveSession() {
+  return useRequiredContext(ActiveSessionContext, "useActiveSession")
+}
+
+/** Transcript messages and load status; changes on every streamed update. */
+export function useChatThread() {
+  return useRequiredContext(ChatThreadContext, "useChatThread")
+}
+
+/** Session commands with stable identity. */
+export function useChatSessionActions() {
+  return useRequiredContext(ChatSessionActionsContext, "useChatSessionActions")
 }

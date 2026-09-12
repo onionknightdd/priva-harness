@@ -63,7 +63,10 @@ function SessionLiveStatus({
   return null
 }
 
-export function ProjectSessionItem({
+// Memoized: a list of sessions re-renders on selection and refresh, and each
+// row carries a tag popover, a menu and several tooltips, so only rows whose
+// session or active flag changed should render.
+export const ProjectSessionItem = React.memo(function ProjectSessionItem({
   session,
   isMobile,
   untitled,
@@ -233,4 +236,4 @@ export function ProjectSessionItem({
       )}
     </SidebarMenuSubItem>
   )
-}
+})

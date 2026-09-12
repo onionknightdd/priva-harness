@@ -5,14 +5,14 @@ import { Card } from "@/components/ui/card"
 import { WorkflowStatusPill } from "./workflow-status"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { useChatSession } from "@/features/chat-session"
+import { useActiveSession } from "@/features/chat-session"
 import { useHarness } from "@/features/sidebar/header/harness-context"
 import { useWorkspaceWorkflow } from "@/features/workspace/use-workspace-workflow"
 import type { AgentToolView } from "../agent-tool-data"
 import { BackgroundTaskStopButton } from "./background-task-card"
 
 export function AgentToolItem({ agent, agents }: { agent: AgentToolView; agents: AgentToolView[] }) {
-  const { activeSession, runSessionId } = useChatSession()
+  const { activeSession, runSessionId } = useActiveSession()
   const { runHarnessId } = useHarness()
   const { openAgent } = useWorkspaceWorkflow()
   return <AgentToolSummary agent={agent} onOpen={() => openAgent(`${runHarnessId}:${activeSession?.sessionId ?? runSessionId}`, agents, agent.id)} />

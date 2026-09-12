@@ -19,7 +19,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { SessionMenuItems, useChatSession } from "@/features/chat-session"
+import {
+  SessionMenuItems,
+  useActiveSession,
+  useSessionList,
+} from "@/features/chat-session"
 import { sessionDisplayTitle } from "@/features/sidebar/content/session-projects"
 import { writeClipboardText } from "@/lib/clipboard"
 import { cn } from "@/lib/utils"
@@ -119,7 +123,8 @@ function SessionIdCopyButton({ sessionId }: { sessionId: string }) {
 export function AgentChatHeader() {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
-  const { activeSession, rename } = useChatSession()
+  const { activeSession } = useActiveSession()
+  const { rename } = useSessionList()
   const untitled = t("sidebar.projects.untitledSession")
   const title = activeSession
     ? sessionDisplayTitle(activeSession, untitled)
