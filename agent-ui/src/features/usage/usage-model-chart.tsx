@@ -1,5 +1,6 @@
 import { format, parseISO } from "date-fns"
 import { enUS, zhCN } from "date-fns/locale"
+import { useReducedMotion } from "motion/react"
 import { useMemo } from "react"
 import { useTranslation } from "react-i18next"
 import { Bar, BarChart, CartesianGrid, XAxis } from "recharts"
@@ -26,6 +27,10 @@ import {
 // chart container derives from each config key.
 const seriesKey = (index: number) => `series${index + 1}`
 
+// Bars grow from the baseline when the chart appears; Recharts' 1.5s default
+// reads as sluggish, so the reveal is kept close to the heatmap's.
+const BAR_REVEAL_MS = 320
+
 // Spelled out so Tailwind sees each theme variable referenced and emits it; a
 // template literal would leave the tokens out of the generated CSS.
 const SERIES_COLORS = [
@@ -48,6 +53,7 @@ export function UsageModelChart({
   const { t, i18n } = useTranslation()
   const zh = i18n.language.startsWith("zh")
   const locale = zh ? zhCN : enUS
+  const reduceMotion = Boolean(useReducedMotion())
   const series = useMemo(() => modelSeries(window, dailyModels, models), [window, dailyModels, models])
 
   const config = useMemo<ChartConfig>(
@@ -103,7 +109,9 @@ export function UsageModelChart({
             stackId="models"
             fill={`var(--color-${seriesKey(index)})`}
             radius={index === series.keys.length - 1 ? [3, 3, 0, 0] : 0}
-            isAnimationActive={false}
+            isAnimationActive={!reduceMotion}
+            animationDuration={BAR_REVEAL_MS}
+            animationEasing="ease-out"
           />
         ))}
       </BarChart>

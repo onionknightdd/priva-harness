@@ -114,7 +114,18 @@ async function runChecks() {
     check("the mode switch list has no background", getComputedStyle(triggers()[2]!.closest('[data-slot="tabs-list"]')!).backgroundColor === "rgba(0, 0, 0, 0)")
     check("three mode tabs are rendered", triggers().length === 5)
     check("weekday labels run Monday to Sunday", weekdayLabels().map((label) => label.textContent).join(",") === ["mon", "tue", "wed", "thu", "fri", "sat", "sun"].map((key) => i18n.t(`usage.heatmap.weekday.${key}`)).join(","))
-    check("weekday labels are one step smaller than month labels", getComputedStyle(weekdayLabels()[0]!).fontSize === "11px" && getComputedStyle(monthLabels()[0]!).fontSize === "12px")
+    check("weekday labels are 10px under 12px month labels", getComputedStyle(weekdayLabels()[0]!).fontSize === "10px" && getComputedStyle(monthLabels()[0]!).fontSize === "12px")
+    check("the reveal sweeps from the top-left corner along the diagonal", (() => {
+      const delayOf = (rect: SVGRectElement) => Number(rect.getAnimations()[0]?.effect?.getTiming().delay ?? NaN)
+      const at = (column: number, row: number) => rects().find((rect) => Math.round(Number(rect.getAttribute("x")) / 16) === column && Math.round(Number(rect.getAttribute("y")) / 16) === row)
+      const origin = at(1, 0), below = at(1, 1), right = at(2, 0), far = at(2, 1)
+      if (!origin || !below || !right || !far) return false
+      return delayOf(below) === delayOf(right) && delayOf(below) > delayOf(origin) && delayOf(far) > delayOf(below) && delayOf(right) - delayOf(origin) === 8
+    })())
+    check("the reveal is over within a second", Math.max(...rects().map((rect) => {
+      const timing = rect.getAnimations()[0]?.effect?.getTiming()
+      return timing ? Number(timing.delay) + Number(timing.duration) : 0
+    })) <= 1000)
     // Headless virtual time can freeze WAAPI mid-flight, so a cell counts when
     // it has settled or its reveal animation is still attached. The reveal is
     // then finished explicitly so geometry checks measure settled cells.
@@ -189,7 +200,8 @@ async function runChecks() {
     await clickTab(i18n.t("usage.activity.models"))
     check("model panel unmounts the heatmap", rects().length === 0)
     check("model panel hides the heatmap mode switch", triggers().length === 2)
-    check("model chart has rendered its bars", await waitFor(() => host.querySelectorAll(".recharts-bar-rectangle").length > 0))
+    // Bars grow in over 320ms; their paths only exist once they have height.
+    check("model chart has rendered its bars", await waitFor(() => host.querySelectorAll(".recharts-bar-rectangle path").length > 0))
     check("model chart stacks the top four models plus others", (() => {
       const text = host.querySelector(".recharts-legend-wrapper")?.textContent ?? ""
       const ranked = [...overview.models].sort((left, right) => right.processedTokens - left.processedTokens).map((model) => model.model)

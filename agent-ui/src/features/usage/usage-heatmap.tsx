@@ -28,8 +28,22 @@ export const USAGE_HEATMAP_WIDTH =
   USAGE_HEATMAP_BLOCK_MARGIN +
   STROKE_PADDING * 2
 
-// Month labels stay at 12px; weekday labels sit one step smaller.
-const WEEKDAY_LABEL_FONT_SIZE = 11
+// Month labels stay at 12px; weekday labels are a quieter 10px.
+const WEEKDAY_LABEL_FONT_SIZE = 10
+
+// Reveal timing: each cell plays for REVEAL_DURATION_MS and starts
+// REVEAL_STEP_MS after the cell on its upper-left diagonal.
+const REVEAL_DURATION_MS = 200
+const REVEAL_STEP_MS = 8
+const CELL_PITCH = USAGE_HEATMAP_BLOCK_SIZE + USAGE_HEATMAP_BLOCK_MARGIN
+
+// Column + row of a cell, read from its grid position rather than its DOM
+// index: the first week may be a partial column, so indices do not map to rows.
+function diagonalIndex(cell: SVGRectElement) {
+  const column = Math.round(Number(cell.getAttribute("x")) / CELL_PITCH)
+  const row = Math.round(Number(cell.getAttribute("y")) / CELL_PITCH)
+  return column + row
+}
 
 // Mode switches re-colour every cell at once; a short fill transition reads
 // as one grid changing rather than a repaint. `transform-box: fill-box` lets
@@ -69,8 +83,9 @@ export function UsageHeatmap({
     [t]
   )
 
-  // Reveal the year left to right when the data arrives: cells scale up from
-  // their centre with a per-column delay, so the grid fills like a timeline
+  // Reveal the year from the top-left corner to the bottom-right when the
+  // data arrives: cells scale up from their centre with a delay that grows
+  // along the diagonal (column + row), so the grid sweeps in like a wipe
   // instead of popping in. Plain WAAPI keeps 365 concurrent animations off the
   // main thread, and `fill: "backwards"` hides each cell through its delay
   // while leaving no inline styles behind once it has played. Mode switches
@@ -79,16 +94,15 @@ export function UsageHeatmap({
     const root = rootRef.current
     if (!root || reduceMotion) return
     const cells = Array.from(root.querySelectorAll<SVGRectElement>("rect[data-date]"))
-    const animations = cells.map((cell, index) =>
+    const animations = cells.map((cell) =>
       cell.animate(
         [
           { opacity: 0, transform: "scale(0.62)" },
           { opacity: 1, transform: "scale(1)" },
         ],
         {
-          duration: 240,
-          // The DOM is column-major (each week holds its seven days).
-          delay: Math.floor(index / 7) * 15,
+          duration: REVEAL_DURATION_MS,
+          delay: diagonalIndex(cell) * REVEAL_STEP_MS,
           easing: EASE_OUT_CSS,
           fill: "backwards",
         }
