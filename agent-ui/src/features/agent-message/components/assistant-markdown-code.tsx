@@ -9,7 +9,7 @@ import {
 import { StreamdownMarkdownCode } from "@/components/ai-elements/streamdown-markdown-code"
 import { FilePathLink } from "@/features/files/file-path-link"
 import { useChatSession } from "@/features/chat-session"
-import { looksLikeFilePath, resolveAgainstCwd } from "@/lib/file-path"
+import { fileNameFromPath, looksLikeFilePath, resolveAgainstCwd } from "@/lib/file-path"
 import { cn } from "@/lib/utils"
 
 const assistantInlineCodeClassName = "bg-[rgb(236,236,236)] dark:bg-muted"
@@ -52,7 +52,7 @@ export function AssistantMarkdownCode({
       return (
         <FilePathLink
           path={resolveAgainstCwd(text, runCwd)}
-          label={text}
+          label={fileNameFromPath(text)}
           showIcon
           variant="code"
           className={cn(assistantInlineCodeClassName, className)}

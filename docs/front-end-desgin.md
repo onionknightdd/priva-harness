@@ -631,6 +631,13 @@ Agent 执行过程（固定可用宽度）
 inline 文件链接使用正常行高；单行省略容器不能使用 `leading-none`，否则字体的
 下伸部分（如 `g`、`p`、`y`）可能超出行框并被 `truncate` 裁切。
 
+2026-09-12：助手正文中识别为文件路径的 inline code 只显示文件名，使用共享
+`fileNameFromPath` 提取；点击打开时仍使用相对会话 cwd 解析后的完整路径。
+
+```text
+src/components/example.tsx -> [example.tsx] -> open resolved full path
+```
+
 ## Layout approval
 
 以下两条布局要求从 `AGENTS.md` 原样迁入，继续生效。
