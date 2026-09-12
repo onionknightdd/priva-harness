@@ -8,8 +8,6 @@ import { Bar, BarChart, CartesianGrid, XAxis } from "recharts"
 import {
   type ChartConfig,
   ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart"
@@ -31,8 +29,10 @@ const seriesKey = (index: number) => `series${index + 1}`
 // Bars grow from the baseline when the chart appears; Recharts' 1.5s default
 // reads as sluggish, so the reveal is kept close to the heatmap's.
 const BAR_REVEAL_MS = 320
-// Plot plus legend; the activity block adopts this as the height of both
-// panels so switching tabs never moves what sits below.
+// The activity block adopts this as the height of both panels so switching
+// tabs never moves what sits below. There is no legend: the model table under
+// the block lists the same series in the same colours, and long model ids
+// would overflow a single-line legend.
 export const USAGE_MODEL_CHART_HEIGHT = 168
 
 
@@ -98,7 +98,6 @@ export function UsageModelChart({
         <ChartTooltip
           content={<ChartTooltipContent labelFormatter={(value) => monthLabel(String(value))} />}
         />
-        <ChartLegend content={<ChartLegendContent />} />
         {series.keys.map((_, index) => (
           <Bar
             key={seriesKey(index)}

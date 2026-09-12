@@ -123,7 +123,7 @@ await act(async () => {
 // `?panel=models` opens the model chart for visual inspection.
 if (params.get("panel") === "models") {
   await act(async () => {
-    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-slot="tabs-trigger"]'))[1]?.click()
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-test="activity"] [data-slot="tabs-trigger"]'))[1]?.click()
   })
 }
 
@@ -257,10 +257,10 @@ async function runChecks() {
     check("model panel hides the heatmap mode switch", triggers().length === 2)
     // Bars grow in over 320ms; their paths only exist once they have height.
     check("model chart has rendered its bars", await waitFor(() => host.querySelectorAll(".recharts-bar-rectangle path").length > 0))
+    check("model chart has no legend; the table below carries the series names", host.querySelector(".recharts-legend-wrapper") === null)
     check("model chart stacks the top four models plus others", (() => {
-      const text = host.querySelector(".recharts-legend-wrapper")?.textContent ?? ""
-      const ranked = [...overview.models].sort((left, right) => right.processedTokens - left.processedTokens).map((model) => model.model)
-      return ranked.slice(0, 4).every((model) => text.includes(model)) && ranked.slice(4).every((model) => !text.includes(model)) && text.includes(i18n.t("usage.models.other"))
+      const stacks = new Set(Array.from(host.querySelectorAll<SVGPathElement>(".recharts-bar-rectangle path")).map((path) => path.getAttribute("fill")))
+      return stacks.size === 5 && [1, 2, 3, 4, 5].every((index) => stacks.has(`var(--color-series${index})`))
     })())
     check("model chart draws twelve or thirteen monthly columns", (() => {
       const ticks = host.querySelectorAll(".recharts-cartesian-axis-tick")
