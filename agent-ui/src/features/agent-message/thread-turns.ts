@@ -60,6 +60,60 @@ export function reuseThreadTurns(
     : merged
 }
 
+// A transcript that arrives at once mounts in slices: the newest turns render
+// in the first frame (the viewport is pinned to the end anyway) and earlier
+// turns are prepended in transitions while the scroller preserves the viewport
+// position. Streaming appends and small threads never enter this path.
+export const INITIAL_REVEALED_TURNS = 6
+export const REVEAL_BATCH_TURNS = 8
+
+/** Which turns are mounted: indexes below `from` are still pending. */
+export interface RevealWindow {
+  firstTurnId: string | null
+  turnCount: number
+  from: number
+}
+
+export function initialRevealWindow(turns: readonly ThreadTurn[]): RevealWindow {
+  return {
+    firstTurnId: turns[0]?.id ?? null,
+    turnCount: turns.length,
+    from: Math.max(0, turns.length - INITIAL_REVEALED_TURNS),
+  }
+}
+
+/**
+ * Returns `current` unchanged while the thread only streams within the same
+ * turns; restarts from the tail when a different thread or a bulk of turns
+ * arrives; otherwise clamps the pending range to the new length.
+ */
+export function nextRevealWindow(
+  current: RevealWindow,
+  turns: readonly ThreadTurn[]
+): RevealWindow {
+  const firstTurnId = turns[0]?.id ?? null
+  if (current.firstTurnId === firstTurnId && current.turnCount === turns.length) {
+    return current
+  }
+  const bulkArrival =
+    current.firstTurnId !== firstTurnId ||
+    turns.length - current.turnCount > INITIAL_REVEALED_TURNS
+  if (bulkArrival) {
+    return initialRevealWindow(turns)
+  }
+  return {
+    firstTurnId,
+    turnCount: turns.length,
+    from: Math.min(current.from, turns.length),
+  }
+}
+
+export function revealNextBatch(current: RevealWindow): RevealWindow {
+  return current.from === 0
+    ? current
+    : { ...current, from: Math.max(0, current.from - REVEAL_BATCH_TURNS) }
+}
+
 export function turnStickyParts(turn: ThreadTurn): {
   user: AgentThreadMessage | null
   working: AgentThreadMessage | null

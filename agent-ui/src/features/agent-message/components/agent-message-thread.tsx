@@ -1,6 +1,8 @@
 import {
   memo,
+  startTransition,
   useCallback,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -46,6 +48,9 @@ import { questionSummaryTransition } from "../question-summary-motion"
 import { AssistantSelectionActionContext, type OnAssistantSelectionAction } from "../selection-actions-context"
 import {
   groupThreadTurns,
+  initialRevealWindow,
+  nextRevealWindow,
+  revealNextBatch,
   reuseThreadTurns,
   turnStickyParts,
   type ThreadTurn,
@@ -107,6 +112,26 @@ export function AgentMessageThread({
     previousTurns.current = next
     return next
   }, [visibleMessages])
+
+  // Long transcripts mount in slices; see thread-turns.ts. The window is
+  // derived during render so a bulk arrival and its first slice commit together.
+  const [reveal, setReveal] = useState(() => initialRevealWindow(turns))
+  const revealWindow = nextRevealWindow(reveal, turns)
+  if (revealWindow !== reveal) {
+    setReveal(revealWindow)
+  }
+  const revealFrom = revealWindow.from
+  useEffect(() => {
+    if (revealFrom === 0) {
+      return
+    }
+    // Let the current slice paint, then build the next one as a transition so
+    // React can yield while rendering the older turns.
+    const frame = requestAnimationFrame(() => {
+      startTransition(() => setReveal(revealNextBatch))
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [revealFrom])
 
   // Fork reads the current transcript through a ref so the callback, and with
   // it every message's props, stays stable while messages stream in.
@@ -174,14 +199,16 @@ export function AgentMessageThread({
               >
                 {/* Fixed layout dependencies keep streaming updates immediate;
                     the disclosure's LayoutGroup coordinates position changes. */}
-                {turns.map((turn, index) => (
-                  <ThreadTurnItem
-                    key={turn.id}
-                    isLast={index === turns.length - 1}
-                    renderMessage={renderMessage}
-                    turn={turn}
-                  />
-                ))}
+                {turns.map((turn, index) =>
+                  index < revealFrom ? null : (
+                    <ThreadTurnItem
+                      key={turn.id}
+                      isLast={index === turns.length - 1}
+                      renderMessage={renderMessage}
+                      turn={turn}
+                    />
+                  )
+                )}
                 <ThreadEndSpacer />
               </MessageScrollerContent>
             </MotionScrollerViewport>

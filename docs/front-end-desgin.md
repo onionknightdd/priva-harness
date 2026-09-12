@@ -245,6 +245,34 @@ Tooltip 根 523 → 66（仅侧栏与页头）。
 （WASM，正则不经 V8），属于依赖层决策。回归页 `tooltip-browser.html` 新增
 `#deferred` 区块（未 armed 无 Tooltip 根、点击保留、arming 后焦点回位、hover 打开）。
 
+### 长会话：分片挂载 turn
+
+2026-09-13：数据帧剩下的 ~240ms 是纯 React 挂载（45 个 turn、约 6000 个 DOM 节点），
+只能分片。`thread-turns.ts` 的 `RevealWindow` 记录 `firstTurnId / turnCount / from`：
+
+- 一次到达超过 `INITIAL_REVEALED_TURNS`（6）个 turn，或首个 turn 的 id 变化（切换会话），
+  视为整批到达，只挂最后 6 个 turn；视口本来就钉在底部，首帧内容不变。
+- 首帧绘制后（`requestAnimationFrame`），用 `startTransition` 每次再向前挂
+  `REVEAL_BATCH_TURNS`（8）个，直到 `from === 0`。React 在 transition 里可以让出
+  主线程，每片的提交只有 8 个 turn。
+- 同一线程内的流式更新（turn 数不变或 +1）不进入这条路径，窗口原样保留；线程变短时
+  只把 `from` 夹到新长度。窗口在渲染期间派生（`setState` during render），整批到达
+  与它的第一片在同一次提交里落地。
+- 向上补挂的 turn 由 `@shadcn/react/message-scroller` 的 `preserveScrollOnPrepend`
+  处理：钉底时继续钉底，用户已经上滚时保持原可见项位置（跨片时可能有一次 ~30px 的
+  位移，来自 `content-visibility:auto` 项首次布局，与分片无关）。
+
+```text
+messages 到达 ──► turns(45) ──► nextRevealWindow ──► from=39 ──► 首帧挂 6 个 turn（钉底）
+                                    │ rAF + startTransition
+                                    └─► from=31 → 23 → 15 → 7 → 0，每片 8 个，prepend 到上方
+streaming +1 turn ──► 窗口不变（无分片）
+```
+
+实测（dev 构建，长会话，热态）：数据帧 234–264ms → 49–52ms，之后每片 21–29ms
+共 5 片（约 600ms 内全部挂完），切换慢帧合计 444–462ms → 252–284ms；打开后视口
+仍在底部，最终 DOM 节点数不变。冷态剩下的一帧仍是 Shiki（~236ms）。
+
 ### 悬浮高亮的跟手速度
 
 2026-09-12：侧栏菜单、文件树和 Slash 菜单的滑动悬浮高亮共用

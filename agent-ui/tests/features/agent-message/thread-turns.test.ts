@@ -3,8 +3,13 @@ import { describe, it } from "node:test"
 
 import type { AgentThreadMessage } from "../../../src/features/agent-message/agent-message-data.ts"
 import {
+  INITIAL_REVEALED_TURNS,
+  REVEAL_BATCH_TURNS,
   freezeBelowMaskTarget,
   groupThreadTurns,
+  initialRevealWindow,
+  nextRevealWindow,
+  revealNextBatch,
   reuseThreadTurns,
   turnStickyParts,
 } from "../../../src/features/agent-message/thread-turns.ts"
@@ -165,5 +170,63 @@ describe("reuseThreadTurns", () => {
     assert.notEqual(merged, previous)
     assert.equal(merged.length, 1)
     assert.equal(merged[0], previous[0])
+  })
+})
+
+describe("reveal window", () => {
+  const turnsOf = (count: number, prefix = "u") =>
+    groupThreadTurns(
+      Array.from({ length: count }, (_, index) => message(`${prefix}${index}`, "user", `q${index}`))
+    )
+
+  it("mounts only the newest turns of a transcript that arrives at once", () => {
+    const empty = initialRevealWindow([])
+    const loaded = nextRevealWindow(empty, turnsOf(45))
+
+    assert.equal(loaded.from, 45 - INITIAL_REVEALED_TURNS)
+    assert.equal(loaded.turnCount, 45)
+  })
+
+  it("mounts short threads completely", () => {
+    assert.equal(initialRevealWindow(turnsOf(INITIAL_REVEALED_TURNS)).from, 0)
+    assert.equal(nextRevealWindow(initialRevealWindow([]), turnsOf(3)).from, 0)
+  })
+
+  it("reveals earlier turns in batches until none are pending", () => {
+    let window = nextRevealWindow(initialRevealWindow([]), turnsOf(20))
+    const steps: number[] = []
+    while (window.from > 0) {
+      window = revealNextBatch(window)
+      steps.push(window.from)
+    }
+
+    assert.deepEqual(steps, [14 - REVEAL_BATCH_TURNS, 0])
+    assert.equal(revealNextBatch(window), window)
+  })
+
+  it("keeps the same window while a turn streams or a single turn is appended", () => {
+    const turns = turnsOf(20)
+    const window = nextRevealWindow(initialRevealWindow([]), turns)
+
+    assert.equal(nextRevealWindow(window, turns), window)
+    const appended = nextRevealWindow(window, turnsOf(21))
+    assert.equal(appended.from, window.from)
+    assert.equal(appended.turnCount, 21)
+  })
+
+  it("restarts from the tail when a different thread arrives", () => {
+    const window = { ...nextRevealWindow(initialRevealWindow([]), turnsOf(20)), from: 0 }
+    const other = nextRevealWindow(window, turnsOf(20, "v"))
+
+    assert.equal(other.firstTurnId, "v0")
+    assert.equal(other.from, 20 - INITIAL_REVEALED_TURNS)
+  })
+
+  it("clamps the pending range when the thread shrinks", () => {
+    const window = nextRevealWindow(initialRevealWindow([]), turnsOf(20))
+    const shrunk = nextRevealWindow(window, turnsOf(10))
+
+    assert.equal(shrunk.from, 10)
+    assert.equal(revealNextBatch(shrunk).from, 2)
   })
 })
