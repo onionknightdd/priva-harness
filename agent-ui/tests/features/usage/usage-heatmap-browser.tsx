@@ -114,6 +114,36 @@ async function runChecks() {
     check("the mode switch list has no background", getComputedStyle(triggers()[2]!.closest('[data-slot="tabs-list"]')!).backgroundColor === "rgba(0, 0, 0, 0)")
     check("three mode tabs are rendered", triggers().length === 5)
     check("weekday labels run Monday to Sunday", weekdayLabels().map((label) => label.textContent).join(",") === ["mon", "tue", "wed", "thu", "fri", "sat", "sun"].map((key) => i18n.t(`usage.heatmap.weekday.${key}`)).join(","))
+    check("weekday labels are one step smaller than month labels", getComputedStyle(weekdayLabels()[0]!).fontSize === "11px" && getComputedStyle(monthLabels()[0]!).fontSize === "12px")
+    // Headless virtual time can freeze WAAPI mid-flight, so a cell counts when
+    // it has settled or its reveal animation is still attached. The reveal is
+    // then finished explicitly so geometry checks measure settled cells.
+    check("every cell is revealed or still revealing", rects().every((rect) => getComputedStyle(rect).opacity === "1" || rect.getAnimations().length > 0))
+    for (const rect of rects()) for (const animation of rect.getAnimations()) animation.finish()
+    check("finished cells sit at full size and opacity", (() => {
+      const off = rects().filter((rect) => getComputedStyle(rect).opacity !== "1" || Math.abs(rect.getBoundingClientRect().width - 12) >= 0.5)
+      if (off.length === 0) return true
+      const sample = off[0]!
+      throw new Error(`finished cells sit at full size and opacity: ${off.length} off, e.g. opacity=${getComputedStyle(sample).opacity} width=${sample.getBoundingClientRect().width} transform=${getComputedStyle(sample).transform} animations=${sample.getAnimations().length}`)
+    })())
+
+    const hoveredCell = rects().at(-1)!
+    await act(async () => {
+      hoveredCell.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }))
+    })
+    const tooltip = () => document.querySelector<HTMLElement>('[data-slot="tooltip-content"]')
+    check("hovering a cell shows its date and tokens", await waitFor(() => {
+      const text = tooltip()?.textContent ?? ""
+      const [year, month, day] = hoveredCell.dataset.date!.split("-").map(Number)
+      const expectedDate = i18n.language.startsWith("zh")
+        ? `${year}年${month}月${day}日`
+        : new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short", day: "numeric" }).format(new Date(year!, month! - 1, day))
+      return text.includes(expectedDate) && text.includes(Number(hoveredCell.dataset.value).toLocaleString())
+    }))
+    await act(async () => {
+      hoveredCell.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: document.body }))
+    })
+    check("leaving the grid hides the tooltip", await waitFor(() => tooltip() === null || tooltip()?.getAttribute("data-open") === null))
     check("month labels sit below the last day row", (() => {
       const maxRectBottom = Math.max(...rects().map((rect) => rect.getBBox().y + rect.getBBox().height))
       return monthLabels().length > 0 && monthLabels().every((label) => label.getBBox().y >= maxRectBottom)

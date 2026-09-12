@@ -100,6 +100,11 @@ export const en = {
         weekly: "Week of {{date}}: {{value}} tokens",
         cumulative: "Through {{date}}: {{value}} tokens in total",
       },
+      tooltip: {
+        daily: "{{value}} tokens",
+        weekly: "{{value}} tokens this week",
+        cumulative: "{{value}} tokens to date",
+      },
       ariaLabel: "Token activity heatmap for {{year}}",
     },
   },

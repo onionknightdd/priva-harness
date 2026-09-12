@@ -739,6 +739,8 @@ export type CalendarHeatmapBodyProps = Omit<
   hideMonthLabels?: boolean;
   hideWeekdayLabels?: boolean;
   hideYearLabels?: boolean;
+  // Defaults to the month label size (fontSize * 0.75).
+  weekdayLabelFontSize?: number;
   className?: string;
   labelClassName?: string;
   yearClassName?: string;
@@ -754,6 +756,7 @@ export const CalendarHeatmapBody = ({
   hideMonthLabels = false,
   hideWeekdayLabels = false,
   hideYearLabels = false,
+  weekdayLabelFontSize,
   className,
   labelClassName,
   yearClassName,
@@ -884,7 +887,9 @@ export const CalendarHeatmapBody = ({
                         }
                         dominantBaseline="middle"
                         textAnchor="start"
-                        style={{ fontSize: `${fontSize * 0.75}px` }}
+                        style={{
+                          fontSize: `${weekdayLabelFontSize ?? fontSize * 0.75}px`,
+                        }}
                       >
                         {adjustedLabel}
                       </text>

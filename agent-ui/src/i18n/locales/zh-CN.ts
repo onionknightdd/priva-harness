@@ -100,6 +100,11 @@ export const zhCN = {
         weekly: "{{date}} 所在周：{{value}} tokens",
         cumulative: "截至 {{date}}：累计 {{value}} tokens",
       },
+      tooltip: {
+        daily: "{{value}} tokens",
+        weekly: "本周 {{value}} tokens",
+        cumulative: "累计 {{value}} tokens",
+      },
       ariaLabel: "{{year}} 年 Token 活动热力图",
     },
   },
