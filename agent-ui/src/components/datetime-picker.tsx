@@ -441,9 +441,11 @@ function MonthYearPicker({
   }, [mode, value]);
   return (
     <div className={cn(className)}>
+      {/* The scrollbar overlays the viewport, so the grids keep a right gutter
+          for it instead of letting it cover the last column. */}
       <ScrollArea className="h-full">
         {mode === 'year' && (
-          <div className="grid grid-cols-4">
+          <div className="grid grid-cols-4 pe-3">
             {years.map((year) => (
               <div key={year.value} ref={year.value === getYear(value) ? yearRef : undefined}>
                 <Button
@@ -459,7 +461,7 @@ function MonthYearPicker({
           </div>
         )}
         {mode === 'month' && (
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-3 gap-4 pe-3">
             {months.map((month) => (
               <Button
                 key={month.value}
