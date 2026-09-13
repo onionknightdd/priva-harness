@@ -67,11 +67,17 @@ export function reuseThreadTurns(
 export const INITIAL_REVEALED_TURNS = 6
 export const REVEAL_BATCH_TURNS = 8
 
-/** Which turns are mounted: indexes below `from` are still pending. */
+/**
+ * Which turns are mounted: indexes below `from` are still pending. While
+ * `preparing` is set nothing mounts yet; the thread resolves the file
+ * references of a freshly arrived transcript first so they render in their
+ * final form instead of reflowing slice by slice.
+ */
 export interface RevealWindow {
   firstTurnId: string | null
   turnCount: number
   from: number
+  preparing: boolean
 }
 
 export function initialRevealWindow(turns: readonly ThreadTurn[]): RevealWindow {
@@ -79,7 +85,12 @@ export function initialRevealWindow(turns: readonly ThreadTurn[]): RevealWindow 
     firstTurnId: turns[0]?.id ?? null,
     turnCount: turns.length,
     from: Math.max(0, turns.length - INITIAL_REVEALED_TURNS),
+    preparing: turns.length > 0,
   }
+}
+
+export function markRevealPrepared(current: RevealWindow): RevealWindow {
+  return current.preparing ? { ...current, preparing: false } : current
 }
 
 /**
@@ -102,6 +113,7 @@ export function nextRevealWindow(
     return initialRevealWindow(turns)
   }
   return {
+    ...current,
     firstTurnId,
     turnCount: turns.length,
     from: Math.min(current.from, turns.length),

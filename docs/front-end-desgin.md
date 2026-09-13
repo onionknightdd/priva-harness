@@ -318,7 +318,31 @@ isEmpty: false ─► spacer flexGrow=0（贴底，瞬时）  useLayoutEffect �
                   └─ 合成器线程跑，主线程同时挂载 turn 分片
 ```
 
-`project-directory-browser.html` 的 fixtures 补了 `POST /api/sandbox/files/exists`
+**分片挂载后的“抖动很多下”。** 停靠改到合成器线程后，冷态打开长会话仍有多次抖动，
+逐帧比对发现不是动画而是内容回流：新挂上的 turn 里，行内文件引用先按“未解析”渲染成
+`<code>` 芯片（可换行、上下各 2px 内边距），`/exists` 结果到达后换成带图标、单行截断的
+按钮，每条引用矮 4px 且不再换行，一片 turn 一起收缩 60–100px；视口钉底，收缩发生在
+可见区上方就把内容推下去，再被钉底逻辑拉回——每片一次。两处修正：
+
+- `useFileExists` 改为三态（`undefined` 待定 / `true` / `false`），`FilePathLink`
+  在待定时用与按钮相同的盒子（`inline-flex` + 图标 + 单行截断）渲染成不可点击的
+  `<span>`，解析后只换颜色和交互；文件不存在时才换成 `<code>` 芯片。
+- 整批到达的 transcript 先不挂 turn（`RevealWindow.preparing`），
+  `collectThreadFilePaths` 从 assistant 文本的行内代码（跳过围栏代码块）和 tool_use 的
+  `file_path` / `path` / `notebook_path` 收集路径，一次 `checkFileExists` 批量解析后再挂
+  第一片，上限 400ms（超时则退回逐条解析）。`PinLatestAtCenter` 在 turn 真正挂上的那次
+  提交重新钉底。
+
+```text
+messages 到达 ──► collectThreadFilePaths ──► POST /files/exists（一次）
+                                                │ ≤400ms
+                                                └─► preparing=false ──► 首片挂载，引用直接是最终形态
+流式新增引用 ──► 待定态与按钮同盒 ──► 解析后只变颜色，不回流
+```
+
+实测（dev 构建，冷态打开长会话）：逐帧监测 45 个 turn 的高度与末项底边，改动前每片
+有 6–13px×N 的高度变化、底边最多偏移 107px 再回弹；改动后高度变化 0、底边偏移 0，
+热态同样为 0。`project-directory-browser.html` 的 fixtures 补了 `POST /api/sandbox/files/exists`
 的模拟（行内文件引用批量探测存在性）。该页里「existing project plus starts a clean
 draft」一项在本次改动前的分支上同样失败：`settle()` 恰好 300ms，与 WebSocket 关闭后
 300ms 的自动重连竞争，第二个 socket 先于断言创建；属于既有的计时竞态，未在本次处理。
@@ -1218,7 +1242,7 @@ Agent data / composer / attachments：
 node --import ./services/agent-runner/ts/node_modules/tsx/dist/loader.mjs --test agent-ui/tests/features/agent-message/agent-tool-data.test.ts
 node --test agent-ui/tests/features/agent-message/composer-attachments.test.ts agent-ui/tests/features/agent-message/composer-primary-action.test.ts agent-ui/tests/features/agent-message/slash-command-envelope.test.ts
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/message-attachments.test.ts
-./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/thread-turns.test.ts agent-ui/tests/features/agent-message/snapshot-messages.test.ts
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/thread-turns.test.ts agent-ui/tests/features/agent-message/snapshot-messages.test.ts agent-ui/tests/features/agent-message/thread-file-paths.test.ts
 ```
 
 项目目录浏览器回归：在 `agent-ui/` 运行 `npm run dev`，打开

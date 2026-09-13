@@ -29,6 +29,7 @@ import {
   useMessageScroller,
 } from "@/components/ui/message-scroller"
 import { useActiveSession, useChatSessionActions } from "@/features/chat-session"
+import { checkFileExists } from "@/features/files/file-existence"
 import { sessionDisplayTitle } from "@/features/sidebar/content/session-projects"
 import { useHarness } from "@/features/sidebar/header/harness-context"
 import { TickingNowProvider, useTickingNow } from "@/lib/relative-time"
@@ -46,9 +47,11 @@ import { ForkContext, type ForkAvailability } from "../fork-context"
 import { foldCommandSurfaces } from "../slash-command-envelope"
 import { questionSummaryTransition } from "../question-summary-motion"
 import { AssistantSelectionActionContext, type OnAssistantSelectionAction } from "../selection-actions-context"
+import { collectThreadFilePaths } from "../thread-file-paths"
 import {
   groupThreadTurns,
   initialRevealWindow,
+  markRevealPrepared,
   nextRevealWindow,
   revealNextBatch,
   reuseThreadTurns,
@@ -64,6 +67,10 @@ import { WorkingStatusLine } from "./working-status-line"
 const MotionScrollerViewport = motion.create(MessageScrollerViewport)
 const MotionScrollerItem = motion.create(MessageScrollerItem)
 
+// Upper bound on holding a transcript for its file-existence batch; a slow
+// server degrades to the per-reference settling instead of a blank thread.
+const FILE_PREFETCH_TIMEOUT_MS = 400
+
 export function AgentMessageThread({
   messages,
   onSelectionAction,
@@ -73,7 +80,7 @@ export function AgentMessageThread({
 }) {
   const { t } = useTranslation()
   const { runHarnessId } = useHarness()
-  const { activeSession, canFork, forking, runSessionId } = useActiveSession()
+  const { activeSession, canFork, forking, runCwd, runSessionId } = useActiveSession()
   const { forkFrom } = useChatSessionActions()
   const now = useTickingNow()
   const [followPaused, setFollowPaused] = useState(false)
@@ -121,8 +128,28 @@ export function AgentMessageThread({
     setReveal(revealWindow)
   }
   const revealFrom = revealWindow.from
+  const preparing = revealWindow.preparing
+  // A freshly arrived transcript first resolves its file references in one
+  // batch; otherwise each slice would mount as pending text and reflow when
+  // the answers land, nudging the pinned viewport several times.
   useEffect(() => {
-    if (revealFrom === 0) {
+    if (!preparing) {
+      return
+    }
+    let cancelled = false
+    const paths = collectThreadFilePaths(visibleMessages, runCwd)
+    const timeout = new Promise<void>((resolve) => {
+      setTimeout(resolve, FILE_PREFETCH_TIMEOUT_MS)
+    })
+    void Promise.race([Promise.all(paths.map((path) => checkFileExists(path))), timeout]).then(() => {
+      if (!cancelled) setReveal(markRevealPrepared)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [preparing, runCwd, visibleMessages])
+  useEffect(() => {
+    if (preparing || revealFrom === 0) {
       return
     }
     // Let the current slice paint, then build the next one as a transition so
@@ -131,7 +158,7 @@ export function AgentMessageThread({
       startTransition(() => setReveal(revealNextBatch))
     })
     return () => cancelAnimationFrame(frame)
-  }, [revealFrom])
+  }, [preparing, revealFrom])
 
   // Fork reads the current transcript through a ref so the callback, and with
   // it every message's props, stays stable while messages stream in.
@@ -200,7 +227,7 @@ export function AgentMessageThread({
                 {/* Fixed layout dependencies keep streaming updates immediate;
                     the disclosure's LayoutGroup coordinates position changes. */}
                 {turns.map((turn, index) =>
-                  index < revealFrom ? null : (
+                  preparing || index < revealFrom ? null : (
                     <ThreadTurnItem
                       key={turn.id}
                       isLast={index === turns.length - 1}
@@ -215,7 +242,7 @@ export function AgentMessageThread({
           </LayoutGroup>
         </MotionConfig>
         <KeepExpandAnchor onFollowPausedChange={setFollowPaused} />
-        <PinLatestAtCenter messages={messages} />
+        <PinLatestAtCenter messages={messages} mounted={!preparing} />
         <div className="pointer-events-none absolute inset-x-0 bottom-2 z-20 flex justify-center">
           <div className="pointer-events-auto flex items-center gap-2">
             <TaskPlanPopover messages={messages} />
@@ -434,8 +461,11 @@ function isScrolledToEnd(viewport: HTMLElement) {
 
 function PinLatestAtCenter({
   messages,
+  mounted,
 }: {
   messages: AgentThreadMessage[]
+  /** Turns mount one commit after the messages arrive; re-pin on that commit. */
+  mounted: boolean
 }) {
   const { scrollToEnd } = useMessageScroller()
   const pinnedRef = useRef(true)
@@ -460,7 +490,7 @@ function PinLatestAtCenter({
 
   useLayoutEffect(() => {
     followLatest()
-  }, [followLatest, messages])
+  }, [followLatest, messages, mounted])
 
   useLayoutEffect(() => {
     const viewport = document.querySelector<HTMLElement>(

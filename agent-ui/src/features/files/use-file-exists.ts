@@ -6,13 +6,16 @@ import {
   peekFileExists,
 } from "./file-existence"
 
+/**
+ * Whether `path` exists: `undefined` while the first check is pending, so
+ * callers can render a placeholder with the final geometry instead of
+ * flipping between two layouts. A `revision` change rechecks but keeps the
+ * last answer until the new one arrives.
+ */
 export function useFileExists(path: string | undefined, revision?: string) {
-  const [exists, setExists] = React.useState<boolean>(() => {
-    if (!path) {
-      return false
-    }
-    return peekFileExists(path) === true
-  })
+  const [exists, setExists] = React.useState<boolean | undefined>(() =>
+    path ? peekFileExists(path) : false
+  )
 
   React.useEffect(() => {
     if (!path) {

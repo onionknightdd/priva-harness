@@ -8,6 +8,7 @@ import {
   freezeBelowMaskTarget,
   groupThreadTurns,
   initialRevealWindow,
+  markRevealPrepared,
   nextRevealWindow,
   revealNextBatch,
   reuseThreadTurns,
@@ -228,5 +229,30 @@ describe("reveal window", () => {
 
     assert.equal(shrunk.from, 10)
     assert.equal(revealNextBatch(shrunk).from, 2)
+  })
+})
+
+describe("reveal preparation", () => {
+  const turnsOf = (count: number) =>
+    groupThreadTurns(
+      Array.from({ length: count }, (_, index) => message(`u${index}`, "user", `q${index}`))
+    )
+
+  it("holds a freshly arrived transcript until its references are prepared", () => {
+    const empty = initialRevealWindow([])
+    assert.equal(empty.preparing, false)
+
+    const loaded = nextRevealWindow(empty, turnsOf(20))
+    assert.equal(loaded.preparing, true)
+
+    const prepared = markRevealPrepared(loaded)
+    assert.equal(prepared.preparing, false)
+    assert.equal(prepared.from, loaded.from)
+    assert.equal(markRevealPrepared(prepared), prepared)
+  })
+
+  it("does not re-prepare while the same thread streams", () => {
+    const prepared = markRevealPrepared(nextRevealWindow(initialRevealWindow([]), turnsOf(20)))
+    assert.equal(nextRevealWindow(prepared, turnsOf(21)).preparing, false)
   })
 })

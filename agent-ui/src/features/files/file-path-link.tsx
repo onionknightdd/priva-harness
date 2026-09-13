@@ -34,16 +34,25 @@ export function FilePathLink({
   const shouldReduceMotion = Boolean(useReducedMotion())
   const workspaceFiles = useOptionalWorkspaceFiles()
   const exists = useFileExists(path, recheckKey)
-  const canOpen = exists && workspaceFiles !== null && path.trim() !== ""
+  const canOpen = exists === true && workspaceFiles !== null && path.trim() !== ""
   const openLabel = t("agentMessage.openFile", { name: label })
 
-  const content = !canOpen ? (
-    variant === "code" ? (
-      <code className={cn("rounded bg-muted px-1.5 py-0.5 font-mono text-[1em]", className)}>
-        {label}
-      </code>
-    ) : <span className={cn(marquee && "inline-block max-w-full min-w-0 truncate align-middle", className)}>{label}</span>
+  const icon = showIcon ? (
+    <FileTypeIcon
+      name={fileNameFromPath(path)}
+      path={path}
+      className="block size-[0.875em]"
+    />
+  ) : null
+  const text = marquee ? (
+    <OverflowMarquee className="flex-1">{label}</OverflowMarquee>
   ) : (
+    <span className="min-w-0 truncate">{label}</span>
+  )
+  const linkBox =
+    "relative z-10 inline-flex max-w-full min-w-0 items-center gap-0.5 align-middle text-left font-normal leading-normal"
+
+  const content = canOpen ? (
     <motion.button
       type="button"
       aria-label={openLabel}
@@ -55,7 +64,8 @@ export function FilePathLink({
       whileTap={shouldReduceMotion ? undefined : { scale: 0.98 }}
       transition={{ duration: shouldReduceMotion ? 0 : 0.16 }}
       className={cn(
-        "relative z-10 inline-flex max-w-full min-w-0 pointer-events-auto items-center gap-0.5 align-middle text-left font-normal leading-normal outline-none",
+        linkBox,
+        "pointer-events-auto outline-none",
         className,
         "cursor-pointer bg-transparent p-0 underline-offset-2",
         focusRing,
@@ -64,15 +74,22 @@ export function FilePathLink({
           : "hover:underline"
       )}
     >
-      {showIcon ? (
-        <FileTypeIcon
-          name={fileNameFromPath(path)}
-          path={path}
-          className="block size-[0.875em]"
-        />
-      ) : null}
-      {marquee ? <OverflowMarquee className="flex-1">{label}</OverflowMarquee> : <span className="min-w-0 truncate">{label}</span>}
+      {icon}
+      {text}
     </motion.button>
+  ) : exists === undefined ? (
+    // Same box as the button, so a transcript full of references does not
+    // reflow line by line as the existence checks resolve.
+    <span className={cn(linkBox, className)}>
+      {icon}
+      {text}
+    </span>
+  ) : variant === "code" ? (
+    <code className={cn("rounded bg-muted px-1.5 py-0.5 font-mono text-[1em]", className)}>
+      {label}
+    </code>
+  ) : (
+    <span className={cn(marquee && "inline-block max-w-full min-w-0 truncate align-middle", className)}>{label}</span>
   )
 
   return (
