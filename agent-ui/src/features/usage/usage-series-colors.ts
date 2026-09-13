@@ -8,6 +8,7 @@ export const SERIES_COLORS = [
   "var(--color-usage-series-3)",
   "var(--color-usage-series-4)",
   "var(--color-usage-series-5)",
+  "var(--color-usage-series-6)",
 ] as const
 
 export function seriesColor(index: number) {

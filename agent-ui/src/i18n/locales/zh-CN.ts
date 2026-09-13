@@ -80,7 +80,7 @@ export const zhCN = {
     },
     modelTable: {
       title: "模型",
-      description: "近一年，按处理 token 排序；前 4 个模型与其余合计。",
+      description: "近一年，按处理 token 排序；前 5 个模型与其余合计。",
       model: "模型",
       share: "份额",
       tokens: "Token",

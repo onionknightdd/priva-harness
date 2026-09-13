@@ -17,9 +17,9 @@ test("model rows rank by processed tokens and fold the tail into others with sum
     model("m3", 30, { share: 0.1 }),
     model("m4", 20, { share: 0.06 }),
   ])
-  assert.deepEqual(rows.map((row) => row.key), ["m1", "m2", "m3", "m4", OTHER_MODELS_KEY])
-  assert.deepEqual(rows[4], {
-    key: OTHER_MODELS_KEY, processedTokens: 14, share: 0.14, costUsd: 0.5, runsWithoutCost: 6, runs: 8,
+  assert.deepEqual(rows.map((row) => row.key), ["m1", "m2", "m3", "m4", "m5", OTHER_MODELS_KEY])
+  assert.deepEqual(rows[5], {
+    key: OTHER_MODELS_KEY, processedTokens: 6, share: 0.06, costUsd: null, runsWithoutCost: 6, runs: 6,
   })
 })
 

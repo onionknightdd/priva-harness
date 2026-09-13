@@ -197,7 +197,7 @@ export async function fetchUsageOverview(
 }
 
 // Stacked model chart: one bar per calendar month, one series per model.
-export const MODEL_SERIES_LIMIT = 4
+export const MODEL_SERIES_LIMIT = 5
 export const OTHER_MODELS_KEY = "__other__"
 
 export type ModelMonth = {

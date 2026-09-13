@@ -80,7 +80,7 @@ export const en = {
     },
     modelTable: {
       title: "Models",
-      description: "Last year, ranked by processed tokens; the top four models plus the rest.",
+      description: "Last year, ranked by processed tokens; the top five models plus the rest.",
       model: "Model",
       share: "Share",
       tokens: "Tokens",

@@ -162,11 +162,16 @@ async function runChecks() {
     const panelTabs = triggers().slice(0, 2)
     check("panel tabs read Token activity / Model activity", panelTabs.map((tab) => tab.textContent).join("|") === `${i18n.t("usage.activity.tokens")}|${i18n.t("usage.activity.models")}`)
     check("panel tabs use the default list variant like the sidebar", panelTabs[0]!.closest('[data-slot="tabs-list"]')?.getAttribute("data-variant") === "default")
-    check("the selected mode carries a pill while the list stays bare", await waitFor(() => {
+    check("the selected mode carries a pill, the list stays bare and hover adds nothing", await waitFor(() => {
       const list = triggers()[2]!.closest<HTMLElement>('[data-slot="tabs-list"]')!
       const indicator = list.querySelector<HTMLElement>('[data-slot="tabs-active-indicator"]')
-      return list.getAttribute("data-variant") === "ghost" && indicator !== null && getComputedStyle(indicator).backgroundColor !== "rgba(0, 0, 0, 0)" && indicator.getBoundingClientRect().width > 0
+      triggers()[3]!.dispatchEvent(new MouseEvent("mouseenter", { bubbles: false }))
+      return list.getAttribute("data-variant") === "text" && indicator !== null && getComputedStyle(indicator).backgroundColor !== "rgba(0, 0, 0, 0)" && indicator.getBoundingClientRect().width > 0 && list.querySelector('[data-slot="tabs-hover-indicator"]') === null
     }))
+    check("the overview presets use the same bare list with a selected pill", (() => {
+      const list = host.querySelector<HTMLElement>('[data-test="cards"] [data-slot="tabs-list"]')!
+      return list.getAttribute("data-variant") === "text" && list.querySelector('[data-slot="tabs-active-indicator"]') !== null
+    })())
     check("the mode switch list has no background", getComputedStyle(triggers()[2]!.closest('[data-slot="tabs-list"]')!).backgroundColor === "rgba(0, 0, 0, 0)")
     check("three mode tabs are rendered", triggers().length === 5)
     check("weekday labels run Monday to Sunday", weekdayLabels().map((label) => label.textContent).join(",") === ["mon", "tue", "wed", "thu", "fri", "sat", "sun"].map((key) => i18n.t(`usage.heatmap.weekday.${key}`)).join(","))
@@ -262,9 +267,9 @@ async function runChecks() {
     // Bars grow in over 320ms; their paths only exist once they have height.
     check("model chart has rendered its bars", await waitFor(() => host.querySelectorAll(".recharts-bar-rectangle path").length > 0))
     check("model chart has no legend; the table below carries the series names", host.querySelector(".recharts-legend-wrapper") === null)
-    check("model chart stacks the top four models plus others", (() => {
+    check("model chart stacks the top five models plus others", (() => {
       const stacks = new Set(Array.from(host.querySelectorAll<SVGPathElement>(".recharts-bar-rectangle path")).map((path) => path.getAttribute("fill")))
-      return stacks.size === 5 && [1, 2, 3, 4, 5].every((index) => stacks.has(`var(--color-series${index})`))
+      return stacks.size === 6 && [1, 2, 3, 4, 5, 6].every((index) => stacks.has(`var(--color-series${index})`))
     })())
     check("model chart draws twelve or thirteen monthly columns", (() => {
       const ticks = host.querySelectorAll(".recharts-cartesian-axis-tick")
@@ -328,13 +333,13 @@ async function runChecks() {
     const table = host.querySelector<HTMLElement>('[data-test="models"] table')!
     const tableRows = Array.from(table.querySelectorAll("tbody tr"))
     const ranked = [...overview.models].sort((left, right) => right.processedTokens - left.processedTokens)
-    check("model table lists the top four models then others", tableRows.map((row) => row.querySelector("td")!.textContent).join("|") === [...ranked.slice(0, 4).map((m) => m.model), i18n.t("usage.models.other")].join("|"))
+    check("model table lists the top five models then others", tableRows.map((row) => row.querySelector("td")!.textContent).join("|") === [...ranked.slice(0, 5).map((m) => m.model), i18n.t("usage.models.other")].join("|"))
     check("model table rows are 26px with right-aligned tabular numbers", tableRows.every((row) => Math.abs(row.getBoundingClientRect().height - 26) < 1) && Array.from(table.querySelectorAll("tbody td:nth-child(3)")).every((cell) => getComputedStyle(cell).textAlign === "right"))
     check("model table shares add up to the whole", (() => {
       const total = tableRows.reduce((sum, row) => sum + Number(row.querySelector("td:nth-child(2) span:last-child")!.textContent!.replace("%", "")), 0)
       return Math.abs(total - 100) <= tableRows.length
     })())
-    check("model table row swatches follow the chart palette", tableRows.every((row, index) => (row.querySelector<HTMLElement>("td span span")!.style.backgroundColor || "").includes(`usage-series-${Math.min(index + 1, 5)}`)))
+    check("model table row swatches follow the chart palette", tableRows.every((row, index) => (row.querySelector<HTMLElement>("td span span")!.style.backgroundColor || "").includes(`usage-series-${Math.min(index + 1, 6)}`)))
     check("share bars settle at their share width", await waitFor(() => tableRows.every((row) => {
       const bar = row.querySelector<HTMLElement>("td:nth-child(2) span span span")!
       const track = bar.parentElement!

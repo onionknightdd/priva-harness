@@ -189,7 +189,7 @@ Base UI 工程中转换出的 `render`。文件正文不做高度布局动画或
      10月  11月  12月  1月  2月  3月  4月  5月  6月  7月  8月     9月
 
 [Token 活动 | ▥ 模型活动]
-      ▄▄        每月一根堆叠柱，最多 4 个模型 + 其他，无图例
+      ▄▄        每月一根堆叠柱，最多 5 个模型 + 其他，无图例
   ▄▄  ██  ▄▄    hover 显示该月各模型处理 token；系列名见下方模型表
  10月 11月 12月 ...
 窄屏：热力图容器横向滚动，柱状图随宽度收缩。
@@ -198,9 +198,9 @@ Base UI 工程中转换出的 `render`。文件正文不做高度布局动画或
 2026-09-12：按用户要求，整块放入与侧栏 Agent / Code 相同样式的 Tabs
 （`assistant-ui/tabs` `default` 变体、`size="sm"`、`TabsTriggerContent` 激活图标弹入），
 两个面板为「Token 活动」（Lucide `Gauge`）和「模型活动」（`ChartColumnStacked`）。右侧「每日 / 每周 / 累计」只属于热力图面板：
-2026-09-13 按用户要求改为 `ghost` 变体并把列表底色设为透明——组本身无底色，选中的周期
-带 8% 前景色的圆角滑块，悬浮时有同样的浅色跟随；切到模型面板时随面板一起移除，切回时
-和面板同样淡入。概览的 7 天 / 30 天 / 1 年 仍用 `text` 变体（仅文字颜色）。
+使用共享 Tabs 的 `text` 变体——2026-09-13 按用户要求定义为：列表无底色、无悬浮滑块，
+只有选中项带 8% 前景色的圆角滑块（悬浮仅改文字颜色）；切到模型面板时随面板一起移除，
+切回时和面板同样淡入。概览的 7 天 / 30 天 / 1 年 用同一变体。
 
 面板切换不做交叉淡出（会让两块内容在列中
 叠一帧并推动布局），只让进入的面板做 200ms 透明度淡入。两个面板固定为二者中较高的一个
@@ -279,7 +279,7 @@ CLI 会同时想安装 `@radix-ui/react-icons` 和一个名为 `cn` 的无关包
 ### 模型表
 
 2026-09-13：活动块下方增加「模型」表，回答"总共用了多少、花了多少"（柱状图回答"什么时候用了
-什么"）。近一年窗口，按处理 token 排序，前 4 个模型 + 「其他」合计，与堆叠柱共用
+什么"）。近一年窗口，按处理 token 排序，前 5 个模型 + 「其他」合计，与堆叠柱共用
 `usage-series` 色板与顺序（`usage-series-colors.ts`）；列为 模型（色块 + 名称）、份额
 （4px 进度条 + 百分比）、Token、成本、轮次。行高 26px、表头 12px 二级文本、数字右对齐
 tabular，与 Skills / MCP 列表一致。成本为部分已知时显示 `$x.xx+` 并以共享 Tooltip 说明
@@ -289,7 +289,7 @@ tabular，与 Skills / MCP 列表一致。成本为部分已知时显示 `$x.xx+
 
 ```text
 模型
-近一年，按处理 token 排序；前 4 个模型与其余合计。
+近一年，按处理 token 排序；前 5 个模型与其余合计。
 模型                    份额              Token      成本     轮次
 ■ claude-sonnet-4.5   ████████░░  38%     3.8M    $11.40+    201
 ■ …
@@ -297,8 +297,9 @@ tabular，与 Skills / MCP 列表一致。成本为部分已知时显示 `$x.xx+
 ```
 
 模型活动使用 shadcn 堆叠柱状图（`ui/chart` + Recharts `BarChart`），不套 Card：
-X 轴为窗口内的每个月（无用量的月份保留空柱位），按处理 token 从高到低取前 4 个模型，
-其余合并为「其他」；系列颜色读取共享 `usage-series-1…5` token（蓝色由深到浅）。
+X 轴为窗口内的每个月（无用量的月份保留空柱位），按处理 token 从高到低取前 5 个模型，
+其余合并为「其他」；系列颜色读取共享 `usage-series-1…6` token（五档蓝色由深到浅，
+第 6 档为「其他」的灰蓝）。
 2026-09-13：按用户选择不画图例——下方「模型」表按同一顺序、同一色板列出这 5 行，
 单行图例在模型 id 很长时会溢出块外，折行又会压缩绘图区。悬浮提示复用
 `ChartTooltipContent`，标题为「2026年9月 / Sep 2026」；共享 `ChartTooltipContent` 的
@@ -962,7 +963,7 @@ App TooltipProvider -> 首次悬浮 1s -> 连续切换 0ms
 
 | 组件类型 | 当前入口 / 来源 | 当前样式和反馈 | 代表场景 |
 | --- | --- | --- | --- |
-| Tabs | [assistant-ui/tabs](../agent-ui/src/components/assistant-ui/tabs.tsx)，Base UI + Motion | default / line / ghost / pills / outline 共享选中/悬浮滑块；`text` 变体无底色无滑块，仅文字颜色表达激活态；属于本地通用封装 | 侧栏模式、文件标签、工作表、工作流详情、用量面板与热力图模式切换 |
+| Tabs | [assistant-ui/tabs](../agent-ui/src/components/assistant-ui/tabs.tsx)，Base UI + Motion | default / line / ghost / pills / outline 共享选中/悬浮滑块；`text` 变体列表无底色、无悬浮滑块，仅选中项带浅色滑块；属于本地通用封装 | 侧栏模式、文件标签、工作表、工作流详情、用量面板与热力图模式切换 |
 | 资源 Tabs | [animate-ui/components/radix/tabs](../agent-ui/src/components/animate-ui/components/radix/tabs.tsx)，Radix + Motion | 24px 标签栏、共享底色和滑块；键盘及减少动态效果时立即切换 | Skill 文件预览、MCP 工具 / 提示词 / 资源 / 配置 |
 | ExpandableTabs | [motion/expandable-tabs](../agent-ui/src/components/motion/expandable-tabs.tsx)，BE UI 衍生 | 胶囊图标展开标签；固定 26px 外框 / 18px 内容圆角、本地 tab 语义和动画 | Workspace 模块切换 |
 | Sidebar | [ui/sidebar](../agent-ui/src/components/ui/sidebar.tsx)，shadcn 衍生组合 | `sidebar-*` token；Base UI Sheet 处理移动端，GSAP 调整桌面宽度，Motion 处理行高亮 | 主侧栏、工作区侧栏 |
@@ -974,7 +975,7 @@ App TooltipProvider -> 首次悬浮 1s -> 连续切换 0ms
 | DatePicker | [datetime-picker](../agent-ui/src/components/datetime-picker.tsx)，shadcn-datetime-picker（react-day-picker v9 + date-fns）+ 本地 Base UI 适配 | 日历弹层，支持 min / max、时区、可选时间；用量页只用日期模式、`secondary` / `xs` 触发按钮 | 用量概览区间起止 |
 | ScrollArea | [ui/scroll-area](../agent-ui/src/components/ui/scroll-area.tsx)，Base UI ScrollArea | shadcn 滚动区与滚动条 | datetime-picker 时间列（用量页未启用） |
 | Avatar | [ui/avatar](../agent-ui/src/components/ui/avatar.tsx)，Base UI Avatar | 圆形头像及 fallback | 用户菜单、Profile |
-| Chart | [ui/chart](../agent-ui/src/components/ui/chart.tsx) + Recharts | `chart-*` token 与本地图表 Tooltip；用量页堆叠柱读取 `usage-series-1…5` token；这里的 Tooltip 是图表数据提示 | 用量页模型活动、Profile 模型用量 |
+| Chart | [ui/chart](../agent-ui/src/components/ui/chart.tsx) + Recharts | `chart-*` token 与本地图表 Tooltip；用量页堆叠柱读取 `usage-series-1…6` token；这里的 Tooltip 是图表数据提示 | 用量页模型活动、Profile 模型用量 |
 | CalendarHeatmap | [heatmap/calendar-heatmap](../agent-ui/src/components/heatmap/calendar-heatmap.tsx)，`@heatmap` registry（SVG + date-fns）+ 本地 `ring-inset` / `monthLabelPosition` / `splitYears` | 网格热力图；基础默认读 chart token，用量页读取共享 `heatmap` token，Profile 调用点仍传固定蓝色 | 用量页 Token 活动、Profile Token 日历 |
 | Table / 数据网格 | [spreadsheet-renderer](../agent-ui/src/features/files/preview/renderers/spreadsheet-renderer.tsx)，SheetJS + TanStack Virtual + 原生 table | 工作簿解析、虚拟行列、粘性表头、本地单元格样式 | 表格文件预览；尚无通用 `ui/table` 或 DataTable 入口 |
 | ScrollArea / 消息滚动 | [agents/code-block](../agent-ui/src/components/agents/code-block.tsx) 直接使用 Base UI ScrollArea；[ui/message-scroller](../agent-ui/src/components/ui/message-scroller.tsx) 包装 `@shadcn/react/message-scroller` | 代码滚动区与聊天跟随滚动；其余区域多用原生 overflow | 代码块、聊天历史 |
@@ -1290,7 +1291,7 @@ MCP 页面浏览器回归：打开 `/tests/features/resources/mcp-browser.html`�
 文字与网格两缘对齐、整块居中、每周整列同色、累计单调递增、切回每日恢复原色，以及
 星期标签 10px / 月份 12px、揭示动效沿对角线推进且 1s 内结束、结束后单元恢复原尺寸与
 透明度、悬浮单元的日期与
-token 提示及离开后关闭、模型面板卸载热力图与模式切换、前 4 个模型 + 其他的五个系列且无图例、
+token 提示及离开后关闭、模型面板卸载热力图与模式切换、前 5 个模型 + 其他的六个系列且无图例、
 12–13 个月份柱位、系列 token 和切回热力图的恢复，以及概览六张卡的顺序、默认一年区间与
 预设高亮、选择器跟随预设、7 天重请求与数值变化、日期按钮固定宽度与滚动切换后只剩新值、
 概览位于活动块上方、Gauge 图标、日历 32px 日格、打开开始日期日历并选日后变为自定义区间，

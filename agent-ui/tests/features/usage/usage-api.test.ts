@@ -97,8 +97,8 @@ test("model series ranks by processed tokens and folds the tail into others", ()
     [{ date: "2026-09-01", byModel: { m6: 1, m5: 2, m1: 50, m4: 4 } }],
     [...models].reverse()
   )
-  assert.deepEqual(series.keys, ["m1", "m2", "m3", "m4", OTHER_MODELS_KEY])
-  assert.deepEqual(series.months[0]?.byModel, { m1: 50, m2: 0, m3: 0, m4: 4, [OTHER_MODELS_KEY]: 3 })
+  assert.deepEqual(series.keys, ["m1", "m2", "m3", "m4", "m5", OTHER_MODELS_KEY])
+  assert.deepEqual(series.months[0]?.byModel, { m1: 50, m2: 0, m3: 0, m4: 4, m5: 2, [OTHER_MODELS_KEY]: 1 })
 })
 
 test("model series has no others bucket when every model fits", () => {

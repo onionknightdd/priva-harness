@@ -77,8 +77,9 @@ const tabsListVariants = cva(
         ghost: "gap-1.5 dark:bg-transparent",
         pills: "gap-2 dark:bg-transparent",
         outline: "border-border gap-1 rounded-lg border p-1 dark:bg-transparent",
-        // Bare labels: the active state is carried by text colour alone, for
-        // mode switches that sit beside a chart or table.
+        // Bare list for mode switches beside a chart or table: no list
+        // background and no hover indicator, only the selected label carries
+        // a soft pill.
         text: "gap-1 bg-transparent dark:bg-transparent",
       },
       size: {
@@ -105,7 +106,7 @@ const tabsActiveIndicatorVariants = cva(
         ghost: "bg-foreground/8 inset-y-1 rounded-md",
         pills: "bg-primary inset-y-0 rounded-full",
         outline: "border-border bg-background inset-y-1 rounded-md border",
-        text: "hidden",
+        text: "bg-foreground/8 inset-y-1 rounded-md",
       },
     },
     defaultVariants: {

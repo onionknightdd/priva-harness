@@ -79,6 +79,7 @@
     --color-usage-series-3: var(--usage-series-3);
     --color-usage-series-4: var(--usage-series-4);
     --color-usage-series-5: var(--usage-series-5);
+    --color-usage-series-6: var(--usage-series-6);
     --color-tool-output: var(--tool-output);
     /* Tool spinners: the default 1s `animate-spin` reads as idle; 0.7s reads as work. */
     --animate-spin-fast: spin 0.7s linear infinite;
@@ -147,12 +148,14 @@
     --status-error: oklch(0.586 0.21 20);
     --loading-state: rgb(77 159 240);
     --heatmap: rgb(78 130 239);
-    /* Stacked model series, darkest for the largest share, lightest for "others". */
+    /* Stacked model series: five blues from the largest share down, then a
+       muted grey-blue for "others". */
     --usage-series-1: oklch(0.546 0.215 262.88);
     --usage-series-2: oklch(0.623 0.188 259.81);
     --usage-series-3: oklch(0.685 0.148 237.32);
     --usage-series-4: oklch(0.75 0.11 232);
     --usage-series-5: oklch(0.828 0.093 230.32);
+    --usage-series-6: oklch(0.88 0.03 235);
     --tool-output: oklch(0.964 0 0);
     --context-system: oklch(0.549 0 0);
     --context-tools: oklch(0.48 0.22 305);
