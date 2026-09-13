@@ -32,7 +32,7 @@ export class McpProbe {
       const tools = capabilities?.tools ? await this.pages((cursor) => client.listTools(cursor === undefined ? {} : { cursor }), 'tools') : []
       const resources = capabilities?.resources ? await this.pages((cursor) => client.listResources(cursor === undefined ? {} : { cursor }), 'resources') : []
       const prompts = capabilities?.prompts ? await this.pages((cursor) => client.listPrompts(cursor === undefined ? {} : { cursor }), 'prompts') : []
-      return { tools, resources, prompts, testedAt: new Date().toISOString() }
+      return { tools, resources, prompts, testedAt: new Date().toISOString(), serverVersion: client.getServerVersion()?.version ?? null }
     })
   }
 

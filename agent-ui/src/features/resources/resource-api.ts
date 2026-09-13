@@ -25,6 +25,7 @@ export type McpDetail = Mcp & {
 export type ResourceDetail = SkillDetail | McpDetail
 export type McpCapabilities = {
   tools: Record<string, unknown>[]; resources: Record<string, unknown>[]; prompts: Record<string, unknown>[]; testedAt: string
+  serverVersion: string | null
 }
 
 export function resourceUrl(path: string, query: ResourceQuery, extra: Record<string, string> = {}) {

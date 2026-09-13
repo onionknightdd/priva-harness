@@ -155,6 +155,7 @@ export const en = {
     retryAttachment: "Retry uploading {{name}}",
     attachmentUploadIncomplete: "Upload incomplete",
     messageAttachments: "Message attachments",
+    userMessageContent: "User message content",
     slashCommandGroup: "Command",
     slashSkillGroup: "Skill",
     slashOriginBuiltin: "built-in",

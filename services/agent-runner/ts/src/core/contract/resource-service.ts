@@ -6,6 +6,7 @@ export interface McpCapabilities {
   readonly resources: Record<string, unknown>[]
   readonly prompts: Record<string, unknown>[]
   readonly testedAt: string
+  readonly serverVersion: string | null
 }
 
 export interface ResourceService {

@@ -128,6 +128,23 @@ User MessageContent -> user-message -> light: #EAF3FD
 Dark popup menus -> popover -> #353535
 ```
 
+用户消息正文超过实际排版的 5 行时，默认只显示前 5 行。第 5 行覆盖向气泡底色
+渐变的遮罩，“展开”按钮右对齐并使用二级文本颜色；点击才展示完整正文。展开后整个气泡最高为
+可见视口的一半，正文在内部滚动，底部保留“收起”。滚动区域使用稳定 gutter，正文
+右侧另留 12px，兼顾常驻和浮动滚动条。附件仍显示在正文前，行内选区引用保持完整。
+宽度变化时重新测量换行，各消息独立保存展开状态，展开时沿用线程的顶部定位逻辑。
+高度和箭头使用共享 `EASE_OUT`（展开 180ms、收起 120ms）；键盘触发和减少动态效果
+直接切换状态。
+
+```text
+折叠                          展开（整个气泡 <= 半屏）
++------------------------+    +------------------------+
+| 正文第 1–4 行          |    | 完整正文            |  |
+| 第5行渐变遮罩 [展开 v] | -> | ...       12px 留白 |# |
++------------------------+    |               [收起 ^] |
+                              +------------------------+
+```
+
 ### 打开会话时的重渲染范围
 
 2026-09-12：从首页打开一个会话曾经触发三轮全 App 重渲染（点击、`useEffect`
@@ -946,13 +963,15 @@ Skills 与 MCP 共用 [ResourceListHeader](../agent-ui/src/features/resources/re
 
 桌面初始分栏为 1:2；MCP 分组初始仅展开全局，项目标题使用 CSS 圆点分隔，
 折叠箭头位于标题右侧。服务行高 26px，行间距 2px，禁用标签高 16px。
-详情移除大图标与来源元信息，显示 16px 服务名、12px 服务地址 / 启动命令，
+详情移除大图标与来源元信息，16px 服务名旁显示 10px 脉冲状态点。
+标题下依次显示连接类型、服务端版本和地址 / 启动命令 pill，统一为 20px 高、12px 文本；
+版本来自 MCP 握手，服务未返回版本时不显示版本 pill。地址单行显示，溢出时仅悬停跑马灯。
 保留只读与禁用状态、编辑和删除动作。
 
 ```text
-MCP 服务 | 搜索 | 刷新 | 新增  | 服务名称              编辑 删除
-12px 说明                     | 服务地址 / 启动命令
-全局 MCP v ------------------ | 协议 / 连接状态         测试连接
+MCP 服务 | 搜索 | 刷新 | 新增  | 服务名称 ●            编辑 删除
+12px 说明                     | [HTTP] [1.2.3] [服务地址 / 启动命令]
+全局 MCP v ------------------ |
   服务名称 [已禁用]           |----------------------------------
 项目 · 名称 > --------------- | 配置路径 复制 [工具 提示词 资源 配置]
                               | 所选内容 / 加载 / 空状态 / 错误
@@ -962,11 +981,82 @@ MCP 服务 | 搜索 | 刷新 | 新增  | 服务名称              编辑 删除
 ```
 
 MCP 工具栏采用同一 Animate UI Radix Tabs 入口：工具栏高 36px、Tab 组高 24px，
-文字垂直居中；窄栏按上图换行。路径为二级文本，复制按钮复制当前 Tab 内容。
+文字垂直居中；外框、选中项和动效高亮共用 `--mcp-tab-radius`，读取 `radius-md`。
+窄栏按上图换行。路径为二级文本，复制按钮复制当前 Tab 内容。
 已访问的 Tab 保留 DOM 与滚动位置，未访问的 Tab 按需挂载。
 两类资源最多保留三个最近详情；刷新或配置保存会使旧详情失效。
-连接重测时保留上次结果和滚动，显示忙碌状态并阻止重复测试；失败显示明确错误。
+进入详情及配置修改后立即检测；详情可见时每次检测结束 30 秒后再次检测。
+文档隐藏或 React Activity 隐藏详情时暂停，恢复可见后立即检测；请求不重叠，旧响应不覆盖新服务。
+后台重测和失败都保留上次能力与滚动位置；失败显示明确错误，成功恢复后清除。
+状态点区分检查中、在线、离线和禁用，带可访问名称及忙碌状态；减少动态效果时停止脉冲。
+详情不再提供手动连接测试按钮。
 项目 MCP 的编辑、连接与工具测试使用所选服务的 `source.cwd`，全局服务沿用默认范围。
+
+### 资源表单
+
+Skill 上传和 MCP 新增统一使用“生效范围”，复用设置页 Model Selector 的分组
+`Combobox` 输入框、可搜索选项和弹层动效。下拉分为“全局生效”和“指定项目”：
+前者包含“所有项目”，后者列出资源列表 `projects` 中的项目，以及“其他项目…”入口。
+项目名称为目录的最后一段，名称后使用 12px `text-muted-foreground/60` 三级文本显示
+完整路径，支持按名称或路径搜索。同名项目按完整路径区分；选中后也显示名称与路径。
+路径始终单行，溢出时复用 `OverflowMarquee`，仅鼠标悬停触发，移开后复位；
+短路径、触屏和减少动态效果时保持静止，完整值仍由 Tooltip 和可访问文本提供。
+已有项目直接选择；“其他项目…”显示可选择或输入路径的 Combobox，保留自定义目录。
+全局新增提交 `scope=global` 且不带 `cwd`；指定项目提交 `scope=project` 和完整 `cwd`，
+使用对应 harness 的原生设置来源。MCP 编辑仍修改服务原有来源，连接方式使用同款 Combobox。
+Skill 上传弹窗的归档说明使用 12px `text-muted-foreground`，比原来的 14px 缩小 2px。
+拖放文案为“将skill的压缩包拖到这里”。
+
+MCP 请求头使用 Key / Value 输入行，支持添加和删除。提交时省略完全空白的行，
+保留值中的空白和服务商变量，缺少 Key 或 Key 重复（不区分大小写）时给出错误。
+完整 JSON 配置与行编辑双向转换；不能转换成字符串键值对的请求头继续留在 JSON
+模式，并显示错误，避免丢失配置。编辑请求头或切换生效范围 / 连接方式会清除旧测试结果。
+
+MCP 新增 / 编辑弹窗使用 `McpProbeResult`。测试成功提示沿用模型 Probe
+的绿色勾选图标、12px 文本与 160ms 淡入，减少动态效果时直接显示。中文文案为
+“MCP服务测试成功，发现：工具（N）、提示词（N）、资源（N）”，只显示分类数量，
+不显示工具名称。提示保持单行，溢出时仅悬停跑马灯；空类别显示 0。
+编辑草稿会清除成功提示，测试期间的编辑也会使旧响应失效。
+
+```text
+Skill 上传                      MCP 新增 / 编辑
+生效范围 [app /team/app v]       生效范围（新增）/ 连接方式 [Combobox v]
+12px 二级说明 + 归档上传         请求头 [Key] [Value] [删除]
+取消 / 上传                     [+ 添加请求头]
+                                [✓] MCP服务测试成功，发现：工具（2）、提示词（1）、资源（1）
+                                测试 / 取消 / 保存
+
+生效范围下拉
++--------------------------------------+
+| 全局生效                             |
+|   所有项目                           |
+| 指定项目                             |
+|   app  /workspace/team/app            |
+|   app  /workspace/client/app          |
+|   其他项目…                          |
++--------------------------------------+
+         完整路径为三级文本，单行、溢出时仅悬停滚动
+```
+
+工具测试 Drawer 按 `inputSchema` 的类型、说明、必填项和默认值生成表单，移除原始
+参数结构和 JSON 参数编辑器。Schema 解析及校验使用 `@rjsf/core`、`@rjsf/utils`
+与 `@rjsf/validator-ajv8`，控件复用本地 Input、Switch、Combobox、Badge 和 Button。
+支持嵌套对象、数组、引用及枚举；不因 `minItems` 自动填充空列表项。
+普通字符串列表使用类似 [BEUI Multi-select](https://beui.dev/r/multi-select.json)
+的多标签输入，回车添加、按钮删除，保留原值空白；仅 `uniqueItems` 禁止重复。
+输入法确认不会添加标签；尚未添加的输入阻止执行，避免漏传参数。
+执行前校验并保留数字、布尔和数组类型，运行时禁用表单；只有用户提交才调用工具。
+整个 Drawer 按需加载，避免 Schema 表单依赖进入资源页首屏包。
+模板扩展遵循 [RJSF Custom Themes](https://rjsf-team.github.io/react-jsonschema-form/docs/advanced-customization/custom-themes/)。
+
+```text
+工具名称 / 说明
+query      [文本输入                  ]
+packages   [react ×] [vite ×] [输入... ]  Enter 添加
+enabled    [开关]       limit [数字输入]
+config     [按结构嵌套的字段           ]
+[执行工具] -> 校验通过 -> 提交类型正确的参数 -> 结果 / 错误
+```
 
 ### 图片工具卡片
 
@@ -1219,9 +1309,10 @@ transcript -> attachmentsFromMessageText -> body + attachment cards
 | Input / Textarea | [ui/input](../agent-ui/src/components/ui/input.tsx)、[ui/textarea](../agent-ui/src/components/ui/textarea.tsx) | Input 基于 Base UI，Textarea 是本地样式的原生 textarea；共享 input / ring / destructive token | 搜索、名称、配置文本 |
 | Field / Label | [ui/field](../agent-ui/src/components/ui/field.tsx)、[ui/label](../agent-ui/src/components/ui/label.tsx) | 本地 shadcn 风格的标签、说明、错误与分组结构 | 设置和表单；资源表单还存在本地 FormField 组合 |
 | InputGroup / ButtonGroup | [ui/input-group](../agent-ui/src/components/ui/input-group.tsx)、[ui/button-group](../agent-ui/src/components/ui/button-group.tsx) | 组合输入、前后缀、附属动作、按钮组，共享基础组件 | 聊天输入框、表格预览搜索；消息动作内组合按钮组 |
-| Select | [ui/select](../agent-ui/src/components/ui/select.tsx)，Base UI Select | 有边框触发器，选项弹层复用 `popupMotion` | 设置选项、资源作用域、用量筛选 |
-| Combobox | [ui/combobox](../agent-ui/src/components/ui/combobox.tsx)，Base UI Combobox | 可搜索选项、选中标记 / chips，复用输入组件和弹层动效 | 模型选择、会话标签筛选 |
-| Tags input / 标签选择 | [session-tag-popover](../agent-ui/src/features/sidebar/content/session-tag-popover.tsx)、[session-tag-chip](../agent-ui/src/features/sidebar/content/session-tag-chip.tsx)，本地组合 | Popover + 原生 input + 标签 chip + Motion；输入和清除按钮有独立尺寸样式 | 会话标签编辑与搜索 |
+| Select | [ui/select](../agent-ui/src/components/ui/select.tsx)，Base UI Select | 有边框触发器，选项弹层复用 `popupMotion` | 设置选项、用量筛选 |
+| Combobox | [ui/combobox](../agent-ui/src/components/ui/combobox.tsx)，Base UI Combobox | 可搜索选项、选中标记 / chips，复用输入组件和弹层动效 | 模型选择、会话标签筛选、Skill / MCP 资源表单 |
+| Tags input / 标签选择 | [session-tag-popover](../agent-ui/src/features/sidebar/content/session-tag-popover.tsx)、[session-tag-chip](../agent-ui/src/features/sidebar/content/session-tag-chip.tsx)、[mcp-tool-string-list](../agent-ui/src/features/resources/mcp-tool-string-list.tsx)，本地组合 | Popover / InputGroup + input + 标签 chip；Enter 添加、逐项删除 | 会话标签、MCP 字符串列表 |
+| Schema 表单 | [mcp-tool-form](../agent-ui/src/features/resources/mcp-tool-form.tsx)，RJSF + AJV | Schema 解析与校验交给依赖，模板复用本地基础控件 | MCP 工具测试参数 |
 | FileUpload / Dropzone | [ui/file-upload](../agent-ui/src/components/ui/file-upload.tsx)、[FileUploadDropzone1](../agent-ui/src/components/file-upload-dropzone-1.tsx) | Dice UI / shadcnblocks 来源；虚线投放区、文件列表、校验反馈 | Skill 上传；聊天和文件浏览器另用隐藏的原生 file input 接入上传逻辑 |
 
 Toggle 用于保持按压状态的工具按钮，Switch 表达布尔开关；切换内容面板时使用
@@ -1441,6 +1532,22 @@ rg -n '@base-ui/react|motion/react|gsap' agent-ui/src
 - 生产构建：`npm run build`
 - 预览生产构建：`npm run preview`
 
+资源表单使用 jsdom 和 Node 测试验证分组选择 / 搜索、同名项目和完整路径、全局 / 项目
+提交范围、自定义路径保留、请求头编辑、JSON 往返与测试 / 保存请求、单行分类数量提示、
+中英文、空清单、重测失败与旧响应失效。同时覆盖 30 秒自动检测及可见性暂停、
+版本 pill、工具参数类型 / 默认值 / 校验、字符串列表和实际提交入口，不启动浏览器：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/resources/resource-forms.test.tsx agent-ui/tests/features/resources/mcp-headers.test.ts agent-ui/tests/features/resources/resource-api.test.ts agent-ui/tests/features/resources/skill-upload.test.ts agent-ui/tests/features/resources/mcp-probe.test.tsx agent-ui/tests/features/resources/mcp-tool-form.test.tsx agent-ui/tests/features/resources/mcp-detail.test.tsx
+```
+
+用户消息折叠浏览器回归：打开
+`/tests/features/agent-message/user-message-content-browser.html`，点击
+**Run user message checks**。覆盖五行边界、右对齐和渐变遮罩、独立展开、半屏上限、
+内部滚动与末行可达、滚动条留白、宽度变化、连续长字符串、附件、引用和错误消息。
+追加 `?zh&dark&narrow&reduced-motion` 检查中文、深色、窄栏与减少动态效果；用真实
+Tab / Enter / Space 验证按钮和滚动区域焦点，用滚轮检查气泡内部滚动。
+
 Mermaid 浏览器回归：打开 `/tests/components/ai-elements/mermaid-browser.html` 并点击
 **Run Mermaid checks**。覆盖真实图表加载、异步模块拒绝、局部源代码回退、复制入口、
 周围消息保留和页面可交互；追加 `?zh&dark` 验证中文提示与深色主题。
@@ -1584,12 +1691,15 @@ PDF 预览回归：打开 `/tests/features/resources/skill-pdf-browser.html`，�
 **Run PDF preview checks**。在内存生成有效单页 PDF，通过实际的 SkillContent 和
 共享 PDF 查看器渲染，并检查二进制读取与源文件 Tab 禁用。
 
-MCP 页面浏览器回归：打开 `/tests/features/resources/mcp-browser.html`，点击
+MCP 页面的既有浏览器样例：打开 `/tests/features/resources/mcp-browser.html`，点击
 **Run MCP browser checks**。使用隔离的服务、能力列表、网络及剪贴板样例，覆盖
-搜索 / Esc 焦点、分组与范围选择器移除、分栏、紧凑工具栏、重测成功 / 失败时的
+搜索 / Esc 焦点、分组与范围选择器移除、分栏、紧凑工具栏、自动检测成功 / 失败时的
 结果与滚动保留、防重复请求、Tab / 最近服务切换、复制配置、只读 / 禁用限制、
 项目连接的 cwd、最近详情数量上限，以及 390px iframe 的搜索、Tab 和返回操作。
 附加 `?reduced-motion=1&dark=1` 检查深色和减少动态效果；不会连接或修改真实服务。
+该样例通过手动推进 30 秒检测计时器避免等待。按用户要求，本轮未运行浏览器验证；
+新增 Node/jsdom 测试覆盖自动检测、表单类型与校验及详情到工具执行的集成行为。
+详情测试仅跳过 CSS 模块导入，不验证实际视觉布局。
 
 用量页请求参数、热力图每日 / 每周 / 累计换算、区间预设与模型表行聚合：
 

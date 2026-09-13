@@ -155,6 +155,7 @@ export const zhCN = {
     retryAttachment: "重新上传 {{name}}",
     attachmentUploadIncomplete: "上传未完成",
     messageAttachments: "消息附件",
+    userMessageContent: "用户消息内容",
     slashCommandGroup: "命令",
     slashSkillGroup: "技能",
     slashOriginBuiltin: "内置",

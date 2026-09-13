@@ -40,8 +40,7 @@ import { TaskNotificationCard } from "./task-notification-card"
 import { CompactSessionMarker } from "./compact-session-marker"
 import { AssistantMarkdownCode } from "./assistant-markdown-code"
 import { QuoteSelectable } from "./quote-selectable"
-import { MessageSelectionContent } from "./message-selection-quote"
-import { UserMessageAttachments } from "./user-message-attachments"
+import { UserMessageContent } from "./user-message-content"
 
 const MotionMessageActions = motion.create(MessageActions)
 
@@ -277,35 +276,30 @@ export const AgentMessageItem = React.memo(function AgentMessageItem({
             />
             {t("agentMessage.errorLabel")}
           </div>
-          <MessageContent
+          {message.role === "user" ? (
+            <UserMessageContent key={message.id} content={message.content} attachments={message.attachments} isError />
+          ) : <MessageContent
             className="rounded-xl bg-destructive/10 px-4 py-3 text-destructive"
             role="alert"
           >
-            <QuoteSelectable messageRole={message.role}>{message.role === "user" ? <MessageSelectionContent content={message.content} /> : message.content}</QuoteSelectable>
-          </MessageContent>
+            <QuoteSelectable messageRole={message.role}>{message.content}</QuoteSelectable>
+          </MessageContent>}
         </motion.div>
       ) : (
         <>
-          <MessageContent
-            aria-live={message.role === "assistant" ? "polite" : undefined}
+          {message.role === "user" ? (
+            <UserMessageContent key={message.id} content={message.content} attachments={message.attachments} />
+          ) : <MessageContent
+            aria-live="polite"
             aria-busy={isStreaming || undefined}
-            className={
-              message.role === "user" ? "whitespace-pre-wrap" : "overflow-visible"
-            }
+            className="overflow-visible"
           >
-            {message.role === "assistant" ? (
-              <AssistantStreamBody
-                message={message}
-                isStreaming={isStreaming}
-                hideProcessHeader={hideProcessHeader}
-              />
-            ) : (
-              <>
-                {message.attachments?.length ? <UserMessageAttachments attachments={message.attachments} /> : null}
-                {message.content ? <QuoteSelectable messageRole="user"><MessageSelectionContent content={message.content} /></QuoteSelectable> : null}
-              </>
-            )}
-          </MessageContent>
+            <AssistantStreamBody
+              message={message}
+              isStreaming={isStreaming}
+              hideProcessHeader={hideProcessHeader}
+            />
+          </MessageContent>}
           {message.role === "assistant" && message.status === "complete" ? (
             <MotionMessageActions layout="position" layoutDependency={false}>
               <AgentMessageCopyAction text={message.role === "assistant" ? assistantTimeline(message).map((section) => section.message.content).filter(Boolean).join("\n\n") : message.content} />

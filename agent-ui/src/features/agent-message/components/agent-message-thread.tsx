@@ -216,7 +216,7 @@ export function AgentMessageThread({
                 className="mx-auto w-full max-w-3xl gap-6 pt-6"
                 onClickCapture={(event) => {
                   const trigger = event.target instanceof Element
-                    ? event.target.closest('[data-question-summary] [data-slot="collapsible-trigger"]')
+                    ? event.target.closest('[data-question-summary] [data-slot="collapsible-trigger"], [data-user-message-toggle]')
                     : null
                   if (trigger) {
                     const closing = trigger.getAttribute("aria-expanded") === "true"

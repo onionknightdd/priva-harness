@@ -31,7 +31,7 @@ const servers = [
 ]
 const capabilities: McpCapabilities = {
   tools: Array.from({ length: 16 }, (_, index) => ({ name: index === 0 ? "read_file" : `inspect_resource_${index}`, description: "Read project resources and inspect their contents.\nReturns structured data for the current workspace.", inputSchema: { type: "object", properties: { path: { type: "string" } } } })),
-  prompts: [], resources: [{ name: "workspace", uri: "fixture://workspace", description: "Workspace metadata" }], testedAt: "2026-09-10T00:00:00Z",
+  prompts: [], resources: [{ name: "workspace", uri: "fixture://workspace", description: "Workspace metadata" }], serverVersion: "1.2.3", testedAt: "2026-09-10T00:00:00Z",
 }
 const wait = (ms = 30) => new Promise((resolve) => setTimeout(resolve, ms))
 async function until(ready: () => unknown, message: string) {
@@ -47,6 +47,16 @@ const requests: { method: string; path: string; cwd: string | null }[] = []
 let failTest = false
 let copiedText = ""
 const originalFetch = window.fetch
+const probeTimers = new Map<number, () => void>()
+let nextProbeTimer = -1
+const originalSetTimeout = window.setTimeout.bind(window)
+const originalClearTimeout = window.clearTimeout.bind(window)
+window.setTimeout = (handler: TimerHandler, delay?: number, ...args: unknown[]) => {
+  if (delay === 30_000 && typeof handler === "function") { const id = nextProbeTimer--; probeTimers.set(id, () => handler(...args)); return id }
+  return originalSetTimeout(handler, delay, ...args)
+}
+window.clearTimeout = (id) => { if (id !== undefined) probeTimers.delete(id); originalClearTimeout(id) }
+const advanceProbes = () => { const pending = [...probeTimers.values()]; probeTimers.clear(); pending.forEach((callback) => callback()) }
 // Every resource request stays in this fixture, including after the checks.
 window.fetch = async (input, init) => {
   const url = new URL(input instanceof Request ? input.url : String(input), location.href)
@@ -99,7 +109,7 @@ document.querySelector<HTMLButtonElement>("#run")!.addEventListener("click", asy
     }
     row("filesystem").click()
     await until(() => host.querySelector("[data-mcp-header]"), "service details")
-    check("details show the service target with the compact name hierarchy", host.querySelector("[data-mcp-header] p")?.textContent === servers[0].target && getComputedStyle(host.querySelector("[data-mcp-header] h2")!).fontSize === "16px")
+    check("details show the service target with the compact name hierarchy", host.querySelector("[data-mcp-metadata]")?.textContent?.includes(servers[0].target) && getComputedStyle(host.querySelector("[data-mcp-header] h2")!).fontSize === "16px")
     if (mobile) {
       check("mobile toolbar fits the viewport and provides all four tabs", !host.querySelector('[data-slot="resizable-panel"]') && host.scrollWidth <= host.clientWidth && host.querySelectorAll('[role="tab"]').length === 4)
       selectTab("configuration")
@@ -112,25 +122,24 @@ document.querySelector<HTMLButtonElement>("#run")!.addEventListener("click", asy
     }
     const toolbar = host.querySelector<HTMLElement>("[data-mcp-toolbar]")!
     check("desktop toolbar remains compact and shows the source path", toolbar.getBoundingClientRect().height === 36 && toolbar.querySelector("p")?.textContent === source.path && toolbar.querySelector('[role="tablist"]')!.getBoundingClientRect().height === 24)
-    findButton(i18n.t("resources.test")).click()
     await until(() => activePanel()?.querySelector("h3"), "connection results")
     const pane = activePanel()
     const firstTool = pane.querySelector("h3")!
     pane.scrollTop = 180
     const oldScroll = pane.scrollTop
     const beforeRetry = requests.length
-    const testButton = host.querySelector<HTMLButtonElement>("[data-mcp-connection] button")!
-    testButton.click()
-    await until(() => testButton.disabled, "pending connection")
-    testButton.click()
-    check("retesting preserves tool content, scroll and button opacity", firstTool.isConnected && activePanel() === pane && pane.scrollTop === oldScroll && getComputedStyle(testButton).opacity === "1")
-    await until(() => !testButton.disabled, "retest success")
+    const statusDot = host.querySelector<HTMLElement>("[data-mcp-status]")!
+    advanceProbes()
+    await until(() => statusDot.getAttribute("aria-busy") === "true", "pending connection")
+    advanceProbes()
+    check("background probes preserve tool content and scroll", firstTool.isConnected && activePanel() === pane && pane.scrollTop === oldScroll)
+    await until(() => statusDot.getAttribute("aria-busy") !== "true", "retest success")
     check("pending connection prevents duplicate probes", requests.slice(beforeRetry).filter((request) => request.path.endsWith("/capabilities")).length === 1)
-    failTest = true; testButton.click()
+    failTest = true; advanceProbes()
     await until(() => host.textContent?.includes("Fixture connection failed"), "failed connection")
-    check("failed retest retains the last result and reports failure", firstTool.isConnected && pane.scrollTop === oldScroll && host.querySelector("[data-mcp-connection]")?.textContent?.includes(i18n.t("resources.testFailed")))
-    failTest = false; testButton.click()
-    await until(() => !testButton.disabled && !host.textContent?.includes("Fixture connection failed"), "connection recovery")
+    check("failed retest retains the last result and reports failure", firstTool.isConnected && pane.scrollTop === oldScroll && statusDot.dataset.mcpStatus === "offline")
+    failTest = false; advanceProbes()
+    await until(() => statusDot.getAttribute("aria-busy") !== "true" && !host.textContent?.includes("Fixture connection failed"), "connection recovery")
     selectTab("prompts")
     await until(() => activePanel()?.textContent?.includes(i18n.t("resources.noCapabilities")), "empty prompts")
     check("empty capability categories have an explicit empty state", !activePanel().querySelector("h3"))
@@ -155,12 +164,11 @@ document.querySelector<HTMLButtonElement>("#run")!.addEventListener("click", asy
     row("disabled-server").click()
     await until(() => Array.from(host.querySelectorAll("[data-mcp-header] h2")).some((item) => visible(item) && item.textContent === "disabled-server"), "disabled service")
     const disabledHeader = Array.from(host.querySelectorAll<HTMLElement>("[data-mcp-header]")).find(visible)!
-    check("read-only and disabled services retain their action restrictions", findButton(i18n.t("resources.edit"), disabledHeader).disabled && findButton(i18n.t("resources.delete"), disabledHeader).disabled && Array.from(host.querySelectorAll<HTMLButtonElement>("[data-mcp-connection] button")).find(visible)!.disabled)
+    check("read-only and disabled services retain their action restrictions", findButton(i18n.t("resources.edit"), disabledHeader).disabled && findButton(i18n.t("resources.delete"), disabledHeader).disabled && disabledHeader.querySelector("[data-mcp-status]")?.getAttribute("data-mcp-status") === "disabled")
     findButton("Project alpha").click()
     await until(() => row("alpha-server") && visible(row("alpha-server")), "project group")
     row("alpha-server").click()
     await until(() => Array.from(host.querySelectorAll("[data-mcp-header] h2")).some((item) => visible(item) && item.textContent === "alpha-server"), "project service")
-    Array.from(host.querySelectorAll<HTMLButtonElement>("[data-mcp-connection] button")).find(visible)!.click()
     await until(() => requests.some((request) => request.path.endsWith("/alpha-server/capabilities")), "project probe")
     check("project probes use the selected server's own working directory", requests.find((request) => request.path.endsWith("/alpha-server/capabilities"))?.cwd === projects[0])
     check("detail retention is bounded to three services", host.querySelectorAll("[data-mcp-header]").length === 3)

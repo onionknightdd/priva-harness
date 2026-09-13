@@ -65,6 +65,7 @@ describe('resource HTTP routes', () => {
     expect(capabilities.json<McpCapabilities>().tools.map((tool) => tool['name'])).toEqual(['echo', 'second'])
     expect(capabilities.json<McpCapabilities>().resources).toHaveLength(1)
     expect(capabilities.json<McpCapabilities>().prompts).toHaveLength(1)
+    expect(capabilities.json<McpCapabilities>().serverVersion).toBe('1')
     expect((await server.inject({ method: 'POST', url: url('mcp/validate'), payload: { definition } })).statusCode).toBe(200)
     const called = await server.inject({ method: 'POST', url: url('mcp/validate/tool'), payload: { id: detail.id, name: 'echo', args: { value: 'hello' } } })
     expect(called.statusCode).toBe(200)

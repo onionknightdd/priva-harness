@@ -138,7 +138,7 @@ export function ResourceBrowser({ kind, harness }: { kind: ResourceKind; harness
         <ResizableHandle />
         <ResizablePanel defaultSize="66.667%" minSize="30%">{pane}</ResizablePanel>
       </ResizablePanelGroup>}
-      {creating && <React.Suspense fallback={null}><ResourceCreateDialog kind={kind} query={query} groups={list.data?.groups ?? []} open={creating} onOpenChange={setCreating} onSaved={changed} /></React.Suspense>}
+      {creating && <React.Suspense fallback={null}><ResourceCreateDialog kind={kind} query={query} projects={list.data?.projects ?? []} open={creating} onOpenChange={setCreating} onSaved={changed} /></React.Suspense>}
     </section>
   )
 }

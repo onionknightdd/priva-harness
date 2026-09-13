@@ -178,9 +178,22 @@ loadMcpConfig(globalConfigPath, session.cwd)
 | POST | `/mcp` | 在指定来源新增配置 |
 | PATCH | `/mcp/{id}` | 修改指定来源的定义 |
 | DELETE | `/mcp/{id}` | 删除指定来源的声明 |
-| GET | `/mcp/{id}/capabilities` | 显式连接已保存配置，获取能力 |
+| GET | `/mcp/{id}/capabilities` | 连接已保存配置，获取能力与服务端版本 |
 | POST | `/mcp/validate` | 测试草稿连接与能力 |
 | POST | `/mcp/validate/tool` | 显式调用测试工具 |
+
+两个能力检测接口均返回 `tools`、`resources`、`prompts`、`testedAt` 和
+`serverVersion`。版本是 MCP 握手中的服务端版本，类型为 `string | null`，缺失时返回 null。
+详情可见时立即检测，每次完成 30 秒后再测；文档或缓存详情隐藏时暂停，恢复可见后立即检测。
+检测不重叠，旧请求不覆盖当前服务，失败保留上次能力清单。工具调用只由用户提交参数表单触发。
+
+```text
+可见详情 -> 连接 + 握手 -> 能力 / serverVersion -> 状态点 + pill
+    ^                       |
+    +----- 30 秒后重测 ------+
+隐藏详情 -> 暂停，恢复可见 -> 立即检测
+工具 inputSchema -> 参数表单 -> 用户执行 -> /mcp/validate/tool
+```
 
 源级原始配置与指定 cwd 的有效配置需区分；被覆盖记录不可误报为生效。
 启停必须映射到 provider 真正支持的语义，不能只保存一个与运行时无关的布尔值。
