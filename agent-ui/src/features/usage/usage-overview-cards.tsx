@@ -105,7 +105,7 @@ export function UsageOverviewCards() {
   const cards = (() => {
     const data: UsageRangeSummary | null = summary.data
     if (!data) {
-      return (["tokens", "cacheHitRate", "projects", "sessions", "runs", "peakDay", "longestStreak"] as const).map((key) => ({
+      return (["tokens", "cacheHitRate", "sessions", "runs", "peakDay", "longestStreak"] as const).map((key) => ({
         key, value: none, detail: "",
       }))
     }
@@ -122,8 +122,10 @@ export function UsageOverviewCards() {
           read: formatTokenCount(data.cacheReadTokens), write: formatTokenCount(data.cacheWriteTokens),
         }),
       },
-      { key: "projects", value: data.projects.toLocaleString(), detail: "" },
-      { key: "sessions", value: data.activeSessions.toLocaleString(), detail: t("usage.overview.activeDays", { count: data.activeDays }) },
+      {
+        key: "sessions", value: data.activeSessions.toLocaleString(),
+        detail: t("usage.overview.sessionDetail", { days: data.activeDays, projects: data.projects }),
+      },
       {
         key: "runs", value: data.runs.toLocaleString(),
         detail: data.runs === 0 ? "" : t("usage.overview.completedShare", { percent: Math.round((data.completed / data.runs) * 100) }),
@@ -222,7 +224,7 @@ export function UsageOverviewCards() {
       <div
         aria-busy={summary.loading || undefined}
         className={cn(
-          "grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-7",
+          "grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6",
           "motion-safe:transition-opacity motion-safe:duration-150",
           summary.loading && summary.data ? "opacity-60" : "opacity-100"
         )}
