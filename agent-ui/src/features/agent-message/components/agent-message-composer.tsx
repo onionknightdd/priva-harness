@@ -8,10 +8,7 @@ import { SPRING_LAYOUT } from "@/lib/ease"
 import { cn } from "@/lib/utils"
 import { ActionSwapRollIcon } from "@/components/motion/action-swap-roll"
 import { Field, FieldLabel } from "@/components/ui/field"
-import {
-  InputGroupButton,
-  InputGroupTextarea,
-} from "@/components/ui/input-group"
+import { InputGroupButton } from "@/components/ui/input-group"
 import { Separator } from "@/components/ui/separator"
 
 import type { ComposerAttachment } from "../composer-attachments"
@@ -20,7 +17,6 @@ import {
   applySlashSelection,
   filterSlashCommands,
   parseSlashTrigger,
-  shouldDeleteSlashChip,
   slashOptionId,
   visibleSlashCommands,
 } from "../composer-slash-command"
@@ -30,7 +26,10 @@ import { ComposerAttachmentChips } from "./composer-attachment-chips"
 import { ComposerModelSelector, COMPOSER_MODEL_TRIGGER_MAX_CLASS, type ComposerEffort } from "./composer-model-selector"
 import { ComposerSlashChip } from "./composer-slash-chip"
 import { ComposerSlashMenu } from "./composer-slash-menu"
+import { ComposerEditor, type ComposerEditorHandle } from "./composer-editor"
+import { messageSelectionDisplayText, parseMessageSelections } from "../message-select-action"
 import { TooltipHint } from "@/components/ui/tooltip"
+import "./composer-editor.css"
 
 export const composerDockTransition = {
   duration: 0.4,
@@ -61,7 +60,10 @@ function measureTextWidth(text: string, source: HTMLElement) {
     return 0
   }
 
-  measureContext.font = getComputedStyle(source).font
+  const font = getComputedStyle(source)
+  // The editor disables ligatures, which cannot be serialized into the CSS
+  // font shorthand in every browser. Measure with explicit font properties.
+  measureContext.font = `${font.fontStyle} ${font.fontWeight} ${font.fontSize} ${font.fontFamily}`
   return measureContext.measureText(text).width
 }
 
@@ -97,8 +99,9 @@ function useLineOverflow(
   shellRef: React.RefObject<HTMLDivElement | null>,
   leftRef: React.RefObject<HTMLDivElement | null>,
   rightRef: React.RefObject<HTMLDivElement | null>,
-  textareaRef: React.RefObject<HTMLTextAreaElement | null>,
-  leadingWidth = 0
+  inputRef: React.RefObject<HTMLDivElement | null>,
+  leadingWidth = 0,
+  quoteCount = 0
 ) {
   const [overflows, setOverflows] = React.useState(false)
 
@@ -116,9 +119,9 @@ function useLineOverflow(
     const shell = shellRef.current
     const left = leftRef.current
     const right = rightRef.current
-    const textarea = textareaRef.current
+    const input = inputRef.current
 
-    if (!shell || !left || !right || !textarea) {
+    if (!shell || !left || !right || !input) {
       return
     }
 
@@ -129,7 +132,7 @@ function useLineOverflow(
       return
     }
 
-    const textWidth = measureTextWidth(draft, textarea)
+    const textWidth = measureTextWidth(draft, input) + quoteCount * (parseFloat(getComputedStyle(input).fontSize) + 4)
 
     setOverflows((current) => {
       if (current) {
@@ -138,7 +141,7 @@ function useLineOverflow(
 
       return textWidth > available
     })
-  }, [draft, leadingWidth, leftRef, rightRef, shellRef, textareaRef])
+  }, [draft, leadingWidth, leftRef, rightRef, shellRef, inputRef, quoteCount])
 
   React.useLayoutEffect(() => {
     update()
@@ -255,6 +258,7 @@ export function AgentMessageComposer({
   modelReady,
   slashCommand,
   shellRef: shellRefProp,
+  editorRef: editorRefProp,
   onDraftChange,
   onSlashCommandChange,
   onModelReferenceChange,
@@ -273,6 +277,7 @@ export function AgentMessageComposer({
   modelReady: boolean
   slashCommand: SlashCommand | null
   shellRef?: React.RefObject<HTMLDivElement | null>
+  editorRef?: React.RefObject<ComposerEditorHandle | null>
   onDraftChange: (draft: string) => void
   onSlashCommandChange: (command: SlashCommand | null) => void
   onModelReferenceChange: (model: string | null) => void
@@ -286,7 +291,9 @@ export function AgentMessageComposer({
   const shellRef = shellRefProp ?? localShellRef
   const leftRef = React.useRef<HTMLDivElement>(null)
   const rightRef = React.useRef<HTMLDivElement>(null)
-  const textareaRef = React.useRef<HTMLTextAreaElement>(null)
+  const inputRef = React.useRef<HTMLDivElement>(null)
+  const localEditorRef = React.useRef<ComposerEditorHandle>(null)
+  const editorRef = editorRefProp ?? localEditorRef
   const chipRef = React.useRef<HTMLDivElement>(null)
   const catalog = useSlashCommandCatalog()
   const [dismissedQuery, setDismissedQuery] = React.useState<string | null>(null)
@@ -308,13 +315,15 @@ export function AgentMessageComposer({
   const chipWidth = useOffsetWidth(chipRef, slashCommand !== null)
   const chipOccupy =
     slashCommand && chipWidth > 0 ? chipWidth + COMPOSER_CHIP_GAP : 0
+  const draftParts = React.useMemo(() => parseMessageSelections(draft), [draft])
   const overflowsLine = useLineOverflow(
-    draft,
+    messageSelectionDisplayText(draftParts),
     shellRef,
     leftRef,
     rightRef,
-    textareaRef,
-    chipOccupy
+    inputRef,
+    chipOccupy,
+    draftParts.filter((part) => part.type === "selection").length
   )
   const singleLine = attachments.length === 0 && !overflowsLine
   const promptId = React.useId()
@@ -353,10 +362,10 @@ export function AgentMessageComposer({
       onDraftChange(applySlashSelection(draft))
       setDismissedQuery(null)
       requestAnimationFrame(() => {
-        textareaRef.current?.focus()
+        editorRef.current?.focus(true)
       })
     },
-    [draft, onDraftChange, onSlashCommandChange]
+    [draft, editorRef, onDraftChange, onSlashCommandChange]
   )
 
   const closeSlashMenu = React.useCallback(() => {
@@ -399,7 +408,7 @@ export function AgentMessageComposer({
               return
             }
 
-            textareaRef.current?.focus()
+            editorRef.current?.focus()
           }}
         >
           <ComposerAttachmentChips
@@ -413,7 +422,7 @@ export function AgentMessageComposer({
             commands={filteredCommands}
             highlightedIndex={highlightedIndex}
             anchorRef={shellRef}
-            textareaRef={textareaRef}
+            inputRef={inputRef}
             onOpenChange={(open) => {
               if (!open) {
                 closeSlashMenu()
@@ -457,17 +466,16 @@ export function AgentMessageComposer({
                     </div>
                   ) : null}
                 </AnimatePresence>
-                <InputGroupTextarea
-                  ref={textareaRef}
+                <ComposerEditor
+                  ref={editorRef}
+                  inputRef={inputRef}
                   id={promptId}
-                  rows={1}
-                  wrap={singleLine ? "off" : "soft"}
-                  value={draft}
+                  draft={draft}
                   placeholder={
                     slashCommand?.argumentHint ??
                     t("agentMessage.promptPlaceholder")
                   }
-                  data-agent-composer="prompt"
+                  aria-label={t("agentMessage.promptLabel")}
                   // Screen readers learn about the slash listbox and follow the
                   // highlighted option; keyboard handling below already exists.
                   aria-autocomplete="list"
@@ -483,41 +491,41 @@ export function AgentMessageComposer({
                   className={cn(
                     "w-full min-w-0 px-0 py-0 text-base! leading-8",
                     singleLine
-                      ? "field-sizing-fixed h-8 min-h-8 max-h-8 overflow-hidden whitespace-nowrap"
+                      ? "h-8 min-h-8 max-h-8 overflow-hidden"
                       : cn(
-                          "max-h-60 field-sizing-content",
+                          "max-h-60 overflow-y-auto",
                           compact ? "min-h-8" : "min-h-12"
                         )
                   )}
-                  onChange={(event) => onDraftChange(event.currentTarget.value)}
-                  onKeyDown={(event) => {
+                  onChange={onDraftChange}
+                  onKeyDown={(event, atStart) => {
                     if (slashMenuOpen) {
                       if (event.key === "ArrowDown") {
                         event.preventDefault()
                         if (filteredCommands.length === 0) {
-                          return
+                          return true
                         }
                         setHighlightedIndex(
                           (current) => (current + 1) % filteredCommands.length
                         )
-                        return
+                        return true
                       }
                       if (event.key === "ArrowUp") {
                         event.preventDefault()
                         if (filteredCommands.length === 0) {
-                          return
+                          return true
                         }
                         setHighlightedIndex(
                           (current) =>
                             (current - 1 + filteredCommands.length) %
                             filteredCommands.length
                         )
-                        return
+                        return true
                       }
                       if (event.key === "Escape") {
                         event.preventDefault()
                         closeSlashMenu()
-                        return
+                        return true
                       }
                       if (
                         (event.key === "Enter" && !event.shiftKey) ||
@@ -527,7 +535,7 @@ export function AgentMessageComposer({
                         if (selected) {
                           event.preventDefault()
                           selectSlashCommand(selected)
-                          return
+                          return true
                         }
                       }
                     }
@@ -535,22 +543,20 @@ export function AgentMessageComposer({
                     if (
                       event.key === "Backspace" &&
                       slashCommand !== null &&
-                      shouldDeleteSlashChip(
-                        event.currentTarget.selectionStart,
-                        event.currentTarget.selectionEnd
-                      )
+                      atStart
                     ) {
                       event.preventDefault()
                       onSlashCommandChange(null)
-                      return
+                      return true
                     }
 
                     if (event.key !== "Enter" || event.shiftKey) {
-                      return
+                      return false
                     }
 
                     event.preventDefault()
-                    event.currentTarget.form?.requestSubmit()
+                    inputRef.current?.closest("form")?.requestSubmit()
+                    return true
                   }}
                 />
               </div>
@@ -564,7 +570,7 @@ export function AgentMessageComposer({
             style={singleLine ? undefined : { height: COMPOSER_FOOTER_HEIGHT }}
           >
             {/* The bar itself snaps between the inline row and the footer; the
-                controls glide there on the same spring as the textarea padding,
+                controls glide there on the same spring as the editor padding,
                 so nothing teleports when the draft wraps to a second line. */}
             <motion.div
               ref={leftRef}

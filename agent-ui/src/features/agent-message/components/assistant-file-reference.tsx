@@ -10,7 +10,7 @@ import { writeClipboardText } from "@/lib/clipboard"
 import { isAbsoluteFilePath } from "@/lib/file-path"
 
 import { PopupsArmedContext } from "@/components/ui/popups-armed-context"
-import { AssistantSelectionActionContext } from "../selection-actions-context"
+import { QuoteInChatContext } from "../selection-actions-context"
 
 export function AssistantFileReference({ path, label, className }: {
   path: string
@@ -19,7 +19,7 @@ export function AssistantFileReference({ path, label, className }: {
 }) {
   const { t } = useTranslation()
   const workspace = useOptionalWorkspaceFiles()
-  const onSelectionAction = useContext(AssistantSelectionActionContext)
+  const onSelectionAction = useContext(QuoteInChatContext)
   const exists = useFileExists(path)
   const absolute = isAbsoluteFilePath(path)
   const [open, setOpen] = useState(false)
@@ -88,7 +88,7 @@ export function AssistantFileReference({ path, label, className }: {
           onClick={() => {
             quoted.current = true
             window.getSelection()?.removeAllRanges()
-            onSelectionAction?.("quote", path)
+            onSelectionAction?.({ type: "file", path })
           }}>
           <MessageSquareQuoteIcon aria-hidden="true" />
           {t("agentMessage.fileReferenceMenu.quote")}

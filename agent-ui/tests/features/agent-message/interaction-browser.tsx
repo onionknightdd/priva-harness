@@ -7,6 +7,7 @@ import App from "../../../src/App"
 import i18n from "../../../src/i18n"
 import "../../../src/index.css"
 import { installProjectDirectoryFixtures } from "../project-directory/project-directory-fixtures"
+import { fillComposerInput } from "../../helpers/composer-input"
 import type { InteractionRequest } from "../../../src/features/agent-message/interaction-data"
 
 const options = new URLSearchParams(location.search)
@@ -36,8 +37,9 @@ const button = (text: string) => {
   return found
 }
 const click = async (element: HTMLElement) => { await act(async () => element.click()); await settle() }
-const fill = async (element: HTMLInputElement | HTMLTextAreaElement, text: string) => {
+const fill = async (element: HTMLInputElement | HTMLTextAreaElement | HTMLDivElement, text: string) => {
   await act(async () => {
+    if (element.matches('[data-agent-composer="prompt"]')) { fillComposerInput(element, text); return }
     Object.getOwnPropertyDescriptor(element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype, "value")!.set!.call(element, text)
     element.dispatchEvent(new Event("input", { bubbles: true }))
   })
@@ -62,9 +64,9 @@ const resolve = async (request: InteractionRequest, decision: "allow" | "deny", 
 async function start() {
   if (sessionId) return
   await settle(600)
-  const textarea = host.querySelector<HTMLTextAreaElement>("textarea")!
-  if (!textarea) throw new Error("Composer did not load")
-  await fill(textarea, "验证权限审批和回答问题")
+  const input = host.querySelector<HTMLDivElement>('[data-agent-composer="prompt"]')!
+  if (!input) throw new Error("Composer did not load")
+  await fill(input, "验证权限审批和回答问题")
   await click(host.querySelector<HTMLButtonElement>('button[type="submit"]')!)
   if (!socket()) throw new Error("Run was not sent")
   runId = String(socket().sent[0].runId)
@@ -82,7 +84,7 @@ async function runChecks() {
     await start()
     const composer = host.querySelector<HTMLElement>("[data-composer-line]")!
     const width = composer.getBoundingClientRect().width
-    const prompt = host.querySelector<HTMLTextAreaElement>('textarea')!
+    const prompt = host.querySelector<HTMLDivElement>('[data-agent-composer="prompt"]')!
     for (const draft of ["Short draft", "A draft\nwith multiple lines"]) {
       await fill(prompt, draft)
       await act(async () => prompt.blur()); await settle()
@@ -90,7 +92,7 @@ async function runChecks() {
       await act(async () => prompt.focus()); await settle()
       check(`composer focus keeps its border and shadow (${draft.includes("\n") ? "multi" : "single"})`, getComputedStyle(composer).borderColor === unfocused.border && getComputedStyle(composer).boxShadow === unfocused.shadow)
     }
-    await fill(host.querySelector<HTMLTextAreaElement>("textarea")!, "保留这段未发送草稿")
+    await fill(host.querySelector<HTMLDivElement>('[data-agent-composer="prompt"]')!, "保留这段未发送草稿")
     const ask = question(); await show(ask)
     const card = () => host.querySelector<HTMLElement>("[data-interaction-card]")!
     check("card replaces composer at exactly the same width", !host.querySelector("[data-composer-line]") && Math.abs(card().getBoundingClientRect().width - width) < 1)
@@ -110,7 +112,7 @@ async function runChecks() {
     check("failure keeps answers and enables retry", Boolean(card().querySelector('[role="alert"]')) && card().querySelector<HTMLInputElement>("input")?.value === answers.q2.text && !button(t("interaction.send")).disabled)
     await click(button(t("interaction.send")))
     await resolve(ask, "allow", answers)
-    check("acknowledgment restores the draft and composer width", host.querySelector<HTMLTextAreaElement>("textarea")?.value === "保留这段未发送草稿" && Math.abs(host.querySelector<HTMLElement>("[data-composer-line]")!.getBoundingClientRect().width - width) < 1)
+    check("acknowledgment restores the draft and composer width", host.querySelector<HTMLDivElement>('[data-agent-composer="prompt"]')?.textContent === "保留这段未发送草稿" && Math.abs(host.querySelector<HTMLElement>("[data-composer-line]")!.getBoundingClientRect().width - width) < 1)
     const answered = host.querySelector<HTMLElement>('[data-question-summary="answered"]')!
     const userBubble = host.querySelector<HTMLElement>(".is-user > div")!
     check("answered summary aligns with the user bubble and fits its content", Math.abs(answered.getBoundingClientRect().right - userBubble.getBoundingClientRect().right) < 1 && answered.getBoundingClientRect().width < width)

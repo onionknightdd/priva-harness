@@ -9,7 +9,6 @@ import {
   groupSlashCommands,
   parseSlashTrigger,
   positionSlashMenuPanel,
-  shouldDeleteSlashChip,
   slashGroupId,
   slashKindLabelKey,
   slashMenuHoverMoved,
@@ -116,12 +115,6 @@ describe("composer slash command helpers", () => {
     assert.equal(applySlashSelection("/com"), "")
     assert.equal(applySlashSelection("/com leftover"), "leftover")
     assert.equal(composeSlashMessage("review", "   "), "/review")
-  })
-
-  it("deletes the chip only when the caret is at the start", () => {
-    assert.equal(shouldDeleteSlashChip(0, 0), true)
-    assert.equal(shouldDeleteSlashChip(1, 1), false)
-    assert.equal(shouldDeleteSlashChip(0, 3), false)
   })
 
   it("reveals the group title when the first row of a group is highlighted", () => {

@@ -1055,11 +1055,13 @@ inline 文件链接使用正常行高；单行省略容器不能使用 `leading-
 Workspace 抽屉；复制使用绝对路径，失败保留菜单并显示错误。引用把完整路径追加为
 Markdown 引用并聚焦输入框；未能解析为绝对路径时不执行文件操作。
 
-助手文本选区操作采用 [Beautiful UI Selection Actions](https://www.beautifului.dev/r/selection-actions.json)
-的 36px 胶囊、4px 内边距和 28px 圆角按钮，提取为本地
+消息文本选区操作采用 [Beautiful UI Selection Actions](https://www.beautifului.dev/r/selection-actions.json)
+的胶囊与圆角按钮外观，提取为本地
 `components/primitives/SelectionActions.tsx`，复用 Button、Lucide 与主题 token。
-只提供 12px 的“引用”“解释”“优化”；三个操作都写入草稿，解释 / 优化在选区引用后
-追加对应指令，由用户发送。工具条优先显示在选区下方，底部空间不足时向上翻转，
+2026-09-13：只提供 12px 的“在对话中引用”，支持 assistant / user 消息并记录来源角色。
+工具条外层内边距从 4px 减半为 2px，高度 32px；按钮保留 28px 高度，左右内边距从
+10px 减半为 5px，使用可点击指针。操作将选区插入 composer 当前光标位置，由用户发送。
+工具条优先显示在选区下方，底部空间不足时向上翻转，
 水平位置按实际宽度限制在视口内。Tab 进入工具条，左右方向键 / Home / End 移动，
 Esc、滚动及右键菜单打开时关闭。进入 160ms、退出 100ms，复用 `EASE_OUT`；
 键盘和减少动态效果立即切换。退出中的按钮设为 inert，取消未执行的定位帧。
@@ -1069,8 +1071,41 @@ src/components/example.tsx -> [example.tsx] --click / Open--> Workspace / Files
                                           |-- Hover ----> absolute path
                                           |-- Copy path --> absolute path
                                           +-- Quote ----> composer draft
-Assistant selection -> ( Quote | Explain | Improve ) ----> composer draft
-                                                        -> user sends
+Assistant / User selection -> ( Quote in chat ) -> composer caret
+Composer: text [message-circle-code "preview......"] text
+                              | hover -> original text / icon becomes delete
+                              v
+                         user sends -> readonly inline reference
+```
+
+Composer 使用 ProseMirror 的扁平 inline 文档：普通文本、换行和不可拆分的选区引用。
+引用沿正常文字排列，图标为 `message-circle-code`，文本加双引号，使用现有文件链接的
+浅蓝色（`sky-600` / 深色 `sky-400`）及可点击指针。预览最多保留 10 个可见字符
+（不拆 Emoji）；超过长度或遇到第一个换行后统一追加六个点 `......`。
+共享 Tooltip 按全局 1s 延迟显示完整原文，保留换行和空格。
+只有 composer 提供删除：悬停 / 键盘聚焦时图标在固定位置淡入切换成删除按钮
+（120ms，减少动态效果立即切换）；触屏始终显示删除图标。点击删除或紧邻引用的
+Backspace / Delete 删除整条节点，支持撤销与重做。Shift+Enter 换行，IME 确认键不发送；
+发送后清空编辑历史，权限卡替换输入框期间仍保留串行化草稿。
+
+发送、复制与粘贴使用 `message_select_action` 围栏，内容为来源角色和完整选区；预览
+截断不修改协议内容。围栏前后各两个换行用于协议分隔，渲染时去掉这部分换行并保留
+普通文本自身的空白。选区中存在反引号围栏时，外层围栏自动加长。历史消息将有效的
+顶层标记还原为相同的只读行内引用；无效、不完整、嵌在代码示例中的标记保留为正文。
+文件右键引用仍追加绝对路径的 Markdown `>` 引用。
+
+````text
+```message_select_action
+message_role: assistant
+selected_text: 选中的完整内容
+可包含换行
+```
+````
+
+```text
+native selection + source role -> ProseMirror inline atom
+        -> message_select_action -> run.start.text -> Claude / Pi
+        -> transcript -> MessageSelectionContent -> readonly inline preview
 ```
 
 附件发送格式：上传成功后，`messageTextWithAttachments` 将 `AgentAttachments` 围栏追加到
@@ -1078,7 +1113,7 @@ Assistant selection -> ( Quote | Explain | Improve ) ----> composer draft
 attachments 数组。每个条目使用 name、path、MIME、size 四个字段；path 是上传返回的
 绝对路径，size 是字节数。多个条目用空行分开，字段内的反斜杠、CR、LF 分别转义为
 `\\`、`\r`、`\n`。历史回放将完整有效的标记还原为附件卡片；不完整或无效标记保留为正文。
-当前文件 / 文本引用使用 Markdown `>`，没有额外的引用协议标记。
+附件清单与选区引用标记可出现在同一条消息中，分别解析。
 
 ````text
 用户正文
@@ -1196,7 +1231,8 @@ Tabs，选择预览操作模式时可使用 ToggleGroup。不要只根据组件�
 | DropdownMenu | [ui/dropdown-menu](../agent-ui/src/components/ui/dropdown-menu.tsx)，Base UI Menu | `ring-1`、共享 CSS 弹层动画、焦点行背景；`DropdownMenuContent` 透出 Positioner 的 `anchor`，一个菜单可挂多个 Trigger | 模型、会话、账户、路径、Harness 菜单 |
 | 附件 Menu | [animate-ui/components/base/menu](../agent-ui/src/components/animate-ui/components/base/menu.tsx)，Base UI Menu + Animate UI | `border`、200ms 弹层、Motion 滑动高亮；与通用 DropdownMenu 的分组字号等不同 | 聊天附件菜单 |
 | ContextMenu | [ui/context-menu](../agent-ui/src/components/ui/context-menu.tsx)，Base UI ContextMenu | shadcn 风格的右键菜单；行内文件菜单为 12px | 文件树节点、助手行内文件引用 |
-| Slash / 选区动作菜单 | [composer-slash-menu](../agent-ui/src/features/agent-message/components/composer-slash-menu.tsx)、[assistant-selection-actions](../agent-ui/src/features/agent-message/components/assistant-selection-actions.tsx)，本地 Portal + Motion | Slash 保留输入框焦点；选区复用 Beautiful UI 胶囊外观与工具条键盘操作 | 输入 `/`、引用 / 解释 / 优化所选文本 |
+| Slash / 选区动作菜单 | [composer-slash-menu](../agent-ui/src/features/agent-message/components/composer-slash-menu.tsx)、[message-selection-actions](../agent-ui/src/features/agent-message/components/message-selection-actions.tsx)，本地 Portal + Motion | Slash 保留输入框焦点；选区复用 Beautiful UI 胶囊外观与工具条键盘操作 | 输入 `/`、在对话中引用 assistant / user 选区 |
+| Composer 编辑内容 | [composer-editor](../agent-ui/src/features/agent-message/components/composer-editor.tsx)、[message-selection-quote](../agent-ui/src/features/agent-message/components/message-selection-quote.tsx)，ProseMirror + React Portal | 文本、换行、可删除的行内引用；撤销 / 重做、纯文本协议剪贴板 | composer 草稿与消息里的只读引用 |
 | Dialog / AlertDialog | [ui/dialog](../agent-ui/src/components/ui/dialog.tsx)、[ui/alert-dialog](../agent-ui/src/components/ui/alert-dialog.tsx)，Base UI | 居中模态框 + 遮罩；200ms 进入 / 150ms 退出 | 设置、资源表单、重命名、删除确认 |
 | Sheet | [ui/sheet](../agent-ui/src/components/ui/sheet.tsx)，Base UI Dialog | 边缘滑入；共享 `sheetMotion`，380ms 进入 / 220ms 退出 | 移动端侧栏、资源详情抽屉 |
 | Badge / Status | [ui/badge](../agent-ui/src/components/ui/badge.tsx)、[kibo-ui/status](../agent-ui/src/components/kibo-ui/status/index.tsx)、[workflow-status](../agent-ui/src/features/agent-message/components/workflow-status.tsx) | 标签 pill、状态圆点、带图标状态组合；Kibo 状态点使用语义 token | 会话状态、资源类型、工作流状态 |
@@ -1478,16 +1514,12 @@ node --test agent-ui/tests/features/file-browser/file-tree-content-width.test.ts
 
 后端 `POST /api/sandbox/files/exists` 的单元与 HTTP 集成用例包含在 Runner 的 `npm test` 中。
 
-选区操作的草稿保留、指令追加、绝对路径引用、浮层定位及选区范围回归：
+选区角色与范围、浮层定位、文件引用、引用协议与截断、编辑器插入 / 删除 / 撤销、
+剪贴板、IME、发送清空、历史只读展示和完整原文 Tooltip 回归。
+DOM 用例使用 jsdom 模拟事件，不承担浏览器布局或视觉验收：
 
 ```sh
-./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/quote-selection.test.ts
-```
-
-选区操作的草稿保留、指令追加、绝对路径引用、浮层定位及选区范围回归：
-
-```sh
-./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/quote-selection.test.ts
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/quote-selection.test.ts agent-ui/tests/features/agent-message/message-select-action.test.ts agent-ui/tests/features/agent-message/composer-editor-state.test.ts agent-ui/tests/features/agent-message/composer-editor.test.tsx
 ```
 
 后端文件系统与 HTTP 回归覆盖 1–3 MiB、3 MiB 边界、UTF-8 字节数、无扩展名文本、

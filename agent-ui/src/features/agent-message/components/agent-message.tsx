@@ -15,11 +15,10 @@ import { cn } from "@/lib/utils"
 
 import type { AgentThreadMessage } from "../agent-message-data"
 import type { ContextUsage } from "../context-usage"
-import {
-  appendQuotedDraft,
-  focusAgentComposer,
-} from "../quote-selection"
-import type { OnAssistantSelectionAction } from "../selection-actions-context"
+import { appendQuotedDraft } from "../quote-selection"
+import { serializeMessageSelections } from "../message-select-action"
+import type { OnQuoteInChat } from "../selection-actions-context"
+import type { ComposerEditorHandle } from "./composer-editor"
 import {
   AgentMessageComposer,
   composerDockTransition,
@@ -82,6 +81,7 @@ export function AgentMessage({
 }) {
   const { t } = useTranslation()
   const composerShellRef = useRef<HTMLDivElement>(null)
+  const composerEditorRef = useRef<ComposerEditorHandle>(null)
   const { activeSession, forkError, runCwd, runSessionId } = useActiveSession()
   const { setDraftCwd } = useChatSessionActions()
   const shouldReduceMotion = Boolean(useReducedMotion())
@@ -89,7 +89,7 @@ export function AgentMessage({
   const hadInteraction = useRef(false)
   useEffect(() => {
     if (hadInteraction.current && !pending) {
-      const id = requestAnimationFrame(focusAgentComposer)
+      const id = requestAnimationFrame(() => composerEditorRef.current?.focus(true))
       hadInteraction.current = false
       return () => cancelAnimationFrame(id)
     }
@@ -98,18 +98,20 @@ export function AgentMessage({
   const isEmpty = messages.length === 0 && activeSession === null
   // Every inline file reference subscribes to the selection action, so keep
   // its identity stable while the draft and connection state change.
-  const selectionContext = useRef({ draft, onDraftChange, t })
+  const selectionContext = useRef({ draft, onDraftChange })
   useLayoutEffect(() => {
-    selectionContext.current = { draft, onDraftChange, t }
+    selectionContext.current = { draft, onDraftChange }
   })
-  const onSelectionAction = useCallback<OnAssistantSelectionAction>((action, text) => {
-    const { draft, onDraftChange, t } = selectionContext.current
-    const instruction = action === "explain" ? t("agentMessage.explainSelectionPrompt")
-      : action === "improve" ? t("agentMessage.improveSelectionPrompt") : ""
-    onDraftChange(appendQuotedDraft(draft, text, instruction))
-    requestAnimationFrame(() => {
-      focusAgentComposer()
-    })
+  const onSelectionAction = useCallback<OnQuoteInChat>((quote) => {
+    const { draft, onDraftChange } = selectionContext.current
+    if (quote.type === "selection" && composerEditorRef.current) {
+      composerEditorRef.current.insertSelection(quote.selection)
+      return
+    }
+    onDraftChange(quote.type === "file"
+      ? appendQuotedDraft(draft, quote.path)
+      : draft + serializeMessageSelections([{ type: "selection", selection: quote.selection }]))
+    requestAnimationFrame(() => composerEditorRef.current?.focus(true))
   }, [])
   const dockRef = useRef<HTMLDivElement>(null)
   const dockSpacerRef = useRef<HTMLDivElement>(null)
@@ -224,6 +226,7 @@ export function AgentMessage({
           modelReady={modelReady}
           slashCommand={slashCommand}
           shellRef={composerShellRef}
+          editorRef={composerEditorRef}
           onDraftChange={onDraftChange}
           onSlashCommandChange={onSlashCommandChange}
           onModelReferenceChange={onModelReferenceChange}

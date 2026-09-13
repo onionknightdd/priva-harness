@@ -35,7 +35,7 @@ export function ComposerSlashMenu({
   commands,
   highlightedIndex,
   anchorRef,
-  textareaRef,
+  inputRef,
   onOpenChange,
   onHighlight,
   onSelect,
@@ -45,7 +45,7 @@ export function ComposerSlashMenu({
   commands: readonly SlashCommand[]
   highlightedIndex: number
   anchorRef: React.RefObject<HTMLElement | null>
-  textareaRef: React.RefObject<HTMLTextAreaElement | null>
+  inputRef: React.RefObject<HTMLElement | null>
   onOpenChange: (open: boolean) => void
   onHighlight: (index: number) => void
   onSelect: (command: SlashCommand) => void
@@ -144,7 +144,7 @@ export function ComposerSlashMenu({
       if (panelRef.current?.contains(target)) {
         return
       }
-      if (textareaRef.current?.contains(target)) {
+      if (inputRef.current?.contains(target)) {
         return
       }
       if (anchorRef.current?.contains(target)) {
@@ -155,7 +155,7 @@ export function ComposerSlashMenu({
 
     document.addEventListener("pointerdown", onPointerDown)
     return () => document.removeEventListener("pointerdown", onPointerDown)
-  }, [anchorRef, onOpenChange, open, textareaRef])
+  }, [anchorRef, onOpenChange, open, inputRef])
 
   React.useEffect(() => {
     if (!open) {

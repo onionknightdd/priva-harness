@@ -2,24 +2,24 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
-import { MessageCircleQuestionMarkIcon, MessageSquareQuoteIcon, SparklesIcon } from "lucide-react"
+import { MessageCircleCodeIcon } from "lucide-react"
 import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react"
 import { useTranslation } from "react-i18next"
 
 import SelectionActions from "@/components/primitives/SelectionActions"
 import { EASE_OUT } from "@/lib/ease"
 
-import { readAssistantSelection, selectionActionsPosition } from "../quote-selection"
-import type { AssistantSelectionAction, OnAssistantSelectionAction } from "../selection-actions-context"
+import { readMessageSelection, selectionActionsPosition } from "../quote-selection"
+import type { OnQuoteInChat } from "../selection-actions-context"
 
-export function AssistantSelectionActions({ onAction }: { onAction: OnAssistantSelectionAction }) {
+export function MessageSelectionActions({ onAction }: { onAction: OnQuoteInChat }) {
   const { t } = useTranslation()
   const reduceMotion = Boolean(useReducedMotionConfig())
   const pointerDown = useRef(false)
   const frame = useRef<number | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const returnFocus = useRef<HTMLElement | null>(null)
-  const [selection, setSelection] = useState<ReturnType<typeof readAssistantSelection>>(null)
+  const [selection, setSelection] = useState<ReturnType<typeof readMessageSelection>>(null)
   const [keyboard, setKeyboard] = useState(false)
   const [mounted, setMounted] = useState(false)
   const instant = reduceMotion || keyboard
@@ -35,7 +35,7 @@ export function AssistantSelectionActions({ onAction }: { onAction: OnAssistantS
     // text remains available until an action or an explicit dismissal.
     if (menuRef.current?.contains(document.activeElement)) return
     returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    setSelection(readAssistantSelection())
+    setSelection(readMessageSelection())
   }, [])
 
   useLayoutEffect(() => {
@@ -115,10 +115,10 @@ export function AssistantSelectionActions({ onAction }: { onAction: OnAssistantS
     }
   }, [syncSelection])
 
-  const act = (action: AssistantSelectionAction) => {
+  const act = () => {
     if (!selection) return
-    onAction(action, selection.text)
     window.getSelection()?.removeAllRanges()
+    onAction({ type: "selection", selection: { messageRole: selection.messageRole, selectedText: selection.selectedText } })
     setSelection(null)
   }
 
@@ -127,9 +127,9 @@ export function AssistantSelectionActions({ onAction }: { onAction: OnAssistantS
     <AnimatePresence>
       {selection ? (
         <motion.div
-          key="assistant-selection-actions"
+          key="message-selection-actions"
           ref={menuRef}
-          data-assistant-selection-actions
+          data-message-selection-actions
           className="fixed z-50"
           initial={instant ? false : { opacity: 0, transform: "translateY(4px) scale(0.96)" }}
           animate={{ opacity: 1, transform: "translateY(0px) scale(1)" }}
@@ -137,9 +137,7 @@ export function AssistantSelectionActions({ onAction }: { onAction: OnAssistantS
           transition={{ duration: instant ? 0 : 0.16, ease: EASE_OUT }}
         >
           <SelectionActions label={t("agentMessage.quoteMenuLabel")} instant={instant} actions={[
-            { id: "quote", label: t("agentMessage.quoteSelection"), icon: <MessageSquareQuoteIcon aria-hidden="true" />, onSelect: () => act("quote") },
-            { id: "explain", label: t("agentMessage.explainSelection"), icon: <MessageCircleQuestionMarkIcon aria-hidden="true" />, onSelect: () => act("explain") },
-            { id: "improve", label: t("agentMessage.improveSelection"), icon: <SparklesIcon aria-hidden="true" />, onSelect: () => act("improve") },
+            { id: "quote", label: t("agentMessage.quoteSelection"), icon: <MessageCircleCodeIcon aria-hidden="true" />, onSelect: act },
           ]} />
         </motion.div>
       ) : null}

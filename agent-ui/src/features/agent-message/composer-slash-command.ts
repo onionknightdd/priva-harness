@@ -118,13 +118,6 @@ export function applySlashSelection(draft: string): string {
   return draft.replace(/^\/[^\s]*[ \t]*/u, "")
 }
 
-export function shouldDeleteSlashChip(
-  selectionStart: number,
-  selectionEnd: number
-): boolean {
-  return selectionStart === 0 && selectionEnd === 0
-}
-
 const SLASH_MENU_VIEWPORT_INSET_PX = 8
 
 export function slashOptionId(menuId: string, index: number) {
