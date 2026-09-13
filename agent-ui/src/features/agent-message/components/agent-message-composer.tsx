@@ -37,9 +37,11 @@ export const composerDockTransition = {
   ease: [0.16, 1, 0.3, 1],
 } as const
 
-const COMPOSER_FOOTER_HEIGHT = 40
-const COMPOSER_MULTI_PAD = 14
-const COMPOSER_SINGLE_PAD_Y = 7
+// Scale the footer's vertical padding while keeping its 32px controls intact.
+const COMPOSER_FOOTER_HEIGHT = 32 + (8 * 2) / 3
+const COMPOSER_MULTI_PAD_X = 14
+const COMPOSER_MULTI_PAD_TOP = 8
+const COMPOSER_SINGLE_PAD_Y = (7 * 2) / 3
 const COMPOSER_CHIP_GAP = 8
 const COMPOSER_LEFT_FALLBACK_PX = 46
 const COMPACT_LINE_SLACK_PX = 8
@@ -326,10 +328,10 @@ export function AgentMessageComposer({
   )
   const fieldPadLeft = singleLine
     ? leftWidth || COMPOSER_LEFT_FALLBACK_PX
-    : COMPOSER_MULTI_PAD
+    : COMPOSER_MULTI_PAD_X
   const fieldPadRight = singleLine
     ? rightWidth || 212
-    : COMPOSER_MULTI_PAD
+    : COMPOSER_MULTI_PAD_X
 
   React.useEffect(() => {
     setHighlightedIndex(0)
@@ -432,7 +434,7 @@ export function AgentMessageComposer({
               animate={{
                 paddingTop: singleLine
                   ? COMPOSER_SINGLE_PAD_Y
-                  : COMPOSER_MULTI_PAD - 2,
+                  : COMPOSER_MULTI_PAD_TOP,
                 paddingBottom: singleLine
                   ? COMPOSER_SINGLE_PAD_Y
                   : COMPOSER_FOOTER_HEIGHT,
@@ -557,8 +559,9 @@ export function AgentMessageComposer({
           <div
             className={cn(
               "pointer-events-none absolute z-10 flex items-center",
-              singleLine ? "inset-0" : "inset-x-0 bottom-0 h-10"
+              singleLine ? "inset-0" : "inset-x-0 bottom-0"
             )}
+            style={singleLine ? undefined : { height: COMPOSER_FOOTER_HEIGHT }}
           >
             {/* The bar itself snaps between the inline row and the footer; the
                 controls glide there on the same spring as the textarea padding,

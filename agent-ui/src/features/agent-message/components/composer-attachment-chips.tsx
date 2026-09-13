@@ -38,7 +38,7 @@ export function ComposerAttachmentChips({
   }
 
   return (
-    <AttachmentGroup className="px-3.5 pt-3">
+    <AttachmentGroup className="px-3.5 pt-2">
       <AnimatePresence initial={false}>
         {attachments.map((attachment) => {
           const previewUrl = attachment.previewUrl
