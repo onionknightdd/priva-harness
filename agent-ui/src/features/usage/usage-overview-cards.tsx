@@ -13,6 +13,7 @@ import { EASE_OUT } from "@/lib/ease"
 import { cn } from "@/lib/utils"
 
 import {
+  cacheHitRate,
   matchingPreset,
   presetRange,
   RANGE_PRESETS,
@@ -62,6 +63,11 @@ function RollingText({ text, reduceMotion }: { text: string; reduceMotion: boole
   )
 }
 
+// Detail lines wrap on narrow cards. Each segment between " · " / " – " is an
+// inline-block, so the line breaks at a separator and keeps a figure with its
+// unit; a segment only wraps internally when it is wider than the card.
+const DETAIL_SEPARATOR = /( · | – )/
+
 function StatCard({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
     <Card size="sm" className="gap-1 rounded-lg shadow-none [--card-spacing:--spacing(3)]">
@@ -70,7 +76,9 @@ function StatCard({ label, value, detail }: { label: string; value: string; deta
         {value}
       </p>
       <p key={detail} className={cn("min-h-4 px-(--card-spacing) text-[11px] leading-4 text-muted-foreground tabular-nums", VALUE_CLASS_NAME)}>
-        {detail}
+        {detail.split(DETAIL_SEPARATOR).map((segment, index) =>
+          index % 2 === 1 ? segment : <span key={index} className="inline-block">{segment}</span>
+        )}
       </p>
     </Card>
   )
@@ -97,15 +105,23 @@ export function UsageOverviewCards() {
   const cards = (() => {
     const data: UsageRangeSummary | null = summary.data
     if (!data) {
-      return (["tokens", "projects", "sessions", "runs", "peakDay", "longestStreak"] as const).map((key) => ({
+      return (["tokens", "cacheHitRate", "projects", "sessions", "runs", "peakDay", "longestStreak"] as const).map((key) => ({
         key, value: none, detail: "",
       }))
     }
     const cost = data.costUsd === null
       ? t("usage.overview.noCost")
       : `$${data.costUsd.toFixed(2)}${data.runsWithoutCost > 0 ? ` · ${t("usage.overview.partialCost", { count: data.runsWithoutCost })}` : ""}`
+    const hitRate = cacheHitRate(data)
     return [
       { key: "tokens", value: formatTokenCount(data.processedTokens), detail: cost },
+      {
+        key: "cacheHitRate",
+        value: hitRate === null ? none : `${Math.round(hitRate * 100)}%`,
+        detail: hitRate === null ? "" : t("usage.overview.cacheTokens", {
+          read: formatTokenCount(data.cacheReadTokens), write: formatTokenCount(data.cacheWriteTokens),
+        }),
+      },
       { key: "projects", value: data.projects.toLocaleString(), detail: "" },
       { key: "sessions", value: data.activeSessions.toLocaleString(), detail: t("usage.overview.activeDays", { count: data.activeDays }) },
       {
@@ -206,7 +222,7 @@ export function UsageOverviewCards() {
       <div
         aria-busy={summary.loading || undefined}
         className={cn(
-          "grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6",
+          "grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-7",
           "motion-safe:transition-opacity motion-safe:duration-150",
           summary.loading && summary.data ? "opacity-60" : "opacity-100"
         )}

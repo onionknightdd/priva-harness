@@ -92,7 +92,9 @@ function syntheticRange(from: string, to: string): UsageRangeSummary {
   return {
     from, to, days: days.length, runs, completed: Math.round(runs * 0.94), failed: runs - Math.round(runs * 0.94), aborted: 0,
     activeSessions: Math.ceil(runs / 3), activeDays: active.length, projects: Math.min(6, active.length),
-    inputTokens: processedTokens, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, processedTokens,
+    // 70% of the prompt is served from cache so the hit-rate card has a
+    // recognisable value to check.
+    inputTokens: processedTokens * 0.2, outputTokens: 0, cacheReadTokens: processedTokens * 0.7, cacheWriteTokens: processedTokens * 0.1, processedTokens,
     costUsd: runs === 0 ? null : Math.round(processedTokens / 1_000_000 * 150) / 100, runsWithoutCost: Math.floor(runs / 10),
     peakDay: peak ? { date: peak.date, processedTokens: peak.processedTokens } : null, longestStreak: streak,
   }
@@ -294,10 +296,12 @@ async function runChecks() {
       const [year, month, day] = date.split("-").map(Number)
       return i18n.language.startsWith("zh") ? `${year}年${month}月${day}日` : new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short", day: "numeric" }).format(new Date(year!, month! - 1, day))
     }
-    check("overview renders six cards in the requested order", Array.from(cardsSection.querySelectorAll('[data-slot="card"] p:first-child')).map((node) => node.textContent).join("|") === ["tokens", "projects", "sessions", "runs", "peakDay", "longestStreak"].map((key) => i18n.t(`usage.overview.cards.${key}`)).join("|"))
+    check("overview renders seven cards in the requested order", Array.from(cardsSection.querySelectorAll('[data-slot="card"] p:first-child')).map((node) => node.textContent).join("|") === ["tokens", "cacheHitRate", "projects", "sessions", "runs", "peakDay", "longestStreak"].map((key) => i18n.t(`usage.overview.cards.${key}`)).join("|"))
     check("the default range is one year ending today", await waitFor(() => rangeRequests.some((url) => url.includes(`from=${shiftLocalDate(todayIso, -364)}&to=${todayIso}`))))
     check("the one-year preset is active and both pickers show its dates", presetTabs()[2]?.getAttribute("aria-selected") === "true" && pickerButtons().map((button) => button.textContent).join("|") === `${dayLabel(shiftLocalDate(todayIso, -364))}|${dayLabel(todayIso)}`)
-    check("card values arrive from the range summary", await waitFor(() => cardValues()[0] !== i18n.t("usage.overview.none") && cardValues()[5]?.includes(String(syntheticRange(shiftLocalDate(todayIso, -364), todayIso).longestStreak?.days)) === true))
+    check("card values arrive from the range summary", await waitFor(() => cardValues()[0] !== i18n.t("usage.overview.none") && cardValues()[6]?.includes(String(syntheticRange(shiftLocalDate(todayIso, -364), todayIso).longestStreak?.days)) === true))
+    check("the cache hit rate card shows the share of prompt tokens read from cache", cardValues()[1] === "70%")
+    check("all seven cards share one row on desktop", new Set(Array.from(cardsSection.querySelectorAll('[data-slot="card"]')).map((card) => Math.round(card.getBoundingClientRect().top))).size === 1)
     const yearTokens = cardValues()[0]
 
     await act(async () => { presetTabs()[0]!.click() })

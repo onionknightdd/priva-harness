@@ -108,6 +108,15 @@ export type UsageRangeSummary = TokenTotals & {
   longestStreak: UsageStreak | null
 }
 
+// Share of prompt tokens the provider served from its cache. Prompt tokens
+// are everything the model read (fresh input, cache reads and cache writes);
+// output is excluded because it can never be cached. `null` when nothing was
+// read, so the card shows a dash instead of a misleading 0%.
+export function cacheHitRate(totals: TokenTotals): number | null {
+  const prompt = totals.inputTokens + totals.cacheReadTokens + totals.cacheWriteTokens
+  return prompt === 0 ? null : totals.cacheReadTokens / prompt
+}
+
 export type LocalDateRange = { from: string; to: string }
 
 export type UsageRangeQuery = LocalDateRange & { timeZone: string }

@@ -3,6 +3,7 @@ import { test } from "node:test"
 
 import {
   browserTimeZone,
+  cacheHitRate,
   heatmapActivities,
   matchingPreset,
   modelSeries,
@@ -124,4 +125,19 @@ test("range URL carries the zone and both inclusive dates", () => {
   assert.equal(url.searchParams.get("tz"), "Asia/Shanghai")
   assert.equal(url.searchParams.get("from"), "2026-08-01")
   assert.equal(url.searchParams.get("to"), "2026-09-13")
+})
+
+const totals = (inputTokens: number, cacheReadTokens: number, cacheWriteTokens: number, outputTokens = 0) => ({
+  inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens,
+  processedTokens: inputTokens + cacheReadTokens + cacheWriteTokens + outputTokens, costUsd: null, runsWithoutCost: 0,
+})
+
+test("cache hit rate is cache reads over all prompt tokens, ignoring output", () => {
+  assert.equal(cacheHitRate(totals(200, 700, 100, 5_000)), 0.7)
+  assert.equal(cacheHitRate(totals(1_000, 0, 0)), 0)
+  assert.equal(cacheHitRate(totals(0, 300, 0)), 1)
+})
+
+test("cache hit rate is undefined when no prompt tokens were read", () => {
+  assert.equal(cacheHitRate(totals(0, 0, 0, 40)), null)
 })
