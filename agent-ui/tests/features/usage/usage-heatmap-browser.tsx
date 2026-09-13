@@ -304,12 +304,22 @@ async function runChecks() {
     check("the sessions card reads 「sessions, turns」 as one value with days · projects below", (() => {
       const year = syntheticRange(shiftLocalDate(todayIso, -364), todayIso)
       const valueLine = cardsSection.querySelectorAll('[data-slot="card"] p:nth-child(2)')[2]
+      const parts = Array.from(valueLine?.children ?? [])
       return valueLine?.textContent === `${year.activeSessions.toLocaleString()}${i18n.t("usage.overview.sessionTurns", { count: year.runs })}`
-        && valueLine.children.length === 0
-        && valueLine.getBoundingClientRect().height < 30
+        && parts.length === 2 && parts[1]?.textContent === i18n.t("usage.overview.sessionTurns", { count: year.runs }).replace(/^(，|, )/, "")
+        && parts.every((part) => getComputedStyle(part).fontSize === getComputedStyle(valueLine).fontSize)
         && cardsSection.querySelectorAll('[data-slot="card"] p:nth-child(3)')[2]?.textContent === i18n.t("usage.overview.sessionDetail", { days: year.activeDays, projects: year.projects })
     })())
     check("the range tabs end with a custom range option", presetTabs().length === 4 && presetTabs()[3]?.textContent === i18n.t("usage.overview.presets.custom"))
+    check("all five cards are the same size and their detail rows share one baseline", (() => {
+      const cards = Array.from(cardsSection.querySelectorAll<HTMLElement>('[data-slot="card"]'))
+      const widths = new Set(cards.map((card) => Math.round(card.getBoundingClientRect().width)))
+      const heights = new Set(cards.map((card) => Math.round(card.getBoundingClientRect().height)))
+      const detailBottoms = new Set(cards.map((card) => Math.round(card.querySelector("p:nth-child(3)")!.getBoundingClientRect().bottom)))
+      return widths.size === 1 && heights.size === 1 && detailBottoms.size === 1
+        && cards.every((card) => getComputedStyle(card.querySelector("p")!).paddingLeft === "12px")
+    })())
+    check("the sessions value breaks after the comma, never inside the turn count", cardsSection.querySelectorAll('[data-slot="card"] p:nth-child(2)')[2]!.getBoundingClientRect().height < 55)
     check("all five cards share one row on desktop", new Set(Array.from(cardsSection.querySelectorAll('[data-slot="card"]')).map((card) => Math.round(card.getBoundingClientRect().top))).size === 1)
     const yearTokens = cardValues()[0]
 

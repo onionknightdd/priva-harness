@@ -1,7 +1,7 @@
 import { format, parseISO } from "date-fns"
 import { enUS, zhCN } from "date-fns/locale"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
-import { useId, useMemo, useState } from "react"
+import { useId, useMemo, useState, type CSSProperties } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Tabs, TabsList, TabsTrigger } from "@/components/assistant-ui/tabs"
@@ -65,24 +65,37 @@ function RollingText({ text, reduceMotion }: { text: string; reduceMotion: boole
   )
 }
 
-// Detail lines wrap on narrow cards. Each segment between " · " / " – " is an
+// Card text wraps on narrow cards. Each segment between separators is an
 // inline-block, so the line breaks at a separator and keeps a figure with its
-// unit; a segment only wraps internally when it is wider than the card.
+// unit; a segment only wraps internally when it is wider than the card. The
+// separators themselves stay as plain text between the blocks, since a space
+// inside an inline-block would collapse.
+//   detail: " · " and " – "
+//   value:  the comma joining two figures ("173，共计 519 轮" / "173, 519 turns");
+//           a thousands separator ("1,234") has no space after it and is kept.
 const DETAIL_SEPARATOR = /( · | – )/
+const VALUE_SEPARATOR = /((?<=，)|(?<=,) )/
+
+function segments(text: string, separator: RegExp) {
+  return text.split(separator).map((segment, index) =>
+    index % 2 === 1 ? segment : <span key={index} className="inline-block">{segment}</span>
+  )
+}
 
 type StatCardProps = { label: string; value: string; detail: string }
 
 function StatCard({ label, value, detail }: StatCardProps) {
   return (
-    <Card size="sm" className="gap-1 rounded-lg shadow-none [--card-spacing:--spacing(3)]">
+    // Inline so the 12px spacing beats Card's own size variants for certain.
+    <Card size="sm" className="gap-1 rounded-lg shadow-none" style={{ "--card-spacing": "0.75rem" } as CSSProperties}>
       <p className="px-(--card-spacing) text-xs text-muted-foreground">{label}</p>
       <p key={value} className={cn("px-(--card-spacing) text-xl font-semibold leading-tight tabular-nums", VALUE_CLASS_NAME)}>
-        {value}
+        {segments(value, VALUE_SEPARATOR)}
       </p>
-      <p key={detail} className={cn("min-h-4 px-(--card-spacing) text-[11px] leading-4 text-muted-foreground tabular-nums", VALUE_CLASS_NAME)}>
-        {detail.split(DETAIL_SEPARATOR).map((segment, index) =>
-          index % 2 === 1 ? segment : <span key={index} className="inline-block">{segment}</span>
-        )}
+      {/* Detail rows sit on one baseline across the row even when a value
+          wraps, so the value area absorbs the extra line. */}
+      <p key={detail} className={cn("mt-auto min-h-4 px-(--card-spacing) text-[11px] leading-4 text-muted-foreground tabular-nums", VALUE_CLASS_NAME)}>
+        {segments(detail, DETAIL_SEPARATOR)}
       </p>
     </Card>
   )
@@ -237,9 +250,7 @@ export function UsageOverviewCards() {
       <div
         aria-busy={summary.loading || undefined}
         className={cn(
-          // The sessions card carries two figures on its value line
-          // ("173，519 轮对话"), so it takes half a column more than the rest.
-          "grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-[1fr_1fr_1.5fr_1fr_1fr]",
+          "grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5",
           "motion-safe:transition-opacity motion-safe:duration-150",
           summary.loading && summary.data ? "opacity-60" : "opacity-100"
         )}

@@ -97,7 +97,7 @@ export const zhCN = {
       none: "—",
       noCost: "无成本数据",
       partialCost: "{{count}} 轮无成本",
-      sessionTurns: "，{{count}} 轮对话",
+      sessionTurns: "，共计 {{count}} 轮",
       sessionDetail: "活跃 {{days}} 天 · 共 {{projects}} 个项目",
       streakDays: "{{count}} 天",
       cacheTokens: "读取 {{read}} · 写入 {{write}}",
