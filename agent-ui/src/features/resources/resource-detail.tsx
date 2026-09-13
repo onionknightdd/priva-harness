@@ -51,8 +51,8 @@ export function ResourceDetailPane({ kind, query, detail, file, onChanged, onSki
         </div>
         <div className="flex shrink-0 items-center gap-2.5" aria-busy={busy || undefined}>
           {skill ? <>
-            {/* Saving blocks duplicate actions without dimming the toolbar. */}
-            <Switch size="sm" className={skill.canToggle ? "disabled:opacity-100" : undefined} checked={detail.enabled} onCheckedChange={(enabled) => void mutate("PATCH", { enabled })} disabled={!skill.canToggle || busy} aria-label={t("resources.enabled")} />
+            {/* Saving blocks duplicate actions without changing the cursor or dimming the toolbar. */}
+            <Switch size="sm" className={skill.canToggle ? "disabled:cursor-auto disabled:opacity-100" : undefined} checked={detail.enabled} onCheckedChange={(enabled) => void mutate("PATCH", { enabled })} disabled={!skill.canToggle || busy} aria-label={t("resources.enabled")} />
             <TooltipHint content={t("resources.download")}><ResourceIconButton render={<a href={resourceUrl(`skills/${detail.id}/download`, query)} />} aria-label={t("resources.download")}><DownloadIcon /></ResourceIconButton></TooltipHint>
             <TooltipHint content={t("resources.delete")}><ResourceIconButton className={canDelete ? "disabled:opacity-100" : undefined} disabled={!canDelete || busy} onClick={() => setDeleting(true)} aria-label={t("resources.delete")}><Trash2Icon /></ResourceIconButton></TooltipHint>
           </> : <>
