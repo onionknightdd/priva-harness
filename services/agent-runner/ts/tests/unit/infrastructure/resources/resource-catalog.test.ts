@@ -33,10 +33,34 @@ describe('resource catalog', () => {
     for (const path of [join(cwd, '.git'), join(other, '.git'), claudeDir, piDir]) await mkdir(path, { recursive: true })
     vi.stubEnv('CLAUDE_CONFIG_DIR', claudeDir)
     vi.stubEnv('PI_CODING_AGENT_DIR', piDir)
-    service = new LocalResourceService({ activeCwd: cwd, claudeDir, piDir, discoverProjects: () => Promise.resolve([other, cwd, join(root, 'gone')]) })
+    service = new LocalResourceService({ activeCwd: cwd, claudeDir, claudeConfigFilePath: join(claudeDir, '.claude.json'), piDir, discoverProjects: () => Promise.resolve([other, cwd, join(root, 'gone')]) })
   })
 
   afterEach(async () => { vi.unstubAllEnvs(); await rm(root, { recursive: true, force: true }) })
+
+  it('reads and writes native Claude MCP config beside the global directory', async () => {
+    vi.stubEnv('HOME', root)
+    vi.stubEnv('CLAUDE_CONFIG_DIR', undefined)
+    const nativeDir = join(root, '.claude')
+    const configPath = join(root, '.claude.json')
+    const misplacedPath = join(nativeDir, '.claude.json')
+    await json(configPath, { theme: 'dark', mcpServers: { native: { command: 'native' } }, projects: { [cwd]: { trusted: true } } })
+    await json(misplacedPath, { mcpServers: { misplaced: { command: 'wrong' } } })
+    const native = new LocalResourceService({ activeCwd: cwd, claudeDir: nativeDir, claudeConfigFilePath: configPath, piDir, discoverProjects: () => Promise.resolve([]) })
+    const query = { harness: 'claude' as const, cwd }
+
+    const list = await native.mcp.list(query)
+    const globalGroup = present(list.groups.find((group) => group.source.scope === 'global'))
+    expect(globalGroup.source.path).toBe(configPath)
+    expect(globalGroup.items.map((item) => item.name)).toEqual(['native'])
+    expect(list.groups.find((group) => group.source.scope === 'local')?.source.path).toBe(configPath)
+
+    await native.mcp.create(query, { scope: 'global', name: 'added', definition: { command: 'added' } })
+    expect(JSON.parse(await readFile(configPath, 'utf8'))).toEqual({
+      theme: 'dark', mcpServers: { native: { command: 'native' }, added: { command: 'added' } }, projects: { [cwd]: { trusted: true } },
+    })
+    expect(JSON.parse(await readFile(misplacedPath, 'utf8'))).toEqual({ mcpServers: { misplaced: { command: 'wrong' } } })
+  })
 
   it('keeps source identities and local > project > global precedence without a model profile', async () => {
     await json(join(claudeDir, '.claude.json'), { theme: 'dark', mcpServers: { same: { command: 'global' } }, projects: { [cwd]: { trusted: true, mcpServers: { same: { command: 'local' } } } } })

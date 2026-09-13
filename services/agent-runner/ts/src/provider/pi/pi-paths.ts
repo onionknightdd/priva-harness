@@ -1,10 +1,11 @@
 import { join, resolve } from 'node:path'
 
-const PI_DIRECTORY = '.pi'
-const PI_AGENT_DIRECTORY = 'agent'
+import { getAgentDir } from '@earendil-works/pi-coding-agent'
 
-export function piGlobalDir(harnessHome: string): string {
-  return join(harnessHome, PI_DIRECTORY, PI_AGENT_DIRECTORY)
+const PI_DIRECTORY = '.pi'
+
+export function piGlobalDir(): string {
+  return getAgentDir()
 }
 
 export function piProjectDir(cwd: string): string {

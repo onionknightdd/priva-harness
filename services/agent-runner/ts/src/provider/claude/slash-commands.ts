@@ -31,14 +31,12 @@ export type ClaudeSlashQueryStart = (args: {
 
 export function resolveClaudeListingQueryOptions(
   spec: ProviderRunSpec,
-  globalConfigDir: string,
   abortController?: AbortController,
   tools: readonly ToolDefinition[] = [],
 ): Options {
   return {
     ...resolveClaudeQueryOptions(
       spec,
-      globalConfigDir,
       { kind: 'new', provider: 'claude' },
       abortController,
       tools,
@@ -102,7 +100,6 @@ export async function listClaudeSlashCommands(options: {
     prompt: input,
     options: resolveClaudeListingQueryOptions(
       options.spec,
-      options.globalConfigDir,
       abortController,
       options.tools ?? [],
     ),

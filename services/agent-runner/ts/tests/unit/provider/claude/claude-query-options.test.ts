@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   CLAUDE_DISALLOWED_TOOLS,
@@ -37,11 +37,15 @@ describe('resolveClaudeQuerySettings', () => {
 })
 
 describe('resolveClaudeQueryOptions', () => {
+  beforeEach(() => {
+    vi.stubEnv('CLAUDE_CONFIG_DIR', undefined)
+    vi.stubEnv('PI_CODING_AGENT_DIR', undefined)
+  })
+
+  afterEach(() => { vi.unstubAllEnvs() })
+
   it('resolves run spec fields onto Claude SDK options', () => {
-    const options = resolveClaudeQueryOptions(
-      spec,
-      '/home/user/.bambuddy/harness/.claude',
-    )
+    const options = resolveClaudeQueryOptions(spec)
 
     expect(options.cwd).toBe('/work/repo')
     expect(options.model).toBe('deepseek-v4-flash')
@@ -65,9 +69,8 @@ describe('resolveClaudeQueryOptions', () => {
     expect(options.forkSession).toBeUndefined()
     expect(options.continue).toBeUndefined()
     expect(options.sessionId).toBeUndefined()
-    expect(options.env?.['CLAUDE_CONFIG_DIR']).toBe(
-      '/home/user/.bambuddy/harness/.claude',
-    )
+    expect(options.env).not.toHaveProperty('CLAUDE_CONFIG_DIR')
+    expect(options.env).not.toHaveProperty('PI_CODING_AGENT_DIR')
     expect(options.env?.['ANTHROPIC_BASE_URL']).toBe(
       'https://api.deepseek.com/anthropic',
     )
@@ -88,10 +91,19 @@ describe('resolveClaudeQueryOptions', () => {
     expect(options.env?.['PATH'] ?? process.env['PATH']).toBe(process.env['PATH'])
   })
 
+  it('inherits native harness directory variables without overriding them', () => {
+    vi.stubEnv('CLAUDE_CONFIG_DIR', '/native/claude')
+    vi.stubEnv('PI_CODING_AGENT_DIR', '/native/pi')
+
+    const options = resolveClaudeQueryOptions(spec)
+
+    expect(options.env?.['CLAUDE_CONFIG_DIR']).toBe('/native/claude')
+    expect(options.env?.['PI_CODING_AGENT_DIR']).toBe('/native/pi')
+  })
+
   it('omits empty overlay env keys and maps effort, resume, and fork', () => {
     const resume = resolveClaudeQueryOptions(
       { ...spec, effort: 'high', baseUrl: '  ', authToken: '' },
-      '/cfg',
       { kind: 'resume', session: { provider: 'claude', id: 'sess-1' } },
     )
     expect(resume.effort).toBe('high')
@@ -100,7 +112,7 @@ describe('resolveClaudeQueryOptions', () => {
     expect(resume.env?.['ANTHROPIC_BASE_URL']).toBeUndefined()
     expect(resume.env?.['ANTHROPIC_API_KEY']).toBeUndefined()
     expect(resume.env?.['ANTHROPIC_MODEL']).toBe('deepseek-v4-flash')
-    expect(resume.env?.['CLAUDE_CONFIG_DIR']).toBe('/cfg')
+    expect(resume.env).not.toHaveProperty('CLAUDE_CONFIG_DIR')
     expect(resume.settings).toEqual(
       resolveClaudeQuerySettings({
         ...spec,
@@ -111,7 +123,6 @@ describe('resolveClaudeQueryOptions', () => {
 
     const forked = resolveClaudeQueryOptions(
       spec,
-      '/cfg',
       { kind: 'fork', source: { provider: 'claude', id: 'sess-1' } },
     )
     expect(forked.resume).toBe('sess-1')
@@ -122,7 +133,6 @@ describe('resolveClaudeQueryOptions', () => {
   it('sets sessionId from a preassigned Claude session without forcing a title', () => {
     const options = resolveClaudeQueryOptions(
       spec,
-      '/cfg',
       { kind: 'new', provider: 'claude', sessionId: '11111111-1111-4111-8111-111111111111' },
     )
     expect(options.sessionId).toBe('11111111-1111-4111-8111-111111111111')
@@ -131,7 +141,6 @@ describe('resolveClaudeQueryOptions', () => {
 
     const resumed = resolveClaudeQueryOptions(
       spec,
-      '/cfg',
       { kind: 'resume', session: { provider: 'claude', id: 'sess-1' } },
     )
     expect(resumed.sessionId).toBeUndefined()
@@ -140,7 +149,6 @@ describe('resolveClaudeQueryOptions', () => {
 
     const forked = resolveClaudeQueryOptions(
       spec,
-      '/cfg',
       {
         kind: 'fork',
         source: { provider: 'claude', id: 'sess-1' },
@@ -155,7 +163,6 @@ describe('resolveClaudeQueryOptions', () => {
   it('disables prompt suggestions when the run spec asks', () => {
     const options = resolveClaudeQueryOptions(
       { ...spec, promptSuggestions: false },
-      '/cfg',
     )
     expect(options.promptSuggestions).toBe(false)
   })
@@ -163,7 +170,6 @@ describe('resolveClaudeQueryOptions', () => {
   it('compiles product tools into an SDK MCP server', () => {
     const options = resolveClaudeQueryOptions(
       spec,
-      '/cfg',
       { kind: 'new', provider: 'claude' },
       undefined,
       productTools,

@@ -77,7 +77,7 @@ describe('Claude slash command catalog', () => {
 
   it('lists from a short-lived query using runtime skill overrides and persistSession false', async () => {
     const spec = testRunSpec({ cwd: '/work/repo' })
-    const options = resolveClaudeListingQueryOptions(spec, '/cfg/.claude')
+    const options = resolveClaudeListingQueryOptions(spec)
     expect(options.persistSession).toBe(false)
     expect(options.settings).toEqual(resolveClaudeQuerySettings(spec))
 

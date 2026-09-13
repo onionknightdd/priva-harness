@@ -28,7 +28,7 @@ describe('subagent and memory resources', () => {
     for (const path of [join(cwd, '.git'), join(other, '.git'), piDir, claudeDir]) await mkdir(path, { recursive: true })
     vi.stubEnv('PI_CODING_AGENT_DIR', piDir); vi.stubEnv('CLAUDE_CONFIG_DIR', claudeDir)
     vi.stubEnv('CLAUDE_CODE_DISABLE_AUTO_MEMORY', ''); vi.stubEnv('PI_CODE_DISABLE_AUTO_MEMORY', '')
-    service = new LocalResourceService({ activeCwd: cwd, claudeDir, piDir, discoverProjects: () => Promise.resolve([other]) })
+    service = new LocalResourceService({ activeCwd: cwd, claudeDir, claudeConfigFilePath: join(claudeDir, '.claude.json'), piDir, discoverProjects: () => Promise.resolve([other]) })
   })
   afterEach(async () => { vi.unstubAllEnvs(); await rm(root, { recursive: true, force: true }) })
 

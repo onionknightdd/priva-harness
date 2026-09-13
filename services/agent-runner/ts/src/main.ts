@@ -15,7 +15,7 @@ import { LocalResourceService } from './infrastructure/resources/local-resource-
 import { CompatibleModelEndpointClient } from './infrastructure/model-profile/compatible-model-endpoint-client.js'
 import { JsonModelProfileStore } from './infrastructure/model-profile/json-model-profile-store.js'
 import { JsonRuntimeSettingsStore } from './infrastructure/settings/json-runtime-settings-store.js'
-import { claudeGlobalDir } from './provider/claude/claude-paths.js'
+import { claudeGlobalConfigFilePath, claudeGlobalDir } from './provider/claude/claude-paths.js'
 import { ClaudeConfigAdapter } from './provider/claude/config-adapter/claude-config-adapter.js'
 import { ClaudeProvider } from './provider/claude/claude-provider.js'
 import { ClaudeSessionStore } from './provider/claude/session/claude-session-store.js'
@@ -40,15 +40,12 @@ export async function startServer(): Promise<void> {
   const runtimeConfig = createRuntimeConfig(
     resolveRuntimeHome(process.env[RUNTIME_HOME_ENV]),
   )
-  const claudeConfigDir = claudeGlobalDir(runtimeConfig.harnessHome)
-  const piConfigDir = piGlobalDir(runtimeConfig.harnessHome)
-  process.env['CLAUDE_CONFIG_DIR'] = claudeConfigDir
-  process.env['PI_CODING_AGENT_DIR'] = piConfigDir
+  const claudeConfigDir = claudeGlobalDir()
+  const piConfigDir = piGlobalDir()
   const initialDirectory = process.env['WORKSPACE_DIR'] ?? homedir()
   await Promise.all([
     mkdir(initialDirectory, { recursive: true }),
     mkdir(runtimeConfig.runtimeHome, { recursive: true, mode: 0o700 }),
-    mkdir(runtimeConfig.harnessHome, { recursive: true, mode: 0o700 }),
     mkdir(claudeConfigDir, { recursive: true, mode: 0o700 }),
     mkdir(piConfigDir, { recursive: true, mode: 0o700 }),
     mkdir(piSessionsRoot(piConfigDir), { recursive: true, mode: 0o700 }),
@@ -116,6 +113,7 @@ export async function startServer(): Promise<void> {
   const server = buildHttpServer({
     resourceService: new LocalResourceService({
       claudeDir: claudeConfigDir,
+      claudeConfigFilePath: claudeGlobalConfigFilePath(),
       piDir: piConfigDir,
       activeCwd: initialDirectory,
       discoverProjects: async (provider) => (await providers[provider].sessions.list({}))

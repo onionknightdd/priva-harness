@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { emptyHarnessConfig } from '../../../../src/core/config/harness-config.js'
 import { PiConfigAdapter } from '../../../../src/provider/pi/config-adapter/pi-config-adapter.js'
 
-const context = { harnessHome: '/tmp/harness', cwd: '/work' }
+const context = { cwd: '/work' }
 
 describe('PiConfigAdapter', () => {
   it('projects nothing for an empty config', async () => {

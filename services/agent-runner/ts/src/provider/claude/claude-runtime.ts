@@ -86,7 +86,7 @@ export class ClaudeRuntime implements AgentRuntime {
   constructor(
     private spec: ProviderRunSpec,
     private readonly target: SessionTarget,
-    private readonly globalConfigDir: string,
+    globalConfigDir: string,
     startQuery?: ClaudeQueryStart,
     private readonly tools: readonly ToolDefinition[] = [],
   ) {
@@ -193,7 +193,6 @@ export class ClaudeRuntime implements AgentRuntime {
       options: {
         ...resolveClaudeQueryOptions(
           this.spec,
-          this.globalConfigDir,
           this.target,
           abortController,
           this.tools,
@@ -338,7 +337,6 @@ function mainAssistantId(message: SDKMessage): string | undefined {
 
 export function resolveClaudeQueryOptions(
   spec: ProviderRunSpec,
-  globalConfigDir: string,
   target: SessionTarget = { kind: 'new', provider: 'claude' },
   abortController?: AbortController,
   tools: readonly ToolDefinition[] = [],
@@ -359,7 +357,7 @@ export function resolveClaudeQueryOptions(
     systemPrompt: { type: 'preset', preset: 'claude_code' },
     settingSources: ['user', 'project', 'local'],
     settings: resolveClaudeQuerySettings(spec),
-    env: resolveClaudeQueryEnv(spec, globalConfigDir),
+    env: resolveClaudeQueryEnv(spec),
     ...(abortController === undefined ? {} : { abortController }),
   }
 
@@ -415,13 +413,11 @@ export function resolveClaudeQuerySettings(
 
 export function resolveClaudeQueryEnv(
   spec: ProviderRunSpec,
-  globalConfigDir: string,
 ): Record<string, string> {
   return mergeProviderProcessEnv(
     resolveProviderRunEnv(spec),
-    new Set([...profileEnvKeys('claude'), 'CLAUDE_CONFIG_DIR']),
+    new Set(profileEnvKeys('claude')),
     {
-      CLAUDE_CONFIG_DIR: globalConfigDir,
       CLAUDE_CODE_HARBOR_KITE: '1',
     },
   )

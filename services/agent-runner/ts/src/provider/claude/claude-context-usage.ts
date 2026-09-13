@@ -27,14 +27,12 @@ export type ClaudeContextQueryStart = (args: {
 export function resolveClaudeContextQueryOptions(
   spec: ProviderRunSpec,
   sessionId: string,
-  globalConfigDir: string,
   abortController?: AbortController,
   tools: readonly ToolDefinition[] = [],
 ): Options {
   return {
     ...resolveClaudeQueryOptions(
       spec,
-      globalConfigDir,
       { kind: 'resume', session: { provider: 'claude', id: sessionId } },
       abortController,
       tools,
@@ -46,7 +44,6 @@ export function resolveClaudeContextQueryOptions(
 export async function measureClaudeContextUsage(options: {
   readonly spec: ProviderRunSpec
   readonly sessionId: string
-  readonly globalConfigDir: string
   readonly tools?: readonly ToolDefinition[]
   readonly startQuery?: ClaudeContextQueryStart
 }): Promise<ContextUsage> {
@@ -59,7 +56,6 @@ export async function measureClaudeContextUsage(options: {
     options: resolveClaudeContextQueryOptions(
       options.spec,
       options.sessionId,
-      options.globalConfigDir,
       abortController,
       tools,
     ),

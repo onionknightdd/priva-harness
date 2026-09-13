@@ -36,9 +36,16 @@ Subagent test --> AgentHarness.run --> selected provider --> SSE AgentEvent fram
   flag are not registered. Its own collision detector does not recognize the
   lowercase `workflow` name used by the existing implementation.
 
-The runner relocates each harness's global directory below its configured
-runtime home. A global source therefore means `CLAUDE_CONFIG_DIR` or
-`PI_CODING_AGENT_DIR`, not necessarily the default directories in the OS home.
+The runner uses each harness's native global directory: `~/.claude` and
+`~/.pi/agent` by default. It does not set or overwrite `CLAUDE_CONFIG_DIR` or
+`PI_CODING_AGENT_DIR`; inherited native overrides retain their harness semantics.
+The product runtime home only contains product settings and data.
+
+```text
+Claude native global directory --> Claude agents / memory
+Pi native global directory     --> Pi agents / memory
+Product runtime home           --> Product settings / data
+```
 
 ## Source semantics
 
@@ -98,7 +105,7 @@ Pi's memory configuration is independent of Claude, as selected for this app:
 
 | Setting | Claude | Pi |
 | --- | --- | --- |
-| Global settings | `CLAUDE_CONFIG_DIR/settings.json` | `PI_CODING_AGENT_DIR/settings.json` |
+| Global settings | Native global directory's `settings.json` (default `~/.claude/settings.json`) | Native agent directory's `settings.json` (default `~/.pi/agent/settings.json`) |
 | Project toggle writes | Highest native local settings path | `<cwd>/.pi/settings.json` |
 | Environment override | `CLAUDE_CODE_DISABLE_AUTO_MEMORY` | `PI_CODE_DISABLE_AUTO_MEMORY` |
 | Managed policy | Native SDK settings cascade | Not applicable |

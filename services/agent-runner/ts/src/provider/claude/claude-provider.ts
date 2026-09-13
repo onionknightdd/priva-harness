@@ -72,7 +72,6 @@ export class ClaudeProvider implements AgentProvider {
     return measureClaudeContextUsage({
       spec,
       sessionId: session.id,
-      globalConfigDir: this.options.globalConfigDir,
       tools: this.options.tools ?? [],
     })
   }

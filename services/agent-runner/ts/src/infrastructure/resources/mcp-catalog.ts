@@ -183,7 +183,7 @@ export class McpCatalog {
           }
           if (isRecord(manifestMcp)) await add(await source('claude', plugin.scope, 'plugin', join(plugin.path, '.claude-plugin/plugin.json'), plugin.cwd, plugin.name), [], plugin.enabled, `plugin:${name}:`, { mcpServers: manifestMcp })
         }
-        const globalPath = join(this.environment.claudeDir, '.claude.json')
+        const globalPath = this.environment.claudeConfigFilePath
         await add(await source('claude', 'global', 'settings', globalPath, null, 'Global · Claude MCP', true, true))
         await add(await source('claude', 'project', 'settings', join(cwd, '.mcp.json'), cwd, `Project · ${cwd}`, true, true))
         await add(await source('claude', 'local', 'settings', globalPath, cwd, `Local · ${cwd}`, true, true), ['projects', cwd])

@@ -4,7 +4,6 @@ import type { ProjectionPlan } from '../config/projection-plan.js'
 import type { ProviderId } from './agent-provider.js'
 
 export interface ConfigProjectionContext {
-  readonly harnessHome: string
   readonly cwd: string
 }
 

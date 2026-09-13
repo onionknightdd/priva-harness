@@ -36,7 +36,7 @@ describe('resource HTTP routes', () => {
     server = buildHttpServer({
       ...createTestAgentServices(join(root, 'runtime')),
       userFileSystem: new NodeUserFileSystem({ initialDirectory: root }), agentHarness: harness,
-      resourceService: new LocalResourceService({ activeCwd: root, claudeDir, piDir, discoverProjects: () => Promise.resolve([]) }),
+      resourceService: new LocalResourceService({ activeCwd: root, claudeDir, claudeConfigFilePath: join(claudeDir, '.claude.json'), piDir, discoverProjects: () => Promise.resolve([]) }),
       recorder,
     })
     await server.ready()

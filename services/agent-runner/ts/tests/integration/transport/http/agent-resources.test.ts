@@ -34,7 +34,7 @@ describe('agent resource HTTP endpoints', () => {
       profile: { id: 'fixture', label: 'Fixture', baseUrl: 'https://fixture.invalid', authToken: 'fixture', defaultModel: 'fixture/model', imageUnderstandingModel: null, imageGenerationModel: null, imageEditModel: null, modelCapabilities: { imageUnderstanding: [], imageGeneration: [], imageEdit: [] } },
       model: 'fixture-model', modelId: 'fixture/model', capabilities: { context: null },
     })
-    service = new LocalResourceService({ activeCwd: root, claudeDir, piDir, discoverProjects: () => Promise.resolve([]) })
+    service = new LocalResourceService({ activeCwd: root, claudeDir, claudeConfigFilePath: join(claudeDir, '.claude.json'), piDir, discoverProjects: () => Promise.resolve([]) })
     recorder = new MemoryDataRecorder()
     server = buildHttpServer({ ...services, userFileSystem: new NodeUserFileSystem({ initialDirectory: root }), agentHarness: harness, resourceService: service, recorder })
     await server.ready()

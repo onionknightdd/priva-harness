@@ -20,7 +20,7 @@ const probeTool: ToolDefinition = {
 describe('measureClaudeContextUsage', () => {
   it('resumes the session without persisting, then closes the query', async () => {
     const spec = testRunSpec({ cwd: '/work/repo' })
-    const options = resolveClaudeContextQueryOptions(spec, 'sess-cold', '/cfg/.claude')
+    const options = resolveClaudeContextQueryOptions(spec, 'sess-cold')
     expect(options.resume).toBe('sess-cold')
     expect(options.persistSession).toBe(false)
     expect(options.mcpServers).toBeUndefined()
@@ -31,7 +31,6 @@ describe('measureClaudeContextUsage', () => {
     const usage = await measureClaudeContextUsage({
       spec,
       sessionId: 'sess-cold',
-      globalConfigDir: '/cfg/.claude',
       startQuery: ({ prompt, options: next }) => {
         started.push(next)
         query.bind(prompt)
@@ -65,7 +64,6 @@ describe('measureClaudeContextUsage', () => {
     const usage = await measureClaudeContextUsage({
       spec: testRunSpec(),
       sessionId: 'sess-mcp',
-      globalConfigDir: '/cfg/.claude',
       tools: [probeTool],
       startQuery: ({ prompt, options: next }) => {
         started.push(next)
@@ -84,7 +82,6 @@ describe('measureClaudeContextUsage', () => {
     const usage = await measureClaudeContextUsage({
       spec: testRunSpec(),
       sessionId: 'sess-mcp-down',
-      globalConfigDir: '/cfg/.claude',
       tools: [probeTool],
       startQuery: ({ prompt }) => {
         query.bind(prompt)
@@ -104,7 +101,6 @@ describe('measureClaudeContextUsage', () => {
     const usage = await measureClaudeContextUsage({
       spec: testRunSpec(),
       sessionId: 'sess-second-read',
-      globalConfigDir: '/cfg/.claude',
       tools: [probeTool],
       startQuery: ({ prompt }) => {
         query.bind(prompt)
@@ -122,7 +118,6 @@ describe('measureClaudeContextUsage', () => {
     const usage = await measureClaudeContextUsage({
       spec: testRunSpec(),
       sessionId: 'sess-missing',
-      globalConfigDir: '/cfg/.claude',
       startQuery: ({ prompt }) => new FakeClaudeContextQuery(prompt, { failInit: true }),
     })
     expect(usage).toEqual(emptyContextUsage())

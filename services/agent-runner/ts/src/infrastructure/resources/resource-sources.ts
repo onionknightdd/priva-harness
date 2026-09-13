@@ -10,6 +10,7 @@ import { exists, inside, missing, record, resourceId, type ResourceFiles, string
 
 export interface ResourceEnvironment {
   readonly claudeDir: string
+  readonly claudeConfigFilePath: string
   readonly piDir: string
 }
 

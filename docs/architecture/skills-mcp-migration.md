@@ -19,17 +19,22 @@
 | Pi coding agent | 0.84.2（当前项目安装版本） |
 | pi-mcp-adapter | 2.32.1（Runner 固定依赖，已验证生产构建加载） |
 
-当前 Runner 在 `main.ts` 设置以下运行目录，安装扩展与管理配置必须使用相同路径：
+Runner 使用各 harness 的原生目录，运行、会话存储与资源管理解析到相同路径。
+未设置原生目录环境变量时：
 
 ```text
-RUNTIME_HOME_DIR（默认 ~/.bambuddy）
-└── harness
-    ├── .claude         <- CLAUDE_CONFIG_DIR
-    └── .pi/agent       <- PI_CODING_AGENT_DIR
+~/
++-- .claude/           Claude 全局目录
++-- .claude.json       Claude 全局 MCP / 本地项目配置
++-- .pi/agent/         Pi 全局目录
++-- .bambuddy/         产品设置与数据（RUNTIME_HOME_DIR 可覆盖）
 ```
 
-在普通终端执行 `pi install` 不一定安装到 Runner 使用的目录。应明确指定
-Runner 的 `PI_CODING_AGENT_DIR`。Pi SDK 的
+Runner 不设置或覆盖 `CLAUDE_CONFIG_DIR`、`PI_CODING_AGENT_DIR`，也不再创建
+产品根下的 `harness/` 目录。外部已设置的原生变量由各 harness 自身规则解析。
+在相同用户和环境下，普通终端的 `pi install` 与 Runner 使用同一个 Pi 目录。
+更改产品 `RUNTIME_HOME_DIR` 不影响 harness 目录；已有产品根下的 harness 文件不自动迁移。
+Pi SDK 的
 `DefaultPackageManager.installAndPersist('npm:pi-mcp-adapter@2.32.1')`
 是可指定 `agentDir` 的程序化安装入口。当前 Runner 将此插件作为固定 npm 依赖，
 通过 `createMcpAdapter` 托管到每个 SDK 会话，无需用户再次执行安装命令；

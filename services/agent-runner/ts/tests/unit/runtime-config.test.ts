@@ -12,14 +12,13 @@ import {
 } from '../../src/runtime-config.js'
 
 describe('runtimeConfig', () => {
-  it('defaults to ~/.bambuddy with settings and harness paths', () => {
+  it('keeps only product settings and data under ~/.bambuddy', () => {
     const runtimeHome = join(homedir(), '.bambuddy')
 
     expect(defaultRuntimeHome()).toBe(runtimeHome)
     expect(runtimeConfig).toEqual({
       runtimeHome,
       settingsFilePath: join(runtimeHome, 'bambuddy.settings.json'),
-      harnessHome: join(runtimeHome, 'harness'),
       dataFilePath: join(runtimeHome, '.data.db'),
     })
     expect(Object.isFrozen(runtimeConfig)).toBe(true)
@@ -38,7 +37,6 @@ describe('runtimeConfig', () => {
     expect(createRuntimeConfig(runtimeHome)).toEqual({
       runtimeHome: resolve(runtimeHome),
       settingsFilePath: join(runtimeHome, 'bambuddy.settings.json'),
-      harnessHome: join(runtimeHome, 'harness'),
       dataFilePath: join(runtimeHome, '.data.db'),
     })
   })

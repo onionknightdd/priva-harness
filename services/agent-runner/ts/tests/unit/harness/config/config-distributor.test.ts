@@ -4,7 +4,7 @@ import { emptyHarnessConfig } from '../../../../src/core/config/harness-config.j
 import { ConfigDistributor } from '../../../../src/harness/config/config-distributor.js'
 import { FakeConfigAdapter } from '../../../support/fake-config-adapter.js'
 
-const context = { harnessHome: '/tmp/harness', cwd: '/work' }
+const context = { cwd: '/work' }
 
 describe('ConfigDistributor', () => {
   it('reconciles every registered adapter without branching on provider id', async () => {

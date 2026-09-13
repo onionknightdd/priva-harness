@@ -61,7 +61,7 @@ LLM 端点（Anthropic / 自建 / DeepSeek Official / OpenAI-compat）
 
 ```text
 main.ts
-  ├── ClaudeProvider(globalConfigDir = $RUNTIME_HOME/harness/.claude)
+  ├── ClaudeProvider(globalConfigDir = 原生目录，默认 ~/.claude)
   ├── AgentHarness({ provider: claude, cwd })
   └── HTTP + WS /api/sandbox/agent/ws/session
 ```
@@ -141,7 +141,7 @@ dsh-jsonrpc-agent + cordis.yml     （子进程，stdout 纯 JSON-RPC）
 | abort | `query.interrupt()` | `session.abort()` | **协议没有 cancel，只能关进程** |
 | resume | 本切片不支持 | 同左 | SDK 可用同一 `sessionId` 再 prompt |
 | 工具 | Claude 自己的 | Pi 自己的 | **DSH 自己的 bash / editor / …** |
-| 配置目录 | `$RUNTIME_HOME/harness/.claude` | `$RUNTIME_HOME/harness/.pi/agent` | 应隔离到 `$RUNTIME_HOME/harness/.dsh` |
+| 配置目录 | 原生目录，默认 `~/.claude` | 原生目录，默认 `~/.pi/agent` | 应隔离到 `$RUNTIME_HOME/harness/.dsh` |
 
 这符合基线文档的边界：`core` / `harness` 不 import SDK；DSH 类型只出现在 `provider/dsh`。
 
