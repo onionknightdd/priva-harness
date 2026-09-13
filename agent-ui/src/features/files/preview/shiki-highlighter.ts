@@ -3,7 +3,7 @@ import {
   createBundledHighlighter,
   createSingletonShorthands,
 } from "shiki/core"
-import { createJavaScriptRegexEngine } from "shiki/engine/javascript"
+import { getShikiEngine } from "@/lib/shiki-engine"
 
 const sourceLanguageLoaders = {
   c: () => import("@shikijs/langs/c"),
@@ -52,7 +52,7 @@ export type SourceHighlightTheme = keyof typeof sourceThemeLoaders
 const createSourceHighlighter = createBundledHighlighter({
   langs: sourceLanguageLoaders,
   themes: sourceThemeLoaders,
-  engine: () => createJavaScriptRegexEngine(),
+  engine: getShikiEngine,
 })
 
 const { codeToTokens } = createSingletonShorthands(

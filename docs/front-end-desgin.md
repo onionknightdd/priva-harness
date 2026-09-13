@@ -241,8 +241,8 @@ Tooltip 根 523 → 66（仅侧栏与页头）。
 折叠时下方消息的位移动画，且 profile 里归到 motion 的 ~20ms 只是首个读取者承担的
 一次强制布局；冷态仍有一帧 ~180–250ms 的 Shiki 高亮，实测是一段 3 行 tsx 代码
 ——在页面空闲时预热同语言的样例只需 2ms，但大规模挂载后的 GC 会刷掉 V8 已编译的
-正则，首次分词要重新编译 TypeScript 语法的正则。要根治需换 `shiki/engine/oniguruma`
-（WASM，正则不经 V8），属于依赖层决策。回归页 `tooltip-browser.html` 新增
+正则，首次分词要重新编译 TypeScript 语法的正则（后一项已在下文“Shiki 改用
+Oniguruma 引擎”中解决）。回归页 `tooltip-browser.html` 新增
 `#deferred` 区块（未 armed 无 Tooltip 根、点击保留、arming 后焦点回位、hover 打开）。
 
 ### 长会话：分片挂载 turn
@@ -272,6 +272,28 @@ streaming +1 turn ──► 窗口不变（无分片）
 实测（dev 构建，长会话，热态）：数据帧 234–264ms → 49–52ms，之后每片 21–29ms
 共 5 片（约 600ms 内全部挂完），切换慢帧合计 444–462ms → 252–284ms；打开后视口
 仍在底部，最终 DOM 节点数不变。冷态剩下的一帧仍是 Shiki（~236ms）。
+
+### Shiki 改用 Oniguruma 引擎
+
+2026-09-13：两处高亮器（消息里的 `agent-shiki.tsx`、文件预览的
+`shiki-highlighter.ts`）都从 `shiki/engine/javascript` 改为
+`shiki/engine/oniguruma`，由 `lib/shiki-engine.ts` 的 `getShikiEngine()` 提供同一个
+engine promise；`loadWasm` 只实例化一次 WASM。JS 引擎把语法正则翻译成 `RegExp`
+交给 V8，V8 在首次执行时编译，且大规模挂载后的 GC 会刷掉已编译的正则代码，导致
+冷态打开长会话时一段 3 行 tsx 要付 ~180–250ms 重新编译整套 TypeScript 语法；WASM
+里的正则编译一次常驻，不受 V8 GC 影响，也没有 JS 正则的回溯风险。
+
+```text
+TextMate 语法 ─► engine/javascript ─► RegExp → V8 编译（首次/GC 后重来）
+             └► engine/oniguruma  ─► onig.wasm 内编译一次常驻（+622KB 内联 wasm 模块，gzip 232KB）
+```
+
+代价是首次高亮前多加载一个约 232KB（gzip）的模块；构建产物里这个 wasm 模块本来就
+存在两份（`shiki` 全量 bundle 的默认引擎与 `@streamdown/code` 自带的 shiki 副本各
+引用一份），本次没有新增 chunk，只是其中一份开始真正被加载。
+
+实测（dev 构建，长会话，冷态）：Shiki 那一帧 ~236ms 消失，冷态最大帧 92ms（数据帧），
+慢帧合计 900ms → 602ms；代码块回归页 24/24，文件预览 JSON 高亮正常。
 
 ### 悬浮高亮的跟手速度
 

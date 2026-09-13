@@ -15,8 +15,7 @@ import {
   type Highlighter,
   type ThemedTokenWithVariants,
 } from "shiki"
-import { createJavaScriptRegexEngine } from "shiki/engine/javascript"
-
+import { getShikiEngine } from "@/lib/shiki-engine"
 import { cn } from "@/lib/utils"
 
 import "./agent-shiki.css"
@@ -28,7 +27,6 @@ export const AGENT_SHIKI_DARK_THEME = "github-dark-high-contrast"
 
 const SPECIAL_LANGUAGES = new Set(["text", "plain", "ansi"])
 
-const engine = createJavaScriptRegexEngine({ forgiving: true })
 const notationDiffTransformer = transformerNotationDiff({
   matchAlgorithm: "v3",
 })
@@ -201,7 +199,7 @@ export function resolveAgentCodeLanguage(
 function getAgentHighlighter() {
   if (!highlighterPromise) {
     highlighterPromise = createHighlighter({
-      engine,
+      engine: getShikiEngine(),
       langs: [],
       themes: [AGENT_SHIKI_LIGHT_THEME, AGENT_SHIKI_DARK_THEME],
     })
