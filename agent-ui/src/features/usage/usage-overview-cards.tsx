@@ -26,6 +26,8 @@ import { useUsageRange } from "./use-usage-range"
 
 const DEFAULT_PRESET: RangePreset = 365
 const CUSTOM_RANGE = "custom"
+const CARD_KEYS = ["tokens", "cacheHitRate", "sessions", "peakDay", "longestStreak"] as const
+type CardKey = (typeof CARD_KEYS)[number]
 
 // Numbers swap in place when the range changes; a short fade on the new
 // value reads as an update, not a reload. Keyed on the text so an unchanged
@@ -68,7 +70,9 @@ function RollingText({ text, reduceMotion }: { text: string; reduceMotion: boole
 // unit; a segment only wraps internally when it is wider than the card.
 const DETAIL_SEPARATOR = /( · | – )/
 
-function StatCard({ label, value, detail }: { label: string; value: string; detail: string }) {
+type StatCardProps = { label: string; value: string; detail: string }
+
+function StatCard({ label, value, detail }: StatCardProps) {
   return (
     <Card size="sm" className="gap-1 rounded-lg shadow-none [--card-spacing:--spacing(3)]">
       <p className="px-(--card-spacing) text-xs text-muted-foreground">{label}</p>
@@ -108,12 +112,10 @@ export function UsageOverviewCards() {
   const shortDay = (date: string) => format(parseISO(date), zh ? "M月d日" : "MMM d", { locale })
   const none = t("usage.overview.none")
 
-  const cards = (() => {
+  const cards = ((): (Omit<StatCardProps, "label"> & { key: CardKey })[] => {
     const data: UsageRangeSummary | null = summary.data
     if (!data) {
-      return (["tokens", "cacheHitRate", "sessions", "runs", "peakDay", "longestStreak"] as const).map((key) => ({
-        key, value: none, detail: "",
-      }))
+      return CARD_KEYS.map((key) => ({ key, value: none, detail: "" }))
     }
     const cost = data.costUsd === null
       ? t("usage.overview.noCost")
@@ -129,10 +131,10 @@ export function UsageOverviewCards() {
         }),
       },
       {
-        key: "sessions", value: data.activeSessions.toLocaleString(),
+        key: "sessions",
+        value: `${data.activeSessions.toLocaleString()}${t("usage.overview.sessionTurns", { count: data.runs })}`,
         detail: t("usage.overview.sessionDetail", { days: data.activeDays, projects: data.projects }),
       },
-      { key: "runs", value: data.runs.toLocaleString(), detail: "" },
       {
         key: "peakDay",
         value: data.peakDay ? formatTokenCount(data.peakDay.processedTokens) : none,
@@ -143,7 +145,7 @@ export function UsageOverviewCards() {
         value: data.longestStreak ? t("usage.overview.streakDays", { count: data.longestStreak.days }) : none,
         detail: data.longestStreak ? `${shortDay(data.longestStreak.from)} – ${shortDay(data.longestStreak.to)}` : "",
       },
-    ] as const
+    ]
   })()
 
   const pickerTrigger = (label: string) => ({ value, setOpen }: { value: Date | undefined; setOpen: (open: boolean) => void }) => (
@@ -235,13 +237,15 @@ export function UsageOverviewCards() {
       <div
         aria-busy={summary.loading || undefined}
         className={cn(
-          "grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6",
+          // The sessions card carries two figures on its value line
+          // ("173，519 轮对话"), so it takes half a column more than the rest.
+          "grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-[1fr_1fr_1.5fr_1fr_1fr]",
           "motion-safe:transition-opacity motion-safe:duration-150",
           summary.loading && summary.data ? "opacity-60" : "opacity-100"
         )}
       >
-        {cards.map((card) => (
-          <StatCard key={card.key} label={t(`usage.overview.cards.${card.key}`)} value={card.value} detail={card.detail} />
+        {cards.map(({ key, ...card }) => (
+          <StatCard key={key} label={t(`usage.overview.cards.${key}`)} {...card} />
         ))}
       </div>
     </section>
