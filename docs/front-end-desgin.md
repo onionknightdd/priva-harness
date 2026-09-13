@@ -381,7 +381,8 @@ Skill 搜索立即切换。分组折叠图标位于标题文字右侧、分割�
 不影响条目内部的文件树间距。Markdown 源文件保留原始内容、frontmatter 和行号，
 并启用共享 Shiki 的 Markdown 语法高亮；其他源文件仍使用带行号的纯文本。
 Skill 启停开关采用 `size="sm"`（24 × 15px 轨道、11px 滑块），保存期间保持透明度，
-其他开关保留默认尺寸和动效。
+并沿用普通指针，避免临时 `disabled` 状态触发禁止指针的闪烁；仍阻止重复操作。
+真正不可切换的 Skill 保留禁止指针和禁用透明度，其他开关保留默认尺寸和动效。
 
 ```text
 技能标题 | 搜索图标 / 展开的输入框 | 刷新 | 上传
@@ -433,6 +434,16 @@ token，浅色 / 深色均为 `rgb(77, 159, 240)`（`#4D9FF0`）。
 
 流式输出时，工作状态吸附在用户消息下方，偏移使用用户消息的实际测量高度，
 保留小数像素，避免高度取整后两层背景之间出现缝隙。
+
+重新加载会话时，`StickyFreeze` 在消息挂载和滚动位置恢复后、首帧绘制前同步
+初始吸附状态；多个吸附条合并为一次更新，让消息与底部渐变遮罩同时出现。
+后续滚动继续由 IntersectionObserver 更新，未吸附时不显示遮罩。
+
+```text
+Mount history -> restore scroll in layout effects -> pre-paint batch
+                                                          |
+                                                   message + mask
+```
 
 ```text
 [User message background]
@@ -1069,8 +1080,10 @@ CodeBlock 标题栏在复制按钮左侧提供自动换行按钮，默认关闭�
 消息中的 CodeBlock 沿用组件的内容内边距，默认首行距标题栏 18px，不再通过
 `pt-0` 清除顶部留白。水平滚动条下移 8px，放在代码视口外的底部内边距中，
 避免覆盖末行；垂直滚动条止于视口底部，转角跟随水平条下移。
-Chat composer 单行上下内边距各为 7px，高度由 50px 减至 48px；多行顶部内边距
-由 14px 减至 12px，同样缩小 2px，保留文字行高、按钮尺寸和原有过渡。
+Chat composer 上下留白缩小三分之一：单行上下内边距各为 14/3px（约 4.67px），
+整体高度约 43.33px；多行与附件区域顶部内边距为 8px。多行底部按钮栏的 32px
+控件区域上下各留 8/3px，栏高与正文底部占位共用同一尺寸（约 37.33px），
+保留文字行高、按钮尺寸和原有过渡。
 
 ```text
 类型标题                         状态 | 自动换行 | 复制
@@ -1213,6 +1226,11 @@ Mermaid 浏览器回归：打开 `/tests/components/ai-elements/mermaid-browser.
 同时验证单行 / 多行 ChatComposer 聚焦前后边框和阴影一致，以及历史快照中的
 结构化问答逐题显示，不退回英文工具回执。
 相关数据和连接测试包含在下方 Agent message 的 `*.test.ts` 命令中。
+
+吸附遮罩时序回归入口为 `/tests/features/agent-message/sticky-freeze.html`，点击
+**Run sticky freeze checks**。检查函数 `runStickyFreezeChecks` 使用真实 React 提交，
+受控 DOM 几何和延迟的 IntersectionObserver，亦可在 jsdom 中调用；覆盖历史滚动
+恢复后首帧前出现遮罩、未吸附状态、小数偏移、流式双层遮罩交接、卸载与 StrictMode。
 
 图片工具卡片浏览器回归：在 `agent-ui/` 运行
 `npm run dev -- --config tests/features/agent-message/image-tools-browser.config.ts --host 127.0.0.1`，
