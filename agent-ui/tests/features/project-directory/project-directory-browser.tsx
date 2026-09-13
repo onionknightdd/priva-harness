@@ -5,6 +5,7 @@ import { ThemeProvider } from "next-themes"
 import i18n from "../../../src/i18n"
 import "../../../src/index.css"
 import App from "../../../src/App"
+import { fillComposerInput } from "../../helpers/composer-input"
 import { installProjectDirectoryFixtures } from "./project-directory-fixtures"
 
 const options = new URLSearchParams(location.search)
@@ -36,8 +37,9 @@ async function runChecks() {
   const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]')!
   const pathInput = () => document.querySelector<HTMLInputElement>(`input[aria-label="${t("directoryPicker.path")}"]`)!
   const click = async (element: HTMLElement) => { await act(async () => { element.focus(); element.click() }); await settle() }
-  const fill = async (element: HTMLInputElement | HTMLTextAreaElement, value: string) => {
+  const fill = async (element: HTMLInputElement | HTMLTextAreaElement | HTMLDivElement, value: string) => {
     await act(async () => {
+      if (element.matches('[data-agent-composer="prompt"]')) { fillComposerInput(element, value); return }
       Object.getOwnPropertyDescriptor(element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype, "value")!.set!.call(element, value)
       element.dispatchEvent(new Event("input", { bubbles: true }))
     })
@@ -45,7 +47,7 @@ async function runChecks() {
   const go = async (path: string) => { await fill(pathInput(), path); await click(button(t("directoryPicker.go"), dialog())) }
   const row = (path: string) => document.querySelector<HTMLElement>(`[data-file-tree-item-id="${path}"]`)!
   const selected = (path: string) => Array.from(dialog()?.querySelectorAll('[aria-live="polite"] p') ?? []).some((item) => item.textContent === path)
-  const draft = () => host.querySelector<HTMLTextAreaElement>("textarea")!
+  const draft = () => host.querySelector<HTMLDivElement>('[data-agent-composer="prompt"]')!
   const indicator = (path: string) => button(`${t("directoryPicker.change")}: ${path}`, host)
   const addFiles = async (names: string[]) => {
     const transfer = new DataTransfer()
@@ -117,7 +119,7 @@ async function runChecks() {
     check("closing the folder dialog removes its blur from the directory picker", !nestedBackdrop.isConnected && dialog().contains(document.elementFromPoint(pickerBounds.left + 16, pickerBounds.top + 16)))
     check("choosing and creating folders do not start an agent run", fixtures.sockets.length === 0)
     await click(button(t("directoryPicker.use")))
-    check("Use opens a local draft in the chosen directory", !dialog() && Boolean(indicator("/workspace/work/new-project")) && draft().value === "")
+    check("Use opens a local draft in the chosen directory", !dialog() && Boolean(indicator("/workspace/work/new-project")) && draft().textContent === "")
     check("a directory without a session does not create a sidebar group", !host.querySelector('[data-sidebar="sidebar"]')?.textContent?.includes("new-project"))
 
     await fill(draft(), "Keep this draft")
@@ -128,7 +130,7 @@ async function runChecks() {
     await click(cwdTrigger)
     await go("/workspace/work/other")
     await click(button(t("directoryPicker.use")))
-    check("changing cwd preserves draft text and both attachment chips", draft().value === "Keep this draft" && host.querySelectorAll('[data-slot="attachment"]').length === 2)
+    check("changing cwd preserves draft text and both attachment chips", draft().textContent === "Keep this draft" && host.querySelectorAll('[data-slot="attachment"]').length === 2)
     check("changing cwd does not cancel an in-flight upload", !fixtures.uploads[1].aborted)
     check("confirming restores focus to the existing directory trigger", document.activeElement === cwdTrigger)
     await act(async () => { fixtures.uploads[1].complete() })
@@ -150,7 +152,7 @@ async function runChecks() {
     const existingProject = [...host.querySelectorAll<HTMLElement>('[data-slot="collapsible"]')].find((item) => item.textContent?.includes("Existing conversation") && item.querySelector('button[aria-label="' + t("sidebar.projects.createSession") + '"]') && !item.textContent?.includes("New conversation"))
     if (!existingProject) throw new Error("Missing existing project group")
     await click(button(t("sidebar.projects.createSession"), existingProject))
-    check("existing project plus starts a clean draft in that project's cwd", Boolean(indicator("/workspace/work/existing")) && draft().value === "" && fixtures.sockets.length === 1)
+    check("existing project plus starts a clean draft in that project's cwd", Boolean(indicator("/workspace/work/existing")) && draft().textContent === "" && fixtures.sockets.length === 1)
 
     await click(indicator("/workspace/work/existing"))
     fixtures.holdPaths.add("/workspace/slow")

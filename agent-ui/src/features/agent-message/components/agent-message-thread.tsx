@@ -46,7 +46,7 @@ import {
 import { ForkContext, type ForkAvailability } from "../fork-context"
 import { foldCommandSurfaces } from "../slash-command-envelope"
 import { questionSummaryTransition } from "../question-summary-motion"
-import { AssistantSelectionActionContext, type OnAssistantSelectionAction } from "../selection-actions-context"
+import { QuoteInChatContext, type OnQuoteInChat } from "../selection-actions-context"
 import { collectThreadFilePaths } from "../thread-file-paths"
 import {
   groupThreadTurns,
@@ -59,7 +59,7 @@ import {
   type ThreadTurn,
 } from "../thread-turns"
 import { AgentMessageItem } from "./agent-message-item"
-import { AssistantSelectionActions } from "./assistant-selection-actions"
+import { MessageSelectionActions } from "./message-selection-actions"
 import { StickyFreeze } from "./sticky-freeze"
 import { TaskPlanPopover } from "./task-plan-popover"
 import { WorkingStatusLine } from "./working-status-line"
@@ -76,7 +76,7 @@ export function AgentMessageThread({
   onSelectionAction,
 }: {
   messages: AgentThreadMessage[]
-  onSelectionAction?: OnAssistantSelectionAction
+  onSelectionAction?: OnQuoteInChat
 }) {
   const { t } = useTranslation()
   const { runHarnessId } = useHarness()
@@ -204,7 +204,7 @@ export function AgentMessageThread({
   )
 
   return (
-    <AssistantSelectionActionContext.Provider value={onSelectionAction ?? null}>
+    <QuoteInChatContext.Provider value={onSelectionAction ?? null}>
     <ForkContext.Provider value={forkAvailability}>
     <TickingNowProvider value={now}>
     <MessageScrollerProvider autoScroll={!followPaused}>
@@ -253,11 +253,11 @@ export function AgentMessageThread({
           </div>
         </div>
       </MessageScroller>
-      {onSelectionAction ? <AssistantSelectionActions onAction={onSelectionAction} /> : null}
+      {onSelectionAction ? <MessageSelectionActions onAction={onSelectionAction} /> : null}
     </MessageScrollerProvider>
     </TickingNowProvider>
     </ForkContext.Provider>
-    </AssistantSelectionActionContext.Provider>
+    </QuoteInChatContext.Provider>
   )
 }
 

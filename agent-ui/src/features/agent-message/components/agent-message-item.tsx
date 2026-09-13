@@ -40,6 +40,7 @@ import { TaskNotificationCard } from "./task-notification-card"
 import { CompactSessionMarker } from "./compact-session-marker"
 import { AssistantMarkdownCode } from "./assistant-markdown-code"
 import { QuoteSelectable } from "./quote-selectable"
+import { MessageSelectionContent } from "./message-selection-quote"
 import { UserMessageAttachments } from "./user-message-attachments"
 
 const MotionMessageActions = motion.create(MessageActions)
@@ -280,7 +281,7 @@ export const AgentMessageItem = React.memo(function AgentMessageItem({
             className="rounded-xl bg-destructive/10 px-4 py-3 text-destructive"
             role="alert"
           >
-            <QuoteSelectable>{message.content}</QuoteSelectable>
+            <QuoteSelectable messageRole={message.role}>{message.role === "user" ? <MessageSelectionContent content={message.content} /> : message.content}</QuoteSelectable>
           </MessageContent>
         </motion.div>
       ) : (
@@ -301,7 +302,7 @@ export const AgentMessageItem = React.memo(function AgentMessageItem({
             ) : (
               <>
                 {message.attachments?.length ? <UserMessageAttachments attachments={message.attachments} /> : null}
-                {message.content ? <QuoteSelectable>{message.content}</QuoteSelectable> : null}
+                {message.content ? <QuoteSelectable messageRole="user"><MessageSelectionContent content={message.content} /></QuoteSelectable> : null}
               </>
             )}
           </MessageContent>

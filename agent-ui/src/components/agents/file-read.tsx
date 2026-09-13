@@ -206,7 +206,7 @@ export function FileRead({
       >
         <div className="pt-[10px] pl-[calc(1em+0.25rem)] text-sm">
           {view?.kind === "text" ? (
-            <div className="pl-[4px]" data-assistant-selectable="">
+            <div className="pl-[4px]" data-message-selectable="assistant">
               <CodeBlock
                 code={view.content}
                 language={language}

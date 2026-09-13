@@ -298,11 +298,8 @@ export const en = {
     copy: "Copy",
     copied: "Copied",
     copyFailed: "Unable to copy",
-    quoteSelection: "Quote",
-    explainSelection: "Explain",
-    improveSelection: "Improve",
-    explainSelectionPrompt: "Please explain the content above.",
-    improveSelectionPrompt: "Please improve the content above.",
+    quoteSelection: "Quote in chat",
+    removeSelection: "Remove quote",
     fileReferenceMenu: {
       open: "Open",
       copyPath: "Copy file path",

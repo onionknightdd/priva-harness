@@ -1,5 +1,6 @@
-export const ASSISTANT_SELECTABLE_ATTR = "data-assistant-selectable"
-export const COMPOSER_PROMPT_ATTR = "data-agent-composer"
+import { parseMessageSelections, serializeMessageSelections } from "./message-select-action"
+
+export const MESSAGE_SELECTABLE_ATTR = "data-message-selectable"
 
 export function toQuotedMarkdown(text: string) {
   const normalized = text.replaceAll("\r\n", "\n").trim()
@@ -13,14 +14,21 @@ export function toQuotedMarkdown(text: string) {
     .join("\n")
 }
 
-export function appendQuotedDraft(draft: string, quoted: string, instruction = "") {
+export function appendQuotedDraft(draft: string, quoted: string) {
   const block = toQuotedMarkdown(quoted)
   if (block === "") {
     return draft
   }
 
-  const prefix = draft.trim() === "" ? "" : `${draft.replace(/\s+$/, "")}\n\n`
-  return `${prefix}${block}\n\n${instruction ? `${instruction}\n` : ""}`
+  const parts = parseMessageSelections(draft)
+  const last = parts.at(-1)
+  if (last?.type === "text") {
+    last.text = last.text.replace(/\s+$/, "")
+    if (!last.text) parts.pop()
+  }
+  // Add visible paragraph spacing, independently of the selection protocol's
+  // own fence separators (which disappear in the editor).
+  return serializeMessageSelections([...parts, { type: "text", text: `${parts.length ? "\n\n" : ""}${block}\n\n` }])
 }
 
 export function selectionActionsPosition(rect: { left: number; top: number; bottom: number; width: number },
@@ -33,34 +41,21 @@ export function selectionActionsPosition(rect: { left: number; top: number; bott
   return { left, top, placeAbove }
 }
 
-export function focusAgentComposer() {
-  const composer = document.querySelector<HTMLTextAreaElement>(
-    `[${COMPOSER_PROMPT_ATTR}="prompt"]`
-  )
-  if (!composer) {
-    return
-  }
-
-  composer.focus()
-  const end = composer.value.length
-  composer.setSelectionRange(end, end)
-}
-
-export function readAssistantSelection() {
+export function readMessageSelection(): { selectedText: string; messageRole: "assistant" | "user"; rect: DOMRect } | null {
   const selection = window.getSelection()
   if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
     return null
   }
 
-  const text = selection.toString().replaceAll("\u00a0", " ").trim()
-  if (text === "") {
+  const text = selection.toString()
+  if (text.trim() === "") {
     return null
   }
 
   const anchor = nodeElement(selection.anchorNode)
   const focus = nodeElement(selection.focusNode)
-  const surface = anchor?.closest(`[${ASSISTANT_SELECTABLE_ATTR}]`)
-  if (!surface || focus?.closest(`[${ASSISTANT_SELECTABLE_ATTR}]`) !== surface) {
+  const surface = anchor?.closest(`[${MESSAGE_SELECTABLE_ATTR}]`)
+  if (!surface || focus?.closest(`[${MESSAGE_SELECTABLE_ATTR}]`) !== surface) {
     return null
   }
 
@@ -70,7 +65,9 @@ export function readAssistantSelection() {
     return null
   }
 
-  return { text, rect }
+  const messageRole = surface.getAttribute(MESSAGE_SELECTABLE_ATTR)
+  if (messageRole !== "assistant" && messageRole !== "user") return null
+  return { selectedText: text, messageRole, rect }
 }
 
 function nodeElement(node: Node | null) {

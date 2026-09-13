@@ -298,11 +298,8 @@ export const zhCN = {
     copy: "复制",
     copied: "已复制",
     copyFailed: "无法复制",
-    quoteSelection: "引用",
-    explainSelection: "解释",
-    improveSelection: "优化",
-    explainSelectionPrompt: "请解释以上内容。",
-    improveSelectionPrompt: "请优化以上内容。",
+    quoteSelection: "在对话中引用",
+    removeSelection: "删除引用",
     fileReferenceMenu: {
       open: "打开",
       copyPath: "复制文件路径",

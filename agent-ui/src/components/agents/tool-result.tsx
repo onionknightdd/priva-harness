@@ -192,7 +192,7 @@ function ToolResultViewport({
       className="overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
       style={{ maxHeight }}
     >
-      <div className={contentClassName} data-assistant-selectable="">
+      <div className={contentClassName} data-message-selectable="assistant">
         {children}
       </div>
     </div>

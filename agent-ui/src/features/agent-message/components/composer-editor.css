@@ -1,0 +1,36 @@
+.composer-editor {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-variant-ligatures: none;
+}
+
+.composer-editor[data-empty="true"]::before {
+  content: attr(data-placeholder);
+  position: absolute;
+  color: var(--muted-foreground);
+  pointer-events: none;
+}
+
+.composer-editor .composer-selection-node {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border-radius: var(--radius-sm);
+}
+
+.composer-editor .ProseMirror-selectednode {
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.composer-editor.ProseMirror-hideselection *::selection {
+  background: transparent;
+}
+
+.composer-editor.ProseMirror-hideselection {
+  caret-color: transparent;
+}
+
+.composer-editor img.ProseMirror-separator {
+  display: inline !important;
+  border: none !important;
+  margin: 0 !important;
+}

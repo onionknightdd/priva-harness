@@ -311,7 +311,7 @@ export function FileDiff({
               <div
                 ref={viewportRef}
                 data-slot="file-diff-viewport"
-                data-assistant-selectable=""
+                data-message-selectable="assistant"
                 aria-live="polite"
                 className="scrollbar-hide overflow-auto"
                 style={{ maxHeight }}
