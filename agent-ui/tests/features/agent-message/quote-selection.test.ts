@@ -56,9 +56,9 @@ test("only a nonempty selection within the same message surface enables actions,
   Object.defineProperty(globalThis, "Node", { configurable: true, value: { ELEMENT_NODE: 1 } })
   Object.defineProperty(globalThis, "window", { configurable: true, value: { getSelection: () => selection } })
   try {
-    assert.deepEqual(readMessageSelection(), { selectedText: "selected text", messageRole: "assistant", rect })
+    assert.deepEqual(readMessageSelection(), { selectedText: " selected\u00a0text ", messageRole: "assistant", rect })
     role = "user"
-    assert.deepEqual(readMessageSelection(), { selectedText: "selected text", messageRole: "user", rect })
+    assert.deepEqual(readMessageSelection(), { selectedText: " selected\u00a0text ", messageRole: "user", rect })
     role = "system"
     assert.equal(readMessageSelection(), null)
     role = "assistant"

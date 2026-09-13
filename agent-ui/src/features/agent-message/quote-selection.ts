@@ -47,8 +47,8 @@ export function readMessageSelection(): { selectedText: string; messageRole: "as
     return null
   }
 
-  const text = selection.toString().replaceAll("\u00a0", " ").trim()
-  if (text === "") {
+  const text = selection.toString()
+  if (text.trim() === "") {
     return null
   }
 
