@@ -295,6 +295,34 @@ TextMate 语法 ─► engine/javascript ─► RegExp → V8 编译（首次/GC
 实测（dev 构建，长会话，冷态）：Shiki 那一帧 ~236ms 消失，冷态最大帧 92ms（数据帧），
 慢帧合计 900ms → 602ms；代码块回归页 24/24，文件预览 JSON 高亮正常。
 
+### Composer 停靠动画走合成器线程
+
+2026-09-13：从空态打开会话时 composer 由居中滑到底部，原实现是 motion 逐帧改一个
+spacer 的 `flexGrow`（每帧 JS + 重排，全在主线程）。打开长会话时线程挂载的几帧
+（数据帧 ~50–90ms、每片 ~25ms）正好落在这 400ms 里，动画被卡住再跳：实测 composer
+`top` 轨迹 752 → (78ms 空档) → 972，1069 → (73ms) → 1070。
+
+现在 spacer 直接切到最终布局（`flexGrow` 0/1 不再动画），`AgentMessage` 用
+ResizeObserver 记住 composer 列上一次绘制的 `top`（RO 在布局后回调，不触发强制重排；
+列上正在跑停靠动画时不记录），`isEmpty` 翻转时在 `useLayoutEffect` 里量新位置，用
+WAAPI `element.animate` 做 `translateY(旧 − 新 → 0)` 的 FLIP，时长和缓动仍取
+`composerDockTransition`。transform 动画由合成器线程驱动，主线程挂载线程时也不中断；
+`prefers-reduced-motion` 与位移小于 1px 时不动画。新建对话会重挂 `AgentMessagePage`，
+和之前一样不做反向滑动。
+
+```text
+isEmpty: true ──► spacer flexGrow=1（居中）      RO 记录 top₀
+      │ 打开会话
+isEmpty: false ─► spacer flexGrow=0（贴底，瞬时）  useLayoutEffect 量 top₁
+                  composer 列 animate(translateY(top₀−top₁) → 0, 400ms, [0.16,1,0.3,1])
+                  └─ 合成器线程跑，主线程同时挂载 turn 分片
+```
+
+`project-directory-browser.html` 的 fixtures 补了 `POST /api/sandbox/files/exists`
+的模拟（行内文件引用批量探测存在性）。该页里「existing project plus starts a clean
+draft」一项在本次改动前的分支上同样失败：`settle()` 恰好 300ms，与 WebSocket 关闭后
+300ms 的自动重连竞争，第二个 socket 先于断言创建；属于既有的计时竞态，未在本次处理。
+
 ### 悬浮高亮的跟手速度
 
 2026-09-12：侧栏菜单、文件树和 Slash 菜单的滑动悬浮高亮共用

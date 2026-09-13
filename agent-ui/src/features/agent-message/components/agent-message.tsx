@@ -111,9 +111,47 @@ export function AgentMessage({
       focusAgentComposer()
     })
   }, [])
-  const dockTransition = shouldReduceMotion
-    ? { duration: 0 }
-    : composerDockTransition
+  const dockRef = useRef<HTMLDivElement>(null)
+  const dockSpacerRef = useRef<HTMLDivElement>(null)
+  const dockTop = useRef<number | null>(null)
+  // Remember where the composer column was last painted. ResizeObserver runs
+  // after layout, so this never forces a reflow; skip readings taken while a
+  // dock animation is transforming the column.
+  useEffect(() => {
+    const dock = dockRef.current
+    const spacer = dockSpacerRef.current
+    if (!dock || !spacer) return
+    const record = () => {
+      if (dock.getAnimations().length === 0) {
+        dockTop.current = dock.getBoundingClientRect().top
+      }
+    }
+    record()
+    const observer = new ResizeObserver(record)
+    observer.observe(dock)
+    observer.observe(spacer)
+    return () => observer.disconnect()
+  }, [])
+  // The spacer switches layout instantly; the column slides from its previous
+  // position with a compositor-driven transform, so the animation keeps
+  // running while the main thread mounts a long transcript.
+  useLayoutEffect(() => {
+    const dock = dockRef.current
+    const previousTop = dockTop.current
+    if (!dock || previousTop === null) return
+    const nextTop = dock.getBoundingClientRect().top
+    dockTop.current = nextTop
+    const delta = previousTop - nextTop
+    if (shouldReduceMotion || Math.abs(delta) < 1) return
+    const animation = dock.animate(
+      [{ transform: `translateY(${delta}px)` }, { transform: "translateY(0)" }],
+      {
+        duration: composerDockTransition.duration * 1000,
+        easing: `cubic-bezier(${composerDockTransition.ease.join(", ")})`,
+      }
+    )
+    return () => animation.cancel()
+  }, [isEmpty, shouldReduceMotion])
   const overlayTransition = shouldReduceMotion
     ? { duration: 0 }
     : fadeTransition
@@ -161,6 +199,7 @@ export function AgentMessage({
       </div>
 
       <div
+        ref={dockRef}
         className={cn(
           "shrink-0",
           agentColumnClassName,
@@ -229,12 +268,11 @@ export function AgentMessage({
         ) : null}
       </div>
 
-      <motion.div
+      <div
+        ref={dockSpacerRef}
         aria-hidden="true"
-        initial={false}
-        animate={{ flexGrow: isEmpty ? 1 : 0 }}
-        transition={dockTransition}
         className="min-h-0 basis-0"
+        style={{ flexGrow: isEmpty ? 1 : 0 }}
       />
     </section>
   )
