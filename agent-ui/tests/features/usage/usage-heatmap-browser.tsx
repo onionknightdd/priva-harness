@@ -305,6 +305,8 @@ async function runChecks() {
       const year = syntheticRange(shiftLocalDate(todayIso, -364), todayIso)
       return cardsSection.querySelectorAll('[data-slot="card"] p:nth-child(3)')[2]?.textContent === i18n.t("usage.overview.sessionDetail", { days: year.activeDays, projects: year.projects })
     })())
+    check("the turns card has no detail line", cardsSection.querySelectorAll('[data-slot="card"] p:nth-child(3)')[3]?.textContent === "")
+    check("the range tabs end with a custom range option", presetTabs().length === 4 && presetTabs()[3]?.textContent === i18n.t("usage.overview.presets.custom"))
     check("all six cards share one row on desktop", new Set(Array.from(cardsSection.querySelectorAll('[data-slot="card"]')).map((card) => Math.round(card.getBoundingClientRect().top))).size === 1)
     const yearTokens = cardValues()[0]
 
@@ -334,8 +336,14 @@ async function runChecks() {
     const done = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-slot="popover-content"] button')).find((button) => button.textContent === i18n.t("usage.overview.done"))
     if (!done) throw new Error("done button not found")
     await act(async () => { done.click() })
-    check("picking a start date makes the range custom and deselects presets", await waitFor(() => rangeRequests.some((url) => url.includes(`from=${target}&to=${todayIso}`))) && presetTabs().every((tab) => tab.getAttribute("aria-selected") !== "true"))
+    check("picking a start date moves the highlight to the custom range tab", await waitFor(() => rangeRequests.some((url) => url.includes(`from=${target}&to=${todayIso}`))) && presetTabs().map((tab) => tab.getAttribute("aria-selected")).join("|") === "false|false|false|true")
     check("the start picker shows the chosen day", await waitFor(() => pickerButtons()[0]?.textContent === dayLabel(target)))
+
+    await act(async () => { presetTabs()[1]!.click() })
+    check("a preset takes over from the custom tab", await waitFor(() => presetTabs()[1]?.getAttribute("aria-selected") === "true" && pickerButtons()[0]?.textContent === dayLabel(shiftLocalDate(todayIso, -29))))
+    const requestsBeforeCustom = rangeRequests.length
+    await act(async () => { presetTabs()[3]!.click() })
+    check("choosing the custom tab keeps the dates and lights only that tab", presetTabs()[3]?.getAttribute("aria-selected") === "true" && presetTabs()[1]?.getAttribute("aria-selected") === "false" && pickerButtons()[0]?.textContent === dayLabel(shiftLocalDate(todayIso, -29)) && rangeRequests.length === requestsBeforeCustom)
 
     // --- model table -------------------------------------------------------
     const table = host.querySelector<HTMLElement>('[data-test="models"] table')!

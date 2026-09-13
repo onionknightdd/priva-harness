@@ -90,7 +90,7 @@ export const en = {
     overview: {
       title: "Overview",
       rangeLabel: "Date range",
-      presets: { 7: "7 days", 30: "30 days", 365: "1 year" },
+      presets: { 7: "7 days", 30: "30 days", 365: "1 year", custom: "Custom range" },
       from: "Start date",
       to: "End date",
       done: "Done",
@@ -98,7 +98,6 @@ export const en = {
       noCost: "No cost reported",
       partialCost: "{{count}} without cost",
       sessionDetail: "{{days}} active days · {{projects}} projects",
-      completedShare: "{{percent}}% completed",
       streakDays: "{{count}} days",
       cacheTokens: "{{read}} read · {{write}} written",
       cards: {

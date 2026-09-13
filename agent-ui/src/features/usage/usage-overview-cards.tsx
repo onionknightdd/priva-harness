@@ -92,7 +92,13 @@ export function UsageOverviewCards() {
   const reduceMotion = Boolean(useReducedMotion())
   const today = useMemo(localToday, [])
   const [range, setRange] = useState<LocalDateRange>(() => presetRange(DEFAULT_PRESET, today))
+  // Which tab is lit is derived from the dates: editing a picker to a range
+  // no preset covers moves the highlight to 「自定义区间」 by itself. Choosing
+  // that tab explicitly keeps it lit even while the dates still equal a preset,
+  // so the user can start editing from the current range.
+  const [customChosen, setCustomChosen] = useState(false)
   const preset = matchingPreset(range, today)
+  const activeTab = customChosen || preset === null ? CUSTOM_RANGE : String(preset)
   const summary = useUsageRange(range)
 
   const fromDate = parseISO(range.from)
@@ -126,10 +132,7 @@ export function UsageOverviewCards() {
         key: "sessions", value: data.activeSessions.toLocaleString(),
         detail: t("usage.overview.sessionDetail", { days: data.activeDays, projects: data.projects }),
       },
-      {
-        key: "runs", value: data.runs.toLocaleString(),
-        detail: data.runs === 0 ? "" : t("usage.overview.completedShare", { percent: Math.round((data.completed / data.runs) * 100) }),
-      },
+      { key: "runs", value: data.runs.toLocaleString(), detail: "" },
       {
         key: "peakDay",
         value: data.peakDay ? formatTokenCount(data.peakDay.processedTokens) : none,
@@ -169,9 +172,14 @@ export function UsageOverviewCards() {
         </h2>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <Tabs
-            value={preset === null ? CUSTOM_RANGE : String(preset)}
+            value={activeTab}
             onValueChange={(value) => {
-              if (isPreset(value)) setRange(presetRange(Number(value) as RangePreset, today))
+              if (isPreset(value)) {
+                setRange(presetRange(Number(value) as RangePreset, today))
+                setCustomChosen(false)
+              } else if (value === CUSTOM_RANGE) {
+                setCustomChosen(true)
+              }
             }}
             className="gap-0"
           >
@@ -181,6 +189,9 @@ export function UsageOverviewCards() {
                   {t(`usage.overview.presets.${days}`)}
                 </TabsTrigger>
               ))}
+              <TabsTrigger value={CUSTOM_RANGE} className="text-xs">
+                {t("usage.overview.presets.custom")}
+              </TabsTrigger>
             </TabsList>
           </Tabs>
           {/* The pickers always mirror the active range, so a preset shows its

@@ -90,7 +90,7 @@ export const zhCN = {
     overview: {
       title: "概览",
       rangeLabel: "时间区间",
-      presets: { 7: "7 天", 30: "30 天", 365: "1 年" },
+      presets: { 7: "7 天", 30: "30 天", 365: "1 年", custom: "自定义区间" },
       from: "开始日期",
       to: "结束日期",
       done: "完成",
@@ -98,7 +98,6 @@ export const zhCN = {
       noCost: "无成本数据",
       partialCost: "{{count}} 轮无成本",
       sessionDetail: "活跃 {{days}} 天 · 共 {{projects}} 个项目",
-      completedShare: "{{percent}}% 完成",
       streakDays: "{{count}} 天",
       cacheTokens: "读取 {{read}} · 写入 {{write}}",
       cards: {
