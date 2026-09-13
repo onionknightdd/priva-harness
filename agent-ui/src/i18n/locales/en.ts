@@ -575,7 +575,6 @@ export const en = {
     },
     user: {
       openMenu: "Open user menu",
-      openProfile: "Open profile",
       profile: "Profile",
       guestName: "admin",
       guestEmail: "admin@localhost",

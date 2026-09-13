@@ -571,7 +571,6 @@ export const zhCN = {
     },
     user: {
       openMenu: "打开用户菜单",
-      openProfile: "打开个人资料",
       profile: "个人资料",
       guestName: "admin",
       guestEmail: "admin@localhost",

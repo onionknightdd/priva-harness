@@ -61,6 +61,7 @@ export function NavUser() {
   const [settingsOpen, setSettingsOpen] = React.useState(false)
   const [profileOpen, setProfileOpen] = React.useState(false)
   const [profileLoaded, setProfileLoaded] = React.useState(false)
+  const rowRef = React.useRef<HTMLLIElement>(null)
   const name = t("sidebar.user.guestName")
   const email = t("sidebar.user.guestEmail")
   const initials = t("sidebar.user.guestInitials")
@@ -68,42 +69,44 @@ export function NavUser() {
   return (
     <>
       <SidebarMenu>
-        <SidebarMenuItem className="flex items-center gap-0.5 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:justify-center">
-          <button
-            type="button"
-            className="ring-inset flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none group-data-[collapsible=icon]:hidden"
-            aria-label={t("sidebar.user.openProfile")}
-            onClick={() => {
-              setProfileLoaded(true)
-              setProfileOpen(true)
-            }}
-          >
-            <UserAvatar className="size-7" label={initials} />
-            <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
-              <span className="truncate font-medium">{name}</span>
-              <span className="truncate text-xs text-muted-foreground">
-                {email}
-              </span>
-            </div>
-          </button>
-
-          <LanguageToggle className="ml-auto group-data-[collapsible=icon]:order-2 group-data-[collapsible=icon]:ml-0" />
-
-          <ThemeToggle className="group-data-[collapsible=icon]:order-3" />
-
-          <TooltipHint content={t("sidebar.user.logOut")}>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="shrink-0 border-0 group-data-[collapsible=icon]:order-4"
-              aria-label={t("sidebar.user.logOut")}
+        {/* One menu, two triggers: the avatar row and the chevron both open
+            it. The popup anchors to the whole footer row so it lands in the
+            same place whichever trigger was pressed. */}
+        <DropdownMenu>
+          <SidebarMenuItem ref={rowRef} className="flex items-center gap-0.5 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:justify-center">
+            <DropdownMenuTrigger
+              render={
+                <button
+                  type="button"
+                  className="ring-inset flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none aria-expanded:bg-sidebar-accent aria-expanded:text-sidebar-accent-foreground group-data-[collapsible=icon]:hidden"
+                />
+              }
             >
-              <LogOutIcon />
-            </Button>
-          </TooltipHint>
+              <UserAvatar className="size-7" label={initials} />
+              <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
+                <span className="truncate font-medium">{name}</span>
+                <span className="truncate text-xs text-muted-foreground">
+                  {email}
+                </span>
+              </div>
+            </DropdownMenuTrigger>
 
-          <DropdownMenu>
+            <LanguageToggle className="ml-auto group-data-[collapsible=icon]:order-2 group-data-[collapsible=icon]:ml-0" />
+
+            <ThemeToggle className="group-data-[collapsible=icon]:order-3" />
+
+            <TooltipHint content={t("sidebar.user.logOut")}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="shrink-0 border-0 group-data-[collapsible=icon]:order-4"
+                aria-label={t("sidebar.user.logOut")}
+              >
+                <LogOutIcon />
+              </Button>
+            </TooltipHint>
+
             <TooltipHint content={t("sidebar.user.openMenu")}>
               <DropdownMenuTrigger
                 aria-label={t("sidebar.user.openMenu")}
@@ -123,7 +126,9 @@ export function NavUser() {
               </DropdownMenuTrigger>
             </TooltipHint>
             <DropdownMenuContent
-              className="min-w-56 rounded-lg"
+              // Anchored to the row, so opt out of the anchor-width default.
+              className="w-auto min-w-56 rounded-lg"
+              anchor={rowRef}
               side={isMobile ? "bottom" : "right"}
               align="end"
               sideOffset={4}
@@ -170,8 +175,8 @@ export function NavUser() {
                 </DropdownMenuItem>
               </DropdownMenuGroup>
             </DropdownMenuContent>
-          </DropdownMenu>
-        </SidebarMenuItem>
+          </SidebarMenuItem>
+        </DropdownMenu>
       </SidebarMenu>
       {profileLoaded ? (
         <React.Suspense fallback={null}>

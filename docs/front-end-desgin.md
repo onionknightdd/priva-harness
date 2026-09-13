@@ -563,6 +563,23 @@ Skeleton，失败显示 `role="alert"` 的错误文本与重试按钮。数据�
 透明度淡入（`@starting-style`），减少动态效果时立即显示；单元悬浮沿用组件的
 透明度反馈。Profile 对话框中的 mock 热力图仍传固定蓝色，后续收敛到同一 token。
 
+### 侧栏账户菜单
+
+2026-09-13：按用户要求，侧栏底部的头像 / 用户名不再打开个人资料弹窗，而是打开右侧的
+账户菜单（与旁边的 ⇅ 按钮同一个菜单）。两处都是 Base UI `Menu.Trigger`，弹层通过
+`DropdownMenuContent` 的 `anchor` 固定挂在整行上，因此无论按哪一个，菜单都出现在同一位置
+（桌面在侧栏右侧、底端对齐；手机在下方），并用 `w-auto min-w-56` 避开随锚点变宽的默认。
+头像行按下时与悬浮同色。个人资料弹窗仍可从菜单里的「个人资料」进入；折叠侧栏时只剩
+头像按钮，行为不变。
+
+```text
+[A admin        ]  ZH  ☀  ⏻  ⇅      ┌──────────────┐
+  admin@localhost                   │ 个人资料      │
+   ▲ 点击 → 打开菜单 ───────────────►│ 设置          │
+                                    │ …            │
+                                    └──────────────┘
+```
+
 ### Mermaid 模块加载失败
 
 2026-09-11：Markdown 图表使用局部 `MermaidRenderBoundary`。异步模块加载或图表
@@ -1169,7 +1186,7 @@ Tabs，选择预览操作模式时可使用 ToggleGroup。不要只根据组件�
 | TooltipHint | 同一 [ui/tooltip](../agent-ui/src/components/ui/tooltip.tsx) 中的组合入口 | 替代浏览器原生 `title`，复用全局延迟组，不添加布局包裹元素，保留多行提示 | 图标按钮、路径、错误、状态、截断文字 |
 | 富内容提示 | [composer-slash-chip](../agent-ui/src/features/agent-message/components/composer-slash-chip.tsx)，Base UI Tooltip | 沿用 popover token 的卡片样式，与其他提示共享计时 | Slash command chip 预览；旧 HoverCard 入口当前无业务调用 |
 | Popover | [ui/popover](../agent-ui/src/components/ui/popover.tsx)，Base UI Popover | 浮层表单 / 信息面板，160ms 进入 / 100ms 退出 | 标签、上下文占用、任务计划、上传队列 |
-| DropdownMenu | [ui/dropdown-menu](../agent-ui/src/components/ui/dropdown-menu.tsx)，Base UI Menu | `ring-1`、共享 CSS 弹层动画、焦点行背景 | 模型、会话、账户、路径、Harness 菜单 |
+| DropdownMenu | [ui/dropdown-menu](../agent-ui/src/components/ui/dropdown-menu.tsx)，Base UI Menu | `ring-1`、共享 CSS 弹层动画、焦点行背景；`DropdownMenuContent` 透出 Positioner 的 `anchor`，一个菜单可挂多个 Trigger | 模型、会话、账户、路径、Harness 菜单 |
 | 附件 Menu | [animate-ui/components/base/menu](../agent-ui/src/components/animate-ui/components/base/menu.tsx)，Base UI Menu + Animate UI | `border`、200ms 弹层、Motion 滑动高亮；与通用 DropdownMenu 的分组字号等不同 | 聊天附件菜单 |
 | ContextMenu | [ui/context-menu](../agent-ui/src/components/ui/context-menu.tsx)，Base UI ContextMenu | shadcn 风格的右键菜单；行内文件菜单为 12px | 文件树节点、助手行内文件引用 |
 | Slash / 选区动作菜单 | [composer-slash-menu](../agent-ui/src/features/agent-message/components/composer-slash-menu.tsx)、[assistant-selection-actions](../agent-ui/src/features/agent-message/components/assistant-selection-actions.tsx)，本地 Portal + Motion | Slash 保留输入框焦点；选区复用 Beautiful UI 胶囊外观与工具条键盘操作 | 输入 `/`、引用 / 解释 / 优化所选文本 |
