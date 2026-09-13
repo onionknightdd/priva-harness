@@ -25,12 +25,14 @@ import {
 import { writeClipboardText } from "@/lib/clipboard"
 import { EASE_OUT } from "@/lib/ease"
 
-import type { RelativeTimeLabel } from "@/lib/relative-time"
+import { formatSessionRelativeTime, useSharedNow } from "@/lib/relative-time"
 
 import {
   assistantHasProcess,
   type AgentThreadMessage,
 } from "../agent-message-data"
+import { PopupsArmedContext } from "@/components/ui/popups-armed-context"
+import { useForkAvailability } from "../fork-context"
 import { userMessageSurface } from "../slash-command-envelope"
 import { AssistantProcess } from "./assistant-process"
 import { assistantTimeline } from "../assistant-timeline"
@@ -118,15 +120,10 @@ function AgentMessageCopyAction({ text }: { text: string }) {
   )
 }
 
-function AgentMessageSplitAction({
-  onFork,
-  disabledReason,
-}: {
-  onFork?: () => void
-  disabledReason?: string
-}) {
+function AgentMessageSplitAction({ message }: { message: AgentThreadMessage }) {
   const { t } = useTranslation()
-  const enabled = onFork !== undefined
+  const { forkFrom, disabledReason } = useForkAvailability()
+  const enabled = forkFrom !== undefined
   const label = enabled
     ? t("agentMessage.forkChat")
     : (disabledReason ?? t("agentMessage.forkChat"))
@@ -142,7 +139,7 @@ function AgentMessageSplitAction({
         }
 
         animateControl(event.currentTarget)
-        onFork?.()
+        forkFrom?.(message)
       }}
     >
       <SplitIcon className="size-3.5" aria-hidden="true" />
@@ -174,12 +171,22 @@ function useIsFreshMessage(createdAt: string) {
   return fresh
 }
 
-function AgentMessageRelativeTime({
-  relativeTime,
-}: {
-  relativeTime: RelativeTimeLabel
-}) {
+// Subscribes to the shared clock itself, so a tick re-renders only this label
+// and not the memoized message around it.
+function AgentMessageRelativeTime({ createdAt }: { createdAt: string }) {
+  const { t, i18n } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
+  const now = useSharedNow()
+  const relativeTime = formatSessionRelativeTime(
+    Date.parse(createdAt),
+    i18n.resolvedLanguage ?? i18n.language,
+    t("agentMessage.justNow"),
+    now
+  )
+
+  if (!relativeTime) {
+    return null
+  }
 
   return (
     <Tooltip>
@@ -201,17 +208,13 @@ function AgentMessageRelativeTime({
   )
 }
 
-export function AgentMessageItem({
+// Memoized so that streaming updates and thread-level state changes only
+// re-render the messages whose props actually changed.
+export const AgentMessageItem = React.memo(function AgentMessageItem({
   message,
-  relativeTime,
-  onFork,
-  forkDisabledReason,
   hideProcessHeader = false,
 }: {
   message: AgentThreadMessage
-  relativeTime?: RelativeTimeLabel | null
-  onFork?: () => void
-  forkDisabledReason?: string
   hideProcessHeader?: boolean
 }) {
   const { t } = useTranslation()
@@ -219,6 +222,10 @@ export function AgentMessageItem({
   const isFresh = useIsFreshMessage(message.createdAt)
   const isStreaming = message.status === "streaming"
   const isError = message.status === "error"
+  // Context menus on inline file references mount once the pointer or focus
+  // reaches this message; see PopupsArmedContext.
+  const [popupsArmed, setPopupsArmed] = React.useState(false)
+  const armPopups = () => setPopupsArmed(true)
 
   if (message.role === "user" && !message.attachments?.length) {
     const surface = userMessageSurface(message.content, message.compact)
@@ -252,7 +259,8 @@ export function AgentMessageItem({
   }
 
   const body = (
-    <Message from={message.role}>
+    <PopupsArmedContext.Provider value={popupsArmed}>
+    <Message from={message.role} onPointerEnter={armPopups} onFocusCapture={armPopups}>
       {isError ? (
         <motion.div
           className="flex w-fit max-w-full flex-col items-start gap-1"
@@ -300,18 +308,14 @@ export function AgentMessageItem({
           {message.role === "assistant" && message.status === "complete" ? (
             <MotionMessageActions layout="position" layoutDependency={false}>
               <AgentMessageCopyAction text={message.role === "assistant" ? assistantTimeline(message).map((section) => section.message.content).filter(Boolean).join("\n\n") : message.content} />
-              <AgentMessageSplitAction
-                onFork={onFork}
-                disabledReason={forkDisabledReason}
-              />
-              {relativeTime ? (
-                <AgentMessageRelativeTime relativeTime={relativeTime} />
-              ) : null}
+              <AgentMessageSplitAction message={message} />
+              <AgentMessageRelativeTime createdAt={message.createdAt} />
             </MotionMessageActions>
           ) : null}
         </>
       )}
     </Message>
+    </PopupsArmedContext.Provider>
   )
 
   if (message.role !== "user") {
@@ -329,7 +333,7 @@ export function AgentMessageItem({
       {body}
     </motion.div>
   )
-}
+})
 
 function AssistantStreamBody({
   message,

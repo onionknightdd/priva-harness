@@ -128,6 +128,240 @@ User MessageContent -> user-message -> light: #EAF3FD
 Dark popup menus -> popover -> #353535
 ```
 
+### 打开会话时的重渲染范围
+
+2026-09-12：从首页打开一个会话曾经触发三轮全 App 重渲染（点击、`useEffect`
+重复清空、数据到达），每轮都带着整个侧栏（每行 4 个 Tooltip + Popover +
+DropdownMenu）、Composer 和所有工具卡，实测 6 条消息的会话点击帧 73–90ms、
+数据帧 47–72ms、另有 23–29ms 的多余一帧。原因是 `ChatSessionContext` 把会话
+列表、当前会话、线程消息和全部回调放在一个 value 里，18 处消费者只取一两个
+字段却随任何变化重渲染。
+
+现在 `chat-session-context.tsx` 按变化频率拆成四个 context，按需订阅：
+
+```text
+ChatSessionProvider
+├─ useChatSessionActions()  openSession / closeSession / startNewChat / setDraftCwd /
+│                           forkFrom / bindRunSession / reloadThread   —— 身份稳定，永不变
+├─ useSessionList()         groups / status / refresh / setTags / rename / remove …
+│                           —— 列表刷新时变（侧栏、SessionMenuItems、header 重命名）
+├─ useActiveSession()       activeSession / runCwd / runSessionId / highlightedSessionId /
+│                           canFork / forking / forkError —— 打开、关闭、fork 时变
+└─ useChatThread()          threadMessages / messagesStatus / transcriptEpoch
+                            —— 每次流式更新都变，只有 useAgentMessage 订阅
+```
+
+回调通过一个在 `useLayoutEffect` 里同步的 `latest` ref 读取最新状态，因此
+`AppSidebar`（只需要 `openSession`）不再因为任何会话状态重渲染。配套规则：
+
+- `ProjectSessionItem`、`AgentMessageItem`、`ThreadTurnItem` 都是 `React.memo`；
+  传给它们的回调必须稳定（`AppSidebar.selectSession`、`NavProjects.renameSession`、
+  `AgentMessageThread.renderMessage` / `forkFromMessage` 均为 `useCallback`）。
+- `reuseThreadTurns` 在流式更新时复用未变化的 turn 对象，只有最后一个 turn 重渲染。
+- 相对时间由 `AgentMessageRelativeTime` 自己订阅 `TickingNowProvider`，15s 一次的
+  tick 只更新时间文字；`relative-time.ts` 按 locale 缓存 Intl 格式化器。
+- 打开会话的 `useEffect` 用函数式 `setState` 避免重复写入 `[]` / `"loading"`。
+
+实测（dev 构建，同一会话，热态）：点击帧 73–90ms → 44–47ms，数据帧 47–72ms
+→ 45–52ms，中间多余的一帧消失，long task 从 1–2 个降为 0；React 工作量
+174ms → 96ms。剩余成本是线程本体的首次挂载（每个工具卡一个 ContextMenu +
+TooltipHint、FilePathLink 的 Tooltip 等 Base UI 原语）。
+
+### 长会话：弹层根节点懒挂载与文件存在性批量查询
+
+2026-09-12：用 90 条消息 / 166 个工具卡 / 242 个行内文件引用的会话
+（`de14fd09…`，由脚本补入合成数据）复测。两项改动：
+
+- **弹层根节点按需挂载。** 侧栏每行的 `SessionTagPopover` 与「更多」`DropdownMenu`
+  在指针进入或焦点进入该行前只渲染同样式、同 `aria-label` 的普通按钮
+  （`ProjectSessionItem` 的 `armed`）；行内文件引用的 `ContextMenu` 由所在消息通过
+  `PopupsArmedContext` 控制，`AgentMessageItem` 在 `onPointerEnter` / `onFocusCapture`
+  时置为已挂载。两者的触发时机都早于点击 / 右键 / 长按 / Shift+F10，键盘进入时
+  `AssistantFileReference` 会把焦点放回重挂后的同一个按钮。消息之外（如
+  Workspace agent 视图、测试页）保持立即挂载。
+- **文件存在性批量查询。** `checkFileExists` 在同一微任务内收集路径，调用新的
+  `POST /api/sandbox/files/exists`（每次最多 500 条，后端只做 `stat`，EACCES 视为存在，
+  与原来 `previewFile` 的 403 语义一致），并分片（40 条 / 任务）交付结果，避免一次
+  把几百个链接同时切换成按钮。之前是每个链接各发一个 `/preview` 请求并下载文件内容。
+
+```text
+mount transcript ──► useFileExists ×N ──► checkFileExists (queueMicrotask 合并)
+                                             └─► POST /files/exists {paths}
+                                                   └─► 分片 40 条/任务 resolve ──► 链接逐批变为按钮
+hover / focus 进入消息 ──► PopupsArmedContext=true ──► ContextMenu 根节点挂载
+hover / focus 进入侧栏行 ──► 占位按钮 → Popover / DropdownMenu
+```
+
+实测（dev 构建，长会话）：热态数据帧 350ms → 280–300ms，后续帧 88–110ms → 64–80ms，
+切换合计 710ms → 570ms；冷态首次打开从 177 个 `/preview` 请求变为 1 个 `/exists`
+请求，慢帧合计 1417ms → 约 960ms。仍然剩下的两块不在本次范围内：数据帧本体
+（约 6000 个 DOM 节点、158 个 Tooltip 根、`ThreadTurnItem` 的 `syncHeight` 强制布局
+约 45ms）和冷态 Shiki 首次高亮约 40 个代码块的 ~250ms 一帧。
+
+### 长会话：Tooltip 延迟挂载与连接后的整线程重渲染
+
+2026-09-13：继续在同一会话上复测。数据帧里线程共有 461 个 Base UI Tooltip 根
+（242 个行内文件引用、90 个消息操作、45 个相对时间、80 个代码块按钮）；打开后
+约 2s 还有一帧 50–64ms，是 WebSocket 连上后的整线程重渲染。改动：
+
+- **Tooltip 随消息一起延迟挂载。** `PopupsArmedContext` 移到
+  `components/ui/popups-armed-context.ts`，`Tooltip` / `TooltipTrigger` /
+  `TooltipContent` / `TooltipHint` 在未 armed 的子树里只用 `useRender` 渲染触发元素
+  本身（保留 `render` 合成、`className`、`data-slot`），不挂 Root、Content；消息
+  armed 后重挂，`Tooltip` 通过 `HeldFocusContext` 记住触发元素是否持有焦点并把焦点
+  放回去。消息之外默认值为 `true`，行为不变。`Root.children` 为 payload 渲染函数时
+  不延迟。
+- **`ThreadTurnItem.syncHeight` 只在有流式回复时测量。** 用户气泡高度只用于把
+  工作状态行贴在它下面，历史 turn 不再逐个 `getBoundingClientRect`（会强制布局
+  `content-visibility:auto` 的项）也不再各排一次 `setState`。
+- **fork 可用性改为 context。** `runSessionId` 在连接后才有值，之前它改变了
+  `renderMessage` / 每条消息的 `forkDisabledReason` prop，整个线程重渲染；现在
+  `ForkContext`（`fork-context.ts`）只让 45 个 fork 按钮更新。
+- **`session.snapshot` 复用已有消息对象。** `mergeSnapshotMessages` 用 `dequal`
+  比较快照里每条消息与当前对象，完全一致时保留原对象，`AgentMessageItem` 的 memo
+  才能命中。
+- **稳定线程下的 context 值。** `AgentMessage.onSelectionAction` 用 `latest` ref 变为
+  稳定回调（242 个文件引用订阅它）；`AgentMessageThread` 的 `MotionConfig`
+  `transition` 用 `useMemo`；线程与空态之间的 `AnimatePresence` 设
+  `presenceAffectsLayout={false}`——两者都绝对定位，不会推挤兄弟，而默认值会在
+  `AgentMessage` 每次渲染时给线程里每个 motion 元素一个新的 presence context。
+
+```text
+WebSocket session.snapshot ──► mergeSnapshotMessages (dequal) ──► 同对象 ──► memo 命中
+runSessionId 变化 ──► ForkContext ──► 只有 45 个 fork 按钮重渲染
+AgentMessage 重渲染 ──► onSelectionAction / MotionConfig / PresenceContext 值不变 ──► 线程不动
+hover / focus 进入消息 ──► PopupsArmedContext=true ──► Tooltip 根 + ContextMenu 根挂载
+```
+
+实测（dev 构建，长会话，热态）：数据帧 300–312ms → 234–264ms，连接后的一帧
+56–64ms → 消失，后续帧 60–70ms → 40–44ms，切换合计 663–722ms → 444–462ms；
+Tooltip 根 523 → 66（仅侧栏与页头）。
+
+两项未做并说明原因：把 `layout="position"` 限制到最后一个 turn 会取消问答摘要
+折叠时下方消息的位移动画，且 profile 里归到 motion 的 ~20ms 只是首个读取者承担的
+一次强制布局；冷态仍有一帧 ~180–250ms 的 Shiki 高亮，实测是一段 3 行 tsx 代码
+——在页面空闲时预热同语言的样例只需 2ms，但大规模挂载后的 GC 会刷掉 V8 已编译的
+正则，首次分词要重新编译 TypeScript 语法的正则（后一项已在下文“Shiki 改用
+Oniguruma 引擎”中解决）。回归页 `tooltip-browser.html` 新增
+`#deferred` 区块（未 armed 无 Tooltip 根、点击保留、arming 后焦点回位、hover 打开）。
+
+### 长会话：分片挂载 turn
+
+2026-09-13：数据帧剩下的 ~240ms 是纯 React 挂载（45 个 turn、约 6000 个 DOM 节点），
+只能分片。`thread-turns.ts` 的 `RevealWindow` 记录 `firstTurnId / turnCount / from`：
+
+- 一次到达超过 `INITIAL_REVEALED_TURNS`（6）个 turn，或首个 turn 的 id 变化（切换会话），
+  视为整批到达，只挂最后 6 个 turn；视口本来就钉在底部，首帧内容不变。
+- 首帧绘制后（`requestAnimationFrame`），用 `startTransition` 每次再向前挂
+  `REVEAL_BATCH_TURNS`（8）个，直到 `from === 0`。React 在 transition 里可以让出
+  主线程，每片的提交只有 8 个 turn。
+- 同一线程内的流式更新（turn 数不变或 +1）不进入这条路径，窗口原样保留；线程变短时
+  只把 `from` 夹到新长度。窗口在渲染期间派生（`setState` during render），整批到达
+  与它的第一片在同一次提交里落地。
+- 向上补挂的 turn 由 `@shadcn/react/message-scroller` 的 `preserveScrollOnPrepend`
+  处理：钉底时继续钉底，用户已经上滚时保持原可见项位置（跨片时可能有一次 ~30px 的
+  位移，来自 `content-visibility:auto` 项首次布局，与分片无关）。
+
+```text
+messages 到达 ──► turns(45) ──► nextRevealWindow ──► from=39 ──► 首帧挂 6 个 turn（钉底）
+                                    │ rAF + startTransition
+                                    └─► from=31 → 23 → 15 → 7 → 0，每片 8 个，prepend 到上方
+streaming +1 turn ──► 窗口不变（无分片）
+```
+
+实测（dev 构建，长会话，热态）：数据帧 234–264ms → 49–52ms，之后每片 21–29ms
+共 5 片（约 600ms 内全部挂完），切换慢帧合计 444–462ms → 252–284ms；打开后视口
+仍在底部，最终 DOM 节点数不变。冷态剩下的一帧仍是 Shiki（~236ms）。
+
+### Shiki 改用 Oniguruma 引擎
+
+2026-09-13：两处高亮器（消息里的 `agent-shiki.tsx`、文件预览的
+`shiki-highlighter.ts`）都从 `shiki/engine/javascript` 改为
+`shiki/engine/oniguruma`，由 `lib/shiki-engine.ts` 的 `getShikiEngine()` 提供同一个
+engine promise；`loadWasm` 只实例化一次 WASM。JS 引擎把语法正则翻译成 `RegExp`
+交给 V8，V8 在首次执行时编译，且大规模挂载后的 GC 会刷掉已编译的正则代码，导致
+冷态打开长会话时一段 3 行 tsx 要付 ~180–250ms 重新编译整套 TypeScript 语法；WASM
+里的正则编译一次常驻，不受 V8 GC 影响，也没有 JS 正则的回溯风险。
+
+```text
+TextMate 语法 ─► engine/javascript ─► RegExp → V8 编译（首次/GC 后重来）
+             └► engine/oniguruma  ─► onig.wasm 内编译一次常驻（+622KB 内联 wasm 模块，gzip 232KB）
+```
+
+代价是首次高亮前多加载一个约 232KB（gzip）的模块；构建产物里这个 wasm 模块本来就
+存在两份（`shiki` 全量 bundle 的默认引擎与 `@streamdown/code` 自带的 shiki 副本各
+引用一份），本次没有新增 chunk，只是其中一份开始真正被加载。
+
+实测（dev 构建，长会话，冷态）：Shiki 那一帧 ~236ms 消失，冷态最大帧 92ms（数据帧），
+慢帧合计 900ms → 602ms；代码块回归页 24/24，文件预览 JSON 高亮正常。
+
+### Composer 停靠动画走合成器线程
+
+2026-09-13：从空态打开会话时 composer 由居中滑到底部，原实现是 motion 逐帧改一个
+spacer 的 `flexGrow`（每帧 JS + 重排，全在主线程）。打开长会话时线程挂载的几帧
+（数据帧 ~50–90ms、每片 ~25ms）正好落在这 400ms 里，动画被卡住再跳：实测 composer
+`top` 轨迹 752 → (78ms 空档) → 972，1069 → (73ms) → 1070。
+
+现在 spacer 直接切到最终布局（`flexGrow` 0/1 不再动画），`AgentMessage` 用
+ResizeObserver 记住 composer 列上一次绘制的 `top`（RO 在布局后回调，不触发强制重排；
+列上正在跑停靠动画时不记录），`isEmpty` 翻转时在 `useLayoutEffect` 里量新位置，用
+WAAPI `element.animate` 做 `translateY(旧 − 新 → 0)` 的 FLIP，时长和缓动仍取
+`composerDockTransition`。transform 动画由合成器线程驱动，主线程挂载线程时也不中断；
+`prefers-reduced-motion` 与位移小于 1px 时不动画。新建对话会重挂 `AgentMessagePage`，
+和之前一样不做反向滑动。
+
+```text
+isEmpty: true ──► spacer flexGrow=1（居中）      RO 记录 top₀
+      │ 打开会话
+isEmpty: false ─► spacer flexGrow=0（贴底，瞬时）  useLayoutEffect 量 top₁
+                  composer 列 animate(translateY(top₀−top₁) → 0, 400ms, [0.16,1,0.3,1])
+                  └─ 合成器线程跑，主线程同时挂载 turn 分片
+```
+
+**分片挂载后的“抖动很多下”。** 停靠改到合成器线程后，冷态打开长会话仍有多次抖动，
+逐帧比对发现不是动画而是内容回流：新挂上的 turn 里，行内文件引用先按“未解析”渲染成
+`<code>` 芯片（可换行、上下各 2px 内边距），`/exists` 结果到达后换成带图标、单行截断的
+按钮，每条引用矮 4px 且不再换行，一片 turn 一起收缩 60–100px；视口钉底，收缩发生在
+可见区上方就把内容推下去，再被钉底逻辑拉回——每片一次。两处修正：
+
+- `useFileExists` 改为三态（`undefined` 待定 / `true` / `false`），`FilePathLink`
+  在待定时用与按钮相同的盒子（`inline-flex` + 图标 + 单行截断）渲染成不可点击的
+  `<span>`，解析后只换颜色和交互；文件不存在时才换成 `<code>` 芯片。
+- 整批到达的 transcript 先不挂 turn（`RevealWindow.preparing`），
+  `collectThreadFilePaths` 从 assistant 文本的行内代码（跳过围栏代码块）和 tool_use 的
+  `file_path` / `path` / `notebook_path` 收集路径，一次 `checkFileExists` 批量解析后再挂
+  第一片，上限 400ms（超时则退回逐条解析）。`PinLatestAtCenter` 在 turn 真正挂上的那次
+  提交重新钉底。
+
+```text
+messages 到达 ──► collectThreadFilePaths ──► POST /files/exists（一次）
+                                                │ ≤400ms
+                                                └─► preparing=false ──► 首片挂载，引用直接是最终形态
+流式新增引用 ──► 待定态与按钮同盒 ──► 解析后只变颜色，不回流
+```
+
+实测（dev 构建，冷态打开长会话）：逐帧监测 45 个 turn 的高度与末项底边，改动前每片
+有 6–13px×N 的高度变化、底边最多偏移 107px 再回弹；改动后高度变化 0、底边偏移 0，
+热态同样为 0。`project-directory-browser.html` 的 fixtures 补了 `POST /api/sandbox/files/exists`
+的模拟（行内文件引用批量探测存在性）。该页里「existing project plus starts a clean
+draft」一项在本次改动前的分支上同样失败：`settle()` 恰好 300ms，与 WebSocket 关闭后
+300ms 的自动重连竞争，第二个 socket 先于断言创建；属于既有的计时竞态，未在本次处理。
+
+### 悬浮高亮的跟手速度
+
+2026-09-12：侧栏菜单、文件树和 Slash 菜单的滑动悬浮高亮共用
+`components/motion/menu-highlight-transition.ts`。原弹簧（stiffness 350 /
+damping 35）从相邻行移到下一行要 ~290ms 才停稳，100ms 时只走了一半，
+明显滞后于指针。按用户两轮试用后定为 stiffness 2800 / damping 106（临界
+阻尼、无回弹）：90% 位移约 85–90ms，相邻行 ~130ms 停稳，大跨度跳转 ~200ms；
+保留弹簧是为了指针快速掠过多行时速度可以连续，不会像 tween 那样每次从零
+重启。减少动态效果时仍为 0 时长。
+
+```text
+pointermove -> active row -> highlight spring (2800 / 106, no overshoot)
+                              ~88ms reach 90%  ->  ~130ms settle (adjacent row)
+```
+
 ### Skills 搜索与预览 Tab
 
 2026-09-10：按最新调整，Skills 移除项目范围筛选及对应的 Combobox / Command 组件。
@@ -1188,6 +1422,7 @@ Agent data / composer / attachments：
 node --import ./services/agent-runner/ts/node_modules/tsx/dist/loader.mjs --test agent-ui/tests/features/agent-message/agent-tool-data.test.ts
 node --test agent-ui/tests/features/agent-message/composer-attachments.test.ts agent-ui/tests/features/agent-message/composer-primary-action.test.ts agent-ui/tests/features/agent-message/slash-command-envelope.test.ts
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/message-attachments.test.ts
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/thread-turns.test.ts agent-ui/tests/features/agent-message/snapshot-messages.test.ts agent-ui/tests/features/agent-message/thread-file-paths.test.ts
 ```
 
 项目目录浏览器回归：在 `agent-ui/` 运行 `npm run dev`，打开
@@ -1204,17 +1439,25 @@ node --test agent-ui/tests/features/agent-message/composer-attachments.test.ts a
 目录，不启动模型请求。视觉检查需将鼠标停留在吸顶目录行上滚动，确认悬浮时仍保持
 选中底色，并在移出鼠标后保持一致。
 
-文件树范围与宽度测量回归：
+文件树范围、行修订号与宽度测量回归：
 
 ```sh
-./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/file-browser/file-browser-scope.test.ts
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/file-browser/file-browser-scope.test.ts agent-ui/tests/features/file-browser/file-tree-revisions.test.ts
 node --test agent-ui/tests/features/file-browser/file-tree-content-width.test.ts
 ```
 
-文本预览响应映射、超限提示的中英文渲染，以及消息文件链接存在性回归：
+文本预览响应映射、超限提示的中英文渲染，以及消息文件链接存在性批量查询回归：
 
 ```sh
-./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/file-browser/file-preview.test.tsx
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/file-browser/file-preview.test.tsx agent-ui/tests/features/files/file-existence.test.ts
+```
+
+后端 `POST /api/sandbox/files/exists` 的单元与 HTTP 集成用例包含在 Runner 的 `npm test` 中。
+
+选区操作的草稿保留、指令追加、绝对路径引用、浮层定位及选区范围回归：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/quote-selection.test.ts
 ```
 
 选区操作的草稿保留、指令追加、绝对路径引用、浮层定位及选区范围回归：
@@ -1236,7 +1479,8 @@ CodeBlock 自动换行浏览器回归：在开发服务器打开
 **Run tooltip checks**。使用真实计时检查首次 1s、跨组件连续切换、400ms 重置、
 短暂悬浮取消、嵌套提示，以及按钮和 Popover 的组合行为；追加 `?dark=1` 检查深色主题。
 文件链接追加覆盖检查完成后首次悬停、检查期间悬停、文件不存在、缓存命中、再次悬停
-及点击打开 Workspace，使用隔离的文件预览响应。
+及点击打开 Workspace，使用隔离的文件预览响应。`#deferred` 区块模拟未 armed 的消息：
+无 Tooltip 根、悬浮不出现提示、点击保留、arming 后焦点回到同一触发元素、随后 hover 打开。
 使用真实 Tab 聚焦按钮，确认提示立即出现，再按 Escape 关闭；程序调用 `focus()`
 不会在所有浏览器中切换键盘输入模式，因此这两项单独用真实按键验证。
 

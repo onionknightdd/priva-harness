@@ -129,6 +129,36 @@ export const previewFileSchema = {
   },
 } as const
 
+export const FILES_EXIST_MAX_PATHS = 500
+
+export const filesExistSchema = {
+  body: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['paths'],
+    properties: {
+      paths: {
+        type: 'array',
+        maxItems: FILES_EXIST_MAX_PATHS,
+        items: { type: 'string', minLength: 1 },
+      },
+    },
+  },
+  response: {
+    200: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['exists'],
+      properties: {
+        exists: {
+          type: 'object',
+          additionalProperties: { type: 'boolean' },
+        },
+      },
+    },
+  },
+} as const
+
 export const uploadFileSchema = {
   response: {
     200: {

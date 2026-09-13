@@ -34,6 +34,7 @@ function measurementFixture() {
   const operations: string[] = []
   let scale = 10
   let connectedProbes = 0
+  let connectedHosts = 0
   const ownerDocument = {
     defaultView: {
       getComputedStyle: (sample: { font: string }) => {
@@ -41,27 +42,41 @@ function measurementFixture() {
         return { font: sample.font }
       },
     },
-    createElement: () => ({
-      ariaHidden: "",
-      style: { cssText: "", font: "" },
-      textContent: "",
-      get offsetWidth() {
-        operations.push("read:probe")
-        return this.textContent.length * scale * (this.style.font.startsWith("bold") ? 2 : 1)
-      },
-      remove: () => {
-        connectedProbes -= 1
-        operations.push("write:remove")
-      },
-    }),
+    createElement: (tagName: string) =>
+      tagName === "div"
+        ? {
+            ariaHidden: "",
+            style: { cssText: "" },
+            appendChild: (fragment: { children: unknown[] }) => {
+              connectedProbes += fragment.children.length
+              operations.push("write:insert")
+            },
+            remove: () => {
+              connectedHosts -= 1
+              operations.push("write:remove-host")
+            },
+          }
+        : {
+            ariaHidden: "",
+            style: { cssText: "", font: "" },
+            textContent: "",
+            get offsetWidth() {
+              operations.push("read:probe")
+              return this.textContent.length * scale * (this.style.font.startsWith("bold") ? 2 : 1)
+            },
+            remove: () => {
+              connectedProbes -= 1
+              operations.push("write:remove")
+            },
+          },
     createDocumentFragment: () => ({
       children: [] as unknown[],
       appendChild(node: unknown) { this.children.push(node) },
     }),
     body: {
-      appendChild: (fragment: { children: unknown[] }) => {
-        connectedProbes += fragment.children.length
-        operations.push("write:insert")
+      appendChild: () => {
+        connectedHosts += 1
+        operations.push("write:insert-host")
       },
     },
   } as unknown as Document
@@ -79,21 +94,38 @@ function measurementFixture() {
     operations,
     slot,
     connectedProbes: () => connectedProbes,
+    connectedHosts: () => connectedHosts,
     setFontScale: (value: number) => { scale = value },
   }
 }
 
 describe("file tree name measurement", () => {
   it("batches all live reads, probe writes and measurements separately", () => {
-    const { measurer, operations, slot, connectedProbes } = measurementFixture()
+    const { measurer, operations, slot, connectedProbes, connectedHosts } = measurementFixture()
 
     assert.equal(measurer.measure([slot("one", 20), slot("long-name", 40)]), 50)
     assert.deepEqual(operations, [
       "read:font", "read:slot", "read:font", "read:slot",
-      "write:insert", "read:probe", "read:probe",
+      "write:insert-host", "write:insert", "read:probe", "read:probe",
       "write:remove", "write:remove",
     ])
     assert.equal(connectedProbes(), 0)
+    assert.equal(connectedHosts(), 1)
+  })
+
+  it("keeps one contained probe host until disposed", () => {
+    const { measurer, operations, slot, connectedHosts } = measurementFixture()
+
+    measurer.measure([slot("one", 0)])
+    measurer.measure([slot("two", 0)])
+    assert.equal(operations.filter((operation) => operation === "write:insert-host").length, 1)
+    assert.equal(connectedHosts(), 1)
+    measurer.dispose()
+    assert.equal(connectedHosts(), 0)
+    operations.length = 0
+    assert.equal(measurer.measure([slot("one", 0)]), 30)
+    assert.ok(operations.includes("write:insert-host"), "re-creates the host after dispose")
+    assert.ok(operations.includes("read:probe"), "dispose also clears cached widths")
   })
 
   it("reuses widths for duplicate names and recalculates overflow after a resize", () => {

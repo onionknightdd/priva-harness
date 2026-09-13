@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react"
 import type { InteractionRequest, InteractionResponse } from '../interaction-data'
 import { InteractionCard } from './interaction-card'
 import type { ComposerAttachment } from "../composer-attachments"
@@ -9,7 +9,7 @@ import {
 } from "motion/react"
 import { useTranslation } from "react-i18next"
 
-import { useChatSession } from "@/features/chat-session"
+import { useActiveSession, useChatSessionActions } from "@/features/chat-session"
 import type { SlashCommand } from "@/lib/api/slash-commands"
 import { cn } from "@/lib/utils"
 
@@ -19,6 +19,7 @@ import {
   appendQuotedDraft,
   focusAgentComposer,
 } from "../quote-selection"
+import type { OnAssistantSelectionAction } from "../selection-actions-context"
 import {
   AgentMessageComposer,
   composerDockTransition,
@@ -81,7 +82,8 @@ export function AgentMessage({
 }) {
   const { t } = useTranslation()
   const composerShellRef = useRef<HTMLDivElement>(null)
-  const { activeSession, forkError, runCwd, runSessionId, setDraftCwd } = useChatSession()
+  const { activeSession, forkError, runCwd, runSessionId } = useActiveSession()
+  const { setDraftCwd } = useChatSessionActions()
   const shouldReduceMotion = Boolean(useReducedMotion())
   const pending = interactions[0]
   const hadInteraction = useRef(false)
@@ -94,9 +96,62 @@ export function AgentMessage({
     hadInteraction.current = Boolean(pending)
   }, [pending])
   const isEmpty = messages.length === 0 && activeSession === null
-  const dockTransition = shouldReduceMotion
-    ? { duration: 0 }
-    : composerDockTransition
+  // Every inline file reference subscribes to the selection action, so keep
+  // its identity stable while the draft and connection state change.
+  const selectionContext = useRef({ draft, onDraftChange, t })
+  useLayoutEffect(() => {
+    selectionContext.current = { draft, onDraftChange, t }
+  })
+  const onSelectionAction = useCallback<OnAssistantSelectionAction>((action, text) => {
+    const { draft, onDraftChange, t } = selectionContext.current
+    const instruction = action === "explain" ? t("agentMessage.explainSelectionPrompt")
+      : action === "improve" ? t("agentMessage.improveSelectionPrompt") : ""
+    onDraftChange(appendQuotedDraft(draft, text, instruction))
+    requestAnimationFrame(() => {
+      focusAgentComposer()
+    })
+  }, [])
+  const dockRef = useRef<HTMLDivElement>(null)
+  const dockSpacerRef = useRef<HTMLDivElement>(null)
+  const dockTop = useRef<number | null>(null)
+  // Remember where the composer column was last painted. ResizeObserver runs
+  // after layout, so this never forces a reflow; skip readings taken while a
+  // dock animation is transforming the column.
+  useEffect(() => {
+    const dock = dockRef.current
+    const spacer = dockSpacerRef.current
+    if (!dock || !spacer) return
+    const record = () => {
+      if (dock.getAnimations().length === 0) {
+        dockTop.current = dock.getBoundingClientRect().top
+      }
+    }
+    record()
+    const observer = new ResizeObserver(record)
+    observer.observe(dock)
+    observer.observe(spacer)
+    return () => observer.disconnect()
+  }, [])
+  // The spacer switches layout instantly; the column slides from its previous
+  // position with a compositor-driven transform, so the animation keeps
+  // running while the main thread mounts a long transcript.
+  useLayoutEffect(() => {
+    const dock = dockRef.current
+    const previousTop = dockTop.current
+    if (!dock || previousTop === null) return
+    const nextTop = dock.getBoundingClientRect().top
+    dockTop.current = nextTop
+    const delta = previousTop - nextTop
+    if (shouldReduceMotion || Math.abs(delta) < 1) return
+    const animation = dock.animate(
+      [{ transform: `translateY(${delta}px)` }, { transform: "translateY(0)" }],
+      {
+        duration: composerDockTransition.duration * 1000,
+        easing: `cubic-bezier(${composerDockTransition.ease.join(", ")})`,
+      }
+    )
+    return () => animation.cancel()
+  }, [isEmpty, shouldReduceMotion])
   const overlayTransition = shouldReduceMotion
     ? { duration: 0 }
     : fadeTransition
@@ -107,7 +162,10 @@ export function AgentMessage({
       className="@container/agent-message flex min-h-0 flex-1 flex-col overflow-hidden pt-0 pr-2 pb-4 pl-4"
     >
       <div className="relative min-h-0 flex-1">
-        <AnimatePresence initial={false}>
+        {/* Both children are absolutely positioned, so presence never shifts
+            siblings; the default would hand every motion element in the
+            thread a fresh presence context on each render here. */}
+        <AnimatePresence initial={false} presenceAffectsLayout={false}>
           {isEmpty ? (
             <motion.div
               key="agent-message-empty"
@@ -133,14 +191,7 @@ export function AgentMessage({
             >
               <AgentMessageThread
                 messages={messages}
-                onSelectionAction={(action, text) => {
-                  const instruction = action === "explain" ? t("agentMessage.explainSelectionPrompt")
-                    : action === "improve" ? t("agentMessage.improveSelectionPrompt") : ""
-                  onDraftChange(appendQuotedDraft(draft, text, instruction))
-                  requestAnimationFrame(() => {
-                    focusAgentComposer()
-                  })
-                }}
+                onSelectionAction={onSelectionAction}
               />
             </motion.div>
           )}
@@ -148,6 +199,7 @@ export function AgentMessage({
       </div>
 
       <div
+        ref={dockRef}
         className={cn(
           "shrink-0",
           agentColumnClassName,
@@ -216,12 +268,11 @@ export function AgentMessage({
         ) : null}
       </div>
 
-      <motion.div
+      <div
+        ref={dockSpacerRef}
         aria-hidden="true"
-        initial={false}
-        animate={{ flexGrow: isEmpty ? 1 : 0 }}
-        transition={dockTransition}
         className="min-h-0 basis-0"
+        style={{ flexGrow: isEmpty ? 1 : 0 }}
       />
     </section>
   )

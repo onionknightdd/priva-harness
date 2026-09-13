@@ -32,6 +32,10 @@ import {
   type FileBrowserItem,
   type FileBrowserModel,
 } from "../file-browser-data"
+import {
+  createFileTreeRevisions,
+  type FileTreeRevisions,
+} from "../file-tree-revisions"
 import { FileTreeFolderIcon } from "./file-tree-folder-icon"
 import { FileTreeItemMenu } from "./file-tree-item-menu"
 import { FileTypeIcon } from "./file-type-icon"
@@ -280,13 +284,25 @@ function FileBrowserTreePanel({
   )
 }
 
-function FileBrowserTreeNode({
+// Shared per-tree data that nodes read at render time. It travels through a
+// ref so that replacing the loading set does not invalidate every memoized
+// node; the revision tracker bumps exactly the nodes whose loading changed.
+type FileBrowserTreeShared = {
+  loadingDirectories: ReadonlySet<string>
+  revisions: FileTreeRevisions
+}
+
+// Item instances are stable per id but mutable, so the node is memoized on
+// `revision`, which the tree bumps for an item and its ancestors whenever
+// their state, children or loading flag changes.
+const FileBrowserTreeNode = React.memo(function FileBrowserTreeNode({
   compact,
   item,
   level,
-  loadingDirectories,
+  loading,
   positionInSet,
   setSize,
+  shared,
   onActionFeedback,
   onDeleteRequest,
   onDownload,
@@ -299,9 +315,12 @@ function FileBrowserTreeNode({
   compact: boolean
   item: ItemInstance<FileBrowserItem>
   level: number
-  loadingDirectories: Set<string>
+  loading: boolean
   positionInSet: number
+  /** Only compared by React.memo; bumping it is what re-renders the node. */
+  revision: number
   setSize: number
+  shared: React.RefObject<FileBrowserTreeShared>
   onFolderExpand?: (path: string) => void
   rootIcon?: React.ReactNode
   rootMetadata?: React.ReactNode
@@ -311,7 +330,7 @@ function FileBrowserTreeNode({
   const isFolder = item.isFolder()
   const children = isFolder ? item.getChildren() : []
   const expanded = item.isExpanded()
-  const loading = isFolder && loadingDirectories.has(data.path)
+  const { loadingDirectories, revisions } = shared.current
   // Wait for the first directory listing so the panel measures its real height.
   const panelOpen = expanded && (children.length > 0 || !loading)
   const canStick = isFolder && expanded && children.length > 0
@@ -434,22 +453,27 @@ function FileBrowserTreeNode({
       />
       {treeItem}
       <FileBrowserTreePanel open={panelOpen} level={level}>
-        {children.map((child, index) => (
-          <FileBrowserTreeNode
-            key={child.getId()}
-            compact={compact}
-            item={child}
-            level={level + 1}
-            loadingDirectories={loadingDirectories}
-            positionInSet={index + 1}
-            setSize={children.length}
-            onActionFeedback={onActionFeedback}
-            onDeleteRequest={onDeleteRequest}
-            onDownload={onDownload}
-            onUpload={onUpload}
-            onFolderExpand={onFolderExpand}
-          />
-        ))}
+        {children.map((child, index) => {
+          const childId = child.getId()
+          return (
+            <FileBrowserTreeNode
+              key={childId}
+              compact={compact}
+              item={child}
+              level={level + 1}
+              loading={child.isFolder() && loadingDirectories.has(childId)}
+              positionInSet={index + 1}
+              revision={revisions.get(childId)}
+              setSize={children.length}
+              shared={shared}
+              onActionFeedback={onActionFeedback}
+              onDeleteRequest={onDeleteRequest}
+              onDownload={onDownload}
+              onUpload={onUpload}
+              onFolderExpand={onFolderExpand}
+            />
+          )
+        })}
       </FileBrowserTreePanel>
       <span
         ref={stickyEndSentinelRef}
@@ -459,7 +483,7 @@ function FileBrowserTreeNode({
       />
     </Collapsible>
   )
-}
+})
 
 export function FileBrowserTree({
   compact = false,
@@ -544,7 +568,29 @@ export function FileBrowserTree({
     ],
   })
 
-  const expandedKey = tree.getState().expandedItems.join("\n")
+  const treeState = tree.getState()
+  const expandedKey = treeState.expandedItems.join("\n")
+
+  // Revision bookkeeping is derived from the same inputs as this render and
+  // is idempotent per input set, so it runs inline rather than in an effect
+  // that would need a second render to propagate.
+  const revisionsRef = React.useRef<FileTreeRevisions>(null)
+  revisionsRef.current ??= createFileTreeRevisions()
+  const revisions = revisionsRef.current
+  revisions.update({
+    expandedItems: treeState.expandedItems,
+    selectedItems: treeState.selectedItems,
+    focusedItem: treeState.focusedItem,
+    search: treeState.search,
+    loadingDirectories,
+    model,
+    rootPath,
+  })
+  const sharedRef = React.useRef<FileBrowserTreeShared>({
+    loadingDirectories,
+    revisions,
+  })
+  sharedRef.current = { loadingDirectories, revisions }
 
   React.useLayoutEffect(() => {
     tree.rebuildTree()
@@ -632,9 +678,11 @@ export function FileBrowserTree({
             compact={compact}
             item={item}
             level={0}
-            loadingDirectories={loadingDirectories}
+            loading={loadingDirectories.has(item.getId())}
             positionInSet={1}
+            revision={revisions.get(item.getId())}
             setSize={1}
+            shared={sharedRef}
             onActionFeedback={onActionFeedback}
             onDeleteRequest={onDeleteRequest}
             onDownload={onDownload}

@@ -1,5 +1,8 @@
 import {
+  memo,
+  startTransition,
   useCallback,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -25,10 +28,11 @@ import {
   MessageScrollerViewport,
   useMessageScroller,
 } from "@/components/ui/message-scroller"
-import { useChatSession } from "@/features/chat-session"
+import { useActiveSession, useChatSessionActions } from "@/features/chat-session"
+import { checkFileExists } from "@/features/files/file-existence"
 import { sessionDisplayTitle } from "@/features/sidebar/content/session-projects"
 import { useHarness } from "@/features/sidebar/header/harness-context"
-import { formatSessionRelativeTime, useTickingNow } from "@/lib/relative-time"
+import { TickingNowProvider, useTickingNow } from "@/lib/relative-time"
 import { cn } from "@/lib/utils"
 
 import type { AgentThreadMessage } from "../agent-message-data"
@@ -39,11 +43,18 @@ import {
   keepExpandTriggerInPlace,
   releaseThreadFollow,
 } from "../expand-down-anchor"
+import { ForkContext, type ForkAvailability } from "../fork-context"
 import { foldCommandSurfaces } from "../slash-command-envelope"
 import { questionSummaryTransition } from "../question-summary-motion"
 import { AssistantSelectionActionContext, type OnAssistantSelectionAction } from "../selection-actions-context"
+import { collectThreadFilePaths } from "../thread-file-paths"
 import {
   groupThreadTurns,
+  initialRevealWindow,
+  markRevealPrepared,
+  nextRevealWindow,
+  revealNextBatch,
+  reuseThreadTurns,
   turnStickyParts,
   type ThreadTurn,
 } from "../thread-turns"
@@ -56,6 +67,10 @@ import { WorkingStatusLine } from "./working-status-line"
 const MotionScrollerViewport = motion.create(MessageScrollerViewport)
 const MotionScrollerItem = motion.create(MessageScrollerItem)
 
+// Upper bound on holding a transcript for its file-existence batch; a slow
+// server degrades to the per-reference settling instead of a blank thread.
+const FILE_PREFETCH_TIMEOUT_MS = 400
+
 export function AgentMessageThread({
   messages,
   onSelectionAction,
@@ -63,22 +78,21 @@ export function AgentMessageThread({
   messages: AgentThreadMessage[]
   onSelectionAction?: OnAssistantSelectionAction
 }) {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const { runHarnessId } = useHarness()
-  const {
-    activeSession,
-    canFork,
-    forkFrom,
-    forking,
-    runSessionId,
-  } = useChatSession()
+  const { activeSession, canFork, forking, runCwd, runSessionId } = useActiveSession()
+  const { forkFrom } = useChatSessionActions()
   const now = useTickingNow()
   const [followPaused, setFollowPaused] = useState(false)
   const reduceMotion = Boolean(useReducedMotionConfig())
   const [layoutTransition, setLayoutTransition] = useState(() => questionSummaryTransition(true, false))
+  // MotionConfig re-renders every motion element and useReducedMotion caller
+  // below it when its value changes, so only rebuild it when the inputs do.
+  const motionTransition = useMemo(
+    () => ({ layout: reduceMotion ? questionSummaryTransition(true, true) : layoutTransition }),
+    [layoutTransition, reduceMotion]
+  )
   const untitled = t("sidebar.projects.untitledSession")
-  const locale = i18n.resolvedLanguage ?? i18n.language
-  const justNow = t("agentMessage.justNow")
   const forkDisabledReason = canFork
     ? undefined
     : runHarnessId !== "claude"
@@ -95,55 +109,107 @@ export function AgentMessageThread({
     () => foldCommandSurfaces(messages),
     [messages]
   )
-  const turns = useMemo(
-    () => groupThreadTurns(visibleMessages),
-    [visibleMessages]
+  // Keep turn objects stable across streaming updates so memoized turns skip.
+  const previousTurns = useRef<ThreadTurn[]>([])
+  const turns = useMemo(() => {
+    const next = reuseThreadTurns(
+      previousTurns.current,
+      groupThreadTurns(visibleMessages)
+    )
+    previousTurns.current = next
+    return next
+  }, [visibleMessages])
+
+  // Long transcripts mount in slices; see thread-turns.ts. The window is
+  // derived during render so a bulk arrival and its first slice commit together.
+  const [reveal, setReveal] = useState(() => initialRevealWindow(turns))
+  const revealWindow = nextRevealWindow(reveal, turns)
+  if (revealWindow !== reveal) {
+    setReveal(revealWindow)
+  }
+  const revealFrom = revealWindow.from
+  const preparing = revealWindow.preparing
+  // A freshly arrived transcript first resolves its file references in one
+  // batch; otherwise each slice would mount as pending text and reflow when
+  // the answers land, nudging the pinned viewport several times.
+  useEffect(() => {
+    if (!preparing) {
+      return
+    }
+    let cancelled = false
+    const paths = collectThreadFilePaths(visibleMessages, runCwd)
+    const timeout = new Promise<void>((resolve) => {
+      setTimeout(resolve, FILE_PREFETCH_TIMEOUT_MS)
+    })
+    void Promise.race([Promise.all(paths.map((path) => checkFileExists(path))), timeout]).then(() => {
+      if (!cancelled) setReveal(markRevealPrepared)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [preparing, runCwd, visibleMessages])
+  useEffect(() => {
+    if (preparing || revealFrom === 0) {
+      return
+    }
+    // Let the current slice paint, then build the next one as a transition so
+    // React can yield while rendering the older turns.
+    const frame = requestAnimationFrame(() => {
+      startTransition(() => setReveal(revealNextBatch))
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [preparing, revealFrom])
+
+  // Fork reads the current transcript through a ref so the callback, and with
+  // it every message's props, stays stable while messages stream in.
+  const forkContext = useRef({ messages, stem })
+  useLayoutEffect(() => {
+    forkContext.current = { messages, stem }
+  })
+  const forkFromMessage = useCallback(
+    (message: AgentThreadMessage) => {
+      void forkFrom({ message, ...forkContext.current })
+    },
+    [forkFrom]
+  )
+  const forkAvailability = useMemo<ForkAvailability>(
+    () => ({
+      forkFrom: canFork ? forkFromMessage : undefined,
+      disabledReason: forkDisabledReason,
+    }),
+    [canFork, forkDisabledReason, forkFromMessage]
   )
 
-  const renderMessage = (
-    message: AgentThreadMessage,
-    hideProcessHeader = false
-  ) => {
-    const item = (
-      <AgentMessageItem
-        key={message.id}
-        message={message}
-        hideProcessHeader={hideProcessHeader}
-        relativeTime={formatSessionRelativeTime(
-          Date.parse(message.createdAt),
-          locale,
-          justNow,
-          now
-        )}
-        onFork={
-          canFork
-            ? () => {
-                void forkFrom({ message, messages, stem })
-              }
-            : undefined
-        }
-        forkDisabledReason={forkDisabledReason}
-      />
-    )
-    return message.role === "user" ? item : (
-      <motion.div
-        key={message.id}
-        layout="position"
-        layoutDependency={false}
-        className="min-w-0"
-      >
-        {item}
-      </motion.div>
-    )
-  }
+  const renderMessage = useCallback(
+    (message: AgentThreadMessage, hideProcessHeader = false) => {
+      const item = (
+        <AgentMessageItem
+          key={message.id}
+          message={message}
+          hideProcessHeader={hideProcessHeader}
+        />
+      )
+      return message.role === "user" ? item : (
+        <motion.div
+          key={message.id}
+          layout="position"
+          layoutDependency={false}
+          className="min-w-0"
+        >
+          {item}
+        </motion.div>
+      )
+    },
+    []
+  )
 
   return (
     <AssistantSelectionActionContext.Provider value={onSelectionAction ?? null}>
+    <ForkContext.Provider value={forkAvailability}>
+    <TickingNowProvider value={now}>
     <MessageScrollerProvider autoScroll={!followPaused}>
       <MessageScroller>
-        <MotionConfig
-          transition={{ layout: reduceMotion ? questionSummaryTransition(true, true) : layoutTransition }}
-        >
+        <MotionConfig transition={motionTransition}>
           <LayoutGroup inherit={false}>
             <MotionScrollerViewport layoutScroll>
               <MessageScrollerContent
@@ -160,21 +226,23 @@ export function AgentMessageThread({
               >
                 {/* Fixed layout dependencies keep streaming updates immediate;
                     the disclosure's LayoutGroup coordinates position changes. */}
-                {turns.map((turn, index) => (
-                  <ThreadTurnItem
-                    key={turn.id}
-                    isLast={index === turns.length - 1}
-                    renderMessage={renderMessage}
-                    turn={turn}
-                  />
-                ))}
+                {turns.map((turn, index) =>
+                  preparing || index < revealFrom ? null : (
+                    <ThreadTurnItem
+                      key={turn.id}
+                      isLast={index === turns.length - 1}
+                      renderMessage={renderMessage}
+                      turn={turn}
+                    />
+                  )
+                )}
                 <ThreadEndSpacer />
               </MessageScrollerContent>
             </MotionScrollerViewport>
           </LayoutGroup>
         </MotionConfig>
         <KeepExpandAnchor onFollowPausedChange={setFollowPaused} />
-        <PinLatestAtCenter messages={messages} />
+        <PinLatestAtCenter messages={messages} mounted={!preparing} />
         <div className="pointer-events-none absolute inset-x-0 bottom-2 z-20 flex justify-center">
           <div className="pointer-events-auto flex items-center gap-2">
             <TaskPlanPopover messages={messages} />
@@ -187,11 +255,13 @@ export function AgentMessageThread({
       </MessageScroller>
       {onSelectionAction ? <AssistantSelectionActions onAction={onSelectionAction} /> : null}
     </MessageScrollerProvider>
+    </TickingNowProvider>
+    </ForkContext.Provider>
     </AssistantSelectionActionContext.Provider>
   )
 }
 
-function ThreadTurnItem({
+const ThreadTurnItem = memo(function ThreadTurnItem({
   isLast,
   renderMessage,
   turn,
@@ -208,10 +278,15 @@ function ThreadTurnItem({
   const userRef = useRef<HTMLDivElement>(null)
   const [userHeight, setUserHeight] = useState(0)
   const [workingStuck, setWorkingStuck] = useState(false)
+  const hasWorking = working !== null
 
+  // The user bar height only positions the working line below it, so measure
+  // only while a reply is streaming. Reading it for every historical turn
+  // forced layout of each content-visibility:auto item and queued a second
+  // render per turn when a long transcript mounted.
   useLayoutEffect(() => {
     const userBar = userRef.current
-    if (!userBar) {
+    if (!userBar || !hasWorking) {
       setUserHeight(0)
       return
     }
@@ -225,7 +300,7 @@ function ThreadTurnItem({
     const observer = new ResizeObserver(syncHeight)
     observer.observe(userBar)
     return () => observer.disconnect()
-  }, [user?.id])
+  }, [hasWorking, user?.id])
 
   useLayoutEffect(() => {
     if (working === null) {
@@ -268,7 +343,7 @@ function ThreadTurnItem({
       )}
     </MotionScrollerItem>
   )
-}
+})
 
 function ThreadEndSpacer() {
   const spacerRef = useRef<HTMLDivElement>(null)
@@ -386,8 +461,11 @@ function isScrolledToEnd(viewport: HTMLElement) {
 
 function PinLatestAtCenter({
   messages,
+  mounted,
 }: {
   messages: AgentThreadMessage[]
+  /** Turns mount one commit after the messages arrive; re-pin on that commit. */
+  mounted: boolean
 }) {
   const { scrollToEnd } = useMessageScroller()
   const pinnedRef = useRef(true)
@@ -412,7 +490,7 @@ function PinLatestAtCenter({
 
   useLayoutEffect(() => {
     followLatest()
-  }, [followLatest, messages])
+  }, [followLatest, messages, mounted])
 
   useLayoutEffect(() => {
     const viewport = document.querySelector<HTMLElement>(

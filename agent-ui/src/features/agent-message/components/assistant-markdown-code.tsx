@@ -7,7 +7,7 @@ import {
 } from "react"
 
 import { StreamdownMarkdownCode } from "@/components/ai-elements/streamdown-markdown-code"
-import { useChatSession } from "@/features/chat-session"
+import { useActiveSession } from "@/features/chat-session"
 import { fileNameFromPath, looksLikeFilePath, resolveAgainstCwd } from "@/lib/file-path"
 import { cn } from "@/lib/utils"
 
@@ -45,7 +45,7 @@ export function AssistantMarkdownCode({
   ...props
 }: AssistantMarkdownCodeProps) {
   const isBlock = "data-block" in props
-  const { runCwd } = useChatSession()
+  const { runCwd } = useActiveSession()
 
   if (!isBlock) {
     const text = collectText(children).trim()

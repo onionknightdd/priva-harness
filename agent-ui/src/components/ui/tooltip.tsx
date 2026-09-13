@@ -1,11 +1,27 @@
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
-import type { ReactElement, ReactNode } from "react"
+import { useRender } from "@base-ui/react/use-render"
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useLayoutEffect,
+  useRef,
+  type ReactElement,
+  type ReactNode,
+  type RefObject,
+} from "react"
 
+import { PopupsArmedContext } from "@/components/ui/popups-armed-context"
 import { tooltipMotion } from "@/lib/popup-motion"
 import { cn } from "@/lib/utils"
 
 const TOOLTIP_DELAY = 1000
 const TOOLTIP_RESET_TIMEOUT = 400
+
+// Inside an unarmed PopupsArmedContext subtree the Base UI root and content
+// stay unmounted and the trigger renders its element alone. Arming remounts
+// the trigger, so the root remembers whether it held focus and restores it.
+const HeldFocusContext = createContext<RefObject<boolean> | null>(null)
 
 // One delay group spans the app: wait on first hover, skip the delay between
 // hints, and reset after the pointer has left all hints for 400ms.
@@ -21,18 +37,78 @@ function TooltipProvider(props: Omit<TooltipPrimitive.Provider.Props, "delay" | 
 }
 
 function Tooltip({ ...props }: TooltipPrimitive.Root.Props) {
-  return <TooltipPrimitive.Root data-slot="tooltip" {...props} />
+  const armed = useContext(PopupsArmedContext)
+  const heldFocus = useRef(false)
+  // Payload render functions need the root; only plain children can defer.
+  const plainChildren = typeof props.children === "function" ? null : props.children
+  return (
+    <HeldFocusContext.Provider value={heldFocus}>
+      {!armed && plainChildren !== null ? (
+        plainChildren
+      ) : (
+        <TooltipPrimitive.Root data-slot="tooltip" {...props} />
+      )}
+    </HeldFocusContext.Provider>
+  )
 }
 
 function TooltipTrigger(props: Omit<TooltipPrimitive.Trigger.Props, "delay">) {
-  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} delay={TOOLTIP_DELAY} />
+  return <DeferrableTrigger data-slot="tooltip-trigger" {...props} />
+}
+
+function DeferrableTrigger(props: Omit<TooltipPrimitive.Trigger.Props, "delay">) {
+  const armed = useContext(PopupsArmedContext)
+  return armed ? <ArmedTrigger {...props} /> : <PlainTrigger {...props} />
+}
+
+function ArmedTrigger(props: Omit<TooltipPrimitive.Trigger.Props, "delay">) {
+  const heldFocus = useContext(HeldFocusContext)
+  const element = useRef<HTMLElement | null>(null)
+  const setElement = useCallback((node: HTMLElement | null) => {
+    element.current = node
+  }, [])
+  useLayoutEffect(() => {
+    if (heldFocus?.current) {
+      heldFocus.current = false
+      element.current?.focus()
+    }
+  }, [heldFocus])
+  return <TooltipPrimitive.Trigger ref={setElement} {...props} delay={TOOLTIP_DELAY} />
+}
+
+function PlainTrigger({
+  render,
+  className,
+  disabled: _disabled,
+  closeDelay: _closeDelay,
+  closeOnClick: _closeOnClick,
+  handle: _handle,
+  payload: _payload,
+  ...props
+}: Omit<TooltipPrimitive.Trigger.Props, "delay">) {
+  const heldFocus = useContext(HeldFocusContext)
+  return useRender({
+    render: render as useRender.RenderProp<TooltipPrimitive.Trigger.State> | undefined,
+    state: { open: false } satisfies TooltipPrimitive.Trigger.State,
+    defaultTagName: "button",
+    props: {
+      ...props,
+      className,
+      onFocus: () => {
+        if (heldFocus) heldFocus.current = true
+      },
+      onBlur: () => {
+        if (heldFocus) heldFocus.current = false
+      },
+    },
+  })
 }
 
 function TooltipHint({ content, children }: { content?: ReactNode; children: ReactElement }) {
   // Preserve the child's data-slot when composing buttons, tabs, and menus.
   return (
     <Tooltip disabled={content == null || content === false || content === ""}>
-      <TooltipPrimitive.Trigger render={children} delay={TOOLTIP_DELAY} />
+      <DeferrableTrigger render={children} />
       <TooltipContent className="whitespace-pre-line wrap-anywhere">{content}</TooltipContent>
     </Tooltip>
   )
@@ -53,6 +129,8 @@ function TooltipContent({
     TooltipPrimitive.Positioner.Props,
     "align" | "alignOffset" | "anchor" | "side" | "sideOffset"
   > & { hideArrow?: boolean }) {
+  const armed = useContext(PopupsArmedContext)
+  if (!armed) return null
   return (
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Positioner

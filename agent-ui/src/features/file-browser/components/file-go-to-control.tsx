@@ -23,7 +23,9 @@ const goToTransition: Transition = {
   mass: 0.75,
 }
 
-export function FileGoToControl({
+// Memoized so that breadcrumb updates in the address bar do not re-render the
+// `layout` / `layoutId` elements here; each such render re-measures the page.
+export const FileGoToControl = React.memo(function FileGoToControl({
   onAnnounce,
   onGoTo,
 }: {
@@ -208,4 +210,4 @@ export function FileGoToControl({
       )}
     </AnimatePresence>
   )
-}
+})

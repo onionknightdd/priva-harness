@@ -25,6 +25,12 @@ export interface UserFileSystem {
   deletePath(path: string): Promise<DeletedUserPath>
   openDownload(path: string): Promise<UserFileDownload>
   previewFile(path: string): Promise<UserFilePreview>
+  /**
+   * Whether each path can be previewed as a file. Mirrors `previewFile`
+   * without reading content: unreadable files still count as existing so the
+   * UI links them and surfaces the access error on open.
+   */
+  filesExist(paths: readonly string[]): Promise<Record<string, boolean>>
   inspectAttachment(path: string): Promise<UserAttachment>
   beginUpload(fileName: string): Promise<PendingUserFileUpload>
 }

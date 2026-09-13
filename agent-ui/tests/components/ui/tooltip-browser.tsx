@@ -1,9 +1,10 @@
-import { act, useRef } from "react"
+import { act, useRef, useState } from "react"
 import { createRoot } from "react-dom/client"
 import i18next from "i18next"
 import { I18nextProvider, initReactI18next } from "react-i18next"
 
 import { Button } from "../../../src/components/ui/button"
+import { PopupsArmedContext } from "../../../src/components/ui/popups-armed-context"
 import { Tooltip, TooltipContent, TooltipHint, TooltipProvider, TooltipTrigger } from "../../../src/components/ui/tooltip"
 import { Popover, PopoverContent, PopoverTrigger } from "../../../src/components/ui/popover"
 import { ComposerContextRing } from "../../../src/features/agent-message/components/composer-context-ring"
@@ -17,6 +18,24 @@ document.documentElement.classList.toggle("dark", new URLSearchParams(location.s
 const i18n = i18next.createInstance()
 await i18n.use(initReactI18next).init({ lng: "en", resources: { en: { translation: en } } })
 let clicks = 0
+let armDeferred: (armed: boolean) => void = () => {}
+
+// Mirrors a transcript message: tooltip roots stay unmounted until armed.
+function DeferredFixtures() {
+  const [armed, setArmed] = useState(false)
+  armDeferred = setArmed
+  return (
+    <PopupsArmedContext.Provider value={armed}>
+      <div id="deferred" className="flex items-center gap-4">
+        <TooltipHint content="Deferred hint"><Button id="deferred-hint" onClick={() => { clicks += 1 }}>Deferred control</Button></TooltipHint>
+        <Tooltip>
+          <TooltipTrigger render={<Button id="deferred-explicit">Deferred explicit</Button>} />
+          <TooltipContent>Deferred explicit hint</TooltipContent>
+        </Tooltip>
+      </div>
+    </PopupsArmedContext.Provider>
+  )
+}
 
 export function Fixtures() {
   const anchorRef = useRef<HTMLDivElement>(null)
@@ -36,6 +55,7 @@ export function Fixtures() {
       </Popover>
       <TooltipHint content={undefined}><Button id="empty">No hint</Button></TooltipHint>
       <TooltipHint content="Parent hint"><div id="parent" className="p-4">Parent <TooltipHint content="Child hint"><Button id="child">Child control</Button></TooltipHint></div></TooltipHint>
+      <DeferredFixtures />
     </div>
   </TooltipProvider></I18nextProvider>
 }
@@ -135,6 +155,28 @@ async function runChecks() {
     await wait(1100)
     check("empty hints stay disabled", !popup())
     await hover(null)
+
+    const deferred = target("deferred")
+    check("deferred hints render their element without a tooltip root", deferred.querySelectorAll("[data-base-ui-tooltip-trigger], [data-open]").length === 0 && target("deferred-hint").getAttribute("data-slot") === "button" && target("deferred-explicit").getAttribute("data-slot") === "tooltip-trigger")
+    await hover(target("deferred-hint"))
+    await wait(1100)
+    check("deferred hints stay silent before arming", !popup())
+    await act(async () => { target("deferred-hint").click() })
+    check("deferred hint wrapping preserves button clicks", clicks === 2)
+    // The embedded browser may lack window focus, so emit the focus event React
+    // would otherwise receive from the real focus change.
+    await act(async () => { target("deferred-explicit").focus(); target("deferred-explicit").dispatchEvent(new FocusEvent("focusin", { bubbles: true })) })
+    await act(async () => { armDeferred(true) })
+    check("arming keeps focus on the focused deferred trigger", document.activeElement === target("deferred-explicit") && target("deferred-explicit").hasAttribute("data-base-ui-tooltip-trigger"))
+    await hover(null)
+    await wait(450)
+    await hover(target("deferred-hint"))
+    await until(() => popup()?.textContent === "Deferred hint", 1500)
+    check("armed deferred hints open on hover", true)
+    await instantHint(target("deferred-explicit"), "Deferred explicit hint")
+    await hover(null)
+    await until(() => !popup())
+    await wait(450)
     await runFilePathLinkChecks(check)
     await act(async () => { target("popover").click() })
     await until(() => Boolean(document.querySelector('[data-slot="popover-content"][data-open]')))

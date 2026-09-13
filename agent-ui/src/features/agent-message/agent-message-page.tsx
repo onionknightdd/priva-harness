@@ -1,6 +1,6 @@
 import { agentToolsForThread } from "./agent-tool-data"
 import { useEffect } from "react"
-import { useChatSession } from "@/features/chat-session"
+import { useActiveSession } from "@/features/chat-session"
 import { useHarness } from "@/features/sidebar/header/harness-context"
 import { useWorkspaceWorkflow } from "@/features/workspace/use-workspace-workflow"
 import { useAgentMessage } from "./use-agent-message"
@@ -9,7 +9,7 @@ import { AgentMessage } from "./components/agent-message"
 export function AgentMessagePage() {
   const agentMessage = useAgentMessage()
   const { syncWorkflows, syncAgents } = useWorkspaceWorkflow()
-  const { activeSession, runSessionId } = useChatSession()
+  const { activeSession, runSessionId } = useActiveSession()
   const { runHarnessId } = useHarness()
   const sourceKey = `${runHarnessId}:${activeSession?.sessionId ?? runSessionId}`
   useEffect(() => {

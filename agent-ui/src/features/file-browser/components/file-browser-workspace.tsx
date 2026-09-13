@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils"
 export function FileBrowserWorkspace({
   compact = false,
   filePreview,
+  fitAnimating = false,
   onMinimumWidthChange,
   onResizeTree,
   onUserResizeTree,
@@ -30,6 +31,8 @@ export function FileBrowserWorkspace({
 }: {
   compact?: boolean
   filePreview: React.ReactNode
+  /** While the tree fits itself to long names, per-frame toolbar resizes are ignored. */
+  fitAnimating?: boolean
   onMinimumWidthChange?: (width: number) => void
   onResizeTree: (sizePercentage: number) => void
   onUserResizeTree: () => void
@@ -67,6 +70,13 @@ export function FileBrowserWorkspace({
     )
 
     if (!controls || !toolbar) {
+      return
+    }
+
+    // The fit animation shrinks the preview toolbar every frame; measuring
+    // then forces layout per frame and feeds two state updates. Skip until the
+    // animation ends, when this effect re-runs and measures the final size.
+    if (fitAnimating) {
       return
     }
 
@@ -109,6 +119,7 @@ export function FileBrowserWorkspace({
     }
   }, [
     compact,
+    fitAnimating,
     isMobile,
     onMinimumWidthChange,
     panelTransitioning,

@@ -3,14 +3,14 @@ import { useTranslation } from "react-i18next"
 import { SquareIcon, FileTextIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { useChatSession } from "@/features/chat-session"
+import { useActiveSession } from "@/features/chat-session"
 import { useHarness } from "@/features/sidebar/header/harness-context"
 import { useOptionalWorkspaceFiles } from "@/features/workspace/workspace-files-context"
 import { useWorkspaceWorkflow } from "@/features/workspace/use-workspace-workflow"
 import { stopBackgroundTask, taskIsActive, type BackgroundTask } from "../background-task-store"
 
 export function BackgroundTaskCard({ task }: { task: BackgroundTask }) {
-  const { runSessionId } = useChatSession()
+  const { runSessionId } = useActiveSession()
   const { runHarnessId } = useHarness()
   const files = useOptionalWorkspaceFiles()
   const { openTask } = useWorkspaceWorkflow()
@@ -24,7 +24,7 @@ export function BackgroundTaskCard({ task }: { task: BackgroundTask }) {
 
 export function BackgroundTaskStopButton({ task }: { task: BackgroundTask }) {
   const { t } = useTranslation()
-  const { runSessionId } = useChatSession()
+  const { runSessionId } = useActiveSession()
   const { runHarnessId } = useHarness()
   if (!taskIsActive(task)) return null
   return <Button type="button" variant="ghost" size="icon-sm" disabled={task.stopRequested}

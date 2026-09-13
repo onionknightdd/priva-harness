@@ -34,6 +34,22 @@ export function fileTreeTargetPanelWidth({
 
 export function createFileTreeNameMeasurer(ownerDocument: Document) {
   const widths = new Map<string, number>()
+  let host: HTMLElement | null = null
+
+  // Probes live in one persistent host with `contain: strict`, so inserting
+  // and removing them never dirties layout outside the host. The panel size
+  // read that follows a measurement then costs no second full-page layout.
+  function getHost() {
+    if (!host) {
+      host = ownerDocument.createElement("div")
+      host.ariaHidden = "true"
+      host.style.cssText =
+        "position:absolute;left:-9999px;top:0;width:0;height:0;overflow:hidden;contain:strict;visibility:hidden;pointer-events:none"
+      ownerDocument.body.appendChild(host)
+    }
+
+    return host
+  }
 
   function measure(slots: Iterable<HTMLElement>) {
     // Read the live rows before inserting probes. Interleaving a text write
@@ -70,7 +86,7 @@ export function createFileTreeNameMeasurer(ownerDocument: Document) {
     }
 
     if (probes.size > 0) {
-      ownerDocument.body.appendChild(fragment)
+      getHost().appendChild(fragment)
       try {
         // Keep the browser's original text metrics, with one write phase and
         // one read phase for all uncached names, including duplicate names.
@@ -92,5 +108,11 @@ export function createFileTreeNameMeasurer(ownerDocument: Document) {
     )
   }
 
-  return { measure, clearCache: () => widths.clear() }
+  function dispose() {
+    widths.clear()
+    host?.remove()
+    host = null
+  }
+
+  return { measure, clearCache: () => widths.clear(), dispose }
 }

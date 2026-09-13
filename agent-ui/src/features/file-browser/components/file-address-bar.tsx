@@ -1,7 +1,6 @@
 import * as React from "react"
 import gsap from "gsap"
 import { FolderPlusIcon, FoldersIcon, UploadIcon } from "lucide-react"
-import { motion, useReducedMotion, type Transition } from "motion/react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button"
@@ -20,13 +19,6 @@ import type {
 
 import { FileGoToControl } from "./file-go-to-control"
 import { FilePathBreadcrumb } from "./file-path-breadcrumb"
-
-const goToTransition: Transition = {
-  type: "spring",
-  stiffness: 420,
-  damping: 34,
-  mass: 0.75,
-}
 
 function animateActionIcon(control: HTMLButtonElement) {
   const icon = control.querySelector("svg")
@@ -76,10 +68,6 @@ export function FileAddressBar({
   const { t } = useTranslation()
   const announcementTimerRef = React.useRef<number | null>(null)
   const [announcement, setAnnouncement] = React.useState("")
-  const shouldReduceMotion = Boolean(useReducedMotion())
-  const transition: Transition = shouldReduceMotion
-    ? { duration: 0 }
-    : goToTransition
   const treeToggleLabel = treeVisible
     ? t("fileBrowser.hideTree")
     : t("fileBrowser.showTree")
@@ -134,11 +122,9 @@ export function FileAddressBar({
         <TooltipContent>{treeToggleLabel}</TooltipContent>
       </Tooltip>
       <div className={cn("relative min-w-0 flex-1", compact ? "h-7" : "h-8")}>
-        <motion.div
-          layout
-          className="absolute inset-0 flex min-w-0 items-center gap-0.5"
-          transition={transition}
-        >
+        {/* Fills its parent, so it has no layout of its own to animate; the
+            go-to control below owns the layout / layoutId animations. */}
+        <div className="absolute inset-0 flex min-w-0 items-center gap-0.5">
           <FilePathBreadcrumb
             breadcrumb={breadcrumb}
             compact={compact}
@@ -202,7 +188,7 @@ export function FileAddressBar({
           )}
 
           <FileGoToControl onAnnounce={announce} onGoTo={onGoTo} />
-        </motion.div>
+        </div>
       </div>
       <p className="sr-only" role="status" aria-live="polite">
         {announcement}

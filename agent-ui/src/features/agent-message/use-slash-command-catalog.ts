@@ -4,12 +4,12 @@ import {
   listSlashCommands,
   type SlashCommand,
 } from "@/lib/api/slash-commands"
-import { useChatSession } from "@/features/chat-session"
+import { useActiveSession } from "@/features/chat-session"
 import { useHarness } from "@/features/sidebar/header/harness-context"
 
 export function useSlashCommandCatalog() {
   const { runHarnessId } = useHarness()
-  const { runCwd } = useChatSession()
+  const { runCwd } = useActiveSession()
   const [commands, setCommands] = React.useState<readonly SlashCommand[]>([])
 
   React.useEffect(() => {

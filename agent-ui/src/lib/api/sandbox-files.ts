@@ -100,6 +100,20 @@ export function previewFile(path: string) {
   return requestJson<FilePreviewResponse>(withPath("/preview", path))
 }
 
+export const FILES_EXIST_MAX_PATHS = 500
+
+/** Which of `paths` can be previewed as files, keyed by the path as sent. */
+export function filesExist(paths: readonly string[]) {
+  return requestJson<{ exists: Record<string, boolean> }>(
+    `${FILE_API_PREFIX}/exists`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paths }),
+    }
+  ).then((response) => response.exists)
+}
+
 export function createDirectory(directory: string, name: string) {
   return requestJson<CreatedDirectory>(`${FILE_API_PREFIX}/mkdir`, {
     method: "POST",

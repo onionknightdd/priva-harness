@@ -2,7 +2,13 @@ import { updateInteractions, type InteractionRequest, type InteractionResponse }
 import * as React from "react"
 import { useTranslation } from "react-i18next"
 import { useAgentPreferences } from "@/features/settings/agent-preferences-context"
-import { useChatSession, useLiveSessions } from "@/features/chat-session"
+import {
+  useActiveSession,
+  useChatSessionActions,
+  useChatThread,
+  useLiveSessions,
+  useSessionList,
+} from "@/features/chat-session"
 import { useHarness } from "@/features/sidebar/header/harness-context"
 import { fetchSessionContextUsage } from "@/lib/api/sandbox-sessions"
 import type { SlashCommand } from "@/lib/api/slash-commands"
@@ -14,13 +20,16 @@ import { connectAgentSession, type AgentSessionConnection, type AgentRunEffort }
 import { bindTaskStop, setBackgroundTasks, updateBackgroundTask } from "./background-task-store"
 import { isCompactCommandUserMessage } from "./slash-command-envelope"
 import { contextUsageFromApi, emptyContextUsage, type ContextUsage } from "./context-usage"
-import { applyThreadStreamFrame, type StreamFrame } from "./run-stream-reducer"
+import { applyThreadStreamFrame, mergeSnapshotMessages, type StreamFrame } from "./run-stream-reducer"
 
 export function useAgentMessage() {
   const { t } = useTranslation()
   const { runHarnessId } = useHarness()
   const { queueBehavior, inputSuggestions, setLastModelReference } = useAgentPreferences()
-  const { threadMessages, messagesStatus, transcriptEpoch, runCwd, runSessionId, bindRunSession, refresh } = useChatSession()
+  const { threadMessages, messagesStatus, transcriptEpoch } = useChatThread()
+  const { runCwd, runSessionId } = useActiveSession()
+  const { bindRunSession } = useChatSessionActions()
+  const { refresh } = useSessionList()
   const { beginLiveSession, endLiveSession } = useLiveSessions()
   const composerAttachments = useComposerAttachments(runCwd, runHarnessId, runSessionId)
   const { attachments, clear: clearAttachments } = composerAttachments
@@ -61,7 +70,7 @@ export function useAgentMessage() {
     if (frame.type === "session.snapshot") {
       hasSnapshotRef.current = true
       setMessages((current) => {
-        const snapshot = frame.messages ?? []
+        const snapshot = mergeSnapshotMessages(current, frame.messages ?? [])
         const ids = new Set(snapshot.map((message) => message.id))
         return [...snapshot, ...current.filter((message) => !ids.has(message.id) &&
           (pendingIdsRef.current.has(message.id) || pendingIdsRef.current.has(message.id.replace(/:user$/, ""))))]
