@@ -38,7 +38,7 @@ export function ImageEditToolItem({ block, cwd }: { block: ImageToolBlock; cwd: 
         { label: t("agentMessage.imageTools.before"), path: before },
         { label: t("agentMessage.imageTools.after"), path: status === "success" ? after : "" },
       ].map(({ label, path }, index) => (
-        <div key={index} className={`flex min-w-0 items-baseline gap-1.5 ${visibleMode === "slide" && index === 1 ? "justify-end" : ""}`}>
+        <div key={index} className="flex min-w-0 items-baseline gap-1.5">
           <span className="shrink-0">{label}</span>
           {path ? <FilePathLink path={path} label={fileNameFromPath(path)} tooltip={path} marquee recheckKey={block.tool?.status} /> : null}
         </div>
@@ -97,7 +97,7 @@ export function ImageEditToolItem({ block, cwd }: { block: ImageToolBlock; cwd: 
         transition={{ duration: 0.16, ease: EASE_OUT }}
         className="min-w-0 space-y-1.5"
       >
-        {visibleMode === "slide" ? <ImageToolComparison before={before} after={after}>{imageLabels}</ImageToolComparison> : <>
+        {visibleMode === "slide" ? <ImageToolComparison before={before} after={after} recheckKey={block.tool?.status} /> : <>
           {imageLabels}
           <div className="grid min-w-0 grid-cols-2 gap-2">
             {before ? <ImageToolPreview path={before} alt={`${t("agentMessage.imageTools.before")} · ${fileNameFromPath(before)}`} className="h-48 sm:h-64" /> : (

@@ -270,6 +270,7 @@ export const en = {
       emptyOutput: "No content was returned.",
       before: "Original",
       after: "Result",
+      edited: "Edited",
       missingSource: "No source image path was recorded.",
       comparisonMode: "Image comparison mode",
       sideBySide: "Side by side",

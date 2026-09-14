@@ -270,6 +270,7 @@ export const zhCN = {
       emptyOutput: "未返回内容。",
       before: "原图",
       after: "结果",
+      edited: "修改后",
       missingSource: "未记录原图路径。",
       comparisonMode: "图片对比模式",
       sideBySide: "并排",

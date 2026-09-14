@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { registerHooks } from "node:module"
 import { after, test } from "node:test"
 import { JSDOM } from "jsdom"
+import { compile } from "tailwindcss"
 
 import type { ImageToolBlock } from "../../../src/features/agent-message/image-tool-data.ts"
 
@@ -18,6 +19,9 @@ Object.assign(globalThis, {
 dom.window.matchMedia = (query) => ({ matches: true, media: query, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => true, onchange: null })
 dom.window.HTMLElement.prototype.getAnimations = () => []
 dom.window.HTMLElement.prototype.scrollIntoView = () => {}
+dom.window.HTMLElement.prototype.setPointerCapture = () => {}
+dom.window.HTMLElement.prototype.releasePointerCapture = () => {}
+dom.window.HTMLElement.prototype.hasPointerCapture = () => false
 // Component behavior is tested in Node; CSS layout is covered by the browser fixture.
 const hooks = registerHooks({
   load: (url, context, nextLoad) => {
@@ -96,6 +100,18 @@ async function key(element: HTMLElement, key: string, shiftKey = false) {
   await act(async () => element.dispatchEvent(new KeyboardEvent("keydown", { key, shiftKey, bubbles: true, cancelable: true })))
 }
 
+const comparisonLabels = (host: HTMLElement) => [...host.querySelectorAll<HTMLElement>('[data-slot="image-comparison-file-label"]')]
+function assertMajorityLabel(host: HTMLElement, side: "before" | "after" | null) {
+  const labels = comparisonLabels(host)
+  assert.equal(labels.length, 2)
+  assert.deepEqual(labels.filter(label => label.getAttribute("aria-hidden") === "false").map(label => label.dataset.side), side ? [side] : [])
+  for (const label of labels) {
+    const visible = label.dataset.side === side
+    assert.equal(label.style.opacity, visible ? "1" : "0")
+    assert.equal(label.hasAttribute("inert"), !visible)
+  }
+}
+
 test("Edit shows filename links above the images and opens the correct source and result in Workspace", async () => {
   const view = await mount()
   try {
@@ -131,25 +147,79 @@ test("Slide keeps both full images, supports keyboard endpoints, and preserves s
     assert.equal(range.disabled, false)
     assert.equal(range.value, "50")
     assert.equal(range.getAttribute("aria-label"), "Original and result divider")
-    await click(button(view.host, "portrait.png"))
-    assert.equal(view.host.querySelector("output")!.textContent, "/workspace/references/portrait.png")
-    assert.equal(range.value, "50")
+    assertMajorityLabel(view.host, null)
     assert.deepEqual(paths(view.host), ["/workspace/.images/result.png", "/workspace/references/portrait.png"])
     const reveal = view.host.querySelector<HTMLElement>('[data-slot="image-comparison-before"]')!
     assert.match(reveal.style.clipPath, /50%/)
     await key(range, "ArrowRight")
     assert.equal(range.value, "50.1")
     assert.match(reveal.style.clipPath, /49.9%/)
+    assertMajorityLabel(view.host, "before")
+    await click(button(view.host, "portrait.png"))
+    assert.equal(view.host.querySelector("output")!.textContent, "/workspace/references/portrait.png")
+    assert.equal(range.value, "50.1")
+    assert.ok(comparisonLabels(view.host).every(label => label.style.transitionDuration === "0ms"))
     await key(range, "ArrowRight", true)
     assert.equal(range.value, "60.1")
     await key(range, "End")
     assert.equal(range.value, "100")
+    assertMajorityLabel(view.host, "before")
     await key(range, "Home")
     assert.equal(range.value, "0")
     assert.match(reveal.style.clipPath, /100%/)
+    assertMajorityLabel(view.host, "after")
+    assert.ok(comparisonLabels(view.host).find(label => label.dataset.side === "after")!.textContent!.startsWith("Edited"))
+    await click(button(view.host, "result.png"))
+    assert.equal(view.host.querySelector("output")!.textContent, "/workspace/.images/result.png")
+    assert.equal(range.value, "0")
     await click(button(view.host, i18n.t("agentMessage.imageTools.sideBySide")))
     assert.deepEqual(paths(view.host), ["/workspace/references/portrait.png", "/workspace/.images/result.png"])
   } finally { await view.close() }
+})
+
+test("comparison labels follow fractional pointer positions, switch at half, and fade only opacity", async () => {
+  const view = await mount()
+  const style = document.head.appendChild(document.createElement("style"))
+  try {
+    await click(button(view.host, i18n.t("agentMessage.imageTools.compare")))
+    await imagesLoad(view.host)
+    const range = view.host.querySelector<HTMLInputElement>('input[type="range"]')!
+    const control = view.host.querySelector('[data-slot="image-comparison-before"]')!.parentElement!
+    control.getBoundingClientRect = () => new DOMRect(0, 0, 1000, 256)
+    const compiler = await compile("@tailwind utilities;")
+    style.textContent = compiler.build([...new Set(comparisonLabels(view.host).flatMap(label => [...label.classList]))])
+    for (const label of comparisonLabels(view.host)) {
+      assert.equal(getComputedStyle(label).transitionProperty, "opacity")
+      assert.equal(getComputedStyle(label).transitionDuration, "160ms")
+    }
+    const pointer = async (type: string, position: number) => {
+      await act(async () => (type === "pointerdown" ? control : document).dispatchEvent(new PointerEvent(type, {
+        clientX: position * 10, clientY: 100, pointerId: 1, pointerType: "mouse", isPrimary: true,
+        button: 0, buttons: type === "pointerup" ? 0 : 1, bubbles: true, cancelable: true,
+      })))
+    }
+    await pointer("pointerdown", 50)
+    try {
+      for (const position of [50.1, 70, 49.9, 30, 50, 100, 0, 75, 25]) {
+        await pointer("pointermove", position)
+        assert.equal(Number(range.value), position)
+        assertMajorityLabel(view.host, position > 50 ? "before" : position < 50 ? "after" : null)
+        for (const label of comparisonLabels(view.host)) {
+          const translation = Number(/translateX\(([-\d.]+)%\)/.exec(label.style.transform)![1])
+          // Each track is half a canvas wide, with its handle-facing edge at
+          // the midpoint before translation. Compare that edge to the thumb.
+          assert.ok(Math.abs(50 + translation / 2 - Number(range.value)) < 0.001)
+          assert.equal(label.style.transitionDuration, "")
+        }
+      }
+    } finally { await pointer("pointerup", 25) }
+    await click(button(view.host, "result.png"))
+    assert.equal(view.host.querySelector("output")!.textContent, "/workspace/.images/result.png")
+    assert.equal(range.value, "25")
+    await click(button(view.host, "Original 2"))
+    assert.equal(view.host.querySelector<HTMLInputElement>('input[type="range"]')!.value, "50")
+    assertMajorityLabel(view.host, null)
+  } finally { style.remove(); await view.close() }
 })
 
 test("running Edit transitions to an open result and preserves source images on errors", async () => {
@@ -196,6 +266,11 @@ test("missing inputs stay usable and the comparison is localized", async () => {
     await view.update(completed)
     await click(button(view.host, i18n.t("agentMessage.imageTools.compare")))
     await imagesLoad(view.host)
-    assert.equal(view.host.querySelector<HTMLInputElement>('input[type="range"]')!.getAttribute("aria-label"), "原图与结果分隔线")
+    const range = view.host.querySelector<HTMLInputElement>('input[type="range"]')!
+    assert.equal(range.getAttribute("aria-label"), "原图与结果分隔线")
+    await key(range, "End")
+    assert.equal(comparisonLabels(view.host).find(label => label.dataset.side === "before")!.textContent, "原图source.png")
+    await key(range, "Home")
+    assert.equal(comparisonLabels(view.host).find(label => label.dataset.side === "after")!.textContent, "修改后result.png")
   } finally { await view.close(); await i18n.changeLanguage("en") }
 })

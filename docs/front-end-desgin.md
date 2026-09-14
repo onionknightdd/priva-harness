@@ -1207,7 +1207,7 @@ AnalyzingImage 通过 `agent-ui/components.json` 的 registry 安装：
 2026-09-14：`image_edit`（含 MCP 别名）接入独立图片编辑卡片，首行直接显示输入
 prompt，随后是「并排 / 对比」切换；默认并排展示原图和结果。模式文案跟随界面语言。
 多张输入图片按工具参数的逗号 / 换行顺序提供原图选择，相对路径根据会话目录解析。
-图片上方的「原图」「结果」后各显示文件名，复用 `FilePathLink`；点击在 Workspace
+并排模式在图片上方的「原图」「结果」后各显示文件名，复用 `FilePathLink`；点击在 Workspace
 打开对应文件，悬停可查看完整路径，长文件名按现有链接方式收缩与悬停滚动。
 结果成功返回后才显示结果文件链接，不再单独展示底部路径行。
 
@@ -1219,8 +1219,25 @@ prompt，随后是「并排 / 对比」切换；默认并排展示原图和结�
   原图 [source.png]      结果 [result.png]
   +--------------------+------------------------+
   | 原图               | 结果                   |
-  | 并排预览 / 对比模式中拖动分隔线             |
+  | 并排预览                                    |
   +--------------------+------------------------+
+```
+
+对比模式只显示占比超过 50% 的一侧标签：「原图 + 文件名」或「修改后 + 文件名」。
+各占一半时两者都隐藏，并保留顶部 20px 行高。标签贴着分隔线放在占比较大的一侧，
+沿手柄同步移动；使用两个固定半宽轨道的 transform，避免拖动时重新排版标题宽度。
+标签仅对 opacity 做 160ms / `EASE_OUT` 明度淡入淡出，快速反向拖动可从当前明度继续
+切换；减少动态效果时缩短至 100ms，键盘调整立即切换。隐藏 / 淡出的链接设为 inert
+并从可访问性树移除，不能继续点击或聚焦。长文件名在轨道内省略，悬停可查看完整路径。
+
+```text
+原图占 70%                  修改后占 70%
+       原图 [source.png]         修改后 [result.png]
++----------------------|---+  +---|----------------------+
+|       原图           |结果|  |原图|       修改后         |
++----------------------|---+  +---|----------------------+
+                       ^          ^
+                    handle      handle
 ```
 
 并排预览复用 `ImageToolPreview`，点击原图或结果均可打开灯箱；对比使用现有
@@ -1773,7 +1790,8 @@ Mermaid 浏览器回归：打开 `/tests/components/ai-elements/mermaid-browser.
 检查窄屏与键盘操作。数据回归包含在 Agent message 的 `*.test.ts` 命令中。
 
 Edit 组件行为也可独立通过 jsdom 验证，包含原图 / 结果文件名链接打开正确的
-Workspace 路径、并排 / 对比的中文标签和键盘操作（从仓库根目录运行）：
+Workspace 路径、并排 / 对比的中文标签、50% 边界、快速正反向拖动时标签与手柄同步、
+明度过渡的 CSS 配置及键盘操作（从仓库根目录运行；不代替真实浏览器的动效观感验收）：
 
 ```sh
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/image-edit-tool-item.test.tsx agent-ui/tests/features/agent-message/image-tool-data.test.ts
