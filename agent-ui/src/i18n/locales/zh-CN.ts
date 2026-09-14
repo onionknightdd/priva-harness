@@ -478,6 +478,7 @@ export const zhCN = {
   },
   sidebar: {
     brand: "Agent Workshop",
+    beta: "(Beta)",
     modes: {
       label: "侧边栏模式",
       agent: "Agent",
@@ -504,6 +505,7 @@ export const zhCN = {
     },
     harness: {
       label: "Harness",
+      poweredBy: "Powered by:",
       select: "选择 Agent Runtime",
       comingSoon: "即将推出",
       pi: {

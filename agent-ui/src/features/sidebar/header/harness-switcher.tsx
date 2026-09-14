@@ -232,10 +232,16 @@ export function HarnessSwitcher() {
                   <BotIcon aria-hidden="true" />
                 </div>
                 <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
-                  <span className="truncate text-lg font-bold">
-                    {t("sidebar.brand")}
+                  <span className="flex min-w-0 items-baseline gap-1.5">
+                    <span className="min-w-0 truncate text-lg font-bold">
+                      {t("sidebar.brand")}
+                    </span>
+                    <span className="shrink-0 text-xs font-normal text-muted-foreground/60">
+                      {t("sidebar.beta")}
+                    </span>
                   </span>
-                  <span className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground">
+                  <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground/60">
+                    <span className="shrink-0">{t("sidebar.harness.poweredBy")}</span>
                     <AnimatePresence initial={false} mode="wait">
                       <motion.span
                         key={activeHarnessId}

@@ -105,6 +105,21 @@ Main sidebar / Workspace sidebar
   -> sidebar-accent: rgb(239, 240, 240)   #EFF0F0
 ```
 
+### 侧栏品牌与 harness 标识
+
+品牌标题右侧显示 `(Beta)`，使用 `text-xs`（12px）、正常字重和
+`text-muted-foreground/60` 三级文本色，与标题基线对齐。
+下方显示 `Powered by: {图标 + harness 名称}`，整行使用三级文本色，字号从
+`text-sm`（14px）降为 `text-xs`（12px）。中英文界面均保留上述英文标识。
+品牌和 harness 名称在空间不足时单行截断；切换 harness 沿用现有图标与名称的
+180ms 淡入 / 位移动效，并尊重减少动态效果设置。
+
+```text
+[品牌图标] Agent Workshop (Beta)    [收起]
+           Powered by: [图标] 名称
+           点击 -> harness 选择菜单
+```
+
 ### 焦点框与用户消息底色
 
 2026-09-10：应用焦点框统一使用 `ring-inset`，包括共享 `focusRing`、基础组件、

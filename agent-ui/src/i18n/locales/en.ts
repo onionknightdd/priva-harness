@@ -479,6 +479,7 @@ export const en = {
   },
   sidebar: {
     brand: "Agent Workshop",
+    beta: "(Beta)",
     modes: {
       label: "Sidebar mode",
       agent: "Agent",
@@ -505,6 +506,7 @@ export const en = {
     },
     harness: {
       label: "Harness",
+      poweredBy: "Powered by:",
       select: "Select agent runtime",
       comingSoon: "Coming soon",
       pi: {
