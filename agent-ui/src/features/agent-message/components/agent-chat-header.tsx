@@ -234,7 +234,7 @@ export function AgentChatHeader() {
               ref={titleRef}
               aria-label={title}
               className={cn(
-                "flex w-[40px] shrink-0 items-center text-sm font-medium",
+                "flex w-[160px] shrink-0 items-center text-sm font-medium",
                 activeSession && "cursor-text"
               )}
               onDoubleClick={() => {
