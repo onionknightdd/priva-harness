@@ -131,8 +131,24 @@ export function AgentChatHeader() {
     : t("agentMessage.testSessionTitle")
   const [editing, setEditing] = React.useState(false)
   const [draft, setDraft] = React.useState(title)
+  const [titleOverflows, setTitleOverflows] = React.useState(false)
+  const titleRef = React.useRef<HTMLHeadingElement>(null)
+  const titleTextRef = React.useRef<HTMLSpanElement>(null)
   const inputRef = React.useRef<HTMLInputElement>(null)
   const skipBlurCommitRef = React.useRef(false)
+
+  React.useLayoutEffect(() => {
+    const heading = titleRef.current
+    const text = titleTextRef.current
+    if (!heading || !text) return
+
+    const measure = () => setTitleOverflows(text.getBoundingClientRect().width > heading.clientWidth)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(heading)
+    observer.observe(text)
+    return () => observer.disconnect()
+  }, [title, editing])
 
   React.useEffect(() => {
     setEditing(false)
@@ -212,11 +228,13 @@ export function AgentChatHeader() {
           />
         </motion.div>
       ) : (
-        <div className="flex min-w-0 items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-1.5">
           <TooltipHint content={title}>
             <h1
+              ref={titleRef}
+              aria-label={title}
               className={cn(
-                "min-w-0 truncate text-sm font-medium",
+                "flex w-[40px] shrink-0 items-center text-sm font-medium",
                 activeSession && "cursor-text"
               )}
               onDoubleClick={() => {
@@ -229,7 +247,10 @@ export function AgentChatHeader() {
                 setEditing(true)
               }}
             >
-              {title}
+              <span className="min-w-0 flex-1 overflow-hidden">
+                <span ref={titleTextRef} className="inline-block whitespace-nowrap">{title}</span>
+              </span>
+              {titleOverflows && <span aria-hidden="true" className="shrink-0">……</span>}
             </h1>
           </TooltipHint>
         </div>
