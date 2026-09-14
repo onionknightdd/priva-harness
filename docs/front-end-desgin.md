@@ -164,7 +164,8 @@ Dark popup menus -> popover -> #353535
 
 2026-09-14：页头会话名称的显示区域固定为 160px，溢出时使用“……”作为后缀，
 短名称保持完整。Tooltip 和可访问名称保留完整标题，双击后仍使用原来的重命名输入框。
-按实际文本宽度检测溢出，名称或字体尺寸变化后重新测量。
+按实际字体宽度测量完整名称与带后缀的候选文本，只在完整字素边界截断；中文、组合字符
+和 emoji 不会显示半截。名称或字体尺寸变化后重新测量，隐藏测量文本不参与布局。
 
 消息底部使用 `FollowLatestMessage` 和 `ThreadEndSpacer`：自动跟随滚动至末尾，末尾
 留白为消息滚动区域高度的 30%。内容足够高时，最新消息容器底边位于该区域约 70% 高度处；
@@ -1570,6 +1571,13 @@ rg -n '@base-ui/react|motion/react|gsap' agent-ui/src
 - 静态分析：`npm run lint`
 - 生产构建：`npm run build`
 - 预览生产构建：`npm run preview`
+
+会话页头截断使用 Node 测试覆盖 160px 边界、后缀占位、不同字符宽度、组合字符与 emoji，
+不启动浏览器：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/fit-session-title.test.ts
+```
 
 资源表单使用 jsdom 和 Node 测试验证分组选择 / 搜索、同名项目和完整路径、全局 / 项目
 提交范围、自定义路径保留、请求头编辑、JSON 往返与测试 / 保存请求、单行分类数量提示、

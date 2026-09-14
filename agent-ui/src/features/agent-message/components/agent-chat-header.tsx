@@ -28,6 +28,8 @@ import { sessionDisplayTitle } from "@/features/sidebar/content/session-projects
 import { writeClipboardText } from "@/lib/clipboard"
 import { cn } from "@/lib/utils"
 
+import { fitSessionTitle } from "../fit-session-title"
+
 const renameTransition = {
   type: "spring" as const,
   stiffness: 420,
@@ -131,18 +133,26 @@ export function AgentChatHeader() {
     : t("agentMessage.testSessionTitle")
   const [editing, setEditing] = React.useState(false)
   const [draft, setDraft] = React.useState(title)
-  const [titleOverflows, setTitleOverflows] = React.useState(false)
+  const [displayTitle, setDisplayTitle] = React.useState(title)
   const titleRef = React.useRef<HTMLHeadingElement>(null)
-  const titleTextRef = React.useRef<HTMLSpanElement>(null)
+  const titleMeasureRef = React.useRef<HTMLSpanElement>(null)
   const inputRef = React.useRef<HTMLInputElement>(null)
   const skipBlurCommitRef = React.useRef(false)
 
   React.useLayoutEffect(() => {
     const heading = titleRef.current
-    const text = titleTextRef.current
+    const text = titleMeasureRef.current
     if (!heading || !text) return
 
-    const measure = () => setTitleOverflows(text.getBoundingClientRect().width > heading.clientWidth)
+    const measure = () => {
+      const nextTitle = fitSessionTitle(title, heading.getBoundingClientRect().width, (candidate) => {
+        text.textContent = candidate
+        return text.getBoundingClientRect().width
+      })
+      // Observe the full title so font changes can expand or shorten the visible prefix.
+      text.textContent = title
+      setDisplayTitle(nextTitle)
+    }
     measure()
     const observer = new ResizeObserver(measure)
     observer.observe(heading)
@@ -234,7 +244,7 @@ export function AgentChatHeader() {
               ref={titleRef}
               aria-label={title}
               className={cn(
-                "flex w-[160px] shrink-0 items-center text-sm font-medium",
+                "relative w-[160px] shrink-0 whitespace-nowrap text-sm font-medium",
                 activeSession && "cursor-text"
               )}
               onDoubleClick={() => {
@@ -247,10 +257,10 @@ export function AgentChatHeader() {
                 setEditing(true)
               }}
             >
-              <span className="min-w-0 flex-1 overflow-hidden">
-                <span ref={titleTextRef} className="inline-block whitespace-nowrap">{title}</span>
+              {displayTitle}
+              <span aria-hidden="true" className="pointer-events-none invisible absolute inset-0 overflow-hidden">
+                <span ref={titleMeasureRef} className="inline-block whitespace-nowrap" />
               </span>
-              {titleOverflows && <span aria-hidden="true" className="shrink-0">……</span>}
             </h1>
           </TooltipHint>
         </div>
