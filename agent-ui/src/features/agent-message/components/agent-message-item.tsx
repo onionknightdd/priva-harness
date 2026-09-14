@@ -14,7 +14,6 @@ import {
   MessageAction,
   MessageActions,
   MessageContent,
-  MessageResponse,
 } from "@/components/ai-elements/message"
 import { Marker, MarkerContent } from "@/components/ui/marker"
 import {
@@ -38,7 +37,7 @@ import { AssistantProcess } from "./assistant-process"
 import { assistantTimeline } from "../assistant-timeline"
 import { TaskNotificationCard } from "./task-notification-card"
 import { CompactSessionMarker } from "./compact-session-marker"
-import { AssistantMarkdownCode } from "./assistant-markdown-code"
+import { AssistantMarkdown } from "./assistant-markdown"
 import { QuoteSelectable } from "./quote-selectable"
 import { UserMessageContent } from "./user-message-content"
 
@@ -375,15 +374,14 @@ function AssistantSegment({
       {text.trim() !== "" ? (
         <motion.div layout="position" layoutDependency={false} className="min-w-0">
           <QuoteSelectable>
-            <MessageResponse
+            <AssistantMarkdown
               className="[&_p]:[line-height:1.5em] [&_p+p]:mt-[2px]"
               animated={isStreaming && !shouldReduceMotion}
               isAnimating={isStreaming}
               mode={isStreaming ? "streaming" : "static"}
-              components={{ code: AssistantMarkdownCode }}
             >
               {text}
-            </MessageResponse>
+            </AssistantMarkdown>
           </QuoteSelectable>
         </motion.div>
       ) : null}

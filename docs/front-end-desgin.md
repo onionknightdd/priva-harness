@@ -1283,6 +1283,23 @@ inline 文件链接使用正常行高；单行省略容器不能使用 `leading-
 Workspace 抽屉；复制使用绝对路径，失败保留菜单并显示错误。引用把完整路径追加为
 Markdown 引用并聚焦输入框；未能解析为绝对路径时不执行文件操作。
 
+2026-09-14：助手正文中的 `[测试文件](sandbox:/绝对路径)` 复用
+`AssistantFileReference`，显示 Markdown 指定的标题，提示、打开、复制和引用使用完整路径。
+支持中文、空格等 URL 编码路径；URI 解码一次，只接受本地绝对路径，
+拒绝网络地址、相对路径、控制字符和无效编码。文件存在性检查沿用共享批处理，
+文件不存在时保留标题且不能打开。普通链接保留 Streamdown 的清理与外链确认，
+代码示例中的 Markdown 不转换为链接。
+生成文件链接应使用直接形式 `[标题](sandbox:/路径)`，兼容历史与流式消息；
+引用式链接 `[标题][id]` 沿用 Streamdown 的定义解析，流式分块不会跨段解析定义。
+
+```text
+[测试文件](sandbox:/workspace/test.md)
+  -> remark: 校验 sandbox URI -> 内部文件引用节点
+  -> AssistantFileReference: 测试文件
+  -> 点击 / 右键打开 -> Workspace / Files: /workspace/test.md
+普通 URL -> 原有 URL 清理 -> 外链确认
+```
+
 消息文本选区操作采用 [Beautiful UI Selection Actions](https://www.beautifului.dev/r/selection-actions.json)
 的胶囊与圆角按钮外观，提取为本地
 `components/primitives/SelectionActions.tsx`，复用 Button、Lucide 与主题 token。
@@ -1678,6 +1695,14 @@ rg -n '@base-ui/react|motion/react|gsap' agent-ui/src
 
 ```sh
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/mcp-tool-data.test.ts agent-ui/tests/features/agent-message/mcp-tool-item.test.tsx
+```
+
+助手 Markdown 文件链接使用 Node/jsdom 验证真实消息组件的历史 / 流式渲染、
+标题和编码路径、历史消息中的引用式链接、表格、Workspace 打开与右键菜单、缺失文件，
+以及原有 URL 清理和外链确认；不启动浏览器：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/sandbox-markdown-links.test.ts agent-ui/tests/features/agent-message/assistant-markdown.test.tsx
 ```
 
 会话页头截断使用 Node 测试覆盖 160px 边界、后缀占位、不同字符宽度、组合字符与 emoji，
