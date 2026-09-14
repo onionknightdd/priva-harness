@@ -242,7 +242,7 @@ export function AgentMessageThread({
           </LayoutGroup>
         </MotionConfig>
         <KeepExpandAnchor onFollowPausedChange={setFollowPaused} />
-        <PinLatestAtCenter messages={messages} mounted={!preparing} />
+        <FollowLatestMessage messages={messages} mounted={!preparing} />
         <div className="pointer-events-none absolute inset-x-0 bottom-2 z-20 flex justify-center">
           <div className="pointer-events-auto flex items-center gap-2">
             <TaskPlanPopover messages={messages} />
@@ -362,7 +362,7 @@ function ThreadEndSpacer() {
     }
 
     const syncHeight = () => {
-      spacer.style.height = `${Math.round(viewport.clientHeight / 2)}px`
+      spacer.style.height = `${Math.round(viewport.clientHeight * 0.3)}px`
     }
 
     syncHeight()
@@ -459,7 +459,7 @@ function isScrolledToEnd(viewport: HTMLElement) {
   )
 }
 
-function PinLatestAtCenter({
+function FollowLatestMessage({
   messages,
   mounted,
 }: {

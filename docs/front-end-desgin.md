@@ -151,10 +151,10 @@ Dark popup menus -> popover -> #353535
 短名称保持完整。Tooltip 和可访问名称保留完整标题，双击后仍使用原来的重命名输入框。
 按实际文本宽度检测溢出，名称或字体尺寸变化后重新测量。
 
-消息底部沿用 `PinLatestAtCenter` 和 `ThreadEndSpacer`：自动跟随滚动至末尾，末尾
-留白为消息滚动区域高度的一半。内容足够高时，最新消息容器底边位于该区域中线；
+消息底部使用 `FollowLatestMessage` 和 `ThreadEndSpacer`：自动跟随滚动至末尾，末尾
+留白为消息滚动区域高度的 30%。内容足够高时，最新消息容器底边位于该区域约 70% 高度处；
 内容较短时仍从顶部排列，底边可能更靠上。该区域位于页头下、输入框上，输入框高度
-变化也会改变中线。用户上滚后暂停跟随，回到滚动底部或点击向下按钮恢复。
+变化也会改变落点。用户上滚后暂停跟随，回到滚动底部或点击向下按钮恢复。
 
 ```text
 Header  [名称……] [复制] [更多]
@@ -162,8 +162,8 @@ Header  [名称……] [复制] [更多]
 +------------------------------+
 | 消息滚动区域                 |
 | 实时输出                     |
-| 最新消息底边 ------ 约 50%    |
-| 半个滚动区域高度的留白       |
+| 最新消息底边 ------ 约 70%    |
+| 滚动区域高度 30% 的留白      |
 +------------------------------+
 | 输入框                       |
 +------------------------------+
@@ -371,7 +371,7 @@ isEmpty: false ─► spacer flexGrow=0（贴底，瞬时）  useLayoutEffect �
 - 整批到达的 transcript 先不挂 turn（`RevealWindow.preparing`），
   `collectThreadFilePaths` 从 assistant 文本的行内代码（跳过围栏代码块）和 tool_use 的
   `file_path` / `path` / `notebook_path` 收集路径，一次 `checkFileExists` 批量解析后再挂
-  第一片，上限 400ms（超时则退回逐条解析）。`PinLatestAtCenter` 在 turn 真正挂上的那次
+  第一片，上限 400ms（超时则退回逐条解析）。`FollowLatestMessage` 在 turn 真正挂上的那次
   提交重新钉底。
 
 ```text
