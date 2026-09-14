@@ -5,12 +5,14 @@ import { createRoot } from "react-dom/client"
 import { I18nextProvider, initReactI18next } from "react-i18next"
 
 import { AnalyzingImage } from "../../../src/components/loading-ui/analyzing-image"
+import { SidebarProvider } from "../../../src/components/ui/sidebar"
 import { ToolItem } from "../../../src/features/agent-message/components/assistant-process"
 import { ImageGenToolItem, ImageReadToolItem } from "../../../src/features/agent-message/components/image-tool-item"
 import { ImageEditToolItem } from "../../../src/features/agent-message/components/image-edit-tool-item"
 import { isImageEditTool, isImageReadTool } from "../../../src/features/agent-message/image-tools"
 import type { ToolCard } from "../../../src/features/agent-message/agent-message-data"
 import type { ImageToolBlock } from "../../../src/features/agent-message/image-tool-data"
+import { WorkspaceFilesProvider } from "../../../src/features/workspace/workspace-files-context"
 import { en } from "../../../src/i18n/locales/en"
 import { zhCN } from "../../../src/i18n/locales/zh-CN"
 import "../../../src/index.css"
@@ -87,7 +89,11 @@ export function Fixtures() {
 
 const root = createRoot(document.getElementById("root")!)
 function renderFixtures() {
-  flushSync(() => root.render(<I18nextProvider i18n={i18n}><Fixtures key={crypto.randomUUID()} /></I18nextProvider>))
+  flushSync(() => root.render(<I18nextProvider i18n={i18n}>
+    <SidebarProvider className="block min-h-0" stateCookieName={false} widthCookieName={false}>
+      <WorkspaceFilesProvider><Fixtures key={crypto.randomUUID()} /></WorkspaceFilesProvider>
+    </SidebarProvider>
+  </I18nextProvider>))
 }
 renderFixtures()
 
@@ -151,22 +157,26 @@ async function runChecks() {
     const modeButton = (name: string, label: string) => Array.from(item(name).querySelectorAll<HTMLButtonElement>('[data-slot="toggle-group-item"]')).find((button) => button.textContent === label)!
     editPreview.querySelector<HTMLButtonElement>('button[aria-expanded="false"]')!.click()
     await until(() => editPreview.querySelectorAll('button[aria-busy="false"]').length === 2, "Edit side-by-side images load")
-    check("Edit shows the input prompt before the mode controls", editPreview.textContent!.indexOf("Turn daylight") < editPreview.textContent!.indexOf("Side-by-side"))
-    check("Edit defaults to side-by-side and exposes both paths", modeButton("edit-preview", "Side-by-side").getAttribute("aria-pressed") === "true" && editPreview.querySelector("dl")!.textContent!.includes("/image-tool-fixtures/source.png") && editPreview.querySelector("dl")!.textContent!.includes("/image-tool-fixtures/result.png"))
+    check("Edit shows the input prompt before the mode controls", editPreview.textContent!.indexOf("Turn daylight") < editPreview.textContent!.indexOf(i18n.t("agentMessage.imageTools.sideBySide")))
+    const fileLabels = () => editPreview.querySelector<HTMLElement>('[data-slot="image-edit-file-labels"]')!
+    await until(() => fileLabels().querySelectorAll("button").length === 2, "Edit file links become available")
+    check("Edit defaults to side-by-side and shows filename links above its previews", modeButton("edit-preview", i18n.t("agentMessage.imageTools.sideBySide")).getAttribute("aria-pressed") === "true" && fileLabels().textContent!.includes("source.png") && fileLabels().textContent!.includes("result.png") && !fileLabels().textContent!.includes("/image-tool-fixtures/") && fileLabels().getBoundingClientRect().bottom <= editPreview.querySelector("img")!.getBoundingClientRect().top)
     const bounds = Array.from(editPreview.querySelectorAll("img")).map((image) => image.getBoundingClientRect())
     check("side-by-side images share a row without distortion", bounds[0].y === bounds[1].y && Math.abs(bounds[0].width - bounds[1].width) < 1 && Array.from(editPreview.querySelectorAll("img")).every((image) => getComputedStyle(image).objectFit === "contain"))
     modeButton("edit-preview", i18n.t("agentMessage.imageTools.sourceNumber", { number: 2 })).click()
     await until(() => editPreview.querySelector("img")?.naturalWidth === 600, "second source loads")
-    check("source selection updates its image and full path while preserving the result", editPreview.querySelector("dl")!.textContent!.includes(portraitPath) && new URL(editPreview.querySelectorAll("img")[1].src).searchParams.get("path") === "/image-tool-fixtures/result.png")
+    check("source selection updates its filename while preserving the result", fileLabels().textContent!.includes("portrait.png") && new URL(editPreview.querySelectorAll("img")[1].src).searchParams.get("path") === "/image-tool-fixtures/result.png")
     const sourceImage = editPreview.querySelector("img")!
     check("Edit portrait preview fits its image within its column", Math.abs(sourceImage.parentElement!.getBoundingClientRect().width - sourceImage.getBoundingClientRect().width - 2) < 1 && sourceImage.parentElement!.getBoundingClientRect().width <= editPreview.getBoundingClientRect().width / 2)
-    modeButton("edit-preview", "Slide").click()
+    modeButton("edit-preview", i18n.t("agentMessage.imageTools.compare")).click()
     await until(() => Boolean(editPreview.querySelector<HTMLInputElement>('input[type="range"]:enabled')), "Slide becomes interactive")
     const range = editPreview.querySelector<HTMLInputElement>('input[type="range"]')!
     const beforeLayer = editPreview.querySelector<HTMLElement>('[data-slot="image-comparison-before"]')!
     check("Slide initially reveals half of the original", range.value === "50" && beforeLayer.style.clipPath.includes("50%"))
     const control = beforeLayer.parentElement!
     const controlBounds = control.getBoundingClientRect()
+    const fittedWidth = Math.max(...Array.from(control.querySelectorAll("img"), (image) => Math.min(image.naturalWidth, (controlBounds.height - 2) * image.naturalWidth / image.naturalHeight))) + 2
+    check("comparison canvas and file headings fit the full images within the message width", Math.abs(controlBounds.width - Math.min(fittedWidth, control.parentElement!.parentElement!.getBoundingClientRect().width)) < 1 && Math.abs(fileLabels().getBoundingClientRect().width - controlBounds.width) < 1)
     const startX = controlBounds.left + controlBounds.width / 2
     const y = controlBounds.top + controlBounds.height / 2
     const pointer = (type: string, x: number, target: EventTarget = document) => target.dispatchEvent(new PointerEvent(type, { clientX: x, clientY: y, pointerId: 1, pointerType: "mouse", isPrimary: true, button: 0, buttons: type === "pointerup" ? 0 : 1, bubbles: true, cancelable: true }))
@@ -192,18 +202,18 @@ async function runChecks() {
     range.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true, cancelable: true }))
     await until(() => range.value === "0", "Home reveals result")
     check("keyboard comparison reaches the result endpoint", beforeLayer.style.clipPath.includes("100%"))
-    modeButton("edit-preview", "Side-by-side").click()
+    modeButton("edit-preview", i18n.t("agentMessage.imageTools.sideBySide")).click()
     await until(() => editPreview.querySelectorAll('button[aria-busy="false"]').length === 2, "return to side-by-side")
     check("switching modes retains the selected original", editPreview.querySelector("img")!.naturalWidth === 600)
-    check("running Edit keeps the source and disables comparison until a result arrives", Boolean(item("edit-live").querySelector("img")) && Boolean(item("edit-live").querySelector('[data-slot="skeleton"]')) && modeButton("edit-live", "Slide").disabled)
+    check("running Edit keeps the source and disables comparison until a result arrives", Boolean(item("edit-live").querySelector("img")) && Boolean(item("edit-live").querySelector('[data-slot="skeleton"]')) && modeButton("edit-live", i18n.t("agentMessage.imageTools.compare")).disabled)
     document.getElementById("complete-edit")!.click()
     await until(() => item("edit-live").querySelectorAll('button[aria-busy="false"]').length === 2, "live result arrives")
-    check("live completion preserves the expanded card and enables comparison", item("edit-live").querySelector('button[aria-expanded]')!.getAttribute("aria-expanded") === "true" && !modeButton("edit-live", "Slide").disabled)
-    check("failed Edit preserves its source preview and disables Slide", Boolean(item("edit-failed").querySelector("img")) && modeButton("edit-failed", "Slide").disabled)
+    check("live completion preserves the expanded card and enables comparison", item("edit-live").querySelector('button[aria-expanded]')!.getAttribute("aria-expanded") === "true" && !modeButton("edit-live", i18n.t("agentMessage.imageTools.compare")).disabled)
+    check("failed Edit preserves its source preview and disables Slide", Boolean(item("edit-failed").querySelector("img")) && modeButton("edit-failed", i18n.t("agentMessage.imageTools.compare")).disabled)
     item("edit-retry").querySelector<HTMLButtonElement>('button[aria-expanded="false"]')!.click()
-    await until(() => Boolean(modeButton("edit-retry", "Slide")), "retry card opens")
-    modeButton("edit-retry", "Slide").click()
-    await until(() => modeButton("edit-retry", "Slide").getAttribute("aria-pressed") === "true" && Boolean(item("edit-retry").querySelector('[role="alert"]')), "comparison load failure")
+    await until(() => Boolean(modeButton("edit-retry", i18n.t("agentMessage.imageTools.compare"))), "retry card opens")
+    modeButton("edit-retry", i18n.t("agentMessage.imageTools.compare")).click()
+    await until(() => modeButton("edit-retry", i18n.t("agentMessage.imageTools.compare")).getAttribute("aria-pressed") === "true" && Boolean(item("edit-retry").querySelector('[role="alert"]')), "comparison load failure")
     Array.from(item("edit-retry").querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent === i18n.t("agentMessage.imageTools.retryPreview"))!.click()
     await until(() => Boolean(item("edit-retry").querySelector('input[type="range"]:enabled')), "comparison retry loads both images")
     check("failed comparison can reload and become interactive", item("edit-retry").querySelectorAll("img").length === 2)

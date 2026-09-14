@@ -12,6 +12,16 @@ export default mergeConfig(appConfig, {
     configureServer(server) {
       server.middlewares.use((request, response, next) => {
         const url = new URL(request.url ?? "/", "http://localhost")
+        if (url.pathname === "/api/sandbox/files/exists" && request.method === "POST") {
+          let body = ""
+          request.on("data", (chunk) => { body += chunk })
+          request.on("end", () => {
+            const { paths } = JSON.parse(body) as { paths: string[] }
+            response.writeHead(200, { "Content-Type": "application/json" })
+            response.end(JSON.stringify({ exists: Object.fromEntries(paths.map((path) => [path, path.startsWith("/image-tool-fixtures/")])) }))
+          })
+          return
+        }
         const path = url.searchParams.get("path") ?? ""
         if (url.pathname !== "/api/sandbox/files/download" || !path.startsWith("/image-tool-fixtures/")) return next()
         if (path.endsWith("retry.png") && !url.searchParams.has("retry")) {

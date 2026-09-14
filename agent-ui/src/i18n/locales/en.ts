@@ -272,6 +272,8 @@ export const en = {
       after: "Result",
       missingSource: "No source image path was recorded.",
       comparisonMode: "Image comparison mode",
+      sideBySide: "Side by side",
+      compare: "Compare",
       sourceImages: "Source images",
       sourceNumber: "Original {{number}}",
       comparePosition: "Original and result divider",

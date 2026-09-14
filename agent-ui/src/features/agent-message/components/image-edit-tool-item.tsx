@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next"
 import { ToolResult } from "@/components/agents/tool-result"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { FilePathLink } from "@/features/files/file-path-link"
 import { EASE_OUT } from "@/lib/ease"
 import { fileNameFromPath } from "@/lib/file-path"
 
@@ -31,6 +32,19 @@ export function ImageEditToolItem({ block, cwd }: { block: ImageToolBlock; cwd: 
   const status = running ? "running" : block.tool?.ok === false || !after ? "error" : "success"
   const canCompare = Boolean(before && after && status === "success")
   const visibleMode = canCompare ? mode : "side-by-side"
+  const imageLabels = (
+    <div className="grid min-w-0 grid-cols-2 gap-2 text-xs text-muted-foreground" data-slot="image-edit-file-labels">
+      {[
+        { label: t("agentMessage.imageTools.before"), path: before },
+        { label: t("agentMessage.imageTools.after"), path: status === "success" ? after : "" },
+      ].map(({ label, path }, index) => (
+        <div key={index} className={`flex min-w-0 items-baseline gap-1.5 ${visibleMode === "slide" && index === 1 ? "justify-end" : ""}`}>
+          <span className="shrink-0">{label}</span>
+          {path ? <FilePathLink path={path} label={fileNameFromPath(path)} tooltip={path} marquee recheckKey={block.tool?.status} /> : null}
+        </div>
+      ))}
+    </div>
+  )
 
   return (
     <ToolResult
@@ -60,8 +74,8 @@ export function ImageEditToolItem({ block, cwd }: { block: ImageToolBlock; cwd: 
           size="sm"
           spacing={0}
         >
-          <ToggleGroupItem value="side-by-side">Side-by-side</ToggleGroupItem>
-          <ToggleGroupItem value="slide" disabled={!canCompare}>Slide</ToggleGroupItem>
+          <ToggleGroupItem value="side-by-side">{t("agentMessage.imageTools.sideBySide")}</ToggleGroupItem>
+          <ToggleGroupItem value="slide" disabled={!canCompare}>{t("agentMessage.imageTools.compare")}</ToggleGroupItem>
         </ToggleGroup>
         {sources.length > 1 ? (
           <ToggleGroup
@@ -83,11 +97,8 @@ export function ImageEditToolItem({ block, cwd }: { block: ImageToolBlock; cwd: 
         transition={{ duration: 0.16, ease: EASE_OUT }}
         className="min-w-0 space-y-1.5"
       >
-        <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground" aria-hidden="true">
-          <span>{t("agentMessage.imageTools.before")}</span>
-          <span className={visibleMode === "slide" ? "text-right" : undefined}>{t("agentMessage.imageTools.after")}</span>
-        </div>
-        {visibleMode === "slide" ? <ImageToolComparison before={before} after={after} /> : (
+        {visibleMode === "slide" ? <ImageToolComparison before={before} after={after}>{imageLabels}</ImageToolComparison> : <>
+          {imageLabels}
           <div className="grid min-w-0 grid-cols-2 gap-2">
             {before ? <ImageToolPreview path={before} alt={`${t("agentMessage.imageTools.before")} · ${fileNameFromPath(before)}`} className="h-48 sm:h-64" /> : (
               <div className="flex h-48 items-center justify-center rounded-lg border border-border bg-muted/20 p-3 text-sm text-muted-foreground sm:h-64">{t(running ? "agentMessage.imageTools.inputPending" : "agentMessage.imageTools.missingSource")}</div>
@@ -98,14 +109,8 @@ export function ImageEditToolItem({ block, cwd }: { block: ImageToolBlock; cwd: 
               </div>
             ) : <ImageToolPreview path={after} alt={t("agentMessage.imageTools.after")} className="h-48 sm:h-64" />}
           </div>
-        )}
+        </>}
       </motion.div>
-      <QuoteSelectable>
-        <dl className="space-y-1 text-xs text-muted-foreground">
-          {before ? <div className="flex items-baseline gap-2"><dt className="shrink-0">{t("agentMessage.imageTools.before")}</dt><dd className="min-w-0"><code className="break-all">{before}</code></dd></div> : null}
-          {after && status === "success" ? <div className="flex items-baseline gap-2"><dt className="shrink-0">{t("agentMessage.imageTools.after")}</dt><dd className="min-w-0"><code className="break-all">{after}</code></dd></div> : null}
-        </dl>
-      </QuoteSelectable>
     </ToolResult>
   )
 }

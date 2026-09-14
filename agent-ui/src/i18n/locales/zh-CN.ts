@@ -272,6 +272,8 @@ export const zhCN = {
       after: "结果",
       missingSource: "未记录原图路径。",
       comparisonMode: "图片对比模式",
+      sideBySide: "并排",
+      compare: "对比",
       sourceImages: "输入图片",
       sourceNumber: "原图 {{number}}",
       comparePosition: "原图与结果分隔线",

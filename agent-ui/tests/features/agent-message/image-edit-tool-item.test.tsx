@@ -20,11 +20,20 @@ dom.window.HTMLElement.prototype.getAnimations = () => []
 dom.window.HTMLElement.prototype.scrollIntoView = () => {}
 // Component behavior is tested in Node; CSS layout is covered by the browser fixture.
 const hooks = registerHooks({
-  load: (url, context, nextLoad) => url.endsWith(".css")
-    ? { format: "module", source: "export default {}", shortCircuit: true }
-    : nextLoad(url, context),
+  load: (url, context, nextLoad) => {
+    if (url.endsWith(".css")) return { format: "module", source: "export default {}", shortCircuit: true }
+    const result = nextLoad(url, context)
+    if (url.endsWith("/file-type-icon.tsx")) return { ...result, source: `import.meta.env = { DEV: false, BASE_URL: "/" };\n${result.source}` }
+    return result
+  },
 })
-after(() => { hooks.deregister(); dom.window.close() })
+const originalFetch = globalThis.fetch
+globalThis.fetch = async (input, init) => {
+  assert.equal(input, "/api/sandbox/files/exists")
+  const { paths } = JSON.parse(String(init?.body)) as { paths: string[] }
+  return Response.json({ exists: Object.fromEntries(paths.map((path) => [path, true])) })
+}
+after(() => { hooks.deregister(); dom.window.close(); globalThis.fetch = originalFetch })
 
 const React = await import("react")
 const { act } = React
@@ -35,6 +44,12 @@ const { en } = await import("../../../src/i18n/locales/en.ts")
 const { zhCN } = await import("../../../src/i18n/locales/zh-CN.ts")
 await i18n.use(initReactI18next).init({ lng: "en", resources: { en: { translation: en }, "zh-CN": { translation: zhCN } } })
 const { ImageEditToolItem } = await import("../../../src/features/agent-message/components/image-edit-tool-item.tsx")
+const { SidebarProvider } = await import("../../../src/components/ui/sidebar.tsx")
+const { WorkspaceFilesProvider, useOptionalWorkspaceFiles } = await import("../../../src/features/workspace/workspace-files-context.tsx")
+
+function OpenedFile() {
+  return <output>{useOptionalWorkspaceFiles()?.pendingFilePath}</output>
+}
 
 const completed: ImageToolBlock = {
   type: "tool_use", id: "edit", blockId: "edit", index: 0, name: "mcp__agentWorkshop__image_edit",
@@ -46,7 +61,16 @@ async function mount(block = completed) {
   const host = document.body.appendChild(document.createElement("div"))
   const root = createRoot(host)
   const update = async (next: ImageToolBlock) => {
-    await act(async () => root.render(<I18nextProvider i18n={i18n}><ImageEditToolItem block={next} cwd="/workspace" /></I18nextProvider>))
+    await act(async () => root.render(
+      <I18nextProvider i18n={i18n}>
+        <SidebarProvider className="block min-h-0" stateCookieName={false} widthCookieName={false}>
+          <WorkspaceFilesProvider>
+            <ImageEditToolItem block={next} cwd="/workspace" />
+            <OpenedFile />
+          </WorkspaceFilesProvider>
+        </SidebarProvider>
+      </I18nextProvider>
+    ))
   }
   await update(block)
   const toggle = host.querySelector<HTMLButtonElement>('button[aria-expanded]')!
@@ -72,16 +96,25 @@ async function key(element: HTMLElement, key: string, shiftKey = false) {
   await act(async () => element.dispatchEvent(new KeyboardEvent("keydown", { key, shiftKey, bubbles: true, cancelable: true })))
 }
 
-test("Edit renders prompt, selectable source previews, result, and full paths for MCP calls", async () => {
+test("Edit shows filename links above the images and opens the correct source and result in Workspace", async () => {
   const view = await mount()
   try {
     assert.ok(view.host.querySelector(".lucide-images"))
-    assert.ok(view.host.textContent!.indexOf("Turn daylight") < view.host.textContent!.indexOf("Side-by-side"))
-    assert.equal(button(view.host, "Side-by-side").getAttribute("aria-pressed"), "true")
+    assert.ok(view.host.textContent!.indexOf("Turn daylight") < view.host.textContent!.indexOf(i18n.t("agentMessage.imageTools.sideBySide")))
+    assert.equal(button(view.host, i18n.t("agentMessage.imageTools.sideBySide")).getAttribute("aria-pressed"), "true")
     assert.deepEqual(paths(view.host), ["/workspace/source.png", "/workspace/.images/result.png"])
+    const labels = view.host.querySelector('[data-slot="image-edit-file-labels"]')!
+    assert.ok(labels.compareDocumentPosition(view.host.querySelector("img")!) & Node.DOCUMENT_POSITION_FOLLOWING)
+    assert.ok(!labels.textContent!.includes("/workspace/"))
+    assert.equal(view.host.querySelector("dl"), null)
+    await click(button(view.host, "source.png"))
+    assert.equal(view.host.querySelector("output")!.textContent, "/workspace/source.png")
+    await click(button(view.host, "result.png"))
+    assert.equal(view.host.querySelector("output")!.textContent, "/workspace/.images/result.png")
     await click(button(view.host, "Original 2"))
     assert.deepEqual(paths(view.host), ["/workspace/references/portrait.png", "/workspace/.images/result.png"])
-    assert.ok(view.host.querySelector("dl")!.textContent!.includes("/workspace/references/portrait.png"))
+    await click(button(view.host, "portrait.png"))
+    assert.equal(view.host.querySelector("output")!.textContent, "/workspace/references/portrait.png")
     await imagesLoad(view.host)
     await click(view.host.querySelector<HTMLButtonElement>('button[aria-busy="false"]')!)
     assert.equal(new URL(document.querySelector<HTMLImageElement>('[role="dialog"] img')!.src).searchParams.get("path"), "/workspace/references/portrait.png")
@@ -92,12 +125,15 @@ test("Slide keeps both full images, supports keyboard endpoints, and preserves s
   const view = await mount()
   try {
     await click(button(view.host, "Original 2"))
-    await click(button(view.host, "Slide"))
+    await click(button(view.host, i18n.t("agentMessage.imageTools.compare")))
     await imagesLoad(view.host)
     const range = view.host.querySelector<HTMLInputElement>('input[type="range"]')!
     assert.equal(range.disabled, false)
     assert.equal(range.value, "50")
     assert.equal(range.getAttribute("aria-label"), "Original and result divider")
+    await click(button(view.host, "portrait.png"))
+    assert.equal(view.host.querySelector("output")!.textContent, "/workspace/references/portrait.png")
+    assert.equal(range.value, "50")
     assert.deepEqual(paths(view.host), ["/workspace/.images/result.png", "/workspace/references/portrait.png"])
     const reveal = view.host.querySelector<HTMLElement>('[data-slot="image-comparison-before"]')!
     assert.match(reveal.style.clipPath, /50%/)
@@ -111,7 +147,7 @@ test("Slide keeps both full images, supports keyboard endpoints, and preserves s
     await key(range, "Home")
     assert.equal(range.value, "0")
     assert.match(reveal.style.clipPath, /100%/)
-    await click(button(view.host, "Side-by-side"))
+    await click(button(view.host, i18n.t("agentMessage.imageTools.sideBySide")))
     assert.deepEqual(paths(view.host), ["/workspace/references/portrait.png", "/workspace/.images/result.png"])
   } finally { await view.close() }
 })
@@ -119,16 +155,16 @@ test("Slide keeps both full images, supports keyboard endpoints, and preserves s
 test("running Edit transitions to an open result and preserves source images on errors", async () => {
   const view = await mount({ ...completed, tool: { ...completed.tool!, status: "running", output: "" } })
   try {
-    assert.equal(button(view.host, "Slide").disabled, true)
+    assert.equal(button(view.host, i18n.t("agentMessage.imageTools.compare")).disabled, true)
     assert.equal(view.host.querySelectorAll("img").length, 1)
     assert.ok(view.host.querySelector('[data-slot="skeleton"]'))
     await view.update(completed)
     assert.equal(view.host.querySelector('button[aria-expanded]')!.getAttribute("aria-expanded"), "true")
-    assert.equal(button(view.host, "Slide").disabled, false)
+    assert.equal(button(view.host, i18n.t("agentMessage.imageTools.compare")).disabled, false)
     const error = '{"error":{"message":"Original upstream error <detail>"}}'
     await view.update({ ...completed, tool: { ...completed.tool!, ok: false, output: error } })
     assert.equal(view.host.querySelector('[role="alert"]')!.textContent, error)
-    assert.equal(button(view.host, "Slide").disabled, true)
+    assert.equal(button(view.host, i18n.t("agentMessage.imageTools.compare")).disabled, true)
     assert.deepEqual(paths(view.host), ["/workspace/source.png"])
     await view.update({ ...completed, tool: { ...completed.tool!, output: error } })
     assert.equal(view.host.querySelector('[role="alert"]')!.textContent, error)
@@ -138,7 +174,7 @@ test("running Edit transitions to an open result and preserves source images on 
 test("a failed Slide image can be reloaded without regenerating the result", async () => {
   const view = await mount()
   try {
-    await click(button(view.host, "Slide"))
+    await click(button(view.host, i18n.t("agentMessage.imageTools.compare")))
     await act(async () => view.host.querySelector("img")!.dispatchEvent(new Event("error")))
     assert.ok(view.host.querySelector('[role="alert"]')!.textContent!.includes("could not be loaded"))
     await click(button(view.host, "Reload image"))
@@ -153,10 +189,12 @@ test("missing inputs stay usable and the comparison is localized", async () => {
   const view = await mount({ ...completed, input: { prompt: "保留构图。" } })
   try {
     assert.ok(view.host.textContent!.includes("未记录原图路径。"))
-    assert.equal(button(view.host, "Slide").disabled, true)
+    assert.ok(button(view.host, "并排"))
+    assert.ok(button(view.host, "对比"))
+    assert.equal(button(view.host, i18n.t("agentMessage.imageTools.compare")).disabled, true)
     assert.deepEqual(paths(view.host), ["/workspace/.images/result.png"])
     await view.update(completed)
-    await click(button(view.host, "Slide"))
+    await click(button(view.host, i18n.t("agentMessage.imageTools.compare")))
     await imagesLoad(view.host)
     assert.equal(view.host.querySelector<HTMLInputElement>('input[type="range"]')!.getAttribute("aria-label"), "原图与结果分隔线")
   } finally { await view.close(); await i18n.changeLanguage("en") }

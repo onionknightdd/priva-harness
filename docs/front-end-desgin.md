@@ -1205,33 +1205,36 @@ AnalyzingImage 通过 `agent-ui/components.json` 的 registry 安装：
 本地补充 `active` 和减少动态效果控制，更新上游组件时须保留这些行为。
 
 2026-09-14：`image_edit`（含 MCP 别名）接入独立图片编辑卡片，首行直接显示输入
-prompt，随后是 `Side-by-side / Slide` 切换；默认并排展示原图和结果。多张输入图片
-按工具参数的逗号 / 换行顺序提供原图选择，相对路径根据会话目录解析。底部完整显示
-所选原图和结果路径，长路径换行并可选中文本复制。
+prompt，随后是「并排 / 对比」切换；默认并排展示原图和结果。模式文案跟随界面语言。
+多张输入图片按工具参数的逗号 / 换行顺序提供原图选择，相对路径根据会话目录解析。
+图片上方的「原图」「结果」后各显示文件名，复用 `FilePathLink`；点击在 Workspace
+打开对应文件，悬停可查看完整路径，长文件名按现有链接方式收缩与悬停滚动。
+结果成功返回后才显示结果文件链接，不再单独展示底部路径行。
 
 ```text
 [Images] 编辑图片 / 状态                         v
   输入 prompt
-  [Side-by-side | Slide]
+  [并排 | 对比]
   [原图 1] [原图 2] ... （多张输入时）
+  原图 [source.png]      结果 [result.png]
   +--------------------+------------------------+
   | 原图               | 结果                   |
-  | 并排预览 / Slide 中拖动分隔线对比            |
+  | 并排预览 / 对比模式中拖动分隔线             |
   +--------------------+------------------------+
-  原图  /workspace/source.png
-  结果  /workspace/.images/result.png
 ```
 
-并排预览复用 `ImageToolPreview`，点击原图或结果均可打开灯箱；Slide 使用现有
+并排预览复用 `ImageToolPreview`，点击原图或结果均可打开灯箱；对比使用现有
 Base UI Slider，支持拖动、方向键、Home / End。两张图片使用相同画布并保持 contain
-比例，只裁切原图显示区域，不拉伸图像。桌面和手机保持相同顺序；鼠标切换模式时
+比例，只裁切原图显示区域，不拉伸图像。按两张图片在当前预览高度内完整显示所需的
+较大宽度收紧画布，宽度候选值不超过各自原始宽度，最终不超过消息内容区域；上方
+文件标题行与画布同宽。桌面和手机保持相同顺序；鼠标切换模式时
 使用 160ms / `EASE_OUT` 淡入，键盘和减少动态效果时立即切换。滑杆步进为 0.1%，
 分隔线与裁切区域同步直接跟随输入，避免整百分比跳格；方向键微调 0.1%，
 Shift + 方向键或 Page Up / Down 调整 10%，Home / End 到达两端。
-Slide 与 shadcn `ResizableHandle withHandle` 共用 `ResizableHandleGrip`：
+对比与 shadcn `ResizableHandle withHandle` 共用 `ResizableHandleGrip`：
 4×24px 圆角竖条、1px 分隔线，使用 `border` 色彩 token；实际拖动命中区宽 44px，
 键盘聚焦时在手柄内显示焦点环。
-执行中保留原图和结果占位，失败保留原始报错；结果可用前禁用 Slide，图片加载
+执行中保留原图和结果占位，失败保留原始报错；结果可用前禁用对比，图片加载
 失败可重新加载。执行完成保留展开状态，历史完成项默认折叠。
 
 图片工具执行失败时展示原始输出文本，保留换行与 JSON 内容；生成结果不符合图片路径
@@ -1729,13 +1732,14 @@ Mermaid 浏览器回归：打开 `/tests/components/ai-elements/mermaid-browser.
 **Run image tool checks**。独立服务使用自己的依赖缓存和合成图片，覆盖加载、
 生成占位、原始错误、预览重试、灯箱关闭及焦点恢复，同时覆盖 Read 的 prompt、
 相对图片路径与模型输出、Edit 的原图选择、并排 / 滑杆模式、键盘端点、运行中转为
-完成、对比图片重载、完整文件路径、Read / Edit 的图标映射、MCP 别名、扫描停止，
+完成、对比图片重载、图片上方文件名链接、Read / Edit 的图标映射、MCP 别名、扫描停止，
 横图 / 竖图 / 小图的自适应宽度、消息及并排列宽约束、单像素正反向拖动与裁切同步，
 以及 Bash / shell 恢复 SquareTerminal。追加 `?zh&dark&reduced-motion`
 检查中文、深色和图标的减少动态效果分支；使用 390px 视口及真实 Tab / Enter / Esc
 检查窄屏与键盘操作。数据回归包含在 Agent message 的 `*.test.ts` 命令中。
 
-Edit 组件行为也可独立通过 jsdom 验证（从仓库根目录运行）：
+Edit 组件行为也可独立通过 jsdom 验证，包含原图 / 结果文件名链接打开正确的
+Workspace 路径、并排 / 对比的中文标签和键盘操作（从仓库根目录运行）：
 
 ```sh
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/image-edit-tool-item.test.tsx agent-ui/tests/features/agent-message/image-tool-data.test.ts
