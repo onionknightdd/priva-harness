@@ -126,11 +126,19 @@ Main sidebar / Workspace sidebar
 拖动、折叠和展开过渡期间暂停默认宽度测量。移动端保持现有抽屉宽度；设置页与 Workspace
 继续使用各自的尺寸设置。
 
+收起时隐藏品牌标题与 harness 文本，品牌 logo 使用不收缩的 32px 容器；按钮内部
+取消图文间距并水平居中，与菜单图标保持同一条中心线。
+
 ```text
 [品牌图标] Agent Workshop (Beta)    [收起]
            Powered by: [图标] 名称
 窄宽度     Powered by: [图标]
            点击 -> harness 选择菜单
+
+收起       [品牌图标]
+           [菜单图标]
+           [菜单图标]
+              ^ 同一水平中心位置
 ```
 
 ### 焦点框与用户消息底色

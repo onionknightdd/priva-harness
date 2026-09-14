@@ -221,18 +221,18 @@ export function HarnessSwitcher() {
                 render={
                   <SidebarMenuButton
                     size="lg"
-                    className="h-auto min-h-12 data-open:bg-sidebar-accent data-open:text-sidebar-accent-foreground [&_[data-brand-logo]_svg]:size-6 [&_[data-runtime-logo]_svg]:size-3.5"
+                    className="h-auto min-h-12 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 data-open:bg-sidebar-accent data-open:text-sidebar-accent-foreground [&_[data-brand-logo]_svg]:size-6 [&_[data-runtime-logo]_svg]:size-3.5"
                   />
                 }
               >
                 <div
                   ref={logoRef}
                   data-brand-logo
-                  className="flex size-8 items-center justify-center"
+                  className="flex size-8 shrink-0 items-center justify-center"
                 >
                   <BotIcon aria-hidden="true" />
                 </div>
-                <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
+                <div className="grid min-w-0 flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
                   <span className="flex min-w-0 items-baseline gap-1.5">
                     <span className="min-w-0 truncate text-lg font-bold">
                       {t("sidebar.brand")}
