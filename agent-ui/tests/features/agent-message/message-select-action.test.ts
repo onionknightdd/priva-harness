@@ -7,15 +7,17 @@ import { formatMessageSelection, messageSelectionPreview, messageSelectionDispla
 
 const quote = { type: "selection", selection: { messageRole: "assistant", selectedText: "选中的内容" } } as const
 
-test("preview stops at ten characters or the first newline without truncating the transmitted text", () => {
-  assert.equal(messageSelectionPreview("1234567890"), "1234567890")
-  assert.equal(messageSelectionPreview("12345678901"), "1234567890......")
-  assert.equal(messageSelectionPreview("第一行\n第二行"), "第一行......")
-  assert.equal(messageSelectionPreview("第一行\r\n第二行"), "第一行......")
-  assert.equal(messageSelectionPreview("\nsecond line"), "......")
-  assert.equal(messageSelectionPreview("👩🏽‍💻".repeat(11)), "👩🏽‍💻".repeat(10) + "......")
-  const selection = { messageRole: "user" as const, selectedText: "12345678901\n全部保留" }
-  assert.equal(messageSelectionDisplayText([{ type: "selection", selection }]), '"1234567890......"')
+test("preview stops at forty characters or the first newline without truncating the transmitted text", () => {
+  const fortyCharacters = "1234567890".repeat(4)
+  assert.equal(messageSelectionPreview(fortyCharacters.slice(0, 39)), fortyCharacters.slice(0, 39))
+  assert.equal(messageSelectionPreview(fortyCharacters), fortyCharacters)
+  assert.equal(messageSelectionPreview(`${fortyCharacters}1`), `${fortyCharacters}……`)
+  assert.equal(messageSelectionPreview("第一行\n第二行"), "第一行……")
+  assert.equal(messageSelectionPreview("第一行\r\n第二行"), "第一行……")
+  assert.equal(messageSelectionPreview("\nsecond line"), "……")
+  assert.equal(messageSelectionPreview("👩🏽‍💻".repeat(41)), "👩🏽‍💻".repeat(40) + "……")
+  const selection = { messageRole: "user" as const, selectedText: `${fortyCharacters}1\n全部保留` }
+  assert.equal(messageSelectionDisplayText([{ type: "selection", selection }]), `"${fortyCharacters}……"`)
   assert.deepEqual(parseMessageSelections(formatMessageSelection(selection)), [{ type: "selection", selection }])
 })
 

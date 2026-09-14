@@ -71,9 +71,9 @@ export function messageSelectionPreview(text: string) {
   let preview = ""
   let length = 0
   for (const { segment } of selectionCharacters.segment(firstLine)) {
-    if (length === 10) return `${preview}......`
+    if (length === 40) return `${preview}……`
     preview += segment
     length += 1
   }
-  return newline < 0 ? preview : `${preview}......`
+  return newline < 0 ? preview : `${preview}……`
 }

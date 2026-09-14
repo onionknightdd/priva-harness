@@ -1221,7 +1221,7 @@ src/components/example.tsx -> [example.tsx] --click / Open--> Workspace / Files
                                           |-- Copy path --> absolute path
                                           +-- Quote ----> composer draft
 Assistant / User selection -> ( Quote in chat ) -> composer caret
-Composer: text [message-circle-code "preview......"] text
+Composer: text [message-circle-code "preview……"] text
                               | hover -> original text / icon becomes delete
                               v
                          user sends -> readonly inline reference
@@ -1229,8 +1229,8 @@ Composer: text [message-circle-code "preview......"] text
 
 Composer 使用 ProseMirror 的扁平 inline 文档：普通文本、换行和不可拆分的选区引用。
 引用沿正常文字排列，图标为 `message-circle-code`，文本加双引号，使用现有文件链接的
-浅蓝色（`sky-600` / 深色 `sky-400`）及可点击指针。预览最多保留 10 个可见字符
-（不拆 Emoji）；超过长度或遇到第一个换行后统一追加六个点 `......`。
+浅蓝色（`sky-600` / 深色 `sky-400`）及可点击指针。预览最多保留 40 个可见字符
+（不拆 Emoji）；超过长度或遇到第一个换行后统一追加中文省略号 `……`。
 共享 Tooltip 按全局 1s 延迟显示完整原文，保留换行和空格。
 只有 composer 提供删除：悬停 / 键盘聚焦时图标在固定位置淡入切换成删除按钮
 （120ms，减少动态效果立即切换）；触屏始终显示删除图标。点击删除或紧邻引用的

@@ -122,7 +122,7 @@ test("the mounted editor inserts inline nodes, deletes by button/Backspace and r
   const editor = await mountEditor("前文 ")
   try {
     await act(async () => editor.ref.current!.insertSelection(quote))
-    assert.equal(editor.input.textContent, '前文 "第一行......"')
+    assert.equal(editor.input.textContent, '前文 "第一行……"')
     assert.equal(editor.input.querySelectorAll("[data-message-selection-quote]").length, 1)
     assert.ok(editor.input.querySelector(".lucide-message-circle-code"))
     assert.deepEqual(parseMessageSelections(editor.draft()), [{ type: "text", text: "前文 " }, { type: "selection", selection: quote }])
@@ -145,7 +145,7 @@ test("plain-text paste, selection replacement and copy/cut preserve reference me
     const source = `前文 \n\n${formatMessageSelection(quote)}\n\n 后文`
     await act(async () => editor.input.dispatchEvent(clipboard("paste", source).event))
     assert.equal(editor.draft(), source)
-    assert.equal(editor.input.textContent, '前文 "第一行......" 后文')
+    assert.equal(editor.input.textContent, '前文 "第一行……" 后文')
     await key(editor.input, "a", { ctrlKey: true, keyCode: 65 })
     const copied = clipboard("copy")
     await act(async () => editor.input.dispatchEvent(copied.event))
@@ -180,11 +180,11 @@ test("external draft updates and remounts retain the same references", async () 
   const source = `\n\n${formatMessageSelection(quote)}\n\n suffix`
   const editor = await mountEditor(source)
   try {
-    assert.equal(editor.input.textContent, '"第一行......" suffix')
+    assert.equal(editor.input.textContent, '"第一行……" suffix')
     await editor.update(`prefix ${source}`)
-    assert.equal(editor.input.textContent, 'prefix "第一行......" suffix')
+    assert.equal(editor.input.textContent, 'prefix "第一行……" suffix')
     await editor.update(source)
-    assert.equal(editor.input.textContent, '"第一行......" suffix')
+    assert.equal(editor.input.textContent, '"第一行……" suffix')
   } finally { await editor.unmount() }
 })
 
@@ -193,7 +193,7 @@ test("sent references render inline and readonly, including restored multiline c
   const root = createRoot(host)
   try {
     await act(async () => root.render(<MessageSelectionContent content={`前文 \n\n${formatMessageSelection(quote)}\n\n 后文`} />))
-    assert.equal(host.textContent, '前文 "第一行......" 后文')
+    assert.equal(host.textContent, '前文 "第一行……" 后文')
     assert.equal(host.querySelector("button"), null)
     assert.ok(host.querySelector(".lucide-message-circle-code"))
     assert.equal(host.querySelector("[data-message-role]")?.getAttribute("data-message-role"), "assistant")
