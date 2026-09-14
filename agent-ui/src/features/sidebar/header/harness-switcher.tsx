@@ -33,6 +33,7 @@ import {
 import { HarnessBrandLogo } from "./harness-brand-logo"
 import { useHarness } from "./harness-context"
 import { HarnessRuntimeLabel } from "./harness-runtime-label"
+import { useHarnessDefaultWidth } from "./use-harness-default-width"
 import {
   getHarnessOption,
   harnessOptions,
@@ -149,6 +150,7 @@ function HarnessOptionList({
 
 export function HarnessSwitcher() {
   const logoRef = React.useRef<HTMLDivElement>(null)
+  const { rowRef, measurementRef } = useHarnessDefaultWidth()
   const { isMobile, setOpen, state } = useSidebar()
   const { t } = useTranslation()
   const { harnessId: activeHarnessId, setHarnessId: setActiveHarnessId } =
@@ -239,7 +241,21 @@ export function HarnessSwitcher() {
                       {t("sidebar.beta")}
                     </span>
                   </span>
-                  <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground/60">
+                  <span ref={rowRef} className="relative flex min-w-0 items-center gap-1 text-xs text-muted-foreground/60">
+                    <span aria-hidden="true" className="pointer-events-none invisible absolute inset-0 overflow-hidden">
+                      <span ref={measurementRef} className="inline-grid w-max whitespace-nowrap">
+                        {harnessOptions.filter((option) => !option.disabled).map((option) => (
+                          <span key={option.id} className="inline-flex items-center gap-1">
+                            <span>{t("sidebar.harness.poweredBy")}</span>
+                            <HarnessBrandLogo
+                              harnessId={option.id}
+                              className={option.id === "pi" ? "size-3 shrink-0" : "size-3.5 shrink-0"}
+                            />
+                            <span>{t(option.nameKey)}</span>
+                          </span>
+                        ))}
+                      </span>
+                    </span>
                     <span className="shrink-0">{t("sidebar.harness.poweredBy")}</span>
                     <HarnessRuntimeLabel harnessId={activeHarnessId} name={runtimeName} />
                   </span>

@@ -65,10 +65,13 @@ function getInitialSidebarWidth(
   minWidth: number,
   widthCookieName: string | false
 ) {
-  const fallbackWidth = clampSidebarWidth(defaultWidth, maxWidth, minWidth)
+  const defaultPreference = {
+    width: clampSidebarWidth(defaultWidth, maxWidth, minWidth),
+    custom: false,
+  }
 
   if (typeof document === "undefined" || !widthCookieName) {
-    return fallbackWidth
+    return defaultPreference
   }
 
   try {
@@ -79,11 +82,11 @@ function getInitialSidebarWidth(
 
     return Number.isFinite(storedWidth) &&
       storedWidth >= SIDEBAR_COLLAPSE_THRESHOLD
-      ? clampSidebarWidth(storedWidth, maxWidth, minWidth)
-      : fallbackWidth
+      ? { width: clampSidebarWidth(storedWidth, maxWidth, minWidth), custom: true }
+      : defaultPreference
   } catch (error) {
     if (isCookieAccessError(error)) {
-      return fallbackWidth
+      return defaultPreference
     }
 
     throw error
@@ -135,6 +138,7 @@ type SidebarContextProps = {
   sidebarWidth: number
   minSidebarWidth: number
   maxSidebarWidth: number
+  setDefaultSidebarWidth: (width: number) => void
   commitSidebarWidth: (width: number) => void
 }
 
@@ -181,7 +185,7 @@ function SidebarProvider({
     maxSidebarWidth,
     Math.max(0, Math.ceil(minWidth))
   )
-  const [preferredSidebarWidth, setPreferredSidebarWidth] = React.useState(
+  const [widthPreference, setWidthPreference] = React.useState(
     () =>
       getInitialSidebarWidth(
         defaultWidth,
@@ -191,16 +195,27 @@ function SidebarProvider({
       )
   )
   const sidebarWidth = clampSidebarWidth(
-    preferredSidebarWidth,
+    widthPreference.width,
     maxSidebarWidth,
     minSidebarWidth
   )
 
   React.useLayoutEffect(() => {
-    setPreferredSidebarWidth((currentWidth) =>
-      Math.max(currentWidth, minSidebarWidth)
-    )
+    setWidthPreference((current) => current.width >= minSidebarWidth
+      ? current
+      : { ...current, width: minSidebarWidth })
   }, [minSidebarWidth])
+
+  const setDefaultSidebarWidth = React.useCallback((width: number) => {
+    const nextWidth = clampSidebarWidth(
+      Math.max(SIDEBAR_COLLAPSE_THRESHOLD, Math.ceil(width)),
+      maxSidebarWidth,
+      minSidebarWidth
+    )
+    setWidthPreference((current) => current.custom || current.width === nextWidth
+      ? current
+      : { width: nextWidth, custom: false })
+  }, [maxSidebarWidth, minSidebarWidth])
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
@@ -236,7 +251,7 @@ function SidebarProvider({
       return
     }
 
-    setPreferredSidebarWidth(nextWidth)
+    setWidthPreference({ width: nextWidth, custom: true })
     persistSidebarWidth(nextWidth, widthCookieName)
   }, [maxSidebarWidth, minSidebarWidth, widthCookieName])
 
@@ -276,6 +291,7 @@ function SidebarProvider({
       sidebarWidth,
       minSidebarWidth,
       maxSidebarWidth,
+      setDefaultSidebarWidth,
       commitSidebarWidth,
     }),
     [
@@ -289,6 +305,7 @@ function SidebarProvider({
       sidebarWidth,
       minSidebarWidth,
       maxSidebarWidth,
+      setDefaultSidebarWidth,
       commitSidebarWidth,
     ]
   )

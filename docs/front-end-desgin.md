@@ -119,6 +119,13 @@ Main sidebar / Workspace sidebar
 `components/motion/collapsing-inline.tsx`：网格宽度和透明度使用 280ms / `EASE_OUT` 过渡，
 可反向中断，减少动态效果时立即切换。切换 harness 本身沿用原有的 180ms 淡入 / 位移动效。
 
+主 Sidebar 的默认展开宽度按所有可选 harness 中最宽的完整标识计算，包含 `Powered by:`、
+图标、名称和间距，并加上品牌图标、内边距、边框与收起按钮所需的实际宽度；切换 harness
+不会改变默认宽度。测量随字体或语言变化更新，并遵循现有 180–384px 展开范围。
+仅未手动设置宽度时使用此默认值，已保存和本次拖动的宽度优先；自动测量不写入宽度 cookie。
+拖动、折叠和展开过渡期间暂停默认宽度测量。移动端保持现有抽屉宽度；设置页与 Workspace
+继续使用各自的尺寸设置。
+
 ```text
 [品牌图标] Agent Workshop (Beta)    [收起]
            Powered by: [图标] 名称
@@ -1586,6 +1593,12 @@ rg -n '@base-ui/react|motion/react|gsap' agent-ui/src
 
 ```sh
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/sidebar/header/harness-runtime-label.test.tsx
+```
+
+默认展开宽度与手动宽度优先级、cookie 恢复、展开过渡和拖动期间暂停测量回归：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/sidebar/header/harness-default-width.test.tsx
 ```
 
 会话页头截断使用 Node 测试覆盖 160px 边界、后缀占位、不同字符宽度、组合字符与 emoji，
