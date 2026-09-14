@@ -111,12 +111,18 @@ Main sidebar / Workspace sidebar
 `text-muted-foreground/60` 三级文本色，与标题基线对齐。
 下方显示 `Powered by: {图标 + harness 名称}`，整行使用三级文本色，字号从
 `text-sm`（14px）降为 `text-xs`（12px）。中英文界面均保留上述英文标识。
-品牌和 harness 名称在空间不足时单行截断；切换 harness 沿用现有图标与名称的
-180ms 淡入 / 位移动效，并尊重减少动态效果设置。
+品牌名称在空间不足时单行截断。harness 标识按 `Powered by:` 后的实际剩余宽度显示：
+能放下完整图标、间距和名称时显示 `icon + name`，不足时仅显示图标，名称不使用省略号。
+拖动侧栏、切换 harness、语言或字体变化时重新测量；隐藏的完整标识始终参与测量，
+避免名称收起后反复展开。Tooltip 与按钮的可访问名称保留完整 harness 名称。
+名称收放与 ChatComposer model selector 共用
+`components/motion/collapsing-inline.tsx`：网格宽度和透明度使用 280ms / `EASE_OUT` 过渡，
+可反向中断，减少动态效果时立即切换。切换 harness 本身沿用原有的 180ms 淡入 / 位移动效。
 
 ```text
 [品牌图标] Agent Workshop (Beta)    [收起]
            Powered by: [图标] 名称
+窄宽度     Powered by: [图标]
            点击 -> harness 选择菜单
 ```
 
@@ -1574,6 +1580,13 @@ rg -n '@base-ui/react|motion/react|gsap' agent-ui/src
 - 静态分析：`npm run lint`
 - 生产构建：`npm run build`
 - 预览生产构建：`npm run preview`
+
+侧栏 harness 自适应标识使用 jsdom 和 Node 测试验证宽度边界、收起后恢复、名称与字体
+变化、观察器清理和减少动态效果；只模拟布局尺寸，不启动浏览器：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/sidebar/header/harness-runtime-label.test.tsx
+```
 
 会话页头截断使用 Node 测试覆盖 160px 边界、后缀占位、不同字符宽度、组合字符与 emoji，
 不启动浏览器：

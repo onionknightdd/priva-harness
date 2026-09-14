@@ -6,11 +6,6 @@ import { useSidebar } from "@/components/ui/sidebar"
 
 const WorkspaceDensityContext = React.createContext(false)
 
-export const workspaceDensityTransition = {
-  duration: 0.28,
-  ease: [0.16, 1, 0.3, 1],
-} as const
-
 export function useWorkspaceTakesMajority() {
   return React.useContext(WorkspaceDensityContext)
 }

@@ -4,6 +4,7 @@ import gsap from "gsap"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
+import { CollapsingInline } from "@/components/motion/collapsing-inline"
 import { OverflowMarquee } from "@/components/motion/overflow-marquee"
 import { Input } from "@/components/ui/input"
 import { InputGroupButton } from "@/components/ui/input-group"
@@ -44,10 +45,7 @@ import {
   type ModelIdGroup,
 } from "@/features/model-settings/model-provider"
 import { ProviderIcon } from "@/features/model-settings/provider-icon"
-import {
-  useWorkspaceTakesMajority,
-  workspaceDensityTransition,
-} from "@/features/workspace"
+import { useWorkspaceTakesMajority } from "@/features/workspace"
 import { TooltipHint } from "@/components/ui/tooltip"
 
 const COMPOSER_MENU_WIDTH_CLASS = "w-56 min-w-56 max-w-56 text-sm"
@@ -104,37 +102,6 @@ function filterModelGroups(
 
     return items.length > 0 ? [{ ...group, items }] : []
   })
-}
-
-function CollapsingInline({
-  open,
-  children,
-}: {
-  open: boolean
-  children: React.ReactNode
-}) {
-  const shouldReduceMotion = Boolean(useReducedMotion())
-
-  return (
-    <motion.span
-      aria-hidden={!open}
-      className="inline-grid min-w-0 max-w-full overflow-hidden align-middle"
-      initial={false}
-      animate={{
-        gridTemplateColumns: open ? "1fr" : "0fr",
-        opacity: open ? 1 : 0,
-      }}
-      transition={
-        shouldReduceMotion ? { duration: 0 } : workspaceDensityTransition
-      }
-    >
-      <span className="flex min-w-0 overflow-hidden">
-        <span className="flex w-max max-w-full items-center gap-1 pl-1">
-          {children}
-        </span>
-      </span>
-    </motion.span>
-  )
 }
 
 function OverflowFadeText({

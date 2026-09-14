@@ -3,7 +3,6 @@
 import * as React from "react"
 import gsap from "gsap"
 import { BotIcon, CheckIcon } from "lucide-react"
-import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
 import { Badge } from "@/components/ui/badge"
@@ -33,6 +32,7 @@ import {
 
 import { HarnessBrandLogo } from "./harness-brand-logo"
 import { useHarness } from "./harness-context"
+import { HarnessRuntimeLabel } from "./harness-runtime-label"
 import {
   getHarnessOption,
   harnessOptions,
@@ -151,7 +151,6 @@ export function HarnessSwitcher() {
   const logoRef = React.useRef<HTMLDivElement>(null)
   const { isMobile, setOpen, state } = useSidebar()
   const { t } = useTranslation()
-  const reduceMotion = useReducedMotion() === true
   const { harnessId: activeHarnessId, setHarnessId: setActiveHarnessId } =
     useHarness()
   const [harnessMenuOpen, setHarnessMenuOpen] = React.useState(false)
@@ -215,7 +214,7 @@ export function HarnessSwitcher() {
                 aria-label={
                   isCollapsed
                     ? t("common.expandSidebar")
-                    : t("sidebar.harness.select")
+                    : `${t("sidebar.harness.select")}: ${runtimeName}`
                 }
                 render={
                   <SidebarMenuButton
@@ -242,29 +241,7 @@ export function HarnessSwitcher() {
                   </span>
                   <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground/60">
                     <span className="shrink-0">{t("sidebar.harness.poweredBy")}</span>
-                    <AnimatePresence initial={false} mode="wait">
-                      <motion.span
-                        key={activeHarnessId}
-                        data-runtime-logo
-                        className="inline-flex min-w-0 items-center gap-1"
-                        initial={
-                          reduceMotion ? false : { opacity: 0, y: 5 }
-                        }
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={reduceMotion ? undefined : { opacity: 0, y: -5 }}
-                        transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-                      >
-                        <HarnessBrandLogo
-                          className={
-                            activeHarness.id === "pi"
-                              ? "size-3 shrink-0"
-                              : "size-3.5 shrink-0"
-                          }
-                          harnessId={activeHarness.id}
-                        />
-                        <span className="truncate">{runtimeName}</span>
-                      </motion.span>
-                    </AnimatePresence>
+                    <HarnessRuntimeLabel harnessId={activeHarnessId} name={runtimeName} />
                   </span>
                 </div>
               </DropdownMenuTrigger>
