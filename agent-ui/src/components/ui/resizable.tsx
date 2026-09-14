@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react"
 import * as ResizablePrimitive from "react-resizable-panels"
 
 import { cn } from "@/lib/utils"
@@ -22,6 +23,17 @@ function ResizablePanel({ ...props }: ResizablePrimitive.PanelProps) {
   return <ResizablePrimitive.Panel data-slot="resizable-panel" {...props} />
 }
 
+function ResizableHandleGrip({ className, ...props }: ComponentProps<"div">) {
+  return (
+    <div
+      aria-hidden="true"
+      data-slot="resizable-handle-grip"
+      className={cn("z-10 flex h-6 w-1 shrink-0 rounded-lg bg-border", className)}
+      {...props}
+    />
+  )
+}
+
 function ResizableHandle({
   withHandle,
   className,
@@ -38,11 +50,9 @@ function ResizableHandle({
       )}
       {...props}
     >
-      {withHandle && (
-        <div className="z-10 flex h-6 w-1 shrink-0 rounded-lg bg-border" />
-      )}
+      {withHandle && <ResizableHandleGrip />}
     </ResizablePrimitive.Separator>
   )
 }
 
-export { ResizableHandle, ResizablePanel, ResizablePanelGroup }
+export { ResizableHandle, ResizableHandleGrip, ResizablePanel, ResizablePanelGroup }

@@ -1154,6 +1154,20 @@ mcp__github__list_issues
 复用 [ImageToolPreview](../agent-ui/src/features/agent-message/components/image-tool-preview.tsx)
 与 [Lightbox](../agent-ui/src/components/interior/lightbox.tsx)，不渲染原始路径作为生成结果。
 
+2026-09-14：消息内的灯箱预览入口按实际图片宽度收紧，最大不超过消息内容区域；
+Edit 并排模式各自受所在列宽度约束。图片按现有预览高度等比缩小，小图不放大，
+加载中和失败时保留占位区域。
+
+```text
+Agent message 内容区域
++--------------------------------------+
+| prompt                               |
+| +------------+                       |
+| | 图片预览   |  随图片宽度收紧        |
+| +------------+  最大不超过消息区域    |
++--------------------------------------+
+```
+
 2026-09-12：`image_read` 的工具行接入用户指定的
 [Loading UI AnalyzingImage](../agent-ui/src/components/loading-ui/analyzing-image.tsx)，
 执行中显示扫描，成功 / 失败及减少动态效果时保持静止；`image_edit` 使用 Lucide
@@ -1203,7 +1217,12 @@ prompt，随后是 `Side-by-side / Slide` 切换；默认并排展示原图和�
 并排预览复用 `ImageToolPreview`，点击原图或结果均可打开灯箱；Slide 使用现有
 Base UI Slider，支持拖动、方向键、Home / End。两张图片使用相同画布并保持 contain
 比例，只裁切原图显示区域，不拉伸图像。桌面和手机保持相同顺序；鼠标切换模式时
-使用 160ms / `EASE_OUT` 淡入，键盘和减少动态效果时立即切换；拖动直接跟随输入。
+使用 160ms / `EASE_OUT` 淡入，键盘和减少动态效果时立即切换。滑杆步进为 0.1%，
+分隔线与裁切区域同步直接跟随输入，避免整百分比跳格；方向键微调 0.1%，
+Shift + 方向键或 Page Up / Down 调整 10%，Home / End 到达两端。
+Slide 与 shadcn `ResizableHandle withHandle` 共用 `ResizableHandleGrip`：
+4×24px 圆角竖条、1px 分隔线，使用 `border` 色彩 token；实际拖动命中区宽 44px，
+键盘聚焦时在手柄内显示焦点环。
 执行中保留原图和结果占位，失败保留原始报错；结果可用前禁用 Slide，图片加载
 失败可重新加载。执行完成保留展开状态，历史完成项默认折叠。
 
@@ -1703,6 +1722,7 @@ Mermaid 浏览器回归：打开 `/tests/components/ai-elements/mermaid-browser.
 生成占位、原始错误、预览重试、灯箱关闭及焦点恢复，同时覆盖 Read 的 prompt、
 相对图片路径与模型输出、Edit 的原图选择、并排 / 滑杆模式、键盘端点、运行中转为
 完成、对比图片重载、完整文件路径、Read / Edit 的图标映射、MCP 别名、扫描停止，
+横图 / 竖图 / 小图的自适应宽度、消息及并排列宽约束、单像素正反向拖动与裁切同步，
 以及 Bash / shell 恢复 SquareTerminal。追加 `?zh&dark&reduced-motion`
 检查中文、深色和图标的减少动态效果分支；使用 390px 视口及真实 Tab / Enter / Esc
 检查窄屏与键盘操作。数据回归包含在 Agent message 的 `*.test.ts` 命令中。

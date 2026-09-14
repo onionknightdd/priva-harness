@@ -68,8 +68,8 @@ async function imagesLoad(host: HTMLElement) {
     }
   })
 }
-async function key(element: HTMLElement, key: string) {
-  await act(async () => element.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })))
+async function key(element: HTMLElement, key: string, shiftKey = false) {
+  await act(async () => element.dispatchEvent(new KeyboardEvent("keydown", { key, shiftKey, bubbles: true, cancelable: true })))
 }
 
 test("Edit renders prompt, selectable source previews, result, and full paths for MCP calls", async () => {
@@ -102,8 +102,10 @@ test("Slide keeps both full images, supports keyboard endpoints, and preserves s
     const reveal = view.host.querySelector<HTMLElement>('[data-slot="image-comparison-before"]')!
     assert.match(reveal.style.clipPath, /50%/)
     await key(range, "ArrowRight")
-    assert.equal(range.value, "51")
-    assert.match(reveal.style.clipPath, /49%/)
+    assert.equal(range.value, "50.1")
+    assert.match(reveal.style.clipPath, /49.9%/)
+    await key(range, "ArrowRight", true)
+    assert.equal(range.value, "60.1")
     await key(range, "End")
     assert.equal(range.value, "100")
     await key(range, "Home")

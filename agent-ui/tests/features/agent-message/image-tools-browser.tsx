@@ -77,6 +77,7 @@ export function Fixtures() {
       <AnalyzingImage active={false} className="size-5" data-case="completed-icon" />
     </div>
     <section data-case="gen"><ImageGenToolItem block={gen("gen", "/image-tool-fixtures/source.png")} /></section>
+    {["portrait", "wide", "small"].map((shape) => <section key={shape} data-case={`gen-${shape}`}><ImageGenToolItem block={gen(`gen-${shape}`, `/image-tool-fixtures/${shape}.png`)} /></section>)}
     <section data-case="retry"><ImageGenToolItem block={gen("retry", "/image-tool-fixtures/retry.png")} /></section>
     <section data-case="pending"><ImageGenToolItem block={gen("pending", "", "running")} /></section>
     <section data-case="failed"><ImageGenToolItem block={gen("failed", "The image service is unavailable.", "completed", false)} /></section>
@@ -114,6 +115,15 @@ async function runChecks() {
     await until(() => Boolean(item("gen")?.querySelector('button[aria-busy="false"]')), "generated image loaded")
     check("Gen shows prompt and requested size", item("gen").textContent!.includes("Quiet sunlight") && item("gen").textContent!.includes("1536x1024"))
     check("successful result is a decoded image", item("gen").querySelector("img")!.naturalWidth === 1200)
+    for (const name of ["gen", "gen-portrait", "gen-wide", "gen-small", "read-running"]) {
+      await until(() => Boolean(item(name).querySelector('button[aria-busy="false"]')), `${name} preview loads`)
+      const image = item(name).querySelector("img")!
+      const preview = image.parentElement!
+      const frame = preview.getBoundingClientRect()
+      const available = preview.parentElement!.getBoundingClientRect().width
+      const expected = Math.min(image.naturalWidth, (frame.height - 2) * image.naturalWidth / image.naturalHeight, available - 2)
+      check(`${name} preview fits the image within the message width`, Math.abs(frame.width - expected - 2) < 1 && frame.width <= available)
+    }
     check("running result keeps a loading placeholder", !item("pending").querySelector("img") && Boolean(item("pending").querySelector('[data-slot="skeleton"]')))
     check("tool failure retains the service message", item("failed").textContent!.includes("The image service is unavailable.") && !item("failed").querySelector("img"))
     check("invalid Gen output retains its original text", item("invalid-output").querySelector('[role="alert"]')!.textContent === '{"error":{"message":"Original image_gen error <detail>"}}')
@@ -148,11 +158,34 @@ async function runChecks() {
     modeButton("edit-preview", i18n.t("agentMessage.imageTools.sourceNumber", { number: 2 })).click()
     await until(() => editPreview.querySelector("img")?.naturalWidth === 600, "second source loads")
     check("source selection updates its image and full path while preserving the result", editPreview.querySelector("dl")!.textContent!.includes(portraitPath) && new URL(editPreview.querySelectorAll("img")[1].src).searchParams.get("path") === "/image-tool-fixtures/result.png")
+    const sourceImage = editPreview.querySelector("img")!
+    check("Edit portrait preview fits its image within its column", Math.abs(sourceImage.parentElement!.getBoundingClientRect().width - sourceImage.getBoundingClientRect().width - 2) < 1 && sourceImage.parentElement!.getBoundingClientRect().width <= editPreview.getBoundingClientRect().width / 2)
     modeButton("edit-preview", "Slide").click()
     await until(() => Boolean(editPreview.querySelector<HTMLInputElement>('input[type="range"]:enabled')), "Slide becomes interactive")
     const range = editPreview.querySelector<HTMLInputElement>('input[type="range"]')!
     const beforeLayer = editPreview.querySelector<HTMLElement>('[data-slot="image-comparison-before"]')!
     check("Slide initially reveals half of the original", range.value === "50" && beforeLayer.style.clipPath.includes("50%"))
+    const control = beforeLayer.parentElement!
+    const controlBounds = control.getBoundingClientRect()
+    const startX = controlBounds.left + controlBounds.width / 2
+    const y = controlBounds.top + controlBounds.height / 2
+    const pointer = (type: string, x: number, target: EventTarget = document) => target.dispatchEvent(new PointerEvent(type, { clientX: x, clientY: y, pointerId: 1, pointerType: "mouse", isPrimary: true, button: 0, buttons: type === "pointerup" ? 0 : 1, bubbles: true, cancelable: true }))
+    const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    pointer("pointerdown", startX, control)
+    const positions: number[] = []
+    const alignmentErrors: number[] = []
+    try {
+      for (const offset of [1, 2, 3, 4, 3, 2, 1]) {
+        pointer("pointermove", startX + offset)
+        await frame()
+        positions.push(Number(range.value))
+        const thumb = range.parentElement!.getBoundingClientRect()
+        const revealX = controlBounds.left + 1 + (controlBounds.width - 2) * (100 - Number.parseFloat(beforeLayer.style.clipPath.split(" ")[1])) / 100
+        alignmentErrors.push(Math.max(Math.abs(thumb.left + thumb.width / 2 - startX - offset), Math.abs(revealX - startX - offset)))
+      }
+    } finally { pointer("pointerup", startX + 1) }
+    check("one-pixel drags move continuously in both directions", positions.slice(0, 4).every((value, index) => value > (index ? positions[index - 1] : 50)) && positions.slice(4).every((value, index) => value < positions[index + 3]))
+    check("divider and image reveal follow the pointer within one pixel", alignmentErrors.every((error) => error < 1))
     range.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true, cancelable: true }))
     await until(() => range.value === "100", "End reveals original")
     check("keyboard comparison reaches the original endpoint", beforeLayer.style.clipPath.includes("0%"))

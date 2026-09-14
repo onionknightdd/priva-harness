@@ -20,9 +20,12 @@ export default mergeConfig(appConfig, {
           return
         }
         const edited = path.endsWith("result.png")
-        const width = path.endsWith("portrait.png") ? 600 : 1200
+        const [width, height] = path.endsWith("portrait.png") ? [600, 800]
+          : path.endsWith("wide.png") ? [2400, 400]
+          : path.endsWith("small.png") ? [96, 64]
+          : [1200, 800]
         response.writeHead(200, { "Content-Type": "image/svg+xml", "Cache-Control": "no-store" })
-        response.end(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="800" viewBox="0 0 1200 800"><rect width="1200" height="800" fill="${edited ? "#27354f" : "#d8e6eb"}"/><circle cx="910" cy="180" r="76" fill="${edited ? "#fff7d3" : "#e8b775"}"/><path d="M0 720L350 200 700 720Z" fill="${edited ? "#546782" : "#719499"}"/><path d="M440 800L880 330 1200 780V800Z" fill="${edited ? "#9cadb8" : "#9cb9b8"}"/><text x="44" y="748" font-family="sans-serif" font-size="32" fill="${edited ? "#ffffff" : "#26383c"}">${edited ? "AFTER · NIGHT" : "BEFORE · DAY"}</text></svg>`)
+        response.end(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 1200 800"><rect width="1200" height="800" fill="${edited ? "#27354f" : "#d8e6eb"}"/><circle cx="910" cy="180" r="76" fill="${edited ? "#fff7d3" : "#e8b775"}"/><path d="M0 720L350 200 700 720Z" fill="${edited ? "#546782" : "#719499"}"/><path d="M440 800L880 330 1200 780V800Z" fill="${edited ? "#9cadb8" : "#9cb9b8"}"/><text x="44" y="748" font-family="sans-serif" font-size="32" fill="${edited ? "#ffffff" : "#26383c"}">${edited ? "AFTER · NIGHT" : "BEFORE · DAY"}</text></svg>`)
       })
     },
   } satisfies Plugin],

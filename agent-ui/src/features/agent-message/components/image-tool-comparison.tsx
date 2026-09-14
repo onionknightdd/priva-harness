@@ -1,9 +1,9 @@
 import { Slider } from "@base-ui/react/slider"
-import { GripVerticalIcon } from "lucide-react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button"
+import { ResizableHandleGrip } from "@/components/ui/resizable"
 import { Skeleton } from "@/components/ui/skeleton"
 import { getDownloadUrl } from "@/lib/api/sandbox-files"
 import { cn } from "@/lib/utils"
@@ -45,6 +45,7 @@ function Comparison({ before, after }: ImageToolComparisonProps) {
       onValueChange={setPosition}
       min={0}
       max={100}
+      step={0.1}
       disabled={!ready}
       className="h-48 min-w-0 sm:h-64"
       aria-busy={!ready}
@@ -76,10 +77,8 @@ function Comparison({ before, after }: ImageToolComparisonProps) {
           getAriaValueText={(_, value) => t("agentMessage.imageTools.compareValue", { value })}
           className={cn("group/handle flex h-full w-11 items-center justify-center outline-none", !ready && "invisible")}
         >
-          <span aria-hidden="true" className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-background shadow-sm" />
-          <span aria-hidden="true" className="relative grid size-8 place-items-center rounded-full border border-border bg-background text-foreground shadow-sm group-has-[:focus-visible]/handle:ring-2 group-has-[:focus-visible]/handle:ring-inset group-has-[:focus-visible]/handle:ring-ring">
-            <GripVerticalIcon className="size-4" />
-          </span>
+          <span aria-hidden="true" className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border" />
+          <ResizableHandleGrip className="group-has-[:focus-visible]/handle:ring-2 group-has-[:focus-visible]/handle:ring-inset group-has-[:focus-visible]/handle:ring-ring" />
         </Slider.Thumb>
       </Slider.Control>
     </Slider.Root>

@@ -49,7 +49,8 @@ function ImagePreview({ path, alt, className }: ImageToolPreviewProps) {
         disabled={state !== "ready"}
         onClick={() => setOpen(true)}
         className={cn(
-          "relative block h-64 w-full min-w-0 overflow-hidden rounded-lg border border-border bg-muted/20 outline-none enabled:cursor-zoom-in enabled:hover:border-ring",
+          "relative flex h-64 max-w-full min-w-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted/20 outline-none enabled:cursor-zoom-in enabled:hover:border-ring",
+          state === "ready" ? "w-fit" : "w-full",
           "transition-[border-color,box-shadow] duration-150 motion-reduce:transition-none",
           focusRing,
           className
@@ -64,7 +65,7 @@ function ImagePreview({ path, alt, className }: ImageToolPreviewProps) {
           src={src}
           alt={alt}
           draggable={false}
-          className={cn("size-full object-contain transition-opacity duration-150 motion-reduce:transition-none", state === "ready" ? "opacity-100" : "opacity-0")}
+          className={cn("h-auto max-h-full w-auto max-w-full object-contain transition-opacity duration-150 motion-reduce:transition-none", state === "ready" ? "opacity-100" : "opacity-0")}
           onLoad={(event) => {
             setDimensions({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })
             setState("ready")
