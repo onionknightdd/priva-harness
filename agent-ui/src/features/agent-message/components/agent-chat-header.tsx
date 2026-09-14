@@ -145,7 +145,9 @@ export function AgentChatHeader() {
     if (!heading || !text) return
 
     const measure = () => {
-      const nextTitle = fitSessionTitle(title, heading.getBoundingClientRect().width, (candidate) => {
+      // Use the limit rather than the current title width so a short title can grow.
+      const availableWidth = Number.parseFloat(getComputedStyle(heading).maxWidth)
+      const nextTitle = fitSessionTitle(title, availableWidth, (candidate) => {
         text.textContent = candidate
         return text.getBoundingClientRect().width
       })
@@ -244,7 +246,7 @@ export function AgentChatHeader() {
               ref={titleRef}
               aria-label={title}
               className={cn(
-                "relative w-[160px] shrink-0 whitespace-nowrap text-sm font-medium",
+                "relative w-fit max-w-[160px] shrink-0 whitespace-nowrap text-sm font-medium",
                 activeSession && "cursor-text"
               )}
               onDoubleClick={() => {
