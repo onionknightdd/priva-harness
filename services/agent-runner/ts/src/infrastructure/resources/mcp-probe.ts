@@ -75,8 +75,14 @@ export class McpProbe {
       const token = typeof definition['bearerToken'] === 'string' ? expand(definition['bearerToken']) : typeof definition['bearerTokenEnv'] === 'string' ? process.env[definition['bearerTokenEnv']] : undefined
       if (token !== undefined) headers['Authorization'] = `Bearer ${token}`
       const options = { requestInit: { headers } }
+      // Short-lived probes skip the optional GET stream, including GET-based resumption.
       // eslint-disable-next-line @typescript-eslint/no-deprecated -- Explicitly configured SSE-only servers still need the legacy transport.
-      transport = definition['type'] === 'sse' || definition['httpTransport'] === 'sse' ? new SSEClientTransport(url, options) : new StreamableHTTPClientTransport(url, options)
+      transport = definition['type'] === 'sse' || definition['httpTransport'] === 'sse' ? new SSEClientTransport(url, options) : new StreamableHTTPClientTransport(url, {
+        ...options,
+        fetch: (input, init) => (init?.method ?? 'GET') === 'GET'
+          ? Promise.resolve(new Response(null, { status: 405, statusText: 'GET stream disabled' }))
+          : fetch(input, init),
+      })
     } else throw new ResourceError(422, 'Provide a complete stdio or HTTP/SSE definition to test this override')
     const signal = AbortSignal.timeout(30_000)
     const close = () => { void client.close() }

@@ -195,6 +195,18 @@ loadMcpConfig(globalConfigPath, session.cwd)
 工具 inputSchema -> 参数表单 -> 用户执行 -> /mcp/validate/tool
 ```
 
+Streamable HTTP 的能力探测和工具测试通过自定义 `fetch` 跳过 GET：在本地返回空的
+`405 GET stream disabled` 响应，避免为短时探测建立独立事件流；GET 事件恢复也会被拦截。
+其他方法正常发送并保留请求头，POST 返回的 JSON 和 SSE 响应均可处理。
+此策略仅作用于资源 probe；显式配置 `type=sse` 或 `httpTransport=sse` 的旧 SSE
+transport 仍发起 GET，provider 的运行时连接不受影响。
+
+```text
+Streamable HTTP probe -> GET      -> 本地 405
+                     -> 其他方法 -> fetch -> JSON / SSE 响应
+显式 SSE probe        -> GET      -> 服务器 SSE 连接
+```
+
 源级原始配置与指定 cwd 的有效配置需区分；被覆盖记录不可误报为生效。
 启停必须映射到 provider 真正支持的语义，不能只保存一个与运行时无关的布尔值。
 
