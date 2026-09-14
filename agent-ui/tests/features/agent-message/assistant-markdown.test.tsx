@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { registerHooks } from "node:module"
 import { after, test } from "node:test"
 import { JSDOM } from "jsdom"
+import { compile } from "tailwindcss"
 
 import type { AgentMessageStatus, AgentThreadMessage } from "../../../src/features/agent-message/agent-message-data.ts"
 
@@ -56,7 +57,7 @@ let quotedPath: string | undefined
 
 function OpenedFile() {
   const files = useOptionalWorkspaceFiles()
-  return <output data-active-tab={useWorkspaceTab().activeTabId}>{files?.pendingFilePath}</output>
+  return <output data-active-tab={useWorkspaceTab().activeTabId} data-open-count={files?.fileOpenNonce}>{files?.pendingFilePath}</output>
 }
 
 async function mount(content: string, status: AgentMessageStatus = "complete") {
@@ -81,13 +82,49 @@ async function mount(content: string, status: AgentMessageStatus = "complete") {
   return { host, update, async close() { await act(async () => root.unmount()); host.remove() } }
 }
 
-const button = (host: ParentNode, label: string) => [...host.querySelectorAll<HTMLButtonElement>("button")].find((element) => element.textContent === label)!
+const button = (host: ParentNode, label: string) => [...host.querySelectorAll<HTMLElement>('button, [role="button"]')].find((element) => element.textContent === label)!
 async function click(element: HTMLElement) {
   assert.ok(element)
   await act(async () => element.click())
 }
 
+async function assertInlineFileText(host: HTMLElement, label: string) {
+  // Compile the real utility classes so jsdom checks CSS display/white-space,
+  // rather than relying on tag names or a hard-coded stylesheet in the test.
+  const compiler = await compile("@tailwind utilities;")
+  const style = document.head.appendChild(document.createElement("style"))
+  style.textContent = compiler.build([...new Set([...host.querySelectorAll<HTMLElement>("[class]")].flatMap(element => [...element.classList]))])
+  try {
+    const link = button(host, label)
+    const paragraph = link.closest("p")!
+    assert.equal(paragraph.textContent, `请查看${label}，这里是后续说明。`)
+    assert.equal(paragraph.querySelector("br, p, div"), null)
+    for (let element: HTMLElement | null = link.querySelector("span") ?? link; element && element !== paragraph; element = element.parentElement) {
+      const computed = getComputedStyle(element)
+      assert.ok(["inline", "contents"].includes(computed.display), `${element.tagName} must flow with prose, got ${computed.display}`)
+      assert.notEqual(computed.whiteSpace, "nowrap", "file titles must be able to wrap within the current text line")
+    }
+  } finally { style.remove() }
+}
+
 for (const status of ["complete", "streaming"] as const) {
+  test(`${status} file links flow with surrounding prose before and after focus`, async () => {
+    const label = "这是一份标题较长的测试文件以及修改说明.md"
+    const view = await mount(`请查看[${label}](sandbox:/workspace/inline-${status}.md)，这里是后续说明。`, status)
+    try {
+      await assertInlineFileText(view.host, label)
+      await act(async () => button(view.host, label).focus())
+      await assertInlineFileText(view.host, label)
+      assert.equal(document.activeElement, button(view.host, label))
+      if (status === "streaming") {
+        await view.update(`请查看[${label}](sandbox:/workspace/inline-${status}.md)，这里是后续说明。`, "complete")
+        await assertInlineFileText(view.host, label)
+      }
+      await click(button(view.host, label))
+      assert.equal(view.host.querySelector("output")!.textContent, `/workspace/inline-${status}.md`)
+    } finally { await view.close() }
+  })
+
   test(`${status} assistant messages open sandbox links in Workspace with the original label`, async () => {
     const path = `/workspace/${status}/测试文件.md`
     const view = await mount(`[测试文件](sandbox:${path})`, status)
@@ -114,6 +151,23 @@ for (const status of ["complete", "streaming"] as const) {
     } finally { await view.close() }
   })
 }
+
+test("inline file actions remain keyboard-accessible with Enter and Space", async () => {
+  const view = await mount("请查看[键盘文件](sandbox:/workspace/keyboard.md)，这里是后续说明。")
+  try {
+    await act(async () => button(view.host, "键盘文件").focus())
+    for (const [key, count] of [["Enter", "1"], [" ", "2"]]) {
+      const action = button(view.host, "键盘文件")
+      assert.equal(action.tabIndex, 0)
+      await act(async () => {
+        action.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }))
+        action.dispatchEvent(new KeyboardEvent("keyup", { key, bubbles: true, cancelable: true }))
+      })
+      assert.equal(view.host.querySelector("output")!.textContent, "/workspace/keyboard.md")
+      assert.equal(view.host.querySelector("output")!.getAttribute("data-open-count"), count)
+    }
+  } finally { await view.close() }
+})
 
 test("static reference links use the first matching Markdown definition", async () => {
   // Streamdown's streaming renderer splits definitions into separate blocks;

@@ -1291,8 +1291,15 @@ Markdown 引用并聚焦输入框；未能解析为绝对路径时不执行文�
 代码示例中的 Markdown 不转换为链接。
 生成文件链接应使用直接形式 `[标题](sandbox:/路径)`，兼容历史与流式消息；
 引用式链接 `[标题][id]` 沿用 Streamdown 的定义解析，流式分块不会跨段解析定义。
+正文中的 sandbox 文件引用使用可折行的行内布局，标题可以利用当前行的剩余空间，
+宽度不足时随正文继续折行。文本、提示触发器和右键触发器都不能使用原子化的
+`inline-flex` 或 `nowrap` 包住整段标题。共享 `FilePathLink` 的 `wrap` 选项使用
+Base UI Button 的非原生按钮模式渲染 inline span，保留按钮语义、Tab / Enter / Space
+和焦点恢复；点击反馈使用透明度，避免依赖不能应用于普通 inline 元素的缩放。
 
 ```text
+正文文字 [文件链接] 后续说明
+              +-- 宽度不足时按文字自然折行
 [测试文件](sandbox:/workspace/test.md)
   -> remark: 校验 sandbox URI -> 内部文件引用节点
   -> AssistantFileReference: 测试文件
@@ -1700,6 +1707,8 @@ rg -n '@base-ui/react|motion/react|gsap' agent-ui/src
 助手 Markdown 文件链接使用 Node/jsdom 验证真实消息组件的历史 / 流式渲染、
 标题和编码路径、历史消息中的引用式链接、表格、Workspace 打开与右键菜单、缺失文件，
 以及原有 URL 清理和外链确认；不启动浏览器：
+文件链接排版回归通过 Tailwind 编译真实 utility classes，使用 jsdom 检查正文及聚焦后的
+display / white-space，并验证 Enter / Space 激活；不将 jsdom 当作像素布局验收。
 
 ```sh
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/sandbox-markdown-links.test.ts agent-ui/tests/features/agent-message/assistant-markdown.test.tsx

@@ -12,10 +12,11 @@ import { isAbsoluteFilePath } from "@/lib/file-path"
 import { PopupsArmedContext } from "@/components/ui/popups-armed-context"
 import { QuoteInChatContext } from "../selection-actions-context"
 
-export function AssistantFileReference({ path, label, className }: {
+export function AssistantFileReference({ path, label, className, wrap = false }: {
   path: string
   label: string
   className?: string
+  wrap?: boolean
 }) {
   const { t } = useTranslation()
   const workspace = useOptionalWorkspaceFiles()
@@ -31,7 +32,8 @@ export function AssistantFileReference({ path, label, className }: {
   // events that open a context menu (right click, long press, Shift+F10).
   const armed = useContext(PopupsArmedContext)
   const restoreFocus = useRef(false)
-  const link = <FilePathLink path={path} label={label} tooltip={path} showIcon variant="code" className={className} />
+  const link = <FilePathLink path={path} label={label} tooltip={path} showIcon variant="code" className={className} wrap={wrap} />
+  const triggerClassName = wrap ? "inline select-text" : "inline-flex max-w-full min-w-0 select-text align-middle"
   const focusable = exists && workspace ? undefined : 0
 
   // Keyboard users can arm the message by focusing this link; the trigger
@@ -39,14 +41,14 @@ export function AssistantFileReference({ path, label, className }: {
   useLayoutEffect(() => {
     if (!armed || !restoreFocus.current) return
     restoreFocus.current = false
-    ;(triggerRef.current?.querySelector("button") ?? triggerRef.current)?.focus()
+    ;(triggerRef.current?.querySelector<HTMLElement>('button, [role="button"]') ?? triggerRef.current)?.focus()
   }, [armed])
 
   if (!armed) {
     return (
       <span
         ref={triggerRef}
-        className="inline-flex max-w-full min-w-0 select-text align-middle"
+        className={triggerClassName}
         tabIndex={focusable}
         onFocus={() => {
           restoreFocus.current = true
@@ -66,10 +68,10 @@ export function AssistantFileReference({ path, label, className }: {
       }
     }}>
       <ContextMenuTrigger className="select-text" tabIndex={focusable}
-        render={<span ref={triggerRef} className="inline-flex max-w-full min-w-0 align-middle" />}>
+        render={<span ref={triggerRef} className={triggerClassName} />}>
         {link}
       </ContextMenuTrigger>
-      <ContextMenuContent finalFocus={() => quoted.current ? false : triggerRef.current?.querySelector("button") ?? triggerRef.current}>
+      <ContextMenuContent finalFocus={() => quoted.current ? false : triggerRef.current?.querySelector<HTMLElement>('button, [role="button"]') ?? triggerRef.current}>
         <ContextMenuItem className="text-xs" disabled={!absolute || !exists || !workspace}
           onClick={() => workspace?.openFileInWorkspace(path)}>
           <FolderOpenIcon aria-hidden="true" />

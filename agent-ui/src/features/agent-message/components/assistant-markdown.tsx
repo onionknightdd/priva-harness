@@ -12,7 +12,7 @@ function AssistantSandboxFile({ url, label, children }: Record<string, unknown>)
   // allowedTags also permits raw HTML, so validate at the renderer boundary.
   const path = sandboxFilePath(url)
   if (!path || typeof label !== "string") return <>{children as ReactNode}</>
-  return <AssistantFileReference path={path} label={label || fileNameFromPath(path)} />
+  return <AssistantFileReference path={path} label={label || fileNameFromPath(path)} wrap />
 }
 
 const assistantMarkdownProps = {
