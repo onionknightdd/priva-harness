@@ -45,6 +45,8 @@ export const en = {
     collapse: "Collapse",
   },
   toolCard: {
+    input: "Input",
+    output: "Output",
     unknown: "Unknown",
     running: "Running",
     completed: "Completed",

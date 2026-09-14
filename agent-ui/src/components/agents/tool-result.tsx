@@ -352,11 +352,11 @@ export function ToolResult({
           {icon ?? <KindIcon kind={kind} />}
         </span>
         <span className="flex min-w-0 flex-1 items-baseline gap-2">
-          <span className="shrink-0 font-normal text-muted-foreground/70">
+          {tool != null && <span className="shrink-0 font-normal text-muted-foreground/70">
             <ActionSwapRollText value={toolKey}>
               {tool}
             </ActionSwapRollText>
-          </span>
+          </span>}
           <span className="min-w-0 flex-1 truncate font-normal text-muted-foreground/70">
             {typeof title === "string" ? (
               <OverflowMarquee>{title}</OverflowMarquee>

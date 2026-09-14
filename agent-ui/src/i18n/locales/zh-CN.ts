@@ -45,6 +45,8 @@ export const zhCN = {
     collapse: "收起",
   },
   toolCard: {
+    input: "输入",
+    output: "输出",
     unknown: "状态未知",
     running: "执行中",
     completed: "已完成",

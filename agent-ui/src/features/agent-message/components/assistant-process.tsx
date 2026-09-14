@@ -73,8 +73,10 @@ import {
 } from "../tool-activity"
 import { QuoteSelectable } from "./quote-selectable"
 import { CanvasToolItem } from "./canvas-tool-item"
+import { McpToolItem } from "./mcp-tool-item"
 import { VisualizeToolItem } from "./visualize-tool-item"
 import { isCanvasTool } from "../canvas-html"
+import { externalMcpToolName } from "../mcp-tool-data"
 import { isVisualizeTool } from "../visualize-jsx"
 import { isImageEditTool, isImageGenTool, isImageReadTool } from "../image-tools"
 import { ImageGenToolItem, ImageReadToolItem } from "./image-tool-item"
@@ -360,6 +362,8 @@ export function ToolItem({
   if (block.name.trim().toLowerCase() === "skill") {
     return <SkillToolItem block={block} />
   }
+  const mcpName = externalMcpToolName(block.name)
+  if (mcpName) return <McpToolItem block={block} name={mcpName} />
   return <GenericToolItem block={block} />
 }
 

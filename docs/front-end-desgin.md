@@ -1114,6 +1114,23 @@ config     [按结构嵌套的字段           ]
 [执行工具] -> 校验通过 -> 提交类型正确的参数 -> 结果 / 错误
 ```
 
+### 外部 MCP 工具卡片
+
+外部 MCP 调用复用 `ToolResult` 的状态、折叠、滚动和复制行为，图标读取现有
+`@lobehub/icons-static-svg/icons/mcp.svg`，用 mask 继承工具行的文本颜色。标题显示
+`服务器名:工具名`：服务器名取第一个与第二个 `__` 之间的部分，工具名取最后一个
+`__` 之后的部分，保留大小写。仅匹配完整的 `mcp__服务器__工具` 名称，普通工具与
+已有内置工具展示保持原入口，包括图片、Canvas 和 Visualize 的 MCP 别名。
+展开后依次显示输入与输出；JSON 输入格式化显示，未完成的流式 JSON 与错误输出保留
+原文。标题过长沿用工具卡的单行展示与悬停跑马灯，减少动态效果沿用共享组件设置。
+
+```text
+mcp__github__list_issues
+  -> [MCP] github:list_issues [状态] [展开]
+       输入 { ... }
+       输出 ...
+```
+
 ### 图片工具卡片
 
 2026-09-11：`image_gen`（含 MCP 别名）使用独立卡片。输入显示 `prompt` 与 `size`；
@@ -1599,6 +1616,13 @@ rg -n '@base-ui/react|motion/react|gsap' agent-ui/src
 
 ```sh
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/sidebar/header/harness-default-width.test.tsx
+```
+
+外部 MCP 工具名称解析、内置工具分流、流式输入、输出与错误、复制及中英文展示回归
+使用 Node/jsdom，不启动浏览器：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/mcp-tool-data.test.ts agent-ui/tests/features/agent-message/mcp-tool-item.test.tsx
 ```
 
 会话页头截断使用 Node 测试覆盖 160px 边界、后缀占位、不同字符宽度、组合字符与 emoji，
