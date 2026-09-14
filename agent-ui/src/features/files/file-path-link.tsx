@@ -46,7 +46,7 @@ export function FilePathLink({
     <FileTypeIcon
       name={fileNameFromPath(path)}
       path={path}
-      className={cn("size-[0.875em]", wrap ? "me-0.5 inline-block align-text-bottom" : "block")}
+      className={cn("size-[1em]", wrap ? "me-0.5 inline-block align-text-bottom" : "block")}
     />
   ) : null
   const text = marquee && !wrap ? (
