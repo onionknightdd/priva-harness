@@ -1,4 +1,4 @@
-import { isAbsoluteFilePath, normalizeFilePath } from "@/lib/file-path"
+import { isAbsoluteFilePath, normalizeFilePath, resolveAgainstCwd } from "@/lib/file-path"
 
 import type { StreamBlock } from "./agent-message-data"
 import { isImageFilePath } from "./file-read-view"
@@ -20,6 +20,16 @@ export function imageOutputPath(output: string | undefined): string {
     return ""
   }
   return normalizeFilePath(path)
+}
+
+export function imageEditSourcePaths(input: Record<string, unknown>, cwd: string): string[] {
+  const value = input.image_path
+  const values = Array.isArray(value) ? value : [value]
+  return values
+    .flatMap((item) => typeof item === "string" ? item.split(/[\n,]+/) : [])
+    .map((path) => path.trim())
+    .filter(Boolean)
+    .map((path) => resolveAgainstCwd(path, cwd))
 }
 
 function inputRecord(input: unknown): Record<string, unknown> {

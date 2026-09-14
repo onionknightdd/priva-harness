@@ -11,7 +11,6 @@ import {
   FilePenLineIcon,
   FilePlusCornerIcon,
   ImageIcon,
-  ImagesIcon,
   ScrollTextIcon,
   WrenchIcon,
 } from "lucide-react"
@@ -80,6 +79,7 @@ import { externalMcpToolName } from "../mcp-tool-data"
 import { isVisualizeTool } from "../visualize-jsx"
 import { isImageEditTool, isImageGenTool, isImageReadTool } from "../image-tools"
 import { ImageGenToolItem, ImageReadToolItem } from "./image-tool-item"
+import { ImageEditToolItem } from "./image-edit-tool-item"
 
 const TEXT_LINE_GAP_CLASS = "[line-height:1.5em]"
 
@@ -359,6 +359,9 @@ export function ToolItem({
   if (isImageReadTool(block.name)) {
     return <SessionImageReadToolItem block={block} />
   }
+  if (isImageEditTool(block.name)) {
+    return <SessionImageEditToolItem block={block} />
+  }
   if (block.name.trim().toLowerCase() === "skill") {
     return <SkillToolItem block={block} />
   }
@@ -370,6 +373,11 @@ export function ToolItem({
 function SessionImageReadToolItem({ block }: { block: Extract<StreamBlock, { type: "tool_use" }> }) {
   const { runCwd } = useActiveSession()
   return <ImageReadToolItem block={block} cwd={runCwd} />
+}
+
+function SessionImageEditToolItem({ block }: { block: Extract<StreamBlock, { type: "tool_use" }> }) {
+  const { runCwd } = useActiveSession()
+  return <ImageEditToolItem block={block} cwd={runCwd} />
 }
 
 function SkillToolItem({ block }: { block: Extract<StreamBlock, { type: "tool_use" }> }) {
@@ -406,7 +414,7 @@ function GenericToolItem({
 
   return (
     <ProcessRow
-      icon={isImageEditTool(block.name) ? <ImagesIcon /> : <WrenchIcon />}
+      icon={<WrenchIcon />}
       title={toolItemStatusLabel(block.name, running, t)}
       badge={label}
       badgeVariant={variant}

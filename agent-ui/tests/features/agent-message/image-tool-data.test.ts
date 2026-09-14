@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
-import { imageOutputPath, imageToolInput, imageToolString, type ImageToolBlock } from "../../../src/features/agent-message/image-tool-data.ts"
+import { imageEditSourcePaths, imageOutputPath, imageToolInput, imageToolString, type ImageToolBlock } from "../../../src/features/agent-message/image-tool-data.ts"
 
 const block: ImageToolBlock = {
   type: "tool_use", blockId: "image", id: "image", index: 0, name: "image_gen",
@@ -32,5 +32,23 @@ test("successful output accepts local image paths, including spaces and Windows 
 test("error text, remote URLs, structured data, and partial output are never loaded as images", () => {
   for (const output of [undefined, "", "Generation failed", "Error: /workspace/file.png", "https://example.com/image.png", "data:image/png;base64,AA", ".images/file.png", "/workspace/image.png\nmore text", '{"path":"/workspace/image.png"}', "/workspace/file.txt"]) {
     assert.equal(imageOutputPath(output), "", String(output))
+  }
+})
+
+test("edit sources match the tool's comma and newline parsing and resolve against the session cwd", () => {
+  assert.deepEqual(imageEditSourcePaths({ image_path: " ./first image.png,\nassets/second.jpg, /workspace/third.webp\n" }, "/workspace"), [
+    "/workspace/first image.png", "/workspace/assets/second.jpg", "/workspace/third.webp",
+  ])
+  assert.deepEqual(imageEditSourcePaths({ image_path: "source.png, ..\\shared\\image.jpg" }, "C:\\workspace\\project"), [
+    "C:/workspace/project/source.png", "C:/workspace/shared/image.jpg",
+  ])
+})
+
+test("edit array inputs preserve source order and ignore incomplete or non-string values", () => {
+  assert.deepEqual(imageEditSourcePaths({ image_path: ["first.png,second.png", null, ["ignored.png"], 4, "third.png"] }, "/workspace"), [
+    "/workspace/first.png", "/workspace/second.png", "/workspace/third.png",
+  ])
+  for (const image_path of [undefined, null, "", " , \n", {}, [false]]) {
+    assert.deepEqual(imageEditSourcePaths({ image_path }, "/workspace"), [])
   }
 })

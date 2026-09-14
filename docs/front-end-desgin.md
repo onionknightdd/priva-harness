@@ -1161,7 +1161,7 @@ Images。两者均覆盖 MCP 别名，图标复用工具行尺寸并作为装饰
 中文名称固定为“查看图片 / 编辑图片 / 创建图片”，执行状态由旁边的状态图标表示。
 查看图片展开后依次显示输入 `prompt`、输入图片缩略图（点击打开灯箱）和模型输出。
 相对图片路径根据当前会话的工作目录解析。执行中显示流式模型内容，结束后保留展开状态；
-历史记录中的完成项默认折叠。Edit 的内容区域仍沿用通用输出布局。
+历史记录中的完成项默认折叠。
 
 ```text
 image_read / MCP alias -> AnalyzingImage -> running: scan / settled: static
@@ -1181,6 +1181,31 @@ Bash / shell 按用户最新要求恢复既有 Lucide SquareTerminal 图标。
 AnalyzingImage 通过 `agent-ui/components.json` 的 registry 安装：
 `npx shadcn@latest add @loading-ui/analyzing-image`。
 本地补充 `active` 和减少动态效果控制，更新上游组件时须保留这些行为。
+
+2026-09-14：`image_edit`（含 MCP 别名）接入独立图片编辑卡片，首行直接显示输入
+prompt，随后是 `Side-by-side / Slide` 切换；默认并排展示原图和结果。多张输入图片
+按工具参数的逗号 / 换行顺序提供原图选择，相对路径根据会话目录解析。底部完整显示
+所选原图和结果路径，长路径换行并可选中文本复制。
+
+```text
+[Images] 编辑图片 / 状态                         v
+  输入 prompt
+  [Side-by-side | Slide]
+  [原图 1] [原图 2] ... （多张输入时）
+  +--------------------+------------------------+
+  | 原图               | 结果                   |
+  | 并排预览 / Slide 中拖动分隔线对比            |
+  +--------------------+------------------------+
+  原图  /workspace/source.png
+  结果  /workspace/.images/result.png
+```
+
+并排预览复用 `ImageToolPreview`，点击原图或结果均可打开灯箱；Slide 使用现有
+Base UI Slider，支持拖动、方向键、Home / End。两张图片使用相同画布并保持 contain
+比例，只裁切原图显示区域，不拉伸图像。桌面和手机保持相同顺序；鼠标切换模式时
+使用 160ms / `EASE_OUT` 淡入，键盘和减少动态效果时立即切换；拖动直接跟随输入。
+执行中保留原图和结果占位，失败保留原始报错；结果可用前禁用 Slide，图片加载
+失败可重新加载。执行完成保留展开状态，历史完成项默认折叠。
 
 图片工具执行失败时展示原始输出文本，保留换行与 JSON 内容；生成结果不符合图片路径
 格式时也展示返回的原文。服务端同时识别 HTTP 错误、HTTP 200 中的 JSON / SSE 错误，
@@ -1676,10 +1701,17 @@ Mermaid 浏览器回归：打开 `/tests/components/ai-elements/mermaid-browser.
 打开 `http://127.0.0.1:5175/tests/features/agent-message/image-tools-browser.html` 并点击
 **Run image tool checks**。独立服务使用自己的依赖缓存和合成图片，覆盖加载、
 生成占位、原始错误、预览重试、灯箱关闭及焦点恢复，同时覆盖 Read 的 prompt、
-相对图片路径与模型输出、Read / Edit 的图标映射、MCP 别名、扫描停止，
+相对图片路径与模型输出、Edit 的原图选择、并排 / 滑杆模式、键盘端点、运行中转为
+完成、对比图片重载、完整文件路径、Read / Edit 的图标映射、MCP 别名、扫描停止，
 以及 Bash / shell 恢复 SquareTerminal。追加 `?zh&dark&reduced-motion`
 检查中文、深色和图标的减少动态效果分支；使用 390px 视口及真实 Tab / Enter / Esc
 检查窄屏与键盘操作。数据回归包含在 Agent message 的 `*.test.ts` 命令中。
+
+Edit 组件行为也可独立通过 jsdom 验证（从仓库根目录运行）：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/image-edit-tool-item.test.tsx agent-ui/tests/features/agent-message/image-tool-data.test.ts
+```
 
 Agent 步骤长输入回归：打开 `/tests/components/agents/tool-result-browser.html`，点击
 **Run step overflow checks**。覆盖真实主聊天消息与 Workspace Agent 过程视图、
