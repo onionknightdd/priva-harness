@@ -39,8 +39,8 @@ function Comparison({ before, after, recheckKey }: ImageToolComparisonProps) {
   const src = (path: string) => `${getDownloadUrl(path)}${attempt ? `&retry=${attempt}` : ""}`
   const imageLabels = (
     <div className="relative h-5 min-w-0 overflow-hidden text-xs text-muted-foreground" data-slot="image-edit-file-labels">
-      {/* Match the canvas's 1px inset. Each half-width label track follows the
-          divider using transform, and stays inside its majority image area. */}
+      {/* Match the canvas's 1px inset. Labels hug the divider and can use all
+          available space on their side before the filename truncates. */}
       <div className="absolute inset-x-px inset-y-0">
         {[
           { side: "before", label: t("agentMessage.imageTools.before"), path: before, visible: position > 50 },
@@ -53,11 +53,12 @@ function Comparison({ before, after, recheckKey }: ImageToolComparisonProps) {
             aria-hidden={!visible}
             inert={!visible}
             className={cn(
-              "absolute top-0 flex h-full w-1/2 min-w-0 items-baseline gap-1.5 transition-opacity duration-160 ease-out motion-reduce:duration-100",
-              side === "before" ? "left-0 justify-end pr-1.5" : "left-1/2 pl-1.5"
+              "absolute top-0 flex h-full w-max min-w-0 items-baseline gap-1.5 transition-opacity duration-160 ease-out motion-reduce:duration-100",
+              side === "before" ? "pr-1.5" : "pl-1.5"
             )}
             style={{
-              transform: `translateX(${position * 2 - 100}%)`,
+              ...(side === "before" ? { right: `${100 - position}%` } : { left: `${position}%` }),
+              maxWidth: `${side === "before" ? position : 100 - position}%`,
               opacity: visible ? 1 : 0,
               transitionDuration: keyboardChange ? "0ms" : undefined,
             }}

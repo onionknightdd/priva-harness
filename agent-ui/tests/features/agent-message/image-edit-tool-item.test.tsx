@@ -189,6 +189,7 @@ test("comparison labels follow fractional pointer positions, switch at half, and
     const compiler = await compile("@tailwind utilities;")
     style.textContent = compiler.build([...new Set(comparisonLabels(view.host).flatMap(label => [...label.classList]))])
     for (const label of comparisonLabels(view.host)) {
+      assert.equal(getComputedStyle(label).width, "max-content")
       assert.equal(getComputedStyle(label).transitionProperty, "opacity")
       assert.equal(getComputedStyle(label).transitionDuration, "160ms")
     }
@@ -205,10 +206,13 @@ test("comparison labels follow fractional pointer positions, switch at half, and
         assert.equal(Number(range.value), position)
         assertMajorityLabel(view.host, position > 50 ? "before" : position < 50 ? "after" : null)
         for (const label of comparisonLabels(view.host)) {
-          const translation = Number(/translateX\(([-\d.]+)%\)/.exec(label.style.transform)![1])
-          // Each track is half a canvas wide, with its handle-facing edge at
-          // the midpoint before translation. Compare that edge to the thumb.
-          assert.ok(Math.abs(50 + translation / 2 - Number(range.value)) < 0.001)
+          const before = label.dataset.side === "before"
+          const handleEdge = before ? 100 - parseFloat(label.style.right) : parseFloat(label.style.left)
+          assert.ok(Math.abs(handleEdge - Number(range.value)) < 0.001)
+          // The label can grow from the handle all the way to its image edge,
+          // rather than truncating at half of the canvas while space is free.
+          const availableWidth = before ? handleEdge : 100 - handleEdge
+          assert.ok(Math.abs(parseFloat(label.style.maxWidth) - availableWidth) < 0.001)
           assert.equal(label.style.transitionDuration, "")
         }
       }
