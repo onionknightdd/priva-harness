@@ -421,6 +421,41 @@
   backdrop-filter: none;
 }
 
+/* Frost the empty width of a stuck user message. The bubble keeps its
+   opaque token; only this full-width sticky backing becomes a material.
+   Unstuck bars stay solid so historical turns do not pay for blur. */
+[data-slot="sticky-freeze"][data-surface="glass"][data-stuck] {
+  background-color: var(--background);
+}
+
+@supports (backdrop-filter: blur(1px)) {
+  [data-slot="sticky-freeze"][data-surface="glass"][data-stuck] {
+    background-color: color-mix(in oklab, var(--background) 65%, transparent);
+    backdrop-filter: blur(20px) saturate(180%);
+  }
+
+  [data-slot="sticky-freeze"][data-surface="glass"][data-stuck]
+    > [data-slot="sticky-freeze-mask"] {
+    background-image: linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--background) 65%, transparent),
+      transparent
+    );
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  [data-slot="sticky-freeze"][data-surface="glass"][data-stuck] {
+    background-color: var(--background);
+    backdrop-filter: none;
+  }
+
+  [data-slot="sticky-freeze"][data-surface="glass"][data-stuck]
+    > [data-slot="sticky-freeze-mask"] {
+    background-image: linear-gradient(to bottom, var(--background), transparent);
+  }
+}
+
 @keyframes loading-state-pixel {
   0%, 62%, 100% {
     opacity: 0.15;

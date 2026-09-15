@@ -325,6 +325,7 @@ const ThreadTurnItem = memo(function ThreadTurnItem({
           ref={userRef}
           className="z-20"
           showBelowMask={!workingStuck}
+          surface="glass"
         >
           {renderMessage(user)}
         </StickyFreeze>
