@@ -30,7 +30,6 @@ export const StickyFreeze = React.forwardRef<
     className?: string
     onStuckChange?: (stuck: boolean) => void
     showBelowMask?: boolean
-    surface?: "opaque" | "glass"
     top?: number
   }
 >(function StickyFreeze(
@@ -39,7 +38,6 @@ export const StickyFreeze = React.forwardRef<
     className,
     onStuckChange,
     showBelowMask = true,
-    surface = "opaque",
     top = 0,
   },
   forwardedRef
@@ -97,20 +95,15 @@ export const StickyFreeze = React.forwardRef<
         ref={forwardedRef}
         data-slot="sticky-freeze"
         data-stuck={stuck || undefined}
-        data-surface={surface}
         className={cn(
-          "relative sticky z-10 w-full min-w-0",
-          surface === "glass" && stuck
-            ? "bg-background supports-backdrop-filter:bg-background/60 supports-backdrop-filter:backdrop-blur-2xl supports-backdrop-filter:backdrop-saturate-150"
-            : "bg-background",
+          "relative sticky z-10 w-full min-w-0 bg-background",
           className
         )}
         style={{ top }}
         animate={{
-          boxShadow:
-            showEdge && surface !== "glass"
-              ? "0 1px 0 0 var(--border)"
-              : "0 0 0 0 transparent",
+          boxShadow: showEdge
+            ? "0 1px 0 0 var(--border)"
+            : "0 0 0 0 transparent",
         }}
         transition={
           shouldReduceMotion
@@ -123,12 +116,7 @@ export const StickyFreeze = React.forwardRef<
           <div
             aria-hidden
             data-slot="sticky-freeze-mask"
-            className={cn(
-              "pointer-events-none absolute inset-x-0 top-full h-8 bg-gradient-to-b to-transparent",
-              surface === "glass"
-                ? "from-background/60"
-                : "from-background"
-            )}
+            className="pointer-events-none absolute inset-x-0 top-full h-8 bg-gradient-to-b from-background to-transparent"
           />
         ) : null}
       </motion.div>

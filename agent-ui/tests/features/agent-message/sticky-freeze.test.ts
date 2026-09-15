@@ -1,5 +1,4 @@
 import assert from "node:assert/strict"
-import { readFile } from "node:fs/promises"
 import { after, test } from "node:test"
 import { JSDOM } from "jsdom"
 
@@ -26,24 +25,12 @@ after(() => { dom.window.close() })
 
 const { runStickyFreezeChecks } = await import("./sticky-freeze-checks.tsx")
 
-test("sticky freeze restores stuck glass before observer delivery", async () => {
+test("sticky freeze restores stuck state before observer delivery", async () => {
   const passed: string[] = []
   await runStickyFreezeChecks((name, condition) => {
     assert.equal(condition, true, name)
     passed.push(name)
   })
-  assert.ok(passed.includes("the stuck user bar uses the glass surface"))
-  assert.ok(passed.includes("the stuck user bar uses navbar glass classes"))
-  assert.ok(passed.includes("the working bar stays opaque while the user bar is glass"))
-})
-
-test("stuck glass uses the Glassmorphism Navbar classes", async () => {
-  const source = await readFile(
-    new URL("../../../src/features/agent-message/components/sticky-freeze.tsx", import.meta.url),
-    "utf8"
-  )
-  assert.match(source, /supports-backdrop-filter:bg-background\/60/)
-  assert.match(source, /supports-backdrop-filter:backdrop-blur-2xl/)
-  assert.match(source, /supports-backdrop-filter:backdrop-saturate-150/)
-  assert.match(source, /showEdge && surface !== "glass"/)
+  assert.ok(passed.includes("the restored user bar is marked as stuck"))
+  assert.ok(passed.includes("only the lower streaming bar gets the initial mask"))
 })
