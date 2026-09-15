@@ -421,33 +421,47 @@
   backdrop-filter: none;
 }
 
-/* Frost the empty width of a stuck user message. The bubble keeps its
-   opaque token; only this full-width sticky backing becomes a material.
-   Unstuck bars stay solid so historical turns do not pay for blur. */
+/* Frosted-glass fill for the empty width of a stuck user message. This is a
+   material (token mix + grain), not a backdrop blur of the transcript. */
 [data-slot="sticky-freeze"][data-surface="glass"][data-stuck] {
-  background-color: var(--background);
+  isolation: isolate;
+  background-color: color-mix(in oklab, var(--background) 78%, var(--muted) 22%);
 }
 
-@supports (backdrop-filter: blur(1px)) {
-  [data-slot="sticky-freeze"][data-surface="glass"][data-stuck] {
-    background-color: color-mix(in oklab, var(--background) 65%, transparent);
-    backdrop-filter: blur(20px) saturate(180%);
-  }
+[data-slot="sticky-freeze"][data-surface="glass"][data-stuck]
+  > :not([data-slot="sticky-freeze-frost"]):not([data-slot="sticky-freeze-mask"]) {
+  position: relative;
+  z-index: 1;
+}
 
-  [data-slot="sticky-freeze"][data-surface="glass"][data-stuck]
-    > [data-slot="sticky-freeze-mask"] {
-    background-image: linear-gradient(
-      to bottom,
-      color-mix(in oklab, var(--background) 65%, transparent),
-      transparent
-    );
-  }
+[data-slot="sticky-freeze-frost"] {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
+  mix-blend-mode: overlay;
+  opacity: 0.32;
+}
+
+.dark [data-slot="sticky-freeze-frost"] {
+  mix-blend-mode: soft-light;
+  opacity: 0.2;
+}
+
+[data-slot="sticky-freeze"][data-surface="glass"][data-stuck]
+  > [data-slot="sticky-freeze-mask"] {
+  background-image: linear-gradient(
+    to bottom,
+    color-mix(in oklab, var(--background) 78%, var(--muted) 22%),
+    transparent
+  );
 }
 
 @media (prefers-reduced-transparency: reduce) {
   [data-slot="sticky-freeze"][data-surface="glass"][data-stuck] {
     background-color: var(--background);
-    backdrop-filter: none;
+  }
+
+  [data-slot="sticky-freeze-frost"] {
+    display: none;
   }
 
   [data-slot="sticky-freeze"][data-surface="glass"][data-stuck]
