@@ -37,12 +37,13 @@ test("sticky freeze restores stuck glass before observer delivery", async () => 
   assert.ok(passed.includes("the working bar stays opaque while the user bar is glass"))
 })
 
-test("stuck glass fill is a frost material rather than a backdrop blur", async () => {
+test("stuck glass is a milky frosted plate, not a bare blur", async () => {
   const css = await readFile(new URL("../../../src/index.css", import.meta.url), "utf8")
   const start = css.indexOf('[data-slot="sticky-freeze"][data-surface="glass"]')
   const end = css.indexOf("@keyframes loading-state-pixel", start)
   assert.ok(start >= 0 && end > start)
   const section = css.slice(start, end)
   assert.match(section, /sticky-freeze-frost/)
-  assert.doesNotMatch(section, /backdrop-filter/)
+  assert.match(section, /color-mix\(in oklab, var\(--background\)/)
+  assert.match(section, /backdrop-filter:\s*blur\(24px\) saturate\(180%\)/)
 })
