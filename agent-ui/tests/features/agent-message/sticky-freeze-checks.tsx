@@ -94,10 +94,13 @@ export async function runStickyFreezeChecks(check: (name: string, condition: boo
     check("history initializes without an intersection callback", observerDeliveries === 0)
     check("the restored user bar is marked as stuck", bar("user").dataset.stuck === "true")
     check("the stuck user bar uses the glass surface", bar("user").dataset.surface === "glass")
+    check("the stuck user bar paints a frost layer", Boolean(bar("user").querySelector('[data-slot="sticky-freeze-frost"]')))
 
     await mount("unscrolled-history", { restored: { user: 160, working: 400 } })
     check("an unscrolled user bar keeps the glass surface without sticking",
       bar("user").dataset.surface === "glass" && bar("user").dataset.stuck !== "true")
+    check("an unscrolled user bar has no frost layer",
+      !bar("user").querySelector('[data-slot="sticky-freeze-frost"]'))
     await deliver("user", 99)
     check("later scrolling still reveals the mask", hasMask("user"))
     await deliver("user", 101)
@@ -109,6 +112,8 @@ export async function runStickyFreezeChecks(check: (name: string, condition: boo
     await mount("stacked-streaming-bars", { stacked: true, restored: { user: 80, working: 145 } })
     check("the working bar stays opaque while the user bar is glass",
       bar("user").dataset.surface === "glass" && bar("working").dataset.surface === "opaque")
+    check("the working bar has no frost layer",
+      !bar("working").querySelector('[data-slot="sticky-freeze-frost"]'))
     check("only the lower streaming bar gets the initial mask", hasMask("working") && !hasMask("user"))
     await deliver("working", 180)
     check("the mask moves back to the user bar when working is no longer stuck", hasMask("user") && !hasMask("working"))

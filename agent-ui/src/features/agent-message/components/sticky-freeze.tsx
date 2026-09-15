@@ -114,6 +114,13 @@ export const StickyFreeze = React.forwardRef<
             : { duration: 0.2, ease: EASE_OUT }
         }
       >
+        {surface === "glass" && stuck ? (
+          <div
+            aria-hidden
+            data-slot="sticky-freeze-frost"
+            className="pointer-events-none absolute inset-0"
+          />
+        ) : null}
         {children}
         {showEdge ? (
           <div
