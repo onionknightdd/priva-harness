@@ -710,11 +710,12 @@ token，浅色 / 深色均为 `rgb(77, 159, 240)`（`#4D9FF0`）。
 流式输出时，工作状态吸附在用户消息下方，偏移使用用户消息的实际测量高度，
 保留小数像素，避免高度取整后两层背景之间出现缝隙。
 
-用户消息吸附到页头时，`StickyFreeze` 的全宽空白区改为毛玻璃材质：用
-`background` 与 `muted` 混合成霜面底，再叠一层细噪声；气泡仍使用不透明的
-`user-message`。这是填充材质，不使用 `backdrop-filter` 去模糊下层消息。
-未吸附时保持实色底。`prefers-reduced-transparency: reduce` 时回退为实色
-`background` 并去掉噪声。工作状态条仍为实色。底部渐变遮罩与当前霜面同色。
+用户消息吸附到页头时，`StickyFreeze` 的全宽空白区改为毛玻璃：半透明
+`background` 底、`blur(24px) saturate(180%)` 霜化，再叠一层低透明度噪声。
+气泡仍使用不透明的 `user-message`。这是一块毛玻璃板，不是只把下层文字糊掉。
+未吸附时保持实色底。不支持 `backdrop-filter` 时改用更不透明的 `background` /
+`muted` 混合。`prefers-reduced-transparency: reduce` 时回退为实色 `background`
+并去掉噪声。工作状态条仍为实色。底部渐变遮罩与当前玻璃板同色。
 
 重新加载会话时，`StickyFreeze` 在消息挂载和滚动位置恢复后、首帧绘制前同步
 初始吸附状态；多个吸附条合并为一次更新，让消息与底部渐变遮罩同时出现。
