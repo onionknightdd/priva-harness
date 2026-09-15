@@ -1,4 +1,4 @@
-import { act, StrictMode, useLayoutEffect, useState, type ComponentProps } from "react"
+import React, { act, StrictMode, useLayoutEffect, useState, type ComponentProps } from "react"
 import { flushSync } from "react-dom"
 import { createRoot } from "react-dom/client"
 

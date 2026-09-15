@@ -1,11 +1,9 @@
 <!doctype html>
 <html lang="en">
   <head><meta charset="UTF-8" /><title>Sticky freeze lifecycle checks</title></head>
-  <body class="bg-background text-foreground">
+  <body>
     <button id="run">Run sticky freeze checks</button>
     <pre id="results"></pre>
-    <div id="preview"></div>
-    <script type="module" src="./sticky-freeze-preview.tsx"></script>
     <script type="module">
       import { runStickyFreezeChecks } from "./sticky-freeze-checks.tsx"
       Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })

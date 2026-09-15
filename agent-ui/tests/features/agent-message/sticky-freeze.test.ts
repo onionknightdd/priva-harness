@@ -1,5 +1,4 @@
 import assert from "node:assert/strict"
-import { registerHooks } from "node:module"
 import { after, test } from "node:test"
 import { JSDOM } from "jsdom"
 
@@ -22,13 +21,7 @@ dom.window.matchMedia = (query) => ({
   dispatchEvent: () => true,
   onchange: null,
 })
-const hooks = registerHooks({
-  load(url, context, nextLoad) {
-    if (url.endsWith(".css")) return { format: "module", source: "export default {}", shortCircuit: true }
-    return nextLoad(url, context)
-  },
-})
-after(() => { hooks.deregister(); dom.window.close() })
+after(() => { dom.window.close() })
 
 const { runStickyFreezeChecks } = await import("./sticky-freeze-checks.tsx")
 
