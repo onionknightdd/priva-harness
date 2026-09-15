@@ -710,14 +710,6 @@ token，浅色 / 深色均为 `rgb(77, 159, 240)`（`#4D9FF0`）。
 流式输出时，工作状态吸附在用户消息下方，偏移使用用户消息的实际测量高度，
 保留小数像素，避免高度取整后两层背景之间出现缝隙。
 
-用户消息吸附到页头时，`StickyFreeze` 的全宽空白区使用与
-[Glassmorphism Navbar](https://www.shadcn.io/blocks/navbar-glassmorphism)
-相同的毛玻璃：`bg-background/60 backdrop-blur-2xl backdrop-saturate-150`，
-仅在支持 `backdrop-filter` 时启用；不支持时保持实色 `background`。
-气泡仍使用不透明的 `user-message`。吸附时不画底边框，只保留向下的渐变遮罩。
-`prefers-reduced-transparency: reduce` 时回退为实色 `background`。
-工作状态条仍为实色。底部渐变遮罩与玻璃板同色。
-
 重新加载会话时，`StickyFreeze` 在消息挂载和滚动位置恢复后、首帧绘制前同步
 初始吸附状态；多个吸附条合并为一次更新，让消息与底部渐变遮罩同时出现。
 后续滚动继续由 IntersectionObserver 更新，未吸附时不显示遮罩。
@@ -729,12 +721,10 @@ Mount history -> restore scroll in layout effects -> pre-paint batch
 ```
 
 ```text
-Header
-+----------------------------------------------+
-| glass blank area              [User bubble]   |  <- stuck, surface=glass
-+----------------------------------------------+
-| exact measured height (including fractional px)|
-| [pixel grid] Working...                       |  <- opaque
+[User message background]
+            | exact measured height (including fractional pixels)
+            v
+[pixel grid] Working...
 Thinking  2.3s  v
   Thinking content
 ```
@@ -1788,8 +1778,8 @@ Mermaid 浏览器回归：打开 `/tests/components/ai-elements/mermaid-browser.
 吸附遮罩时序回归入口为 `/tests/features/agent-message/sticky-freeze.html`，点击
 **Run sticky freeze checks**。检查函数 `runStickyFreezeChecks` 使用真实 React 提交，
 受控 DOM 几何和延迟的 IntersectionObserver，亦可在 jsdom 中调用；覆盖历史滚动
-恢复后首帧前出现遮罩、未吸附状态、用户条毛玻璃 / 工作条实色、小数偏移、流式双层
-遮罩交接、卸载与 StrictMode。Node 入口：
+恢复后首帧前出现遮罩、未吸附状态、小数偏移、流式双层遮罩交接、卸载与 StrictMode。
+Node 入口：
 
 ```sh
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/sticky-freeze.test.ts

@@ -421,13 +421,6 @@
   backdrop-filter: none;
 }
 
-@media (prefers-reduced-transparency: reduce) {
-  [data-slot="sticky-freeze"][data-surface="glass"][data-stuck] {
-    background-color: var(--background);
-    backdrop-filter: none;
-  }
-}
-
 @keyframes loading-state-pixel {
   0%, 62%, 100% {
     opacity: 0.15;
