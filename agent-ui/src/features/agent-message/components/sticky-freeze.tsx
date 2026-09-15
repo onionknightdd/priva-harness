@@ -30,6 +30,7 @@ export const StickyFreeze = React.forwardRef<
     className?: string
     onStuckChange?: (stuck: boolean) => void
     showBelowMask?: boolean
+    surface?: "opaque" | "glass"
     top?: number
   }
 >(function StickyFreeze(
@@ -38,6 +39,7 @@ export const StickyFreeze = React.forwardRef<
     className,
     onStuckChange,
     showBelowMask = true,
+    surface = "opaque",
     top = 0,
   },
   forwardedRef
@@ -95,6 +97,7 @@ export const StickyFreeze = React.forwardRef<
         ref={forwardedRef}
         data-slot="sticky-freeze"
         data-stuck={stuck || undefined}
+        data-surface={surface}
         className={cn(
           "relative sticky z-10 w-full min-w-0 bg-background",
           className
