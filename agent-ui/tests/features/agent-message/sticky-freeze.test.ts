@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { readFile } from "node:fs/promises"
 import { after, test } from "node:test"
 import { JSDOM } from "jsdom"
 
@@ -32,5 +33,16 @@ test("sticky freeze restores stuck glass before observer delivery", async () => 
     passed.push(name)
   })
   assert.ok(passed.includes("the stuck user bar uses the glass surface"))
+  assert.ok(passed.includes("the stuck user bar paints a frost layer"))
   assert.ok(passed.includes("the working bar stays opaque while the user bar is glass"))
+})
+
+test("stuck glass fill is a frost material rather than a backdrop blur", async () => {
+  const css = await readFile(new URL("../../../src/index.css", import.meta.url), "utf8")
+  const start = css.indexOf('[data-slot="sticky-freeze"][data-surface="glass"]')
+  const end = css.indexOf("@keyframes loading-state-pixel", start)
+  assert.ok(start >= 0 && end > start)
+  const section = css.slice(start, end)
+  assert.match(section, /sticky-freeze-frost/)
+  assert.doesNotMatch(section, /backdrop-filter/)
 })
