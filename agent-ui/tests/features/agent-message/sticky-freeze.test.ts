@@ -43,6 +43,7 @@ test("stuck glass uses the Glassmorphism Navbar classes", async () => {
     "utf8"
   )
   assert.match(source, /supports-backdrop-filter:bg-background\/60/)
-  assert.match(source, /supports-backdrop-filter:backdrop-blur-xl/)
+  assert.match(source, /supports-backdrop-filter:backdrop-blur-2xl/)
   assert.match(source, /supports-backdrop-filter:backdrop-saturate-150/)
+  assert.match(source, /showEdge && surface !== "glass"/)
 })

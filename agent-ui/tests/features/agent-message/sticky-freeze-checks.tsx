@@ -95,13 +95,13 @@ export async function runStickyFreezeChecks(check: (name: string, condition: boo
     check("the restored user bar is marked as stuck", bar("user").dataset.stuck === "true")
     check("the stuck user bar uses the glass surface", bar("user").dataset.surface === "glass")
     check("the stuck user bar uses navbar glass classes",
-      bar("user").className.includes("backdrop-blur-xl") && bar("user").className.includes("bg-background/60"))
+      bar("user").className.includes("backdrop-blur-2xl") && bar("user").className.includes("bg-background/60"))
 
     await mount("unscrolled-history", { restored: { user: 160, working: 400 } })
     check("an unscrolled user bar keeps the glass surface without sticking",
       bar("user").dataset.surface === "glass" && bar("user").dataset.stuck !== "true")
     check("an unscrolled user bar stays solid",
-      !bar("user").className.includes("backdrop-blur-xl"))
+      !bar("user").className.includes("backdrop-blur-2xl"))
     await deliver("user", 99)
     check("later scrolling still reveals the mask", hasMask("user"))
     await deliver("user", 101)
@@ -114,7 +114,7 @@ export async function runStickyFreezeChecks(check: (name: string, condition: boo
     check("the working bar stays opaque while the user bar is glass",
       bar("user").dataset.surface === "glass" && bar("working").dataset.surface === "opaque")
     check("the working bar stays solid",
-      !bar("working").className.includes("backdrop-blur-xl"))
+      !bar("working").className.includes("backdrop-blur-2xl"))
     check("only the lower streaming bar gets the initial mask", hasMask("working") && !hasMask("user"))
     await deliver("working", 180)
     check("the mask moves back to the user bar when working is no longer stuck", hasMask("user") && !hasMask("working"))

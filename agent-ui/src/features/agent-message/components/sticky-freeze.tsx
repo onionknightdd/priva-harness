@@ -101,15 +101,16 @@ export const StickyFreeze = React.forwardRef<
         className={cn(
           "relative sticky z-10 w-full min-w-0",
           surface === "glass" && stuck
-            ? "bg-background supports-backdrop-filter:bg-background/60 supports-backdrop-filter:backdrop-blur-xl supports-backdrop-filter:backdrop-saturate-150"
+            ? "bg-background supports-backdrop-filter:bg-background/60 supports-backdrop-filter:backdrop-blur-2xl supports-backdrop-filter:backdrop-saturate-150"
             : "bg-background",
           className
         )}
         style={{ top }}
         animate={{
-          boxShadow: showEdge
-            ? "0 1px 0 0 var(--border)"
-            : "0 0 0 0 transparent",
+          boxShadow:
+            showEdge && surface !== "glass"
+              ? "0 1px 0 0 var(--border)"
+              : "0 0 0 0 transparent",
         }}
         transition={
           shouldReduceMotion

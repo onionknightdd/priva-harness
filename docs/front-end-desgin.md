@@ -712,9 +712,9 @@ token，浅色 / 深色均为 `rgb(77, 159, 240)`（`#4D9FF0`）。
 
 用户消息吸附到页头时，`StickyFreeze` 的全宽空白区使用与
 [Glassmorphism Navbar](https://www.shadcn.io/blocks/navbar-glassmorphism)
-相同的毛玻璃：`bg-background/60 backdrop-blur-xl backdrop-saturate-150`，
+相同的毛玻璃：`bg-background/60 backdrop-blur-2xl backdrop-saturate-150`，
 仅在支持 `backdrop-filter` 时启用；不支持时保持实色 `background`。
-气泡仍使用不透明的 `user-message`。未吸附时保持实色底。
+气泡仍使用不透明的 `user-message`。吸附时不画底边框，只保留向下的渐变遮罩。
 `prefers-reduced-transparency: reduce` 时回退为实色 `background`。
 工作状态条仍为实色。底部渐变遮罩与玻璃板同色。
 
