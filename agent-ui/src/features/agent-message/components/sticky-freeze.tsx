@@ -99,7 +99,10 @@ export const StickyFreeze = React.forwardRef<
         data-stuck={stuck || undefined}
         data-surface={surface}
         className={cn(
-          "relative sticky z-10 w-full min-w-0 bg-background",
+          "relative sticky z-10 w-full min-w-0",
+          surface === "glass" && stuck
+            ? "bg-background supports-backdrop-filter:bg-background/60 supports-backdrop-filter:backdrop-blur-xl supports-backdrop-filter:backdrop-saturate-150"
+            : "bg-background",
           className
         )}
         style={{ top }}
@@ -114,19 +117,17 @@ export const StickyFreeze = React.forwardRef<
             : { duration: 0.2, ease: EASE_OUT }
         }
       >
-        {surface === "glass" && stuck ? (
-          <div
-            aria-hidden
-            data-slot="sticky-freeze-frost"
-            className="pointer-events-none absolute inset-0"
-          />
-        ) : null}
         {children}
         {showEdge ? (
           <div
             aria-hidden
             data-slot="sticky-freeze-mask"
-            className="pointer-events-none absolute inset-x-0 top-full h-8 bg-gradient-to-b from-background to-transparent"
+            className={cn(
+              "pointer-events-none absolute inset-x-0 top-full h-8 bg-gradient-to-b to-transparent",
+              surface === "glass"
+                ? "from-background/60"
+                : "from-background"
+            )}
           />
         ) : null}
       </motion.div>

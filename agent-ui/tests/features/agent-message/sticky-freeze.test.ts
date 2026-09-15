@@ -33,17 +33,16 @@ test("sticky freeze restores stuck glass before observer delivery", async () => 
     passed.push(name)
   })
   assert.ok(passed.includes("the stuck user bar uses the glass surface"))
-  assert.ok(passed.includes("the stuck user bar paints a frost layer"))
+  assert.ok(passed.includes("the stuck user bar uses navbar glass classes"))
   assert.ok(passed.includes("the working bar stays opaque while the user bar is glass"))
 })
 
-test("stuck glass is a milky frosted plate, not a bare blur", async () => {
-  const css = await readFile(new URL("../../../src/index.css", import.meta.url), "utf8")
-  const start = css.indexOf('[data-slot="sticky-freeze"][data-surface="glass"]')
-  const end = css.indexOf("@keyframes loading-state-pixel", start)
-  assert.ok(start >= 0 && end > start)
-  const section = css.slice(start, end)
-  assert.match(section, /sticky-freeze-frost/)
-  assert.match(section, /color-mix\(in oklab, var\(--background\)/)
-  assert.match(section, /backdrop-filter:\s*blur\(24px\) saturate\(180%\)/)
+test("stuck glass uses the Glassmorphism Navbar classes", async () => {
+  const source = await readFile(
+    new URL("../../../src/features/agent-message/components/sticky-freeze.tsx", import.meta.url),
+    "utf8"
+  )
+  assert.match(source, /supports-backdrop-filter:bg-background\/60/)
+  assert.match(source, /supports-backdrop-filter:backdrop-blur-xl/)
+  assert.match(source, /supports-backdrop-filter:backdrop-saturate-150/)
 })
