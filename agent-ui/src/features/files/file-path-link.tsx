@@ -55,7 +55,7 @@ export function FilePathLink({
     <span className={wrap ? "whitespace-normal wrap-anywhere" : "min-w-0 truncate"}>{label}</span>
   )
   const linkBox = cn(
-    "relative z-10 text-left font-normal leading-normal",
+    "text-left font-normal leading-normal",
     wrap ? "inline whitespace-normal wrap-anywhere" : "inline-flex max-w-full min-w-0 items-center gap-0.5 align-middle"
   )
 
