@@ -109,7 +109,7 @@ export function ThreadGlass() {
   }, [])
 
   return (
-    <div aria-hidden className="pointer-events-none sticky top-0 z-10 h-0">
+    <div aria-hidden className="pointer-events-none sticky top-0 z-[15] h-0">
       <div
         ref={surfaceRef}
         data-slot="thread-glass"
