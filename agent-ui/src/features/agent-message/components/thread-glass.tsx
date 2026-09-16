@@ -114,7 +114,7 @@ export function ThreadGlass() {
         ref={surfaceRef}
         data-slot="thread-glass"
         data-glass-surface
-        className="absolute inset-x-0 top-0 bg-background supports-backdrop-filter:bg-background/60 supports-backdrop-filter:backdrop-blur-xl"
+        className="absolute inset-x-0 top-0 bg-background supports-backdrop-filter:bg-background/60 supports-backdrop-filter:backdrop-blur-[20px]"
         style={{ height: AGENT_CHAT_HEADER_HEIGHT }}
       />
     </div>

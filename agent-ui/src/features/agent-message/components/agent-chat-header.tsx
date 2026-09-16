@@ -130,7 +130,7 @@ export function AgentChatHeader() {
   const untitled = t("sidebar.projects.untitledSession")
   const title = activeSession
     ? sessionDisplayTitle(activeSession, untitled)
-    : t("agentMessage.testSessionTitle")
+    : ""
   const [editing, setEditing] = React.useState(false)
   const [draft, setDraft] = React.useState(title)
   const [displayTitle, setDisplayTitle] = React.useState(title)
@@ -196,6 +196,10 @@ export function AgentChatHeader() {
     }
 
     void rename(activeSession.sessionId, nextTitle)
+  }
+
+  if (!activeSession) {
+    return null
   }
 
   return (

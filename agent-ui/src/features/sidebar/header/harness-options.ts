@@ -9,7 +9,7 @@ export type RunHarnessId = (typeof RUN_HARNESS_IDS)[number]
 export type HarnessOption = {
   id: HarnessId
   nameKey: string
-  descriptionKey: string
+  packageName: string
   disabled: boolean
 }
 
@@ -19,19 +19,19 @@ export const harnessOptions = [
   {
     id: "pi",
     nameKey: "sidebar.harness.pi.name",
-    descriptionKey: "sidebar.harness.pi.description",
+    packageName: "@earendil-works/pi-coding-agent",
     disabled: false,
   },
   {
     id: "claude",
     nameKey: "sidebar.harness.claude.name",
-    descriptionKey: "sidebar.harness.claude.description",
+    packageName: "@anthropic-ai/claude-agent-sdk",
     disabled: false,
   },
   {
     id: "deepseek",
     nameKey: "sidebar.harness.deepseek.name",
-    descriptionKey: "sidebar.harness.deepseek.description",
+    packageName: "@deepseek-ai/dsh-sdk-client",
     disabled: true,
   },
 ] as const satisfies readonly HarnessOption[]

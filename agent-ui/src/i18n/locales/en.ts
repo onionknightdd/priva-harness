@@ -339,7 +339,6 @@ export const en = {
     justNow: "just now",
     mockAssistantReply:
       "Sure. This is a local preview reply. I'll stream it in so you can check scrolling, the caret, and message layout. A live model will replace this mock once streaming is connected.",
-    testSessionTitle: "How should I design Agent Message?",
     contextUsage: {
       title: "Context Usage",
       aria: "Context usage",
@@ -530,18 +529,12 @@ export const en = {
       comingSoon: "Coming soon",
       pi: {
         name: "Pi",
-        description:
-          "Pi coding agent with native skills, tools, and project config.",
       },
       claude: {
         name: "Claude Agent SDK",
-        description:
-          "Anthropic's official agent runtime with Claude Code sessions and tools.",
       },
       deepseek: {
         name: "DeepSeek Harness",
-        description:
-          "DeepSeek's native agent runtime, plugins, and tool ecosystem.",
       },
     },
     projects: {
