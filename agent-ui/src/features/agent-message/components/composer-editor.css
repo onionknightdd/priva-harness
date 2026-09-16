@@ -7,8 +7,13 @@
 .composer-editor[data-empty="true"]::before {
   content: attr(data-placeholder);
   position: absolute;
-  color: var(--muted-foreground);
+  inset-inline: 0;
+  color: color-mix(in oklab, var(--muted-foreground) 60%, transparent);
+  font-size: var(--text-sm);
+  line-height: inherit;
   pointer-events: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .composer-editor .composer-selection-node {

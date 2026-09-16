@@ -20,10 +20,16 @@ import {
   slashOptionId,
   visibleSlashCommands,
 } from "../composer-slash-command"
+import {
+  completeMentionQuery,
+  type MentionTrigger,
+} from "../composer-mention"
+import { useComposerMentionListing } from "../use-composer-mention"
 import { useSlashCommandCatalog } from "../use-slash-command-catalog"
 import { ComposerAttachMenu } from "./composer-attach-menu"
 import { ComposerAttachmentChips } from "./composer-attachment-chips"
 import { ComposerModelSelector, COMPOSER_MODEL_TRIGGER_MAX_CLASS, type ComposerEffort } from "./composer-model-selector"
+import { ComposerMentionMenu } from "./composer-mention-menu"
 import { ComposerSlashChip } from "./composer-slash-chip"
 import { ComposerSlashMenu } from "./composer-slash-menu"
 import { ComposerEditor, type ComposerEditorHandle } from "./composer-editor"
@@ -297,7 +303,9 @@ export function AgentMessageComposer({
   const chipRef = React.useRef<HTMLDivElement>(null)
   const catalog = useSlashCommandCatalog()
   const [dismissedQuery, setDismissedQuery] = React.useState<string | null>(null)
+  const [dismissedMention, setDismissedMention] = React.useState<string | null>(null)
   const [highlightedIndex, setHighlightedIndex] = React.useState(0)
+  const [mentionTrigger, setMentionTrigger] = React.useState<MentionTrigger | null>(null)
   const slashTrigger =
     slashCommand === null ? parseSlashTrigger(draft) : null
   const slashQuery = slashTrigger?.query ?? null
@@ -310,6 +318,14 @@ export function AgentMessageComposer({
   )
   const slashMenuOpen =
     slashTrigger !== null && dismissedQuery !== slashTrigger.query
+  const mentionQuery = mentionTrigger?.query ?? null
+  const mentionMenuOpen =
+    mentionTrigger !== null &&
+    !slashMenuOpen &&
+    dismissedMention !== mentionTrigger.query
+  const mentionListing = useComposerMentionListing(
+    mentionMenuOpen ? mentionTrigger : null
+  )
   const leftWidth = useOffsetWidth(leftRef)
   const rightWidth = useOffsetWidth(rightRef)
   const chipWidth = useOffsetWidth(chipRef, slashCommand !== null)
@@ -328,6 +344,7 @@ export function AgentMessageComposer({
   const singleLine = attachments.length === 0 && !overflowsLine
   const promptId = React.useId()
   const slashMenuId = React.useId()
+  const mentionMenuId = React.useId()
   const transition = shouldReduceMotion ? { duration: 0 } : SPRING_LAYOUT
   const primaryAction = composerPrimaryAction(
     draft,
@@ -350,11 +367,26 @@ export function AgentMessageComposer({
   }, [slashQuery])
 
   React.useEffect(() => {
-    if (highlightedIndex < filteredCommands.length) {
+    setHighlightedIndex(0)
+    if (mentionQuery === null) {
+      setDismissedMention(null)
+    }
+  }, [mentionQuery])
+
+  React.useEffect(() => {
+    const count = mentionMenuOpen
+      ? mentionListing.entries.length
+      : filteredCommands.length
+    if (highlightedIndex < count) {
       return
     }
     setHighlightedIndex(0)
-  }, [filteredCommands.length, highlightedIndex])
+  }, [
+    filteredCommands.length,
+    highlightedIndex,
+    mentionListing.entries.length,
+    mentionMenuOpen,
+  ])
 
   const selectSlashCommand = React.useCallback(
     (command: SlashCommand) => {
@@ -373,6 +405,34 @@ export function AgentMessageComposer({
       setDismissedQuery(slashQuery)
     }
   }, [slashQuery])
+
+  const closeMentionMenu = React.useCallback(() => {
+    if (mentionQuery !== null) {
+      setDismissedMention(mentionQuery)
+    }
+  }, [mentionQuery])
+
+  const selectMention = React.useCallback(
+    (entry: (typeof mentionListing.entries)[number]) => {
+      if (!mentionTrigger) {
+        return
+      }
+      const next = completeMentionQuery(
+        mentionTrigger.query,
+        entry.name,
+        entry.type
+      )
+      editorRef.current?.replaceRange(
+        mentionTrigger.from,
+        mentionTrigger.to,
+        `@${next.query}`
+      )
+      if (next.close) {
+        setDismissedMention(next.query)
+      }
+    },
+    [editorRef, mentionTrigger]
+  )
 
   return (
     <form
@@ -431,6 +491,28 @@ export function AgentMessageComposer({
             onHighlight={setHighlightedIndex}
             onSelect={selectSlashCommand}
           />
+          <ComposerMentionMenu
+            open={mentionMenuOpen}
+            menuId={mentionMenuId}
+            entries={mentionListing.entries}
+            empty={
+              mentionListing.status === "loading"
+                ? t("agentMessage.mentionLoading")
+                : mentionListing.status === "error"
+                  ? (mentionListing.error ?? t("agentMessage.mentionEmpty"))
+                  : t("agentMessage.mentionEmpty")
+            }
+            highlightedIndex={highlightedIndex}
+            anchorRef={shellRef}
+            inputRef={inputRef}
+            onOpenChange={(open) => {
+              if (!open) {
+                closeMentionMenu()
+              }
+            }}
+            onHighlight={setHighlightedIndex}
+            onSelect={selectMention}
+          />
           <div
             className="min-w-0"
             style={{
@@ -479,11 +561,19 @@ export function AgentMessageComposer({
                   // Screen readers learn about the slash listbox and follow the
                   // highlighted option; keyboard handling below already exists.
                   aria-autocomplete="list"
-                  aria-controls={slashMenuOpen ? slashMenuId : undefined}
+                  aria-controls={
+                    mentionMenuOpen
+                      ? mentionMenuId
+                      : slashMenuOpen
+                        ? slashMenuId
+                        : undefined
+                  }
                   aria-activedescendant={
-                    slashMenuOpen && filteredCommands.length > 0
-                      ? slashOptionId(slashMenuId, highlightedIndex)
-                      : undefined
+                    mentionMenuOpen && mentionListing.entries.length > 0
+                      ? slashOptionId(mentionMenuId, highlightedIndex)
+                      : slashMenuOpen && filteredCommands.length > 0
+                        ? slashOptionId(slashMenuId, highlightedIndex)
+                        : undefined
                   }
                   style={
                     chipOccupy > 0 ? { textIndent: chipOccupy } : undefined
@@ -498,7 +588,51 @@ export function AgentMessageComposer({
                         )
                   )}
                   onChange={onDraftChange}
+                  onMentionChange={setMentionTrigger}
                   onKeyDown={(event, atStart) => {
+                    if (mentionMenuOpen) {
+                      if (event.key === "ArrowDown") {
+                        event.preventDefault()
+                        if (mentionListing.entries.length === 0) {
+                          return true
+                        }
+                        setHighlightedIndex(
+                          (current) =>
+                            (current + 1) % mentionListing.entries.length
+                        )
+                        return true
+                      }
+                      if (event.key === "ArrowUp") {
+                        event.preventDefault()
+                        if (mentionListing.entries.length === 0) {
+                          return true
+                        }
+                        setHighlightedIndex(
+                          (current) =>
+                            (current - 1 + mentionListing.entries.length) %
+                            mentionListing.entries.length
+                        )
+                        return true
+                      }
+                      if (event.key === "Escape") {
+                        event.preventDefault()
+                        closeMentionMenu()
+                        return true
+                      }
+                      if (
+                        (event.key === "Enter" && !event.shiftKey) ||
+                        (event.key === "Tab" && !event.shiftKey)
+                      ) {
+                        event.preventDefault()
+                        const selected =
+                          mentionListing.entries[highlightedIndex]
+                        if (selected) {
+                          selectMention(selected)
+                        }
+                        return true
+                      }
+                    }
+
                     if (slashMenuOpen) {
                       if (event.key === "ArrowDown") {
                         event.preventDefault()

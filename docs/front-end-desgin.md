@@ -715,7 +715,7 @@ token，浅色 / 深色均为 `rgb(77, 159, 240)`（`#4D9FF0`）。
 
 2026-09-16：用户消息吸附背景采用
 [Glassmorphism Navbar](https://www.shadcn.io/blocks/navbar-glassmorphism) 的材质：
-`bg-background/60` 和 `backdrop-blur-xl`（24px）。玻璃层各边均不画边框或阴影，
+`bg-background/60` 和 `backdrop-blur-[20px]`（20px）。玻璃层各边均不画边框或阴影，
 气泡尺寸不变，工作状态条仍紧接用户消息的实际下沿。
 用户气泡保留 `user-message` 底色，毛玻璃覆盖聊天面板整行宽度，包含正文左右留白。
 滚动视口与 turn 使用全宽，`ThreadMessageColumn` 在背景内保留左 16px / 右 20px
@@ -742,7 +742,7 @@ Header 下沿形成色差。滚动视口向上覆盖 35px Header，`StickyFreeze
 Chat panel, including both side gutters
   +---------------------------------------+
   | Header foreground                     |
-  |                     [opaque bubble]   | <- ONE background/60 + blur(24px)
+  |                     [opaque bubble]   | <- ONE background/60 + blur(20px)
   | Working... (while stuck)               |
   | 32px alpha fade of both fill and blur  |
   +---------------------------------------+
@@ -1416,6 +1416,30 @@ native selection + source role -> ProseMirror inline atom
         -> transcript -> MessageSelectionContent -> readonly inline preview
 ```
 
+### Composer @ 文件选择
+
+2026-09-16：ChatComposer 输入 `@` 打开与 Slash 命令同一套建议菜单，列出**当前项目工作目录**（会话 `cwd`）的一级文件夹和文件。Tab / Enter / 点击补全当前项；选中目录则写入 `@dir/` 并列出下一级，选中文件则写入 `@path` 并关闭菜单。只按需读取当前层，不递归扫描。`/` 命令菜单打开时不显示 `@` 菜单。切换项目目录后，下次打开 `@` 从新的 cwd 重新列出。
+
+```text
+Composer
++--------------------------------------+
+| see @src/                  [send]  |
++--------------------------------------+
+          ^
++--------------------------------------+
+| 文件夹                               |
+|   [icon] lib                         |
+| 文件                                 |
+|   [icon] index.ts                    |
+|--------------------------------------|
+| 输入以搜索，按 Tab 补全              |
++--------------------------------------+
+
+@           -> 当前项目 cwd 的一级目录 / 文件
+@src + Tab  -> @src/ 并列出 src 下一级
+@src/in Tab -> @src/index.ts 并关闭
+```
+
 附件发送格式：上传成功后，`messageTextWithAttachments` 将 `AgentAttachments` 围栏追加到
 原始用户文本后；`run.start` 通过 `text` 发送这份清单，文件字节不嵌入文本，也不发送独立
 attachments 数组。每个条目使用 name、path、MIME、size 四个字段；path 是上传返回的
@@ -1540,7 +1564,7 @@ Tabs，选择预览操作模式时可使用 ToggleGroup。不要只根据组件�
 | DropdownMenu | [ui/dropdown-menu](../agent-ui/src/components/ui/dropdown-menu.tsx)，Base UI Menu | `ring-1`、共享 CSS 弹层动画、焦点行背景；`DropdownMenuContent` 透出 Positioner 的 `anchor`，一个菜单可挂多个 Trigger | 模型、会话、账户、路径、Harness 菜单 |
 | 附件 Menu | [animate-ui/components/base/menu](../agent-ui/src/components/animate-ui/components/base/menu.tsx)，Base UI Menu + Animate UI | `border`、200ms 弹层、Motion 滑动高亮；与通用 DropdownMenu 的分组字号等不同 | 聊天附件菜单 |
 | ContextMenu | [ui/context-menu](../agent-ui/src/components/ui/context-menu.tsx)，Base UI ContextMenu | shadcn 风格的右键菜单；行内文件菜单为 12px | 文件树节点、助手行内文件引用 |
-| Slash / 选区动作菜单 | [composer-slash-menu](../agent-ui/src/features/agent-message/components/composer-slash-menu.tsx)、[message-selection-actions](../agent-ui/src/features/agent-message/components/message-selection-actions.tsx)，本地 Portal + Motion | Slash 保留输入框焦点；选区复用 Beautiful UI 胶囊外观与工具条键盘操作 | 输入 `/`、在对话中引用 assistant / user 选区 |
+| Slash / 选区动作菜单 | [composer-slash-menu](../agent-ui/src/features/agent-message/components/composer-slash-menu.tsx)、[composer-mention-menu](../agent-ui/src/features/agent-message/components/composer-mention-menu.tsx)、[message-selection-actions](../agent-ui/src/features/agent-message/components/message-selection-actions.tsx)，本地 Portal + Motion | Slash 与 `@` 文件共用同一建议菜单；选区复用 Beautiful UI 胶囊外观与工具条键盘操作 | 输入 `/`、输入 `@`、在对话中引用 assistant / user 选区 |
 | Composer 编辑内容 | [composer-editor](../agent-ui/src/features/agent-message/components/composer-editor.tsx)、[message-selection-quote](../agent-ui/src/features/agent-message/components/message-selection-quote.tsx)，ProseMirror + React Portal | 文本、换行、可删除的行内引用；撤销 / 重做、纯文本协议剪贴板 | composer 草稿与消息里的只读引用 |
 | Dialog / AlertDialog | [ui/dialog](../agent-ui/src/components/ui/dialog.tsx)、[ui/alert-dialog](../agent-ui/src/components/ui/alert-dialog.tsx)，Base UI | 居中模态框 + 遮罩；200ms 进入 / 150ms 退出 | 设置、资源表单、重命名、删除确认 |
 | Sheet | [ui/sheet](../agent-ui/src/components/ui/sheet.tsx)，Base UI Dialog | 边缘滑入；共享 `sheetMotion`，380ms 进入 / 220ms 退出 | 移动端侧栏、资源详情抽屉 |
@@ -1858,7 +1882,7 @@ Agent data / composer / attachments：
 
 ```sh
 node --import ./services/agent-runner/ts/node_modules/tsx/dist/loader.mjs --test agent-ui/tests/features/agent-message/agent-tool-data.test.ts
-node --test agent-ui/tests/features/agent-message/composer-attachments.test.ts agent-ui/tests/features/agent-message/composer-primary-action.test.ts agent-ui/tests/features/agent-message/slash-command-envelope.test.ts
+node --test agent-ui/tests/features/agent-message/composer-attachments.test.ts agent-ui/tests/features/agent-message/composer-primary-action.test.ts agent-ui/tests/features/agent-message/slash-command-envelope.test.ts agent-ui/tests/features/agent-message/composer-slash-command.test.ts agent-ui/tests/features/agent-message/composer-mention.test.ts
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/message-attachments.test.ts
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/thread-turns.test.ts agent-ui/tests/features/agent-message/snapshot-messages.test.ts agent-ui/tests/features/agent-message/thread-file-paths.test.ts
 ```

@@ -4,6 +4,7 @@ import { undo, redo, closeHistory } from "prosemirror-history"
 import { NodeSelection, TextSelection, type Command } from "prosemirror-state"
 
 import { composerDocument, createComposerState, deleteMessageSelection, insertMessageSelection, serializeComposerContent } from "../../../src/features/agent-message/composer-editor-state.ts"
+import { mentionTriggerFromState } from "../../../src/features/agent-message/composer-mention.ts"
 import { formatMessageSelection, parseMessageSelections } from "../../../src/features/agent-message/message-select-action.ts"
 
 const selection = { messageRole: "user", selectedText: "a\nb" } as const
@@ -60,4 +61,18 @@ test("newlines and adjacent references retain order through copy/paste document 
   const doc = composerDocument(input)
   assert.equal(serializeComposerContent(doc.content), input)
   assert.ok(doc.eq(composerDocument(serializeComposerContent(doc.content))))
+})
+
+test("the @ mention token includes text after the caret and ignores emails", () => {
+  const state = createComposerState("see @src/index.ts please")
+  const caret = "see @src/in".length
+  const atFile = state.apply(state.tr.setSelection(TextSelection.create(state.doc, caret)))
+  assert.deepEqual(mentionTriggerFromState(atFile), {
+    from: "see ".length,
+    to: "see @src/index.ts".length,
+    query: "src/index.ts",
+    directory: "src",
+    filter: "index.ts",
+  })
+  assert.equal(mentionTriggerFromState(createComposerState("user@host")), null)
 })

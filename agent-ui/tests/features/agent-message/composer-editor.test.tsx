@@ -87,6 +87,14 @@ test("native text edits update the controlled draft", async () => {
   } finally { await editor.unmount() }
 })
 
+test("replaceRange swaps an @ token and reports the mention trigger", async () => {
+  const editor = await mountEditor("see @s")
+  try {
+    await act(async () => editor.ref.current!.replaceRange(4, 6, "@src/"))
+    assert.equal(editor.draft(), "see @src/")
+  } finally { await editor.unmount() }
+})
+
 test("selecting a message outside the composer preserves its insertion caret", async () => {
   const editor = await mountEditor("before after")
   const message = document.body.appendChild(document.createElement("div"))

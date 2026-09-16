@@ -9,12 +9,14 @@ import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 
 import { composerDocument, createComposerState, insertMessageSelection, serializeComposerContent } from "../composer-editor-state"
+import { mentionTriggerFromState, mentionTriggersEqual, type MentionTrigger } from "../composer-mention"
 import type { MessageSelection } from "../message-select-action"
 import { MessageSelectionQuote } from "./message-selection-quote"
 
 export type ComposerEditorHandle = {
   focus: (atEnd?: boolean) => void
   insertSelection: (selection: MessageSelection) => void
+  replaceRange: (from: number, to: number, text: string) => void
 }
 
 type QuotePortal = {
@@ -31,15 +33,17 @@ type ComposerEditorProps = Omit<ComponentProps<"div">, "onChange" | "onKeyDown" 
   placeholder: string
   onChange: (draft: string) => void
   onKeyDown: (event: KeyboardEvent, atStart: boolean) => boolean
+  onMentionChange?: (trigger: MentionTrigger | null) => void
 }
 
-export function ComposerEditor({ ref, inputRef, draft, placeholder, onChange, onKeyDown, className, ...props }: ComposerEditorProps) {
+export function ComposerEditor({ ref, inputRef, draft, placeholder, onChange, onKeyDown, onMentionChange, className, ...props }: ComposerEditorProps) {
   const { t } = useTranslation()
   const viewRef = useRef<EditorView | null>(null)
-  const latest = useRef({ draft, onChange, onKeyDown })
+  const latest = useRef({ draft, onChange, onKeyDown, onMentionChange })
   const serialized = useRef(draft)
+  const mentionRef = useRef<MentionTrigger | null>(null)
   const [portals, setPortals] = useState<QuotePortal[]>([])
-  useLayoutEffect(() => { latest.current = { draft, onChange, onKeyDown } })
+  useLayoutEffect(() => { latest.current = { draft, onChange, onKeyDown, onMentionChange } })
 
   useImperativeHandle(ref, () => ({
     focus(atEnd = false) {
@@ -52,6 +56,13 @@ export function ComposerEditor({ ref, inputRef, draft, placeholder, onChange, on
       const view = viewRef.current
       if (!view) return
       insertMessageSelection(selection)(view.state, view.dispatch)
+      view.focus()
+    },
+    replaceRange(from, to, text) {
+      const view = viewRef.current
+      if (!view) return
+      const tr = view.state.tr.insertText(text, from, to)
+      view.dispatch(tr.setSelection(TextSelection.create(tr.doc, from + text.length)).scrollIntoView())
       view.focus()
     },
   }), [])
@@ -70,6 +81,7 @@ export function ComposerEditor({ ref, inputRef, draft, placeholder, onChange, on
           serialized.current = serializeComposerContent(view.state.doc.content)
           latest.current.onChange(serialized.current)
         }
+        reportMention(view, mentionRef, latest.current.onMentionChange)
       },
       handleKeyDown(view, event) {
         if (view.composing || event.isComposing || event.keyCode === 229) return false
@@ -113,6 +125,7 @@ export function ComposerEditor({ ref, inputRef, draft, placeholder, onChange, on
     viewRef.current = view
     serialized.current = latest.current.draft
     view.dom.dataset.empty = String(view.state.doc.content.size === 0)
+    reportMention(view, mentionRef, latest.current.onMentionChange)
     return () => {
       active = false
       viewRef.current = null
@@ -140,6 +153,7 @@ export function ComposerEditor({ ref, inputRef, draft, placeholder, onChange, on
       }
     }
     view.dom.dataset.empty = String(view.state.doc.content.size === 0)
+    reportMention(view, mentionRef, latest.current.onMentionChange)
   }, [draft])
 
   return <>
@@ -151,4 +165,17 @@ export function ComposerEditor({ ref, inputRef, draft, placeholder, onChange, on
       portal.dom, String(portal.key),
     ))}
   </>
+}
+
+function reportMention(
+  view: EditorView,
+  mentionRef: { current: MentionTrigger | null },
+  onMentionChange: ((trigger: MentionTrigger | null) => void) | undefined
+) {
+  const mention = mentionTriggerFromState(view.state)
+  if (mentionTriggersEqual(mentionRef.current, mention)) {
+    return
+  }
+  mentionRef.current = mention
+  onMentionChange?.(mention)
 }

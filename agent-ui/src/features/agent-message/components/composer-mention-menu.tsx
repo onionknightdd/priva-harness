@@ -1,22 +1,21 @@
 import * as React from "react"
 import { useTranslation } from "react-i18next"
 
-import type { SlashCommand } from "@/lib/api/slash-commands"
+import type { FileSystemEntry } from "@/lib/api/sandbox-files"
+import { FileTypeIcon } from "@/features/file-browser/components/file-type-icon"
+import { FileTreeFolderIcon } from "@/features/file-browser/components/file-tree-folder-icon"
 
-import {
-  groupSlashCommands,
-  slashKindLabelKey,
-  slashOriginLabelKey,
-} from "../composer-slash-command"
+import { groupMentionEntries } from "../composer-mention"
 import {
   ComposerSuggestMenu,
   type ComposerSuggestGroup,
 } from "./composer-suggest-menu"
 
-export function ComposerSlashMenu({
+export function ComposerMentionMenu({
   open,
   menuId,
-  commands,
+  entries,
+  empty,
   highlightedIndex,
   anchorRef,
   inputRef,
@@ -26,35 +25,43 @@ export function ComposerSlashMenu({
 }: {
   open: boolean
   menuId: string
-  commands: readonly SlashCommand[]
+  entries: readonly FileSystemEntry[]
+  empty: string
   highlightedIndex: number
   anchorRef: React.RefObject<HTMLElement | null>
   inputRef: React.RefObject<HTMLElement | null>
   onOpenChange: (open: boolean) => void
   onHighlight: (index: number) => void
-  onSelect: (command: SlashCommand) => void
+  onSelect: (entry: FileSystemEntry) => void
 }) {
   const { t } = useTranslation()
   const grouped = React.useMemo(
-    () => groupSlashCommands(commands),
-    [commands]
+    () => groupMentionEntries(entries),
+    [entries]
   )
   const groups = React.useMemo((): ComposerSuggestGroup[] => {
     return grouped.map((group) => ({
       id: group.kind,
-      label: t(slashKindLabelKey(group.kind)),
-      items: group.commands.map((command) => ({
-        id: `${command.kind}:${command.name}`,
+      label:
+        group.kind === "directory"
+          ? t("agentMessage.mentionFolderGroup")
+          : t("agentMessage.mentionFileGroup"),
+      items: group.entries.map((entry) => ({
+        id: entry.path,
         content: (
           <>
             <span className="flex min-w-0 flex-1 items-center gap-2">
-              <span className="shrink-0">{command.name}</span>
-              <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground/70">
-                {command.description}
-              </span>
+              {entry.type === "directory" ? (
+                <FileTreeFolderIcon expanded={false} />
+              ) : (
+                <FileTypeIcon name={entry.name} path={entry.path} />
+              )}
+              <span className="min-w-0 truncate">{entry.name}</span>
             </span>
             <span className="text-muted-foreground ml-auto text-xs tracking-normal normal-case">
-              {t(slashOriginLabelKey(command.origin))}
+              {entry.type === "directory"
+                ? t("agentMessage.mentionFolderGroup")
+                : t("agentMessage.mentionFileGroup")}
             </span>
           </>
         ),
@@ -66,8 +73,8 @@ export function ComposerSlashMenu({
     <ComposerSuggestMenu
       open={open}
       menuId={menuId}
-      label={t("agentMessage.slashMenuLabel")}
-      empty={t("agentMessage.slashEmpty")}
+      label={t("agentMessage.mentionMenuLabel")}
+      empty={empty}
       groups={groups}
       highlightedIndex={highlightedIndex}
       anchorRef={anchorRef}
@@ -75,7 +82,7 @@ export function ComposerSlashMenu({
       onOpenChange={onOpenChange}
       onHighlight={onHighlight}
       onSelect={(index) => {
-        const selected = grouped.flatMap((group) => group.commands)[index]
+        const selected = grouped.flatMap((group) => group.entries)[index]
         if (selected) {
           onSelect(selected)
         }
