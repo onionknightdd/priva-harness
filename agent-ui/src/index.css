@@ -421,6 +421,23 @@
   backdrop-filter: none;
 }
 
+/* Mask the glass itself, leaving its foreground and scrolling ancestors out
+   of the mask so backdrop blur can sample the transcript continuously. */
+[data-slot="thread-glass"] {
+  padding-bottom: calc(var(--spacing) * 8);
+  box-sizing: content-box;
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - var(--spacing) * 8), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - var(--spacing) * 8), transparent);
+}
+
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  [data-glass-surface] {
+    background-color: var(--background);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
 @keyframes loading-state-pixel {
   0%, 62%, 100% {
     opacity: 0.15;

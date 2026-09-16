@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 
 import { WorkspaceShell } from "@/features/workspace"
 import { AgentChatHeader } from "@/features/agent-message/components/agent-chat-header"
+import { AGENT_CHAT_HEADER_HEIGHT } from "@/features/agent-message/agent-chat-layout"
 import {
   isSidebarContentView,
   type AppView,
@@ -89,6 +90,7 @@ export function AgentLayout({
   const isFileBrowser = activeView === "file-browser"
   const isResource = activeView === "skills" || activeView === "mcp"
   const isUsage = activeView === "usage"
+  const isChat = !isFileBrowser && !isResource && !isUsage
   const workspaceEnabled = !isSidebarContentView(activeView)
   const breadcrumb = isResource
     ? { section: t("resources.plugins"), page: t(`resources.${activeView}`) }
@@ -101,10 +103,14 @@ export function AgentLayout({
   return (
     <WorkspaceShell workspaceEnabled={workspaceEnabled}>
       <header
+        data-slot={isChat ? "agent-chat-header" : undefined}
         className={cn(
-          "z-20 flex shrink-0 items-center gap-2",
-          isFileBrowser ? "h-10" : "h-[35px] pt-[5px]"
+          "flex shrink-0 items-center gap-2",
+          isChat ? "relative z-30" : "z-20",
+          isFileBrowser ? "h-10" : "pt-[5px]",
+          !isChat && !isFileBrowser && "h-[35px]"
         )}
+        style={isChat ? { height: AGENT_CHAT_HEADER_HEIGHT } : undefined}
       >
         <div className="flex min-w-0 flex-1 items-center gap-2 px-4">
           <div className="flex items-center gap-2 md:hidden">

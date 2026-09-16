@@ -14,6 +14,7 @@ import type { SlashCommand } from "@/lib/api/slash-commands"
 import { cn } from "@/lib/utils"
 
 import type { AgentThreadMessage } from "../agent-message-data"
+import { AGENT_CHAT_HEADER_HEIGHT } from "../agent-chat-layout"
 import type { ContextUsage } from "../context-usage"
 import { appendQuotedDraft } from "../quote-selection"
 import { serializeMessageSelections } from "../message-select-action"
@@ -161,7 +162,8 @@ export function AgentMessage({
   return (
     <section
       aria-label={t("agentMessage.contentLabel")}
-      className="@container/agent-message flex min-h-0 flex-1 flex-col overflow-hidden pt-0 pr-2 pb-4 pl-4"
+      className="@container/agent-message flex min-h-0 flex-1 flex-col overflow-hidden pr-2 pb-4 pl-4"
+      style={{ marginTop: -AGENT_CHAT_HEADER_HEIGHT, paddingTop: AGENT_CHAT_HEADER_HEIGHT }}
     >
       <div className="relative min-h-0 flex-1">
         {/* Both children are absolutely positioned, so presence never shifts
@@ -185,7 +187,8 @@ export function AgentMessage({
           ) : (
             <motion.div
               key="agent-message-thread"
-              className="absolute inset-0 min-h-0 overflow-hidden"
+              className="absolute -right-2 bottom-0 -left-4 min-h-0 overflow-hidden"
+              style={{ top: -AGENT_CHAT_HEADER_HEIGHT }}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}

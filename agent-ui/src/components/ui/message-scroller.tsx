@@ -17,6 +17,7 @@ function MessageScrollerProvider(
 }
 
 function MessageScroller({
+  children,
   className,
   ...props
 }: React.ComponentProps<typeof MessageScrollerPrimitive.Root>) {
@@ -28,7 +29,16 @@ function MessageScroller({
         className
       )}
       {...props}
-    />
+    >
+      {children}
+      {/* A mask on the viewport can prevent sticky descendants from blurring
+          the transcript. Paint the bottom fade above the viewport. */}
+      <div
+        aria-hidden
+        data-slot="message-scroller-fade"
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[min(12%,--spacing(10))] bg-gradient-to-t from-background to-transparent"
+      />
+    </MessageScrollerPrimitive.Root>
   )
 }
 
@@ -40,7 +50,7 @@ function MessageScrollerViewport({
     <MessageScrollerPrimitive.Viewport
       data-slot="message-scroller-viewport"
       className={cn(
-        "size-full min-h-0 min-w-0 scroll-fade-b scrollbar-thin overflow-y-auto overscroll-contain contain-content pr-3 [scrollbar-gutter:stable] data-autoscrolling:scrollbar-thumb-transparent data-autoscrolling:scrollbar-track-transparent",
+        "size-full min-h-0 min-w-0 scrollbar-thin overflow-y-auto overscroll-contain contain-content [scrollbar-gutter:stable] data-autoscrolling:scrollbar-thumb-transparent data-autoscrolling:scrollbar-track-transparent",
         className
       )}
       {...props}

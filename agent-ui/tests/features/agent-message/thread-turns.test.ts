@@ -5,7 +5,6 @@ import type { AgentThreadMessage } from "../../../src/features/agent-message/age
 import {
   INITIAL_REVEALED_TURNS,
   REVEAL_BATCH_TURNS,
-  freezeBelowMaskTarget,
   groupThreadTurns,
   initialRevealWindow,
   markRevealPrepared,
@@ -97,36 +96,6 @@ describe("turnStickyParts", () => {
     assert.deepEqual(
       turnStickyParts({ id: working.id, user: null, replies: [working] }),
       { user: null, working }
-    )
-  })
-})
-
-describe("freezeBelowMaskTarget", () => {
-  it("puts the fade under the frozen user message", () => {
-    assert.equal(
-      freezeBelowMaskTarget({ userStuck: true, workingStuck: false }),
-      "user"
-    )
-  })
-
-  it("moves the fade under the working line and clears the user fade", () => {
-    assert.equal(
-      freezeBelowMaskTarget({ userStuck: true, workingStuck: true }),
-      "working"
-    )
-  })
-
-  it("puts the fade under a frozen working line when there is no user bar", () => {
-    assert.equal(
-      freezeBelowMaskTarget({ userStuck: false, workingStuck: true }),
-      "working"
-    )
-  })
-
-  it("hides the fade until a bar is actually stuck", () => {
-    assert.equal(
-      freezeBelowMaskTarget({ userStuck: false, workingStuck: false }),
-      null
     )
   })
 })

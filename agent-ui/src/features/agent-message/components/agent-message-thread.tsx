@@ -36,6 +36,7 @@ import { TickingNowProvider, useTickingNow } from "@/lib/relative-time"
 import { cn } from "@/lib/utils"
 
 import type { AgentThreadMessage } from "../agent-message-data"
+import { AGENT_CHAT_HEADER_HEIGHT } from "../agent-chat-layout"
 import {
   EXPAND_LOCK_MS,
   captureExpandTrigger,
@@ -61,6 +62,7 @@ import {
 import { AgentMessageItem } from "./agent-message-item"
 import { MessageSelectionActions } from "./message-selection-actions"
 import { StickyFreeze } from "./sticky-freeze"
+import { ThreadGlass } from "./thread-glass"
 import { TaskPlanPopover } from "./task-plan-popover"
 import { WorkingStatusLine } from "./working-status-line"
 
@@ -183,11 +185,12 @@ export function AgentMessageThread({
   const renderMessage = useCallback(
     (message: AgentThreadMessage, hideProcessHeader = false) => {
       const item = (
-        <AgentMessageItem
-          key={message.id}
-          message={message}
-          hideProcessHeader={hideProcessHeader}
-        />
+        <ThreadMessageColumn key={message.id}>
+          <AgentMessageItem
+            message={message}
+            hideProcessHeader={hideProcessHeader}
+          />
+        </ThreadMessageColumn>
       )
       return message.role === "user" ? item : (
         <motion.div
@@ -207,13 +210,15 @@ export function AgentMessageThread({
     <QuoteInChatContext.Provider value={onSelectionAction ?? null}>
     <ForkContext.Provider value={forkAvailability}>
     <TickingNowProvider value={now}>
-    <MessageScrollerProvider autoScroll={!followPaused}>
+    <MessageScrollerProvider autoScroll={!followPaused} scrollMargin={AGENT_CHAT_HEADER_HEIGHT}>
       <MessageScroller>
         <MotionConfig transition={motionTransition}>
           <LayoutGroup inherit={false}>
-            <MotionScrollerViewport layoutScroll>
+            <MotionScrollerViewport layoutScroll style={{ scrollPaddingTop: AGENT_CHAT_HEADER_HEIGHT }}>
+              <ThreadGlass />
               <MessageScrollerContent
-                className="mx-auto w-full max-w-3xl gap-6 pt-6"
+                className="w-full gap-6"
+                style={{ paddingTop: `calc(${AGENT_CHAT_HEADER_HEIGHT}px + var(--spacing) * 6)` }}
                 onClickCapture={(event) => {
                   const trigger = event.target instanceof Element
                     ? event.target.closest('[data-question-summary] [data-slot="collapsible-trigger"], [data-user-message-toggle]')
@@ -261,6 +266,16 @@ export function AgentMessageThread({
   )
 }
 
+// Keep the reading column's gutters inside full-width turn surfaces so sticky
+// glass also covers the empty space on both sides of a wide conversation.
+function ThreadMessageColumn({ children }: { children: ReactNode }) {
+  return (
+    <div className="min-w-0 pl-4 pr-5">
+      <div className="mx-auto w-full max-w-3xl">{children}</div>
+    </div>
+  )
+}
+
 const ThreadTurnItem = memo(function ThreadTurnItem({
   isLast,
   renderMessage,
@@ -277,7 +292,6 @@ const ThreadTurnItem = memo(function ThreadTurnItem({
   const freezeTurn = user !== null || working !== null
   const userRef = useRef<HTMLDivElement>(null)
   const [userHeight, setUserHeight] = useState(0)
-  const [workingStuck, setWorkingStuck] = useState(false)
   const hasWorking = working !== null
 
   // The user bar height only positions the working line below it, so measure
@@ -302,12 +316,6 @@ const ThreadTurnItem = memo(function ThreadTurnItem({
     return () => observer.disconnect()
   }, [hasWorking, user?.id])
 
-  useLayoutEffect(() => {
-    if (working === null) {
-      setWorkingStuck(false)
-    }
-  }, [working])
-
   return (
     <MotionScrollerItem
       layout="position"
@@ -323,19 +331,20 @@ const ThreadTurnItem = memo(function ThreadTurnItem({
       {user ? (
         <StickyFreeze
           ref={userRef}
-          className="z-20"
-          showBelowMask={!workingStuck}
+          className={working ? "mt-2" : "mt-6"}
+          top={AGENT_CHAT_HEADER_HEIGHT}
         >
           {renderMessage(user)}
         </StickyFreeze>
       ) : null}
       {working ? (
         <StickyFreeze
-          className="z-10"
-          onStuckChange={setWorkingStuck}
-          top={user ? userHeight : 0}
+          className="mt-2"
+          top={AGENT_CHAT_HEADER_HEIGHT + (user ? userHeight : 0)}
         >
-          <WorkingStatusLine message={working} />
+          <ThreadMessageColumn>
+            <WorkingStatusLine message={working} />
+          </ThreadMessageColumn>
         </StickyFreeze>
       ) : null}
       {turn.replies.map((message) =>
@@ -362,7 +371,7 @@ function ThreadEndSpacer() {
     }
 
     const syncHeight = () => {
-      spacer.style.height = `${Math.round(viewport.clientHeight * 0.3)}px`
+      spacer.style.height = `${Math.round(Math.max(0, viewport.clientHeight - AGENT_CHAT_HEADER_HEIGHT) * 0.3)}px`
     }
 
     syncHeight()

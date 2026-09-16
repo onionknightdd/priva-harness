@@ -710,12 +710,48 @@ token，浅色 / 深色均为 `rgb(77, 159, 240)`（`#4D9FF0`）。
 流式输出时，工作状态吸附在用户消息下方，偏移使用用户消息的实际测量高度，
 保留小数像素，避免高度取整后两层背景之间出现缝隙。
 
-重新加载会话时，`StickyFreeze` 在消息挂载和滚动位置恢复后、首帧绘制前同步
-初始吸附状态；多个吸附条合并为一次更新，让消息与底部渐变遮罩同时出现。
-后续滚动继续由 IntersectionObserver 更新，未吸附时不显示遮罩。
+重新加载会话时，`ThreadGlass` 在消息挂载和滚动位置恢复后、首帧绘制前读取
+原生吸附位置，让玻璃与渐变遮罩同时出现。未吸附时，背景只覆盖 Header。
+
+2026-09-16：用户消息吸附背景采用
+[Glassmorphism Navbar](https://www.shadcn.io/blocks/navbar-glassmorphism) 的材质：
+`bg-background/60` 和 `backdrop-blur-xl`（24px）。玻璃层各边均不画边框或阴影，
+气泡尺寸不变，工作状态条仍紧接用户消息的实际下沿。
+用户气泡保留 `user-message` 底色，毛玻璃覆盖聊天面板整行宽度，包含正文左右留白。
+滚动视口与 turn 使用全宽，`ThreadMessageColumn` 在背景内保留左 16px / 右 20px
+留白及居中的 `max-w-3xl` 阅读列。线程视口向外覆盖 `AgentMessage` 的水平内边距，
+正文与输入框的位置保持原样；Workspace 侧栏宽度变化时，背景随聊天面板一起缩放。
+Header 与吸附消息共用 `ThreadGlass` 的一块背景，避免相邻的两层背景模糊在
+Header 下沿形成色差。滚动视口向上覆盖 35px Header，`StickyFreeze` 与跳转定位
+共用 `AGENT_CHAT_HEADER_HEIGHT` 偏移；未滚动时的正文起点、输入框位置和
+有效阅读区域 70% 的输出落点保持原样。Header 只绘制前景，不再独立画背景。
+`StickyFreeze` 只负责原生吸附。`ThreadGlass` 按气泡实际位置判断吸附，避免
+哨兵与气泡之间的布局间距导致背景提前出现；后续只测量视口内的吸附条，
+背景下沿跟随最下面一条；流式状态也共用同一材质。被下一轮消息顶走的旧气泡
+在 Header 下沿裁切，避免盖住标题。滚动位置、高度和侧栏宽度变化会同步更新背景。
+背景向下延伸 32px，该层自身的 alpha 遮罩让底色与模糊一起渐隐；前景保持清晰，
+整个区域只保留一条下沿渐变，不叠加实色边框、阴影或第二块玻璃。
+材质直接跟随原生滚动；消息展开、收起仍沿用现有 Motion 动效和减少动态效果设置。
+不支持背景模糊、要求减少透明度或提高对比度时使用实色背景，保留下沿渐隐。
+消息视口不使用 `scroll-fade-b` 的 `mask-image`：它会让浏览器中的后代背景模糊
+失效，表现为文字只变淡、仍清晰可读。输入框上方的渐隐由 `MessageScroller` 内
+独立的 `message-scroller-fade` 覆盖层绘制，高度仍为 `min(12%, 40px)`，
+不参与布局、不拦截指针，跳到最新消息按钮位于它上方。
 
 ```text
-Mount history -> restore scroll in layout effects -> pre-paint batch
+Chat panel, including both side gutters
+  +---------------------------------------+
+  | Header foreground                     |
+  |                     [opaque bubble]   | <- ONE background/60 + blur(24px)
+  | Working... (while stuck)               |
+  | 32px alpha fade of both fill and blur  |
+  +---------------------------------------+
+  -> assistant content scrolls behind the glass
+Scroller bottom -> separate background gradient -> composer
+```
+
+```text
+Mount history -> restore scroll in layout effects -> pre-paint geometry read
                                                           |
                                                    message + mask
 ```
@@ -1778,7 +1814,8 @@ Mermaid 浏览器回归：打开 `/tests/components/ai-elements/mermaid-browser.
 吸附遮罩时序回归入口为 `/tests/features/agent-message/sticky-freeze.html`，点击
 **Run sticky freeze checks**。检查函数 `runStickyFreezeChecks` 使用真实 React 提交，
 受控 DOM 几何和延迟的 IntersectionObserver，亦可在 jsdom 中调用；覆盖历史滚动
-恢复后首帧前出现遮罩、未吸附状态、小数偏移、流式双层遮罩交接、卸载与 StrictMode。
+恢复后首帧前出现统一玻璃、原生吸附边界、流式状态交接、展开后的精确高度、
+旧气泡前景裁切、卸载与 StrictMode。
 Node 入口：
 
 ```sh
