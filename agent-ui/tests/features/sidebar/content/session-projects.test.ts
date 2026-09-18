@@ -35,7 +35,7 @@ function group(
 }
 
 describe("sortProjectGroupsByRecency", () => {
-  it("orders projects by the newest session and sessions by lastModified", () => {
+  it("orders projects by newest activity and keeps pinned sessions first", () => {
     const sorted = sortProjectGroupsByRecency([
       group("/older", [
         session("older-pinned", 20, { cwd: "/older", pinned: true }),
@@ -53,7 +53,7 @@ describe("sortProjectGroupsByRecency", () => {
     )
     assert.deepEqual(
       sorted[0]?.sessions.map((item) => item.sessionId),
-      ["newest", "older-in-recent"]
+      ["older-in-recent", "newest"]
     )
     assert.deepEqual(
       sorted[1]?.sessions.map((item) => item.sessionId),
@@ -61,17 +61,24 @@ describe("sortProjectGroupsByRecency", () => {
     )
   })
 
-  it("does not keep a pinned session above a newer unpinned session", () => {
+  it("keeps a pinned session above a newer unpinned session without moving its project", () => {
     const sorted = sortProjectGroupsByRecency([
+      group("/quiet", [
+        session("fresh-unpinned", 50, { cwd: "/quiet" }),
+      ]),
       group("/work", [
         session("pinned-old", 1, { cwd: "/work", pinned: true }),
-        session("fresh", 50, { cwd: "/work" }),
+        session("older-unpinned", 20, { cwd: "/work" }),
       ]),
     ])
 
     assert.deepEqual(
-      sorted[0]?.sessions.map((item) => item.sessionId),
-      ["fresh", "pinned-old"]
+      sorted.map((item) => item.cwd),
+      ["/quiet", "/work"]
+    )
+    assert.deepEqual(
+      sorted[1]?.sessions.map((item) => item.sessionId),
+      ["pinned-old", "older-unpinned"]
     )
   })
 })

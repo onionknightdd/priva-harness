@@ -942,15 +942,15 @@ Empty chat cwd chip --+-> Working directory          |
 项目标题加号从该目录打开选择器，空白对话的目录标签则从当前草稿的 cwd 打开。
 选择目录只改变该草稿，不修改服务端默认目录。
 
-2026-09-18：侧栏项目和组内 session 都按 `lastModified` 降序，最近更新的在上面。
-项目顺序取该工作目录里最新一条 session 的时间，不把进程 `active_cwd` 钉在顶部；
-`active_cwd` 仍只用于空列表默认目录和新对话。Session 置顶不再改变排列。
+2026-09-18：侧栏组内 session 先 pinned，再按 `lastModified` 降序。项目按该工作目录
+里最新一条 session 的时间排，不把进程 `active_cwd` 钉在顶部；`active_cwd` 仍只用于
+空列表默认目录和新对话。旧的 pinned session 不会把整个项目顶上去或沉下去。
 
 ```text
 Sidebar
   /recent  (max lastModified)
-    session-new
     session-old (pinned)
+    session-new
   /older
     session-mid
 ```

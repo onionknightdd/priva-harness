@@ -1,11 +1,20 @@
 import type { SessionInfo, SessionProjectGroup } from "@/lib/api/sandbox-sessions"
 
 export function compareSessionsByRecency(left: SessionInfo, right: SessionInfo) {
+  if (left.pinned !== right.pinned) return left.pinned ? -1 : 1
   return right.lastModified - left.lastModified
 }
 
 export function sortSessionsByRecency(sessions: readonly SessionInfo[]) {
   return [...sessions].sort(compareSessionsByRecency)
+}
+
+function latestSessionActivity(sessions: readonly SessionInfo[]) {
+  let latest = 0
+  for (const session of sessions) {
+    if (session.lastModified > latest) latest = session.lastModified
+  }
+  return latest
 }
 
 export function sortProjectGroupsByRecency(
@@ -16,11 +25,10 @@ export function sortProjectGroupsByRecency(
       ...group,
       sessions: sortSessionsByRecency(group.sessions),
     }))
-    .sort((left, right) => {
-      const leftActivity = left.sessions[0]?.lastModified ?? 0
-      const rightActivity = right.sessions[0]?.lastModified ?? 0
-      return rightActivity - leftActivity
-    })
+    .sort(
+      (left, right) =>
+        latestSessionActivity(right.sessions) - latestSessionActivity(left.sessions)
+    )
 }
 
 export function projectDisplayName(cwd: string, fallback: string) {

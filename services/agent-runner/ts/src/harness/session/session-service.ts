@@ -182,7 +182,7 @@ export class SessionService {
     if (archived) {
       return {
         kind: 'archived',
-        sessions: [...filtered].sort(compareSessions),
+        sessions: [...filtered].sort(compareLastModified),
       }
     }
 
@@ -552,8 +552,21 @@ function tagsFor(info: ProviderSessionInfo, metadata: SessionMetadataRecord | un
   return []
 }
 
-function compareSessions(left: SessionView, right: SessionView): number {
+function compareLastModified(left: SessionView, right: SessionView): number {
   return right.lastModified - left.lastModified
+}
+
+function compareSessions(left: SessionView, right: SessionView): number {
+  if (left.pinned !== right.pinned) return left.pinned ? -1 : 1
+  return compareLastModified(left, right)
+}
+
+function latestActivity(sessions: readonly SessionView[]): number {
+  let latest = 0
+  for (const session of sessions) {
+    if (session.lastModified > latest) latest = session.lastModified
+  }
+  return latest
 }
 
 function groupSessions(sessions: readonly SessionView[]): SessionGroupView[] {
@@ -571,7 +584,7 @@ function groupSessions(sessions: readonly SessionView[]): SessionGroupView[] {
       pinned: false as const,
       sessions: sorted.slice(0, SESSION_GROUP_PAGE_SIZE),
       hasMore: sorted.length > SESSION_GROUP_PAGE_SIZE,
-      lastActivity: sorted[0]?.lastModified ?? 0,
+      lastActivity: latestActivity(items),
     }
   })
   groups.sort((left, right) => right.lastActivity - left.lastActivity)

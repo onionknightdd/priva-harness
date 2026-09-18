@@ -278,7 +278,7 @@ function seedSession(
 }
 
 describe('SessionService list order', () => {
-  it('orders projects and sessions by lastModified, ignoring activeCwd and pin', async () => {
+  it('pins sessions first, then orders by lastModified, ignoring activeCwd', async () => {
     const runtimeHome = await mkdtemp(join(tmpdir(), 'priva-session-order-'))
     const claude = new FakeAgentProvider('claude', [])
     seedSession(claude, 'recent-unpinned', '/recent', 100)
@@ -304,25 +304,25 @@ describe('SessionService list order', () => {
     if (grouped.kind !== 'grouped') return
     expect(grouped.groups.map((group) => group.cwd)).toEqual(['/recent', '/active'])
     expect(grouped.groups[0]?.sessions.map((session) => session.sessionId)).toEqual([
-      'recent-unpinned',
       'older-pinned',
+      'recent-unpinned',
     ])
     expect(grouped.groups[1]?.sessions.map((session) => session.sessionId)).toEqual([
-      'stale-unpinned',
       'oldest-pinned',
+      'stale-unpinned',
     ])
 
     const flat = await service.list({ harness: 'claude', cwd: '/recent' })
     expect(flat.kind).toBe('flat')
     if (flat.kind !== 'flat') return
     expect(flat.sessions.map((session) => session.sessionId)).toEqual([
-      'recent-unpinned',
       'older-pinned',
+      'recent-unpinned',
     ])
     await rm(runtimeHome, { recursive: true, force: true })
   })
 
-  it('keeps the newest sessions on the first grouped page when an older session is pinned', async () => {
+  it('keeps an older pinned session on the first grouped page', async () => {
     const runtimeHome = await mkdtemp(join(tmpdir(), 'priva-session-page-'))
     const claude = new FakeAgentProvider('claude', [])
     for (let stamp = 1; stamp <= SESSION_GROUP_PAGE_SIZE + 1; stamp += 1) {
@@ -346,9 +346,10 @@ describe('SessionService list order', () => {
     if (grouped.kind !== 'grouped') return
     expect(grouped.groups).toHaveLength(1)
     expect(grouped.groups[0]?.hasMore).toBe(true)
-    expect(grouped.groups[0]?.sessions.map((session) => session.sessionId)).toEqual(
-      Array.from({ length: SESSION_GROUP_PAGE_SIZE }, (_, index) => `sess-${SESSION_GROUP_PAGE_SIZE + 1 - index}`),
-    )
+    expect(grouped.groups[0]?.sessions.map((session) => session.sessionId)).toEqual([
+      'sess-1',
+      ...Array.from({ length: SESSION_GROUP_PAGE_SIZE - 1 }, (_, index) => `sess-${SESSION_GROUP_PAGE_SIZE + 1 - index}`),
+    ])
     await rm(runtimeHome, { recursive: true, force: true })
   })
 })
