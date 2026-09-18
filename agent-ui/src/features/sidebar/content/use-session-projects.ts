@@ -16,6 +16,8 @@ import {
   type SessionProjectGroup,
 } from "@/lib/api/sandbox-sessions"
 
+import { sortProjectGroupsByRecency } from "./session-projects"
+
 export type SessionProjectsStatus =
   | "loading"
   | "ready"
@@ -96,9 +98,24 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
     setRefreshIndex((current) => current + 1)
   }, [])
 
+  const commitGroups = React.useCallback(
+    (
+      update:
+        | SessionProjectGroup[]
+        | ((current: SessionProjectGroup[]) => SessionProjectGroup[])
+    ) => {
+      setGroups((current) =>
+        sortProjectGroupsByRecency(
+          typeof update === "function" ? update(current) : update
+        )
+      )
+    },
+    []
+  )
+
   React.useEffect(() => {
     if (!harness) {
-      setGroups([])
+      commitGroups([])
       setActiveCwd("")
       setError(null)
       setRefreshing(false)
@@ -119,7 +136,7 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
         if (cancelled) {
           return
         }
-        setGroups(payload.groups)
+        commitGroups(payload.groups)
         setActiveCwd(payload.activeCwd)
         setStatus("ready")
         setRefreshing(false)
@@ -128,7 +145,7 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
         if (cancelled) {
           return
         }
-        setGroups([])
+        commitGroups([])
         setStatus("error")
         setRefreshing(false)
         setError(errorMessage(caught, loadFailed))
@@ -137,7 +154,7 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
     return () => {
       cancelled = true
     }
-  }, [harness, loadFailed, refreshIndex])
+  }, [commitGroups, harness, loadFailed, refreshIndex])
 
   React.useEffect(() => {
     if (!harness) {
@@ -190,7 +207,7 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
 
   const replaceSession = React.useCallback(
     (sessionId: string, patch: Partial<SessionInfo>) => {
-      setGroups((current) =>
+      commitGroups((current) =>
         current.map((group) => ({
           ...group,
           sessions: group.sessions.map((session) =>
@@ -199,7 +216,7 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
         }))
       )
     },
-    []
+    [commitGroups]
   )
 
   const loadMore = React.useCallback(
@@ -209,7 +226,7 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
       }
 
       const payload = await listSessionsForCwd(harness, cwd, { limit: 100 })
-      setGroups((current) =>
+      commitGroups((current) =>
         current.map((group) =>
           group.cwd === cwd
             ? {
@@ -221,7 +238,7 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
         )
       )
     },
-    [harness]
+    [commitGroups, harness]
   )
 
   const setPinned = React.useCallback(
@@ -245,7 +262,7 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
       if (!harness) {
         return
       }
-      setGroups((current) =>
+      commitGroups((current) =>
         current.map((group) => ({
           ...group,
           sessions: group.sessions.filter(
@@ -260,7 +277,7 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
         refresh()
       }
     },
-    [harness, refresh]
+    [commitGroups, harness, refresh]
   )
 
   const setTags = React.useCallback(
@@ -298,7 +315,7 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
       if (!harness) {
         return
       }
-      setGroups((current) =>
+      commitGroups((current) =>
         current.map((group) => ({
           ...group,
           sessions: group.sessions.filter(
@@ -313,12 +330,12 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
         refresh()
       }
     },
-    [harness, refresh]
+    [commitGroups, harness, refresh]
   )
 
   const prependSession = React.useCallback((session: SessionInfo) => {
     const cwd = session.cwd ?? ""
-    setGroups((current) => {
+    commitGroups((current) => {
       const existingIndex = current.findIndex((group) => group.cwd === cwd)
       if (existingIndex < 0) {
         return [
@@ -352,7 +369,7 @@ export function useSessionProjects(harness: AgentRunHarness | null) {
         }
       })
     })
-  }, [])
+  }, [commitGroups])
 
   return {
     groups,

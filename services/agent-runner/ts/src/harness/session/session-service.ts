@@ -182,7 +182,7 @@ export class SessionService {
     if (archived) {
       return {
         kind: 'archived',
-        sessions: [...filtered].sort((left, right) => right.lastModified - left.lastModified),
+        sessions: [...filtered].sort(compareSessions),
       }
     }
 
@@ -202,7 +202,7 @@ export class SessionService {
 
     return {
       kind: 'grouped',
-      groups: groupSessions(filtered, this.options.activeCwd),
+      groups: groupSessions(filtered),
       activeCwd: this.options.activeCwd,
     }
   }
@@ -553,11 +553,10 @@ function tagsFor(info: ProviderSessionInfo, metadata: SessionMetadataRecord | un
 }
 
 function compareSessions(left: SessionView, right: SessionView): number {
-  if (left.pinned !== right.pinned) return left.pinned ? -1 : 1
   return right.lastModified - left.lastModified
 }
 
-function groupSessions(sessions: readonly SessionView[], activeCwd: string): SessionGroupView[] {
+function groupSessions(sessions: readonly SessionView[]): SessionGroupView[] {
   const byCwd = new Map<string, SessionView[]>()
   for (const session of sessions) {
     const cwd = session.cwd ?? ''
@@ -575,11 +574,7 @@ function groupSessions(sessions: readonly SessionView[], activeCwd: string): Ses
       lastActivity: sorted[0]?.lastModified ?? 0,
     }
   })
-  groups.sort((left, right) => {
-    if (left.cwd === activeCwd && right.cwd !== activeCwd) return -1
-    if (right.cwd === activeCwd && left.cwd !== activeCwd) return 1
-    return right.lastActivity - left.lastActivity
-  })
+  groups.sort((left, right) => right.lastActivity - left.lastActivity)
   return groups.map((group) => ({
     cwd: group.cwd,
     pinned: group.pinned,

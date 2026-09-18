@@ -1,5 +1,28 @@
 import type { SessionInfo, SessionProjectGroup } from "@/lib/api/sandbox-sessions"
 
+export function compareSessionsByRecency(left: SessionInfo, right: SessionInfo) {
+  return right.lastModified - left.lastModified
+}
+
+export function sortSessionsByRecency(sessions: readonly SessionInfo[]) {
+  return [...sessions].sort(compareSessionsByRecency)
+}
+
+export function sortProjectGroupsByRecency(
+  groups: readonly SessionProjectGroup[]
+) {
+  return groups
+    .map((group) => ({
+      ...group,
+      sessions: sortSessionsByRecency(group.sessions),
+    }))
+    .sort((left, right) => {
+      const leftActivity = left.sessions[0]?.lastModified ?? 0
+      const rightActivity = right.sessions[0]?.lastModified ?? 0
+      return rightActivity - leftActivity
+    })
+}
+
 export function projectDisplayName(cwd: string, fallback: string) {
   const trimmed = cwd.replace(/[\\/]+$/u, "")
   if (!trimmed) {

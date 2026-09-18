@@ -942,6 +942,19 @@ Empty chat cwd chip --+-> Working directory          |
 项目标题加号从该目录打开选择器，空白对话的目录标签则从当前草稿的 cwd 打开。
 选择目录只改变该草稿，不修改服务端默认目录。
 
+2026-09-18：侧栏项目和组内 session 都按 `lastModified` 降序，最近更新的在上面。
+项目顺序取该工作目录里最新一条 session 的时间，不把进程 `active_cwd` 钉在顶部；
+`active_cwd` 仍只用于空列表默认目录和新对话。Session 置顶不再改变排列。
+
+```text
+Sidebar
+  /recent  (max lastModified)
+    session-new
+    session-old (pinned)
+  /older
+    session-mid
+```
+
 2026-09-11：工作目录选择器与新建文件夹弹窗使用共享 `shadow-modal` token，
 由 2px / 8px 的轻柔边缘阴影和 16px / 48px 的扩散阴影组成；浅色透明度为
 6% / 14%，深色为 20% / 36%，突出嵌套弹窗层次。保留原有细边框和共享弹窗动效。
@@ -1775,6 +1788,12 @@ rg -n '@base-ui/react|motion/react|gsap' agent-ui/src
 
 ```sh
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/sidebar/header/harness-default-width.test.tsx
+```
+
+侧栏项目与 session 按最后更新时间排序：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/sidebar/content/session-projects.test.ts
 ```
 
 外部 MCP 工具名称解析、内置工具分流、流式输入、输出与错误、复制及中英文展示回归

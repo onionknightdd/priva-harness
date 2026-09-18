@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { emptyContextUsage } from '../../../../src/core/resource/context-usage.js'
-import { SessionError } from '../../../../src/core/resource/session.js'
+import { SessionError, SESSION_GROUP_PAGE_SIZE } from '../../../../src/core/resource/session.js'
 import { LiveRunRegistry } from '../../../../src/harness/run/live-run-registry.js'
 import { SessionService } from '../../../../src/harness/session/session-service.js'
 import { FakeAgentProvider } from '../../../support/fake-agent-provider.js'
@@ -258,11 +258,16 @@ describe('SessionService context usage', () => {
   })
 })
 
-function seedSession(provider: FakeAgentProvider, id: string, cwd = '/work'): void {
+function seedSession(
+  provider: FakeAgentProvider,
+  id: string,
+  cwd = '/work',
+  lastModified = 1,
+): void {
   provider.sessions.seed({
     ref: { provider: provider.id, id },
     summary: id,
-    lastModified: 1,
+    lastModified,
     fileSize: 1,
     customTitle: null,
     firstPrompt: id,
@@ -271,3 +276,79 @@ function seedSession(provider: FakeAgentProvider, id: string, cwd = '/work'): vo
     tag: null,
   })
 }
+
+describe('SessionService list order', () => {
+  it('orders projects and sessions by lastModified, ignoring activeCwd and pin', async () => {
+    const runtimeHome = await mkdtemp(join(tmpdir(), 'priva-session-order-'))
+    const claude = new FakeAgentProvider('claude', [])
+    seedSession(claude, 'recent-unpinned', '/recent', 100)
+    seedSession(claude, 'older-pinned', '/recent', 20)
+    seedSession(claude, 'stale-unpinned', '/active', 50)
+    seedSession(claude, 'oldest-pinned', '/active', 10)
+    const metadata = new MemorySessionMetadataRepository()
+    await metadata.upsert({ provider: 'claude', id: 'older-pinned' }, { pinned: true })
+    await metadata.upsert({ provider: 'claude', id: 'oldest-pinned' }, { pinned: true })
+    const service = new SessionService({
+      providers: {
+        claude,
+        pi: new FakeAgentProvider('pi', []),
+      },
+      metadata,
+      liveRuns: new LiveRunRegistry(),
+      modelProfiles: createTestModelProfileService(runtimeHome),
+      activeCwd: '/active',
+    })
+
+    const grouped = await service.list({ harness: 'claude' })
+    expect(grouped.kind).toBe('grouped')
+    if (grouped.kind !== 'grouped') return
+    expect(grouped.groups.map((group) => group.cwd)).toEqual(['/recent', '/active'])
+    expect(grouped.groups[0]?.sessions.map((session) => session.sessionId)).toEqual([
+      'recent-unpinned',
+      'older-pinned',
+    ])
+    expect(grouped.groups[1]?.sessions.map((session) => session.sessionId)).toEqual([
+      'stale-unpinned',
+      'oldest-pinned',
+    ])
+
+    const flat = await service.list({ harness: 'claude', cwd: '/recent' })
+    expect(flat.kind).toBe('flat')
+    if (flat.kind !== 'flat') return
+    expect(flat.sessions.map((session) => session.sessionId)).toEqual([
+      'recent-unpinned',
+      'older-pinned',
+    ])
+    await rm(runtimeHome, { recursive: true, force: true })
+  })
+
+  it('keeps the newest sessions on the first grouped page when an older session is pinned', async () => {
+    const runtimeHome = await mkdtemp(join(tmpdir(), 'priva-session-page-'))
+    const claude = new FakeAgentProvider('claude', [])
+    for (let stamp = 1; stamp <= SESSION_GROUP_PAGE_SIZE + 1; stamp += 1) {
+      seedSession(claude, `sess-${stamp}`, '/work', stamp)
+    }
+    const metadata = new MemorySessionMetadataRepository()
+    await metadata.upsert({ provider: 'claude', id: 'sess-1' }, { pinned: true })
+    const service = new SessionService({
+      providers: {
+        claude,
+        pi: new FakeAgentProvider('pi', []),
+      },
+      metadata,
+      liveRuns: new LiveRunRegistry(),
+      modelProfiles: createTestModelProfileService(runtimeHome),
+      activeCwd: '/other',
+    })
+
+    const grouped = await service.list({ harness: 'claude' })
+    expect(grouped.kind).toBe('grouped')
+    if (grouped.kind !== 'grouped') return
+    expect(grouped.groups).toHaveLength(1)
+    expect(grouped.groups[0]?.hasMore).toBe(true)
+    expect(grouped.groups[0]?.sessions.map((session) => session.sessionId)).toEqual(
+      Array.from({ length: SESSION_GROUP_PAGE_SIZE }, (_, index) => `sess-${SESSION_GROUP_PAGE_SIZE + 1 - index}`),
+    )
+    await rm(runtimeHome, { recursive: true, force: true })
+  })
+})
