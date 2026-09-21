@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -122,6 +122,16 @@ describe('ensureClaudeProjectTrusted', () => {
     expect(JSON.parse(await readFile(file, 'utf8'))).toMatchObject({ theme: 'dark-daltonized' })
     await ensureClaudeProjectTrusted(file, { cwd: '/work/repo', colorScheme: 'light' })
     expect(JSON.parse(await readFile(file, 'utf8'))).toMatchObject({ theme: 'light' })
+  })
+
+  it('serialises concurrent writers so every project lands and no temp file is lost', async () => {
+    const file = join(dir, '.claude.json')
+    const cwds = ['/a', '/b', '/c', '/d', '/e', '/f']
+    await Promise.all(cwds.map((cwd) => ensureClaudeProjectTrusted(file, { cwd, apiKey: `key-${cwd}` })))
+    const written = JSON.parse(await readFile(file, 'utf8')) as { projects: Record<string, unknown>; customApiKeyResponses: { approved: string[] } }
+    expect(Object.keys(written.projects).sort()).toEqual(cwds)
+    expect(written.customApiKeyResponses.approved.sort()).toEqual(cwds.map((cwd) => `key-${cwd}`).sort())
+    expect((await readdir(dir)).filter((name) => name.endsWith('.tmp'))).toEqual([])
   })
 
   it('leaves key approvals alone when the profile has no token', async () => {

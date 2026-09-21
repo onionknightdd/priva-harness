@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
@@ -20,6 +21,11 @@ export interface ClaudeTerminalPreflight {
 // of the trimmed key (see its `customApiKeyResponses` handling).
 const API_KEY_FINGERPRINT_LENGTH = 20
 
+// Read-modify-write per config file is serialised in-process: two viewers
+// opening terminals at the same moment must not race each other's temp file
+// or lose the other's update.
+const pendingWrites = new Map<string, Promise<void>>()
+
 /**
  * Pre-accept the interactive dialogs Claude Code shows on a first launch.
  *
@@ -30,10 +36,20 @@ const API_KEY_FINGERPRINT_LENGTH = 20
  * global config the CLI reads. Existing keys are preserved; only the flags
  * below are set.
  */
-export async function ensureClaudeProjectTrusted(
+export function ensureClaudeProjectTrusted(
   configFilePath: string,
   preflight: ClaudeTerminalPreflight,
 ): Promise<void> {
+  const previous = pendingWrites.get(configFilePath) ?? Promise.resolve()
+  const run = previous.catch(() => undefined).then(() => applyPreflight(configFilePath, preflight))
+  pendingWrites.set(configFilePath, run)
+  void run.finally(() => {
+    if (pendingWrites.get(configFilePath) === run) pendingWrites.delete(configFilePath)
+  })
+  return run
+}
+
+async function applyPreflight(configFilePath: string, preflight: ClaudeTerminalPreflight): Promise<void> {
   let config: Record<string, unknown> = {}
   try {
     config = asRecord(JSON.parse(await readFile(configFilePath, 'utf8')) as unknown) ?? {}
@@ -62,7 +78,7 @@ export async function ensureClaudeProjectTrusted(
   }
   if (JSON.stringify(next) === JSON.stringify(config)) return
   await mkdir(dirname(configFilePath), { recursive: true, mode: 0o700 })
-  const temporary = `${configFilePath}.${process.pid}.tmp`
+  const temporary = `${configFilePath}.${process.pid}.${randomUUID()}.tmp`
   await writeFile(temporary, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 })
   await rename(temporary, configFilePath)
 }

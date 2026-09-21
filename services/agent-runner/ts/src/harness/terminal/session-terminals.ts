@@ -38,6 +38,10 @@ export interface OpenedSessionTerminal {
  * reference alone, including after a runner restart.
  */
 export class SessionTerminals {
+  // Concurrent opens of the same session (two tabs, a reconnect racing the
+  // first attach) share one launch instead of both trying to create it.
+  private readonly opening = new Map<string, Promise<OpenedSessionTerminal>>()
+
   constructor(private readonly options: SessionTerminalsOptions) {}
 
   static key(ref: SessionRef): string {
@@ -51,11 +55,29 @@ export class SessionTerminals {
     }
     const resolved = resolveTarget(target, spec.provider)
     const key = SessionTerminals.key(resolved.session)
+    const inFlight = this.opening.get(key)
+    if (inFlight) return inFlight.then((opened) => ({ ...opened, adopted: true }))
+    const opening = this.launch(key, resolved, provider.terminalLaunch.bind(provider), spec, size)
+    this.opening.set(key, opening)
+    try {
+      return await opening
+    } finally {
+      this.opening.delete(key)
+    }
+  }
+
+  private async launch(
+    key: string,
+    resolved: { target: SessionTarget; session: SessionRef },
+    terminalLaunch: NonNullable<AgentProvider['terminalLaunch']>,
+    spec: ProviderRunSpec,
+    size: TerminalSize,
+  ): Promise<OpenedSessionTerminal> {
     // A running terminal keeps the configuration it was launched with; the
     // provider is only asked to describe a launch when one is needed.
     if (await this.options.terminals.isAlive(key)) return { session: resolved.session, adopted: true }
     const scratchDir = await this.options.terminals.scratchDir(key)
-    const launch = await provider.terminalLaunch(resolved.target, spec, { scratchDir, ...size })
+    const launch = await terminalLaunch(resolved.target, spec, { scratchDir, ...size })
     const info = await this.options.terminals.ensure(key, launch)
     return { session: resolved.session, adopted: info.adopted }
   }

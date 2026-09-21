@@ -140,6 +140,8 @@ export class TmuxTerminalService implements TerminalService {
     try {
       await this.run(key, args)
     } catch (error) {
+      // Another caller won the race between has-session and new-session.
+      if (/duplicate session/iu.test(describe(error))) return { key, adopted: true }
       throw new TerminalError('launch-failed', `Could not start terminal: ${describe(error)}`, { cause: error })
     }
     return { key, adopted: false }
