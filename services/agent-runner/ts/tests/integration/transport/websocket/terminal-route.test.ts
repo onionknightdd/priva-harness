@@ -108,7 +108,7 @@ describe.skipIf(!tmuxAvailable())('terminal WebSocket route', () => {
   }
 
   it('opens a new session terminal, streams the screen and keystrokes, and lets a second viewer adopt it', async () => {
-    const client = connect(url({ harness: 'claude', cwd: root, model, cols: '90', rows: '15' }))
+    const client = connect(url({ harness: 'claude', cwd: root, model, cols: '90', rows: '15', theme: 'light' }))
     const { socket } = client
     const ready = await client.waitJson('ready')
     expect(ready).toMatchObject({ harness: 'claude', adopted: false, cols: 90, rows: 15 })
@@ -117,7 +117,7 @@ describe.skipIf(!tmuxAvailable())('terminal WebSocket route', () => {
     expect(launches).toHaveLength(1)
     expect(launches[0]?.target).toEqual({ kind: 'new', provider: 'claude', sessionId })
     expect(launches[0]?.spec.model).toBe('m')
-    expect(launches[0]?.context).toMatchObject({ cols: 90, rows: 15 })
+    expect(launches[0]?.context).toMatchObject({ cols: 90, rows: 15, colorScheme: 'light' })
 
     await expect.poll(() => client.text().includes('TUI>'), { timeout: 5000 }).toBe(true)
     socket.send(Buffer.from('echo $MODEL-echoed\r'), { binary: true })

@@ -10,6 +10,7 @@ import type {
 import {
   TerminalError,
   type TerminalAttachment,
+  type TerminalColorScheme,
   type TerminalService,
 } from '../../core/contract/terminal-service.js'
 
@@ -21,6 +22,7 @@ export interface SessionTerminalsOptions {
 export interface TerminalSize {
   readonly cols: number
   readonly rows: number
+  readonly colorScheme?: TerminalColorScheme
 }
 
 export interface OpenedSessionTerminal {

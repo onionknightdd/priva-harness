@@ -15,6 +15,8 @@ export type TerminalSessionOptions = {
   effort?: AgentRunEffort
   cols: number
   rows: number
+  /** Viewer colour scheme; the runner aligns the TUI's own theme with it on launch. */
+  theme?: "light" | "dark"
 }
 
 export type TerminalSessionStatus =
@@ -46,6 +48,7 @@ export function terminalSocketUrl(options: TerminalSessionOptions): string {
   })
   if (options.sessionId) params.set("sessionId", options.sessionId)
   if (options.effort) params.set("effort", options.effort)
+  if (options.theme) params.set("theme", options.theme)
   return `${protocol}//${window.location.host}/api/sandbox/agent/ws/terminal?${params.toString()}`
 }
 

@@ -92,7 +92,7 @@ export class ClaudeProvider implements AgentProvider {
     }
     await ensureClaudeProjectTrusted(
       this.options.globalConfigFilePath ?? claudeGlobalConfigFilePath(),
-      { cwd: spec.cwd, apiKey: spec.authToken },
+      { cwd: spec.cwd, apiKey: spec.authToken, ...(context.colorScheme === undefined ? {} : { colorScheme: context.colorScheme }) },
     )
     return claudeTerminalLaunch({ target, spec, executable, context })
   }

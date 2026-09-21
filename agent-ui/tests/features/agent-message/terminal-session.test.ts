@@ -61,17 +61,18 @@ function withFakeSocket<T>(run: () => T): T {
 test("builds the terminal socket URL from the run parameters", () => {
   withFakeSocket(() => {
     const url = new URL(
-      terminalSocketUrl({ harness: "claude", cwd: "/work/repo", model: "p:m", sessionId: "s1", effort: "high", cols: 100, rows: 30 })
+      terminalSocketUrl({ harness: "claude", cwd: "/work/repo", model: "p:m", sessionId: "s1", effort: "high", cols: 100, rows: 30, theme: "light" })
     )
     assert.equal(url.protocol, "wss:")
     assert.equal(url.host, "ui.example")
     assert.equal(url.pathname, "/api/sandbox/agent/ws/terminal")
     assert.deepEqual(Object.fromEntries(url.searchParams), {
-      harness: "claude", cwd: "/work/repo", model: "p:m", cols: "100", rows: "30", sessionId: "s1", effort: "high",
+      harness: "claude", cwd: "/work/repo", model: "p:m", cols: "100", rows: "30", sessionId: "s1", effort: "high", theme: "light",
     })
     const fresh = new URL(terminalSocketUrl({ harness: "claude", cwd: "/w", model: "m", sessionId: null, cols: 80, rows: 24 }))
     assert.equal(fresh.searchParams.has("sessionId"), false)
     assert.equal(fresh.searchParams.has("effort"), false)
+    assert.equal(fresh.searchParams.has("theme"), false)
   })
 })
 

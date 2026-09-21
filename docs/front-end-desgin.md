@@ -1505,9 +1505,13 @@ Terminal 视图用 xterm.js（`@xterm/xterm` + `addon-fit` + `addon-webgl`，Web
   新会话从终端获得首个 session id（null → id）不算切换，终端保持。
 - 从终端创建的新会话在收到 `ready` 后通过 `bindRunSession` 绑定到当前会话，Chat 侧随即
   指向同一份转录。
-- 主题：xterm 配色跟随 `next-themes` 的 `resolvedTheme`（浅色 `#ffffff/#0a0a0a`，深色
-  `#0a0a0a/#fafafa`，对应 index.css 的 neutral token）；字体读取 `--font-code`，并在
-  `document.fonts.ready` 后清空 WebGL 字形缓存，避免回退字体的度量被缓存。
+- 主题：xterm 配色跟随 `next-themes` 的 `resolvedTheme`。背景/前景对应 index.css 的
+  neutral token（浅色 `#ffffff/#0a0a0a`，深色 `#0a0a0a/#fafafa`）；16 个 ANSI 色位分别
+  使用完整的浅色 / 深色终端调色板（GitHub Light / GitHub Dark 终端方案），因为 xterm 内置
+  默认值只适合深色背景，黄色、青色与亮色在白底上不可读。连接时把当前配色以 `theme`
+  查询参数告知 runner，Claude Code 自身的主题在启动时与之对齐（运行中的 TUI 不随页面
+  切换而变）。字体读取 `--font-code`，并在 `document.fonts.ready` 后清空 WebGL 字形缓存，
+  避免回退字体的度量被缓存。
 - 尺寸：`ResizeObserver` + `FitAddon`，每次 `onResize` 通过 `{type:'resize'}` 文本帧同步到
   runner；隐藏期间的尺寸变化在重新显示时补一次 fit。
 - 状态点复用 `status-running / status-warm / status-idle` token；所有文案在

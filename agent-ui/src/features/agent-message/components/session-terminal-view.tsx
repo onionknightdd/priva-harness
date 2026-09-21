@@ -18,18 +18,34 @@ import {
   type TerminalSessionStatus,
 } from "../terminal-session"
 
-// xterm needs concrete colours; these follow the neutral shadcn palette in
-// index.css (background oklch(1 0 0) / oklch(0.145 0 0)).
+// xterm needs concrete colours. Background / foreground follow the neutral
+// shadcn palette in index.css (oklch(1 0 0) / oklch(0.145 0 0)); the sixteen
+// ANSI slots are full light and dark terminal palettes (GitHub's terminal
+// schemes), because xterm's built-in defaults are tuned for dark backgrounds
+// and leave yellow, cyan and the bright colours unreadable on white.
 const LIGHT_THEME: ITheme = {
   background: "#ffffff",
   foreground: "#0a0a0a",
   cursor: "#0a0a0a",
   cursorAccent: "#ffffff",
-  selectionBackground: "#0a0a0a26",
-  black: "#000000",
-  brightBlack: "#6b6b6b",
-  white: "#d4d4d4",
-  brightWhite: "#ffffff",
+  selectionBackground: "#0969da33",
+  selectionInactiveBackground: "#0969da1f",
+  black: "#24292f",
+  red: "#cf222e",
+  green: "#116329",
+  yellow: "#4d2d00",
+  blue: "#0969da",
+  magenta: "#8250df",
+  cyan: "#1b7c83",
+  white: "#6e7781",
+  brightBlack: "#57606a",
+  brightRed: "#a40e26",
+  brightGreen: "#1a7f37",
+  brightYellow: "#633c01",
+  brightBlue: "#218bff",
+  brightMagenta: "#a475f9",
+  brightCyan: "#3192aa",
+  brightWhite: "#8c959f",
 }
 
 const DARK_THEME: ITheme = {
@@ -37,11 +53,24 @@ const DARK_THEME: ITheme = {
   foreground: "#fafafa",
   cursor: "#fafafa",
   cursorAccent: "#0a0a0a",
-  selectionBackground: "#fafafa33",
-  black: "#0a0a0a",
-  brightBlack: "#7a7a7a",
-  white: "#d4d4d4",
-  brightWhite: "#fafafa",
+  selectionBackground: "#58a6ff4d",
+  selectionInactiveBackground: "#58a6ff26",
+  black: "#484f58",
+  red: "#ff7b72",
+  green: "#3fb950",
+  yellow: "#d29922",
+  blue: "#58a6ff",
+  magenta: "#bc8cff",
+  cyan: "#39c5cf",
+  white: "#b1bac4",
+  brightBlack: "#6e7681",
+  brightRed: "#ffa198",
+  brightGreen: "#56d364",
+  brightYellow: "#e3b341",
+  brightBlue: "#79c0ff",
+  brightMagenta: "#d2a8ff",
+  brightCyan: "#56d4dd",
+  brightWhite: "#f0f6fc",
 }
 
 const MOBILE_KEYS = [
@@ -178,6 +207,7 @@ export function SessionTerminalView({
         sessionId: knownSessionIdRef.current,
         cols: terminal.cols,
         rows: terminal.rows,
+        theme: resolvedTheme === "dark" ? "dark" : "light",
       },
       {
         onOutput: (chunk) => terminal.write(chunk),
@@ -199,7 +229,8 @@ export function SessionTerminalView({
       session.close()
       if (sessionRef.current === session) sessionRef.current = null
     }
-    // `hidden` only affects focus and is read at ready time.
+    // `hidden` only affects focus and is read at ready time; `resolvedTheme`
+    // is read at launch only, a running TUI keeps its theme.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [harness, cwd, model, effort, generation])
 

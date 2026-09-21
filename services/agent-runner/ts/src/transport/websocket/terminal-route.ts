@@ -20,6 +20,9 @@ export interface TerminalRouteOptions {
 }
 
 /**
+ * Query: `harness`, `cwd`, `model`, optional `sessionId`, `effort`, `cols`,
+ * `rows` and `theme` (`light` | `dark`, the viewer's colour scheme).
+ *
  * Wire protocol (both directions use the WebSocket frame type as the
  * discriminator):
  *   server → client  binary: raw terminal output;
@@ -36,6 +39,7 @@ const querySchema = z.object({
   effort: z.string().refine(isEffortLevel, 'Unknown effort level').optional(),
   cols: z.coerce.number().int().min(20).max(500).default(120),
   rows: z.coerce.number().int().min(5).max(300).default(40),
+  theme: z.enum(['light', 'dark']).optional(),
 })
 
 const clientMessageSchema = z.object({
@@ -57,7 +61,7 @@ async function handleTerminalSocket(socket: WebSocket, rawQuery: unknown, option
     fail(socket, 'invalid-request', query.error.issues.map((issue) => issue.message).join('; '))
     return
   }
-  const { harness, sessionId, cwd, model, effort, cols, rows } = query.data
+  const { harness, sessionId, cwd, model, effort, cols, rows, theme } = query.data
   const provider = providerIdForHarness(harness)
   const target: SessionTarget = sessionId === undefined
     ? { kind: 'new', provider }
@@ -68,7 +72,7 @@ async function handleTerminalSocket(socket: WebSocket, rawQuery: unknown, option
     const spec = await buildRunSpec(options, {
       harness, model, cwd, ...(effort === undefined ? {} : { effort }),
     })
-    const opened = await options.terminals.open(target, spec, { cols, rows })
+    const opened = await options.terminals.open(target, spec, { cols, rows, ...(theme === undefined ? {} : { colorScheme: theme }) })
     if (!socketOpen(socket)) return
     attachment = await options.terminals.attach(opened.session)
     if (!socketOpen(socket)) { await attachment.detach(); return }

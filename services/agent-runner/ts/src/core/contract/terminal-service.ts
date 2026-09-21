@@ -18,10 +18,14 @@ export interface TerminalLaunchSpec {
 }
 
 /** What a provider gets when asked to describe how its TUI should be launched. */
+export type TerminalColorScheme = 'light' | 'dark'
+
 export interface TerminalLaunchContext {
   readonly scratchDir: string
   readonly cols: number
   readonly rows: number
+  /** Colour scheme of the viewer that launches the program, when known. */
+  readonly colorScheme?: TerminalColorScheme
 }
 
 export interface TerminalInfo {

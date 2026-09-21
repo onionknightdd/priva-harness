@@ -106,7 +106,7 @@ Claude，因此 `SessionRef` 与转录文件名一致，SDK 驾驭方式可以 `
 
 ### 4.4 WS 线协议
 
-`GET /api/sandbox/agent/ws/terminal?harness=claude&cwd=…&model=…[&sessionId=…][&effort=…][&cols=…&rows=…]`
+`GET /api/sandbox/agent/ws/terminal?harness=claude&cwd=…&model=…[&sessionId=…][&effort=…][&cols=…&rows=…][&theme=light|dark]`
 
 | 方向 | 帧 | 内容 |
 |---|---|---|
@@ -130,7 +130,8 @@ Claude，因此 `SessionRef` 与转录文件名一致，SDK 驾驭方式可以 `
 - 环境：`resolveClaudeQueryEnv` + `DISABLE_AUTOUPDATER=1`；
 - 预置 `~/.claude.json`：`hasCompletedOnboarding`、`bypassPermissionsModeAccepted`、
   `projects[cwd].hasTrustDialogAccepted`、`customApiKeyResponses.approved`
-  （API key 末 20 位指纹）。
+  （API key 末 20 位指纹）；查看者带 `theme` 时同步写入 Claude Code 的 `theme`
+  （`light` / `dark`），只在实际启动时生效，认领已运行的终端不改主题。
 
 ### 4.6 回收
 

@@ -115,6 +115,15 @@ describe('ensureClaudeProjectTrusted', () => {
     })
   })
 
+  it('aligns Claude Code\'s theme with the viewer colour scheme only when one is given', async () => {
+    const file = join(dir, '.claude.json')
+    await writeFile(file, JSON.stringify({ theme: 'dark-daltonized' }))
+    await ensureClaudeProjectTrusted(file, { cwd: '/work/repo' })
+    expect(JSON.parse(await readFile(file, 'utf8'))).toMatchObject({ theme: 'dark-daltonized' })
+    await ensureClaudeProjectTrusted(file, { cwd: '/work/repo', colorScheme: 'light' })
+    expect(JSON.parse(await readFile(file, 'utf8'))).toMatchObject({ theme: 'light' })
+  })
+
   it('leaves key approvals alone when the profile has no token', async () => {
     const file = join(dir, '.claude.json')
     await ensureClaudeProjectTrusted(file, { cwd: '/work/repo', apiKey: '' })

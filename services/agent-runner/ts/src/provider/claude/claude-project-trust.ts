@@ -1,12 +1,19 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
+import type { TerminalColorScheme } from '../../core/contract/terminal-service.js'
 import { asRecord } from '../../core/event/json-record.js'
 
 export interface ClaudeTerminalPreflight {
   readonly cwd: string
   /** Profile API key handed to the CLI through `ANTHROPIC_API_KEY`, if any. */
   readonly apiKey?: string
+  /**
+   * Viewer colour scheme. Claude Code keeps its own `theme` in the global
+   * config; aligning it with the surface that shows the TUI keeps its
+   * secondary text readable on both light and dark backgrounds.
+   */
+  readonly colorScheme?: TerminalColorScheme
 }
 
 // Claude Code remembers an approved custom API key by the last 20 characters
@@ -40,6 +47,7 @@ export async function ensureClaudeProjectTrusted(
   const fingerprint = apiKeyFingerprint(preflight.apiKey)
   const next = {
     ...config,
+    ...(preflight.colorScheme === undefined ? {} : { theme: preflight.colorScheme }),
     hasCompletedOnboarding: true,
     bypassPermissionsModeAccepted: true,
     projects: {
