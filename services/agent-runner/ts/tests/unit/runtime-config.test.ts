@@ -12,7 +12,7 @@ import {
 } from '../../src/runtime-config.js'
 
 describe('runtimeConfig', () => {
-  it('keeps only product settings and data under ~/.bambuddy', () => {
+  it('keeps product settings, data and terminals under ~/.bambuddy', () => {
     const runtimeHome = join(homedir(), '.bambuddy')
 
     expect(defaultRuntimeHome()).toBe(runtimeHome)
@@ -20,6 +20,7 @@ describe('runtimeConfig', () => {
       runtimeHome,
       settingsFilePath: join(runtimeHome, 'bambuddy.settings.json'),
       dataFilePath: join(runtimeHome, '.data.db'),
+      terminalsDir: join(runtimeHome, 'terminals'),
     })
     expect(Object.isFrozen(runtimeConfig)).toBe(true)
     expect(RUNTIME_HOME_ENV).toBe('RUNTIME_HOME_DIR')
@@ -38,6 +39,7 @@ describe('runtimeConfig', () => {
       runtimeHome: resolve(runtimeHome),
       settingsFilePath: join(runtimeHome, 'bambuddy.settings.json'),
       dataFilePath: join(runtimeHome, '.data.db'),
+      terminalsDir: join(runtimeHome, 'terminals'),
     })
   })
 

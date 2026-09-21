@@ -1476,6 +1476,49 @@ upload -> absolute file path -> AgentAttachments -> run.start.text
 transcript -> attachmentsFromMessageText -> body + attachment cards
 ```
 
+### 会话视图切换与 Claude Code 终端镜像
+
+2026-09-21：会话页头中央新增 Chat / Terminal 分段控件（`SessionViewToggle`，复用
+`assistant-ui/tabs` 的 `text` 变体与 Motion 指示条），只对后端提供终端驾驭方式的
+harness 显示（目前 `claude`，判定在 `session-view.ts` 的 `harnessSupportsTerminal`）。
+Terminal 视图用 xterm.js（`@xterm/xterm` + `addon-fit` + `addon-webgl`，WebGL 不可用时
+回退 DOM 渲染）把 runner 在 tmux 中托管的真实 Claude Code TUI 镜像到消息区；composer
+在该视图下隐藏，输入直接进入 TUI。设计决策与后端见
+[claude-tui-chat-mode.md](architecture/claude-tui-chat-mode.md)。
+
+```text
+┌ 会话标题 ✎ ⧉ ⋯          [ Chat │ Terminal ]                    ┐
+├─────────────────────────────────────────────────────────────────┤
+│ Chat：现有消息线程 + ChatComposer                                 │
+│ Terminal：xterm.js 填满消息区（圆角边框，bg-background）          │
+│           覆盖层：Starting Claude Code…(spinner) / 已退出 [重新打开] │
+│                   / 连接已断开 [重新连接] / 该 harness 没有终端模式   │
+├─────────────────────────────────────────────────────────────────┤
+│ ● Connected · 120×40            (移动端) [Esc][Tab][↑][↓][Ctrl+C] │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+- 视图状态由 `SessionViewProvider`（挂在 `AgentLayout`，包住页头与页面）持有；切换只改
+  变可见区域，`SessionTerminalView` 首次打开后保持挂载，xterm 实例与 WebSocket 不因切回
+  Chat 而断开。
+- 重置规则（`shouldResetSessionView`）：新建聊天或切到另一个已有会话时回到 Chat；一个
+  新会话从终端获得首个 session id（null → id）不算切换，终端保持。
+- 从终端创建的新会话在收到 `ready` 后通过 `bindRunSession` 绑定到当前会话，Chat 侧随即
+  指向同一份转录。
+- 主题：xterm 配色跟随 `next-themes` 的 `resolvedTheme`。背景/前景对应 index.css 的
+  neutral token（浅色 `#ffffff/#0a0a0a`，深色 `#0a0a0a/#fafafa`）；16 个 ANSI 色位分别
+  使用完整的浅色 / 深色终端调色板（GitHub Light / GitHub Dark 终端方案），因为 xterm 内置
+  默认值只适合深色背景，黄色、青色与亮色在白底上不可读。连接时把当前配色以 `theme`
+  查询参数告知 runner，Claude Code 自身的主题在启动时与之对齐（运行中的 TUI 不随页面
+  切换而变）。字体读取 `--font-code`，并在 `document.fonts.ready` 后清空 WebGL 字形缓存，
+  避免回退字体的度量被缓存。
+- 尺寸：`ResizeObserver` + `FitAddon`，每次 `onResize` 通过 `{type:'resize'}` 文本帧同步到
+  runner；隐藏期间的尺寸变化在重新显示时补一次 fit。
+- 状态点复用 `status-running / status-warm / status-idle` token；所有文案在
+  `agentMessage.view.*` 与 `agentMessage.terminalView.*`。
+- 线协议客户端在 `terminal-session.ts`，与 React 无关：二进制帧 = 终端字节，文本帧 =
+  `ready | exit | error`，输入以 UTF-8 二进制帧发送。
+
 ## Layout approval
 
 以下两条布局要求从 `AGENTS.md` 原样迁入，继续生效。
@@ -1626,6 +1669,7 @@ App TooltipProvider -> 首次悬浮 1s -> 连续切换 0ms
 
 | 组件类型 | 当前入口 / 来源 | 当前样式 / 边界 |
 | --- | --- | --- |
+| 会话终端镜像 | [session-terminal-view](../agent-ui/src/features/agent-message/components/session-terminal-view.tsx)，xterm.js（`@xterm/xterm`、`addon-fit`、`addon-webgl`） | 托管在 runner tmux 中的 harness TUI；容器使用 `bg-background` + `border-border` 圆角，配色对齐 neutral token，字体取 `--font-code`；覆盖层与状态条为本地实现 |
 | Message / Markdown | [ai-elements/message](../agent-ui/src/components/ai-elements/message.tsx)，AI Elements + Streamdown | 用户气泡与助手正文；内容渲染插件处理代码、数学、Mermaid，操作复用本地 Button/Tooltip |
 | 附件卡 / 文件卡 / 消息标记 | [ui/attachment](../agent-ui/src/components/ui/attachment.tsx)、[assistant-ui/file](../agent-ui/src/components/assistant-ui/file.tsx)、[ui/marker](../agent-ui/src/components/ui/marker.tsx) | 分别服务 composer 附件、上传队列、消息/压缩标记；尺寸、圆角与状态表现有不同变体 |
 | ToolResult / FileRead / FileDiff / CodeBlock | [components/agents](../agent-ui/src/components/agents) | 本地领域封装 + Shiki + Motion/CSS；工具背景、状态图标、代码和 Diff 配色。CodeBlock 类型标题栏上下内边距各为 `4rem / 9`（约 7.11px），比原值减少 1/3 |
@@ -1788,6 +1832,13 @@ rg -n '@base-ui/react|motion/react|gsap' agent-ui/src
 
 ```sh
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/sidebar/header/harness-default-width.test.tsx
+```
+
+会话视图切换（Chat / Terminal）的纯逻辑与终端 WebSocket 客户端（URL 组装、控制帧解析、
+二进制输入输出、退出与断开语义）使用 Node 测试和伪 WebSocket，不启动浏览器：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/session-view.test.ts agent-ui/tests/features/agent-message/terminal-session.test.ts
 ```
 
 侧栏项目与 session 按最后更新时间排序：

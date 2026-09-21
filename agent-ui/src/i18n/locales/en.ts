@@ -143,6 +143,31 @@ export const en = {
   },
   agentMessage: {
     contentLabel: "Agent Message",
+    view: {
+      label: "Session view",
+      chat: "Chat",
+      terminal: "Terminal",
+    },
+    terminalView: {
+      label: "Claude Code terminal",
+      connecting: "Connecting to the terminal…",
+      starting: "Starting Claude Code…",
+      connected: "Connected",
+      disconnected: "Disconnected",
+      exited: "The terminal has exited",
+      reopen: "Reopen",
+      reconnect: "Reconnect",
+      unsupported: "This harness has no terminal mode",
+      failed: "Terminal error",
+      size: "{{cols}}×{{rows}}",
+      keys: {
+        escape: "Esc",
+        tab: "Tab",
+        up: "Up",
+        down: "Down",
+        interrupt: "Ctrl+C",
+      },
+    },
     emptyTitle: "What's next?",
     promptLabel: "Message",
     promptPlaceholder:

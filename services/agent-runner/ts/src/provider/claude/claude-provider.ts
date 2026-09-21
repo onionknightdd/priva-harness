@@ -7,11 +7,20 @@ import type {
   SlashCommandListRequest,
 } from '../../core/contract/agent-provider.js'
 import type { ProviderSessionStore } from '../../core/contract/provider-session-store.js'
+import {
+  TerminalError,
+  type TerminalLaunchContext,
+  type TerminalLaunchSpec,
+} from '../../core/contract/terminal-service.js'
 import type { ContextUsage } from '../../core/resource/context-usage.js'
 import type { SlashCommand } from '../../core/resource/slash-command.js'
 import type { ToolDefinition } from '../../core/tool/define-tool.js'
 import { measureClaudeContextUsage } from './claude-context-usage.js'
+import { resolveBundledClaudeExecutable } from './claude-executable.js'
+import { claudeGlobalConfigFilePath } from './claude-paths.js'
+import { ensureClaudeProjectTrusted } from './claude-project-trust.js'
 import { ClaudeRuntime } from './claude-runtime.js'
+import { claudeTerminalLaunch } from './claude-terminal-launch.js'
 import { ClaudeSessionStore } from './session/claude-session-store.js'
 import {
   listClaudeSlashCommands,
@@ -23,6 +32,10 @@ export interface ClaudeProviderOptions {
   readonly sessions?: ProviderSessionStore
   readonly tools?: readonly ToolDefinition[]
   readonly startQuery?: ClaudeSlashQueryStart
+  /** Global `.claude.json` the interactive CLI reads; defaults to the native location. */
+  readonly globalConfigFilePath?: string
+  /** Interactive `claude` binary; defaults to the one bundled with the Agent SDK. */
+  readonly executable?: string
 }
 
 export class ClaudeProvider implements AgentProvider {
@@ -63,6 +76,25 @@ export class ClaudeProvider implements AgentProvider {
       tools: this.options.tools ?? [],
       ...(this.options.startQuery === undefined ? {} : { startQuery: this.options.startQuery }),
     })
+  }
+
+  async terminalLaunch(
+    target: SessionTarget,
+    spec: ProviderRunSpec,
+    context: TerminalLaunchContext,
+  ): Promise<TerminalLaunchSpec> {
+    const executable = this.options.executable ?? resolveBundledClaudeExecutable()
+    if (executable === undefined) {
+      throw new TerminalError(
+        'backend-unavailable',
+        'The Claude Code binary bundled with @anthropic-ai/claude-agent-sdk was not found for this platform',
+      )
+    }
+    await ensureClaudeProjectTrusted(
+      this.options.globalConfigFilePath ?? claudeGlobalConfigFilePath(),
+      { cwd: spec.cwd, apiKey: spec.authToken, ...(context.colorScheme === undefined ? {} : { colorScheme: context.colorScheme }) },
+    )
+    return claudeTerminalLaunch({ target, spec, executable, context })
   }
 
   measureContextUsage(session: SessionRef, spec: ProviderRunSpec): Promise<ContextUsage> {

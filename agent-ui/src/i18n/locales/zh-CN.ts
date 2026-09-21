@@ -143,6 +143,31 @@ export const zhCN = {
   },
   agentMessage: {
     contentLabel: "Agent Message",
+    view: {
+      label: "会话视图",
+      chat: "对话",
+      terminal: "终端",
+    },
+    terminalView: {
+      label: "Claude Code 终端",
+      connecting: "正在连接终端…",
+      starting: "正在启动 Claude Code…",
+      connected: "已连接",
+      disconnected: "连接已断开",
+      exited: "终端已退出",
+      reopen: "重新打开",
+      reconnect: "重新连接",
+      unsupported: "该 harness 没有终端模式",
+      failed: "终端错误",
+      size: "{{cols}}×{{rows}}",
+      keys: {
+        escape: "Esc",
+        tab: "Tab",
+        up: "上",
+        down: "下",
+        interrupt: "Ctrl+C",
+      },
+    },
     emptyTitle: "接下来做什么？",
     promptLabel: "消息",
     promptPlaceholder:

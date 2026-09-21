@@ -5,6 +5,7 @@ import type { SlashCommand } from '../resource/slash-command.js'
 import type { UserTurn } from '../run/user-turn.js'
 import type { ImageToolProfile } from '../tool/define-tool.js'
 import type { ProviderSessionStore } from './provider-session-store.js'
+import type { TerminalLaunchContext, TerminalLaunchSpec } from './terminal-service.js'
 
 export type ProviderId = 'claude' | 'pi'
 
@@ -74,4 +75,14 @@ export interface AgentProvider {
   readonly sessions: ProviderSessionStore
   openSession(target: SessionTarget, spec: ProviderRunSpec): Promise<AgentRuntime>
   listSlashCommands(request: SlashCommandListRequest): Promise<readonly SlashCommand[]>
+  /**
+   * Describe the provider's interactive TUI for a session terminal. Absent
+   * when the provider has no terminal-hosted driver; the harness then
+   * reports the capability as unsupported instead of approximating it.
+   */
+  terminalLaunch?(
+    target: SessionTarget,
+    spec: ProviderRunSpec,
+    context: TerminalLaunchContext,
+  ): Promise<TerminalLaunchSpec>
 }

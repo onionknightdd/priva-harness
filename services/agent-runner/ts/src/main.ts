@@ -8,6 +8,7 @@ import { ConfigDistributor } from './harness/config/config-distributor.js'
 import { ModelProfileService } from './harness/config/model-profile-service.js'
 import { LiveRunRegistry } from './harness/run/live-run-registry.js'
 import { SessionService } from './harness/session/session-service.js'
+import { SessionTerminals } from './harness/terminal/session-terminals.js'
 import { WorkerDataRecorder } from './infrastructure/data/worker-data-recorder.js'
 import { JsonSessionMetadataStore } from './infrastructure/session/json-session-metadata-store.js'
 import { NodeUserFileSystem } from './infrastructure/filesystem/node-user-file-system.js'
@@ -15,6 +16,7 @@ import { LocalResourceService } from './infrastructure/resources/local-resource-
 import { CompatibleModelEndpointClient } from './infrastructure/model-profile/compatible-model-endpoint-client.js'
 import { JsonModelProfileStore } from './infrastructure/model-profile/json-model-profile-store.js'
 import { JsonRuntimeSettingsStore } from './infrastructure/settings/json-runtime-settings-store.js'
+import { TmuxTerminalService } from './infrastructure/terminal/tmux-terminal-service.js'
 import { claudeGlobalConfigFilePath, claudeGlobalDir } from './provider/claude/claude-paths.js'
 import { ClaudeConfigAdapter } from './provider/claude/config-adapter/claude-config-adapter.js'
 import { ClaudeProvider } from './provider/claude/claude-provider.js'
@@ -70,6 +72,7 @@ export async function startServer(): Promise<void> {
   })
   const claudeProvider = new ClaudeProvider({
     globalConfigDir: claudeConfigDir,
+    globalConfigFilePath: claudeGlobalConfigFilePath(),
     sessions: new ClaudeSessionStore({ globalConfigDir: claudeConfigDir }),
     tools: productTools,
   })
@@ -104,6 +107,10 @@ export async function startServer(): Promise<void> {
     sessions: sessionService,
     recorder: dataRecorder,
   })
+  const sessionTerminals = new SessionTerminals({
+    providers,
+    terminals: new TmuxTerminalService({ rootDir: runtimeConfig.terminalsDir, logger: dataLog }),
+  })
   sessionService.bindWarmListing((harness) => agentHarness.listWarm(harness))
   sessionService.bindContextUsageReader((ref, spec) => agentHarness.readContextUsage(ref, spec))
   const configDistributor = new ConfigDistributor([
@@ -123,6 +130,7 @@ export async function startServer(): Promise<void> {
     modelProfileService,
     agentProfileService,
     agentHarness,
+    sessionTerminals,
     sessionService,
     configDistributor,
     recorder: dataRecorder,
@@ -136,6 +144,7 @@ export async function startServer(): Promise<void> {
 
   const close = async (): Promise<void> => {
     await agentHarness.disposePool()
+    await sessionTerminals.dispose()
     await dataRecorder.close()
     await server.close()
   }

@@ -38,6 +38,7 @@ const fadeTransition = {
 const agentColumnClassName = "mx-auto w-full max-w-3xl"
 
 export function AgentMessage({
+  hidden = false,
   interactions = [],
   interactionConnected = false,
   onInteractionResponse,
@@ -59,6 +60,8 @@ export function AgentMessage({
   onSubmit,
   onStop,
 }: {
+  /** Collapsed while the terminal view owns the screen; state and the socket stay alive. */
+  hidden?: boolean
   interactions?: InteractionRequest[]
   interactionConnected?: boolean
   onInteractionResponse?: (response: InteractionResponse) => Promise<void>
@@ -162,7 +165,7 @@ export function AgentMessage({
   return (
     <section
       aria-label={t("agentMessage.contentLabel")}
-      className="@container/agent-message flex min-h-0 flex-1 flex-col overflow-hidden pr-2 pb-4 pl-4"
+      className={cn("@container/agent-message flex min-h-0 flex-1 flex-col overflow-hidden pr-2 pb-4 pl-4", hidden && "hidden")}
       style={{ marginTop: -AGENT_CHAT_HEADER_HEIGHT, paddingTop: AGENT_CHAT_HEADER_HEIGHT }}
     >
       <div className="relative min-h-0 flex-1">
