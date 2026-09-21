@@ -6,6 +6,7 @@ export const RUNTIME_HOME_ENV = 'RUNTIME_HOME_DIR'
 const RUNTIME_HOME_DIRECTORY = '.bambuddy'
 const SETTINGS_FILE_NAME = 'bambuddy.settings.json'
 const DATA_FILE_NAME = '.data.db'
+const TERMINALS_DIRECTORY = 'terminals'
 
 export interface RuntimeConfig {
   readonly runtimeHome: string
@@ -13,6 +14,9 @@ export interface RuntimeConfig {
   // Usage and audit SQLite database. User-level state shared by every harness
   // provider, stored beside the product settings file.
   readonly dataFilePath: string
+  // Per-session terminal sockets and launch files. Deterministic per session
+  // so a restarted runner finds terminals that kept running.
+  readonly terminalsDir: string
 }
 
 export function defaultRuntimeHome(): string {
@@ -35,6 +39,7 @@ export function createRuntimeConfig(runtimeHome: string): RuntimeConfig {
     runtimeHome: home,
     settingsFilePath: join(home, SETTINGS_FILE_NAME),
     dataFilePath: join(home, DATA_FILE_NAME),
+    terminalsDir: join(home, TERMINALS_DIRECTORY),
   })
 }
 

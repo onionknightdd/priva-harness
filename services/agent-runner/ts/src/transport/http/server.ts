@@ -25,7 +25,9 @@ import type { AgentProfileService } from '../../harness/config/agent-profile-ser
 import type { ConfigDistributor } from '../../harness/config/config-distributor.js'
 import type { ModelProfileService } from '../../harness/config/model-profile-service.js'
 import type { SessionService } from '../../harness/session/session-service.js'
+import type { SessionTerminals } from '../../harness/terminal/session-terminals.js'
 import { runWebsocketRoutes } from '../websocket/run-route.js'
+import { terminalWebsocketRoutes } from '../websocket/terminal-route.js'
 import { agentProfileRoutes } from './route/agent-profile.js'
 import { modelProfileRoutes } from './route/model-profiles.js'
 import { sessionRoutes } from './route/sessions.js'
@@ -40,6 +42,7 @@ export interface BuildHttpServerOptions {
   readonly modelProfileService: ModelProfileService
   readonly agentProfileService: AgentProfileService
   readonly agentHarness?: AgentHarness
+  readonly sessionTerminals?: SessionTerminals
   readonly sessionService?: SessionService
   readonly configDistributor?: ConfigDistributor
   readonly resourceService?: ResourceService
@@ -144,6 +147,13 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
       modelProfileService: options.modelProfileService,
       cwd: options.userFileSystem.initialDirectory,
     })
+    if (options.sessionTerminals !== undefined) {
+      void server.register(terminalWebsocketRoutes, {
+        terminals: options.sessionTerminals,
+        modelProfileService: options.modelProfileService,
+        agentProfileService: options.agentProfileService,
+      })
+    }
   }
 
   return server

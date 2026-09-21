@@ -8,6 +8,7 @@ import type {
   SlashCommandListRequest,
   TurnContext,
 } from '../../src/core/contract/agent-provider.js'
+import type { TerminalLaunchContext, TerminalLaunchSpec } from '../../src/core/contract/terminal-service.js'
 import type { AgentEvent } from '../../src/core/event/agent-event.js'
 import { emptyContextUsage } from '../../src/core/resource/context-usage.js'
 import type { ContextUsage } from '../../src/core/resource/context-usage.js'
@@ -32,6 +33,7 @@ export class FakeAgentProvider implements AgentProvider {
   contextUsage: ContextUsage = emptyContextUsage()
   measureContextUsage: ((session: SessionRef, spec: ProviderRunSpec) => Promise<ContextUsage>) | undefined =
     undefined
+  terminalLaunch?: (target: SessionTarget, spec: ProviderRunSpec, context: TerminalLaunchContext) => Promise<TerminalLaunchSpec>
 
   constructor(id: ProviderId, events: readonly AgentEvent[], sessions = new FakeSessionStore()) {
     this.id = id

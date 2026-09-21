@@ -37,6 +37,16 @@ Usage statistics and audit records are stored in SQLite; before touching
 recording, retention, or the `dataRetention` setting, read
 [docs/architecture/usage-data-store.md](docs/architecture/usage-data-store.md).
 
+Session terminals (the Claude Code TUI hosted in tmux and mirrored to the UI)
+follow [docs/architecture/claude-tui-chat-mode.md](docs/architecture/claude-tui-chat-mode.md);
+read it before changing `core/contract/terminal-service.ts`, the tmux
+infrastructure, or the terminal WebSocket route.
+
+Session terminals (the Claude Code TUI hosted in tmux and mirrored to the UI)
+follow [docs/architecture/claude-tui-chat-mode.md](docs/architecture/claude-tui-chat-mode.md);
+read it before changing `core/contract/terminal-service.ts`, the tmux
+infrastructure, or the terminal WebSocket route.
+
 Add exact backend commands here when additional test tooling is introduced;
 add frontend commands to `docs/front-end-desgin.md`.
 

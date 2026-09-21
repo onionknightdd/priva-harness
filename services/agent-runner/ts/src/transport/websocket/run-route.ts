@@ -1,25 +1,22 @@
 import type { FastifyPluginCallback } from 'fastify'
 import type { WebSocket } from 'ws'
 
-import type { ProviderRunSpec, SessionRef } from '../../core/contract/agent-provider.js'
+import type { SessionRef } from '../../core/contract/agent-provider.js'
 import type { UserFileSystem } from '../../core/contract/user-file-system.js'
 import type { StreamFrame } from '../../core/event/agent-event.js'
 import { encodeEvent } from '../../core/event/encode-event.js'
-import {
-  providerIdForHarness,
-  rewriteProviderBaseUrl,
-} from '../../core/resource/run-harness.js'
+import { providerIdForHarness } from '../../core/resource/run-harness.js'
 import type { AgentHarness } from '../../harness/agent-harness.js'
 import type { AgentProfileService } from '../../harness/config/agent-profile-service.js'
 import type { ModelProfileService } from '../../harness/config/model-profile-service.js'
 import { EnvelopeStamper } from '../../harness/run/envelope-stamper.js'
 import type { LiveRun } from '../../harness/run/live-run.js'
 import type { SessionStream } from '../../harness/session/session-stream.js'
+import { buildRunSpec } from './run-spec.js'
 import {
   parseClientFrame,
   sessionTargetFromInit,
   type AbortFrame,
-  type InitFrame,
 } from './schema/run-frames.js'
 
 export const SESSION_WEBSOCKET_PATH = '/api/sandbox/agent/ws/session'
@@ -153,36 +150,6 @@ function resolveLive(
     return harness.liveForSession(ref)
   }
   return undefined
-}
-
-async function buildRunSpec(
-  options: RunRouteOptions,
-  frame: InitFrame,
-): Promise<ProviderRunSpec> {
-  const resolved = await options.modelProfileService.resolve(frame.model)
-  const agentProfile = await options.agentProfileService.read()
-  return {
-    cwd: frame.cwd,
-    provider: providerIdForHarness(frame.harness),
-    model: resolved.model,
-    baseUrl: rewriteProviderBaseUrl(resolved.profile.baseUrl, frame.harness),
-    authToken: resolved.profile.authToken,
-    profileId: resolved.profile.id,
-    modelContext: resolved.capabilities.context,
-    queueBehavior: agentProfile.queueBehavior,
-    ...(frame.effort === undefined ? {} : { effort: frame.effort }),
-    ...(frame.promptSuggestions === undefined
-      ? {}
-      : { promptSuggestions: frame.promptSuggestions }),
-    imageTools: {
-      baseUrl: rewriteProviderBaseUrl(resolved.profile.baseUrl, frame.harness),
-      authToken: resolved.profile.authToken,
-      imageUnderstandingModel: resolved.profile.imageUnderstandingModel,
-      imageGenerationModel: resolved.profile.imageGenerationModel,
-      imageEditModel: resolved.profile.imageEditModel,
-      modelCapabilities: resolved.profile.modelCapabilities,
-    },
-  }
 }
 
 function sendError(socket: WebSocket, message: string, runId: string, harness: string, code: string, requestId?: string): void {
