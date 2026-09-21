@@ -26,6 +26,12 @@ describe('tmux control protocol', () => {
     expect(Buffer.from(message.data).toString('utf8')).toBe('hi\r\n\u001b[Kpath\\dir é')
   })
 
+  it('re-encodes UTF-8 characters tmux passes through unescaped', () => {
+    // tmux only octal-escapes control bytes; `❯`, `⏵` and emoji arrive as text.
+    const decoded = decodeOctalEscapes('❯ abc \\033[2m⏵⏵ · ←\\033[0m 🚀')
+    expect(Buffer.from(decoded).toString('utf8')).toBe('❯ abc \u001b[2m⏵⏵ · ←\u001b[0m 🚀')
+  })
+
   it('keeps a lone backslash that is not a valid escape', () => {
     expect(Buffer.from(decodeOctalEscapes('a\\9b')).toString('utf8')).toBe('a\\9b')
     expect(Buffer.from(decodeOctalEscapes('tail\\')).toString('utf8')).toBe('tail\\')

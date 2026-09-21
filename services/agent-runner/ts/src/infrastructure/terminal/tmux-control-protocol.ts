@@ -58,11 +58,25 @@ export function parseControlLine(line: string, inReply = false): ControlMessage 
   return { kind: 'body', text: line }
 }
 
-/** Decode tmux's `\ooo` octal escapes (and `\\`) back into raw bytes. */
+const utf8 = new TextEncoder()
+
+/**
+ * Decode tmux's `\ooo` octal escapes (and `\\`) back into raw bytes.
+ *
+ * tmux escapes control bytes and invalid sequences as octal but passes
+ * well-formed UTF-8 through untouched, so any non-ASCII character in the
+ * line is re-encoded as UTF-8 rather than truncated to one byte.
+ */
 export function decodeOctalEscapes(text: string): Uint8Array {
   const bytes: number[] = []
   for (let index = 0; index < text.length; index += 1) {
     const code = text.charCodeAt(index)
+    if (code >= 0x80) {
+      const codePoint = text.codePointAt(index) ?? code
+      bytes.push(...utf8.encode(String.fromCodePoint(codePoint)))
+      if (codePoint > 0xffff) index += 1
+      continue
+    }
     if (code !== 0x5c) {
       bytes.push(code)
       continue
