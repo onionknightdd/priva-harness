@@ -204,7 +204,7 @@ export function useAgentMessage() {
   }, [])
   const stop = React.useCallback(() => connectionRef.current?.abort(), [])
   return {
-    interactions, respondPermission, composerAttachments, draft, messages, contextUsage, modelReference, isConnected, connectionError,
+    interactions, respondPermission, composerAttachments, draft, messages, contextUsage, modelReference, effort, isConnected, connectionError,
     isStreaming: activeRunId !== null || messages.some((message) => message.status === "streaming"),
     canSubmit: Boolean(!interactions.length && (draft.trim() || slashCommand || attachments.length) && readyComposerAttachments(attachments) !== null && modelReference && runHarnessId && runCwd.trim()),
     modelReady: Boolean(modelReference && runHarnessId), slashCommand, setDraft, setSlashCommand, setModelReference, setEffort, submit, stop,

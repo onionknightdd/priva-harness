@@ -24,6 +24,7 @@ import {
   useActiveSession,
   useSessionList,
 } from "@/features/chat-session"
+import { SessionViewToggle } from "./session-view-toggle"
 import { sessionDisplayTitle } from "@/features/sidebar/content/session-projects"
 import { writeClipboardText } from "@/lib/clipboard"
 import { cn } from "@/lib/utils"
@@ -198,8 +199,14 @@ export function AgentChatHeader() {
     void rename(activeSession.sessionId, nextTitle)
   }
 
+  // Without a session only the view toggle remains: the terminal can start a
+  // brand-new session just like the composer can.
   if (!activeSession) {
-    return null
+    return (
+      <div className="flex min-w-0 flex-1 items-center justify-center gap-2">
+        <SessionViewToggle />
+      </div>
+    )
   }
 
   return (
@@ -293,6 +300,9 @@ export function AgentChatHeader() {
           </DropdownMenu>
         </div>
       ) : null}
+      <div className="flex min-w-0 flex-1 items-center justify-center">
+        <SessionViewToggle />
+      </div>
     </div>
   )
 }

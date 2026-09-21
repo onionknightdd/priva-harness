@@ -1,17 +1,27 @@
 import { agentToolsForThread } from "./agent-tool-data"
-import { useEffect } from "react"
-import { useActiveSession } from "@/features/chat-session"
+import { useCallback, useEffect } from "react"
+import { useActiveSession, useChatSessionActions } from "@/features/chat-session"
 import { useHarness } from "@/features/sidebar/header/harness-context"
 import { useWorkspaceWorkflow } from "@/features/workspace/use-workspace-workflow"
 import { useAgentMessage } from "./use-agent-message"
 import { AgentMessage } from "./components/agent-message"
+import { SessionTerminalView } from "./components/session-terminal-view"
+import { harnessSupportsTerminal } from "./session-view"
+import { useSessionView } from "./session-view-context"
 
 export function AgentMessagePage() {
   const agentMessage = useAgentMessage()
   const { syncWorkflows, syncAgents } = useWorkspaceWorkflow()
-  const { activeSession, runSessionId } = useActiveSession()
+  const { activeSession, runSessionId, runCwd } = useActiveSession()
+  const { bindRunSession } = useChatSessionActions()
   const { runHarnessId } = useHarness()
-  const sourceKey = `${runHarnessId}:${activeSession?.sessionId ?? runSessionId}`
+  const { view, terminalOpened } = useSessionView()
+  const viewedSessionId = activeSession?.sessionId ?? runSessionId
+  const sourceKey = `${runHarnessId}:${viewedSessionId}`
+  const terminalView = view === "terminal" && harnessSupportsTerminal(runHarnessId)
+  // A terminal opened on a fresh conversation names the session it created;
+  // the chat side adopts it so both surfaces address the same transcript.
+  const adoptTerminalSession = useCallback((sessionId: string) => bindRunSession(sessionId), [bindRunSession])
   useEffect(() => {
     syncAgents(sourceKey, agentToolsForThread(agentMessage.messages))
     syncWorkflows(sourceKey, agentMessage.messages.flatMap((message) => message.workflows ?? []))
@@ -20,7 +30,19 @@ export function AgentMessagePage() {
   return (
     <>
     {agentMessage.connectionError ? <div role="alert" className="mx-4 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{agentMessage.connectionError}</div> : null}
+    {terminalOpened && runHarnessId && harnessSupportsTerminal(runHarnessId) ? (
+      <SessionTerminalView
+        harness={runHarnessId}
+        cwd={runCwd}
+        model={agentMessage.modelReference}
+        effort={agentMessage.effort}
+        sessionId={viewedSessionId}
+        hidden={!terminalView}
+        onSessionReady={adoptTerminalSession}
+      />
+    ) : null}
     <AgentMessage
+      hidden={terminalView}
       interactions={agentMessage.interactions}
       interactionConnected={agentMessage.isConnected}
       onInteractionResponse={agentMessage.respondPermission}

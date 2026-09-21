@@ -1,6 +1,6 @@
 # Claude Code TUI 作为 UI 聊天驾驭方式
 
-状态：已确认方案，分层实施中（L1 已落地）  
+状态：已确认方案，分层实施中（L1 后端与前端终端视图已落地）  
 范围：`services/agent-runner/ts` 与 `agent-ui/`  
 相关基线：[agent-runner-ts-implementation.md](agent-runner-ts-implementation.md)
 
@@ -146,6 +146,14 @@ Claude，因此 `SessionRef` 与转录文件名一致，SDK 驾驭方式可以 `
 - `tests/integration/transport/websocket/terminal-route.test.ts`
 
 纯协议编解码与 Claude 启动描述的单测不依赖 tmux。
+
+### 4.8 前端视图
+
+页头 Chat / Terminal 分段控件、xterm.js 终端镜像、视图状态与重置规则、主题/字体/尺寸
+同步的实现细节维护在
+[front-end-desgin.md](../front-end-desgin.md#会话视图切换与-claude-code-终端镜像)。
+前端只依赖 §4.4 的线协议；`harnessSupportsTerminal` 列表须与实现了 `terminalLaunch`
+的 provider 保持一致。
 
 ## 5. 已知限制（L1）
 

@@ -5,6 +5,8 @@ import { useTranslation } from "react-i18next"
 import { WorkspaceShell } from "@/features/workspace"
 import { AgentChatHeader } from "@/features/agent-message/components/agent-chat-header"
 import { AGENT_CHAT_HEADER_HEIGHT } from "@/features/agent-message/agent-chat-layout"
+import { SessionViewProvider } from "@/features/agent-message/session-view-context"
+import { useActiveSession } from "@/features/chat-session"
 import {
   isSidebarContentView,
   type AppView,
@@ -87,6 +89,8 @@ export function AgentLayout({
 }) {
   const { setOpenMobile } = useSidebar()
   const { t } = useTranslation()
+  const { activeSession, runSessionId } = useActiveSession()
+  const viewedSessionId = activeSession?.sessionId ?? runSessionId
   const isFileBrowser = activeView === "file-browser"
   const isResource = activeView === "skills" || activeView === "mcp"
   const isUsage = activeView === "usage"
@@ -101,6 +105,7 @@ export function AgentLayout({
         : null
 
   return (
+    <SessionViewProvider chatKey={String(agentMessageSessionKey)} sessionId={viewedSessionId}>
     <WorkspaceShell workspaceEnabled={workspaceEnabled}>
       <header
         data-slot={isChat ? "agent-chat-header" : undefined}
@@ -157,5 +162,6 @@ export function AgentLayout({
         </React.Suspense>
       )}
     </WorkspaceShell>
+    </SessionViewProvider>
   )
 }
