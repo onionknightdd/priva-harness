@@ -8,6 +8,7 @@ import {
   parseControlLine,
   quoteTmuxArgument,
 } from '../../../../src/infrastructure/terminal/tmux-control-protocol.js'
+import { paneEnvironment } from '../../../../src/infrastructure/terminal/tmux-terminal-service.js'
 
 describe('tmux control protocol', () => {
   it('parses reply brackets with their sequence number and origin flag', () => {
@@ -74,5 +75,20 @@ describe('tmux control protocol', () => {
     expect(splitter.push('%exit')).toEqual([])
     expect(splitter.flush()).toEqual(['%exit'])
     expect(splitter.flush()).toEqual([])
+  })
+})
+
+describe('paneEnvironment', () => {
+  it('drops the host terminal descriptors and advertises a colour-capable UTF-8 terminal', () => {
+    const env = paneEnvironment({
+      PATH: '/usr/bin', HOME: '/home/u', NO_COLOR: '1', FORCE_COLOR: '0', CI: 'true',
+      TERM: 'dumb', TERM_PROGRAM: 'vscode', TMUX: '/tmp/x,1,0', TMUX_PANE: '%3', LANG: 'C', LC_ALL: 'POSIX',
+    })
+    expect(env).toEqual({ PATH: '/usr/bin', HOME: '/home/u', TERM: 'xterm-256color', COLORTERM: 'truecolor', LANG: 'C.UTF-8' })
+  })
+
+  it('keeps an existing UTF-8 locale untouched', () => {
+    const env = paneEnvironment({ LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8', EDITOR: 'vim' })
+    expect(env).toMatchObject({ LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8', EDITOR: 'vim', TERM: 'xterm-256color' })
   })
 })

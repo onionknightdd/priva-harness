@@ -26,6 +26,9 @@ const PASTE_BUFFER = 'priva-paste'
 // per-command line limit.
 const MAX_INPUT_BYTES_PER_COMMAND = 2048
 const SNAPSHOT_HISTORY_LINES = 2000
+// screen-256color ships in ncurses-base everywhere tmux runs; programs only
+// need the "256color" suffix to enable colour.
+const PANE_TERM = 'screen-256color'
 const DEFAULT_IDLE_TIMEOUT_MS = 30 * 60 * 1000
 const DEFAULT_SWEEP_INTERVAL_MS = 60 * 1000
 
@@ -35,7 +38,6 @@ const SERVER_OPTIONS: readonly (readonly string[])[] = [
   // browser tab wins instead of tmux clamping to the smallest client.
   ['window-size', 'manual'],
   ['history-limit', '20000'],
-  ['default-terminal', 'tmux-256color'],
   ['escape-time', '0'],
   ['focus-events', 'on'],
   ['exit-empty', 'on'],
@@ -43,6 +45,34 @@ const SERVER_OPTIONS: readonly (readonly string[])[] = [
   ['mouse', 'off'],
   ['set-clipboard', 'off'],
 ]
+
+// Variables the runner process may carry that describe *its* (often
+// non-interactive) environment, not the browser terminal the program will
+// actually render into. They would switch colour and TUI features off.
+const HOST_TERMINAL_VARIABLES = ['NO_COLOR', 'FORCE_COLOR', 'CI', 'TERM', 'TERM_PROGRAM', 'TERM_PROGRAM_VERSION', 'TMUX', 'TMUX_PANE']
+
+/**
+ * Environment for the tmux server (and so for every pane it spawns): the
+ * runner's environment with host-terminal descriptors removed, a truecolor
+ * capability advertised and a UTF-8 locale guaranteed so tmux passes
+ * multibyte output through.
+ */
+export function paneEnvironment(base: NodeJS.ProcessEnv = process.env): Record<string, string> {
+  const env: Record<string, string> = {}
+  for (const [name, value] of Object.entries(base)) {
+    if (value === undefined || HOST_TERMINAL_VARIABLES.includes(name)) continue
+    env[name] = value
+  }
+  env['TERM'] = 'xterm-256color'
+  env['COLORTERM'] = 'truecolor'
+  const locale = env['LC_ALL'] ?? env['LC_CTYPE'] ?? env['LANG'] ?? ''
+  if (!/utf-?8/iu.test(locale)) {
+    delete env['LC_ALL']
+    delete env['LC_CTYPE']
+    env['LANG'] = 'C.UTF-8'
+  }
+  return env
+}
 
 export interface TmuxTerminalServiceOptions {
   /** Directory that holds one sub-directory (socket + scratch files) per terminal. */
@@ -57,6 +87,7 @@ export interface TmuxTerminalServiceOptions {
 
 export class TmuxTerminalService implements TerminalService {
   private readonly tmux: string
+  private readonly env: Record<string, string>
   private readonly idleTimeoutMs: number
   private readonly now: () => number
   private readonly sweepTimer: NodeJS.Timeout | undefined
@@ -64,6 +95,7 @@ export class TmuxTerminalService implements TerminalService {
 
   constructor(private readonly options: TmuxTerminalServiceOptions) {
     this.tmux = options.tmuxBinary ?? 'tmux'
+    this.env = paneEnvironment()
     this.idleTimeoutMs = options.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS
     this.now = options.now ?? Date.now
     const interval = options.sweepIntervalMs ?? DEFAULT_SWEEP_INTERVAL_MS
@@ -87,8 +119,17 @@ export class TmuxTerminalService implements TerminalService {
     if (await this.isAlive(key)) return { key, adopted: true }
     await this.scratchDir(key)
     await rm(this.socketPath(key), { force: true })
-    const envArgs = Object.entries(launch.env).flatMap(([name, value]) => ['-e', `${name}=${value}`])
+    // The server inherits the sanitised environment, so only the launch's
+    // own additions travel as session variables; host-terminal descriptors
+    // the provider copied from the runner process are dropped again here.
+    const envArgs = Object.entries(launch.env)
+      .filter(([name, value]) => !HOST_TERMINAL_VARIABLES.includes(name) && this.env[name] !== value)
+      .flatMap(([name, value]) => ['-e', `${name}=${value}`])
+    // `default-terminal` must be in place before the first pane is created,
+    // hence the explicit start-server ahead of new-session.
     const args = [
+      'start-server', ';',
+      'set-option', '-g', 'default-terminal', PANE_TERM, ';',
       'new-session', '-d', '-s', SESSION_NAME,
       '-x', String(launch.cols), '-y', String(launch.rows),
       '-c', launch.cwd,
@@ -120,6 +161,7 @@ export class TmuxTerminalService implements TerminalService {
       tmuxBinary: this.tmux,
       socketPath: this.socketPath(key),
       sessionName: SESSION_NAME,
+      env: this.env,
     })
     const viewers = this.attachments.get(key) ?? new Set()
     viewers.add(client)
@@ -287,10 +329,12 @@ export class TmuxTerminalService implements TerminalService {
 
   private async runAt(socketPath: string, args: readonly string[]): Promise<{ stdout: string; stderr: string }> {
     try {
+      // The server inherits this environment on `new-session`, so every pane
+      // sees the sanitised terminal variables rather than the runner's own.
       return await execFileAsync(this.tmux, ['-S', socketPath, ...args], {
         cwd: tmpdir(),
         maxBuffer: 16 * 1024 * 1024,
-        env: { ...process.env, TERM: 'xterm-256color' },
+        env: this.env,
       })
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code

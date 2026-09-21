@@ -23,7 +23,7 @@ function shellLaunch(cwd: string, overrides: Partial<TerminalLaunchSpec> = {}): 
     command: 'bash',
     args: ['--norc', '--noprofile'],
     cwd,
-    env: { PS1: 'READY> ', PRIVA_TEST_MARK: 'mark-1' },
+    env: { PS1: 'READY> ', PRIVA_TEST_MARK: 'mark-1', NO_COLOR: '1', TERM: 'dumb' },
     cols: 80,
     rows: 12,
     ...overrides,
@@ -66,9 +66,12 @@ describe.skipIf(!tmuxAvailable())('TmuxTerminalService', () => {
     attachment.onOutput((chunk) => chunks.push(chunk))
     await expect.poll(() => text([attachment.screen]).includes('READY>'), { timeout: 5000 }).toBe(true)
 
-    await attachment.write(Buffer.from('echo $PRIVA_TEST_MARK; pwd\r'))
+    await attachment.write(Buffer.from('echo $PRIVA_TEST_MARK; pwd; echo "T=$TERM C=$COLORTERM N=${NO_COLOR-unset}"\r'))
     await expect.poll(() => text(chunks).includes('mark-1'), { timeout: 5000 }).toBe(true)
     expect(text(chunks)).toContain(cwd)
+    // The pane sees a colour-capable terminal even when the runner (or the
+    // launch env copied from it) carried NO_COLOR / TERM=dumb.
+    await expect.poll(() => text(chunks).includes('T=screen-256color C=truecolor N=unset'), { timeout: 5000 }).toBe(true)
 
     await attachment.resize(100, 20)
     await expect.poll(async () => (await service.capture('s1')).split('\n').length, { timeout: 5000 }).toBeGreaterThanOrEqual(20)

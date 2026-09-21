@@ -12,6 +12,7 @@ export interface TmuxControlClientOptions {
   readonly tmuxBinary: string
   readonly socketPath: string
   readonly sessionName: string
+  readonly env?: Record<string, string>
 }
 
 interface PendingReply {
@@ -41,7 +42,7 @@ export class TmuxControlClient {
     this.child = spawn(
       options.tmuxBinary,
       ['-S', options.socketPath, '-C', 'attach-session', '-t', options.sessionName],
-      { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, TERM: 'xterm-256color' } },
+      { stdio: ['pipe', 'pipe', 'pipe'], env: options.env ?? { ...process.env, TERM: 'xterm-256color' } },
     )
     this.child.stdout.setEncoding('utf8')
     this.child.stdout.on('data', (chunk: string) => { this.consume(chunk) })

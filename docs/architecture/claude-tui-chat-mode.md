@@ -91,7 +91,17 @@ runner 重启后 `has-session` 即可认领仍在运行的 pane，不需要映�
 新会话在启动前就由 `SessionTerminals` 生成 UUID 并通过 `--session-id` 交给
 Claude，因此 `SessionRef` 与转录文件名一致，SDK 驾驭方式可以 `resume` 同一会话。
 
-### 4.3 tmux 控制模式
+### 4.3 pane 环境
+
+tmux server 与 pane 继承的是经 `paneEnvironment` 清洗过的 runner 环境：去掉描述 runner
+自身（往往是非交互）终端的变量 `NO_COLOR`、`FORCE_COLOR`、`CI`、`TERM`、`TERM_PROGRAM*`、
+`TMUX*`，固定 `COLORTERM=truecolor`，缺少 UTF-8 locale 时补 `LANG=C.UTF-8`；pane 的
+`TERM` 由 `default-terminal screen-256color` 决定，并在创建首个 pane 之前通过
+`start-server ; set-option` 生效。provider 从进程环境复制过来的同名变量在 `-e` 传递时
+再过滤一次。否则一个由 systemd / CI 启动的 runner 会让 Claude Code 判定"不支持颜色"，
+浏览器里的 TUI 变成纯黑白。
+
+### 4.4 tmux 控制模式
 
 查看者不通过伪终端 attach，而是起一个 `tmux -S <sock> -C attach` 子进程：
 
@@ -104,7 +114,7 @@ Claude，因此 `SessionRef` 与转录文件名一致，SDK 驾驭方式可以 `
 命令回复按 FIFO 匹配，仅匹配 `fromClient` 标志为 1 的 `%begin/%end`；回复体内以
 `%` 开头的行（如 pane id `%0`）不当作协议行。
 
-### 4.4 WS 线协议
+### 4.5 WS 线协议
 
 `GET /api/sandbox/agent/ws/terminal?harness=claude&cwd=…&model=…[&sessionId=…][&effort=…][&cols=…&rows=…][&theme=light|dark]`
 
@@ -119,7 +129,7 @@ Claude，因此 `SessionRef` 与转录文件名一致，SDK 驾驭方式可以 `
 未带 `sessionId` 时创建新会话终端并在 `ready` 中返回 id；带 `sessionId` 时
 `--resume`。同一会话第二个查看者收到 `adopted: true`，不会重复启动。
 
-### 4.5 Claude TUI 启动
+### 4.6 Claude TUI 启动
 
 `ClaudeProvider.terminalLaunch` 与 `resolveClaudeQueryOptions` 保持同一套配置来源：
 
@@ -133,13 +143,13 @@ Claude，因此 `SessionRef` 与转录文件名一致，SDK 驾驭方式可以 `
   （API key 末 20 位指纹）；查看者带 `theme` 时同步写入 Claude Code 的 `theme`
   （`light` / `dark`），只在实际启动时生效，认领已运行的终端不改主题。
 
-### 4.6 回收
+### 4.7 回收
 
 `TmuxTerminalService.sweepIdle` 每分钟扫描：无 attach 客户端且
 `window_activity` 距今超过 30 分钟的终端 `kill-server` 并删除目录；已死的目录
 直接清理。
 
-### 4.7 验证
+### 4.8 验证
 
 在 `services/agent-runner/ts` 运行 `npm test`；tmux 缺失时以下用例自动跳过：
 
@@ -148,12 +158,12 @@ Claude，因此 `SessionRef` 与转录文件名一致，SDK 驾驭方式可以 `
 
 纯协议编解码与 Claude 启动描述的单测不依赖 tmux。
 
-### 4.8 前端视图
+### 4.9 前端视图
 
 页头 Chat / Terminal 分段控件、xterm.js 终端镜像、视图状态与重置规则、主题/字体/尺寸
 同步的实现细节维护在
 [front-end-desgin.md](../front-end-desgin.md#会话视图切换与-claude-code-终端镜像)。
-前端只依赖 §4.4 的线协议；`harnessSupportsTerminal` 列表须与实现了 `terminalLaunch`
+前端只依赖 §4.5 的线协议；`harnessSupportsTerminal` 列表须与实现了 `terminalLaunch`
 的 provider 保持一致。
 
 ## 5. 已知限制（L1）
