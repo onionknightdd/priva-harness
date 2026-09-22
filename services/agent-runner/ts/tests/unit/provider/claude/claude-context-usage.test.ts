@@ -171,10 +171,10 @@ class FakeClaudeContextQuery implements ClaudeContextQuery {
     const mcpConnected = this.usageReads > 1 && this.flags.mcpStatus === 'connected'
     return Promise.resolve({
       categories: [
-        { name: 'System prompt', tokens: 5, color: '' },
-        { name: 'System tools', tokens: 10, color: '' },
-        ...(mcpConnected ? [{ name: 'MCP tools', tokens: 7, color: '' }] : []),
-        { name: 'Messages', tokens: 5, color: '' },
+        { name: 'System prompt', tokens: 5, color: '', kind: 'used' },
+        { name: 'System tools', tokens: 10, color: '', kind: 'used' },
+        ...(mcpConnected ? [{ name: 'MCP tools', tokens: 7, color: '', kind: 'used' as const }] : []),
+        { name: 'Messages', tokens: 5, color: '', kind: 'used' },
       ],
       totalTokens: mcpConnected ? 27 : 20,
       maxTokens: 200,

@@ -37,22 +37,31 @@ it.skipIf(!nativeClaudeAvailable())('reloads resources at an empty idle prompt, 
   } finally { await fixture.dispose() }
 }, 45000)
 
-it.skipIf(!nativeClaudeAvailable())('finishes /context locally and mirrors manual compaction lifecycle', async () => {
+it.skipIf(!nativeClaudeAvailable())('finishes /context locally, rejects empty compaction and mirrors short conversation compaction', async () => {
   let calls = 0
   const fixture = await nativeClaudeFixture((body, reply) => modelMessage(body, reply, [{ type: 'text', text: `A useful summary ${++calls}` }], `command-${calls}`))
   try {
+    fixture.send('/compact', 'empty-compact')
+    await expect.poll(() => fixture.frames.some((frame) => frame.type === 'run.failed' && frame.runId === 'empty-compact' && frame.message.includes('Not enough messages')), { timeout: 10000 }).toBe(true)
+    expect(calls).toBe(0)
     fixture.send('Some conversation to inspect', 'before')
-    await expect.poll(() => fixture.frames.some((frame) => frame.type === 'run.completed'), { timeout: 15000 }).toBe(true)
+    await expect.poll(() => fixture.frames.some((frame) => frame.type === 'run.completed' && frame.runId === 'before'), { timeout: 15000 }).toBe(true)
+    const callsBeforeContext = calls
     fixture.send('/context', 'context')
     await expect.poll(() => fixture.frames.some((frame) => frame.type === 'run.completed' && frame.runId === 'context'), { timeout: 10000 }).toBe(true)
+    expect(calls).toBe(callsBeforeContext)
     fixture.send('/compact', 'short-compact')
-    await expect.poll(() => fixture.frames.some((frame) => frame.type === 'run.failed' && frame.runId === 'short-compact' && frame.message.includes('Not enough messages')), { timeout: 10000 }).toBe(true)
+    await expect.poll(() => fixture.frames.some((frame) => frame.type === 'run.completed' && frame.runId === 'short-compact'), { timeout: 10000 }).toBe(true)
     fixture.send('More conversation to compact', 'more')
     await expect.poll(() => fixture.frames.some((frame) => frame.type === 'run.completed' && frame.runId === 'more'), { timeout: 10000 }).toBe(true)
     fixture.send('/compact', 'compact')
-    await expect.poll(() => fixture.frames.some((frame) => frame.type === 'session.compacted'), { timeout: 10000 }).toBe(true)
     await expect.poll(() => fixture.frames.some((frame) => frame.type === 'run.completed' && frame.runId === 'compact'), { timeout: 10000 }).toBe(true)
-    expect(fixture.frames.some((frame) => frame.type === 'session.compacting')).toBe(true)
+    for (const runId of ['short-compact', 'compact']) {
+      const lifecycle = fixture.frames.filter((frame) => frame.runId === runId
+        && ['session.compacting', 'session.compacted', 'run.completed', 'run.failed', 'run.aborted'].includes(frame.type))
+      expect(lifecycle.map((frame) => frame.type)).toEqual(['session.compacting', 'session.compacted', 'run.completed'])
+      expect(lifecycle.find((frame) => frame.type === 'session.compacted')?.summary).toMatch(/^A useful summary \d+$/u)
+    }
     expect(fixture.sdkOpen).not.toHaveBeenCalled()
   } catch (error) {
     throw new Error(`${String(error)}\n${await fixture.terminals.capture(fixture.ref)}\n${JSON.stringify(fixture.frames.filter((frame) => frame.type !== 'session.snapshot'))}`, { cause: error })

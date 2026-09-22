@@ -219,9 +219,9 @@ class FakeClaudeQuery implements ClaudeQuery {
   }
   readonly getContextUsage = (): Promise<SDKControlGetContextUsageResponse> => Promise.resolve({
     categories: [
-      { name: 'System prompt', tokens: 5, color: '' },
-      { name: 'System tools', tokens: 10, color: '' },
-      { name: 'Messages', tokens: 5, color: '' },
+      { name: 'System prompt', tokens: 5, color: '', kind: 'used' },
+      { name: 'System tools', tokens: 10, color: '', kind: 'used' },
+      { name: 'Messages', tokens: 5, color: '', kind: 'used' },
     ],
     totalTokens: 20,
     maxTokens: 200,

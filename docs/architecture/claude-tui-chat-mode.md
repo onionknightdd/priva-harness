@@ -467,7 +467,9 @@ stash，保留整份多行草稿，避免 Ctrl+A/K 只删除最后一行而拼�
 
 真实 CLI 集成回归增加 `terminal-capabilities.test.ts`、`terminal-elicitation.test.ts`、
 `terminal-resources.test.ts`：本地模拟模型验证产品 MCP / JSX、typed 表单、用量 / 工具账本、
-草稿保护、MCP 资源刷新、/context 和 /compact 成功 / 拒绝。构建后验证生产 stdio 入口：
+草稿保护、MCP 资源刷新、/context 本地完成，以及空会话 /compact 拒绝与短对话 /compact 成功。
+压缩回归逐轮校验 compacting、compacted（含摘要）、completed 的顺序，避免前一轮事件掩盖失败。
+构建后验证生产 stdio 入口：
 
 ```sh
 node --import tsx tests/fixtures/terminal/native-product-probe.ts dist/provider/claude/tools/native-product-server.js
