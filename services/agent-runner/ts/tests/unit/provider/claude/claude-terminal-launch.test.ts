@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -63,7 +63,7 @@ describe('claudeTerminalLaunch', () => {
     expect(launch.args).not.toContain('--effort')
   })
 
-  it('refuses a new session without a chosen id and any fork', async () => {
+  it('refuses new and forked sessions without a chosen id', async () => {
     await expect(claudeTerminalLaunch({
       target: { kind: 'new', provider: 'claude' },
       spec: testRunSpec(),
@@ -76,6 +76,12 @@ describe('claudeTerminalLaunch', () => {
       executable: '/opt/claude',
       context: { ...context, scratchDir },
     })).rejects.toMatchObject({ kind: 'unsupported' })
+  })
+
+  it('forks the native transcript into the assigned session without opening an SDK runtime', async () => {
+    const launch = await claudeTerminalLaunch({ target: { kind: 'fork', source: { provider: 'claude', id: 'old' }, sessionId: 'fork-id' },
+      spec: testRunSpec(), executable: '/opt/claude', context: { ...context, scratchDir } })
+    expect(launch.args.slice(0, 5)).toEqual(['--resume', 'old', '--fork-session', '--session-id', 'fork-id'])
   })
 })
 
@@ -130,6 +136,45 @@ describe('ensureClaudeProjectTrusted', () => {
     expect(JSON.parse(await readFile(file, 'utf8'))).toMatchObject({
       customApiKeyResponses: { approved: [], rejected: [] },
     })
+  })
+
+  it('preserves every project and key when first launches update the same config concurrently', async () => {
+    const file = join(dir, '.claude.json')
+    const preflights = Array.from({ length: 12 }, (_, index) => ({
+      cwd: `/work/project-${index}`,
+      apiKey: `test-key-${index}`,
+    }))
+    const results = await Promise.allSettled(preflights.map((preflight) => ensureClaudeProjectTrusted(file, preflight)))
+    expect(results.map((result) => result.status)).toEqual(preflights.map(() => 'fulfilled'))
+    expect(JSON.parse(await readFile(file, 'utf8'))).toMatchObject({
+      projects: Object.fromEntries(preflights.map(({ cwd }) => [cwd, { hasTrustDialogAccepted: true }])),
+      customApiKeyResponses: { approved: preflights.map(({ apiKey }) => apiKey), rejected: [] },
+    })
+    expect(await readdir(dir)).toEqual(['.claude.json'])
+  })
+
+  it('handles concurrent preflights for one project without duplicating approvals', async () => {
+    const file = join(dir, '.claude.json')
+    const preflight = { cwd: '/work/repo', apiKey: 'test-key' }
+    const results = await Promise.allSettled(Array.from({ length: 8 }, () => ensureClaudeProjectTrusted(file, preflight)))
+    expect(results.every((result) => result.status === 'fulfilled')).toBe(true)
+    expect(JSON.parse(await readFile(file, 'utf8'))).toMatchObject({
+      projects: { '/work/repo': { hasTrustDialogAccepted: true } },
+      customApiKeyResponses: { approved: ['test-key'], rejected: [] },
+    })
+  })
+
+  it('reports invalid JSON without overwriting it and allows a later update after repair', async () => {
+    const file = join(dir, '.claude.json')
+    await writeFile(file, '{invalid')
+    await expect(ensureClaudeProjectTrusted(file, { cwd: '/work/repo' })).rejects.toBeInstanceOf(SyntaxError)
+    expect(await readFile(file, 'utf8')).toBe('{invalid')
+    await writeFile(file, JSON.stringify({ theme: 'dark', customSetting: true }))
+    await ensureClaudeProjectTrusted(file, { cwd: '/work/repo' })
+    expect(JSON.parse(await readFile(file, 'utf8'))).toMatchObject({
+      theme: 'dark', customSetting: true, projects: { '/work/repo': { hasTrustDialogAccepted: true } },
+    })
+    expect(await readdir(dir)).toEqual(['.claude.json'])
   })
 })
 

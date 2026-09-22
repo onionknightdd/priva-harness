@@ -1,5 +1,6 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
+import { randomUUID } from 'node:crypto'
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { dirname, resolve } from 'node:path'
 
 import type { TerminalColorScheme } from '../../core/contract/terminal-service.js'
 import { asRecord } from '../../core/event/json-record.js'
@@ -19,6 +20,7 @@ export interface ClaudeTerminalPreflight {
 // Claude Code remembers an approved custom API key by the last 20 characters
 // of the trimmed key (see its `customApiKeyResponses` handling).
 const API_KEY_FINGERPRINT_LENGTH = 20
+const configWrites = new Map<string, Promise<void>>()
 
 /**
  * Pre-accept the interactive dialogs Claude Code shows on a first launch.
@@ -34,6 +36,20 @@ export async function ensureClaudeProjectTrusted(
   configFilePath: string,
   preflight: ClaudeTerminalPreflight,
 ): Promise<void> {
+  const path = resolve(configFilePath)
+  // Different sessions share this file. Serialize the whole read/modify/write
+  // transaction so a later preflight preserves the projects and keys just added.
+  const previous = configWrites.get(path) ?? Promise.resolve()
+  const next = previous.catch(() => undefined).then(() => updateClaudeProjectTrust(path, preflight))
+  configWrites.set(path, next)
+  try {
+    await next
+  } finally {
+    if (configWrites.get(path) === next) configWrites.delete(path)
+  }
+}
+
+async function updateClaudeProjectTrust(configFilePath: string, preflight: ClaudeTerminalPreflight): Promise<void> {
   let config: Record<string, unknown> = {}
   try {
     config = asRecord(JSON.parse(await readFile(configFilePath, 'utf8')) as unknown) ?? {}
@@ -62,9 +78,13 @@ export async function ensureClaudeProjectTrusted(
   }
   if (JSON.stringify(next) === JSON.stringify(config)) return
   await mkdir(dirname(configFilePath), { recursive: true, mode: 0o700 })
-  const temporary = `${configFilePath}.${process.pid}.tmp`
-  await writeFile(temporary, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 })
-  await rename(temporary, configFilePath)
+  const temporary = `${configFilePath}.${process.pid}.${randomUUID()}.tmp`
+  try {
+    await writeFile(temporary, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600, flag: 'wx' })
+    await rename(temporary, configFilePath)
+  } finally {
+    await rm(temporary, { force: true })
+  }
 }
 
 function apiKeyFingerprint(apiKey: string | undefined): string | undefined {

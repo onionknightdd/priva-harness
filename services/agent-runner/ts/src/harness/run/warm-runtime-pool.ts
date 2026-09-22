@@ -197,6 +197,14 @@ export class WarmRuntimePool {
     for (const key of keys) await this.evict(key)
   }
 
+  async releaseSession(session: SessionRef): Promise<void> {
+    const runtime = this.peek(session)
+    if (runtime && (this.busy.has(runtime) || runtime.hasBackgroundTasks)) {
+      throw new SessionError('session-busy', 'Wait for the active run and background tasks before opening Terminal')
+    }
+    await this.evict(sessionRefKey(session))
+  }
+
   async invalidateResources(): Promise<void> {
     this.resourceGeneration++
     // Finish active turns with their snapshot; discard them instead of returning them to the pool.

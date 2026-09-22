@@ -51,7 +51,8 @@ export function foldThread(items: readonly ThreadReplayItem[]): ThreadMessage[] 
   for (const item of items) {
     if (item.kind === 'user') {
       finishAssistant()
-      const turn = userTurnFromText(item.content)
+      const parsed = userTurnFromText(item.content)
+      const turn = { ...parsed, ...(item.attachments?.length ? { attachments: [...parsed.attachments ?? [], ...item.attachments] } : {}) }
       if (turn.text.trim() === '' && !turn.attachments?.length) continue
       if (!turn.attachments?.length && isHiddenCompactUserContent(turn.text)) {
         if (isCompactContinuationContent(turn.text)) {

@@ -136,6 +136,8 @@ export interface RecordRunCompletedInput {
 }
 
 export class SessionService {
+  private nativeRunningReader: ((harness: ProviderId) => readonly RunningSessionView[]) | undefined
+  bindNativeRunningReader(read: NonNullable<SessionService['nativeRunningReader']>): void { this.nativeRunningReader = read }
   private liveThreadReader: ((ref: SessionRef) => readonly ThreadMessage[] | undefined) | undefined
   private backgroundReader: ((harness: ProviderId) => readonly { sessionId: string; tasks: readonly BackgroundTask[] }[]) | undefined
   bindLiveThreadReader(read: (ref: SessionRef) => readonly ThreadMessage[] | undefined): void { this.liveThreadReader = read }
@@ -220,10 +222,10 @@ export class SessionService {
 
   listRunning(harness: ProviderId): Promise<readonly RunningSessionView[]> {
     this.provider(harness)
-    return Promise.resolve(this.options.liveRuns.listActive(harness).map((record) => ({
+    return Promise.resolve([...this.options.liveRuns.listActive(harness).map((record) => ({
       sessionId: record.sessionId,
       runId: record.runId,
-      status: 'running',
+      status: 'running' as const,
       startedAt: record.startedAt,
       lastSeq: record.lastSeq,
       firstSeq: record.firstSeq,
@@ -231,7 +233,7 @@ export class SessionService {
       pendingPermission: null,
       runMode: record.runMode,
       harness: record.provider,
-    })))
+    })), ...this.nativeRunningReader?.(harness) ?? []])
   }
 
   async messages(
@@ -244,7 +246,7 @@ export class SessionService {
     const [messages, metadata, live] = await Promise.all([
       provider.sessions.messages(ref, page),
       this.options.metadata.get(ref),
-      Promise.resolve(this.options.liveRuns.liveForSession(ref)),
+      Promise.resolve(this.options.liveRuns.liveForSession(ref) ?? this.nativeRunningReader?.(harness).find((run) => run.sessionId === sessionId)),
     ])
     return {
       messages,
@@ -266,7 +268,7 @@ export class SessionService {
     const [items, metadata, live] = await Promise.all([
       provider.sessions.replay(ref, page),
       this.options.metadata.get(ref),
-      Promise.resolve(this.options.liveRuns.liveForSession(ref)),
+      Promise.resolve(this.options.liveRuns.liveForSession(ref) ?? this.nativeRunningReader?.(harness).find((run) => run.sessionId === sessionId)),
     ])
     return {
       messages: this.liveThreadReader?.(ref) ?? foldThread(items).map((message) => {
@@ -432,7 +434,7 @@ export class SessionService {
   }
 
   private rejectIfLive(ref: SessionRef): void {
-    if (this.options.liveRuns.liveRunningForSession(ref) !== undefined) {
+    if (this.options.liveRuns.liveRunningForSession(ref) !== undefined || this.nativeRunningReader?.(ref.provider).some((run) => run.sessionId === ref.id)) {
       throw new SessionError('session-busy', 'Session has a live run')
     }
   }

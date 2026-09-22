@@ -1,6 +1,7 @@
 export type BackgroundTaskStatus = 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled' | 'unknown'
 
 export interface BackgroundTask {
+  readonly control?: 'terminal'
   readonly taskId: string
   readonly kind: 'bash' | 'agent' | 'workflow' | 'monitor' | 'other'
   readonly status: BackgroundTaskStatus

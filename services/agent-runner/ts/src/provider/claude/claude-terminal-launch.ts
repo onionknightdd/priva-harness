@@ -12,6 +12,10 @@ import {
   resolveClaudeQueryEnv,
   resolveClaudeQuerySettings,
 } from './claude-runtime.js'
+import { writeClaudeTerminalHooks } from './claude-terminal-hooks.js'
+import { saveClaudeTerminalSelection } from './claude-terminal-model.js'
+import type { ToolDefinition } from '../../core/tool/define-tool.js'
+import { writeNativeProductConfig } from './tools/native-product-launch.js'
 
 const SETTINGS_FILE = 'claude-settings.json'
 
@@ -20,6 +24,7 @@ export interface ClaudeTerminalLaunchInput {
   readonly spec: ProviderRunSpec
   readonly executable: string
   readonly context: TerminalLaunchContext
+  readonly tools?: readonly ToolDefinition[]
 }
 
 /**
@@ -34,15 +39,20 @@ export interface ClaudeTerminalLaunchInput {
 export async function claudeTerminalLaunch(input: ClaudeTerminalLaunchInput): Promise<TerminalLaunchSpec> {
   const { target, spec, context } = input
   const settingsPath = join(context.scratchDir, SETTINGS_FILE)
+  const bridge = context.eventsUrl === undefined ? undefined : await writeClaudeTerminalHooks(context.scratchDir, context.eventsUrl)
+  await saveClaudeTerminalSelection(context.scratchDir, spec)
   await writeFile(settingsPath, JSON.stringify({
     ...resolveClaudeQuerySettings(spec),
     skipDangerousModePermissionPrompt: true,
+    ...(spec.promptSuggestions === undefined ? {} : { promptSuggestionEnabled: spec.promptSuggestions }),
+    ...bridge,
   }, null, 2), { mode: 0o600 })
   const args = [
     ...sessionArgs(target),
     '--model', spec.model,
     '--permission-mode', 'bypassPermissions',
     '--settings', settingsPath,
+    ...await writeNativeProductConfig(context.scratchDir, target, spec, input.tools ?? []),
     '--disallowedTools', CLAUDE_DISALLOWED_TOOLS.join(','),
     ...(spec.effort === undefined ? [] : ['--effort', spec.effort]),
   ]
@@ -71,6 +81,7 @@ function sessionArgs(target: SessionTarget): string[] {
     case 'resume':
       return ['--resume', target.session.id]
     case 'fork':
-      throw new TerminalError('unsupported', 'Forking into a terminal session is not supported yet')
+      if (!target.sessionId) throw new TerminalError('unsupported', 'A forked terminal needs its id chosen before launch')
+      return ['--resume', target.source.id, '--fork-session', '--session-id', target.sessionId]
   }
 }

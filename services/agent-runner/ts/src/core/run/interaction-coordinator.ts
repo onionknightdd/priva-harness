@@ -3,7 +3,7 @@ import type { AgentEvent } from '../event/agent-event.js'
 import type { InteractionRequest, InteractionResolution, InteractionResponse } from '../resource/interaction.js'
 
 type RequestInput = InteractionRequest extends infer R ? R extends InteractionRequest ? Omit<R, 'requestId' | 'expiresAt'> : never : never
-interface Pending { request: InteractionRequest; finish: (result: InteractionResolution) => void }
+interface Pending { request: InteractionRequest; finish: (result: InteractionResolution) => void; validate?: (response: InteractionResponse) => void }
 
 /** The suspended provider call owns the request; sockets only observe and answer it. */
 export class InteractionCoordinator {
@@ -12,7 +12,9 @@ export class InteractionCoordinator {
 
   constructor(private readonly emit: (event: AgentEvent) => void, private readonly timeoutMs = 600_000) {}
 
-  request(input: RequestInput, options: { signal?: AbortSignal; timeoutMs?: number } = {}): Promise<InteractionResolution> {
+  has(requestId: string): boolean { return this.pending.has(requestId) || this.settled.has(requestId) }
+
+  request(input: RequestInput, options: { signal?: AbortSignal; timeoutMs?: number; validate?: (response: InteractionResponse) => void } = {}): Promise<InteractionResolution> {
     const timeout = Math.min(options.timeoutMs ?? this.timeoutMs, this.timeoutMs)
     const request = { ...input, requestId: randomUUID(), expiresAt: Date.now() + timeout } as InteractionRequest
     if (options.signal?.aborted) return Promise.resolve({ request, decision: 'deny', reason: 'cancelled' })
@@ -32,7 +34,7 @@ export class InteractionCoordinator {
         this.emit({ type: 'permission.resolved', resolution: result })
         resolve(result)
       }
-      this.pending.set(request.requestId, { request, finish })
+      this.pending.set(request.requestId, { request, finish, ...(options.validate ? { validate: options.validate } : {}) })
       options.signal?.addEventListener('abort', cancel, { once: true })
       this.emit({ type: 'permission.requested', request })
     })
@@ -55,6 +57,7 @@ export class InteractionCoordinator {
         if (!question.multiSelect && answer.selected.length + Number(Boolean(answer.text.trim())) > 1) throw new Error('Choose one answer for a single-choice question')
       }
     } else if (response.decision === 'allow' && response.answers !== undefined) throw new Error('Tool approval cannot change the tool input')
+    pending.validate?.(response)
     const resolution: InteractionResolution = {
       request, decision: response.decision, reason: response.decision === 'allow' ? 'answered' : 'skipped',
       ...(response.decision === 'allow' && response.answers ? { answers: response.answers } : {}),

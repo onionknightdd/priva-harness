@@ -1,14 +1,18 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  decodeOctalEscapes,
+  decodeOctalEscapes as decodeBytes,
   formatTmuxCommand,
   hexKeyTokens,
   LineSplitter,
-  parseControlLine,
+  parseControlLine as parseBytes,
   quoteTmuxArgument,
+  type ControlReply,
 } from '../../../../src/infrastructure/terminal/tmux-control-protocol.js'
 import { paneEnvironment } from '../../../../src/infrastructure/terminal/tmux-terminal-service.js'
+
+const parseControlLine = (line: string, reply?: ControlReply) => parseBytes(Buffer.from(line), reply)
+const decodeOctalEscapes = (line: string) => decodeBytes(Buffer.from(line))
 
 describe('tmux control protocol', () => {
   it('parses reply brackets with their sequence number and origin flag', () => {
@@ -27,7 +31,7 @@ describe('tmux control protocol', () => {
     expect(Buffer.from(message.data).toString('utf8')).toBe('hi\r\n\u001b[Kpath\\dir é')
   })
 
-  it('re-encodes UTF-8 characters tmux passes through unescaped', () => {
+  it('preserves UTF-8 bytes tmux passes through unescaped', () => {
     // tmux only octal-escapes control bytes; `❯`, `⏵` and emoji arrive as text.
     const decoded = decodeOctalEscapes('❯ abc \\033[2m⏵⏵ · ←\\033[0m 🚀')
     expect(Buffer.from(decoded).toString('utf8')).toBe('❯ abc \u001b[2m⏵⏵ · ←\u001b[0m 🚀')
@@ -49,10 +53,11 @@ describe('tmux control protocol', () => {
   })
 
   it('treats %-prefixed command output inside a reply as body, not protocol', () => {
-    expect(parseControlLine('%0', true)).toEqual({ kind: 'body', text: '%0' })
-    expect(parseControlLine('%0 80x10', true)).toEqual({ kind: 'body', text: '%0 80x10' })
-    expect(parseControlLine('%output %0 abc', true)).toMatchObject({ kind: 'output', paneId: '%0' })
-    expect(parseControlLine('%end 1 2 1', true)).toEqual({ kind: 'end', seq: 2, fromClient: true })
+    const reply = { seq: 2, fromClient: true }
+    for (const line of ['%0', '%0 80x10', '%output %0 abc', '%exit', '%begin 1 9 1', '%end 1 9 1']) {
+      expect(parseControlLine(line, reply)).toEqual({ kind: 'body', text: line })
+    }
+    expect(parseControlLine('%end 1 2 1', reply)).toEqual({ kind: 'end', seq: 2, fromClient: true })
   })
 
   it('encodes bytes as hex tokens for send-keys -H', () => {
@@ -70,11 +75,30 @@ describe('tmux control protocol', () => {
 
   it('splits streamed chunks into complete lines and flushes the remainder', () => {
     const splitter = new LineSplitter()
-    expect(splitter.push('%begin 1 2 1\nbo')).toEqual(['%begin 1 2 1'])
-    expect(splitter.push('dy\n%end 1 2 1\n')).toEqual(['body', '%end 1 2 1'])
-    expect(splitter.push('%exit')).toEqual([])
-    expect(splitter.flush()).toEqual(['%exit'])
+    const push = (chunk: string) => splitter.push(Buffer.from(chunk)).map((line) => line.toString('utf8'))
+    expect(push('%begin 1 2 1\nbo')).toEqual(['%begin 1 2 1'])
+    expect(push('dy\n%end 1 2 1\n')).toEqual(['body', '%end 1 2 1'])
+    expect(push('%exit')).toEqual([])
+    expect(splitter.flush().map((line) => line.toString('utf8'))).toEqual(['%exit'])
     expect(splitter.flush()).toEqual([])
+  })
+
+  it('preserves multibyte characters split across protocol messages and stdout chunks', () => {
+    const expected = Buffer.from('中文 🚀 ─')
+    const wire = Buffer.concat(Array.from(expected, (byte) =>
+      Buffer.concat([Buffer.from('%output %0 '), Buffer.of(byte), Buffer.from('\n')])))
+    for (let size = 1; size <= wire.length; size += 1) {
+      const splitter = new LineSplitter()
+      const output: Uint8Array[] = []
+      for (let offset = 0; offset < wire.length; offset += size) {
+        for (const line of splitter.push(wire.subarray(offset, offset + size))) {
+          const message = parseBytes(line)
+          if (message.kind === 'output') output.push(message.data)
+        }
+      }
+      expect(Buffer.concat(output)).toEqual(expected)
+    }
+    expect(Buffer.from(decodeBytes(Buffer.from('\\344\\270\\255')))).toEqual(Buffer.from('中'))
   })
 })
 

@@ -10,6 +10,7 @@ export const zhCN = {
   },
 
   backgroundTasks: {
+    manage: '终端管理', manageTask: '在终端管理任务：{{name}}',
     title: "后台任务", empty: "当前会话没有后台任务", stop: "停止", stopping: "正在停止…", output: "查看输出",
     stopTask: "停止任务：{{name}}", count: "后台 {{count}}",
     status: { pending: "等待中", running: "后台运行中", paused: "已暂停", completed: "已完成", failed: "失败", cancelled: "已停止", unknown: "状态未知" },

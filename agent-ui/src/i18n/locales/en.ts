@@ -10,6 +10,7 @@ export const en = {
   },
 
   backgroundTasks: {
+    manage: 'Manage in Terminal', manageTask: 'Manage task in Terminal: {{name}}',
     title: "Background tasks", empty: "No background tasks in this session", stop: "Stop", stopping: "Stopping…", output: "View output",
     stopTask: "Stop task: {{name}}", count: "{{count}} background",
     status: { pending: "Pending", running: "Running in background", paused: "Paused", completed: "Completed", failed: "Failed", cancelled: "Stopped", unknown: "Unknown status" },

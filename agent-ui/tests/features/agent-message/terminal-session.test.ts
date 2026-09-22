@@ -137,14 +137,39 @@ test("an unexpected drop becomes closed, and a local close reports nothing furth
     assert.deepEqual(statuses.at(-1), { phase: "closed" })
 
     const local: TerminalSessionStatus[] = []
+    const localOutput: number[] = []
     const session = connectTerminalSession(
       { harness: "claude", cwd: "/w", model: "m", sessionId: "s", cols: 80, rows: 24 },
-      { onOutput: () => {}, onStatus: (status) => local.push(status) }
+      { onOutput: (chunk) => localOutput.push(...chunk), onStatus: (status) => local.push(status) }
     )
     const socket = Socket.instances.at(-1)!
     socket.open()
     session.close()
+    socket.text({ type: "exit", reason: "late exit from replaced connection" })
+    socket.text({ type: "ready", sessionId: "stale", adopted: true })
+    socket.binary([0x61])
     assert.equal(socket.readyState, Socket.CLOSED)
     assert.deepEqual(local, [{ phase: "connecting" }])
+    assert.deepEqual(localOutput, [])
+  })
+})
+
+
+test("a native rebind retains the terminal socket and continues binary output", () => {
+  withFakeSocket(() => {
+    const ids: string[] = [], output: number[] = []
+    const session = connectTerminalSession({ harness: "claude", cwd: "/w", model: "m", sessionId: "old", cols: 80, rows: 24 }, {
+      onOutput: (bytes) => output.push(...bytes), onStatus: () => {}, onRebind: (id) => ids.push(id),
+    })
+    const socket = Socket.instances.at(-1)!
+    socket.open()
+    socket.text({ type: "rebound", sessionId: "new" })
+    socket.binary([65])
+    session.send("hello")
+    assert.deepEqual(ids, ["new"])
+    assert.deepEqual(output, [65])
+    assert.equal(socket.readyState, Socket.OPEN)
+    assert.equal(socket.sent.length, 1)
+    session.close()
   })
 })

@@ -99,24 +99,32 @@ describe('WS /api/sandbox/agent/ws/session', () => {
       type: 'run.start',
       text: 'hi',
       model: modelReference,
-      harness: 'claude',
+      harness: 'pi',
       cwd: testRoot,
     }))
     const received = await frames
 
-    expect(received[0]).toMatchObject({ type: 'run.started', v: 2, seq: 1, harness: 'claude' })
+    expect(received[0]).toMatchObject({ type: 'run.started', v: 2, seq: 1, harness: 'pi' })
     expect(received[0]).toHaveProperty('runId')
     expect(received[0]).toHaveProperty('seq')
     expect(received).toEqual(expect.arrayContaining([
-      expect.objectContaining({ type: 'assistant.delta', text: 'Hello' }),
+      expect.objectContaining({ type: 'assistant.delta', text: 'Hi' }),
       expect.objectContaining({
         type: 'run.completed',
         model: 'm',
-        durationMs: 5,
+        durationMs: 3,
       }),
     ]))
-    expect(claudeProvider.targets[0]).toMatchObject({ kind: 'new', provider: 'claude' })
-    expect(claudeProvider.targets[0]).toHaveProperty('sessionId')
+    expect(piProvider.targets[0]).toMatchObject({ kind: 'new', provider: 'pi' })
+    expect(received[0]).toHaveProperty('sessionId')
+  })
+
+  it('reports an unavailable Claude UI terminal without starting the SDK', async () => {
+    const socket = await server.injectWS(SESSION_WEBSOCKET_PATH)
+    const frames = collectFrames(socket)
+    socket.send(JSON.stringify({ type: 'run.start', harness: 'claude', text: 'hello', model: modelReference, cwd: testRoot }))
+    expect(await frames).toEqual([expect.objectContaining({ type: 'error', message: 'Terminal driver is unavailable' })])
+    expect(claudeProvider.targets).toEqual([])
   })
 
   it('returns an error frame for a missing init text', async () => {
@@ -134,7 +142,7 @@ describe('WS /api/sandbox/agent/ws/session', () => {
     ])
   })
 
-  it.each(['claude', 'pi'] as const)('passes verified attachment-only turns to %s', async (harness) => {
+  it.each(['pi'] as const)('passes verified attachment-only turns to %s', async (harness) => {
     const path = join(testRoot, 'report.txt')
     await writeFile(path, 'report')
     const socket = await server.injectWS(SESSION_WEBSOCKET_PATH)
@@ -144,7 +152,7 @@ describe('WS /api/sandbox/agent/ws/session', () => {
       attachments: [{ path, name: 'untrusted', mimeType: 'fake/type', size: 999 }],
     }))
     expect(await frames).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'run.completed' })]))
-    const provider = harness === 'claude' ? claudeProvider : piProvider
+    const provider = piProvider
     expect(provider.turns).toEqual([{
       text: '', attachments: [{ path: await realpath(path), name: 'report.txt', mimeType: 'text/plain', size: 6 }],
     }])
@@ -154,11 +162,11 @@ describe('WS /api/sandbox/agent/ws/session', () => {
     const socket = await server.injectWS(SESSION_WEBSOCKET_PATH)
     const frames = collectFrames(socket)
     socket.send(JSON.stringify({
-      type: 'run.start', text: 'read this', model: modelReference, harness: 'claude', cwd: testRoot,
+      type: 'run.start', text: 'read this', model: modelReference, harness: 'pi', cwd: testRoot,
       attachments: [{ path: join(testRoot, 'missing.txt'), name: 'missing.txt', mimeType: 'text/plain', size: 1 }],
     }))
     expect(await frames).toEqual([expect.objectContaining({ type: 'error' })])
-    expect(claudeProvider.turns).toEqual([])
+    expect(piProvider.turns).toEqual([])
   })
 
   it('returns an error frame when the profile cannot be resolved', async () => {
@@ -168,7 +176,7 @@ describe('WS /api/sandbox/agent/ws/session', () => {
       type: 'run.start',
       text: 'hi',
       model: 'missing:model-a',
-      harness: 'claude',
+      harness: 'pi',
       cwd: testRoot,
     }))
     expect(await frames).toEqual([
@@ -177,7 +185,7 @@ describe('WS /api/sandbox/agent/ws/session', () => {
         message: 'profile_not_found',
         v: 2,
         seq: 1,
-        harness: 'claude',
+        harness: 'pi',
       }),
     ])
   })
@@ -214,27 +222,27 @@ describe('WS /api/sandbox/agent/ws/session', () => {
     ]))
   })
 
-  it('resumes claude and pi sessions and rejects pi fork', async () => {
+  it('resumes SDK sessions and rejects unsupported forks', async () => {
     const resume = await server.injectWS(SESSION_WEBSOCKET_PATH)
     const resumeFrames = collectFrames(resume)
     resume.send(JSON.stringify({
       type: 'run.start',
       text: 'again',
       model: modelReference,
-      harness: 'claude',
+      harness: 'pi',
       cwd: '/work/repo',
       sessionId: 'sess-1',
       effort: 'low',
     }))
     await resumeFrames
 
-    expect(claudeProvider.targets).toEqual([
+    expect(piProvider.targets).toEqual([
       {
         kind: 'resume',
-        session: { provider: 'claude', id: 'sess-1' },
+        session: { provider: 'pi', id: 'sess-1' },
       },
     ])
-    expect(claudeProvider.specs.at(-1)).toEqual(expect.objectContaining({
+    expect(piProvider.specs.at(-1)).toEqual(expect.objectContaining({
       cwd: '/work/repo',
       effort: 'low',
     }))
@@ -251,6 +259,7 @@ describe('WS /api/sandbox/agent/ws/session', () => {
     }))
     await piResumeFrames
     expect(piProvider.targets).toEqual([
+      { kind: 'resume', session: { provider: 'pi', id: 'sess-1' } },
       { kind: 'resume', session: { provider: 'pi', id: 'pi-1' } },
     ])
 
@@ -297,7 +306,7 @@ describe('WS /api/sandbox/agent/ws/session', () => {
 
   it('keeps a live run after the socket closes and replays on attach', async () => {
     let releaseGate = (): void => undefined
-    claudeProvider.gate = new Promise((resolve) => {
+    piProvider.gate = new Promise((resolve) => {
       releaseGate = resolve
     })
     const socket = await server.injectWS(SESSION_WEBSOCKET_PATH)
@@ -305,7 +314,7 @@ describe('WS /api/sandbox/agent/ws/session', () => {
       type: 'run.start',
       text: 'hi',
       model: modelReference,
-      harness: 'claude',
+      harness: 'pi',
       cwd: testRoot,
     }))
     const live = await waitFor(() => liveRuns.listActive()[0])
@@ -324,7 +333,7 @@ describe('WS /api/sandbox/agent/ws/session', () => {
     })
     attach.send(JSON.stringify({
       type: 'session.subscribe',
-      harness: 'claude',
+      harness: 'pi',
       sessionId: live.sessionId,
       sinceSeq: 0,
     }))
@@ -343,13 +352,13 @@ describe('WS /api/sandbox/agent/ws/session', () => {
   })
 
   it('aborts a live run from an abort frame after disconnect', async () => {
-    claudeProvider.gate = new Promise(() => undefined)
+    piProvider.gate = new Promise(() => undefined)
     const socket = await server.injectWS(SESSION_WEBSOCKET_PATH)
     socket.send(JSON.stringify({
       type: 'run.start',
       text: 'hi',
       model: modelReference,
-      harness: 'claude',
+      harness: 'pi',
       cwd: testRoot,
     }))
     const live = await waitFor(() => liveRuns.listActive()[0])
@@ -359,7 +368,7 @@ describe('WS /api/sandbox/agent/ws/session', () => {
     const frames = collectFrames(abortSocket)
     abortSocket.send(JSON.stringify({
       type: 'run.abort',
-      harness: 'claude',
+      harness: 'pi',
       sessionId: live.sessionId,
       runId: live.runId,
     }))
@@ -371,13 +380,13 @@ describe('WS /api/sandbox/agent/ws/session', () => {
   })
 
   it('rejects a second init while the session is live', async () => {
-    claudeProvider.gate = new Promise(() => undefined)
+    piProvider.gate = new Promise(() => undefined)
     const socket = await server.injectWS(SESSION_WEBSOCKET_PATH)
     socket.send(JSON.stringify({
       type: 'run.start',
       text: 'hi',
       model: modelReference,
-      harness: 'claude',
+      harness: 'pi',
       cwd: testRoot,
       sessionId: 'sess-busy',
     }))
@@ -389,7 +398,7 @@ describe('WS /api/sandbox/agent/ws/session', () => {
       type: 'run.start',
       text: 'again',
       model: modelReference,
-      harness: 'claude',
+      harness: 'pi',
       cwd: testRoot,
       sessionId: 'sess-busy',
     }))

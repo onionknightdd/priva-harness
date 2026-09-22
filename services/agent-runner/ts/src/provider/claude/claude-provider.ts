@@ -21,6 +21,11 @@ import { claudeGlobalConfigFilePath } from './claude-paths.js'
 import { ensureClaudeProjectTrusted } from './claude-project-trust.js'
 import { ClaudeRuntime } from './claude-runtime.js'
 import { claudeTerminalLaunch } from './claude-terminal-launch.js'
+import { readClaudeTerminalState, recordClaudeTerminalState } from './claude-terminal-hooks.js'
+import { completeClaudeLocalCommand, submitClaudeTerminalInput } from './claude-terminal-input.js'
+import { readClaudeTerminalText } from './claude-terminal-text.js'
+import { configureClaudeTerminal } from './claude-terminal-model.js'
+import { readClaudeTerminalSpec, readClaudeTerminalTelemetry } from './claude-terminal-telemetry.js'
 import { ClaudeSessionStore } from './session/claude-session-store.js'
 import {
   listClaudeSlashCommands,
@@ -40,6 +45,14 @@ export interface ClaudeProviderOptions {
 
 export class ClaudeProvider implements AgentProvider {
   readonly id = 'claude' as const
+  readonly readTerminalText = readClaudeTerminalText
+  readonly readTerminalTelemetry = readClaudeTerminalTelemetry
+  readonly readTerminalSpec = readClaudeTerminalSpec
+  readonly readTerminalState = readClaudeTerminalState
+  readonly recordTerminalState = recordClaudeTerminalState
+  readonly submitTerminalInput = submitClaudeTerminalInput
+  readonly completeTerminalCommand = completeClaudeLocalCommand
+  readonly configureTerminal = configureClaudeTerminal
   readonly sessions: ProviderSessionStore
 
   constructor(private readonly options: ClaudeProviderOptions) {
@@ -94,7 +107,7 @@ export class ClaudeProvider implements AgentProvider {
       this.options.globalConfigFilePath ?? claudeGlobalConfigFilePath(),
       { cwd: spec.cwd, apiKey: spec.authToken, ...(context.colorScheme === undefined ? {} : { colorScheme: context.colorScheme }) },
     )
-    return claudeTerminalLaunch({ target, spec, executable, context })
+    return claudeTerminalLaunch({ target, spec, executable, context, tools: this.options.tools ?? [] })
   }
 
   measureContextUsage(session: SessionRef, spec: ProviderRunSpec): Promise<ContextUsage> {

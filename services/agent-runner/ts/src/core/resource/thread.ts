@@ -100,6 +100,7 @@ export interface ThreadMessage {
 export type ThreadReplayItem =
   | {
       readonly kind: 'user'
+      readonly attachments?: readonly UserAttachment[]
       readonly id: string
       readonly content: string
       readonly createdAt: string

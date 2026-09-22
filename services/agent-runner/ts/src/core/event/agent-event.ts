@@ -2,6 +2,8 @@ import type { WorkflowState } from '../resource/workflow.js'
 import type { InteractionRequest, InteractionResolution } from '../resource/interaction.js'
 import type { BackgroundTask, TaskNotification, TaskReplyTarget } from '../resource/background-task.js'
 import type { ThreadMessage } from '../resource/thread.js'
+import type { EffortLevel } from '../contract/agent-provider.js'
+import type { ContextUsage } from '../resource/context-usage.js'
 export const STREAM_PROTOCOL_VERSION = 2 as const
 
 // Mapping table (product type ← SDK). Mappers emit AgentEvent; EnvelopeStamper adds the envelope.
@@ -117,13 +119,24 @@ export interface BlockAddress {
   readonly index?: number
 }
 
+export interface SessionConfiguration {
+  readonly model: string
+  readonly profileId?: string
+  readonly effort?: EffortLevel
+  readonly cwd: string
+  readonly context: ContextUsage
+}
+
 export type AgentEvent = (
+  | { readonly type: 'session.rebound'; readonly nextSessionId: string }
+  | { readonly type: 'session.config'; readonly config: SessionConfiguration }
+  | { readonly type: 'terminal.focus'; readonly reason: string }
   | { readonly type: 'tasks.snapshot'; readonly tasks: readonly BackgroundTask[] }
   | { readonly type: 'task.updated' | 'task.notification'; readonly task: BackgroundTask }
   | { readonly type: 'task.delivered'; readonly notification: TaskNotification; readonly task: BackgroundTask }
   | { readonly type: 'session.state'; readonly state: 'running' | 'idle' | 'requires_action' }
-  | { readonly type: 'session.snapshot'; readonly tasks: readonly BackgroundTask[]; readonly messages: readonly ThreadMessage[]; readonly activeRunId?: string; readonly interactions?: readonly InteractionRequest[] }
-  | ({ readonly type: 'run.started'; readonly model?: string; readonly userMessage?: ThreadMessage } & EventChannel)
+  | { readonly type: 'session.snapshot'; readonly tasks: readonly BackgroundTask[]; readonly messages: readonly ThreadMessage[]; readonly activeRunId?: string; readonly interactions?: readonly InteractionRequest[]; readonly config?: SessionConfiguration; readonly runningToolIds?: readonly string[] }
+  | ({ readonly type: 'run.started'; readonly model?: string; readonly userMessage?: ThreadMessage; readonly driver?: 'terminal' } & EventChannel)
   | ({
       readonly type: 'assistant.block_start'
       readonly kind: BlockKind

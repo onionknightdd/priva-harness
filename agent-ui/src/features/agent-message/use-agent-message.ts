@@ -1,7 +1,9 @@
 import { updateInteractions, type InteractionRequest, type InteractionResponse } from "./interaction-data"
 import * as React from "react"
 import { useTranslation } from "react-i18next"
+import { useTheme } from "next-themes"
 import { useAgentPreferences } from "@/features/settings/agent-preferences-context"
+import { useSessionView } from './session-view-context'
 import {
   useActiveSession,
   useChatSessionActions,
@@ -24,6 +26,8 @@ import { applyThreadStreamFrame, mergeSnapshotMessages, type StreamFrame } from 
 
 export function useAgentMessage() {
   const { t } = useTranslation()
+  const { resolvedTheme } = useTheme()
+  const { preserveViewForSession, setView } = useSessionView()
   const { runHarnessId } = useHarness()
   const { queueBehavior, inputSuggestions, setLastModelReference } = useAgentPreferences()
   const { threadMessages, messagesStatus, transcriptEpoch } = useChatThread()
@@ -52,6 +56,7 @@ export function useAgentMessage() {
   const unbindStopRef = React.useRef<(() => void) | undefined>(undefined)
   const contextRequestRef = React.useRef(0)
   const hasSnapshotRef = React.useRef(false)
+  const nativeConfigRef = React.useRef<string | undefined>(undefined)
 
   const refreshContext = React.useCallback((sessionId: string) => {
     if (!runHarnessId) return
@@ -64,8 +69,24 @@ export function useAgentMessage() {
   // Socket handlers retain a live view of React callbacks without reconnecting on each render.
   const receiveRef = React.useRef<(frame: StreamFrame) => void>(() => undefined)
   receiveRef.current = (frame) => {
+    if (frame.type === 'terminal.focus') { setView('terminal'); return }
     setInteractions((current) => updateInteractions(current, frame))
     const id = frame.sessionId ?? connectionRef.current?.sessionId
+    if (frame.type === 'session.rebound') return
+    if (frame.config) {
+      const config = frame.config
+      // Context updates are frequent. Only a native selection change replaces
+      // a locally chosen model that has not been submitted yet.
+      const selection = JSON.stringify([id, config.profileId, config.model, config.effort])
+      if (selection !== nativeConfigRef.current) {
+        nativeConfigRef.current = selection
+        if (config.profileId) setModelReference(`${config.profileId}:${config.model}`)
+        if (config.effort) setEffort(config.effort)
+      }
+      setContextUsage(config.context)
+      if (id && config.cwd && config.cwd !== runCwd) bindRunSession(id, { cwd: config.cwd })
+    }
+    if (frame.type === 'session.config') return
     const key = `${runHarnessId}:${id}`
     if (frame.type === "session.snapshot") {
       hasSnapshotRef.current = true
@@ -87,6 +108,9 @@ export function useAgentMessage() {
     if (frame.task) updateBackgroundTask(key, frame.task)
     if (frame.type === "run.started" && frame.runId) {
       const runId = frame.runId
+      // The terminal owns native transcript IDs. Once it has accepted this
+      // command, snapshots replace its optimistic bubbles without duplicates.
+      if (frame.driver === "terminal") pendingIdsRef.current.delete(runId)
       setActiveRunId(runId)
       if (id) beginLiveSession(id)
       setMessages((current) => applyThreadStreamFrame(current, runId, frame))
@@ -118,12 +142,23 @@ export function useAgentMessage() {
         unbindStopRef.current?.()
         unbindStopRef.current = bindTaskStop(`${runHarnessId}:${id}`, connection.stopTask)
       },
+      onRebind: (previous, next) => {
+        if (generation !== generationRef.current) return
+        preserveViewForSession(next)
+        bindRef.current(next, { previousSessionId: previous })
+        endLiveSession(previous)
+        seedTitleRef.current = null
+        hasSnapshotRef.current = true
+        setMessages((current) => current.filter((message) => pendingIdsRef.current.has(message.id) || pendingIdsRef.current.has(message.id.replace(/:user$/, ''))))
+        setInteractions([])
+        setContextUsage(emptyContextUsage())
+      },
     })
     connectionRef.current = connection
     connectionHarnessRef.current = runHarnessId
     if (runSessionId) unbindStopRef.current = bindTaskStop(`${runHarnessId}:${runSessionId}`, connection.stopTask)
     return connection
-  }, [runHarnessId, runSessionId])
+  }, [runHarnessId, runSessionId, preserveViewForSession, endLiveSession])
 
   const resetConnection = React.useCallback(() => {
     generationRef.current++
@@ -133,6 +168,7 @@ export function useAgentMessage() {
     unbindStopRef.current?.()
     pendingIdsRef.current.clear()
     hasSnapshotRef.current = false
+    nativeConfigRef.current = undefined
     setConnected(false)
     setInteractions([])
     setActiveRunId(null)
@@ -146,7 +182,9 @@ export function useAgentMessage() {
       setMessages([])
       setContextUsage(emptyContextUsage())
     }
-    if (runSessionId && runHarnessId && messagesStatus === "ready" && transcriptEpoch > 0) {
+    // TUI-created sessions already have a server stream, even before their
+    // first transcript is saved or an HTTP history load has completed.
+    if (runSessionId && runHarnessId && messagesStatus !== "loading") {
       ensureConnection()
       refreshContext(runSessionId)
     }
@@ -194,9 +232,10 @@ export function useAgentMessage() {
       await connection.waitForIdle()
       if (generation !== generationRef.current) return
       void connection.start({ text: content, attachments: files, model: modelReference, harness: runHarnessId,
-        cwd: runCwd.trim(), effort, promptSuggestions: inputSuggestions }, assistant.id).catch(failed)
+        cwd: runCwd.trim(), effort, promptSuggestions: inputSuggestions,
+        theme: resolvedTheme === "dark" ? "dark" : "light" }, assistant.id).catch(failed)
     }).catch(failed)
-  }, [interactions.length, attachments, slashCommand, draft, modelReference, runHarnessId, runCwd, ensureConnection, setLastModelReference, clearAttachments, queueBehavior, effort, inputSuggestions, t])
+  }, [interactions.length, attachments, slashCommand, draft, modelReference, runHarnessId, runCwd, ensureConnection, setLastModelReference, clearAttachments, queueBehavior, effort, inputSuggestions, resolvedTheme, t])
 
   const respondPermission = React.useCallback((response: InteractionResponse) => {
     const connection = connectionRef.current

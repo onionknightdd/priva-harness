@@ -7,6 +7,7 @@ import { isEffortLevel } from '../../core/contract/agent-provider.js'
 import { TerminalError, type TerminalAttachment } from '../../core/contract/terminal-service.js'
 import { isRunHarnessId, providerIdForHarness } from '../../core/resource/run-harness.js'
 import type { AgentProfileService } from '../../harness/config/agent-profile-service.js'
+import type { AgentHarness } from '../../harness/agent-harness.js'
 import type { ModelProfileService } from '../../harness/config/model-profile-service.js'
 import type { SessionTerminals } from '../../harness/terminal/session-terminals.js'
 import { buildRunSpec } from './run-spec.js'
@@ -14,6 +15,7 @@ import { buildRunSpec } from './run-spec.js'
 export const TERMINAL_WEBSOCKET_PATH = '/api/sandbox/agent/ws/terminal'
 
 export interface TerminalRouteOptions {
+  readonly harness: AgentHarness
   readonly terminals: SessionTerminals
   readonly modelProfileService: ModelProfileService
   readonly agentProfileService: AgentProfileService
@@ -67,14 +69,19 @@ async function handleTerminalSocket(socket: WebSocket, rawQuery: unknown, option
     ? { kind: 'new', provider }
     : { kind: 'resume', session: { provider, id: sessionId } }
   let attachment: TerminalAttachment | undefined
-  socket.once('close', () => { void attachment?.detach() })
+  let stopHistory: (() => Promise<void>) | undefined
+  let unbindSession: (() => void) | undefined
+  socket.once('close', () => { unbindSession?.(); void attachment?.detach(); void stopHistory?.() })
   try {
     const spec = await buildRunSpec(options, {
       harness, model, cwd, ...(effort === undefined ? {} : { effort }),
     })
-    const opened = await options.terminals.open(target, spec, { cols, rows, ...(theme === undefined ? {} : { colorScheme: theme }) })
+    const opened = await options.harness.openTerminal(target, spec, { cols, rows, ...(theme === undefined ? {} : { colorScheme: theme }) })
+    let currentSession = opened.session
     if (!socketOpen(socket)) return
-    attachment = await options.terminals.attach(opened.session)
+    stopHistory = await options.harness.observeTerminalHistory(opened.session, cwd)
+    if (!socketOpen(socket)) { await stopHistory(); return }
+    attachment = await options.terminals.attach(opened.session, cols, rows)
     if (!socketOpen(socket)) { await attachment.detach(); return }
     sendJson(socket, {
       type: 'ready', harness, sessionId: opened.session.id, adopted: opened.adopted,
@@ -83,22 +90,36 @@ async function handleTerminalSocket(socket: WebSocket, rawQuery: unknown, option
     if (socketOpen(socket)) socket.send(attachment.screen, { binary: true })
     attachment.onOutput((chunk) => { if (socketOpen(socket)) socket.send(chunk, { binary: true }) })
     attachment.onExit((reason) => {
+      void options.harness.terminalExited(currentSession, reason)
       sendJson(socket, { type: 'exit', reason })
       socket.close(1000, 'terminal exited')
     })
     const live = attachment
+    const watchSession = () => {
+      unbindSession?.()
+      unbindSession = options.harness.sessionStream(currentSession).subscribe((frame) => {
+        if (frame.type !== 'session.rebound') return
+        currentSession = { ...currentSession, id: frame.nextSessionId }
+        sendJson(socket, { type: 'rebound', sessionId: currentSession.id })
+        void (async () => {
+          await stopHistory?.()
+          stopHistory = await options.harness.observeTerminalHistory(currentSession, cwd)
+          if (!socketOpen(socket)) { await stopHistory(); return }
+          watchSession()
+        })().catch((error: unknown) => { fail(socket, 'io-failure', describe(error)) })
+      })
+    }
+    watchSession()
     socket.on('message', (data, isBinary) => {
       if (isBinary) {
-        live.write(toBytes(data)).catch((error: unknown) => { fail(socket, 'io-failure', describe(error)) })
+        const input = toBytes(data)
+        live.write(input).then(() => options.harness.terminalInput(currentSession, input)).catch((error: unknown) => { fail(socket, 'io-failure', describe(error)) })
         return
       }
       const parsed = clientMessageSchema.safeParse(parseJson(toBytes(data)))
       if (!parsed.success) { fail(socket, 'invalid-request', 'Text frames must be a resize message'); return }
       live.resize(parsed.data.cols, parsed.data.rows).catch((error: unknown) => { fail(socket, 'io-failure', describe(error)) })
     })
-    // The snapshot was taken at the terminal's current size; the redraw the
-    // viewer's own size triggers streams through the output listener above.
-    if (live.cols !== cols || live.rows !== rows) await live.resize(cols, rows)
   } catch (error) {
     if (error instanceof TerminalError) fail(socket, error.kind, error.message)
     else fail(socket, 'io-failure', describe(error))

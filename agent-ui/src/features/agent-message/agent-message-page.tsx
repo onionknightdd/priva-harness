@@ -15,13 +15,17 @@ export function AgentMessagePage() {
   const { activeSession, runSessionId, runCwd } = useActiveSession()
   const { bindRunSession } = useChatSessionActions()
   const { runHarnessId } = useHarness()
-  const { view, terminalOpened } = useSessionView()
+  const { view, terminalOpened, preserveViewForSession } = useSessionView()
   const viewedSessionId = activeSession?.sessionId ?? runSessionId
   const sourceKey = `${runHarnessId}:${viewedSessionId}`
   const terminalView = view === "terminal" && harnessSupportsTerminal(runHarnessId)
   // A terminal opened on a fresh conversation names the session it created;
   // the chat side adopts it so both surfaces address the same transcript.
   const adoptTerminalSession = useCallback((sessionId: string) => bindRunSession(sessionId), [bindRunSession])
+  const rebindTerminalSession = useCallback((sessionId: string) => {
+    preserveViewForSession(sessionId)
+    bindRunSession(sessionId)
+  }, [bindRunSession, preserveViewForSession])
   useEffect(() => {
     syncAgents(sourceKey, agentToolsForThread(agentMessage.messages))
     syncWorkflows(sourceKey, agentMessage.messages.flatMap((message) => message.workflows ?? []))
@@ -39,6 +43,7 @@ export function AgentMessagePage() {
         sessionId={viewedSessionId}
         hidden={!terminalView}
         onSessionReady={adoptTerminalSession}
+        onSessionRebound={rebindTerminalSession}
       />
     ) : null}
     <AgentMessage

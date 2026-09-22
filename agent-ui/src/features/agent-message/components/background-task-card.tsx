@@ -1,6 +1,6 @@
 import { motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
-import { SquareIcon, FileTextIcon } from "lucide-react"
+import { SquareIcon, FileTextIcon, TerminalIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useActiveSession } from "@/features/chat-session"
@@ -26,11 +26,11 @@ export function BackgroundTaskStopButton({ task }: { task: BackgroundTask }) {
   const { t } = useTranslation()
   const { runSessionId } = useActiveSession()
   const { runHarnessId } = useHarness()
-  if (!taskIsActive(task)) return null
+  if (!taskIsActive(task) && !(task.control === 'terminal' && task.status === 'unknown')) return null
   return <Button type="button" variant="ghost" size="icon-sm" disabled={task.stopRequested}
     onClick={() => stopBackgroundTask(`${runHarnessId}:${runSessionId}`, task.taskId)}
-    aria-label={t("backgroundTasks.stopTask", { name: task.description ?? task.taskId })}>
-    <SquareIcon className="size-3" aria-hidden="true" />
+    aria-label={t(task.control === 'terminal' ? 'backgroundTasks.manageTask' : "backgroundTasks.stopTask", { name: task.description ?? task.taskId })}>
+    {task.control === 'terminal' ? <TerminalIcon className="size-3" aria-hidden="true" /> : <SquareIcon className="size-3" aria-hidden="true" />}
   </Button>
 }
 
@@ -39,7 +39,7 @@ export function BackgroundTaskStatus({ task, onStop, onOpenOutput }: {
 }) {
   const { t } = useTranslation()
   const reduced = useReducedMotion()
-  const active = taskIsActive(task)
+  const active = taskIsActive(task) || (task.control === 'terminal' && task.status === 'unknown')
   return (
     <div data-background-task={task.taskId} className="flex min-w-0 flex-col gap-1.5 rounded-md border border-border/60 px-3 py-2 text-sm">
       <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -47,8 +47,8 @@ export function BackgroundTaskStatus({ task, onStop, onOpenOutput }: {
         <motion.span key={task.status} initial={reduced ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduced ? 0 : 0.15 }} role="status">
           <Badge variant={task.status === "failed" ? "destructive" : "secondary"}>{t(`backgroundTasks.status.${task.status}`)}</Badge>
         </motion.span>
-        {active && onStop ? <Button type="button" variant="ghost" size="sm" disabled={task.stopRequested} onClick={onStop} aria-label={t("backgroundTasks.stopTask", { name: task.description ?? task.taskId })}>
-          <SquareIcon className="size-3" aria-hidden="true" />{t(task.stopRequested ? "backgroundTasks.stopping" : "backgroundTasks.stop")}
+        {active && onStop ? <Button type="button" variant="ghost" size="sm" disabled={task.stopRequested} onClick={onStop} aria-label={t(task.control === 'terminal' ? 'backgroundTasks.manageTask' : "backgroundTasks.stopTask", { name: task.description ?? task.taskId })}>
+          {task.control === 'terminal' ? <TerminalIcon className="size-3" aria-hidden="true" /> : <SquareIcon className="size-3" aria-hidden="true" />}{t(task.control === 'terminal' ? 'backgroundTasks.manage' : task.stopRequested ? "backgroundTasks.stopping" : "backgroundTasks.stop")}
         </Button> : null}
       </div>
       {task.summary ? <p className="m-0 break-words text-xs leading-5 text-muted-foreground">{task.summary}</p> : null}

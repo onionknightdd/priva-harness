@@ -65,7 +65,7 @@ export type ChatSessionActions = {
   startNewChat: (cwd?: string) => void
   setDraftCwd: (cwd: string) => void
   forkFrom: (input: ForkFromInput) => Promise<void>
-  bindRunSession: (sessionId: string, seed?: { firstPrompt?: string }) => void
+  bindRunSession: (sessionId: string, seed?: { firstPrompt?: string; cwd?: string; previousSessionId?: string }) => void
   reloadThread: () => Promise<AgentThreadMessage[]>
 }
 
@@ -402,14 +402,15 @@ export function ChatSessionProvider({
   )
 
   const bindRunSession = React.useCallback(
-    (sessionId: string, seed?: { firstPrompt?: string }) => {
+    (sessionId: string, seed?: { firstPrompt?: string; cwd?: string; previousSessionId?: string }) => {
       const viewed = viewedSessionIdRef.current
-      if (viewed !== null && viewed !== sessionId) {
+      if (viewed !== null && viewed !== sessionId && viewed !== seed?.previousSessionId) {
         return
       }
       viewedSessionIdRef.current = sessionId
       skipTranscriptLoadRef.current = true
       setRunSessionId(sessionId)
+      if (seed?.cwd) setRunCwd(seed.cwd)
       const { groups, runCwd } = latest.current
       const listed = groups
         .flatMap((group) => group.sessions)
@@ -418,13 +419,13 @@ export function ChatSessionProvider({
       const next =
         listed ??
         {
-          ...liveSessionStub(sessionId, runCwd),
+          ...liveSessionStub(sessionId, seed?.cwd ?? runCwd),
           ...(prompt === ""
             ? {}
             : { firstPrompt: prompt, summary: prompt }),
         }
       setActiveSession((current) =>
-        current?.sessionId === sessionId ? current : next
+        current?.sessionId === sessionId ? (seed?.cwd && seed.cwd !== current.cwd ? { ...current, cwd: seed.cwd } : current) : next
       )
       if (listed === undefined) {
         prependSession(next)

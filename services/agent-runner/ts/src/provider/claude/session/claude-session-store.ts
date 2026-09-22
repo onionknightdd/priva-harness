@@ -2,7 +2,8 @@ import { userTurnSummary } from '../../../core/run/user-turn.js'
 import { ownedSubagentMessages } from "./claude-subagent-history.js"
 import { hydrateWorkflowResult, readWorkflowAgentDetail } from './claude-workflow-files.js'
 import { readFile, readdir, stat } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { materializeClaudeImages } from './claude-image-attachments.js'
 
 import * as claudeAgentSdk from '@anthropic-ai/claude-agent-sdk'
 
@@ -143,7 +144,44 @@ export class ClaudeSessionStore implements ProviderSessionStore {
       ...message,
       message: await hydrateWorkflowResult(message.message, path),
     })))
-    return replayClaudeSessionMessages(hydrated)
+    const attachments = new Map(await Promise.all(hydrated.map(async (message) =>
+      [message.uuid, await materializeClaudeImages(message, join(dirname(path), ref.id, 'attachments'))] as const)))
+    return replayClaudeSessionMessages(hydrated, attachments)
+  }
+
+  async watch(ref: SessionRef, cwd: string, changed: (error?: Error) => void): Promise<() => void> {
+    this.assertProvider(ref)
+    const path = await this.findTranscriptPath(ref.id, cwd)
+      ?? join(this.globalConfigDir, 'projects', cwd.replace(/[^A-Za-z0-9]/gu, '-'), `${ref.id}.jsonl`)
+    // stat polling survives a transcript being created, truncated or replaced;
+    // only metadata is read until the file actually changes.
+    let previous = '', stopped = false, checking = false
+    const poll = async () => {
+      if (checking || stopped) return
+      checking = true
+      try {
+        const children = join(dirname(path), ref.id, 'subagents')
+        const names = await readdir(children).catch((error: unknown) => {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+          throw error
+        })
+        const files = [path, ...names.filter((name) => name.endsWith('.jsonl')).map((name) => join(children, name))]
+        const signature = JSON.stringify(await Promise.all(files.map(async (file) => {
+          try { const info = await stat(file); return [file, info.mtimeMs, info.size] }
+          catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [file]; throw error }
+        })))
+        if (isWatching() && signature !== previous) { previous = signature; changed() }
+      } finally { checking = false }
+    }
+    let lastError = ''
+    const isWatching = () => !stopped
+    const timer = setInterval(() => { void poll().then(() => { lastError = '' }).catch((error: unknown) => {
+      const problem = error instanceof Error ? error : new Error(String(error))
+      if (!stopped && lastError !== problem.message) changed(problem)
+      lastError = problem.message
+    }) }, 250)
+    timer.unref()
+    return () => { stopped = true; clearInterval(timer) }
   }
 
   async workflowAgent(ref: SessionRef, runId: string, agentId: string) {

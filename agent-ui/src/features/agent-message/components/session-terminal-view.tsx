@@ -91,6 +91,7 @@ export type SessionTerminalViewProps = {
   hidden: boolean
   /** Called once a terminal opened without a session id has been assigned one by the runner. */
   onSessionReady?: (sessionId: string) => void
+  onSessionRebound?: (sessionId: string) => void
 }
 
 export function SessionTerminalView({
@@ -101,6 +102,7 @@ export function SessionTerminalView({
   sessionId,
   hidden,
   onSessionReady,
+  onSessionRebound,
 }: SessionTerminalViewProps) {
   const { t } = useTranslation()
   const { resolvedTheme } = useTheme()
@@ -112,6 +114,8 @@ export function SessionTerminalView({
   const knownSessionIdRef = React.useRef<string | null>(sessionId)
   const onSessionReadyRef = React.useRef(onSessionReady)
   onSessionReadyRef.current = onSessionReady
+  const onSessionReboundRef = React.useRef(onSessionRebound)
+  onSessionReboundRef.current = onSessionRebound
   const [status, setStatus] = React.useState<TerminalSessionStatus>({ phase: "connecting" })
   const [size, setSize] = React.useState<{ cols: number; rows: number } | null>(null)
   const [generation, setGeneration] = React.useState(0)
@@ -211,6 +215,10 @@ export function SessionTerminalView({
       },
       {
         onOutput: (chunk) => terminal.write(chunk),
+        onRebind: (id) => {
+          knownSessionIdRef.current = id
+          onSessionReboundRef.current?.(id)
+        },
         onStatus: (next) => {
           setStatus(next)
           if (next.phase === "ready") {
@@ -258,7 +266,7 @@ export function SessionTerminalView({
       className={cn("flex min-h-0 flex-1 flex-col overflow-hidden pr-2 pb-4 pl-4", hidden && "hidden")}
     >
       <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-background">
-        <div ref={hostRef} className="absolute inset-0 p-2 [&_.xterm]:h-full [&_.xterm-viewport]:rounded-md" />
+        <div ref={hostRef} className="absolute inset-0 isolate p-2 [&_.xterm]:h-full [&_.xterm-viewport]:rounded-md" />
         <AnimatePresence initial={false}>
           {overlay ? (
             <motion.div

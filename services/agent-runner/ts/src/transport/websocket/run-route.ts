@@ -1,4 +1,5 @@
 import type { FastifyPluginCallback } from 'fastify'
+import { randomUUID } from 'node:crypto'
 import type { WebSocket } from 'ws'
 
 import type { SessionRef } from '../../core/contract/agent-provider.js'
@@ -38,6 +39,7 @@ export const runWebsocketRoutes: FastifyPluginCallback<RunRouteOptions> = (fasti
 
 function handleRunSocket(socket: WebSocket, options: RunRouteOptions): void {
   let unsubscribe: (() => void) | undefined
+  let stopTerminalHistory: (() => Promise<void>) | undefined
   let stream: SessionStream | undefined
   let commandHarness = 'unknown'
   let commandType = ''
@@ -45,14 +47,24 @@ function handleRunSocket(socket: WebSocket, options: RunRouteOptions): void {
   let commandRequestId: string | undefined
   let closed = false
   let commands = Promise.resolve()
+  const followRebind = async (ref: SessionRef) => {
+    await stopTerminalHistory?.()
+    stopTerminalHistory = await options.harness.observeTerminalSession(ref)
+    if (closed) { await stopTerminalHistory(); return }
+    subscribe(options.harness.sessionStream(ref))
+  }
   const subscribe = (next: SessionStream, cursor?: { streamId: string; seq: number }) => {
     unsubscribe?.()
     stream = next
     unsubscribe = next.subscribe((frame) => {
       if (socketOpen(socket)) socket.send(encodeEvent(frame))
+      if (frame.type === 'session.rebound') {
+        commands = commands.then(() => followRebind({ ...next.session, id: frame.nextSessionId }))
+          .catch((error: unknown) => { sendError(socket, String(error), '', next.session.provider, 'session.subscribe') })
+      }
     }, cursor)
   }
-  socket.once('close', () => { closed = true; unsubscribe?.() })
+  socket.once('close', () => { closed = true; unsubscribe?.(); void stopTerminalHistory?.() })
   const handle = async (data: WebSocket.RawData): Promise<void> => {
     let raw: unknown
     commandType = ''; commandRunId = ''; commandRequestId = undefined
@@ -66,6 +78,9 @@ function handleRunSocket(socket: WebSocket, options: RunRouteOptions): void {
     let frame = parsed.frame
     if (frame.type === 'session.subscribe') {
       const id = frame.sessionId
+      await stopTerminalHistory?.()
+      stopTerminalHistory = await options.harness.observeTerminalSession({ provider: frame.harness, id })
+      if (!socketOpen(socket)) { await stopTerminalHistory(); return }
       const next = await options.harness.loadSessionStream({ provider: frame.harness, id })
       if (closed) return
       subscribe(next, frame.streamId ? { streamId: frame.streamId, seq: frame.sinceSeq } : undefined)
@@ -84,6 +99,10 @@ function handleRunSocket(socket: WebSocket, options: RunRouteOptions): void {
       return
     }
     if (frame.type === 'run.abort') {
+      if (frame.sessionId) {
+        if (stream && (stream.session.id !== frame.sessionId || stream.session.provider !== frame.harness)) throw new Error('Run belongs to another session')
+        if (await options.harness.abortTerminal({ provider: frame.harness, id: frame.sessionId }, frame.runId)) return
+      }
       const live = resolveLive(options.harness, frame)
       if (live && (live.provider !== frame.harness || (stream && live.sessionId !== stream.session.id))) throw new Error('Run belongs to another session')
       if (!stream && live?.sessionId) subscribe(options.harness.sessionStream({ provider: live.provider, id: live.sessionId }))
@@ -104,6 +123,20 @@ function handleRunSocket(socket: WebSocket, options: RunRouteOptions): void {
       if (!stream && !closed) subscribe(next)
     }
     if (closed) return
+    if (frame.harness === 'claude') {
+      // Every Claude UI conversation starts with its native driver. Opening
+      // the Terminal view later only attaches a viewer to this same process.
+      const opened = await options.harness.openTerminal(sessionTargetFromInit(frame), spec,
+        { cols: 120, rows: 40, ...(frame.theme ? { colorScheme: frame.theme } : {}) })
+      const next = options.harness.sessionStream(opened.session)
+      if (socketOpen(socket) && stream !== next) subscribe(next)
+      await stopTerminalHistory?.()
+      stopTerminalHistory = await options.harness.observeTerminalHistory(opened.session, spec.cwd)
+      if (!socketOpen(socket)) { await stopTerminalHistory(); return }
+      await options.harness.submitTerminal(opened.session,
+        { text: frame.text, ...(attachments ? { attachments } : {}) }, spec, frame.runId ?? randomUUID())
+      return
+    }
     const live = options.harness.launch(
       { text: frame.text, ...(attachments ? { attachments } : {}) }, spec,
       { source: 'web', session: sessionTargetFromInit(frame), ...(frame.runId ? { runId: frame.runId } : {}) },

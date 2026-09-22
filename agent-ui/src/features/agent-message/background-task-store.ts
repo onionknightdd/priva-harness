@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react"
 
 export type BackgroundTask = {
+  control?: 'terminal'
   taskId: string; kind: "bash" | "agent" | "workflow" | "monitor" | "other"
   status: "pending" | "running" | "paused" | "completed" | "failed" | "cancelled" | "unknown"
   toolUseId?: string; originRunId?: string; description?: string; summary?: string

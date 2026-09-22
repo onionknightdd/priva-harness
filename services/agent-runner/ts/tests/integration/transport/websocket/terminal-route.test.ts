@@ -4,10 +4,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { FastifyInstance } from 'fastify'
 import { WebSocket } from 'ws'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { ProviderRunSpec, SessionTarget } from '../../../../src/core/contract/agent-provider.js'
 import type { TerminalLaunchContext, TerminalLaunchSpec } from '../../../../src/core/contract/terminal-service.js'
+import type { ThreadReplayItem } from '../../../../src/core/resource/thread.js'
 import { AgentHarness } from '../../../../src/harness/agent-harness.js'
 import { LiveRunRegistry } from '../../../../src/harness/run/live-run-registry.js'
 import { SessionTerminals } from '../../../../src/harness/terminal/session-terminals.js'
@@ -15,6 +16,7 @@ import { NodeUserFileSystem } from '../../../../src/infrastructure/filesystem/no
 import { TmuxTerminalService } from '../../../../src/infrastructure/terminal/tmux-terminal-service.js'
 import { buildHttpServer } from '../../../../src/transport/http/server.js'
 import { TERMINAL_WEBSOCKET_PATH } from '../../../../src/transport/websocket/terminal-route.js'
+import { SESSION_WEBSOCKET_PATH } from '../../../../src/transport/websocket/run-route.js'
 import { FakeAgentProvider } from '../../../support/fake-agent-provider.js'
 import { createTestAgentServices } from '../../../support/model-profile.js'
 
@@ -127,7 +129,7 @@ describe.skipIf(!tmuxAvailable())('terminal WebSocket route', () => {
 
     const second = connect(url({ harness: 'claude', sessionId, cwd: root, model }))
     const secondReady = await second.waitJson('ready')
-    expect(secondReady).toMatchObject({ sessionId, adopted: true })
+    expect(secondReady).toMatchObject({ sessionId, adopted: true, cols: 120, rows: 40 })
     await expect.poll(() => second.text().includes('m-echoed'), { timeout: 5000 }).toBe(true)
     expect(launches).toHaveLength(1)
     socket.close()
@@ -140,6 +142,44 @@ describe.skipIf(!tmuxAvailable())('terminal WebSocket route', () => {
     const pi = connect(url({ harness: 'pi', cwd: root, model }))
     expect(await pi.waitJson('error')).toMatchObject({ kind: 'unsupported' })
     await expect.poll(() => bad.socket.readyState, { timeout: 5000 }).toBe(WebSocket.CLOSED)
+  })
+
+  it('delivers TUI transcript changes over the bubble subscription without reopening the session', async () => {
+    let changed: () => void = () => undefined
+    const unwatch = vi.fn()
+    Object.assign(provider.sessions, { watch: (_ref: unknown, _cwd: string, listener: () => void) => {
+      changed = listener
+      return Promise.resolve(unwatch)
+    } })
+    const records: ThreadReplayItem[] = []
+    vi.spyOn(provider.sessions, 'replay').mockImplementation(() => Promise.resolve([...records]))
+    const terminal = connect(url({ harness: 'claude', cwd: root, model }))
+    const ready = await terminal.waitJson('ready')
+    const sessionId = ready['sessionId'] as string
+    const bubbles = connect(url({}).replace(TERMINAL_WEBSOCKET_PATH, SESSION_WEBSOCKET_PATH))
+    bubbles.socket.once('open', () => bubbles.socket.send(JSON.stringify({ type: 'session.subscribe', harness: 'claude', sessionId })))
+    expect(await bubbles.waitJson('session.snapshot')).toMatchObject({ messages: [] })
+    records.push(
+      { kind: 'user', id: 'native-user', content: 'TUI 中发送的中文 🚀', createdAt: '2026-09-22T00:00:00.000Z' },
+      { kind: 'frame', createdAt: '2026-09-22T00:00:01.000Z', event: { type: 'assistant.message', messageId: 'native-assistant',
+        blocks: [{ type: 'text', blockId: 'native-text', index: 0, text: '这是 TUI 的回复' }] } },
+    )
+    changed()
+    await expect.poll(() => bubbles.json.filter((frame) => frame.type === 'session.snapshot').length).toBe(2)
+    expect(bubbles.json.at(-1)).toMatchObject({ type: 'session.snapshot', messages: [
+      { role: 'user', content: 'TUI 中发送的中文 🚀' }, { role: 'assistant', content: '这是 TUI 的回复' },
+    ] })
+    expect((await harness.loadSessionStream({ provider: 'claude', id: sessionId })).snapshot().messages).toHaveLength(2)
+    terminal.socket.close()
+    await expect.poll(() => terminal.socket.readyState).toBe(WebSocket.CLOSED)
+    expect(unwatch).not.toHaveBeenCalled()
+    records.push({ kind: 'user', id: 'background-user', content: 'arrived after viewer closed', createdAt: '2026-09-22T00:00:02.000Z' })
+    changed()
+    await expect.poll(() => bubbles.json.filter((frame) => frame.type === 'session.snapshot').length).toBe(3)
+    await terminals.close({ provider: 'claude', id: sessionId })
+    await harness.terminalExited({ provider: 'claude', id: sessionId }, 'closed')
+    await expect.poll(() => unwatch.mock.calls.length).toBe(1)
+    bubbles.socket.close()
   })
 
   it('tells viewers when the program exits', async () => {

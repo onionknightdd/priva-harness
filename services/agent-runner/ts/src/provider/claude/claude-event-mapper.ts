@@ -789,7 +789,7 @@ function toolOutput(content: unknown): string {
   return JSON.stringify(content)
 }
 
-function claudeToolOutput(
+export function claudeToolOutput(
   block: JsonRecord,
   envelope: JsonRecord,
   inner: JsonRecord,

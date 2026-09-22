@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -13,6 +13,32 @@ import {
 } from '../../../../src/provider/claude/session/claude-session-store.js'
 
 describe('ClaudeSessionStore', () => {
+  it('observes a transcript created after opening and its later atomic replacement', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'claude-watch-'))
+    const store = new ClaudeSessionStore({ globalConfigDir: root, sdk: fakeClaudeSdk() })
+    const changed = vi.fn()
+    const stop = await store.watch({ provider: 'claude', id: 'new-session' }, '/work', changed)
+    try {
+      const directory = join(root, 'projects', '-work')
+      const file = join(directory, 'new-session.jsonl')
+      await mkdir(directory, { recursive: true })
+      await writeFile(file, '{"type":"user"}\n')
+      await expect.poll(() => changed.mock.calls.length).toBeGreaterThan(0)
+      const calls = changed.mock.calls.length
+      await writeFile(`${file}.tmp`, '{"type":"assistant","message":"中文 🚀"}\n')
+      await rename(`${file}.tmp`, file)
+      await expect.poll(() => changed.mock.calls.length).toBeGreaterThan(calls)
+      const afterMain = changed.mock.calls.length
+      const children = join(directory, 'new-session', 'subagents')
+      await mkdir(children, { recursive: true })
+      await writeFile(join(children, 'agent-child.jsonl'), '{"type":"assistant","message":"child only"}\n')
+      await expect.poll(() => changed.mock.calls.length).toBeGreaterThan(afterMain)
+    } finally {
+      stop()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it('maps SDK session info and hydrates subagents on an unpaged messages GET', async () => {
     const sdk = fakeClaudeSdk()
     const store = new ClaudeSessionStore({ globalConfigDir: '/tmp/claude', sdk })

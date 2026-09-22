@@ -30,6 +30,11 @@ import type { LiveRun } from './run/live-run.js'
 import type { LiveRunRegistry } from './run/live-run-registry.js'
 import { WarmRuntimePool } from './run/warm-runtime-pool.js'
 import type { SessionService } from './session/session-service.js'
+import { TerminalHistoryMirror } from './terminal/terminal-history-mirror.js'
+import { TerminalChatSessions } from './terminal/terminal-chat-sessions.js'
+import { readTerminalUsage, terminalUsageDelta } from './terminal/terminal-run-usage.js'
+import type { SessionTerminals, TerminalSize } from './terminal/session-terminals.js'
+import type { TerminalElicitation, TerminalQuestion, TerminalSessionState } from '../core/contract/terminal-service.js'
 
 export interface AgentHarnessOptions {
   readonly providers: Readonly<Record<ProviderId, AgentProvider>>
@@ -66,6 +71,11 @@ export class AgentHarness {
   private readonly pool: WarmRuntimePool | undefined
   private readonly streams = new Map<string, SessionStream>()
   private readonly loadingStreams = new Map<string, Promise<SessionStream>>()
+  private readonly terminalHistories = new Map<string, { mirror: TerminalHistoryMirror; ready: Promise<void>; viewers: number }>()
+  private terminalChats: TerminalChatSessions | undefined
+  private terminals: SessionTerminals | undefined
+  private readonly sdkSessions = new Set<string>()
+  private readonly openingTerminals = new Map<string, number>()
   // Skill names seen in the latest slash-command listing per provider. Used
   // to tell a "/skill" prompt from a path or an unknown command without
   // paying for a listing on every turn.
@@ -75,6 +85,10 @@ export class AgentHarness {
     this.liveRuns = options.liveRuns
     options.sessions?.bindLiveThreadReader((ref) => this.streams.get(sessionRefKey(ref))?.snapshot().messages)
     options.sessions?.bindBackgroundReader((provider) => [...this.streams.values()].filter((stream) => stream.session.provider === provider).map((stream) => ({ sessionId: stream.session.id, tasks: stream.tasks.list() })))
+    options.sessions?.bindNativeRunningReader((provider) => (this.terminalChats?.list(provider) ?? []).flatMap((chat) => chat.runId ? [{
+      sessionId: chat.ref.id, runId: chat.runId, status: 'running' as const, startedAt: chat.startedAt ?? Date.now(),
+      lastSeq: this.sessionStream(chat.ref).snapshot().seq, firstSeq: 0, firstUserUuid: null, pendingPermission: null, runMode: 'code' as const, harness: provider,
+    }] : []))
     this.pool = options.pool ?? (
       options.liveRuns === undefined
         ? undefined
@@ -112,7 +126,131 @@ export class AgentHarness {
     try { return await promise } finally { this.loadingStreams.delete(key) }
   }
 
+  async observeTerminalHistory(ref: SessionRef, cwd: string): Promise<() => Promise<void>> {
+    const store = this.options.providers[ref.provider].sessions
+    if (store.watch === undefined) return () => Promise.resolve()
+    const key = sessionRefKey(ref)
+    let entry = this.terminalHistories.get(key)
+    if (entry === undefined) {
+      const mirror = new TerminalHistoryMirror(store, this.sessionStream(ref))
+      entry = { mirror, ready: mirror.start(cwd), viewers: 0 }
+      this.terminalHistories.set(key, entry)
+    }
+    const current = entry
+    current.viewers++
+    let released = false
+    const release = async () => {
+      if (released) return
+      released = true
+      if (--current.viewers > 0) return
+      // Capture the final record before releasing the last viewer. A new
+      // viewer arriving during this read keeps the existing observer alive.
+      await current.mirror.refresh()
+      if (current.viewers > 0) return
+      if (this.terminalHistories.get(key) === current) this.terminalHistories.delete(key)
+      await current.mirror.stop()
+    }
+    try {
+      await current.ready
+      return release
+    } catch (error) {
+      await release()
+      throw error
+    }
+  }
+
+  configureTerminalChats(terminals: SessionTerminals, eventsUrl: (ref: SessionRef) => string): void {
+    this.terminals = terminals
+    this.terminalChats = new TerminalChatSessions({
+      terminals, eventsUrl, stream: (ref) => this.sessionStream(ref),
+      beforeOpen: async (ref) => {
+        if (this.sdkSessions.has(sessionRefKey(ref)) || this.liveForSession(ref)) {
+          throw new SessionError('session-busy', 'Wait for the current chat reply before opening Terminal')
+        }
+        await this.pool?.releaseSession(ref)
+      },
+      observe: (ref, cwd) => this.observeTerminalHistory(ref, cwd),
+      refresh: async (ref) => { await this.terminalHistories.get(sessionRefKey(ref))?.mirror.refresh() },
+      ledger: (ref, runId, turn, spec, target) => {
+        const knownSkills = this.knownSkills.get(spec.provider)
+        return new RunLedger(this.options.recorder, { runId, spec, turn, source: 'web', sessionId: ref.id, sessionTarget: target,
+          ...(knownSkills ? { knownSkills } : {}) })
+      },
+      accounting: async (ref) => {
+        const store = this.options.providers[ref.provider].sessions
+        const before = await readTerminalUsage(store, ref)
+        return async () => terminalUsageDelta(before, await readTerminalUsage(store, ref))
+      },
+      configured: (ref, spec, model) => this.recordCompleted(ref, spec, model),
+    })
+  }
+
+  async openTerminal(target: SessionTarget, spec: ProviderRunSpec, size: TerminalSize) {
+    if (!this.terminalChats) throw new SessionError('invalid-request', 'Terminal driver is unavailable')
+    const resolved = target.kind === 'resume' ? target : { ...target, sessionId: target.sessionId ?? randomUUID() }
+    const key = sessionRefKey(resolved.kind === 'resume' ? resolved.session : { provider: spec.provider, id: resolved.sessionId })
+    this.openingTerminals.set(key, (this.openingTerminals.get(key) ?? 0) + 1)
+    try { return await this.terminalChats.open(resolved, spec, size) }
+    finally {
+      const remaining = (this.openingTerminals.get(key) ?? 1) - 1
+      if (remaining) this.openingTerminals.set(key, remaining)
+      else this.openingTerminals.delete(key)
+    }
+  }
+
+  async submitTerminal(ref: SessionRef, turn: UserTurn, spec: ProviderRunSpec, runId: string): Promise<void> {
+    if (!this.terminalChats) throw new SessionError('invalid-request', 'Terminal driver is unavailable')
+    await this.terminalChats.submit(ref, turn, spec, runId)
+  }
+
+  async terminalEvent(ref: SessionRef, state: TerminalSessionState): Promise<void> {
+    if (!await this.terminals?.isAlive(ref)) return
+    if ((await this.terminals?.state(ref))?.instanceId !== state.instanceId) return
+    await this.terminalChats?.event(ref, state)
+  }
+
+  async sessionForTerminal(terminalId: string): Promise<SessionRef | undefined> {
+    return this.terminals?.sessionForTerminal(terminalId)
+  }
+
+  async terminalQuestion(ref: SessionRef, question: TerminalQuestion, signal: AbortSignal): Promise<Record<string, unknown>> {
+    if (!this.terminalChats || !await this.terminals?.isAlive(ref) || (await this.terminals?.state(ref))?.instanceId !== question.instanceId) {
+      throw new SessionError('invalid-request', 'The terminal question belongs to an inactive process')
+    }
+    return this.terminalChats.question(ref, question, signal)
+  }
+
+  async terminalElicitation(ref: SessionRef, input: TerminalElicitation, signal: AbortSignal): Promise<Record<string, unknown>> {
+    if (!this.terminalChats || !await this.terminals?.isAlive(ref) || (await this.terminals?.state(ref))?.instanceId !== input.instanceId) {
+      throw new SessionError('invalid-request', 'The terminal elicitation belongs to an inactive process')
+    }
+    return this.terminalChats.elicitation(ref, input, signal)
+  }
+
+  async abortTerminal(ref: SessionRef, runId?: string): Promise<boolean> {
+    return await this.terminalChats?.abort(ref, runId) ?? false
+  }
+
+  async terminalInput(ref: SessionRef, input: Uint8Array): Promise<void> { await this.terminalChats?.input(ref, input) }
+  async terminalExited(ref: SessionRef, reason: string): Promise<void> {
+    // A delayed close from an old browser attach can arrive after relaunch.
+    if (await this.terminals?.isAlive(ref)) return
+    await this.terminalChats?.exited(ref, reason)
+  }
+
+  async observeTerminalSession(ref: SessionRef): Promise<() => Promise<void>> {
+    const state = await this.terminals?.state(ref)
+    if (!state || !await this.terminals?.isAlive(ref)) return () => Promise.resolve()
+    await this.terminalChats?.event(ref, state)
+    return this.observeTerminalHistory(ref, state.cwd)
+  }
+
   async stopTask(ref: SessionRef, taskId: string): Promise<void> {
+    if (this.terminalChats && await this.terminals?.isAlive(ref)) {
+      if (!this.sessionStream(ref).tasks.get(taskId)) throw new SessionError('invalid-request', 'Unknown background task')
+      await this.terminalChats.manageTasks(ref)
+      return
+    }
     const runtime = this.pool?.peek(ref)
     if (!runtime?.stopTask) throw new SessionError('invalid-request', 'The task runtime is no longer available')
     const stream = this.sessionStream(ref)
@@ -126,6 +264,7 @@ export class AgentHarness {
   }
 
   respondPermission(ref: SessionRef, response: InteractionResponse): void {
+    if (this.terminalChats?.respondPermission(ref, response)) return
     const runtime = this.pool?.peek(ref)
     if (!runtime?.respondPermission) throw new SessionError('invalid-request', 'The interaction runtime is no longer available')
     runtime.respondPermission(response)
@@ -168,11 +307,13 @@ export class AgentHarness {
   }
 
   listWarm(harness: ProviderId): readonly SessionRef[] {
-    return this.pool?.listIdle().filter((session) => session.provider === harness) ?? []
+    return [...this.pool?.listIdle().filter((session) => session.provider === harness) ?? [],
+      ...this.terminalChats?.list(harness).filter((chat) => !chat.runId).map((chat) => chat.ref) ?? []]
   }
 
   async readContextUsage(ref: SessionRef, spec?: ProviderRunSpec): Promise<ContextUsage> {
     if (ref.id === '') return emptyContextUsage()
+    if (this.terminals && await this.terminals.isAlive(ref)) return this.terminalChats?.status(ref)?.context ?? (await this.terminals.telemetry(ref, 0)).status?.context ?? emptyContextUsage()
     const runtime = this.pool?.peek(ref)
     if (runtime !== undefined) {
       try {
@@ -240,10 +381,15 @@ export class AgentHarness {
 
   async disposePool(): Promise<void> {
     await this.pool?.disposeAll()
+    await this.terminalChats?.dispose()
+    const histories = [...this.terminalHistories.values()]
+    this.terminalHistories.clear()
+    await Promise.all(histories.map(async ({ ready, mirror }) => { await ready; await mirror.stop() }))
     await Promise.all([...this.streams.values()].map((stream) => stream.flush()))
   }
 
   async invalidateResources(): Promise<void> {
+    this.terminalChats?.invalidateResources()
     await this.pool?.invalidateResources()
   }
 
@@ -256,6 +402,12 @@ export class AgentHarness {
     const runId = runOptions.runId ?? randomUUID()
 
     const session = this.prepareSession(spec, runOptions.session, false)
+    const sdkRef = sessionRefOf(session)
+    const sdkKey = sdkRef ? sessionRefKey(sdkRef) : undefined
+    if (sdkKey) {
+      if (this.sdkSessions.has(sdkKey) || this.openingTerminals.has(sdkKey)) throw new SessionError('session-busy', 'The session already has an active driver')
+      this.sdkSessions.add(sdkKey)
+    }
     const userTurn = userTurnFromText(turn.text)
     const attachments = turn.attachments ?? userTurn.attachments
     // Opened before the provider so a session that fails to open still counts
@@ -269,6 +421,10 @@ export class AgentHarness {
       ...(knownSkills === undefined ? {} : { knownSkills }),
     })
     try {
+      const ref = sessionRefOf(session)
+      if (ref && await this.terminals?.isAlive(ref)) {
+        throw new SessionError('session-busy', 'This session is controlled by its terminal. Send through the session chat or close Terminal before using the SDK.')
+      }
       const provider = this.options.providers[spec.provider]
       const poolKey = sessionRefOf(session)
       const pool = runOptions.keepRuntimeWarm === false ? undefined : this.pool
@@ -301,6 +457,7 @@ export class AgentHarness {
       throw error
     } finally {
       ledger.settle(context.signal.aborted)
+      if (sdkKey) this.sdkSessions.delete(sdkKey)
     }
   }
 

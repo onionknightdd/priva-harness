@@ -27,6 +27,8 @@ export interface ProviderSessionStore {
   lastAssistantModel(ref: SessionRef): Promise<LastAssistantModel | undefined>
   messages(ref: SessionRef, page?: SessionMessagePage): Promise<readonly SessionMessage[]>
   replay(ref: SessionRef, page?: SessionMessagePage): Promise<readonly ThreadReplayItem[]>
+  /** Observe transcript changes, including creation after a terminal's first prompt. */
+  watch?(ref: SessionRef, cwd: string, changed: (error?: Error) => void): Promise<() => void>
   workflowAgent?(ref: SessionRef, runId: string, agentId: string): Promise<WorkflowAgentDetail>
   fork(ref: SessionRef, options: SessionForkOptions): Promise<ProviderSessionInfo>
   delete(ref: SessionRef): Promise<void>

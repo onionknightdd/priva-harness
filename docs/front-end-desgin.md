@@ -869,6 +869,17 @@ npx shadcn add @beui/tool-approval
 再次安装时保留已有 AgentCode、AgentDisclosure 和共享 ease，审阅本地协议接入、
 错误 / 跳过 / 自定义文本处理和主题适配，不能直接覆盖为上游演示逻辑。
 
+### Workspace 初始状态
+
+2026-09-22：首次进入页面时，右侧 Agent Workspace 默认收起。`WorkspaceShell`
+显式传入 `defaultOpen={false}`；右上角开关、文件链接和 Agent / 任务详情入口仍可
+展开面板，宽度与已有展开 / 收起动效沿用现有实现。
+
+```text
+Page mount -> Workspace closed
+Toggle / open file / open agent detail -> Workspace open
+```
+
 ### Workspace Agent 详情标签
 
 2026-09-10：Workspace 的“提示词 / 执行过程 / 输出”按用户指定，复用 sidebar
@@ -1513,11 +1524,58 @@ Terminal 视图用 xterm.js（`@xterm/xterm` + `addon-fit` + `addon-webgl`，Web
   切换而变）。字体读取 `--font-code`，并在 `document.fonts.ready` 后清空 WebGL 字形缓存，
   避免回退字体的度量被缓存。
 - 尺寸：`ResizeObserver` + `FitAddon`，每次 `onResize` 通过 `{type:'resize'}` 文本帧同步到
-  runner；隐藏期间的尺寸变化在重新显示时补一次 fit。
+  runner；隐藏期间的尺寸变化在重新显示时补一次 fit。runner 首次接入时先应用连接参数
+  中的尺寸，再捕获画面与终端模式，避免按旧窗口尺寸生成的快照在新窗口中错误换行。
 - 状态点复用 `status-running / status-warm / status-idle` token；所有文案在
   `agentMessage.view.*` 与 `agentMessage.terminalView.*`。
 - 线协议客户端在 `terminal-session.ts`，与 React 无关：二进制帧 = 终端字节，文本帧 =
-  `ready | exit | error`，输入以 UTF-8 二进制帧发送。
+  `ready | rebound | exit | error`，输入以 UTF-8 二进制帧发送。
+
+终端退出 / 错误提示的按钮必须位于 xterm 的所有内部画布之上。终端宿主用 `isolate`
+建立独立层叠上下文，避免透明的 WebGL 链接层截获覆盖层按钮的鼠标点击。替换或关闭
+WebSocket 后，客户端丢弃该连接迟到的控制帧和输出，以免覆盖新连接状态。
+
+TUI 新建会话取得 id 后立即建立聊天订阅；切换回对话沿用已收到的 `session.snapshot`，
+无需重新打开会话或刷新页面。转录写入后的消息回显见
+[终端架构文档](architecture/claude-tui-chat-mode.md#410-tui-消息回显到聊天气泡)。
+
+```text
+Terminal host (isolated canvases) < Exit/error overlay + reconnect button
+TUI session id -> bubble subscription -> transcript snapshots -> messages
+```
+
+2026-09-22：Claude UI 会话从首条气泡发送起统一由 TUI 驱动；前端继续使用
+相同的 `/ws/session`，首条请求携带当前主题。无需先打开 Terminal，服务端即创建原生
+会话；切换到 Terminal 只附加查看者，进程退出后再次发送会从同一转录恢复。
+收到带 `driver: terminal` 的
+`run.started` 后释放该请求的乐观消息保护，后续原生 UUID 快照可替换对应占位气泡。
+这样切换视图和连续发送不会把同一条用户消息展示两次。Pi 仍保持原有乐观消息规则。
+完成和停止沿用 run 事件；活动 TUI 的历史快照保留 `activeRunId`，避免提前恢复 idle。
+已获 `run.started` 确认的请求在断线后可由权威 idle 快照结清，原生 UUID 无需匹配
+客户端 runId；不自动重发未确认的消息。程序化 SDK 路径在后端保留。
+
+```text
+ChatComposer -> run.start -> open/resume/fork native TUI -> paste + Enter
+Terminal tab -------------------------------------------------> attach viewer
+                         <- run.started(driver: terminal) -> release optimistic IDs
+                         <- native snapshot + activeRunId -> render native messages
+```
+
+原生能力绑定沿用现有布局：`session.config` / snapshot.config 更新模型、effort、cwd 与上下文环；
+仅原生模型选择变化时覆盖选择器，普通 context 刷新不覆盖尚未提交的手动选择。
+snapshot.runningToolIds 恢复等待工具结束的状态。TUI 产生的内嵌图片从转录映射到现有附件卡片，
+产品 MCP 的 visualize / canvas / 图片别名继续使用既有工具卡片。
+
+```text
+native statusLine -> session.config -> model / effort / cwd / context UI
+native hooks     -> permissions / typed MCP forms -> existing interaction cards
+native tasks     -> existing task card [终端管理] -> terminal.focus -> same TUI /tasks
+native rebind    -> reset cursor + preserve view  -> next session address
+```
+
+原生后台任务卡片使用“终端管理”，Pi / SDK 卡片保持“停止”。原生状态为 unknown 时仍可进入
+终端管理；不在 UI 假装已经停止。URL 认证 / 不支持的复杂 MCP 表单也通过 terminal.focus 交给
+原生 TUI。/clear、/resume、/fork 的地址变化使用 previousSessionId 进行受控重绑定，保留当前视图。
 
 ## Layout approval
 
@@ -1796,6 +1854,19 @@ Feature / Page
                   对齐 tokens / focus / motion -> 更新本表与调用示例
 ```
 
+Claude 的增量文本沿用 assistant.delta 和 session.snapshot；原生记录与实时投影在后端
+去重，前端不解析终端屏幕。MessageDisplay 是按行 / 片段推送，非严格模型 token。
+模型和 effort 选择在下一条消息发出前由原生 TUI 确认，问答镜像复用既有 question 卡片。
+
+`/clear` 通过气泡 `session.rebound(nextSessionId)` 与终端 `rebound(sessionId)` 同步地址。
+客户端清空旧历史投影、待答请求和游标；SessionViewProvider 对这次 ID 轮转保留当前视图，
+SessionTerminalView 更新已知 ID 并保留现有 xterm / WebSocket。普通切换会话仍回到 Chat。
+
+```text
+/clear -> 新原生 ID -> 两条连接重绑定 -> 保留当前视图 -> 新消息进入新会话
+                     + 清空旧气泡、游标与问答状态
+```
+
 组件清单应随新增、替换、删除同步更新，记录类型、实际入口、原语/来源、默认变体、
 业务使用点和例外用途。新增基础实现时一起检查 light/dark、hover/focus/pressed、
 disabled/error、键盘、窄屏和 reduced motion；布局修改仍先提供已确认的 ASCII 图。
@@ -1840,6 +1911,17 @@ rg -n '@base-ui/react|motion/react|gsap' agent-ui/src
 ```sh
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/session-view.test.ts agent-ui/tests/features/agent-message/terminal-session.test.ts
 ```
+
+终端按钮与 TUI → 气泡订阅的浏览器回归入口为
+`/tests/features/agent-message/terminal-view-browser.html?zh&dark`。点击
+**Simulate terminal exit** 后应显示 `PASS reopen pointer target: BUTTON`，再用鼠标点击
+「重新打开」，确认连接计数增加且恢复「已连接」。追加 `&reduced-motion` 检查无动效分支。
+追加 `&app` 使用真实 App 和隔离的 HTTP / WebSocket 样例：选择 Claude，在新对话中
+先从气泡发送首条中文，确认 `bubble subscriptions: 1`，再打开终端，应出现同一消息与回复。
+终端输入中文并回车后切回对话，应显示用户消息和模拟回复；继续在两种视图
+交替发送，确认消息计数每轮只增加 2，且发送按钮正常恢复。在终端输入 `/clear` 后，
+终端保持选中且连接计数不变，切回气泡为空；继续发送应正常显示新轮次。
+此页面不连接实际模型或写入用户会话。
 
 侧栏项目与 session 按最后更新时间排序：
 

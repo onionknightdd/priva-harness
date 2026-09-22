@@ -1,4 +1,6 @@
 import { dequal } from "dequal"
+import type { AgentRunEffort } from './run-agent-session'
+import type { ContextUsage } from './context-usage'
 
 import type { InteractionRequest, InteractionResolution } from './interaction-data'
 import type { BackgroundTask, TaskNotification, TaskReplyTarget } from "./background-task-store"
@@ -17,6 +19,10 @@ import { frameAtMs, freezeMessageThinking, stampMessageThinkingTimes } from "./t
 const STREAM_PROTOCOL_VERSION = 2
 
 export type StreamFrame = {
+  config?: { model: string; profileId?: string; effort?: AgentRunEffort; cwd: string; context: ContextUsage }
+  runningToolIds?: string[]
+  nextSessionId?: string
+  driver?: "terminal"
   requestId?: string
   request?: InteractionRequest
   resolution?: InteractionResolution

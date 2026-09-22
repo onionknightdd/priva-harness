@@ -24,6 +24,7 @@ export interface InitFrame {
   readonly sessionId?: string
   readonly fork?: boolean
   readonly promptSuggestions?: boolean
+  readonly theme?: 'light' | 'dark'
 }
 
 export interface SubscribeFrame {
@@ -127,6 +128,8 @@ export function parseInitFrame(raw: unknown): ParseInitResult {
   if (promptSuggestions !== undefined && typeof promptSuggestions !== 'boolean') {
     return { ok: false, message: 'Init promptSuggestions must be a boolean' }
   }
+  const theme = raw['theme']
+  if (theme !== undefined && theme !== 'light' && theme !== 'dark') return { ok: false, message: 'Theme must be light or dark' }
   return {
     ok: true,
     frame: {
@@ -141,6 +144,7 @@ export function parseInitFrame(raw: unknown): ParseInitResult {
       ...(sessionId === undefined ? {} : { sessionId: sessionId.trim() }),
       ...(fork === true ? { fork: true } : {}),
       ...(promptSuggestions === undefined ? {} : { promptSuggestions }),
+      ...(theme === undefined ? {} : { theme }),
     },
   }
 }

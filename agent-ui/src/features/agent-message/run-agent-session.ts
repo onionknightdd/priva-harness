@@ -8,6 +8,7 @@ export type AgentRunEffort = "low" | "medium" | "high" | "xhigh" | "max"
 export type AgentRunInit = {
   text: string; attachments?: MessageAttachment[]; model: string; harness: AgentRunHarness
   cwd: string; effort?: AgentRunEffort; sessionId?: string; fork?: boolean; promptSuggestions?: boolean
+  theme?: "light" | "dark"
 }
 
 type Handlers = {
@@ -15,8 +16,9 @@ type Handlers = {
   onError: (message: string) => void
   onConnection: (connected: boolean) => void
   onSession: (id: string) => void
+  onRebind?: (previous: string, next: string) => void
 }
-type Waiter = { resolve: () => void; reject: (error: Error) => void; sentEpoch?: number }
+type Waiter = { resolve: () => void; reject: (error: Error) => void; sentEpoch?: number; acknowledged?: boolean }
 
 export type AgentSessionConnection = ReturnType<typeof connectAgentSession>
 
@@ -71,6 +73,19 @@ export function connectAgentSession(target: { harness: AgentRunHarness; sessionI
       try { raw = JSON.parse(String(event.data)) } catch { handlers.onError("Invalid agent frame"); return }
       const frame = parseStreamFrame(raw)
       if (!frame) return
+      if (frame.type === "session.rebound" && frame.nextSessionId) {
+        const previous = sessionId
+        sessionId = frame.nextSessionId
+        cursor = undefined
+        activeRunId = undefined
+        tools.clear()
+        for (const resolve of toolWaiters.splice(0)) resolve()
+        if (previous) handlers.onRebind?.(previous, sessionId)
+        handlers.onSession(sessionId)
+        handlers.onFrame(frame)
+        notifyIdle()
+        return
+      }
       if (frame.sessionId && frame.sessionId !== sessionId) {
         sessionId = frame.sessionId
         handlers.onSession(sessionId)
@@ -82,17 +97,26 @@ export function connectAgentSession(target: { harness: AgentRunHarness; sessionI
       }
       if (frame.type === "session.snapshot") {
         activeRunId = frame.activeRunId
+        tools.clear()
+        for (const id of frame.runningToolIds ?? []) tools.add(id)
+        if (!frame.runningToolIds && activeRunId) for (const message of frame.messages ?? []) {
+          for (const block of message.blocks ?? []) if (block.type === 'tool_use' && block.tool && block.tool.status !== 'completed') tools.add(block.id)
+        }
         // A fresh snapshot after restart is authoritative; do not retry an uncertain start.
         for (const [id, waiter] of epoch > 1 ? pending : []) {
           if (waiter.sentEpoch === undefined || waiter.sentEpoch >= epoch) continue
           const message = frame.messages?.find((item) => item.id === id)
           if (message?.status === "streaming" || id === activeRunId) continue
           pending.delete(id)
-          if (message) waiter.resolve()
+          if (message || waiter.acknowledged) waiter.resolve()
           else waiter.reject(new Error("The connection changed before the run could be confirmed"))
         }
       }
-      if (frame.type === "run.started") activeRunId = frame.runId
+      if (frame.type === "run.started") {
+        activeRunId = frame.runId
+        const waiter = frame.runId ? pending.get(frame.runId) : undefined
+        if (waiter && frame.driver === "terminal") waiter.acknowledged = true
+      }
       if (frame.type === "tool.started" && frame.id) tools.add(frame.id)
       if (frame.type === "tool.completed" && frame.id) tools.delete(frame.id)
       if (frame.type === "run.completed" || frame.type === "run.failed" || frame.type === "run.aborted") {

@@ -23,6 +23,9 @@ run the following commands from that directory:
 - Build for production: `npm run build`
 - Start the production build: `npm start`
 
+On macOS, run backend tests with `TMPDIR=/tmp npm test` so the isolated tmux
+fixtures stay within the Unix socket path length limit.
+
 No repository-wide formatter is currently configured. Frontend test commands,
 including the focused Agent data, file tree, and resource tests, are maintained
 in [docs/front-end-desgin.md](docs/front-end-desgin.md#development-and-verification).
@@ -32,6 +35,10 @@ check the compiled production loader, run after `npm run build` from
 `services/agent-runner/ts/`:
 
 - `node --import tsx tests/fixtures/resources/pi-mcp-probe.ts dist/provider/pi/pi-resource-loader.js`
+
+To verify the compiled Claude native product MCP entry point after building:
+
+- `node --import tsx tests/fixtures/terminal/native-product-probe.ts dist/provider/claude/tools/native-product-server.js`
 
 Usage statistics and audit records are stored in SQLite; before touching
 recording, retention, or the `dataRetention` setting, read

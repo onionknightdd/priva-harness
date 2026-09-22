@@ -29,6 +29,7 @@ export type TerminalSessionStatus =
 export type TerminalSessionHandlers = {
   onOutput: (chunk: Uint8Array) => void
   onStatus: (status: TerminalSessionStatus) => void
+  onRebind?: (sessionId: string) => void
 }
 
 export type TerminalSession = {
@@ -65,6 +66,9 @@ export function connectTerminalSession(
   }
   handlers.onStatus({ phase: "connecting" })
   socket.addEventListener("message", (event: MessageEvent<ArrayBuffer | string>) => {
+    // Queued frames from a closed/replaced socket must not overwrite the
+    // next connection's state or write into its freshly reset terminal.
+    if (settled) return
     if (typeof event.data !== "string") {
       handlers.onOutput(new Uint8Array(event.data))
       return
@@ -73,6 +77,8 @@ export function connectTerminalSession(
     if (!frame) return
     if (frame.type === "ready") {
       handlers.onStatus({ phase: "ready", sessionId: frame.sessionId, adopted: frame.adopted, cols: frame.cols, rows: frame.rows })
+    } else if (frame.type === "rebound") {
+      handlers.onRebind?.(frame.sessionId)
     } else if (frame.type === "exit") {
       settle({ phase: "exited", reason: frame.reason })
     } else {
@@ -105,6 +111,7 @@ export function connectTerminalSession(
 }
 
 type ControlFrame =
+  | { type: "rebound"; sessionId: string }
   | { type: "ready"; sessionId: string; adopted: boolean; cols: number; rows: number }
   | { type: "exit"; reason: string }
   | { type: "error"; kind: string; message: string }
@@ -119,6 +126,8 @@ export function parseControlFrame(text: string): ControlFrame | null {
   if (typeof raw !== "object" || raw === null) return null
   const record = raw as Record<string, unknown>
   switch (record.type) {
+    case "rebound":
+      return typeof record.sessionId === "string" && record.sessionId ? { type: "rebound", sessionId: record.sessionId } : null
     case "ready":
       if (typeof record.sessionId !== "string") return null
       return {

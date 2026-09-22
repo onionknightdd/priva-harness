@@ -117,6 +117,7 @@ export function WorkspaceShell({
       ref={shellRef}
       className="h-full min-h-0 overflow-hidden"
       keyboardShortcut={false}
+      defaultOpen={false}
       defaultWidth={WORKSPACE_DEFAULT_WIDTH}
       minWidth={workspaceMinimumWidth}
       maxWidth={workspaceMaxWidth}

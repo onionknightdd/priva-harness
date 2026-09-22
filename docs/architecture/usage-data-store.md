@@ -193,6 +193,23 @@ Pi 对无报价模型给出 `cost.total = 0` 而非缺失，因此 Pi 侧无法�
 
 `run.finished` 与 `tool.invoked` 的审计行也带当时已知的 `session_id`，便于按 session 过滤时间线。
 
+## Claude 原生 UI 账本
+
+Claude 原生 UI 路径也使用 `RunLedger`，但事件来源是 tmux 中 CLI 的 hooks 与原生转录：
+
+```text
+UserPromptSubmit -> 原生 runId / RunLedger
+tool / permission / subagent / compact hooks -> 同一账本的审计
+Stop -> flush 转录 -> API message.id 去重后的 usage 差值 -> run.finished
+     -> hook 返回后的 statusLine -> 同实例 cost / API 时长差值
+```
+
+气泡发送沿用客户端 runId，TUI 发送由服务端生成；SDK 仍仅承担程序化运行。
+同一 API message 的分块 usage 取各字段最大值，避免工具块 / 正文块重复收费；模型账本忽略
+synthetic 消息，已归属子代理的转录参与本轮差值。最终费用状态最多等 2 秒，未刷新则不写 costUsd，
+由现有 runsWithoutCost 表达未知。此统计不完整覆盖原生辅助请求、轮次结束后的后台增量和中断时
+未落盘的 usage，也不包含产品图片服务费用，因此不是供应商账单的替代。
+
 ## 路由层审计
 
 `transport/http/route-audit.ts` 的 `auditRoute()` 在服务调用**成功返回后**记一条 `audit`；失败的请求

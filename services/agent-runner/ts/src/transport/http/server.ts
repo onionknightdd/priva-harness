@@ -36,6 +36,7 @@ import { usageRoutes } from './route/usage.js'
 import { userFileRoutes } from './route/user-files.js'
 import { resourceRoutes } from './route/resources.js'
 import { subagentTestRoutes } from './route/subagent-test.js'
+import { terminalEventRoutes } from './route/terminal-events.js'
 
 export interface BuildHttpServerOptions {
   readonly userFileSystem: UserFileSystem
@@ -148,7 +149,15 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
       cwd: options.userFileSystem.initialDirectory,
     })
     if (options.sessionTerminals !== undefined) {
+      options.agentHarness.configureTerminalChats(options.sessionTerminals, (ref) => {
+        const address = server.server.address()
+        if (!address || typeof address === 'string') throw new Error('The terminal hook server is not listening')
+        const host = address.family === 'IPv6' ? '[::1]' : '127.0.0.1'
+        return `http://${host}:${address.port}/api/sandbox/agent/terminal/${ref.provider}/events`
+      })
+      void server.register(terminalEventRoutes, { harness: options.agentHarness })
       void server.register(terminalWebsocketRoutes, {
+        harness: options.agentHarness,
         terminals: options.sessionTerminals,
         modelProfileService: options.modelProfileService,
         agentProfileService: options.agentProfileService,

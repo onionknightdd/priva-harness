@@ -75,6 +75,34 @@ test("late task frames update the owning reply without changing the current repl
   assert.equal(next.length, 2)
 })
 
+test("reconnect settles an acknowledged TUI turn whose native transcript uses different message IDs", async () => {
+  const originals = ["window", "WebSocket"].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const)
+  Object.defineProperty(globalThis, "window", { configurable: true, value: { location: { protocol: "http:", host: "localhost" } } })
+  Object.defineProperty(globalThis, "WebSocket", { configurable: true, value: Socket })
+  const connection = connectAgentSession({ harness: "claude" }, { onFrame: () => {}, onError: () => {}, onSession: () => {}, onConnection: () => {} })
+  try {
+    const socket = Socket.instances.at(-1)!
+    socket.open()
+    const done = connection.start({ text: "hello", cwd: "/work", model: "model", harness: "claude", theme: "dark" }, "client-run")
+    assert.equal(socket.sent[0]?.theme, "dark")
+    socket.frame({ type: "run.started", runId: "client-run", driver: "terminal", seq: 1 })
+    socket.close()
+    await new Promise((resolve) => setTimeout(resolve, 350))
+    const reconnected = Socket.instances.at(-1)!
+    reconnected.open()
+    reconnected.frame({ type: "session.snapshot", seq: 3, messages: [
+      { id: "native-user-uuid", role: "user", content: "hello", status: "complete", createdAt: new Date().toISOString() },
+      { id: "native-assistant-uuid", role: "assistant", content: "reply", status: "complete", createdAt: new Date().toISOString() },
+    ], tasks: [] })
+    await done
+    await connection.waitForIdle()
+    assert.deepEqual(reconnected.sent.map((frame) => frame.type), ["session.subscribe"])
+  } finally {
+    connection.disconnect()
+    for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key) }
+  }
+})
+
 test("interaction submission waits for acknowledgment, allows retry and never replays an uncertain decision", async () => {
   const originals = ["window", "WebSocket"].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const)
   Object.defineProperty(globalThis, "window", { configurable: true, value: { location: { protocol: "http:", host: "localhost" } } })
@@ -107,6 +135,60 @@ test("interaction submission waits for acknowledgment, allows retry and never re
     reconnected.open()
     assert.equal(reconnected.sent.length, 1)
     assert.equal(reconnected.sent[0]?.type, "session.subscribe")
+  } finally {
+    connection.disconnect()
+    for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key) }
+  }
+})
+
+
+test("native /clear changes the session address and resets the replay cursor on the existing connection", async () => {
+  const originals = ["window", "WebSocket"].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const)
+  Object.defineProperty(globalThis, "window", { configurable: true, value: { location: { protocol: "http:", host: "localhost" } } })
+  Object.defineProperty(globalThis, "WebSocket", { configurable: true, value: Socket })
+  const rebound: string[] = []
+  const connection = connectAgentSession({ harness: "claude", sessionId: "session" }, {
+    onFrame: () => {}, onError: () => {}, onSession: () => {}, onConnection: () => {},
+    onRebind: (previous, next) => rebound.push(`${previous}->${next}`),
+  })
+  try {
+    const socket = Socket.instances.at(-1)!
+    socket.open()
+    socket.frame({ type: "session.snapshot", seq: 30, messages: [], tasks: [] })
+    socket.frame({ type: "session.rebound", seq: 31, nextSessionId: "after-clear" })
+    socket.frame({ type: "session.snapshot", sessionId: "after-clear", streamId: "next-stream", seq: 0, messages: [], tasks: [] })
+    assert.deepEqual(rebound, ["session->after-clear"])
+    assert.equal(connection.sessionId, "after-clear")
+    socket.close()
+    await new Promise((resolve) => setTimeout(resolve, 350))
+    const resumed = Socket.instances.at(-1)!
+    resumed.open()
+    assert.deepEqual(resumed.sent[0], { type: "session.subscribe", harness: "claude", sessionId: "after-clear", streamId: "next-stream", sinceSeq: 0 })
+  } finally {
+    connection.disconnect()
+    for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key) }
+  }
+})
+
+test("a native snapshot preserves running tools until their completion or session rebind", async () => {
+  const originals = ["window", "WebSocket"].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const)
+  Object.defineProperty(globalThis, "window", { configurable: true, value: { location: { protocol: "http:", host: "localhost" } } })
+  Object.defineProperty(globalThis, "WebSocket", { configurable: true, value: Socket })
+  const connection = connectAgentSession({ harness: "claude", sessionId: "session" }, { onFrame: () => {}, onError: () => {}, onSession: () => {}, onConnection: () => {} })
+  try {
+    const socket = Socket.instances.at(-1)!
+    socket.open()
+    socket.frame({ type: "session.snapshot", seq: 1, activeRunId: "native", runningToolIds: ["tool"], messages: [], tasks: [] })
+    let ready = false
+    const pending = connection.waitForTools().then(() => { ready = true })
+    await Promise.resolve()
+    assert.equal(ready, false)
+    socket.frame({ type: "tool.completed", id: "tool", runId: "native", seq: 2 })
+    await pending
+    socket.frame({ type: "session.snapshot", seq: 3, activeRunId: "native", runningToolIds: ["next"], messages: [], tasks: [] })
+    const next = connection.waitForTools()
+    socket.frame({ type: "session.rebound", seq: 4, nextSessionId: "resumed" })
+    await next
   } finally {
     connection.disconnect()
     for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key) }

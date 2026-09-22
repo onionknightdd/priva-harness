@@ -5,9 +5,11 @@ import { asRecord, isRecord, stringField } from '../../../core/event/json-record
 import type { SessionMessage } from '../../../core/resource/session.js'
 import type { ThreadReplayItem } from '../../../core/resource/thread.js'
 import { isSyntheticNoResponseAssistant } from './claude-transcript.js'
+import type { UserAttachment } from '../../../core/run/user-turn.js'
 
 export function replayClaudeSessionMessages(
   messages: readonly SessionMessage[],
+  attachments: ReadonlyMap<string, readonly UserAttachment[]> = new Map(),
 ): ThreadReplayItem[] {
   const mapper = new ClaudeEventMapper()
   const items: ThreadReplayItem[] = []
@@ -21,12 +23,14 @@ export function replayClaudeSessionMessages(
     }
     if (isVisibleUserTurn(message)) {
       const content = userContent(message.message)
-      if (content.trim() === '' || content.trimStart().startsWith('[structured-output-enforce]')) continue
+      const images = attachments.get(message.uuid)
+      if ((content.trim() === '' && !images?.length) || content.trimStart().startsWith('[structured-output-enforce]')) continue
       mapper.beginUserTurn()
       items.push({
         kind: 'user',
         id: message.uuid === '' ? `user-${String(items.length)}` : message.uuid,
         content,
+        ...(images?.length ? { attachments: images } : {}),
         createdAt: isoFromTimestamp(message.timestamp),
       })
       continue

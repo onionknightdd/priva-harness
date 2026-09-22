@@ -1,5 +1,4 @@
 import { execFile } from 'node:child_process'
-import { createHash } from 'node:crypto'
 import { mkdir, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -14,6 +13,8 @@ import {
 } from '../../core/contract/terminal-service.js'
 import { TmuxControlClient } from './tmux-control-client.js'
 import { hexKeyTokens } from './tmux-control-protocol.js'
+import { buildTmuxScreenSnapshot, TMUX_SCREEN_FORMAT, type TmuxScreenSnapshot } from './tmux-screen-snapshot.js'
+import { TerminalBindings } from './terminal-bindings.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -92,8 +93,11 @@ export class TmuxTerminalService implements TerminalService {
   private readonly now: () => number
   private readonly sweepTimer: NodeJS.Timeout | undefined
   private readonly attachments = new Map<string, Set<TmuxControlClient>>()
+  private readonly bindings: TerminalBindings
+  private available: Promise<void> | undefined
 
   constructor(private readonly options: TmuxTerminalServiceOptions) {
+    this.bindings = new TerminalBindings(options.rootDir)
     this.tmux = options.tmuxBinary ?? 'tmux'
     this.env = paneEnvironment()
     this.idleTimeoutMs = options.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS
@@ -105,12 +109,14 @@ export class TmuxTerminalService implements TerminalService {
     }
   }
 
-  socketPath(key: string): string {
-    return join(this.terminalDir(key), SOCKET_FILE)
+  async socketPath(key: string): Promise<string> {
+    return join(await this.terminalDir(key), SOCKET_FILE)
   }
 
   async scratchDir(key: string): Promise<string> {
-    const dir = this.terminalDir(key)
+    const directory = await this.bindings.directory(key, true)
+    if (!directory) throw new TerminalError('io-failure', 'Could not allocate a terminal directory')
+    const dir = join(this.options.rootDir, directory)
     await mkdir(dir, { recursive: true, mode: 0o700 })
     return dir
   }
@@ -118,7 +124,7 @@ export class TmuxTerminalService implements TerminalService {
   async ensure(key: string, launch: TerminalLaunchSpec): Promise<TerminalInfo> {
     if (await this.isAlive(key)) return { key, adopted: true }
     await this.scratchDir(key)
-    await rm(this.socketPath(key), { force: true })
+    await rm(await this.socketPath(key), { force: true })
     // The server inherits the sanitised environment, so only the launch's
     // own additions travel as session variables; host-terminal descriptors
     // the provider copied from the runner process are dropped again here.
@@ -145,7 +151,20 @@ export class TmuxTerminalService implements TerminalService {
     return { key, adopted: false }
   }
 
+  rebind(from: string, to: string): Promise<void> { return this.bindings.rebind(from, to) }
+  keyForTerminal(terminalId: string): Promise<string | undefined> { return this.bindings.keyFor(terminalId) }
+
+  async restart(key: string, launch: TerminalLaunchSpec): Promise<void> {
+    const envArgs = Object.entries(launch.env).filter(([name]) => !HOST_TERMINAL_VARIABLES.includes(name)).flatMap(([name, value]) => ['-e', `${name}=${value}`])
+    await this.run(key, ['respawn-pane', '-k', '-t', SESSION_NAME, '-c', launch.cwd, ...envArgs, '--', launch.command, ...launch.args])
+  }
+
   async isAlive(key: string): Promise<boolean> {
+    this.available ??= execFileAsync(this.tmux, ['-V'], { env: this.env }).then(() => undefined).catch((error: unknown) => {
+      this.available = undefined
+      throw new TerminalError('backend-unavailable', `tmux is unavailable (${this.tmux})`, { cause: error })
+    })
+    await this.available
     try {
       await this.run(key, ['has-session', '-t', SESSION_NAME])
       return true
@@ -155,47 +174,83 @@ export class TmuxTerminalService implements TerminalService {
     }
   }
 
-  async attach(key: string): Promise<TerminalAttachment> {
+  async attach(key: string, cols: number, rows: number): Promise<TerminalAttachment> {
     if (!await this.isAlive(key)) throw new TerminalError('not-found', 'Terminal is not running')
     const client = await TmuxControlClient.open({
       tmuxBinary: this.tmux,
-      socketPath: this.socketPath(key),
+      socketPath: await this.socketPath(key),
       sessionName: SESSION_NAME,
       env: this.env,
     })
-    const viewers = this.attachments.get(key) ?? new Set()
+    const directory = await this.terminalDir(key)
+    const viewers = this.attachments.get(directory) ?? new Set()
     viewers.add(client)
-    this.attachments.set(key, viewers)
+    this.attachments.set(directory, viewers)
     const paneId = (await client.command(['list-panes', '-t', SESSION_NAME, '-F', '#{pane_id}']))[0]?.trim()
     if (paneId === undefined || paneId === '') {
       await client.close()
       throw new TerminalError('io-failure', 'Terminal has no pane')
     }
-    // Output that races the snapshot is held back: the snapshot already
-    // includes everything tmux rendered before it, and replaying it twice
-    // would corrupt the viewer's screen.
+    // Drop output before the snapshot boundary (already captured), then keep
+    // every subsequent byte until the viewer subscribes after writing screen.
     const outputListeners = new Set<(chunk: Uint8Array) => void>()
     const exitListeners = new Set<(reason: string) => void>()
     let snapshotDone = false
+    let atSnapshotBoundary = true
     const buffered: Uint8Array[] = []
-    client.onOutput((pane, data) => {
-      if (pane !== paneId) return
-      if (!snapshotDone) { buffered.push(data); return }
-      for (const listener of outputListeners) listener(data)
-    })
-    client.onExit((reason) => {
+    let exitReason: string | undefined
+    const reportExit = (reason: string) => {
+      if (exitReason !== undefined) return
+      exitReason = reason
       viewers.delete(client)
       for (const listener of exitListeners) listener(reason)
+    }
+    const publish = (data: Uint8Array) => {
+      if (outputListeners.size === 0) { buffered.push(data); return }
+      for (const listener of outputListeners) listener(data)
+    }
+    client.onOutput((pane, data) => {
+      if (pane !== paneId || !snapshotDone || data.length === 0) return
+      if (atSnapshotBoundary && ((data[0] ?? 0) & 0xc0) === 0x80) {
+        // capture-pane -P exposes pending ANSI, but not tmux's UTF-8 decoder.
+        // A leading continuation means the snapshot split a character. Take
+        // the now-updated cells before forwarding any further incremental data.
+        snapshotDone = false
+        void this.snapshot(client, paneId, (fresh) => {
+          publish(fresh.screen)
+          snapshotDone = true
+        }).catch((error: unknown) => {
+          reportExit(`Could not synchronize terminal: ${describe(error)}`)
+          void client.close()
+        })
+        return
+      }
+      atSnapshotBoundary = false
+      publish(data)
     })
-    const snapshot = await this.snapshot(client, paneId)
-    snapshotDone = true
-    buffered.length = 0
+    client.onExit(reportExit)
+    let snapshot: TmuxScreenSnapshot
+    try {
+      snapshot = await this.snapshot(client, paneId, () => { snapshotDone = true }, { cols, rows })
+    } catch (error) {
+      viewers.delete(client)
+      await client.close()
+      throw error
+    }
     return {
       screen: snapshot.screen,
       cols: snapshot.cols,
       rows: snapshot.rows,
-      onOutput: (listener) => { outputListeners.add(listener); return () => { outputListeners.delete(listener) } },
-      onExit: (listener) => { exitListeners.add(listener); return () => { exitListeners.delete(listener) } },
+      onOutput: (listener) => {
+        outputListeners.add(listener)
+        for (const chunk of buffered.splice(0)) listener(chunk)
+        return () => { outputListeners.delete(listener) }
+      },
+      onExit: (listener) => {
+        exitListeners.add(listener)
+        if (exitReason !== undefined) listener(exitReason)
+        return () => { exitListeners.delete(listener) }
+      },
       write: async (input) => {
         for (let offset = 0; offset < input.length; offset += MAX_INPUT_BYTES_PER_COMMAND) {
           const slice = input.subarray(offset, offset + MAX_INPUT_BYTES_PER_COMMAND)
@@ -216,7 +271,7 @@ export class TmuxTerminalService implements TerminalService {
   }
 
   async paste(key: string, text: string): Promise<void> {
-    const dir = this.terminalDir(key)
+    const dir = await this.terminalDir(key)
     const file = join(dir, `paste-${process.pid}-${this.now()}.txt`)
     // A trailing newline inside the paste keeps a final backslash from being
     // read as a line continuation when Enter follows.
@@ -240,8 +295,11 @@ export class TmuxTerminalService implements TerminalService {
   }
 
   async close(key: string): Promise<void> {
-    for (const client of this.attachments.get(key) ?? []) await client.close()
-    this.attachments.delete(key)
+    const directory = await this.bindings.directory(key)
+    if (!directory) return
+    const dir = join(this.options.rootDir, directory)
+    for (const client of this.attachments.get(dir) ?? []) await client.close()
+    this.attachments.delete(dir)
     if (await this.isAlive(key)) {
       try {
         await this.run(key, ['kill-server'])
@@ -249,7 +307,8 @@ export class TmuxTerminalService implements TerminalService {
         if (!(error instanceof TerminalError && error.kind === 'not-found')) throw error
       }
     }
-    await rm(this.terminalDir(key), { recursive: true, force: true })
+    await rm(dir, { recursive: true, force: true })
+    await this.bindings.remove(directory)
   }
 
   async dispose(): Promise<void> {
@@ -270,10 +329,12 @@ export class TmuxTerminalService implements TerminalService {
     }
     const closed: string[] = []
     for (const dir of dirs) {
+      if (!/^[a-f0-9]{24}$/u.test(dir)) continue
       const key = `dir:${dir}`
       try {
         if (!await this.isAliveAt(join(this.options.rootDir, dir, SOCKET_FILE))) {
           await rm(join(this.options.rootDir, dir), { recursive: true, force: true })
+          await this.bindings.remove(dir)
           continue
         }
         const { stdout } = await this.runAt(join(this.options.rootDir, dir, SOCKET_FILE), [
@@ -284,6 +345,7 @@ export class TmuxTerminalService implements TerminalService {
         if (attached !== '0' || !Number.isFinite(idleMs) || idleMs < this.idleTimeoutMs) continue
         await this.runAt(join(this.options.rootDir, dir, SOCKET_FILE), ['kill-server'])
         await rm(join(this.options.rootDir, dir), { recursive: true, force: true })
+        await this.bindings.remove(dir)
         closed.push(dir)
       } catch (error) {
         this.options.logger?.warn(`terminal sweep skipped ${key}: ${describe(error)}`)
@@ -295,26 +357,41 @@ export class TmuxTerminalService implements TerminalService {
   private async snapshot(
     client: TmuxControlClient,
     paneId: string,
-  ): Promise<{ screen: Uint8Array; cols: number; rows: number }> {
-    const [geometry] = await client.command([
-      'display-message', '-p', '-t', paneId, '#{pane_width} #{pane_height} #{cursor_x} #{cursor_y}',
-    ])
-    const [cols, rows, cursorX, cursorY] = (geometry ?? '').trim().split(' ').map(Number)
-    const lines = await client.command([
-      'capture-pane', '-p', '-e', '-t', paneId, '-S', `-${SNAPSHOT_HISTORY_LINES}`,
-    ])
-    // Rows are joined without a trailing newline so the last visible row
-    // stays on screen; the cursor is then placed explicitly.
-    const text = `\u001b[0m${lines.join('\r\n')}\u001b[${(cursorY ?? 0) + 1};${(cursorX ?? 0) + 1}H`
-    return { screen: Buffer.from(text, 'utf8'), cols: cols ?? 80, rows: rows ?? 24 }
+    onComplete: (snapshot: TmuxScreenSnapshot) => void,
+    size?: { cols: number; rows: number },
+  ): Promise<TmuxScreenSnapshot> {
+    const resize: string[][] = []
+    if (size !== undefined) {
+      const width = clampDimension(size.cols, 20, 500)
+      const height = clampDimension(size.rows, 5, 300)
+      resize.push(
+        ['refresh-client', '-C', `${width}x${height}`],
+        ['resize-window', '-t', SESSION_NAME, '-x', String(width), '-y', String(height)],
+      )
+    }
+    let snapshot: TmuxScreenSnapshot | undefined
+    await client.commandBatch([
+      ...resize,
+      ['display-message', '-p', '-t', paneId, TMUX_SCREEN_FORMAT],
+      ['capture-pane', '-p', '-e', '-N', '-t', paneId, '-S', `-${SNAPSHOT_HISTORY_LINES}`],
+      ['capture-pane', '-p', '-e', '-N', '-a', '-q', '-t', paneId, '-S', `-${SNAPSHOT_HISTORY_LINES}`],
+      ['capture-pane', '-p', '-P', '-C', '-t', paneId],
+    ], (replies) => {
+      snapshot = buildTmuxScreenSnapshot(replies.slice(resize.length))
+      onComplete(snapshot)
+    })
+    if (snapshot === undefined) throw new TerminalError('io-failure', 'tmux did not return a screen snapshot')
+    return snapshot
   }
 
-  private terminalDir(key: string): string {
-    return join(this.options.rootDir, createHash('sha256').update(key).digest('hex').slice(0, 24))
+  private async terminalDir(key: string): Promise<string> {
+    const directory = await this.bindings.directory(key)
+    if (!directory) throw new TerminalError('not-found', 'Terminal binding not found')
+    return join(this.options.rootDir, directory)
   }
 
-  private run(key: string, args: readonly string[]): Promise<{ stdout: string; stderr: string }> {
-    return this.runAt(this.socketPath(key), args)
+  private async run(key: string, args: readonly string[]): Promise<{ stdout: string; stderr: string }> {
+    return this.runAt(await this.socketPath(key), args)
   }
 
   private async isAliveAt(socketPath: string): Promise<boolean> {

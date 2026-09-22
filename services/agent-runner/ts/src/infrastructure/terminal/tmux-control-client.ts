@@ -6,6 +6,7 @@ import {
   formatTmuxCommand,
   LineSplitter,
   parseControlLine,
+  type ControlReply,
 } from './tmux-control-protocol.js'
 
 export interface TmuxControlClientOptions {
@@ -16,6 +17,7 @@ export interface TmuxControlClientOptions {
 }
 
 interface PendingReply {
+  readonly batch: symbol
   readonly command: string
   readonly lines: string[]
   resolve(lines: string[]): void
@@ -33,6 +35,7 @@ export class TmuxControlClient {
   private readonly splitter = new LineSplitter()
   private readonly queue: PendingReply[] = []
   private active: PendingReply | undefined
+  private reply: ControlReply | undefined
   private readonly outputListeners = new Set<(paneId: string, data: Uint8Array) => void>()
   private readonly exitListeners = new Set<(reason: string) => void>()
   private exited = false
@@ -44,8 +47,7 @@ export class TmuxControlClient {
       ['-S', options.socketPath, '-C', 'attach-session', '-t', options.sessionName],
       { stdio: ['pipe', 'pipe', 'pipe'], env: options.env ?? { ...process.env, TERM: 'xterm-256color' } },
     )
-    this.child.stdout.setEncoding('utf8')
-    this.child.stdout.on('data', (chunk: string) => { this.consume(chunk) })
+    this.child.stdout.on('data', (chunk: Buffer) => { this.consume(chunk) })
     this.child.stderr.setEncoding('utf8')
     this.child.stderr.on('data', (chunk: string) => { this.stderr = (this.stderr + chunk).slice(-4096) })
     this.child.once('close', () => { this.finish(this.stderr.trim() || 'tmux control client closed') })
@@ -70,15 +72,49 @@ export class TmuxControlClient {
     return () => { this.exitListeners.delete(listener) }
   }
 
-  command(parts: readonly string[]): Promise<string[]> {
+  async command(parts: readonly string[]): Promise<string[]> {
+    const [lines] = await this.commandBatch([parts])
+    return lines ?? []
+  }
+
+  /**
+   * Synchronous tmux commands in one command group see the same pane state.
+   * onComplete runs at the last %end, before any following output in the same
+   * stdout chunk. An await continuation is too late for this stream boundary.
+   */
+  commandBatch(commands: readonly (readonly string[])[], onComplete?: (replies: string[][]) => void): Promise<string[][]> {
     if (this.exited) {
       return Promise.reject(new TerminalError('io-failure', 'tmux control client is closed'))
     }
-    const command = formatTmuxCommand(parts)
-    return new Promise<string[]>((resolve, reject) => {
-      this.queue.push({ command, lines: [], resolve, reject })
-      this.child.stdin.write(`${command}\n`, (error) => {
-        if (error) reject(new TerminalError('io-failure', `tmux command failed to send: ${error.message}`))
+    if (commands.length === 0) return Promise.resolve([])
+    const batch = Symbol('tmux command group')
+    const formatted = commands.map(formatTmuxCommand)
+    return new Promise<string[][]>((resolve, reject) => {
+      const replies: string[][] = []
+      const rejectBatch = (error: Error) => {
+        // tmux skips the rest of a semicolon-separated group after an error.
+        for (let index = this.queue.length - 1; index >= 0; index -= 1) {
+          if (this.queue[index]?.batch === batch) this.queue.splice(index, 1)
+        }
+        reject(error)
+      }
+      for (const command of formatted) {
+        this.queue.push({
+          batch, command, lines: [], reject: rejectBatch,
+          resolve: (lines) => {
+            replies.push(lines)
+            if (replies.length !== commands.length) return
+            try {
+              onComplete?.(replies)
+              resolve(replies)
+            } catch (error) {
+              rejectBatch(error instanceof Error ? error : new Error(String(error)))
+            }
+          },
+        })
+      }
+      this.child.stdin.write(`${formatted.join(' ; ')}\n`, (error) => {
+        if (error) rejectBatch(new TerminalError('io-failure', `tmux command failed to send: ${error.message}`))
       })
     })
   }
@@ -92,23 +128,26 @@ export class TmuxControlClient {
     clearTimeout(timer)
   }
 
-  private consume(chunk: string): void {
+  private consume(chunk: Buffer): void {
     for (const line of this.splitter.push(chunk)) this.handle(line)
   }
 
-  private handle(line: string): void {
-    const message = parseControlLine(line, this.active !== undefined)
+  private handle(line: Buffer): void {
+    const message = parseControlLine(line, this.reply)
     switch (message.kind) {
       case 'begin':
+        this.reply = message
         if (message.fromClient) this.active = this.queue.shift()
         return
       case 'end':
+        this.reply = undefined
         if (message.fromClient && this.active) {
           this.active.resolve(this.active.lines)
           this.active = undefined
         }
         return
       case 'error':
+        this.reply = undefined
         if (message.fromClient && this.active) {
           this.active.reject(new TerminalError(
             'io-failure',
