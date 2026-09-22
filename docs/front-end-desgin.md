@@ -1539,16 +1539,21 @@ Shift+Tab 保留焦点导航，IME 组合输入不接受建议。开始输入、
 
 ### 会话视图切换与 Claude Code 终端镜像
 
-2026-09-21：会话页头中央新增 Chat / Terminal 分段控件（`SessionViewToggle`，复用
-`assistant-ui/tabs` 的 `text` 变体与 Motion 指示条），只对后端提供终端驾驭方式的
+2026-09-21：会话页头新增 Chat / Terminal 分段控件（`SessionViewToggle`，复用
+`assistant-ui/tabs` 的 `default` 变体与 Motion 指示条，样式与侧栏 Agent / Code 一致），只对后端提供终端驾驭方式的
 harness 显示（目前 `claude`，判定在 `session-view.ts` 的 `harnessSupportsTerminal`）。
+两个触发器只显示图标（对话为 `messages-square`），名称放在 `aria-label`
+（`agentMessage.view.chat` / `agentMessage.view.terminal`）。Workspace 关闭时控件在
+展开/关闭按钮左侧，间距 8px（大于按钮组的 4px）；打开时留在分隔线左侧，右边距 16px，
+与按钮的 `right-4` 一致。
 Terminal 视图用 xterm.js（`@xterm/xterm` + `addon-fit` + `addon-webgl`，WebGL 不可用时
 回退 DOM 渲染）把 runner 在 tmux 中托管的真实 Claude Code TUI 镜像到消息区；composer
 在该视图下隐藏，输入直接进入 TUI。设计决策与后端见
 [claude-tui-chat-mode.md](architecture/claude-tui-chat-mode.md)。
 
 ```text
-┌ 会话标题 ✎ ⧉ ⋯          [ Chat │ Terminal ]                    ┐
+┌ 会话标题 ✎ ⧉ ⋯              [ 💬 │ >_ ] · [▣]               ┐  关闭
+┌ 会话标题 ✎ ⧉ ⋯        [ 💬 │ >_ ] │ workspace … [⤢][▣]      ┐  打开
 ├─────────────────────────────────────────────────────────────────┤
 │ Chat：现有消息线程 + ChatComposer                                 │
 │ Terminal：xterm.js 填满消息区（圆角边框，bg-background）          │
@@ -1563,9 +1568,12 @@ Terminal 视图用 xterm.js（`@xterm/xterm` + `addon-fit` + `addon-webgl`，Web
   变可见区域，`SessionTerminalView` 首次打开后保持挂载，xterm 实例与 WebSocket 不因切回
   Chat 而断开。
 - 重置规则（`shouldResetSessionView`）：新建聊天或切到另一个已有会话时回到 Chat；一个
-  新会话从终端获得首个 session id（null → id）不算切换，终端保持。
-- 从终端创建的新会话在收到 `ready` 后通过 `bindRunSession` 绑定到当前会话，Chat 侧随即
-  指向同一份转录。
+  新会话获得首个 session id（null → id）不算切换，仍停留在 Chat。
+- 新对话只能从 ChatComposer 发起。没有服务端确认的 session id 时，Terminal 标签禁用，
+  视图状态也拒绝切换，页面不挂载终端或建立终端 WebSocket。首条消息启动 Claude 并收到
+  session id 后才解锁 Terminal，解锁本身不自动切换或挂载终端。
+- 点击“新对话”或关闭当前会话会清除 `terminalOpened`，即使旧终端正在显示，也不会把它
+  带到空白对话。只有明确的原生 /clear、/resume、/fork 重绑定保留现有终端视图。
 - 主题：xterm 配色跟随 `next-themes` 的 `resolvedTheme`。背景/前景对应 index.css 的
   neutral token（浅色 `#ffffff/#0a0a0a`，深色 `#0a0a0a/#fafafa`）；16 个 ANSI 色位分别
   使用完整的浅色 / 深色终端调色板（GitHub Light / GitHub Dark 终端方案），因为 xterm 内置
@@ -1585,17 +1593,18 @@ Terminal 视图用 xterm.js（`@xterm/xterm` + `addon-fit` + `addon-webgl`，Web
 建立独立层叠上下文，避免透明的 WebGL 链接层截获覆盖层按钮的鼠标点击。替换或关闭
 WebSocket 后，客户端丢弃该连接迟到的控制帧和输出，以免覆盖新连接状态。
 
-TUI 新建会话取得 id 后立即建立聊天订阅；切换回对话沿用已收到的 `session.snapshot`，
+首条气泡启动原生会话并取得 id 后建立聊天订阅；切换回对话沿用已收到的 `session.snapshot`，
 无需重新打开会话或刷新页面。转录写入后的消息回显见
 [终端架构文档](architecture/claude-tui-chat-mode.md#410-tui-消息回显到聊天气泡)。
 
 ```text
 Terminal host (isolated canvases) < Exit/error overlay + reconnect button
-TUI session id -> bubble subscription -> transcript snapshots -> messages
+Chat first message -> native session id -> enable Terminal tab
+native transcript snapshots -> bubble subscription -> messages
 ```
 
 2026-09-22：Claude UI 会话从首条气泡发送起统一由 TUI 驱动；前端继续使用
-相同的 `/ws/session`，首条请求携带当前主题。无需先打开 Terminal，服务端即创建原生
+相同的 `/ws/session`，首条请求携带当前主题。服务端在收到首条气泡后创建原生
 会话；切换到 Terminal 只附加查看者，进程退出后再次发送会从同一转录恢复。
 收到带 `driver: terminal` 的
 `run.started` 后释放该请求的乐观消息保护，后续原生 UUID 快照可替换对应占位气泡。
@@ -1732,7 +1741,7 @@ Tabs，选择预览操作模式时可使用 ToggleGroup。不要只根据组件�
 | DropdownMenu | [ui/dropdown-menu](../agent-ui/src/components/ui/dropdown-menu.tsx)，Base UI Menu | `ring-1`、共享 CSS 弹层动画、焦点行背景；`DropdownMenuContent` 透出 Positioner 的 `anchor`，一个菜单可挂多个 Trigger | 模型、会话、账户、路径、Harness 菜单 |
 | 附件 Menu | [animate-ui/components/base/menu](../agent-ui/src/components/animate-ui/components/base/menu.tsx)，Base UI Menu + Animate UI | `border`、200ms 弹层、Motion 滑动高亮；与通用 DropdownMenu 的分组字号等不同 | 聊天附件菜单 |
 | ContextMenu | [ui/context-menu](../agent-ui/src/components/ui/context-menu.tsx)，Base UI ContextMenu | shadcn 风格的右键菜单；行内文件菜单为 12px | 文件树节点、助手行内文件引用 |
-| Slash / 选区动作菜单 | [composer-slash-menu](../agent-ui/src/features/agent-message/components/composer-slash-menu.tsx)、[composer-mention-menu](../agent-ui/src/features/agent-message/components/composer-mention-menu.tsx)、[message-selection-actions](../agent-ui/src/features/agent-message/components/message-selection-actions.tsx)，本地 Portal + Motion | Slash 与 `@` 文件共用同一建议菜单；选区复用 Beautiful UI 胶囊外观与工具条键盘操作 | 输入 `/`、输入 `@`、在对话中引用 assistant / user 选区 |
+| Slash / 选区动作菜单 | [composer-slash-menu](../agent-ui/src/features/agent-message/components/composer-slash-menu.tsx)、[composer-mention-menu](../agent-ui/src/features/agent-message/components/composer-mention-menu.tsx)、[message-selection-actions](../agent-ui/src/features/agent-message/components/message-selection-actions.tsx)，本地 Portal + Motion | Slash 与 `@` 文件共用同一建议菜单，列表最多显示 5 行选项，其余滚动；选区复用 Beautiful UI 胶囊外观与工具条键盘操作 | 输入 `/`、输入 `@`、在对话中引用 assistant / user 选区 |
 | Composer 编辑内容 | [composer-editor](../agent-ui/src/features/agent-message/components/composer-editor.tsx)、[message-selection-quote](../agent-ui/src/features/agent-message/components/message-selection-quote.tsx)，ProseMirror + React Portal | 文本、换行、可删除的行内引用；撤销 / 重做、纯文本协议剪贴板 | composer 草稿与消息里的只读引用 |
 | Dialog / AlertDialog | [ui/dialog](../agent-ui/src/components/ui/dialog.tsx)、[ui/alert-dialog](../agent-ui/src/components/ui/alert-dialog.tsx)，Base UI | 居中模态框 + 遮罩；200ms 进入 / 150ms 退出 | 设置、资源表单、重命名、删除确认 |
 | Sheet | [ui/sheet](../agent-ui/src/components/ui/sheet.tsx)，Base UI Dialog | 边缘滑入；共享 `sheetMotion`，380ms 进入 / 220ms 退出 | 移动端侧栏、资源详情抽屉 |
@@ -1987,13 +1996,21 @@ Shift+Tab、Esc、已有草稿、重复快照、断线重连和原生会话重�
 
 ```sh
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/session-view.test.ts agent-ui/tests/features/agent-message/terminal-session.test.ts
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/session-view-context.test.tsx
 ```
+
+视图 context / Tab 的 jsdom 回归覆盖空白对话禁用、程序请求不能绕过、收到会话 id 后解锁、
+“新对话”与关闭会话的终端重置，以及原生 /clear 重绑定保留视图。
 
 终端按钮与 TUI → 气泡订阅的浏览器回归入口为
 `/tests/features/agent-message/terminal-view-browser.html?zh&dark`。点击
 **Simulate terminal exit** 后应显示 `PASS reopen pointer target: BUTTON`，再用鼠标点击
 「重新打开」，确认连接计数增加且恢复「已连接」。追加 `&reduced-motion` 检查无动效分支。
 追加 `&app` 使用真实 App 和隔离的 HTTP / WebSocket 样例：选择 Claude，在新对话中
+确认 Terminal 禁用且连接计数为 0；勾选 `Hold Claude startup` 后发送首条消息，启动未确认时
+标签仍禁用。点击 `Fail Claude startup` 后应保持禁用，重试并点击 `Complete Claude startup`
+才解锁。曾打开终端后点击“新对话”，应回到 Chat、禁用 Terminal，连接计数不再增加。
+常规双向同步检查不勾选 `Hold Claude startup`：
 先从气泡发送首条中文，确认 `bubble subscriptions: 1`，再打开终端，应出现同一消息与回复。
 终端输入中文并回车后切回对话，应显示用户消息和模拟回复；继续在两种视图
 交替发送，确认消息计数每轮只增加 2，且发送按钮正常恢复。在终端输入 `/clear` 后，

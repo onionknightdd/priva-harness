@@ -356,7 +356,9 @@ export function AgentMessageComposer({
     chipOccupy,
     draftParts.filter((part) => part.type === "selection").length
   )
-  const singleLine = attachments.length === 0 && !overflowsLine
+  // The home composer starts at two lines. A session composer stays one line
+  // until the draft or an attachment needs the footer layout.
+  const singleLine = compact && attachments.length === 0 && !overflowsLine
   const promptId = React.useId()
   const slashMenuId = React.useId()
   const mentionMenuId = React.useId()
@@ -607,7 +609,7 @@ export function AgentMessageComposer({
                       ? "h-8 min-h-8 max-h-8 overflow-hidden"
                       : cn(
                           "max-h-60 overflow-y-auto",
-                          compact ? "min-h-8" : "min-h-12"
+                          compact ? "min-h-8" : "min-h-16"
                         )
                   )}
                   onChange={onDraftChange}

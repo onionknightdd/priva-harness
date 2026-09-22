@@ -17,6 +17,9 @@ const COMPOSER_SUGGEST_LABEL_CLASS =
   "px-2 py-1.5 text-xs font-medium text-muted-foreground"
 const COMPOSER_SUGGEST_ITEM_CLASS =
   "relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none"
+// Five option rows (2rem) under the group label (1.75rem), plus the list's p-1.
+const SUGGEST_MENU_LIST_CLASS =
+  "relative max-h-[calc(1.75rem+2rem*5+0.5rem)] overflow-x-hidden overflow-y-auto overscroll-contain p-1"
 
 const SUGGEST_MENU_ENTER = { duration: 0.18, ease: EASE_OUT } as const
 const SUGGEST_MENU_EXIT = { duration: 0.12, ease: EASE_OUT } as const
@@ -253,7 +256,7 @@ export function ComposerSuggestMenu({
               id={menuId}
               role="listbox"
               aria-label={label}
-              className="relative max-h-72 overflow-x-hidden overflow-y-auto overscroll-contain p-1"
+              className={SUGGEST_MENU_LIST_CLASS}
               onWheel={(event) => event.stopPropagation()}
               onMouseDown={(event) => {
                 if (isVerticalScrollbarClick(event)) {

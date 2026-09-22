@@ -7,6 +7,7 @@ import { motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button"
+import { useSidebar } from "@/components/ui/sidebar"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,6 +31,15 @@ import { writeClipboardText } from "@/lib/clipboard"
 import { cn } from "@/lib/utils"
 
 import { fitSessionTitle } from "../fit-session-title"
+
+// Workspace toggle is a 32px button fixed 16px from the viewport edge.
+// Header content is already inset 16px, so 40px more leaves an 8px gap
+// (one step above the 4px icon gap) when the panel is closed.
+// When the panel is docked, drop that offset: the header ends at the divider
+// and the existing 16px inset matches the button's right-4 edge margin.
+const VIEW_TOGGLE_CLOSED_OFFSET = "mr-10"
+const viewToggleMotion =
+  "ml-auto transition-[margin] duration-200 ease-linear motion-reduce:transition-none"
 
 const renameTransition = {
   type: "spring" as const,
@@ -125,6 +135,12 @@ function SessionIdCopyButton({ sessionId }: { sessionId: string }) {
 
 export function AgentChatHeader() {
   const { t } = useTranslation()
+  const { isMobile, state } = useSidebar()
+  const workspaceDocked = !isMobile && state === "expanded"
+  const viewToggleClassName = cn(
+    viewToggleMotion,
+    workspaceDocked ? "mr-0" : VIEW_TOGGLE_CLOSED_OFFSET
+  )
   const shouldReduceMotion = Boolean(useReducedMotion())
   const { activeSession } = useActiveSession()
   const { rename } = useSessionList()
@@ -199,12 +215,12 @@ export function AgentChatHeader() {
     void rename(activeSession.sessionId, nextTitle)
   }
 
-  // Without a session only the view toggle remains: the terminal can start a
-  // brand-new session just like the composer can.
+  // A draft keeps the view toggle visible, with Terminal disabled until the
+  // first Chat message starts the session.
   if (!activeSession) {
     return (
-      <div className="flex min-w-0 flex-1 items-center justify-center gap-2">
-        <SessionViewToggle />
+      <div className="flex min-w-0 flex-1 items-center">
+        <SessionViewToggle className={viewToggleClassName} />
       </div>
     )
   }
@@ -300,9 +316,7 @@ export function AgentChatHeader() {
           </DropdownMenu>
         </div>
       ) : null}
-      <div className="flex min-w-0 flex-1 items-center justify-center">
-        <SessionViewToggle />
-      </div>
+      <SessionViewToggle className={viewToggleClassName} />
     </div>
   )
 }

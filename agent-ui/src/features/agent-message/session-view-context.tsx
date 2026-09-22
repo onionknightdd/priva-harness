@@ -11,6 +11,7 @@ import {
 } from "./session-view"
 
 type SessionViewContextValue = SessionViewState & {
+  canOpenTerminal: boolean
   setView: (view: SessionView) => void
   preserveViewForSession: (id: string) => void
 }
@@ -29,17 +30,20 @@ export function SessionViewProvider({
   // renders" pattern) so the view never flashes the stale state for a frame.
   const [identity, setIdentity] = React.useState<SessionViewIdentity>({ chatKey, sessionId })
   if (identity.chatKey !== chatKey || identity.sessionId !== sessionId) {
-    if (reboundSession.current !== sessionId && shouldResetSessionView(identity, { chatKey, sessionId })) setState(initialSessionViewState)
+    const preservingRebind = identity.chatKey === chatKey && reboundSession.current !== null && reboundSession.current === sessionId
+    if (!preservingRebind && shouldResetSessionView(identity, { chatKey, sessionId })) setState(initialSessionViewState)
     reboundSession.current = null
     setIdentity({ chatKey, sessionId })
   }
+  const canOpenTerminal = sessionId !== null
   const setView = React.useCallback((view: SessionView) => {
+    if (view === "terminal" && !canOpenTerminal) return
     setState((previous) => selectSessionView(previous, view))
-  }, [])
+  }, [canOpenTerminal])
   const preserveViewForSession = React.useCallback((id: string) => { reboundSession.current = id }, [])
   const value = React.useMemo<SessionViewContextValue>(
-    () => ({ view: state.view, terminalOpened: state.terminalOpened, setView, preserveViewForSession }),
-    [state.view, state.terminalOpened, setView, preserveViewForSession]
+    () => ({ view: state.view, terminalOpened: state.terminalOpened, canOpenTerminal, setView, preserveViewForSession }),
+    [state.view, state.terminalOpened, canOpenTerminal, setView, preserveViewForSession]
   )
   return <SessionViewContextProvider value={value}>{children}</SessionViewContextProvider>
 }

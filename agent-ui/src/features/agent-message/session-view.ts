@@ -32,7 +32,7 @@ export type SessionViewIdentity = {
 /**
  * Whether a change of the conversation identity should reset the view.
  * A fresh conversation acquiring its first session id (null → id) is the
- * same conversation, so the terminal that created it must survive; any
+ * same conversation and stays in Chat until the user opens Terminal; any
  * other id change means the user opened a different session.
  */
 export function shouldResetSessionView(previous: SessionViewIdentity, next: SessionViewIdentity): boolean {
