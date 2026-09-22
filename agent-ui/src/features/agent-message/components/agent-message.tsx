@@ -52,6 +52,8 @@ export function AgentMessage({
   canSubmit,
   isStreaming,
   modelReady,
+  modelReference,
+  effort,
   slashCommand,
   onDraftChange,
   onSlashCommandChange,
@@ -75,6 +77,8 @@ export function AgentMessage({
   canSubmit: boolean
   isStreaming: boolean
   modelReady: boolean
+  modelReference: string | null
+  effort: ComposerEffort
   slashCommand: SlashCommand | null
   onDraftChange: (draft: string) => void
   onSlashCommandChange: (command: SlashCommand | null) => void
@@ -230,6 +234,8 @@ export function AgentMessage({
           canSubmit={canSubmit}
           isStreaming={isStreaming}
           modelReady={modelReady}
+          modelReference={modelReference}
+          effort={effort}
           slashCommand={slashCommand}
           shellRef={composerShellRef}
           editorRef={composerEditorRef}

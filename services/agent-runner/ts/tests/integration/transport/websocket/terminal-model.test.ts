@@ -45,3 +45,22 @@ it.skipIf(!nativeClaudeAvailable())('applies the bubble model selection to the s
     throw error
   } finally { await viewer?.detach(); await fixture.dispose() }
 }, 60000)
+
+it.skipIf(!nativeClaudeAvailable())('publishes a manual TUI model change without sending another chat message', async () => {
+  const fixture = await nativeClaudeFixture((body, reply) => modelMessage(body, reply, [{ type: 'text', text: 'Ready to switch' }]))
+  try {
+    fixture.send('before native switch', 'first')
+    await expect.poll(() => fixture.frames.some((frame) => frame.type === 'run.completed' && frame.runId === 'first'), { timeout: 30000 }).toBe(true)
+    const runsBeforeSwitch = fixture.frames.filter((frame) => frame.type === 'run.started').length
+    const instance = (await fixture.terminals.state(fixture.ref))?.instanceId
+    await fixture.terminals.submit(fixture.ref, '/model claude-opus-4-6', new AbortController().signal)
+    await expect.poll(() => fixture.terminals.capture(fixture.ref)).toContain('Switch model?')
+    await fixture.terminals.sendKeys(fixture.ref, ['Enter'])
+    await expect.poll(() => fixture.frames.filter((frame) => frame.type === 'session.config').at(-1)).toMatchObject({
+      config: { model: 'claude-opus-4-6', profileId: fixture.profile.id },
+    })
+    expect(fixture.frames.filter((frame) => frame.type === 'run.started')).toHaveLength(runsBeforeSwitch)
+    expect((await fixture.terminals.state(fixture.ref))?.instanceId).toBe(instance)
+    expect(fixture.sdkOpen).not.toHaveBeenCalled()
+  } finally { await fixture.dispose() }
+}, 40000)

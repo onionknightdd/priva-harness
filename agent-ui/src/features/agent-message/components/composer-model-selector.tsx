@@ -36,6 +36,7 @@ import { useAgentPreferences } from "@/features/settings/agent-preferences-conte
 import {
   knownProfileModelIds,
   resolveComposerSelection,
+  selectionFromModelReference,
   type ComposerModelSelection,
 } from "@/features/agent-message/composer-model-selection"
 import {
@@ -484,11 +485,15 @@ function EffortSubmenu({
 }
 
 export function ComposerModelSelector({
+  modelReference,
+  effort,
   onModelReferenceChange,
   onEffortChange,
 }: {
-  onModelReferenceChange?: (model: string | null) => void
-  onEffortChange?: (effort: ComposerEffort) => void
+  modelReference: string | null
+  effort: ComposerEffort
+  onModelReferenceChange: (model: string | null) => void
+  onEffortChange: (effort: ComposerEffort) => void
 }) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
@@ -501,9 +506,6 @@ export function ComposerModelSelector({
   const [defaultProfileId, setDefaultProfileId] = React.useState<string | null>(
     null
   )
-  const [selection, setSelection] =
-    React.useState<ComposerModelSelection | null>(null)
-  const [effort, setEffort] = React.useState<ComposerEffort>("medium")
   const [profilesStatus, setProfilesStatus] = React.useState<
     "loading" | "ready" | "error"
   >("loading")
@@ -589,7 +591,6 @@ export function ComposerModelSelector({
 
         setProfiles([])
         setDefaultProfileId(null)
-        setSelection(null)
         setProfilesStatus("error")
       }
     })()
@@ -599,21 +600,21 @@ export function ComposerModelSelector({
     }
   }, [ensureProfileModels])
 
-  React.useEffect(() => {
-    if (profilesStatus !== "ready") {
-      return
-    }
-
-    setSelection((current) =>
-      resolveComposerSelection({
-        sessionModel,
-        profiles,
-        defaultProfileId,
-        lastModelReference: lastModelReferenceRef.current,
-        current,
-      })
-    )
-  }, [defaultProfileId, profiles, profilesStatus, sessionModel])
+  // The displayed value and run.start use the same session state, including
+  // native /model updates received while this composer is hidden or unmounted.
+  const selection = React.useMemo(() => {
+    if (profilesStatus !== "ready") return null
+    const resolved = resolveComposerSelection({
+      sessionModel,
+      profiles,
+      defaultProfileId,
+      lastModelReference: lastModelReferenceRef.current,
+      current: selectionFromModelReference(profiles, modelReference),
+    })
+    if (!resolved || resolved.modelId.trim()) return resolved
+    const firstModel = modelsByProfileId[resolved.profileId]?.models.find((modelId) => modelId.trim())
+    return firstModel ? { ...resolved, modelId: firstModel } : resolved
+  }, [defaultProfileId, modelReference, modelsByProfileId, profiles, profilesStatus, sessionModel])
 
   React.useEffect(() => {
     const profile = profiles.find((item) => item.id === selection?.profileId)
@@ -642,8 +643,7 @@ export function ComposerModelSelector({
 
       const reference = `${next.profileId}:${next.modelId}`
       setLastModelReference(reference)
-      onModelReferenceChange?.(reference)
-      setSelection(next)
+      onModelReferenceChange(reference)
       setSaveError(null)
 
       if (sessionModel === "last-used") {
@@ -693,31 +693,14 @@ export function ComposerModelSelector({
   )
 
   React.useEffect(() => {
-    if (!selection || selection.modelId.trim() !== "") {
-      return
-    }
-
-    const firstModel = modelsByProfileId[selection.profileId]?.models.find(
-      (modelId) => modelId.trim() !== ""
-    )
-    if (!firstModel) {
-      return
-    }
-
-    setSelection({ ...selection, modelId: firstModel })
-  }, [modelsByProfileId, selection])
-
-  React.useEffect(() => {
+    // Resolve defaults only after profiles load; a native update may arrive
+    // first and must not be cleared by an empty/loading catalog.
+    if (profilesStatus !== "ready") return
     const profileId = selection?.profileId.trim() ?? ""
     const modelId = selection?.modelId.trim() ?? ""
-    onModelReferenceChange?.(
-      profileId && modelId ? `${profileId}:${modelId}` : null
-    )
-  }, [onModelReferenceChange, selection])
-
-  React.useEffect(() => {
-    onEffortChange?.(effort)
-  }, [effort, onEffortChange])
+    const reference = profileId && modelId ? `${profileId}:${modelId}` : null
+    if (reference !== modelReference) onModelReferenceChange(reference)
+  }, [modelReference, onModelReferenceChange, profilesStatus, selection])
 
   const selectionKey = selection
     ? `${selection.profileId}:${selection.modelId}`
@@ -840,7 +823,7 @@ export function ComposerModelSelector({
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />
-        <EffortSubmenu effort={effort} onEffortChange={setEffort} />
+        <EffortSubmenu effort={effort} onEffortChange={onEffortChange} />
       </DropdownMenuContent>
     </DropdownMenu>
   )

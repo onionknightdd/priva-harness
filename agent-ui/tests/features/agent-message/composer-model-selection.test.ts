@@ -3,7 +3,7 @@ import { describe, it } from "node:test"
 
 import {
   resolveComposerSelection,
-  selectionFromLastUsed,
+  selectionFromModelReference,
   selectionFromProfile,
   type ComposerProfile,
 } from "../../../src/features/agent-message/composer-model-selection.ts"
@@ -82,7 +82,7 @@ describe("composer model selection", () => {
 
   it("restores the last-used reference only before the user selects", () => {
     assert.deepEqual(
-      selectionFromLastUsed(profiles, `${beta.id}:beta-other`),
+      selectionFromModelReference(profiles, `${beta.id}:beta-other`),
       {
         profileId: beta.id,
         profileLabel: "Beta",

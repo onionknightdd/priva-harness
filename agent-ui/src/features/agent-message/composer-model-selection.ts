@@ -67,11 +67,11 @@ export function selectionFromProfile(
   }
 }
 
-export function selectionFromLastUsed(
+export function selectionFromModelReference(
   profiles: readonly ComposerProfile[],
-  lastModelReference: string | null
+  modelReference: string | null
 ): ComposerModelSelection | null {
-  const parsed = parseModelReference(lastModelReference)
+  const parsed = parseModelReference(modelReference)
   if (!parsed) {
     return null
   }
@@ -118,7 +118,7 @@ export function resolveComposerSelection(input: {
 
   if (input.sessionModel === "last-used") {
     return (
-      selectionFromLastUsed(input.profiles, input.lastModelReference) ??
+      selectionFromModelReference(input.profiles, input.lastModelReference) ??
       selectionFromProfile(defaultProfile)
     )
   }

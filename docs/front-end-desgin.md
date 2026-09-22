@@ -1563,11 +1563,15 @@ Terminal tab -------------------------------------------------> attach viewer
 
 原生能力绑定沿用现有布局：`session.config` / snapshot.config 更新模型、effort、cwd 与上下文环；
 仅原生模型选择变化时覆盖选择器，普通 context 刷新不覆盖尚未提交的手动选择。
+模型与 effort 由 `useAgentMessage` 持有，选择器通过受控 props 显示并回报用户选择，
+不保存独立副本。profile 加载中不清空已到达的原生状态；问答完成后重新挂载选择器时
+沿用会话当前值。原生回传不触发保存 profile 默认模型。
 snapshot.runningToolIds 恢复等待工具结束的状态。TUI 产生的内嵌图片从转录映射到现有附件卡片，
 产品 MCP 的 visualize / canvas / 图片别名继续使用既有工具卡片。
 
 ```text
 native statusLine -> session.config -> model / effort / cwd / context UI
+                                      -> controlled selector / run.start (same state)
 native hooks     -> permissions / typed MCP forms -> existing interaction cards
 native tasks     -> existing task card [终端管理] -> terminal.focus -> same TUI /tasks
 native rebind    -> reset cursor + preserve view  -> next session address
@@ -1891,6 +1895,16 @@ rg -n '@base-ui/react|motion/react|gsap' agent-ui/src
 - 静态分析：`npm run lint`
 - 生产构建：`npm run build`
 - 预览生产构建：`npm run preview`
+
+模型选择器的原生回传、effort、问答后重新挂载及延迟 profile 加载回归（仓库根目录）：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/composer-model-selector.test.tsx agent-ui/tests/features/agent-message/composer-model-selection.test.ts
+```
+
+完整页面回归使用 `/tests/features/agent-message/terminal-view-browser.html?app&reduced-motion`：
+打开终端后点击 `Simulate native /model`，切回对话检查模型和 effort；手动另选模型后点击
+`Refresh native context`，选择应保持，发送请求与当前选择一致。
 
 侧栏 harness 自适应标识使用 jsdom 和 Node 测试验证宽度边界、收起后恢复、名称与字体
 变化、观察器清理和减少动态效果；只模拟布局尺寸，不启动浏览器：

@@ -6,6 +6,8 @@ import { SessionTerminalView } from "../../../src/features/agent-message/compone
 import App from "../../../src/App"
 import { installProjectDirectoryFixtures } from "../project-directory/project-directory-fixtures"
 import type { AgentThreadMessage } from "../../../src/features/agent-message/agent-message-data"
+import { emptyContextUsage } from "../../../src/features/agent-message/context-usage"
+import type { StreamFrame } from "../../../src/features/agent-message/run-stream-reducer"
 import i18n from "../../../src/i18n"
 import "../../../src/index.css"
 
@@ -19,10 +21,12 @@ let subscriptions = 0
 let seq = 0
 let nativeRuns = 0
 let activeRunId: string | undefined
+let config: StreamFrame["config"]
+let lastSentModel = ""
 let sessionId = appMode ? "new-session-1" : "terminal-regression"
 const messages: AgentThreadMessage[] = []
 const sockets: TerminalSocket[] = []
-const summary = () => { results.textContent = `Terminal connections: ${connections}; bubble subscriptions: ${subscriptions}; messages: ${messages.length}` }
+const summary = () => { results.textContent = `Terminal connections: ${connections}; bubble subscriptions: ${subscriptions}; messages: ${messages.length}; sent model: ${lastSentModel}` }
 
 class TerminalSocket extends EventTarget {
   static readonly OPEN = 1
@@ -56,11 +60,11 @@ class TerminalSocket extends EventTarget {
     this.dispatchEvent(new MessageEvent("message", { data: new TextEncoder().encode(text).buffer }))
   }
   snapshot() {
-    this.reply({ v: 2, type: "session.snapshot", streamId: "native-stream", sessionId, harness: "claude", runId: "", seq, ts: Date.now(), tasks: [], messages, activeRunId })
+    this.reply({ v: 2, type: "session.snapshot", streamId: "native-stream", sessionId, harness: "claude", runId: "", seq, ts: Date.now(), tasks: [], messages, activeRunId, config })
   }
   send(data: string | ArrayBuffer) {
     if (typeof data === "string") {
-      const frame = JSON.parse(data) as { type: string; text?: string; runId?: string }
+      const frame = JSON.parse(data) as { type: string; text?: string; runId?: string; model?: string; effort?: string }
       if (frame.type === "session.subscribe") {
         this.subscribed = true
         subscriptions++
@@ -68,6 +72,7 @@ class TerminalSocket extends EventTarget {
         summary()
       }
       if (frame.type === "run.start" && frame.runId && frame.text) {
+        lastSentModel = `${frame.model} / ${frame.effort}`
         if (!this.subscribed) { this.subscribed = true; subscriptions++; this.snapshot() }
         replyInTerminal(frame.text, frame.runId)
       }
@@ -139,6 +144,13 @@ Object.assign(host.style, { position: "fixed", inset: "80px 0 0", display: "flex
 createRoot(host).render(<React.StrictMode><MotionConfig reducedMotion={options.has("reduced-motion") ? "always" : "user"}><ThemeProvider attribute="class" forcedTheme={options.has("dark") ? "dark" : "light"}>
   {appMode ? <App /> : <SessionTerminalView harness="claude" cwd="/test" model="test:model" effort="medium" sessionId={sessionId} hidden={false} />}
 </ThemeProvider></MotionConfig></React.StrictMode>)
+document.getElementById("model")!.onclick = () => {
+  config = { profileId: "test", model: "claude-opus-4-6[1m]", effort: "high", cwd: "/workspace/work/existing", context: emptyContextUsage() }
+  broadcast({ type: "session.config", config })
+}
+document.getElementById("context")!.onclick = () => {
+  if (config) broadcast({ type: "session.config", config: { ...config, context: { ...config.context, used: 42 } } })
+}
 document.getElementById("exit")!.onclick = () => {
   const socket = sockets.filter((socket) => socket.terminal && socket.readyState === 1).at(-1)!
   if (!socket) return

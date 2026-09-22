@@ -335,6 +335,18 @@ statusLine 同时回传 model / effort / cwd / context，`session.config` 和重
 工作目录及上下文环。上下文频繁刷新不会覆盖用户尚未提交的新模型选择；仅原生选择本身变化时
 更新选择器。模型元数据只在模型或 profile 变化时保存。
 
+选择器的模型与 effort 直接受 `useAgentMessage` 控制，经页面和 Composer 向下传递；
+组件不再另存一份选择值。原生 `/model` 与 `/effort` 更新、问答后输入框重新挂载、
+profile 目录延迟加载时均保留同一会话状态。原生回传只更新当前选择，不改写 profile 默认模型。
+
+```text
+statusLine -> session.config -> useAgentMessage -> ComposerModelSelector (controlled values)
+                                      ^                  |
+                                      +--- user choice --+
+                                      |
+                                   run.start
+```
+
 ### 4.14 AskUserQuestion 镜像
 
 PermissionRequest command hook 接收原生工具审批及 AskUserQuestion。relay 挂起本机 HTTP 请求，

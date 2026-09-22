@@ -181,6 +181,8 @@ function ComposerControls({
   action,
   canSubmit,
   modelReady,
+  modelReference,
+  effort,
   sendLabel,
   stopLabel,
   modelRequired,
@@ -191,6 +193,8 @@ function ComposerControls({
   action: "send" | "stop"
   canSubmit: boolean
   modelReady: boolean
+  modelReference: string | null
+  effort: ComposerEffort
   sendLabel: string
   stopLabel: string
   modelRequired: string
@@ -212,6 +216,8 @@ function ComposerControls({
         onPointerDown={(event) => event.stopPropagation()}
       >
         <ComposerModelSelector
+          modelReference={modelReference}
+          effort={effort}
           onModelReferenceChange={onModelReferenceChange}
           onEffortChange={onEffortChange}
         />
@@ -262,6 +268,8 @@ export function AgentMessageComposer({
   canSubmit,
   isStreaming = false,
   modelReady,
+  modelReference,
+  effort,
   slashCommand,
   shellRef: shellRefProp,
   editorRef: editorRefProp,
@@ -281,6 +289,8 @@ export function AgentMessageComposer({
   canSubmit: boolean
   isStreaming?: boolean
   modelReady: boolean
+  modelReference: string | null
+  effort: ComposerEffort
   slashCommand: SlashCommand | null
   shellRef?: React.RefObject<HTMLDivElement | null>
   editorRef?: React.RefObject<ComposerEditorHandle | null>
@@ -725,6 +735,8 @@ export function AgentMessageComposer({
                 action={primaryAction}
                 canSubmit={canSubmit}
                 modelReady={modelReady}
+                modelReference={modelReference}
+                effort={effort}
                 sendLabel={t("agentMessage.send")}
                 stopLabel={t("agentMessage.stop")}
                 modelRequired={t("agentMessage.modelRequired")}
