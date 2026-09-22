@@ -108,8 +108,19 @@ export interface TerminalElicitation {
 }
 
 /** The provider owns its input-box readiness and paste/submit semantics. */
+export interface TerminalComposer {
+  readonly text: string
+  readonly suggestion?: string
+}
+
+export interface TerminalCaptureOptions {
+  /** Preserve SGR attributes and join soft-wrapped rows into logical lines. */
+  readonly styled?: boolean
+}
+
 export interface TerminalInput {
   isAlive(): Promise<boolean>
+  /** Styled capture: providers must distinguish editable text from faint hints. */
   capture(): Promise<string>
   paste(text: string): Promise<void>
   sendKeys(keys: readonly string[]): Promise<void>
@@ -162,8 +173,8 @@ export interface TerminalService {
   paste(key: string, text: string): Promise<void>
   /** Send named keys (tmux key names such as `Escape`, `Enter`, `C-c`). */
   sendKeys(key: string, keys: readonly string[]): Promise<void>
-  /** Plain-text capture of the visible pane, one line per row. */
-  capture(key: string): Promise<string>
+  /** Capture the visible pane; plain text with one line per row by default. */
+  capture(key: string, options?: TerminalCaptureOptions): Promise<string>
   close(key: string): Promise<void>
   dispose(): Promise<void>
 }

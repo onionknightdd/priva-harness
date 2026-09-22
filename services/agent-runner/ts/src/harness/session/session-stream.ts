@@ -27,6 +27,7 @@ export class SessionStream {
   private config: SessionConfiguration | undefined
   private readonly runningTools = new Set<string>()
   private readonly nativeTasks = new Map<string, string>()
+  private prompts: readonly string[] = []
 
   constructor(readonly session: SessionRef, history: readonly ThreadMessage[] = [], private readonly limit = 4096,
     private readonly saveTasks?: (tasks: readonly BackgroundTask[]) => Promise<void>, savedTasks: readonly BackgroundTask[] = []) {
@@ -42,6 +43,8 @@ export class SessionStream {
   }
 
   publish(event: AgentEvent, runId = ''): StreamFrame {
+    if (event.type === 'suggestion.prompts') this.prompts = event.prompts
+    if (event.type === 'run.started' || event.type === 'session.rebound') this.prompts = []
     if (event.type === 'session.config') this.config = event.config
     if (event.type === 'tool.started') this.runningTools.add(event.id)
     if (event.type === 'tool.completed') this.runningTools.delete(event.id)
@@ -159,7 +162,7 @@ export class SessionStream {
   }
 
   snapshot(): StreamFrame & { type: 'session.snapshot' } {
-    return this.frame({ type: 'session.snapshot', tasks: this.tasks.list(), messages: this.messages, runningToolIds: [...this.runningTools], ...(this.config ? { config: this.config } : {}), interactions: [...this.interactions.values()].map(({ request }) => request),
+    return this.frame({ type: 'session.snapshot', tasks: this.tasks.list(), messages: this.messages, prompts: this.prompts, runningToolIds: [...this.runningTools], ...(this.config ? { config: this.config } : {}), interactions: [...this.interactions.values()].map(({ request }) => request),
       ...(this.activeRunId ? { activeRunId: this.activeRunId } : {}) }, this.seq) as StreamFrame & { type: 'session.snapshot' }
   }
 
@@ -190,7 +193,7 @@ export class SessionStream {
         applyStreamFrame(next, { type: 'task.updated', task }), message))
       return
     }
-    if (frame.type === 'session.state' || frame.type === 'session.snapshot' || frame.type === 'session.config') return
+    if (frame.type === 'session.state' || frame.type === 'session.snapshot' || frame.type === 'session.config' || frame.type === 'suggestion.prompts') return
     const targetId = frame.messageTargetId ?? frame.runId
     if (frame.type === 'task.delivered') {
       this.messages = this.messages.map((message) => {

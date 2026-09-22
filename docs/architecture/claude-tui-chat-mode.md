@@ -258,7 +258,11 @@ Claude hooks -> local HTTP -> run.started / session.state / run.completed
 native JSONL -> shared watch -> session.snapshot -> both connected chat viewers
 ```
 
-注入前等待带边框的原生输入框出现，用原生 stash 保存并腾空已有草稿，粘贴后等待内容显示并提交。
+注入前等待带边框的原生输入框出现，用原生 stash 保存并腾空已有草稿，粘贴后等待真实输入内容显示并提交。
+输入检测使用 `capture-pane -p -e -J`：保留 SGR 样式，并合并终端软换行。
+`ClaudeProvider.parseTerminalComposer` 按 faint 属性区分可编辑文字与灰色建议，颜色不参与判定，
+因此浅色 / 深色主题均适用。RGB / 索引色参数中的数字不会被当成字体属性。
+只有真实草稿触发 Ctrl+S；暂存后出现建议仍算空输入，建议也不能充当粘贴完成的确认。
 不会向启动对话框、历史搜索或尚未就绪的画面盲发 Enter；超时提示用户打开 Terminal
 处理。`UserPromptSubmit` 仍是 Claude 接收消息的权威确认。
 
@@ -456,7 +460,7 @@ TUI 粘贴图片 -> 原生 base64 image -> 按内容哈希的 0600 附件文件 
 /compact -> Pre/PostCompact -> 压缩状态；原生拒绝 -> 明确失败
 ```
 
-原生输入框有草稿或对话框时不自动刷新。启动与资源重启共享按会话的进行中任务，刷新期间
+原生输入框有草稿或对话框时不自动刷新；灰色输入建议不阻止资源刷新。启动与资源重启共享按会话的进行中任务，刷新期间
 发送气泡不会误报“旧终端缺少桥接”，也不会启动两个进程。气泡接管非空输入时使用原生
 stash，保留整份多行草稿，避免 Ctrl+A/K 只删除最后一行而拼接错消息。
 [原生快捷键说明](https://code.claude.com/docs/en/interactive-mode#general-controls)定义了 Ctrl+S 的暂存语义。
@@ -475,11 +479,34 @@ stash，保留整份多行草稿，避免 Ctrl+A/K 只删除最后一行而拼�
 node --import tsx tests/fixtures/terminal/native-product-probe.ts dist/provider/claude/tools/native-product-server.js
 ```
 
+### 4.19 原生输入建议
+
+终端启动 / 认领后及空闲轮询时读取 provider 的 composer 状态（间隔 1 秒）。建议变化才发布
+`suggestion.prompts`，清除时发送空数组；真实草稿、对话框、新轮次和进程退出会清除旧建议。
+`SessionStream` 将建议保存在 `session.snapshot.prompts` 中，重连无需再生成建议；
+会话重绑定清除旧流状态。读取完成后复核会话、实例和活动轮次，丢弃跨状态变化的结果。
+输入检测和资源刷新共用同一 composer 解析器，harness 不识别 Claude 的字符布局。
+
+```text
+tmux styled capture -> Claude composer { text, suggestion }
+                         |                    |
+                    stash / paste       idle poll (1s)
+                                              |
+                          suggestion.prompts + snapshot.prompts
+                                              |
+                          ChatComposer gray hint -> accept -> draft -> send
+```
+
+WebUI 只在当前会话已连接、空闲且输入框为空时显示建议，遵循“输入建议”偏好。
+输入或 Esc 会隐藏当前建议，重复快照不使它重新出现；新的建议或新轮次可再次显示。
+具体布局与键盘行为见前端规范的“Composer 原生输入建议”。
+
 ## 5. 已知限制
 
 - Pi TUI 不在本轮范围；Pi UI 与程序化 Claude 调用仍使用各自原有 runtime。
 - MessageDisplay 按原生行 / 片段推送，不提供严格逐 token、thinking 或工具参数增量。
-- 原生 prompt suggestion 留在 CLI 输入框；CLI 没有向此桥接提供 SDK 的 `suggestion.prompts` 列表。
+- 原生输入建议从当前 TUI 画面读取；CLI 没有向这个交互式桥接提供 SDK 的结构化建议事件。
+  UI 镜像当前可见建议，不额外请求模型；原生没有生成建议时不补造内容。
 - statusLine 仅给出上下文总占用和窗口上限；分类计数未知时保留 null，不伪造为 0。
 - 后台任务的直接键盘取消不一定写入转录。任务卡片进入原生管理后标为 unknown，
   只有后续原生通知才确认为完成 / 取消；不能可靠绑定单个任务的自动停止。

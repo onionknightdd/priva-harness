@@ -23,6 +23,7 @@ import { bindTaskStop, setBackgroundTasks, updateBackgroundTask } from "./backgr
 import { isCompactCommandUserMessage } from "./slash-command-envelope"
 import { contextUsageFromApi, emptyContextUsage, type ContextUsage } from "./context-usage"
 import { applyThreadStreamFrame, mergeSnapshotMessages, type StreamFrame } from "./run-stream-reducer"
+import { updatePromptSuggestion, type PromptSuggestion } from "./prompt-suggestion"
 
 export function useAgentMessage() {
   const { t } = useTranslation()
@@ -39,6 +40,7 @@ export function useAgentMessage() {
   const { attachments, clear: clearAttachments } = composerAttachments
   const [interactions, setInteractions] = React.useState<InteractionRequest[]>([])
   const [draft, setDraft] = React.useState("")
+  const [suggestion, setSuggestion] = React.useState<PromptSuggestion | null>(null)
   const [slashCommand, setSlashCommand] = React.useState<SlashCommand | null>(null)
   const [modelReference, setModelReference] = React.useState<string | null>(null)
   const [effort, setEffort] = React.useState<AgentRunEffort>("medium")
@@ -72,6 +74,10 @@ export function useAgentMessage() {
     if (frame.type === 'terminal.focus') { setView('terminal'); return }
     setInteractions((current) => updateInteractions(current, frame))
     const id = frame.sessionId ?? connectionRef.current?.sessionId
+    if (id && ["suggestion.prompts", "session.snapshot", "run.started", "session.rebound"].includes(frame.type ?? "")) {
+      setSuggestion((current) => updatePromptSuggestion(current, `${runHarnessId}:${id}`, frame))
+    }
+    if (frame.type === "suggestion.prompts") return
     if (frame.type === 'session.rebound') return
     if (frame.config) {
       const config = frame.config
@@ -151,6 +157,7 @@ export function useAgentMessage() {
         hasSnapshotRef.current = true
         setMessages((current) => current.filter((message) => pendingIdsRef.current.has(message.id) || pendingIdsRef.current.has(message.id.replace(/:user$/, ''))))
         setInteractions([])
+        setSuggestion(null)
         setContextUsage(emptyContextUsage())
       },
     })
@@ -172,6 +179,7 @@ export function useAgentMessage() {
     setConnected(false)
     setInteractions([])
     setActiveRunId(null)
+    setSuggestion(null)
   }, [])
 
   React.useEffect(() => {
@@ -213,6 +221,7 @@ export function useAgentMessage() {
     seedTitleRef.current = content || files.map((file) => file.name).join(", ")
     setLastModelReference(modelReference)
     setDraft(""); setSlashCommand(null); clearAttachments()
+    setSuggestion(null)
     setMessages((current) => [...current, user, assistant])
     const generation = generationRef.current
     // Queue only model turns. Detached tasks have their own lifecycle and stop action.
@@ -242,10 +251,19 @@ export function useAgentMessage() {
     return connection ? connection.respondPermission(response) : Promise.reject(new Error("Connection unavailable"))
   }, [])
   const stop = React.useCallback(() => connectionRef.current?.abort(), [])
+  const dismissPromptSuggestion = React.useCallback(() => setSuggestion((current) =>
+    current && !current.dismissed ? { ...current, dismissed: true } : current), [])
+  const updateDraft = React.useCallback((value: string) => {
+    setDraft(value)
+    dismissPromptSuggestion()
+  }, [dismissPromptSuggestion])
+  const isStreaming = activeRunId !== null || messages.some((message) => message.status === "streaming")
   return {
     interactions, respondPermission, composerAttachments, draft, messages, contextUsage, modelReference, effort, isConnected, connectionError,
-    isStreaming: activeRunId !== null || messages.some((message) => message.status === "streaming"),
+    isStreaming,
+    promptSuggestion: inputSuggestions && isConnected && !isStreaming && suggestion?.scope === `${runHarnessId}:${runSessionId}` && !suggestion.dismissed ? suggestion.text : undefined,
+    dismissPromptSuggestion,
     canSubmit: Boolean(!interactions.length && (draft.trim() || slashCommand || attachments.length) && readyComposerAttachments(attachments) !== null && modelReference && runHarnessId && runCwd.trim()),
-    modelReady: Boolean(modelReference && runHarnessId), slashCommand, setDraft, setSlashCommand, setModelReference, setEffort, submit, stop,
+    modelReady: Boolean(modelReference && runHarnessId), slashCommand, setDraft: updateDraft, setSlashCommand, setModelReference, setEffort, submit, stop,
   }
 }

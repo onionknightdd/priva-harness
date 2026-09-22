@@ -171,6 +171,8 @@ export const zhCN = {
     },
     emptyTitle: "接下来做什么？",
     promptLabel: "消息",
+    acceptPromptSuggestion: "填入建议：{{suggestion}}",
+    promptSuggestionHint: "建议：{{suggestion}}。按 Tab 或右方向键填入。",
     promptPlaceholder:
       "输入你的问题，输入 / 使用技能或者命令，输入@引用工作区文件",
     send: "发送",

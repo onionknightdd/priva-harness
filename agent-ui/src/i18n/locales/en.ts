@@ -171,6 +171,8 @@ export const en = {
     },
     emptyTitle: "What's next?",
     promptLabel: "Message",
+    acceptPromptSuggestion: "Use suggestion: {{suggestion}}",
+    promptSuggestionHint: "Suggestion: {{suggestion}}. Press Tab or Right arrow to insert it.",
     promptPlaceholder:
       "Type a question, use / for skills, use @ to refer a project file",
     send: "Send",

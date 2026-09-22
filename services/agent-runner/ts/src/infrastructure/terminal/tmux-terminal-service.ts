@@ -289,8 +289,8 @@ export class TmuxTerminalService implements TerminalService {
     await this.run(key, ['send-keys', '-t', SESSION_NAME, ...keys])
   }
 
-  async capture(key: string): Promise<string> {
-    const { stdout } = await this.run(key, ['capture-pane', '-p', '-t', SESSION_NAME])
+  async capture(key: string, options?: { readonly styled?: boolean }): Promise<string> {
+    const { stdout } = await this.run(key, ['capture-pane', '-p', ...(options?.styled ? ['-e', '-J'] : []), '-t', SESSION_NAME])
     return stdout
   }
 

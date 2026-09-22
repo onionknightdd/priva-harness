@@ -10,9 +10,11 @@ import { emptyContextUsage } from "../../../src/features/agent-message/context-u
 import type { StreamFrame } from "../../../src/features/agent-message/run-stream-reducer"
 import i18n from "../../../src/i18n"
 import "../../../src/index.css"
+import { runPromptSuggestionChecks } from "./prompt-suggestion-browser"
 
 const options = new URLSearchParams(location.search)
 const appMode = options.has("app")
+if (options.has("suggestions")) localStorage.setItem("agent-ui-agent-preferences", JSON.stringify({ defaultHarness: "claude", inputSuggestions: !options.has("suggestions-disabled") }))
 if (appMode) installProjectDirectoryFixtures()
 await i18n.changeLanguage(options.has("zh") ? "zh-CN" : "en")
 const results = document.getElementById("results")!
@@ -22,6 +24,7 @@ let seq = 0
 let nativeRuns = 0
 let activeRunId: string | undefined
 let config: StreamFrame["config"]
+let prompts: string[] = []
 let lastSentModel = ""
 let sessionId = appMode ? "new-session-1" : "terminal-regression"
 const messages: AgentThreadMessage[] = []
@@ -60,7 +63,7 @@ class TerminalSocket extends EventTarget {
     this.dispatchEvent(new MessageEvent("message", { data: new TextEncoder().encode(text).buffer }))
   }
   snapshot() {
-    this.reply({ v: 2, type: "session.snapshot", streamId: "native-stream", sessionId, harness: "claude", runId: "", seq, ts: Date.now(), tasks: [], messages, activeRunId, config })
+    this.reply({ v: 2, type: "session.snapshot", streamId: "native-stream", sessionId, harness: "claude", runId: "", seq, ts: Date.now(), tasks: [], messages, activeRunId, config, prompts })
   }
   send(data: string | ArrayBuffer) {
     if (typeof data === "string") {
@@ -98,6 +101,7 @@ function broadcast(frame: Record<string, unknown>) {
 }
 
 function replyInTerminal(content: string, runId: string) {
+  prompts = []
   if (content.trim() === "/clear") {
     broadcast({ type: "run.completed", runId, model: "fixture" })
     const nextSessionId = `cleared-${++nativeRuns}`
@@ -162,4 +166,33 @@ document.getElementById("exit")!.onclick = () => {
     const hit = document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
     results.textContent = `${button.contains(hit) ? "PASS" : "FAIL"} reopen pointer target: ${hit?.tagName}`
   }, 250)
+}
+
+if (options.has("suggestions")) {
+  const show = (text: string) => { prompts = text ? [text] : []; broadcast({ type: "suggestion.prompts", prompts }) }
+  const checks = document.getElementById("checks")!
+  const preview = document.createElement("button")
+  preview.textContent = "Simulate native suggestion"
+  preview.onclick = () => show("检查子 agent 的输出")
+  const run = document.createElement("button")
+  run.textContent = "Run suggestion checks"
+  run.onclick = () => {
+    run.disabled = true
+    void runPromptSuggestionChecks({ host, show, disabled: options.has("suggestions-disabled"),
+      snapshot: () => { for (const socket of sockets) if (socket.subscribed && socket.readyState === 1) socket.snapshot() },
+      count: () => messages.length,
+      rebind: () => replyInTerminal("/clear", "clear-test"),
+      disconnect: () => { for (const socket of sockets) if (socket.subscribed && socket.readyState === 1) socket.close() },
+    }).then((passed) => { results.textContent = `PASS ${passed.length} suggestion checks\n${passed.join("\n")}` })
+      .catch((error: unknown) => { results.textContent = `FAIL ${String(error)}` })
+      .finally(() => { run.disabled = false })
+  }
+  checks.insertBefore(preview, results)
+  checks.insertBefore(run, results)
+  Object.assign(checks.style, { height: "100px", overflow: "auto", fontSize: "12px" })
+  host.style.top = "110px"
+  host.style.height = "calc(100dvh - 110px)"
+  const style = document.createElement("style")
+  style.textContent = '#root [data-slot="sidebar-wrapper"] { height: 100%; min-height: 0; } #checks { background: var(--background); } #checks button { margin-right: 8px; }'
+  document.head.append(style)
 }

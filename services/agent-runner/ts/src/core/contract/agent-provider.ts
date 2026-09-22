@@ -5,7 +5,7 @@ import type { SlashCommand } from '../resource/slash-command.js'
 import type { UserTurn } from '../run/user-turn.js'
 import type { ImageToolProfile } from '../tool/define-tool.js'
 import type { ProviderSessionStore } from './provider-session-store.js'
-import type { TerminalInput, TerminalLaunchContext, TerminalLaunchSpec, TerminalSessionState, TerminalTextBatch, TerminalTelemetry } from './terminal-service.js'
+import type { TerminalComposer, TerminalInput, TerminalLaunchContext, TerminalLaunchSpec, TerminalSessionState, TerminalTextBatch, TerminalTelemetry } from './terminal-service.js'
 
 export type ProviderId = 'claude' | 'pi'
 
@@ -90,6 +90,7 @@ export interface AgentProvider {
   readTerminalSpec?(scratchDir: string): Promise<ProviderRunSpec | undefined>
   readTerminalState?(scratchDir: string): Promise<TerminalSessionState | undefined>
   recordTerminalState?(scratchDir: string, state: TerminalSessionState): Promise<void>
+  parseTerminalComposer?(screen: string): TerminalComposer | undefined
   submitTerminalInput?(input: TerminalInput, text: string, signal: AbortSignal): Promise<void>
   completeTerminalCommand?(input: TerminalInput, text: string, signal: AbortSignal): Promise<boolean>
   configureTerminal?(input: TerminalInput, scratchDir: string, spec: ProviderRunSpec, signal: AbortSignal): Promise<'applied' | 'restart'>

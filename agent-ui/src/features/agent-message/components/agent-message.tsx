@@ -48,6 +48,8 @@ export function AgentMessage({
   onAttachmentRemove,
   onAttachmentRetry,
   draft,
+  promptSuggestion,
+  onDismissPromptSuggestion,
   messages,
   contextUsage,
   canSubmit,
@@ -73,6 +75,8 @@ export function AgentMessage({
   onAttachmentRemove: (id: string) => void
   onAttachmentRetry: (id: string) => void
   draft: string
+  promptSuggestion?: string
+  onDismissPromptSuggestion?: () => void
   messages: AgentThreadMessage[]
   contextUsage: ContextUsage
   canSubmit: boolean
@@ -232,6 +236,8 @@ export function AgentMessage({
           onAttachmentRetry={onAttachmentRetry}
           compact={!isEmpty}
           draft={draft}
+          promptSuggestion={promptSuggestion}
+          onDismissPromptSuggestion={onDismissPromptSuggestion}
           canSubmit={canSubmit}
           isStreaming={isStreaming}
           modelReady={modelReady}

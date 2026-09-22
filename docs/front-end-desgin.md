@@ -1509,6 +1509,34 @@ upload -> absolute file path -> AgentAttachments -> run.start.text
 transcript -> attachmentsFromMessageText -> body + attachment cards
 ```
 
+### Composer 原生输入建议
+
+2026-09-23：按用户确认，Claude Code TUI 的灰色输入建议同步到 ChatComposer。
+复用现有输入框位置、Button、主题文字色与模型 / 发送操作。空闲、已连接、无草稿、
+无附件、无 Slash 命令时显示；关闭“输入建议”偏好后隐藏。
+
+```text
+Chat / Terminal
++------------------------------------------------+
+| 消息记录                                       |
++------------------------------------------------+
+| [+] 灰色输入建议              [Tab] [模型] [↑]  |
++------------------------------------------------+
+      Tab / 右箭头 / 点击 -> 可编辑草稿 -> 发送
+窄屏：保留灰字与点击入口，隐藏 Tab 标签；长建议单行截断。
+```
+
+建议本身不进入 ProseMirror 文档，不能直接发送、不会启用发送按钮，也不改变输入框高度。
+Tab / 右方向键或点击建议只填入草稿并将光标放到末尾；Enter 沿用正常发送逻辑。
+Shift+Tab 保留焦点导航，IME 组合输入不接受建议。开始输入、Esc、新轮次、切换会话或
+原生 /clear 等重绑定清除旧建议；断线隐藏，重连从快照恢复。已有草稿始终优先。
+重复快照不复活用户已隐藏的同一建议。Button 和输入框通过中英文可访问说明解释接受操作。
+建议出现时为 150ms 淡入，开始输入时立即移除；减少动态效果时立即显示。
+
+服务端使用 `suggestion.prompts` 与 `session.snapshot.prompts`，按会话同步原生建议，
+不单独调用模型。后端输入识别和时序见
+[claude-tui-chat-mode.md](architecture/claude-tui-chat-mode.md#419-原生输入建议)。
+
 ### 会话视图切换与 Claude Code 终端镜像
 
 2026-09-21：会话页头中央新增 Chat / Terminal 分段控件（`SessionViewToggle`，复用
@@ -1906,6 +1934,19 @@ rg -n '@base-ui/react|motion/react|gsap' agent-ui/src
 ```
 
 ## Development and verification
+
+原生输入建议的状态回归（仓库根目录）：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/prompt-suggestion.test.ts
+```
+
+浏览器打开 `/tests/features/agent-message/terminal-view-browser.html?app&suggestions`，点击
+**Run suggestion checks**。检查空输入建议、填入后再发送、Tab / 右箭头 / 点击、IME、
+Shift+Tab、Esc、已有草稿、重复快照、断线重连和原生会话重绑定。
+附加 `&zh&dark&reduced-motion` 检查中文、深色和减少动态效果，并在 390px 视口复测。
+附加 `&suggestions-disabled` 验证关闭偏好后不能显示或接受建议。
+该模式设置测试偏好，需在独立开发服务器 origin 运行，避免改变常用 UI 的本地偏好。
 
 前端位于 `agent-ui/`，使用 npm。以下开发和测试入口从 `AGENTS.md` 迁入。
 新增前端工具时在这里维护确切命令。

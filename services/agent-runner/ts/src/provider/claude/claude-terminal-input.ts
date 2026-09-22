@@ -1,21 +1,8 @@
 import { setTimeout } from 'node:timers/promises'
+import { stripVTControlCharacters } from 'node:util'
 
 import { TerminalError, type TerminalInput } from '../../core/contract/terminal-service.js'
-
-/** Find the live composer, never a prompt echoed into transcript scrollback. */
-export function claudeComposer(screen: string): string | undefined {
-  const lines = screen.split('\n')
-  for (let index = lines.length - 1; index > 0; index--) {
-    const line = lines[index] ?? ''
-    if (/^\s*❯/u.test(line) && /^\s*[─━╌-]{3,}\s*$/u.test(lines[index - 1] ?? '')) {
-      // Search uses the same box, but Enter would replay the selected old prompt.
-      if (lines.slice(index + 1).some((row) => /ctrl\+r|esc to cancel.*search/iu.test(row))) return undefined
-      const bottom = lines.findIndex((row, next) => next > index && /^\s*[─━╌-]{3,}\s*$/u.test(row))
-      return [line.replace(/^\s*❯\s?/u, ''), ...lines.slice(index + 1, bottom < 0 ? index + 1 : bottom)].join('\n').trimEnd()
-    }
-  }
-  return undefined
-}
+import { claudeComposer } from './claude-terminal-composer.js'
 
 export async function submitClaudeTerminalInput(input: TerminalInput, text: string, signal: AbortSignal): Promise<void> {
   const screen = await waitFor(input, signal, (screen) => claudeComposer(screen) !== undefined,
@@ -23,9 +10,9 @@ export async function submitClaudeTerminalInput(input: TerminalInput, text: stri
   signal.throwIfAborted()
   // Ctrl+A/K only clears the current logical line. Native stash clears the
   // entire draft (including pasted blocks) without interrupting active work.
-  if (claudeComposer(screen)?.trim()) {
+  if (claudeComposer(screen)?.text.trim()) {
     await input.sendKeys(['C-s'])
-    await waitFor(input, signal, (next) => claudeComposer(next)?.trim() === '',
+    await waitFor(input, signal, (next) => claudeComposer(next)?.text.trim() === '',
       'Claude did not stash its input draft. Open Terminal before sending again.', 5000)
   }
   signal.throwIfAborted()
@@ -33,7 +20,7 @@ export async function submitClaudeTerminalInput(input: TerminalInput, text: stri
   // Claude coalesces fast input bursts: Enter before paste commit becomes a
   // newline in the draft. Observe the draft before submitting, then let the
   // lifecycle hook provide the authoritative acceptance acknowledgement.
-  await waitFor(input, signal, (screen) => Boolean(claudeComposer(screen)?.trim()),
+  await waitFor(input, signal, (screen) => Boolean(claudeComposer(screen)?.text.trim()),
     'Claude did not display the pasted message. Open Terminal to inspect its input.', 10000)
   await setTimeout(100, undefined, { signal })
   signal.throwIfAborted()
@@ -43,8 +30,9 @@ export async function submitClaudeTerminalInput(input: TerminalInput, text: stri
 export async function completeClaudeLocalCommand(input: TerminalInput, text: string, signal: AbortSignal): Promise<boolean> {
   if (/^\/compact(?:\s|$)/u.test(text.trim())) {
     await waitFor(input, signal, (screen) => {
-      if (claudeComposer(screen)?.trim() !== '') return false
-      const output = screen.slice(screen.lastIndexOf('❯ /compact'))
+      if (claudeComposer(screen)?.text.trim() !== '') return false
+      const plain = stripVTControlCharacters(screen)
+      const output = plain.slice(plain.lastIndexOf('❯ /compact'))
       const error = /Not enough messages to compact[^\n]*|(?:Error|Failed|Unable)[^\n]*(?:compact|compress)[^\n]*/iu.exec(output)?.[0]
       if (error) throw new TerminalError('io-failure', error)
       // Successful compaction is acknowledged by PostCompact, which cancels
@@ -53,7 +41,7 @@ export async function completeClaudeLocalCommand(input: TerminalInput, text: str
     }, 'Claude did not finish /compact. Open Terminal to inspect its response.', 300000)
   }
   if (!/^\/context(?:\s|$)/u.test(text.trim())) return false
-  await waitFor(input, signal, (screen) => claudeComposer(screen)?.trim() === '' && /context usage|context window|tokens.*\//iu.test(screen),
+  await waitFor(input, signal, (screen) => claudeComposer(screen)?.text.trim() === '' && /context usage|context window|tokens.*\//iu.test(stripVTControlCharacters(screen)),
     'Claude did not finish /context. Open Terminal to inspect its response.', 30000)
   return true
 }

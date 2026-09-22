@@ -6,6 +6,7 @@ import { z } from 'zod'
 import type { ProviderRunSpec } from '../../core/contract/agent-provider.js'
 import { TerminalError, type TerminalInput } from '../../core/contract/terminal-service.js'
 import { submitClaudeTerminalInput } from './claude-terminal-input.js'
+import { stripVTControlCharacters } from 'node:util'
 import { splitModelContext } from '../../core/resource/model-profile.js'
 
 const selectionSchema = z.object({ model: z.string(), effort: z.string().optional(), profile: z.string() })
@@ -52,7 +53,7 @@ async function change(input: TerminalInput, scratchDir: string, field: 'model' |
     const status = await readStatus(scratchDir)
     const actual = status?.[field]
     if (status?.instanceId === instanceId && (actual === value || (field === 'model' && modelMatches(actual, value)))) return
-    const screen = await input.capture()
+    const screen = stripVTControlCharacters(await input.capture())
     // Confirm only the cache-reset dialog caused by this exact operation.
     if (!confirmed && screen.includes(hint)) { await input.sendKeys(['Enter']); confirmed = true }
     await setTimeout(100, undefined, { signal })

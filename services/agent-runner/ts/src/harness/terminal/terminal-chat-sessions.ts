@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { setTimeout as delay } from 'node:timers/promises'
 
 import type { ProviderRunSpec, SessionRef, SessionTarget } from '../../core/contract/agent-provider.js'
-import type { TerminalElicitation, TerminalQuestion, TerminalSessionState, TerminalStatus } from '../../core/contract/terminal-service.js'
+import type { TerminalComposer, TerminalElicitation, TerminalQuestion, TerminalSessionState, TerminalStatus } from '../../core/contract/terminal-service.js'
 import { terminalElicitationForm } from './terminal-elicitation.js'
 import type { RunLedger } from '../run/run-ledger.js'
 import type { RunAccounting, SessionConfiguration } from '../../core/event/agent-event.js'
@@ -57,6 +57,7 @@ interface TerminalChat {
   releaseHistory?: () => Promise<void>
   readonly interactions: InteractionCoordinator
   backgroundActive?: boolean
+  suggestion?: string
 }
 
 export interface TerminalChatSessionsOptions {
@@ -115,6 +116,7 @@ export class TerminalChatSessions {
       if (state) await this.event(ref, state)
       chat.releaseHistory ??= await this.options.observe(ref, chat.cwd)
       await this.readTelemetry(chat)
+      await this.readComposer(chat)
       return opened
     })()
     this.opening.set(key, opening)
@@ -281,6 +283,7 @@ export class TerminalChatSessions {
   async exited(ref: SessionRef, reason: string): Promise<void> {
     const chat = this.chats.get(sessionRefKey(ref))
     if (!chat) return
+    this.publishSuggestion(chat)
     for (const pending of chat.queue.splice(0)) this.options.stream(ref).publish({ type: 'error', code: 'run.start', message: reason }, pending.runId)
     await this.finish(chat, { type: 'run.failed', message: reason })
     await chat.releaseHistory?.()
@@ -326,6 +329,7 @@ export class TerminalChatSessions {
   }
 
   private async begin(chat: TerminalChat, text: string, runId: string, model: string, confirmed: boolean, startedAt = Date.now()): Promise<ActiveTurn> {
+    this.publishSuggestion(chat)
     const active: ActiveTurn = { runId, text, model, confirmed, textOffset: 0, startedAt, abort: new AbortController() }
     chat.active = active
     const spec = chat.spec ?? await this.options.terminals.spec(chat.ref)
@@ -520,12 +524,32 @@ export class TerminalChatSessions {
     return chat.telemetryRead
   }
 
-  private async reloadResources(chat: TerminalChat): Promise<void> {
+  private publishSuggestion(chat: TerminalChat, suggestion?: string): void {
+    if (chat.suggestion === suggestion) return
+    if (suggestion) chat.suggestion = suggestion
+    else delete chat.suggestion
+    this.options.stream(chat.ref).publish({ type: 'suggestion.prompts', prompts: suggestion ? [suggestion] : [] })
+  }
+
+  private async readComposer(chat: TerminalChat): Promise<TerminalComposer | undefined> {
+    if (this.composerBusy(chat)) return undefined
+    const updatedAt = chat.updatedAt, instanceId = chat.instanceId
+    const composer = await this.options.terminals.composer(chat.ref)
+    if (this.disposed || this.chats.get(sessionRefKey(chat.ref)) !== chat || this.composerBusy(chat) ||
+      updatedAt !== chat.updatedAt || instanceId !== chat.instanceId) return undefined
+    this.publishSuggestion(chat, chat.spec?.promptSuggestions === false ? undefined : composer?.suggestion)
+    return composer
+  }
+
+  private composerBusy(chat: TerminalChat): boolean {
+    return chat.active !== undefined || chat.pumping || chat.finishing || chat.awaitingReady
+  }
+
+  private async reloadResources(chat: TerminalChat, composer: TerminalComposer | undefined): Promise<void> {
     const key = sessionRefKey(chat.ref)
     if (!this.resourcesDirty.has(key) || chat.active || chat.pumping || chat.finishing || !chat.spec || (chat.backgroundActive ?? this.options.stream(chat.ref).tasks.hasActive)) return
     // Do not discard a native draft or close a user-owned dialog to reload.
-    const screen = await this.options.terminals.capture(chat.ref)
-    if (!/^\s*❯\s*$/mu.test(screen) || !/[─━╌-]{3,}\s*\n\s*❯\s*\n/u.test(screen)) return
+    if (composer?.text.trim() !== '') return
     if (this.isBusy(chat) || (await this.options.terminals.state(chat.ref))?.phase !== 'idle') return
     chat.pumping = true
     chat.awaitingReady = true
@@ -574,7 +598,8 @@ export class TerminalChatSessions {
           const state = await this.options.terminals.state(chat.ref)
           if (this.isDisposed()) break
           if (state && this.chats.get(sessionRefKey(chat.ref)) === chat) await this.event(chat.ref, state)
-          await this.reloadResources(chat)
+          const composer = await this.readComposer(chat)
+          await this.reloadResources(chat, composer)
           delete chat.monitorError
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error)

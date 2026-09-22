@@ -3,6 +3,18 @@ import { SessionStream } from '../../../../src/harness/session/session-stream.js
 import type { StreamFrame } from '../../../../src/core/event/agent-event.js'
 
 describe('session stream', () => {
+  it('restores suggestions to reconnecting viewers and clears them on a new turn or session', () => {
+    const stream = new SessionStream({ provider: 'claude', id: 's' })
+    stream.publish({ type: 'suggestion.prompts', prompts: ['检查子 agent 的输出'] })
+    const frames: StreamFrame[] = []
+    stream.subscribe((frame) => frames.push(frame))()
+    expect(frames).toEqual([expect.objectContaining({ type: 'session.snapshot', prompts: ['检查子 agent 的输出'], messages: [] })])
+    stream.publish({ type: 'run.started', driver: 'terminal' }, 'next')
+    expect(stream.snapshot().prompts).toEqual([])
+    stream.publish({ type: 'suggestion.prompts', prompts: ['Another suggestion'] })
+    stream.publish({ type: 'session.rebound', nextSessionId: 'next-session' })
+    expect(stream.snapshot().prompts).toEqual([])
+  })
   it('keeps a newer native task membership fact when the same history is replayed', () => {
     const stream = new SessionStream({ provider: 'claude', id: 's' })
     stream.publish({ type: 'run.started', driver: 'terminal' }, 'native')

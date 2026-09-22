@@ -135,7 +135,7 @@ export type AgentEvent = (
   | { readonly type: 'task.updated' | 'task.notification'; readonly task: BackgroundTask }
   | { readonly type: 'task.delivered'; readonly notification: TaskNotification; readonly task: BackgroundTask }
   | { readonly type: 'session.state'; readonly state: 'running' | 'idle' | 'requires_action' }
-  | { readonly type: 'session.snapshot'; readonly tasks: readonly BackgroundTask[]; readonly messages: readonly ThreadMessage[]; readonly activeRunId?: string; readonly interactions?: readonly InteractionRequest[]; readonly config?: SessionConfiguration; readonly runningToolIds?: readonly string[] }
+  | { readonly type: 'session.snapshot'; readonly tasks: readonly BackgroundTask[]; readonly messages: readonly ThreadMessage[]; readonly activeRunId?: string; readonly interactions?: readonly InteractionRequest[]; readonly config?: SessionConfiguration; readonly runningToolIds?: readonly string[]; readonly prompts?: readonly string[] }
   | ({ readonly type: 'run.started'; readonly model?: string; readonly userMessage?: ThreadMessage; readonly driver?: 'terminal' } & EventChannel)
   | ({
       readonly type: 'assistant.block_start'

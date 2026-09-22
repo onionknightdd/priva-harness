@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import type { TerminalLaunchSpec } from '../../../../src/core/contract/terminal-service.js'
 import { TmuxTerminalService } from '../../../../src/infrastructure/terminal/tmux-terminal-service.js'
+import { claudeComposer } from '../../../../src/provider/claude/claude-terminal-composer.js'
 
 function tmuxAvailable(): boolean {
   try {
@@ -107,6 +108,22 @@ describe.skipIf(!tmuxAvailable())('TmuxTerminalService', () => {
     await expect.poll(async () => (await service.capture('s2')).includes('pasted-line'), { timeout: 5000 }).toBe(true)
     await first.detach()
     await second.detach()
+  })
+
+  it('preserves suggestion styling and joins soft wraps without merging logical draft lines', async () => {
+    const suggestion = '检查子 agent 的输出 👋 and the rest of this long suggestion'
+    const initial = `READY\r\n${'─'.repeat(40)}\r\n❯ \u001b[2m${suggestion}\u001b[0m\r\n${'─'.repeat(40)}`
+    await service.ensure('suggestion', shellLaunch(cwd, {
+      command: process.execPath, args: [...byteWriterArgs, Buffer.from(initial).toString('base64')], cols: 40,
+    }))
+    await expect.poll(() => service.capture('suggestion')).toContain('READY')
+    const styled = await service.capture('suggestion', { styled: true })
+    expect(claudeComposer(styled)).toEqual({ text: '', suggestion })
+    expect(await service.capture('suggestion')).not.toContain('\u001b[')
+    const viewer = await service.attach('suggestion', 40, 12)
+    await viewer.write(outputInput(Buffer.from(`\u001b[2J\u001b[H${'─'.repeat(40)}\r\n❯ draft one\r\nsecond line\r\n${'─'.repeat(40)}`)))
+    await expect.poll(async () => claudeComposer(await service.capture('suggestion', { styled: true })))
+      .toEqual({ text: 'draft one\nsecond line' })
   })
 
   it('reports exit to viewers when the program ends and closes cleanly', async () => {

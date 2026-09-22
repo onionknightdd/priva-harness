@@ -10,6 +10,7 @@ import { ActionSwapRollIcon } from "@/components/motion/action-swap-roll"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { InputGroupButton } from "@/components/ui/input-group"
 import { Separator } from "@/components/ui/separator"
+import { Button } from "@/components/ui/button"
 
 import type { ComposerAttachment } from "../composer-attachments"
 import { composerPrimaryAction } from "../composer-primary-action"
@@ -265,6 +266,8 @@ export function AgentMessageComposer({
   onAttachmentRemove,
   onAttachmentRetry,
   draft,
+  promptSuggestion,
+  onDismissPromptSuggestion,
   canSubmit,
   isStreaming = false,
   modelReady,
@@ -286,6 +289,8 @@ export function AgentMessageComposer({
   onAttachmentRemove: (id: string) => void
   onAttachmentRetry: (id: string) => void
   draft: string
+  promptSuggestion?: string
+  onDismissPromptSuggestion?: () => void
   canSubmit: boolean
   isStreaming?: boolean
   modelReady: boolean
@@ -362,6 +367,13 @@ export function AgentMessageComposer({
     slashCommand !== null,
     attachments.length > 0
   )
+  const visibleSuggestion = !isStreaming && draft === "" && !slashCommand && attachments.length === 0 && !mentionMenuOpen && !slashMenuOpen
+    ? promptSuggestion : undefined
+  const acceptSuggestion = () => {
+    if (!visibleSuggestion) return
+    onDraftChange(visibleSuggestion)
+    requestAnimationFrame(() => editorRef.current?.focus(true))
+  }
   const fieldPadLeft = singleLine
     ? leftWidth || COMPOSER_LEFT_FALLBACK_PX
     : COMPOSER_MULTI_PAD_X
@@ -564,9 +576,10 @@ export function AgentMessageComposer({
                   id={promptId}
                   draft={draft}
                   placeholder={
-                    slashCommand?.argumentHint ??
-                    t("agentMessage.promptPlaceholder")
+                    visibleSuggestion ? "" : (slashCommand?.argumentHint ??
+                    t("agentMessage.promptPlaceholder"))
                   }
+                  aria-description={visibleSuggestion ? t("agentMessage.promptSuggestionHint", { suggestion: visibleSuggestion }) : undefined}
                   aria-label={t("agentMessage.promptLabel")}
                   // Screen readers learn about the slash listbox and follow the
                   // highlighted option; keyboard handling below already exists.
@@ -600,6 +613,18 @@ export function AgentMessageComposer({
                   onChange={onDraftChange}
                   onMentionChange={setMentionTrigger}
                   onKeyDown={(event, atStart) => {
+                    if (visibleSuggestion && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
+                      if (event.key === "Tab" || event.key === "ArrowRight") {
+                        event.preventDefault()
+                        acceptSuggestion()
+                        return true
+                      }
+                      if (event.key === "Escape") {
+                        event.preventDefault()
+                        onDismissPromptSuggestion?.()
+                        return true
+                      }
+                    }
                     if (mentionMenuOpen) {
                       if (event.key === "ArrowDown") {
                         event.preventDefault()
@@ -703,6 +728,22 @@ export function AgentMessageComposer({
                     return true
                   }}
                 />
+                {visibleSuggestion ? (
+                  <motion.div key={visibleSuggestion} className="absolute inset-x-0 top-0"
+                    initial={shouldReduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }}
+                    transition={{ duration: shouldReduceMotion ? 0 : 0.15 }}>
+                    <Button type="button" variant="ghost" size="sm"
+                      data-prompt-suggestion="true"
+                      className="h-8 w-full min-w-0 justify-start gap-2 px-0 font-normal text-muted-foreground/60 hover:bg-transparent hover:text-muted-foreground"
+                      aria-label={t("agentMessage.acceptPromptSuggestion", { suggestion: visibleSuggestion })}
+                      title={visibleSuggestion}
+                      onPointerDown={(event) => event.preventDefault()}
+                      onClick={acceptSuggestion}>
+                      <span className="min-w-0 truncate">{visibleSuggestion}</span>
+                      <kbd className="ml-auto hidden shrink-0 rounded bg-muted px-1.5 text-xs sm:inline-flex" aria-hidden="true">Tab</kbd>
+                    </Button>
+                  </motion.div>
+                ) : null}
               </div>
             </motion.div>
           </div>

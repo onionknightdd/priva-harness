@@ -56,6 +56,8 @@ export function AgentMessagePage() {
       onAttachmentRemove={agentMessage.composerAttachments.remove}
       onAttachmentRetry={agentMessage.composerAttachments.retry}
       draft={agentMessage.draft}
+      promptSuggestion={agentMessage.promptSuggestion}
+      onDismissPromptSuggestion={agentMessage.dismissPromptSuggestion}
       messages={agentMessage.messages}
       contextUsage={agentMessage.contextUsage}
       canSubmit={agentMessage.canSubmit}

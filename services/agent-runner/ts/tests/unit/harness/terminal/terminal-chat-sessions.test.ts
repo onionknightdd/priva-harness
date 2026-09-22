@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { TerminalInput, TerminalService, TerminalSessionState } from '../../../../src/core/contract/terminal-service.js'
+import type { TerminalComposer, TerminalInput, TerminalService, TerminalSessionState } from '../../../../src/core/contract/terminal-service.js'
 import type { StreamFrame } from '../../../../src/core/event/agent-event.js'
 import { SessionStream } from '../../../../src/harness/session/session-stream.js'
 import { AgentHarness } from '../../../../src/harness/agent-harness.js'
@@ -17,6 +17,9 @@ function setup(timeout = 1000) {
   const spec = testRunSpec()
   let state: TerminalSessionState | undefined = { sessionId: ref.id, instanceId: 'instance', cwd: spec.cwd, event: 'ready', phase: 'idle', updatedAt: 1 }
   const provider = Object.assign(new FakeAgentProvider('claude', []), {
+    terminalLaunch: vi.fn(() => Promise.resolve({ command: 'claude', args: [], cwd: spec.cwd, env: {}, cols: 120, rows: 40 })),
+    readTerminalSpec: vi.fn(() => Promise.resolve(spec)),
+    parseTerminalComposer: vi.fn<(screen: string) => TerminalComposer | undefined>(),
     readTerminalState: vi.fn(() => Promise.resolve(state)),
     recordTerminalState: vi.fn((_dir: string, next: TerminalSessionState) => { state = next; return Promise.resolve() }),
     submitTerminalInput: vi.fn(async (input: TerminalInput, text: string) => { await input.paste(text); await input.sendKeys(['Enter']) }),
@@ -49,6 +52,46 @@ function setup(timeout = 1000) {
 }
 
 describe('TerminalChatSessions', () => {
+  it('mirrors late native suggestions, deduplicates polling, and clears hints for drafts, work and exit', async () => {
+    const { driver, ref, spec, provider, service, stream, frames, event } = setup()
+    provider.parseTerminalComposer.mockReturnValue({ text: '' })
+    await driver.open({ kind: 'resume', session: ref }, spec, { cols: 120, rows: 40 })
+    provider.parseTerminalComposer.mockReturnValue({ text: '', suggestion: 'native suggestion' })
+    await expect.poll(() => stream.snapshot().prompts, { timeout: 2500 }).toEqual(['native suggestion'])
+    expect(service.capture).toHaveBeenCalledWith('claude:terminal-session', { styled: true })
+    await driver.open({ kind: 'resume', session: ref }, spec, { cols: 120, rows: 40 })
+    expect(frames.filter((frame) => frame.type === 'suggestion.prompts')).toHaveLength(1)
+    provider.parseTerminalComposer.mockReturnValue({ text: 'native draft' })
+    await expect.poll(() => stream.snapshot().prompts, { timeout: 2500 }).toEqual([])
+    provider.parseTerminalComposer.mockReturnValue({ text: '', suggestion: 'native suggestion' })
+    await driver.open({ kind: 'resume', session: ref }, spec, { cols: 120, rows: 40 })
+    expect(stream.snapshot().prompts).toEqual(['native suggestion'])
+    await event('prompt', 'next turn')
+    expect(stream.snapshot().prompts).toEqual([])
+    await event('exit')
+    expect(stream.snapshot().prompts).toEqual([])
+  }, 7000)
+
+  it('honors the native input-suggestion preference', async () => {
+    const { driver, ref, spec, provider, stream } = setup()
+    provider.readTerminalSpec.mockResolvedValue({ ...spec, promptSuggestions: false })
+    provider.parseTerminalComposer.mockReturnValue({ text: '', suggestion: 'hidden suggestion' })
+    await driver.open({ kind: 'resume', session: ref }, spec, { cols: 120, rows: 40 })
+    expect(stream.snapshot().prompts).toEqual([])
+  })
+
+  it('discards a composer capture that finishes after a native turn starts', async () => {
+    const { driver, ref, spec, provider, service, stream, event } = setup()
+    let resolveCapture: (screen: string) => void = () => undefined
+    service.capture.mockImplementationOnce(() => new Promise<string>((resolve) => { resolveCapture = resolve }))
+    provider.parseTerminalComposer.mockReturnValue({ text: '', suggestion: 'stale suggestion' })
+    const opened = driver.open({ kind: 'resume', session: ref }, spec, { cols: 120, rows: 40 })
+    await expect.poll(() => service.capture.mock.calls.length).toBe(1)
+    await event('prompt', 'native input')
+    resolveCapture('old screen')
+    await opened
+    expect(stream.snapshot().prompts).toEqual([])
+  })
   it('mirrors generic tool approval and leaves URL elicitation in the native UI', async () => {
     const { driver, ref, spec, frames, stream } = setup()
     const pending = driver.question(ref, { sessionId: ref.id, instanceId: 'instance', cwd: spec.cwd, tool: 'Read',

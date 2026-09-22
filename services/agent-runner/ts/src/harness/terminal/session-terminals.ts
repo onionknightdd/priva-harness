@@ -11,6 +11,8 @@ import {
   TerminalError,
   type TerminalAttachment,
   type TerminalColorScheme,
+  type TerminalCaptureOptions,
+  type TerminalComposer,
   type TerminalService,
   type TerminalSessionState,
   type TerminalTextBatch,
@@ -137,13 +139,13 @@ export class SessionTerminals {
     const provider = this.options.providers[ref.provider]
     if (!provider.submitTerminalInput) throw new TerminalError('unsupported', `The ${ref.provider} terminal does not support chat input`)
     await provider.submitTerminalInput({
-      isAlive: () => this.isAlive(ref), capture: () => this.capture(ref),
+      isAlive: () => this.isAlive(ref), capture: () => this.capture(ref, { styled: true }),
       paste: (value) => this.paste(ref, value), sendKeys: (keys) => this.sendKeys(ref, keys),
     }, text, signal)
   }
 
   async completeCommand(ref: SessionRef, text: string, signal: AbortSignal): Promise<boolean> {
-    return await this.options.providers[ref.provider].completeTerminalCommand?.({ isAlive: () => this.isAlive(ref), capture: () => this.capture(ref),
+    return await this.options.providers[ref.provider].completeTerminalCommand?.({ isAlive: () => this.isAlive(ref), capture: () => this.capture(ref, { styled: true }),
       paste: (value) => this.paste(ref, value), sendKeys: (keys) => this.sendKeys(ref, keys) }, text, signal) ?? false
   }
 
@@ -152,7 +154,7 @@ export class SessionTerminals {
     if (!provider.configureTerminal) return false
     const key = SessionTerminals.key(ref)
     const scratchDir = await this.options.terminals.scratchDir(key)
-    const outcome = forceRestart ? 'restart' : await provider.configureTerminal({ isAlive: () => this.isAlive(ref), capture: () => this.capture(ref),
+    const outcome = forceRestart ? 'restart' : await provider.configureTerminal({ isAlive: () => this.isAlive(ref), capture: () => this.capture(ref, { styled: true }),
       paste: (text) => this.paste(ref, text), sendKeys: (keys) => this.sendKeys(ref, keys) }, scratchDir, spec, signal)
     if (outcome !== 'restart') return false
     if (!canRestart) throw new TerminalError('unsupported', 'Finish or stop background tasks before changing the model profile or reloading resources')
@@ -173,8 +175,13 @@ export class SessionTerminals {
     return this.options.terminals.sendKeys(SessionTerminals.key(ref), keys)
   }
 
-  capture(ref: SessionRef): Promise<string> {
-    return this.options.terminals.capture(SessionTerminals.key(ref))
+  capture(ref: SessionRef, options?: TerminalCaptureOptions): Promise<string> {
+    return this.options.terminals.capture(SessionTerminals.key(ref), options)
+  }
+
+  async composer(ref: SessionRef): Promise<TerminalComposer | undefined> {
+    const provider = this.options.providers[ref.provider]
+    return provider.parseTerminalComposer?.(await this.capture(ref, { styled: true }))
   }
 
   close(ref: SessionRef): Promise<void> {
