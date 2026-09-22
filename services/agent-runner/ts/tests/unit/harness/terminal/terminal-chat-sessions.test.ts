@@ -41,9 +41,10 @@ function setup(timeout = 1000) {
   const driver = new TerminalChatSessions({ terminals, eventsUrl: () => 'http://localhost/events',
     stream: () => stream, beforeOpen: () => Promise.resolve(), observe: () => Promise.resolve(released), refresh, confirmationTimeoutMs: timeout })
   drivers.push(driver)
-  const event = async (event: TerminalSessionState['event'], prompt?: string) => {
+  const event = async (event: TerminalSessionState['event'], prompt?: string, source?: string) => {
     state = { sessionId: ref.id, instanceId: 'instance', cwd: spec.cwd, event, updatedAt: (state?.updatedAt ?? 0) + 1,
-      phase: event === 'prompt' ? 'running' : event === 'exit' ? 'exited' : 'idle', ...(prompt === undefined ? {} : { prompt }) }
+      phase: event === 'prompt' ? 'running' : event === 'exit' ? 'exited' : 'idle', ...(prompt === undefined ? {} : { prompt }),
+      ...(source === undefined ? {} : { source }) }
     await driver.event(ref, state)
   }
   const submit = (text: string, runId: string) => driver.submit(ref, { text }, spec, runId)
@@ -52,6 +53,33 @@ function setup(timeout = 1000) {
 }
 
 describe('TerminalChatSessions', () => {
+  it.each([{ source: 'system', notification: true }, { source: 'user', notification: false },
+    { source: undefined, notification: true }, { source: undefined, notification: false }])('uses native input provenance for notifications without hiding pasted XML ($source, notification=$notification)', async ({ source, notification }) => {
+    const { event, stream, frames, refresh } = setup()
+    const xml = '<task-notification><task-id>worker</task-id><tool-use-id>agent-tool</tool-use-id><status>completed</status><result>Worker output</result></task-notification>'
+    const task = { taskId: 'worker', toolUseId: 'agent-tool', kind: 'agent', status: 'completed', result: 'Worker output' } as const
+    const history = [{ id: 'launch', role: 'assistant', content: 'Started', createdAt: new Date(0).toISOString(), status: 'complete', blocks: [
+      { type: 'tool_use', id: 'agent-tool', name: 'Agent', blockId: 'agent-tool', index: 0 },
+      { type: 'text', blockId: 'started', index: 1, text: 'Started' },
+      ...(notification ? [{ type: 'task_notification', blockId: 'notice', index: 2,
+        notification: { id: 'notice', task, createdAt: new Date(2).toISOString() } } as const] : []),
+    ] }] as const
+    refresh.mockImplementation(() => { stream.replaceHistory([...history, ...(notification ? [] : [{ id: 'human', role: 'user',
+      content: xml, createdAt: new Date(2).toISOString(), status: 'complete' } as const])]); return Promise.resolve() })
+    await event('prompt', xml, source)
+    const started = frames.find((frame) => frame.type === 'run.started')
+    expect(started?.type).toBe('run.started')
+    expect(started).not.toHaveProperty('userMessage')
+    stream.publishTerminalText({ sessionId: 'terminal-session', turnId: 'turn', messageId: 'display', index: 0, text: 'Worker finished', final: true })
+    expect(stream.snapshot().messages.filter((message) => message.role === 'user')).toHaveLength(notification ? 0 : 1)
+    if (notification) {
+      expect(stream.snapshot().messages).toHaveLength(1)
+      expect(stream.snapshot().messages[0]).toMatchObject({ id: 'launch', content: 'Worker finished' })
+      expect(frames.filter((frame) => frame.type === 'session.snapshot').flatMap((frame) => frame.messages)
+        .some((message) => message.role === 'user' && message.content === xml)).toBe(false)
+    } else expect(stream.snapshot().messages.find((message) => message.role === 'user')).toMatchObject({ id: 'human', content: xml })
+  })
+
   it('mirrors late native suggestions, deduplicates polling, and clears hints for drafts, work and exit', async () => {
     const { driver, ref, spec, provider, service, stream, frames, event } = setup()
     provider.parseTerminalComposer.mockReturnValue({ text: '' })

@@ -319,6 +319,26 @@ shell 追加，不等待网络，也不启动 Node relay；读端只提交完整
 保留未落盘的尾部。历史刷新、空 final、工具后的第二段回答、断线快照均走同一投影。
 Stop 先等待在途读取并补读最后一批，随后补读转录，再完成轮次。
 
+`UserPromptSubmit` 也会接收后台任务通知，且当前原生版本可能省略 `source`。原生 hook
+只启动运行状态，不用其 prompt 创建临时用户气泡；气泡输入已经由用户明确提交，仍保留
+乐观消息。原生转录确认真实用户消息或 `task_notification` 后，投影才选择续答位置。
+通知续答只消费该通知之后的已落盘文本，保留卡片之前的启动说明与旧通知回复。
+卡片尚未落盘时暂存增量；历史刷新和重连复用同一投影，因此不会短暂显示 XML 用户气泡
+或重复续答。用户实际粘贴的 XML 按原生用户记录正常显示。
+
+```text
+native prompt hook -> run.started (no provisional user) -> buffer display chunks
+native transcript  -> user input -> user bubble + assistant text
+                   -> task delivery -> notification card + continuation
+history / reconnect -------------------------------> same projected messages
+```
+
+隔离的真实终端通知回归（本地模拟模型，覆盖后台任务、增量、落盘与重连）：
+
+```sh
+TMPDIR=/tmp npm test -- tests/integration/transport/websocket/terminal-notifications.test.ts
+```
+
 ### 4.13 气泡模型与 effort
 
 气泡选择在下一条消息注入前应用。相同服务配置下向原生输入框提交 `/model <id>`、

@@ -56,3 +56,36 @@ it('recovers a running native turn with a saved assistant prefix, even when the 
   expect(stream.snapshot().messages.map((message) => message.id)).toEqual(['native-user', 'native-assistant', 'current-user', 'current-assistant'])
   expect(stream.snapshot().messages.at(-1)?.content).toBe('continued')
 })
+
+it.each([false, true])('projects notification replies after the correct delivery, without a user bubble or duplicate answer (absorbed=%s)', (absorbed) => {
+  const task = { taskId: 'worker', toolUseId: 'agent-tool', kind: 'agent', status: 'completed' } as const
+  const launch = { ...native('Started'), blocks: [
+    { type: 'tool_use', id: 'agent-tool', name: 'Agent', blockId: 'agent-tool', index: 0 } as const,
+    { type: 'text', blockId: 'started', index: 1, text: 'Started' } as const,
+  ] }
+  const notification = { type: 'task_notification', blockId: 'notice', index: absorbed ? 0 : 2,
+    notification: { id: 'notice', task, ...(absorbed ? { turnId: 'task-turn:notice' } : {}) } } as const
+  const owner = { ...launch, ...(absorbed ? { id: 'task-turn:notice', content: '' } : {}),
+    blocks: [...(absorbed ? [] : launch.blocks), notification] }
+  const history = [user, ...(absorbed ? [launch] : []), owner]
+  const stream = new SessionStream({ provider: 'claude', id: 's' }, [user, launch])
+  stream.startTerminalTurn('followup', 'm', { ...user, id: 'hook-prompt', createdAt: new Date(1).toISOString(),
+    content: '<task-notification><task-id>worker</task-id><status>completed</status></task-notification>' }, true)
+  stream.publishTerminalText(delta('First line\n', 0))
+  expect(stream.snapshot().messages.filter((message) => message.role === 'user')).toMatchObject([user])
+  stream.replaceHistory(history)
+  expect(stream.snapshot().messages.at(-1)?.content).toBe('First line\n')
+  stream.publishTerminalText(delta('Second line', 1, 'display-1', true))
+  expect(stream.snapshot().messages.at(-1)?.content).toBe('First line\nSecond line')
+  const final = { ...owner, content: 'First line\nSecond line', blocks: [...owner.blocks,
+    { type: 'text', blockId: 'native-reply', index: owner.blocks.length, text: 'First line\nSecond line' } as const] }
+  stream.replaceHistory([...history.slice(0, -1), final])
+  stream.publishTerminalText(delta('Second line', 1, 'display-1', true))
+  stream.publish({ type: 'run.completed', model: 'm', durationMs: 1 }, 'followup')
+  const snapshot = stream.snapshot()
+  expect(snapshot.messages).toMatchObject([...history.slice(0, -1), final])
+  expect(snapshot.activeRunId).toBeUndefined()
+  const reconnected: unknown[] = []
+  stream.subscribe((frame) => reconnected.push(frame))()
+  expect(reconnected).toEqual([snapshot])
+})

@@ -173,7 +173,7 @@ export class TerminalChatSessions {
         }
         return
       }
-      await this.begin(chat, state.prompt ?? '', randomUUID(), chat.model, true, state.updatedAt)
+      await this.begin(chat, state.prompt ?? '', randomUUID(), chat.model, true, state.updatedAt, true)
       return
     }
     if (state.event === 'exit') {
@@ -328,7 +328,7 @@ export class TerminalChatSessions {
       phase: 'idle', event: 'stop', updatedAt: chat.updatedAt })
   }
 
-  private async begin(chat: TerminalChat, text: string, runId: string, model: string, confirmed: boolean, startedAt = Date.now()): Promise<ActiveTurn> {
+  private async begin(chat: TerminalChat, text: string, runId: string, model: string, confirmed: boolean, startedAt = Date.now(), nativePrompt = false): Promise<ActiveTurn> {
     this.publishSuggestion(chat)
     const active: ActiveTurn = { runId, text, model, confirmed, textOffset: 0, startedAt, abort: new AbortController() }
     chat.active = active
@@ -347,11 +347,11 @@ export class TerminalChatSessions {
     await this.options.refresh(chat.ref)
     const turn = userTurnFromText(text)
     const stream = this.options.stream(chat.ref)
-    stream.publish({ type: 'run.started', driver: 'terminal', model, userMessage: {
+    stream.startTerminalTurn(runId, model, {
       id: `${runId}:user`, role: 'user', content: turn.text,
       ...(turn.attachments?.length ? { attachments: turn.attachments } : {}),
       createdAt: new Date(active.startedAt).toISOString(), status: 'complete',
-    } }, runId)
+    }, nativePrompt)
     stream.publish({ type: 'session.state', state: 'running' }, runId)
     return active
   }

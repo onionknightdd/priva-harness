@@ -249,7 +249,8 @@ export class ClaudeRuntime implements AgentRuntime {
         const deliveries: AgentEvent[] = []
         if (mainId && mainId !== this.lastMainMessageId) {
           this.lastMainMessageId = mainId
-          if (this.pendingNotices.size) for (const notice of await this.deliveries.forAssistant(mainId)) {
+          // Monitor events can prompt a reply without a lifecycle notification.
+          for (const notice of await this.deliveries.forAssistant(mainId)) {
             for (const event of this.mapper.push(notice)) {
               if (event.type === 'task.delivered') this.consumedNotices.add(event.task.taskId)
               deliveries.push(event)

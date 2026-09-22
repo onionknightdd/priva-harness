@@ -6,26 +6,27 @@ import { ClaudeTaskDeliveryReader } from '../../../../src/provider/claude/sessio
 
 const roots: string[] = []
 afterEach(async () => { await Promise.all(roots.splice(0).map((path) => rm(path, { recursive: true, force: true }))) })
-const notice = (id: string) => ({ type: 'user', uuid: id, origin: { kind: 'task-notification' }, message: { content:
-  `<task-notification><task-id>worker</task-id><status>completed</status><result>实际输出 ${id}</result></task-notification>` } })
+const notice = (id: string, kind: 'completion' | 'monitor' = 'completion') => ({ type: 'user', uuid: id, origin: { kind: 'task-notification' }, message: { content:
+  `<task-notification><task-id>worker</task-id>${kind === 'monitor' ? `<event>实际输出 ${id}</event>`
+    : `<status>completed</status><result>实际输出 ${id}</result>`}</task-notification>` } })
 const answer = (id: string) => ({ type: 'assistant', message: { id, content: [{ type: 'text', text: 'Response' }] } })
 const lines = (...records: unknown[]) => records.map((record) => JSON.stringify(record)).join('\n') + '\n'
 
 describe('native task delivery reader', () => {
-  it('binds consumed attachments to the following assistant and ignores enqueue/removal bookkeeping', async () => {
+  it.each(['completion', 'monitor'] as const)('binds consumed %s attachments to the following assistant and ignores queue bookkeeping', async (kind) => {
     const root = await mkdtemp(join(tmpdir(), 'task-delivery-')); roots.push(root)
     await mkdir(join(root, 'projects', '-work'), { recursive: true })
     const path = join(root, 'projects', '-work', 'session.jsonl')
     const reader = new ClaudeTaskDeliveryReader(root, '/work')
     await reader.start('session')
     const attachment = (id: string) => ({ type: 'attachment', uuid: id, attachment: {
-      type: 'queued_command', commandMode: 'task-notification', prompt: notice(id).message.content,
+      type: 'queued_command', commandMode: 'task-notification', prompt: notice(id, kind).message.content,
     } })
-    await writeFile(path, lines(notice('standalone'), answer('checking'),
-      { type: 'queue-operation', operation: 'enqueue', content: notice('one').message.content }))
+    await writeFile(path, lines(notice('standalone', kind), answer('checking'),
+      { type: 'queue-operation', operation: 'enqueue', content: notice('one', kind).message.content }))
     expect((await reader.forAssistant('checking')).map((item) => item.uuid)).toEqual(['standalone'])
     await appendFile(path, lines(attachment('one'),
-      { type: 'queue-operation', operation: 'remove', reason: 'absorbed_mid_turn', content: notice('one').message.content },
+      { type: 'queue-operation', operation: 'remove', reason: 'absorbed_mid_turn', content: notice('one', kind).message.content },
       attachment('two')))
     expect((await reader.forAssistant('checking')).map((item) => item.uuid)).toEqual(['standalone'])
     const delivered = await reader.forAssistant('summary-streaming')

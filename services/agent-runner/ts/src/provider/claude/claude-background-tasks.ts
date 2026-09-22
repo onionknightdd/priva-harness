@@ -6,13 +6,15 @@ export class ClaudeBackgroundTasks {
   readonly state = new BackgroundTasks()
 
   launch(toolUseId: string, name: string, result: Record<string, unknown>, output = ''): AgentEvent[] {
+    const kind = taskKind(name)
     const status = stringField(result, 'status')
     const id = stringField(result, 'backgroundTaskId') ??
+      (kind === 'monitor' ? stringField(result, 'taskId') : undefined) ??
       (status === 'async_launched' || status === 'remote_launched'
         ? stringField(result, 'taskId') ?? stringField(result, 'agentId') : undefined)
     if (!id) return []
     const task: BackgroundTask = {
-      taskId: id, toolUseId, kind: taskKind(name), status: 'running',
+      taskId: id, toolUseId, kind, status: 'running',
       ...optional('description', result['description'] ?? result['summary']),
       ...optional('outputFile', result['outputFile'] ?? result['rawOutputPath'] ?? launchOutputFile(output, id)),
     }

@@ -44,6 +44,13 @@ bubble. `replyTo` records the consumed `notificationIds`, `taskId`, and
 notifications consumed during an existing reply. Splitting this turn does not
 change the SDK run identity, model execution, or composer busy state.
 
+Native terminal prompt hooks also fire for machine input and may omit their
+source. They start a run without a provisional user message; the native
+transcript establishes the actual user or notification input. Display chunks
+wait for that input and merge after its notification card, excluding earlier
+launch text from prefix reconciliation. This keeps streaming and reconnect
+snapshots free of transient XML user bubbles and duplicate continuations.
+
 | Event | Payload / meaning |
 | --- | --- |
 | `session.snapshot` | `messages`, `tasks`, optional `activeRunId`; state at the envelope's sequence |
@@ -74,6 +81,22 @@ Workspace Agent output uses the native notification's actual `result`. Each
 notification retains its own result, so a second delivery for a resumed agent
 does not overwrite the first notification's preview. Bash output continues to
 open its SDK-provided file on demand.
+
+Monitor launch receipts use `taskId` without an async launch status; that ID is
+bound to the originating Monitor tool. Monitor notifications carry `<event>`
+instead of `<result>` and may omit `<status>`. Their event text becomes the
+delivery's `result`, including multiline and literal XML-like output. Tags inside
+the output do not supply task identity or lifecycle metadata. Events preserve
+the known task status (or `unknown` without prior state) and never imply that the
+monitor completed. Repeated events retain separate delivery UUIDs even when their
+text is identical; user-authored XML remains ordinary text.
+
+```text
+Monitor tool receipt / taskId -> task + originating tool
+native task notification / event -> task.delivered + result -> notification card
+                                -> replyTo -> assistant continuation
+                                -> existing task status retained
+```
 
 A task disappearing from the SDK's active set becomes unknown until terminal
 evidence arrives. An older running snapshot cannot reverse a terminal state.
@@ -112,7 +135,8 @@ the model consumed the result. The installed Claude SDK omits synthetic user
 messages from the live stream, even with replay-user-messages enabled. Before
 the first main assistant frame, the runtime incrementally reads the native JSONL
 records appended since query startup and resolves that assistant's input
-context. Only validated native deliveries in the two supported forms generate
+context even without a preceding lifecycle notification, as Monitor events can
+arrive while the task keeps running. Only validated native deliveries in the two supported forms generate
 `task.delivered`. Streaming and history use the same mapper and reply tracker;
 there is no additional prompt injection or host-generated model turn.
 

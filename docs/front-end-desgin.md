@@ -2273,7 +2273,7 @@ Switch 浏览器回归：在 `agent-ui/` 运行 `npm run dev`，打开
 后台任务通过 `background-task-store.ts` 更新原工具卡、Tasks & Activity 和侧栏计数。
 输入框只由模型生成状态控制；后台卡提供独立停止和输出预览。
 任务通知与其续答按实际消费顺序放回启动任务的 assistant 气泡；通知是可点击的独立
-组件，同一气泡只保留一组复制 / 分支操作。Agent 启动卡不再叠加重复的任务状态卡。
+组件，图标统一使用 Lucide `BellDot`；同一气泡只保留一组复制 / 分支操作。Agent 启动卡不再叠加重复的任务状态卡。
 点击通知打开 Workspace 对应 Agent 的“输出”页，正文取自该条原生通知的 `result`。
 后续真实用户消息仍保持独立。桌面沿用右侧 Workspace，窄屏沿用 Workspace 抽屉。
 `absorbed_mid_turn` 批次在实际消费位置显示为独立 assistant turn：先显示同批通知，

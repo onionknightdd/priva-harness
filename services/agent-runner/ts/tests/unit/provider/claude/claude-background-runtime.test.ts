@@ -27,6 +27,47 @@ const signal = new AbortController().signal
 const result = { type: 'result', subtype: 'success', duration_ms: 1 }
 
 describe('Claude background handoff', () => {
+  it('delivers repeated Monitor events without lifecycle bookends before their live continuations', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'claude-monitor-'))
+    const { runtime, push } = fixture(root)
+    try {
+      const seen: AgentEvent[] = []
+      const consuming = (async () => { for await (const event of runtime.run({ text: 'Watch output' }, { signal })) seen.push(event) })()
+      const launch = { type: 'assistant', message: { id: 'launch', content: [{ type: 'tool_use', id: 'tool', name: 'Monitor', input: {} }] } }
+      const receipt = { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'tool', content: 'Monitor started' }] },
+        tool_use_result: { taskId: 'monitor', timeoutMs: 200000, persistent: false } }
+      push(launch); push(receipt)
+      await vi.waitFor(() => expect(seen.some((event) => event.type === 'task.updated')).toBe(true))
+      const content = '<task-notification><task-id>monitor</task-id><summary>Output changed</summary><event>3</event></task-notification>'
+      const first = { type: 'user', uuid: 'first', origin: { kind: 'task-notification' }, message: { role: 'user', content } }
+      const absorbed = { type: 'attachment', uuid: 'absorbed', attachment: {
+        type: 'queued_command', commandMode: 'task-notification', prompt: content,
+      } }
+      const answer = (id: string) => ({ type: 'assistant', message: { id, content: [{ type: 'text', text: 'Event received' }] } })
+      await mkdir(join(root, 'projects', '-tmp'), { recursive: true })
+      await writeFile(join(root, 'projects', '-tmp', 's.jsonl'), [launch, receipt, first, answer('first-answer'), absorbed, answer('last-answer')]
+        .map((record) => JSON.stringify(record)).join('\n') + '\n')
+      push(answer('first-answer'))
+      push({ type: 'stream_event', event: { type: 'message_start', message: { id: 'last-answer' } } })
+      push({ type: 'stream_event', event: { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } } })
+      push({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Event received' } } })
+      push(answer('last-answer')); push(result)
+      await consuming
+      const deliveries = seen.filter((event) => event.type === 'task.delivered')
+      expect(deliveries.map((event) => [event.notification.id, event.task.kind, event.task.status, event.task.result]))
+        .toEqual([['first', 'monitor', 'running', '3'], ['absorbed', 'monitor', 'running', '3']])
+      const firstAnswer = seen.find((event) => event.type === 'assistant.message' && event.messageId === 'first-answer')
+      expect(firstAnswer?.replyTo).toEqual({ taskId: 'monitor', toolUseId: 'tool', notificationIds: ['first'] })
+      const delta = seen.find((event) => event.type === 'assistant.delta')
+      expect(delta?.replyTo).toMatchObject({ notificationIds: ['absorbed'], turnId: 'task-turn:absorbed' })
+      expect(seen.findIndex((event) => event === delta)).toBeGreaterThan(seen.findIndex((event) => event === deliveries[1]))
+      expect(runtime.hasBackgroundTasks).toBe(true)
+    } finally {
+      await runtime.release('dispose')
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it('delivers absorbed attachments before live continuation deltas without moving the earlier human response', async () => {
     const root = await mkdtemp(join(tmpdir(), 'claude-absorbed-'))
     const { runtime, push } = fixture(root)

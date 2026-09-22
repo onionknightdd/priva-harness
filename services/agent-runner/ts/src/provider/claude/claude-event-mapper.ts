@@ -108,10 +108,11 @@ export class ClaudeEventMapper {
         ? content.filter(isRecord).map((block) => stringField(block, 'text') ?? '').join('') : ''
       const fields = taskNotification(message.origin, text)
       if (fields?.['task_id']) {
-        const mapped = this.backgroundTasks.push({ ...fields, subtype: 'task_notification' }, this.tools)
+        const mapped = this.backgroundTasks.push({ ...fields, subtype: 'task_notification',
+          ...(fields['event'] === undefined ? {} : { task_type: 'monitor' }) }, this.tools)
         const previous = this.backgroundTasks.state.get(fields['task_id'])
         if (!previous || !message.uuid) return mapped
-        const task = this.backgroundTasks.state.update({ ...previous, result: fields['result'] ?? null })
+        const task = this.backgroundTasks.state.update({ ...previous, result: fields['result'] ?? fields['event'] ?? null })
         return this.replies.deliver({ id: message.uuid, task,
           ...(message.timestamp ? { createdAt: message.timestamp } : {}) }, asRecord(message.origin)?.['delivery'] === 'absorbed_mid_turn')
       }

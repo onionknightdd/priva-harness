@@ -91,13 +91,25 @@ export class BackgroundTasks {
 /** Only provider-originated notices are eligible. A person's XML remains ordinary text. */
 export function taskNotification(origin: unknown, content: string): Record<string, string> | undefined {
   if (typeof origin !== 'object' || origin === null || !('kind' in origin) || origin.kind !== 'task-notification') return undefined
+  return taskNotificationFields(content)
+}
+
+/** Parse an envelope; callers must establish provenance before rendering a delivery. */
+export function taskNotificationFields(content: string): Record<string, string> | undefined {
   const text = content.trim()
   if (!text.startsWith('<task-notification>') || !text.endsWith('</task-notification>')) return undefined
   const fields: Record<string, string> = {}
-  for (const name of ['task-id', 'tool-use-id', 'status', 'summary', 'output-file', 'result', 'subagent_tokens', 'duration_ms']) {
-    const value = new RegExp(`<${name}>([\\s\\S]*${name === 'result' ? '' : '?'})</${name}>`, 'u').exec(text)?.[1]
+  // Output may contain literal tags; only the envelope supplies task metadata.
+  const envelope = text.replace(/<(result|event)>([\s\S]*)<\/\1>/gu, (_match, name: string, value: string) => {
+    fields[name] = value
+    return ''
+  })
+  for (const name of ['task-id', 'tool-use-id', 'status', 'summary', 'output-file', 'subagent_tokens', 'duration_ms']) {
+    const value = new RegExp(`<${name}>([\\s\\S]*?)</${name}>`, 'u').exec(envelope)?.[1]
     if (value !== undefined) fields[name.replaceAll('-', '_')] = value
   }
-  if (!fields['task_id'] || taskStatus(fields['status']) === 'unknown') return undefined
+  if (!fields['task_id']) return undefined
+  // Monitor events are deliveries, not lifecycle transitions; they omit status.
+  if (fields['status'] === undefined ? fields['event'] === undefined : taskStatus(fields['status']) === 'unknown') return undefined
   return fields
 }

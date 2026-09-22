@@ -1,4 +1,4 @@
-import { BotIcon, SquareArrowOutUpRightIcon } from "lucide-react"
+import { BellDotIcon, SquareArrowOutUpRightIcon } from "lucide-react"
 import { motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 import { Badge } from "@/components/ui/badge"
@@ -27,7 +27,7 @@ export function TaskNotificationStatus({ notification, onOpen }: { notification:
     <Button variant="outline" onClick={onOpen}
       aria-label={t("agentMessage.workflowUI.openAgent", { agent: label })}
       className="h-auto w-full min-w-0 justify-start gap-2 whitespace-normal px-3 py-2 text-left">
-      <BotIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <BellDotIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
       <span className="min-w-0 flex-1 break-words text-sm text-muted-foreground">{label}</span>
       <Badge variant={task.status === "failed" ? "destructive" : "secondary"}>{t(`backgroundTasks.status.${task.status}`)}</Badge>
       <SquareArrowOutUpRightIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
