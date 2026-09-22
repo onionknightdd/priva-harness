@@ -354,6 +354,12 @@ export const zhCN = {
     quoteMenuLabel: "选中文本操作",
     copySessionId: "复制会话 ID",
     sessionCwd: "工作目录",
+    git: {
+      branch: "Git 分支：{{value}}",
+      detached: "分离 HEAD：{{value}}",
+      unavailable: "Git 状态不可用",
+      retry: "重试获取 Git 状态",
+    },
     forkChat: "新对话分支",
     forkUnsupported: "仅 Claude Agent SDK 支持对话分支",
     forkNeedsSession: "当前对话还没有可分支的会话",

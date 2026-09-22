@@ -354,6 +354,12 @@ export const en = {
     quoteMenuLabel: "Selection actions",
     copySessionId: "Copy session id",
     sessionCwd: "Working directory",
+    git: {
+      branch: "Git branch: {{value}}",
+      detached: "Detached HEAD: {{value}}",
+      unavailable: "Git unavailable",
+      retry: "Retry Git status",
+    },
     forkChat: "Fork chat",
     forkUnsupported: "Fork is only available for Claude Agent SDK",
     forkNeedsSession: "Fork is available after this chat has a session",

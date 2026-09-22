@@ -36,6 +36,11 @@ export function installProjectDirectoryFixtures() {
     const url = new URL(input instanceof Request ? input.url : String(input), location.href)
     if (!url.pathname.startsWith("/api/")) return originalFetch(input, init)
     requests.push(`${init?.method ?? "GET"} ${url.pathname}${url.search}`)
+    if (url.pathname === "/api/sandbox/git/status") {
+      const cwd = url.searchParams.get("cwd")
+      const branch = new URLSearchParams(location.search).get("git-branch") ?? "main"
+      return Response.json({ cwd, root: cwd, branch, commit: "a1b2c3d" })
+    }
     if (url.pathname === "/api/sandbox/files/list") {
       const raw = url.searchParams.get("path") || "/workspace"
       const path = raw === "~/other" ? "/workspace/work/other" : raw

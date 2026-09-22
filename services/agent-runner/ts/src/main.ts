@@ -12,6 +12,7 @@ import { SessionTerminals } from './harness/terminal/session-terminals.js'
 import { WorkerDataRecorder } from './infrastructure/data/worker-data-recorder.js'
 import { JsonSessionMetadataStore } from './infrastructure/session/json-session-metadata-store.js'
 import { NodeUserFileSystem } from './infrastructure/filesystem/node-user-file-system.js'
+import { NodeGitStatusReader } from './infrastructure/git/node-git-status-reader.js'
 import { LocalResourceService } from './infrastructure/resources/local-resource-service.js'
 import { CompatibleModelEndpointClient } from './infrastructure/model-profile/compatible-model-endpoint-client.js'
 import { JsonModelProfileStore } from './infrastructure/model-profile/json-model-profile-store.js'
@@ -127,6 +128,7 @@ export async function startServer(): Promise<void> {
         .map((session) => session.cwd).filter((cwd): cwd is string => cwd !== null && cwd !== ''),
     }),
     userFileSystem: fileSystem,
+    gitStatusReader: new NodeGitStatusReader(fileSystem.initialDirectory),
     modelProfileService,
     agentProfileService,
     agentHarness,

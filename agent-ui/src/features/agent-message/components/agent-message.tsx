@@ -29,6 +29,7 @@ import { AgentMessageThread } from "./agent-message-thread"
 import type { ComposerEffort } from "./composer-model-selector"
 import { ComposerContextRing } from "./composer-context-ring"
 import { SessionCwdIndicator } from "./session-cwd-indicator"
+import { SessionGitIndicator } from "./session-git-indicator"
 
 const fadeTransition = {
   duration: 0.2,
@@ -247,18 +248,21 @@ export function AgentMessage({
           onStop={onStop}
         />}
         <div className="mt-1 flex items-center gap-1.5">
-          {runCwd ? (
-            <SessionCwdIndicator
-              cwd={runCwd}
-              onChange={isEmpty && !isStreaming && !runSessionId ? setDraftCwd : undefined}
-              className="min-w-0"
-            />
-          ) : null}
+          <div className="flex min-w-0 flex-1 items-center gap-1.5">
+            {runCwd ? (
+              <SessionCwdIndicator
+                cwd={runCwd}
+                onChange={isEmpty && !isStreaming && !runSessionId ? setDraftCwd : undefined}
+                className="min-w-0"
+              />
+            ) : null}
+            <SessionGitIndicator cwd={runCwd} sessionId={runSessionId} isStreaming={isStreaming} enabled={!hidden} />
+          </div>
           <AnimatePresence initial={false}>
             {isEmpty ? null : (
               <motion.div
                 key="composer-context-ring"
-                className="ml-auto flex items-center pr-2.5"
+                className="ml-auto flex shrink-0 items-center pr-2.5"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}

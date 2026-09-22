@@ -1440,6 +1440,28 @@ native selection + source role -> ProseMirror inline atom
         -> transcript -> MessageSelectionContent -> readonly inline preview
 ```
 
+### Composer 当前 Git 分支
+
+2026-09-22：Composer 下方的工作目录右侧显示当前 Git 分支；detached HEAD 显示短
+commit，未提交的初始仓库仍显示分支，非 Git 工作树不显示。新草稿与已有会话共用
+`GET /api/sandbox/git/status?cwd=...`，不依赖 provider 或历史会话的 `git_branch`。
+
+```text
++------------------------------------------------------+
+| Composer                                   [Send]    |
++------------------------------------------------------+
+  [Project directory] [branch / short commit] [Context]
+```
+
+桌面和窄屏均保持同一行；目录与分支允许截断，分支最多占左侧区域的 45%，上下文环
+不收缩。分支使用与目录一致的次级文本、Lucide 图标和 24px 高度；Tooltip 与键盘焦点
+保留完整分支 / 仓库路径。状态出现或变化时使用共享 `EASE_OUT` 的 150ms 透明度过渡，
+reduced-motion 下立即更新。读取失败显示可点击的重试状态。
+
+打开会话、切换目录、运行开始 / 结束、窗口重新聚焦和页面恢复可见时刷新；隐藏的
+Chat 视图暂停请求。切目录立即移除旧标签，并取消 / 忽略过期请求；不做持续轮询。
+接口与边界状态见 [当前项目 Git 状态](architecture/project-git-status.md)。
+
 ### Composer @ 文件选择
 
 2026-09-16：ChatComposer 输入 `@` 打开与 Slash 命令同一套建议菜单，列出**当前项目工作目录**（会话 `cwd`）的一级文件夹和文件。Tab / Enter / 点击补全当前项；选中目录则写入 `@dir/` 并列出下一级，选中文件则写入 `@path` 并关闭菜单。只按需读取当前层，不递归扫描。`/` 命令菜单打开时不显示 `@` 菜单。切换项目目录后，下次打开 `@` 从新的 cwd 重新列出。
@@ -2043,6 +2065,18 @@ Agent 步骤长输入回归：打开 `/tests/components/agents/tool-result-brows
 `lint` 对应 `oxlint .`，`build` 对应 `tsc -b && vite build`，以
 [package.json](../agent-ui/package.json) 为准。下列测试均从仓库根目录运行；
 引用 Runner 的 tsx/loader 的命令要求 `services/agent-runner/ts/` 已安装依赖。
+
+Composer Git 分支状态：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/session-git-indicator.test.tsx
+```
+
+覆盖新草稿、运行完成 / focus / 会话切换刷新、过期请求、非 Git 目录、错误重试、
+中英文 detached HEAD 文案、视图隐藏与页面恢复可见。
+长分支布局可在完整页面样例
+`/tests/features/agent-message/terminal-view-browser.html?app&reduced-motion&git-branch=feature/long-branch-name-for-responsive-layout`
+验证；加 `zh&dark` 检查中文 / 深色，390px 宽度检查名称截断与上下文环不重叠。
 
 Agent data / composer / attachments：
 

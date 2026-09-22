@@ -6,10 +6,12 @@ import Fastify, {
 } from 'fastify'
 
 import type { DataRecorder } from '../../core/contract/data-recorder.js'
+import type { GitStatusReader } from '../../core/contract/git-status-reader.js'
 import type { UsageReader } from '../../core/contract/usage-reader.js'
 import type { UserFileSystem } from '../../core/contract/user-file-system.js'
 import type { ResourceService } from '../../core/contract/resource-service.js'
 import { ResourceError } from '../../core/resource/resource-catalog.js'
+import { GitStatusError } from '../../core/resource/git-status.js'
 import {
   ModelProfileError,
   type ModelProfileErrorKind,
@@ -29,6 +31,7 @@ import type { SessionTerminals } from '../../harness/terminal/session-terminals.
 import { runWebsocketRoutes } from '../websocket/run-route.js'
 import { terminalWebsocketRoutes } from '../websocket/terminal-route.js'
 import { agentProfileRoutes } from './route/agent-profile.js'
+import { gitStatusRoutes } from './route/git-status.js'
 import { modelProfileRoutes } from './route/model-profiles.js'
 import { sessionRoutes } from './route/sessions.js'
 import { slashCommandRoutes } from './route/slash-commands.js'
@@ -40,6 +43,7 @@ import { terminalEventRoutes } from './route/terminal-events.js'
 
 export interface BuildHttpServerOptions {
   readonly userFileSystem: UserFileSystem
+  readonly gitStatusReader?: GitStatusReader
   readonly modelProfileService: ModelProfileService
   readonly agentProfileService: AgentProfileService
   readonly agentHarness?: AgentHarness
@@ -59,6 +63,11 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
   })
 
   server.setErrorHandler((error, request, reply) => {
+    if (error instanceof GitStatusError) {
+      if (error.statusCode >= 500) request.log.error({ err: error }, 'Git status request failed')
+      void reply.code(error.statusCode).send({ detail: error.message })
+      return
+    }
     if (error instanceof ResourceError) {
       void reply.code(error.statusCode).send({ detail: error.message })
       return
@@ -114,6 +123,9 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
     },
   })
   void server.register(userFileRoutes, { fileSystem: options.userFileSystem })
+  if (options.gitStatusReader !== undefined) {
+    void server.register(gitStatusRoutes, { reader: options.gitStatusReader })
+  }
   const recorder = options.recorder
   void server.register(modelProfileRoutes, { service: options.modelProfileService, ...(recorder === undefined ? {} : { recorder }) })
   void server.register(agentProfileRoutes, { service: options.agentProfileService, ...(recorder === undefined ? {} : { recorder }) })
