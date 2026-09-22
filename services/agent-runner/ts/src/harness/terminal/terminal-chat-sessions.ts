@@ -161,19 +161,20 @@ export class TerminalChatSessions {
     chat.opened = true
     chat.awaitingReady = false
     if (state.event === 'prompt') {
+      const prompt = this.options.terminals.promptText(ref, state.prompt ?? '')
       // The synchronous UserPromptSubmit hook precedes the API call. Capture
       // the baseline here, after startup or a profile/resource restart.
       await this.readTelemetry(chat)
       if (chat.active) {
         // A bubble start is acknowledged by Claude, not by a successful tmux write.
-        if (!chat.active.confirmed && normalize(chat.active.text) === normalize(state.prompt ?? '')) {
+        if (!chat.active.confirmed && normalize(chat.active.text) === normalize(prompt)) {
           chat.active.confirmed = true
           if (chat.status) chat.active.initialStatus = chat.status
           clearTimeout(chat.active.timer)
         }
         return
       }
-      await this.begin(chat, state.prompt ?? '', randomUUID(), chat.model, true, state.updatedAt, true)
+      await this.begin(chat, prompt, randomUUID(), chat.model, true, state.updatedAt, true)
       return
     }
     if (state.event === 'exit') {

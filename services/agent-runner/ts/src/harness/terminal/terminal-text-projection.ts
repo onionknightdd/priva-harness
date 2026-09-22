@@ -31,7 +31,9 @@ export class TerminalTextProjection {
   }
 
   merge(history: readonly ThreadMessage[]): readonly ThreadMessage[] {
-    this.userId ??= history.find((message) => message.role === 'user' && !this.previousUsers.has(message.id) && message.content === this.user.content)?.id
+    // Native paste handling may trim outer whitespace or normalize line endings.
+    this.userId ??= history.find((message) => message.role === 'user' && !this.previousUsers.has(message.id) &&
+      normalize(message.content) === normalize(this.user.content))?.id
     const userIndex = this.userId ? history.findIndex((message) => message.id === this.userId) : -1
     let nativeIndex = -1
     let replyStart = 0
@@ -79,3 +81,5 @@ export class TerminalTextProjection {
     return result
   }
 }
+
+function normalize(text: string): string { return text.replaceAll('\r\n', '\n').trim() }

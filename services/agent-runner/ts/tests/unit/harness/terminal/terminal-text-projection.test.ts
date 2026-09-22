@@ -57,6 +57,19 @@ it('recovers a running native turn with a saved assistant prefix, even when the 
   expect(stream.snapshot().messages.at(-1)?.content).toBe('continued')
 })
 
+it('reconciles native paste whitespace without retaining a provisional user or an empty reply', () => {
+  const pasted = { ...user, content: 'line one\nline two' }
+  const stream = new SessionStream({ provider: 'claude', id: 's' })
+  stream.publish({ type: 'run.started', driver: 'terminal', userMessage: { ...user, id: 'r:user', content: '  line one\r\nline two\n' } }, 'r')
+  stream.replaceHistory([pasted, native('answer')])
+  stream.publishTerminalText(delta('answer', 0, 'display-1', true))
+  stream.publish({ type: 'run.completed', model: 'm', durationMs: 1 }, 'r')
+  expect(stream.snapshot().messages).toMatchObject([pasted, native('answer')])
+  const reconnected: unknown[] = []
+  stream.subscribe((frame) => reconnected.push(frame))()
+  expect(reconnected).toEqual([stream.snapshot()])
+})
+
 it.each([false, true])('projects notification replies after the correct delivery, without a user bubble or duplicate answer (absorbed=%s)', (absorbed) => {
   const task = { taskId: 'worker', toolUseId: 'agent-tool', kind: 'agent', status: 'completed' } as const
   const launch = { ...native('Started'), blocks: [

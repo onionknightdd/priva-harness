@@ -90,6 +90,8 @@ export interface AgentProvider {
   readTerminalSpec?(scratchDir: string): Promise<ProviderRunSpec | undefined>
   readTerminalState?(scratchDir: string): Promise<TerminalSessionState | undefined>
   recordTerminalState?(scratchDir: string, state: TerminalSessionState): Promise<void>
+  /** Remove native prompt envelopes for display/correlation, never for submission. */
+  terminalPromptText?(prompt: string): string
   parseTerminalComposer?(screen: string): TerminalComposer | undefined
   submitTerminalInput?(input: TerminalInput, text: string, signal: AbortSignal): Promise<void>
   completeTerminalCommand?(input: TerminalInput, text: string, signal: AbortSignal): Promise<boolean>

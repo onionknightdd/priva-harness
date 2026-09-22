@@ -8,6 +8,7 @@ import { SessionTerminals } from '../../../../src/harness/terminal/session-termi
 import { TerminalChatSessions } from '../../../../src/harness/terminal/terminal-chat-sessions.js'
 import { FakeAgentProvider } from '../../../support/fake-agent-provider.js'
 import { testRunSpec } from '../../../support/run-spec.js'
+import { claudePromptText } from '../../../../src/provider/claude/claude-prompt-text.js'
 
 const drivers: TerminalChatSessions[] = []
 afterEach(async () => { for (const driver of drivers.splice(0)) await driver.dispose() })
@@ -20,6 +21,7 @@ function setup(timeout = 1000) {
     terminalLaunch: vi.fn(() => Promise.resolve({ command: 'claude', args: [], cwd: spec.cwd, env: {}, cols: 120, rows: 40 })),
     readTerminalSpec: vi.fn(() => Promise.resolve(spec)),
     parseTerminalComposer: vi.fn<(screen: string) => TerminalComposer | undefined>(),
+    terminalPromptText: vi.fn(claudePromptText),
     readTerminalState: vi.fn(() => Promise.resolve(state)),
     recordTerminalState: vi.fn((_dir: string, next: TerminalSessionState) => { state = next; return Promise.resolve() }),
     submitTerminalInput: vi.fn(async (input: TerminalInput, text: string) => { await input.paste(text); await input.sendKeys(['Enter']) }),
@@ -53,6 +55,31 @@ function setup(timeout = 1000) {
 }
 
 describe('TerminalChatSessions', () => {
+  it('acknowledges a native paste envelope without timing out or replaying the bubble', async () => {
+    const { submit, event, service, frames, stream, provider } = setup(100)
+    const text = '后台启动一个子agent , 每秒echo 1, 执行30s'
+    const wrapped = `\n\n<pasted_content id="6985">\n${text}\n</pasted_content id="6985">\n`
+    provider.submitTerminalInput.mockImplementation(async (input, prompt) => {
+      await input.paste(prompt)
+      await event('prompt', wrapped)
+      await input.sendKeys(['Enter'])
+    })
+    await submit(text, 'pasted')
+    await expect.poll(() => service.sendKeys.mock.calls.length).toBe(1)
+    const delays = vi.fn()
+    const timer = setTimeout(delays, 150)
+    try {
+      await expect.poll(() => delays.mock.calls.length).toBe(1)
+      expect(provider.terminalPromptText).toHaveBeenCalledWith(wrapped)
+      expect(stream.snapshot().activeRunId).toBe('pasted')
+      expect(frames.some((frame) => frame.type === 'run.failed')).toBe(false)
+      expect(service.paste).toHaveBeenCalledTimes(1)
+      expect(service.paste).toHaveBeenCalledWith('claude:terminal-session', text)
+    } finally { clearTimeout(timer) }
+    await event('stop')
+    await expect.poll(() => frames.some((frame) => frame.type === 'run.completed' && frame.runId === 'pasted')).toBe(true)
+  })
+
   it.each([{ source: 'system', notification: true }, { source: 'user', notification: false },
     { source: undefined, notification: true }, { source: undefined, notification: false }])('uses native input provenance for notifications without hiding pasted XML ($source, notification=$notification)', async ({ source, notification }) => {
     const { event, stream, frames, refresh } = setup()

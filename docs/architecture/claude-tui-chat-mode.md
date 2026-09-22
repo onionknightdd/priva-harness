@@ -288,6 +288,22 @@ runner 的本机 HTTP 路由；[官方 hooks 参考](https://code.claude.com/doc
 `run.started` 的请求可由权威 idle 快照结清，不要求原生消息 UUID 等于客户端 runId；
 尚未获确认的请求不会自动重发。
 
+Claude 可按运行时开关为粘贴内容加入 `<pasted_content id="四位十六进制">` 包装。
+provider 的 `terminalPromptText` 与历史回放共用同一解包函数，只处理完整且 id 匹配的原生
+格式；保留正文、多段粘贴之间的手输文字及普通 XML，不递归解析粘贴正文。原生转录文件
+和模型收到的内容保持不变。发送确认与原生文本投影忽略两端空白和 CRLF / LF 差别，避免
+CLI 去掉粘贴尾部换行后无法关联同一轮次。重复发送相同正文仍按时间与转录 id 保留独立消息。
+
+```text
+Claude native prompt -> provider.terminalPromptText -> acknowledge / native turn
+Claude transcript    -> same paste decoder          -> user history
+                                                         |
+optimistic user + native user ----------------------> one user + assistant
+```
+
+`terminal-pasted-content.test.ts` 在隔离的 CLI 配置中显式开启原生粘贴包装，验证生成中、
+完成后及 WebSocket 重连的消息一致性，并确认发给模型的原生包装仍然保留。
+
 升级前已经运行的 TUI 没有当前 hooks / instanceId。需在该终端执行 `/exit` 并重新打开一次，
 继续使用原会话记录；仅刷新浏览器不会替换后台进程。不会为了升级强行关闭活动终端。
 运行中模型与交互同步见以下各节；统一的 TUI 用量归集仍未完成。

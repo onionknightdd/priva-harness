@@ -8,6 +8,27 @@ import { mapClaudeMessage } from '../../../../src/provider/claude/session/claude
 import { attachTranscriptToolUseResult, toolUseResultsFromTranscriptLines } from '../../../../src/provider/claude/session/claude-transcript.js'
 
 describe('replayClaudeSessionMessages', () => {
+  it.each(['string', 'blocks'])('displays pasted user text without changing native content (%s)', (format) => {
+    const text = '后台启动一个子agent , 每秒echo 1, 执行30s'
+    const wrapped = `\n\n<pasted_content id="6985">\n${text}\n</pasted_content id="6985">\n`
+    const message = session('user', 'paste', { content: format === 'string' ? wrapped : [{ type: 'text', text: wrapped }] })
+    const before = structuredClone(message)
+    expect(foldThread(replayClaudeSessionMessages([message]))).toMatchObject([{ role: 'user', content: text, transcriptUuid: 'paste' }])
+    expect(message).toEqual(before)
+  })
+
+  it('keeps paste-tag examples in assistant responses and tool output', () => {
+    const text = '<pasted_content id="6985">\nexample\n</pasted_content id="6985">'
+    const thread = foldThread(replayClaudeSessionMessages([
+      session('user', 'u1', { content: 'Show the format' }),
+      session('assistant', 'a1', { content: [{ type: 'tool_use', id: 'read', name: 'Bash', input: { command: 'printf example' } }] }),
+      session('user', 'tool', { content: [{ type: 'tool_result', tool_use_id: 'read', content: text }] }),
+      session('assistant', 'a2', { content: [{ type: 'text', text }] }),
+    ]))
+    expect(thread[1]?.content).toBe(text)
+    expect(thread[1]?.blocks?.find((block) => block.type === 'tool_use')).toMatchObject({ tool: { output: text } })
+  })
+
   it('restores answered summaries from JSONL metadata omitted by the SDK history API', () => {
     const questions = [{ question: 'Which region?', options: [{ label: 'Asia' }], multiSelect: false }, { question: 'Any details?', options: [] }]
     const native = {

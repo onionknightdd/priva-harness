@@ -6,6 +6,7 @@ import type { SessionMessage } from '../../../core/resource/session.js'
 import type { ThreadReplayItem } from '../../../core/resource/thread.js'
 import { isSyntheticNoResponseAssistant } from './claude-transcript.js'
 import type { UserAttachment } from '../../../core/run/user-turn.js'
+import { claudePromptText } from '../claude-prompt-text.js'
 
 export function replayClaudeSessionMessages(
   messages: readonly SessionMessage[],
@@ -22,7 +23,7 @@ export function replayClaudeSessionMessages(
       continue
     }
     if (isVisibleUserTurn(message)) {
-      const content = userContent(message.message)
+      const content = claudePromptText(userContent(message.message))
       const images = attachments.get(message.uuid)
       if ((content.trim() === '' && !images?.length) || content.trimStart().startsWith('[structured-output-enforce]')) continue
       mapper.beginUserTurn()

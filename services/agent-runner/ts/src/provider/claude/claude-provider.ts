@@ -24,6 +24,7 @@ import { claudeTerminalLaunch } from './claude-terminal-launch.js'
 import { readClaudeTerminalState, recordClaudeTerminalState } from './claude-terminal-hooks.js'
 import { completeClaudeLocalCommand, submitClaudeTerminalInput } from './claude-terminal-input.js'
 import { claudeComposer } from './claude-terminal-composer.js'
+import { claudePromptText } from './claude-prompt-text.js'
 import { readClaudeTerminalText } from './claude-terminal-text.js'
 import { configureClaudeTerminal } from './claude-terminal-model.js'
 import { readClaudeTerminalSpec, readClaudeTerminalTelemetry } from './claude-terminal-telemetry.js'
@@ -53,6 +54,7 @@ export class ClaudeProvider implements AgentProvider {
   readonly recordTerminalState = recordClaudeTerminalState
   readonly submitTerminalInput = submitClaudeTerminalInput
   readonly parseTerminalComposer = claudeComposer
+  readonly terminalPromptText = claudePromptText
   readonly completeTerminalCommand = completeClaudeLocalCommand
   readonly configureTerminal = configureClaudeTerminal
   readonly sessions: ProviderSessionStore

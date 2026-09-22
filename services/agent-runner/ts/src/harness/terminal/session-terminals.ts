@@ -119,6 +119,10 @@ export class SessionTerminals {
     return this.options.providers[ref.provider].readTerminalState?.(await this.options.terminals.scratchDir(SessionTerminals.key(ref)))
   }
 
+  promptText(ref: SessionRef, prompt: string): string {
+    return this.options.providers[ref.provider].terminalPromptText?.(prompt) ?? prompt
+  }
+
   async telemetry(ref: SessionRef, offset: number): Promise<TerminalTelemetry> {
     return await this.options.providers[ref.provider].readTerminalTelemetry?.(await this.options.terminals.scratchDir(SessionTerminals.key(ref)), offset) ?? { offset, events: [] }
   }
