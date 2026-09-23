@@ -17,6 +17,7 @@ export const en = {
   },
   resources: resourcesEn,
   common: {
+    comingSoon: "coming soon",
     breadcrumb: "Breadcrumb",
     close: "Close",
     loading: "Loading",
@@ -617,24 +618,18 @@ export const en = {
     },
     user: {
       openMenu: "Open user menu",
-      profile: "Profile",
       guestName: "admin",
       guestEmail: "admin@localhost",
       guestInitials: "A",
       settings: "Settings",
-      apiDocumentation: "API Documentation",
-      about: "About",
-      systemInformation: "System Information",
-      feedback: "Feedback",
       logOut: "Log out",
     },
   },
   settings: {
     title: "Settings",
-    description: "Manage your account and application preferences.",
+    description: "Manage your models and agent preferences.",
     sectionMenu: "Choose a settings section",
     sections: {
-      account: "Account",
       llmProviders: "Models",
       agent: "Agent",
       dm: "DM",
@@ -643,9 +638,6 @@ export const en = {
       debug: "Debug",
       archived: "Archived",
     },
-    unavailableTitle: "This section is not available yet",
-    unavailableDescription:
-      "Model profiles and agent session preferences can be configured now. Other settings will land here as those features are built.",
     agent: {
       sessionGroup: "Session",
       defaultHarness: "Default harness",

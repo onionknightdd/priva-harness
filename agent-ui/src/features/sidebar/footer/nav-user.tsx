@@ -1,13 +1,8 @@
 import * as React from "react"
 import {
-  BookOpenTextIcon,
   ChevronsUpDownIcon,
-  InfoIcon,
   LogOutIcon,
-  MessageSquareTextIcon,
-  MonitorCogIcon,
   SettingsIcon,
-  UserRoundIcon,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
@@ -19,7 +14,6 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -32,11 +26,6 @@ import { cn } from "@/lib/utils"
 import { LanguageToggle } from "./language-toggle"
 import { ThemeToggle } from "./theme-toggle"
 import { TooltipHint } from "@/components/ui/tooltip"
-
-const ProfileDialog = React.lazy(async () => {
-  const module = await import("@/features/profile")
-  return { default: module.ProfileDialog }
-})
 
 const menuItemClassName =
   "gap-2 px-2 py-1.5 text-sm [&_svg]:text-muted-foreground"
@@ -59,8 +48,6 @@ export function NavUser() {
   const { isMobile } = useSidebar()
   const { t } = useTranslation()
   const [settingsOpen, setSettingsOpen] = React.useState(false)
-  const [profileOpen, setProfileOpen] = React.useState(false)
-  const [profileLoaded, setProfileLoaded] = React.useState(false)
   const rowRef = React.useRef<HTMLLIElement>(null)
   const name = t("sidebar.user.guestName")
   const email = t("sidebar.user.guestEmail")
@@ -136,53 +123,16 @@ export function NavUser() {
               <DropdownMenuGroup>
                 <DropdownMenuItem
                   className={menuItemClassName}
-                  onClick={() => {
-                    setProfileLoaded(true)
-                    setProfileOpen(true)
-                  }}
-                >
-                  <UserRoundIcon className="size-3.5" />
-                  {t("sidebar.user.profile")}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className={menuItemClassName}
                   onClick={() => setSettingsOpen(true)}
                 >
                   <SettingsIcon className="size-3.5" />
                   {t("sidebar.user.settings")}
                 </DropdownMenuItem>
               </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuGroup>
-                <DropdownMenuItem className={menuItemClassName}>
-                  <BookOpenTextIcon className="size-3.5" />
-                  {t("sidebar.user.apiDocumentation")}
-                </DropdownMenuItem>
-                <DropdownMenuItem className={menuItemClassName}>
-                  <InfoIcon className="size-3.5" />
-                  {t("sidebar.user.about")}
-                </DropdownMenuItem>
-                <DropdownMenuItem className={menuItemClassName}>
-                  <MonitorCogIcon className="size-3.5" />
-                  {t("sidebar.user.systemInformation")}
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuGroup>
-                <DropdownMenuItem className={menuItemClassName}>
-                  <MessageSquareTextIcon className="size-3.5" />
-                  {t("sidebar.user.feedback")}
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
             </DropdownMenuContent>
           </SidebarMenuItem>
         </DropdownMenu>
       </SidebarMenu>
-      {profileLoaded ? (
-        <React.Suspense fallback={null}>
-          <ProfileDialog open={profileOpen} onOpenChange={setProfileOpen} />
-        </React.Suspense>
-      ) : null}
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </>
   )

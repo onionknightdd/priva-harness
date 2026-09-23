@@ -11,7 +11,6 @@ import {
   MessageSquareIcon,
   SettingsIcon,
   SlidersHorizontalIcon,
-  UserRoundIcon,
 } from "lucide-react"
 import { motion, useReducedMotion, type Transition } from "motion/react"
 import { useTranslation } from "react-i18next"
@@ -55,48 +54,53 @@ import { AgentSettingsView } from "./agent-settings-view"
 
 const settingsNavigation = [
   {
-    id: "account",
-    titleKey: "settings.sections.account",
-    icon: UserRoundIcon,
-  },
-  {
     id: "llmProviders",
     titleKey: "settings.sections.llmProviders",
     icon: BotIcon,
+    disabled: false,
   },
   {
     id: "agent",
     titleKey: "settings.sections.agent",
     icon: BotMessageSquareIcon,
+    disabled: false,
   },
   {
     id: "dm",
     titleKey: "settings.sections.dm",
     icon: MessageSquareIcon,
+    disabled: true,
   },
   {
     id: "personalization",
     titleKey: "settings.sections.personalization",
     icon: SlidersHorizontalIcon,
+    disabled: true,
   },
   {
     id: "advanced",
     titleKey: "settings.sections.advanced",
     icon: SettingsIcon,
+    disabled: true,
   },
   {
     id: "debug",
     titleKey: "settings.sections.debug",
     icon: BugIcon,
+    disabled: true,
   },
   {
     id: "archived",
     titleKey: "settings.sections.archived",
     icon: ArchiveIcon,
+    disabled: true,
   },
 ] as const
 
-type SettingsSectionId = (typeof settingsNavigation)[number]["id"]
+type SettingsSectionId = Extract<
+  (typeof settingsNavigation)[number],
+  { disabled: false }
+>["id"]
 
 const settingsPanelTransition: Transition = {
   duration: 0.22,
@@ -111,7 +115,7 @@ export function SettingsDialog({
   onOpenChange: (open: boolean) => void
 }) {
   const [activeSectionId, setActiveSectionId] =
-    React.useState<SettingsSectionId>("account")
+    React.useState<SettingsSectionId>("llmProviders")
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
   const activeSection =
@@ -119,7 +123,6 @@ export function SettingsDialog({
     settingsNavigation[0]
   const activeSectionTitle = t(activeSection.titleKey)
   const isModelSection = activeSectionId === "llmProviders"
-  const isAgentSection = activeSectionId === "agent"
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -150,12 +153,24 @@ export function SettingsDialog({
                           <SidebarMenuButton
                             type="button"
                             isActive={isActive}
+                            disabled={item.disabled}
                             className="text-sm [&_svg]:size-3.5"
                             aria-current={isActive ? "page" : undefined}
-                            onClick={() => setActiveSectionId(item.id)}
+                            onClick={
+                              item.disabled
+                                ? undefined
+                                : () => setActiveSectionId(item.id)
+                            }
                           >
                             <Icon aria-hidden="true" />
-                            <span>{t(item.titleKey)}</span>
+                            <span className="min-w-0 truncate">
+                              {t(item.titleKey)}
+                            </span>
+                            {item.disabled && (
+                              <span className="shrink-0 text-xs text-muted-foreground">
+                                ({t("common.comingSoon")})
+                              </span>
+                            )}
                           </SidebarMenuButton>
                         </SidebarMenuItem>
                       )
@@ -202,7 +217,7 @@ export function SettingsDialog({
                           {activeSectionTitle}
                           <ChevronDownIcon className="size-3.5" />
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className="min-w-44">
+                        <DropdownMenuContent align="start" className="w-auto min-w-44">
                           {settingsNavigation.map((item) => {
                             const Icon = item.icon
                             const isActive = item.id === activeSectionId
@@ -210,11 +225,23 @@ export function SettingsDialog({
                             return (
                               <DropdownMenuItem
                                 key={item.id}
+                                disabled={item.disabled}
                                 className="gap-2 text-sm"
-                                onClick={() => setActiveSectionId(item.id)}
+                                onClick={
+                                  item.disabled
+                                    ? undefined
+                                    : () => setActiveSectionId(item.id)
+                                }
                               >
                                 <Icon className="size-3.5" aria-hidden="true" />
-                                <span className="flex-1">{t(item.titleKey)}</span>
+                                <span className="flex-1 whitespace-nowrap">
+                                  {t(item.titleKey)}
+                                </span>
+                                {item.disabled && (
+                                  <span className="shrink-0 text-xs text-muted-foreground">
+                                    ({t("common.comingSoon")})
+                                  </span>
+                                )}
                                 {isActive ? (
                                   <CheckIcon className="size-3.5" />
                                 ) : null}
@@ -259,17 +286,8 @@ export function SettingsDialog({
               >
                 {isModelSection ? (
                   <ModelSettingsView />
-                ) : isAgentSection ? (
-                  <AgentSettingsView />
                 ) : (
-                  <div className="flex max-w-lg flex-col gap-2 py-2">
-                    <p className="text-sm font-medium">
-                      {t("settings.unavailableTitle")}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {t("settings.unavailableDescription")}
-                    </p>
-                  </div>
+                  <AgentSettingsView />
                 )}
               </motion.div>
             </section>

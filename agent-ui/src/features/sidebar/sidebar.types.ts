@@ -28,6 +28,7 @@ export type SidebarNavSubItem = {
   titleKey: string
   view?: AppView
   icon: ReactNode
+  disabled?: boolean
 }
 
 export type SidebarNavItem = {

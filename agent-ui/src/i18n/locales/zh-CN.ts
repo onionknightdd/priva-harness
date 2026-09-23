@@ -17,6 +17,7 @@ export const zhCN = {
   },
   resources: resourcesZh,
   common: {
+    comingSoon: "coming soon",
     breadcrumb: "面包屑导航",
     close: "关闭",
     loading: "正在加载",
@@ -615,24 +616,18 @@ export const zhCN = {
     },
     user: {
       openMenu: "打开用户菜单",
-      profile: "个人资料",
       guestName: "admin",
       guestEmail: "admin@localhost",
       guestInitials: "A",
       settings: "设置",
-      apiDocumentation: "API文档",
-      about: "简介",
-      systemInformation: "系统信息",
-      feedback: "反馈",
       logOut: "退出登录",
     },
   },
   settings: {
     title: "设置",
-    description: "管理你的账户和应用偏好设置。",
+    description: "管理你的模型和 Agent 偏好设置。",
     sectionMenu: "选择设置分区",
     sections: {
-      account: "账户",
       llmProviders: "模型",
       agent: "Agent",
       dm: "DM",
@@ -641,9 +636,6 @@ export const zhCN = {
       debug: "调试",
       archived: "已归档",
     },
-    unavailableTitle: "该分区尚未提供",
-    unavailableDescription:
-      "目前可以配置模型和 Agent 会话偏好。其他设置会随对应功能一起出现在这里。",
     agent: {
       sessionGroup: "会话",
       defaultHarness: "默认 harness",

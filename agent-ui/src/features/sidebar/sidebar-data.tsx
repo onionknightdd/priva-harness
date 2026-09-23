@@ -47,14 +47,17 @@ export const sidebarData = {
         {
           titleKey: "sidebar.navigation.hook",
           icon: <WebhookIcon />,
+          disabled: true,
         },
         {
           titleKey: "sidebar.navigation.subAgent",
           icon: <BotIcon />,
+          disabled: true,
         },
         {
           titleKey: "sidebar.navigation.memory",
           icon: <NotebookPenIcon />,
+          disabled: true,
         },
       ],
     },
@@ -70,6 +73,7 @@ export const sidebarData = {
         {
           titleKey: "sidebar.navigation.activityAndTraces",
           icon: <ActivityIcon />,
+          disabled: true,
         },
         {
           titleKey: "sidebar.navigation.fileBrowser",

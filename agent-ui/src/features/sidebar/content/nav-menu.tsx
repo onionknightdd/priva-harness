@@ -142,13 +142,22 @@ function NavMenuItem({
           {item.items?.map((subItem) => (
             <SidebarMenuSubItem key={subItem.titleKey}>
               <SidebarMenuSubButton
-                render={<button type="button" />}
+                render={<button type="button" disabled={subItem.disabled} />}
                 className="w-full text-left"
                 isActive={subItem.view === activeView}
-                onClick={() => selectView(subItem.view)}
+                onClick={
+                  subItem.disabled ? undefined : () => selectView(subItem.view)
+                }
               >
                 {subItem.icon}
-                <span>{t(subItem.titleKey)}</span>
+                <span className="min-w-0 truncate">
+                  {t(subItem.titleKey)}
+                </span>
+                {subItem.disabled && (
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    ({t("common.comingSoon")})
+                  </span>
+                )}
               </SidebarMenuSubButton>
             </SidebarMenuSubItem>
           ))}

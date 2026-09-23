@@ -676,15 +676,35 @@ Skeleton，失败显示 `role="alert"` 的错误文本与重试按钮。数据�
 账户菜单（与旁边的 ⇅ 按钮同一个菜单）。两处都是 Base UI `Menu.Trigger`，弹层通过
 `DropdownMenuContent` 的 `anchor` 固定挂在整行上，因此无论按哪一个，菜单都出现在同一位置
 （桌面在侧栏右侧、底端对齐；手机在下方），并用 `w-auto min-w-56` 避开随锚点变宽的默认。
-头像行按下时与悬浮同色。个人资料弹窗仍可从菜单里的「个人资料」进入；折叠侧栏时只剩
+头像行按下时与悬浮同色。2026-09-23：按用户要求，菜单只保留「设置」，移除个人资料、
+API 文档、简介、系统信息和反馈入口；个人资料弹窗不再由侧栏加载。折叠侧栏时只剩
 头像按钮，行为不变。
 
 ```text
 [A admin        ]  ZH  ☀  ⏻  ⇅      ┌──────────────┐
-  admin@localhost                   │ 个人资料      │
-   ▲ 点击 → 打开菜单 ───────────────►│ 设置          │
-                                    │ …            │
+  admin@localhost                   │ 设置          │
+   ▲ 点击 → 打开菜单 ───────────────►│               │
                                     └──────────────┘
+```
+
+### 暂未开放的导航入口
+
+2026-09-23：Hook、SubAgent、记忆和「活动和轨迹」，以及设置内的 DM、个性化配置、
+高级、调试和已归档，保留原位置并禁用。中英文均在名称后显示 `(coming soon)`，
+复用现有菜单的禁用样式；窄栏优先保留状态提示，名称可截断但可访问文本保持完整。
+禁用项不响应点击或键盘激活，也不参与悬浮高亮。移动端设置下拉菜单应用相同规则，
+弹层宽度随内容自适应，名称和状态提示保持单行。
+设置移除「账户」，默认打开「模型」，只允许切换「模型」和「Agent」。
+
+```text
+Sidebar
+  Plugins / Customize -> Hook / SubAgent / Memory      [disabled]
+  Data and Usage      -> Activity & Traces             [disabled]
+  Footer              -> Settings
+Settings (desktop sidebar / mobile dropdown)
+  Models (default) / Agent                            [enabled]
+  DM / Personalization / Advanced / Debug / Archived   [disabled]
+Disabled label -> name + (coming soon)
 ```
 
 ### Mermaid 模块加载失败
