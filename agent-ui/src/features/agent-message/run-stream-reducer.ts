@@ -98,15 +98,22 @@ export function parseStreamFrame(raw: unknown): StreamFrame | undefined {
  * A session snapshot usually repeats the transcript the thread already shows.
  * Keep the existing object for every message it reproduces exactly, so the
  * memoized message tree does not re-render the whole thread on connect.
+ * A native snapshot can replace provisional IDs; retain the mounted identity
+ * using the explicit renderId supplied by the terminal projection.
  */
 export function mergeSnapshotMessages(
   current: readonly AgentThreadMessage[],
   snapshot: readonly AgentThreadMessage[]
 ): AgentThreadMessage[] {
   const byId = new Map(current.map((message) => [message.id, message]))
+  const byRenderId = new Map(current.map((message) => [message.renderId ?? message.id, message]))
   return snapshot.map((message) => {
-    const existing = byId.get(message.id)
-    return existing && dequal(existing, message) ? existing : message
+    const existing = byId.get(message.id) ?? (message.renderId ? byRenderId.get(message.renderId) : undefined)
+    if (!existing) return message
+    const next = existing.renderId || message.renderId || existing.id !== message.id
+      ? { ...message, renderId: existing.renderId ?? existing.id }
+      : message
+    return dequal(existing, next) ? existing : next
   })
 }
 

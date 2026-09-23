@@ -102,7 +102,7 @@ export function useAgentMessage() {
       hasSnapshotRef.current = true
       setMessages((current) => {
         const snapshot = mergeSnapshotMessages(current, frame.messages ?? [])
-        const ids = new Set(snapshot.map((message) => message.id))
+        const ids = new Set(snapshot.flatMap((message) => [message.id, message.renderId ?? message.id]))
         return [...snapshot, ...current.filter((message) => !ids.has(message.id) &&
           (pendingIdsRef.current.has(message.id) || pendingIdsRef.current.has(message.id.replace(/:user$/, ""))))]
       })

@@ -185,7 +185,7 @@ export function AgentMessageThread({
   const renderMessage = useCallback(
     (message: AgentThreadMessage, hideProcessHeader = false) => {
       const item = (
-        <ThreadMessageColumn key={message.id}>
+        <ThreadMessageColumn key={message.renderId ?? message.id}>
           <AgentMessageItem
             message={message}
             hideProcessHeader={hideProcessHeader}
@@ -194,7 +194,7 @@ export function AgentMessageThread({
       )
       return message.role === "user" ? item : (
         <motion.div
-          key={message.id}
+          key={message.renderId ?? message.id}
           layout="position"
           layoutDependency={false}
           className="min-w-0"
@@ -289,6 +289,7 @@ const ThreadTurnItem = memo(function ThreadTurnItem({
   turn: ThreadTurn
 }) {
   const { user, working } = turnStickyParts(turn)
+  const userRenderId = user?.renderId ?? user?.id
   const freezeTurn = user !== null || working !== null
   const userRef = useRef<HTMLDivElement>(null)
   const [userHeight, setUserHeight] = useState(0)
@@ -314,7 +315,7 @@ const ThreadTurnItem = memo(function ThreadTurnItem({
     const observer = new ResizeObserver(syncHeight)
     observer.observe(userBar)
     return () => observer.disconnect()
-  }, [hasWorking, user?.id])
+  }, [hasWorking, userRenderId])
 
   return (
     <MotionScrollerItem
@@ -479,7 +480,7 @@ function FollowLatestMessage({
   const { scrollToEnd } = useMessageScroller()
   const pinnedRef = useRef(true)
   const programmaticRef = useRef(false)
-  const threadKey = messages[0]?.id ?? "empty"
+  const threadKey = messages[0]?.renderId ?? messages[0]?.id ?? "empty"
 
   const followLatest = useCallback(() => {
     if (!pinnedRef.current || isExpandScrollLocked()) {

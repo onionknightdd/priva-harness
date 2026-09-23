@@ -85,6 +85,7 @@ export type NestedAgent = {
 export type AgentThreadMessage = {
   interactions?: import('./interaction-data').InteractionResolution[]
   id: string
+  renderId?: string
   role: AgentMessageRole
   content: string
   attachments?: MessageAttachment[]

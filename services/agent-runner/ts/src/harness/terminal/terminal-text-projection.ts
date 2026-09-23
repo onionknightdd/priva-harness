@@ -74,9 +74,11 @@ export class TerminalTextProjection {
     }
     const base = native ?? emptyAssistantMessage(this.runId, this.user.createdAt)
     const blocks = [...(base.blocks ?? []), ...tail]
-    const message: ThreadMessage = { ...base, blocks, content: textFromThreadBlocks(blocks), status: this.finished ? 'complete' : 'streaming' }
+    const message: ThreadMessage = { ...base, renderId: this.runId, blocks, content: textFromThreadBlocks(blocks), status: this.finished ? 'complete' : 'streaming' }
     if (userIndex < 0 && !this.nativePrompt) return [...history, this.user, message]
     const result = [...history]
+    const nativeUser = result[userIndex]
+    if (nativeUser) result[userIndex] = { ...nativeUser, renderId: this.user.renderId ?? this.user.id }
     result.splice(nativeIndex >= 0 ? nativeIndex : userIndex + 1, native ? 1 : 0, message)
     return result
   }

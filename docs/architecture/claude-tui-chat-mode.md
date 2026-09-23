@@ -311,11 +311,18 @@ provider 的 `terminalPromptText` 与历史回放共用同一解包函数，只�
 和模型收到的内容保持不变。发送确认与原生文本投影忽略两端空白和 CRLF / LF 差别，避免
 CLI 去掉粘贴尾部换行后无法关联同一轮次。重复发送相同正文仍按时间与转录 id 保留独立消息。
 
+实时投影给关联后的用户消息和助手回复附加 `renderId`，值分别为原临时用户消息 ID 与
+runId。原生 `id` / `transcriptUuid` 保持不变。前端按显式 renderId 接续原气泡的组件身份，
+后续轮次和重连快照中继续保留已建立的身份，不按正文猜测关联。因此确认发送只更新数据，
+不会重新触发消息入场、长列表准备或滚动锚点初始化。
+
 ```text
 Claude native prompt -> provider.terminalPromptText -> acknowledge / native turn
 Claude transcript    -> same paste decoder          -> user history
                                                          |
 optimistic user + native user ----------------------> one user + assistant
+                  renderId ------------------------> retain mounted components
+                  native id -----------------------> native message references
 ```
 
 `terminal-pasted-content.test.ts` 在隔离的 CLI 配置中显式开启原生粘贴包装，验证生成中、

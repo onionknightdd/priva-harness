@@ -5,7 +5,7 @@ import type { TaskNotification } from "./background-task-store"
 export function assistantTimeline(message: AgentThreadMessage) {
   const messageTools = new Set((message.blocks ?? []).flatMap((block) => block.type === "tool_use" ? [block.id] : []))
   const sections: { id: string; notification?: TaskNotification; blocks: StreamBlock[] }[] = [
-    { id: message.id, blocks: [] },
+    { id: message.renderId ?? message.id, blocks: [] },
   ]
   for (const block of [...(message.blocks ?? [])].sort((a, b) => a.index - b.index)) {
     if (block.type === "task_notification") sections.push({ id: block.blockId, notification: block.notification, blocks: [] })

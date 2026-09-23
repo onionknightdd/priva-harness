@@ -90,6 +90,8 @@ export interface ModelChange {
 export interface ThreadMessage {
   readonly interactions?: readonly InteractionResolution[]
   readonly id: string
+  /** Keeps an already displayed message mounted when its native ID arrives. */
+  readonly renderId?: string
   readonly role: 'user' | 'assistant'
   readonly content: string
   readonly attachments?: readonly UserAttachment[]

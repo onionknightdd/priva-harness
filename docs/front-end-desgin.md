@@ -1674,8 +1674,12 @@ new text after return -> normal streaming animation
 相同的 `/ws/session`，首条请求携带当前主题。服务端在收到首条气泡后创建原生
 会话；切换到 Terminal 只附加查看者，进程退出后再次发送会从同一转录恢复。
 收到带 `driver: terminal` 的
-`run.started` 后释放该请求的乐观消息保护，后续原生 UUID 快照可替换对应占位气泡。
+`run.started` 后释放该请求的乐观消息保护，后续原生 UUID 快照原地更新对应占位消息的数据。
 这样切换视图和连续发送不会把同一条用户消息展示两次。Pi 仍保持原有乐观消息规则。
+原生快照用 `renderId` 关联已经显示的临时用户消息与回复，业务 `id` / `transcriptUuid`
+仍采用原生值。前端快照合并保留已有 renderId；消息组件、轮次、回复分段和滚动锚点
+都使用该标识，确认回包不重新挂载气泡、不重放入场动画，也不重置首条消息的展示窗口。
+后续快照不再携带临时关联时仍保留已建立的渲染标识；相同正文的不同发送保持独立。
 完成和停止沿用 run 事件；活动 TUI 的历史快照保留 `activeRunId`，避免提前恢复 idle。
 已获 `run.started` 确认的请求在断线后可由权威 idle 快照结清，原生 UUID 无需匹配
 客户端 runId；不自动重发未确认的消息。程序化 SDK 路径在后端保留。
@@ -1685,6 +1689,8 @@ ChatComposer -> run.start -> open/resume/fork native TUI -> paste + Enter
 Terminal tab -------------------------------------------------> attach viewer
                          <- run.started(driver: terminal) -> release optimistic IDs
                          <- native snapshot + activeRunId -> render native messages
+optimistic message ID -> snapshot.renderId -> same mounted bubble / reply / scroll anchor
+                        snapshot.id       -> native references and fork operations
 ```
 
 原生能力绑定沿用现有布局：`session.config` / snapshot.config 更新模型、effort、cwd 与上下文环；

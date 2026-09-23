@@ -12,8 +12,9 @@ export function groupThreadTurns(
   const turns: ThreadTurn[] = []
 
   for (const message of messages) {
+    const id = message.renderId ?? message.id
     if (message.role === "user") {
-      turns.push({ id: message.id, user: message, replies: [] })
+      turns.push({ id, user: message, replies: [] })
       continue
     }
 
@@ -23,7 +24,7 @@ export function groupThreadTurns(
       continue
     }
 
-    turns.push({ id: message.id, user: null, replies: [message] })
+    turns.push({ id, user: null, replies: [message] })
   }
 
   return turns
