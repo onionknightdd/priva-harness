@@ -5,7 +5,6 @@ import gsap from "gsap"
 import { BotIcon, CheckIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
-import { Badge } from "@/components/ui/badge"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,7 +36,6 @@ import { useHarnessDefaultWidth } from "./use-harness-default-width"
 import {
   getHarnessOption,
   harnessOptions,
-  isSelectableHarnessId,
   type HarnessId,
 } from "./harness-options"
 import { TooltipHint } from "@/components/ui/tooltip"
@@ -73,13 +71,11 @@ function HarnessOptionList({
 
     const context = gsap.context(() => {
       items.forEach((item, index) => {
-        const disabled = item.matches("[data-disabled], [aria-disabled='true']")
-
         gsap.fromTo(
           item,
           { opacity: 0, y: 8 },
           {
-            opacity: disabled ? 0.5 : 1,
+            opacity: 1,
             y: 0,
             duration: 0.22,
             delay: index * 0.045,
@@ -106,18 +102,13 @@ function HarnessOptionList({
             <DropdownMenuItem
               key={option.id}
               data-harness-option
-              disabled={option.disabled}
               className="p-0 justify-start [&_[data-slot=item-description]]:text-muted-foreground focus:[&_[data-slot=item-description]]:text-muted-foreground"
-              onClick={() => {
-                if (isSelectableHarnessId(option.id)) {
-                  onSelect(option.id)
-                }
-              }}
+              onClick={() => onSelect(option.id)}
             >
               <Item
                 size="xs"
                 variant="default"
-                className={`w-full flex-nowrap items-start justify-start gap-3 py-2 text-left in-data-[slot=dropdown-menu-content]:px-3 in-data-[slot=dropdown-menu-content]:py-2${isActive ? " bg-[rgb(229,229,229)] dark:bg-muted" : ""}`}
+                className={`w-full flex-nowrap items-start justify-start gap-3 text-left in-data-[slot=dropdown-menu-content]:p-1 in-data-[slot=dropdown-menu-content]:px-3${isActive ? " bg-[rgb(229,229,229)] dark:bg-muted" : ""}`}
               >
                 <ItemMedia className="size-8 justify-start self-start">
                   <HarnessBrandLogo harnessId={option.id} />
@@ -125,14 +116,6 @@ function HarnessOptionList({
                 <ItemContent className="-ml-[4px] min-w-0 flex-1 items-start gap-0.5 text-left">
                   <ItemTitle className="text-sm">
                     <span className="truncate">{t(option.nameKey)}</span>
-                    {option.disabled ? (
-                      <Badge
-                        variant="secondary"
-                        className="h-4 px-1.5 text-[11px]"
-                      >
-                        {t("sidebar.harness.comingSoon")}
-                      </Badge>
-                    ) : null}
                   </ItemTitle>
                   <ItemDescription className="line-clamp-none text-xs leading-snug whitespace-nowrap">
                     {option.packageName}
@@ -248,7 +231,7 @@ export function HarnessSwitcher() {
                   <span ref={rowRef} className="relative flex min-w-0 items-center gap-1 text-xs text-muted-foreground/60">
                     <span aria-hidden="true" className="pointer-events-none invisible absolute inset-0 overflow-hidden">
                       <span ref={measurementRef} className="inline-grid w-max whitespace-nowrap">
-                        {harnessOptions.filter((option) => !option.disabled).map((option) => (
+                        {harnessOptions.map((option) => (
                           <span key={option.id} className="inline-flex items-center gap-1">
                             <span>{t("sidebar.harness.poweredBy")}</span>
                             <HarnessBrandLogo

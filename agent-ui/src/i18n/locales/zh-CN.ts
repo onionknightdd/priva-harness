@@ -559,15 +559,11 @@ export const zhCN = {
       label: "Harness",
       poweredBy: "Powered by:",
       select: "选择 Agent Runtime",
-      comingSoon: "即将推出",
       pi: {
         name: "Pi",
       },
       claude: {
         name: "Claude Agent SDK",
-      },
-      deepseek: {
-        name: "DeepSeek Harness",
       },
     },
     projects: {

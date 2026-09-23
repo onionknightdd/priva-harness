@@ -1,5 +1,4 @@
 import claudeCodeIcon from "@lobehub/icons-static-svg/icons/claudecode-color.svg"
-import deepseekIcon from "@lobehub/icons-static-svg/icons/deepseek-color.svg"
 import piIcon from "@lobehub/icons-static-svg/icons/pi.svg"
 
 import { cn } from "@/lib/utils"
@@ -12,7 +11,6 @@ const brandImages: Record<
 > = {
   pi: { src: piIcon, monochrome: true },
   claude: { src: claudeCodeIcon },
-  deepseek: { src: deepseekIcon },
 }
 
 export function HarnessBrandLogo({

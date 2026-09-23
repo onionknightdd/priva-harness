@@ -129,11 +129,20 @@ Main sidebar / Workspace sidebar
 收起时隐藏品牌标题与 harness 文本，品牌 logo 使用不收缩的 32px 容器；按钮内部
 取消图文间距并水平居中，与菜单图标保持同一条中心线。
 
+Harness 选择菜单仅保留 Pi 和 Claude Agent SDK，移除 DeepSeek Harness 占位项。
+菜单 Item 上下内边距各增加 4px。原有 `xs` 菜单样式中的 `p-0` 覆盖了 `py-2`，
+浏览器实际上下内边距为 0px；此处用菜单内的 `p-1 px-3` 覆盖，将上下内边距设为
+4px、左右保持 12px。普通、悬停与选中态共用这一尺寸，悬停时保持列表位置稳定。
+
 ```text
 [品牌图标] Agent Workshop (Beta)    [收起]
            Powered by: [图标] 名称
 窄宽度     Powered by: [图标]
            点击 -> harness 选择菜单
+                   +--------------------------------+
+                   | Pi / Claude Agent SDK          |
+                   | 每项上下内边距 4px（各 +4px）  |
+                   +--------------------------------+
 
 收起       [品牌图标]
            [菜单图标]

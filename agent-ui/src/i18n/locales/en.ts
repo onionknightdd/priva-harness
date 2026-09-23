@@ -560,15 +560,11 @@ export const en = {
       label: "Harness",
       poweredBy: "Powered by:",
       select: "Select agent runtime",
-      comingSoon: "Coming soon",
       pi: {
         name: "Pi",
       },
       claude: {
         name: "Claude Agent SDK",
-      },
-      deepseek: {
-        name: "DeepSeek Harness",
       },
     },
     projects: {
