@@ -29,6 +29,7 @@ export const sidebarData = {
     {
       titleKey: "sidebar.navigation.automation",
       icon: CalendarClockIcon,
+      disabled: true,
     },
     {
       titleKey: "sidebar.navigation.plugins",

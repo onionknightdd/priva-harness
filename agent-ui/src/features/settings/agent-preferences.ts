@@ -1,4 +1,5 @@
 import {
+  DEFAULT_HARNESS_ID,
   isSelectableHarnessId,
   toRunHarnessId,
   type RunHarnessId,
@@ -33,8 +34,8 @@ export type AgentPreferences = {
 }
 
 export const DEFAULT_AGENT_PREFERENCES: AgentPreferences = {
-  defaultHarness: "pi",
-  lastHarnessId: "pi",
+  defaultHarness: DEFAULT_HARNESS_ID,
+  lastHarnessId: DEFAULT_HARNESS_ID,
   sessionModel: "profile-default",
   lastModelReference: null,
   queueBehavior: "follow-up",

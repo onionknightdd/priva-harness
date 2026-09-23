@@ -19,20 +19,27 @@ export function WorkspaceHome({
       {WORKSPACE_MODULES.map((module) => {
         const Icon = module.icon
         const label = t(module.labelKey)
+        const tooltip = module.disabled ? `${label} (${t("common.comingSoon")})` : label
 
         return (
-          <TooltipHint key={module.id} content={label}>
+          <TooltipHint key={module.id} content={tooltip}>
             <Button
               key={module.id}
               type="button"
               variant="ghost"
               data-workspace-action={module.id}
-              aria-label={label}
+              aria-label={tooltip}
+              disabled={module.disabled}
               className="h-14 w-full justify-start gap-3 px-3 text-left font-normal"
-              onClick={() => onAction(module.id)}
+              onClick={module.disabled ? undefined : () => onAction(module.id)}
             >
               <Icon className="size-5" strokeWidth={1} aria-hidden="true" />
               <span className="min-w-0 truncate">{label}</span>
+              {module.disabled && (
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  ({t("common.comingSoon")})
+                </span>
+              )}
             </Button>
           </TooltipHint>
         )

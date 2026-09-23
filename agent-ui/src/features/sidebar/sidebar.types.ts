@@ -36,6 +36,7 @@ export type SidebarNavItem = {
   view?: AppView
   action?: "new-agent-message"
   icon: SidebarAnimatedIcon
+  disabled?: boolean
   items?: SidebarNavSubItem[]
 }
 

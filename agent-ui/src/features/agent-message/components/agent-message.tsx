@@ -93,11 +93,23 @@ export function AgentMessage({
   onStop: () => void
 }) {
   const { t } = useTranslation()
+  const sectionRef = useRef<HTMLElement>(null)
+  const wasHidden = useRef(hidden)
   const composerShellRef = useRef<HTMLDivElement>(null)
   const composerEditorRef = useRef<ComposerEditorHandle>(null)
   const { activeSession, forkError, runCwd, runSessionId } = useActiveSession()
   const { setDraftCwd } = useChatSessionActions()
   const shouldReduceMotion = Boolean(useReducedMotion())
+  useLayoutEffect(() => {
+    if (wasHidden.current && !hidden) {
+      // display:none restarts retained Streamdown CSS animations on reveal.
+      // Finish received text before paint; future tokens keep their animations.
+      for (const token of sectionRef.current?.querySelectorAll("[data-sd-animate]") ?? []) {
+        for (const animation of token.getAnimations()) animation.finish()
+      }
+    }
+    wasHidden.current = hidden
+  }, [hidden])
   const pending = interactions[0]
   const hadInteraction = useRef(false)
   useEffect(() => {
@@ -173,6 +185,7 @@ export function AgentMessage({
 
   return (
     <section
+      ref={sectionRef}
       aria-label={t("agentMessage.contentLabel")}
       className={cn("@container/agent-message flex min-h-0 flex-1 flex-col overflow-hidden pr-2 pb-4 pl-4", hidden && "hidden")}
       style={{ marginTop: -AGENT_CHAT_HEADER_HEIGHT, paddingTop: AGENT_CHAT_HEADER_HEIGHT }}

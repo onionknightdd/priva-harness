@@ -130,6 +130,8 @@ Main sidebar / Workspace sidebar
 取消图文间距并水平居中，与菜单图标保持同一条中心线。
 
 Harness 选择菜单仅保留 Pi 和 Claude Agent SDK，移除 DeepSeek Harness 占位项。
+默认 harness 为 Claude；偏好缺失或无有效最近使用记录时也使用 Claude。
+有效的已保存偏好仍优先。
 菜单 Item 上下内边距各增加 4px。原有 `xs` 菜单样式中的 `p-0` 覆盖了 `py-2`，
 浏览器实际上下内边距为 0px；此处用菜单内的 `p-1 px-3` 覆盖，将上下内边距设为
 4px、左右保持 12px。普通、悬停与选中态共用这一尺寸，悬停时保持列表位置稳定。
@@ -708,18 +710,24 @@ API 文档、简介、系统信息和反馈入口；个人资料弹窗不再由�
 
 ### 暂未开放的导航入口
 
-2026-09-23：Hook、SubAgent、记忆和「活动和轨迹」，以及设置内的 DM、个性化配置、
+2026-09-23：自动化、Hook、SubAgent、记忆和「活动和轨迹」，以及设置内的 DM、个性化配置、
 高级、调试和已归档，保留原位置并禁用。中英文均在名称后显示 `(coming soon)`，
 复用现有菜单的禁用样式；窄栏优先保留状态提示，名称可截断但可访问文本保持完整。
 禁用项不响应点击或键盘激活，也不参与悬浮高亮。移动端设置下拉菜单应用相同规则，
 弹层宽度随内容自适应，名称和状态提示保持单行。
+Agent Workspace 的「终端」和「产出」同样禁用，首页按钮和顶部标签栏共用模块定义中的
+`disabled` 状态。首页显示 `(coming soon)`，图标标签的 Tooltip 与可访问名称保留相同提示；
+按钮置灰，不响应点击或键盘激活。
 设置移除「账户」，默认打开「模型」，只允许切换「模型」和「Agent」。
 
 ```text
 Sidebar
+  Automation                                         [disabled]
   Plugins / Customize -> Hook / SubAgent / Memory      [disabled]
   Data and Usage      -> Activity & Traces             [disabled]
   Footer              -> Settings
+Agent Workspace (home / tabs)
+  Terminal / Artifacts                                [disabled]
 Settings (desktop sidebar / mobile dropdown)
   Models (default) / Agent                            [enabled]
   DM / Personalization / Advanced / Debug / Archived   [disabled]
@@ -1645,10 +1653,17 @@ WebSocket 后，客户端丢弃该连接迟到的控制帧和输出，以免覆�
 无需重新打开会话或刷新页面。转录写入后的消息回显见
 [终端架构文档](architecture/claude-tui-chat-mode.md#410-tui-消息回显到聊天气泡)。
 
+2026-09-23：TUI 切回 Chat 时，已收到的助手文本立即完整显示。隐藏区域恢复显示会
+重启 Streamdown 留在 DOM 上的文字 CSS 动画，因此 `AgentMessage` 在显示前的
+layout effect 中结束这些已有动画；消息组件保持挂载，代码块换行等局部状态不变。
+后续新收到的文本仍正常流式展示，完成事件晚于文本到达时也不重放已有内容。
+
 ```text
 Terminal host (isolated canvases) < Exit/error overlay + reconnect button
 Chat first message -> native session id -> enable Terminal tab
 native transcript snapshots -> bubble subscription -> messages
+TUI -> Chat -> finish retained text animations before paint -> show received text
+new text after return -> normal streaming animation
 ```
 
 2026-09-22：Claude UI 会话从首条气泡发送起统一由 TUI 驱动；前端继续使用
@@ -2072,6 +2087,11 @@ Shift+Tab、Esc、已有草稿、重复快照、断线重连和原生会话重�
 交替发送，确认消息计数每轮只增加 2，且发送按钮正常恢复。在终端输入 `/clear` 后，
 终端保持选中且连接计数不变，切回气泡为空；继续发送应正常显示新轮次。
 此页面不连接实际模型或写入用户会话。
+
+追加 `&replay`（`?app&replay`）并点击 **Run terminal replay checks**，验证 TUI 内完成的
+回复直接显示、完成事件尚未到达时已有文本也不重放、切回后的新文本仍流式展示，以及
+反复切换不重启动画；应显示 `PASS 7 terminal replay checks`。
+追加 `&reduced-motion` 检查无动效分支。
 
 侧栏项目与 session 按最后更新时间排序：
 

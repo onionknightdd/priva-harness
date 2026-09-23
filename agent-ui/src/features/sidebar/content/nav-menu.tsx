@@ -43,6 +43,7 @@ function NavMenuItem({
   const iconRef = React.useRef<SidebarAnimatedIconHandle>(null)
   const Icon = item.icon
   const title = t(item.titleKey)
+  const tooltip = item.disabled ? `${title} (${t("common.comingSoon")})` : title
   const hasSubmenu = Boolean(item.items?.length)
   const isItemActive = item.view === activeView
   const hasActiveSubmenuItem = Boolean(
@@ -51,7 +52,7 @@ function NavMenuItem({
   const [submenuOpen, setSubmenuOpen] = React.useState(
     hasActiveSubmenuItem
   )
-  const iconAnimationHandlers = {
+  const iconAnimationHandlers = item.disabled ? {} : {
     onMouseEnter: () => iconRef.current?.startAnimation(),
     onMouseLeave: () => iconRef.current?.stopAnimation(),
     onFocus: () => iconRef.current?.startAnimation(),
@@ -97,7 +98,12 @@ function NavMenuItem({
         className="size-4 shrink-0"
         aria-hidden="true"
       />
-      <span>{title}</span>
+      <span className="min-w-0 truncate">{title}</span>
+      {item.disabled && (
+        <span className="shrink-0 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
+          ({t("common.comingSoon")})
+        </span>
+      )}
       {hasSubmenu && (
         <ChevronRightIcon className="ml-auto transition-transform duration-200 group-data-open/collapsible:rotate-90" />
       )}
@@ -108,9 +114,10 @@ function NavMenuItem({
     return (
       <SidebarMenuItem>
         <SidebarMenuButton
-          isActive={isItemActive}
-          tooltip={title}
-          onClick={selectItem}
+          render={<button type="button" disabled={item.disabled} />}
+          isActive={!item.disabled && isItemActive}
+          tooltip={tooltip}
+          onClick={item.disabled ? undefined : selectItem}
           {...iconAnimationHandlers}
         >
           {content}
@@ -127,10 +134,11 @@ function NavMenuItem({
       render={<SidebarMenuItem />}
     >
       <CollapsibleTrigger
+        disabled={item.disabled}
         render={
           <SidebarMenuButton
-            isActive={hasActiveSubmenuItem}
-            tooltip={title}
+            isActive={!item.disabled && hasActiveSubmenuItem}
+            tooltip={tooltip}
             {...iconAnimationHandlers}
           />
         }

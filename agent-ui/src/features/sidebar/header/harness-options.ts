@@ -12,7 +12,7 @@ export type HarnessOption = {
   packageName: string
 }
 
-export const DEFAULT_HARNESS_ID: HarnessId = "pi"
+export const DEFAULT_HARNESS_ID: HarnessId = "claude"
 
 export const harnessOptions = [
   {

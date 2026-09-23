@@ -33,6 +33,7 @@ export type ExpandableTabsItem = {
   content: ReactNode
   /** Mount on first selection and retain state while another panel is active. */
   keepMounted?: boolean
+  disabled?: boolean
 }
 
 export type ExpandableTabsClassNames = {
@@ -69,7 +70,7 @@ const TAB_PAD_X = 8
 const LABEL_GAP = 4
 
 const tabButtonClassName =
-  "ring-inset flex h-full w-full min-w-0 items-center justify-start overflow-hidden rounded-full border-0 bg-transparent px-2 text-sm font-medium shadow-none outline-none transition-[color,background-color] select-none hover:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+  "ring-inset flex h-full w-full min-w-0 items-center justify-start overflow-hidden rounded-full border-0 bg-transparent px-2 text-sm font-medium shadow-none outline-none transition-[color,background-color] select-none enabled:hover:text-foreground disabled:opacity-50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
 
 function sameWidths(a: Record<string, number>, b: Record<string, number>) {
   const aKeys = Object.keys(a)
@@ -277,8 +278,9 @@ export function ExpandableTabs({
                         role="tab"
                         aria-selected={isActive}
                         aria-label={item.label}
+                        disabled={item.disabled}
                         onClick={() => {
-                          if (!isActive) {
+                          if (!item.disabled && !isActive) {
                             setActive(item.id)
                           }
                         }}

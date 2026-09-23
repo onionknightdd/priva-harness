@@ -56,8 +56,9 @@ export function WorkspaceTabs({
 
         return {
           id: module.id,
+          disabled: module.disabled,
           keepMounted: module.id === "files",
-          label,
+          label: module.disabled ? `${label} (${t("common.comingSoon")})` : label,
           icon: <Icon aria-hidden="true" />,
           content: (
             <div className="flex h-full min-h-0 flex-col overflow-hidden">

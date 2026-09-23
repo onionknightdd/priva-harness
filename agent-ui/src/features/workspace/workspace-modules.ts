@@ -19,6 +19,7 @@ export type WorkspaceModule = {
   id: WorkspaceModuleId
   labelKey: string
   icon: LucideIcon
+  disabled?: boolean
 }
 
 export const WORKSPACE_MODULES: WorkspaceModule[] = [
@@ -36,11 +37,13 @@ export const WORKSPACE_MODULES: WorkspaceModule[] = [
     id: "terminal",
     labelKey: "workspace.home.terminal",
     icon: TerminalIcon,
+    disabled: true,
   },
   {
     id: "artifacts",
     labelKey: "workspace.home.artifacts",
     icon: PackageIcon,
+    disabled: true,
   },
 ]
 

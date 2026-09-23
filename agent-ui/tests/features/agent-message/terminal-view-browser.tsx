@@ -11,10 +11,17 @@ import type { StreamFrame } from "../../../src/features/agent-message/run-stream
 import i18n from "../../../src/i18n"
 import "../../../src/index.css"
 import { runPromptSuggestionChecks } from "./prompt-suggestion-browser"
+import { runTerminalReplayChecks } from "./terminal-replay-browser"
 
 const options = new URLSearchParams(location.search)
+if (options.has("reduced-motion")) {
+  const nativeMatchMedia = window.matchMedia.bind(window)
+  window.matchMedia = (media) => media === "(prefers-reduced-motion)" || media === "(prefers-reduced-motion: reduce)"
+    ? Object.assign(new EventTarget(), { matches: true, media, onchange: null, addListener() {}, removeListener() {} }) as MediaQueryList
+    : nativeMatchMedia(media)
+}
 const appMode = options.has("app")
-if (options.has("suggestions")) localStorage.setItem("agent-ui-agent-preferences", JSON.stringify({ defaultHarness: "claude", inputSuggestions: !options.has("suggestions-disabled") }))
+if (options.has("suggestions") || options.has("replay")) localStorage.setItem("agent-ui-agent-preferences", JSON.stringify({ defaultHarness: "claude", inputSuggestions: !options.has("suggestions-disabled") }))
 if (appMode) installProjectDirectoryFixtures()
 await i18n.changeLanguage(options.has("zh") ? "zh-CN" : "en")
 const results = document.getElementById("results")!
@@ -206,4 +213,35 @@ if (options.has("suggestions")) {
   const style = document.createElement("style")
   style.textContent = '#root [data-slot="sidebar-wrapper"] { height: 100%; min-height: 0; } #checks { background: var(--background); } #checks button { margin-right: 8px; }'
   document.head.append(style)
+}
+
+if (options.has("replay")) {
+  const run = document.createElement("button")
+  run.textContent = "Run terminal replay checks"
+  let reply: AgentThreadMessage
+  const snapshot = () => { for (const socket of sockets) if (socket.subscribed && socket.readyState === 1) socket.snapshot() }
+  run.onclick = () => {
+    run.disabled = true
+    void runTerminalReplayChecks({ host, reducedMotion: options.has("reduced-motion") || matchMedia("(prefers-reduced-motion: reduce)").matches,
+      start: (text) => {
+        activeRunId = `replay-${++nativeRuns}`
+        const createdAt = new Date().toISOString()
+        const user: AgentThreadMessage = { id: `${activeRunId}:user`, role: "user", content: "Explain the result", status: "complete", createdAt }
+        reply = { id: `${activeRunId}:assistant`, role: "assistant", content: text, status: "streaming", createdAt }
+        broadcast({ type: "run.started", runId: activeRunId, driver: "terminal", userMessage: user })
+        messages.push(user, reply)
+        snapshot()
+      },
+      update: (text) => { reply.content = text; snapshot() },
+      finish: () => {
+        reply.status = "complete"
+        broadcast({ type: "run.completed", runId: activeRunId, messageTargetId: reply.id, model: "fixture" })
+        activeRunId = undefined
+        snapshot()
+      },
+    }).then((passed) => { results.textContent = `PASS ${passed.length} terminal replay checks\n${passed.join("\n")}` })
+      .catch((error: unknown) => { results.textContent = `FAIL ${String(error)}` })
+      .finally(() => { run.disabled = false })
+  }
+  document.getElementById("checks")!.insertBefore(run, results)
 }
