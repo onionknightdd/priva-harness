@@ -1,3 +1,4 @@
+import { emptyContextUsage } from '../../core/resource/context-usage.js'
 import { randomUUID } from 'node:crypto'
 import { setTimeout as delay } from 'node:timers/promises'
 
@@ -9,7 +10,7 @@ import type { RunAccounting, SessionConfiguration } from '../../core/event/agent
 import { InteractionCoordinator } from '../../core/run/interaction-coordinator.js'
 import { answersByQuestion, normalizeQuestions, type InteractionResponse } from '../../core/resource/interaction.js'
 import type { AgentEvent } from '../../core/event/agent-event.js'
-import { SessionError, sessionRefKey } from '../../core/resource/session.js'
+import { SessionError, sessionRefKey, type RunMode } from '../../core/resource/session.js'
 import { userTurnFromText, userTurnText, type UserTurn } from '../../core/run/user-turn.js'
 import type { SessionStream } from '../session/session-stream.js'
 import type { OpenedSessionTerminal, SessionTerminals, TerminalSize } from './session-terminals.js'
@@ -51,6 +52,7 @@ interface TerminalChat {
   awaitingReady: boolean
   monitorError?: string
   spec?: ProviderRunSpec
+  runMode?: RunMode
   target?: SessionTarget
   status?: TerminalStatus
   telemetryOffset: number
@@ -67,6 +69,8 @@ export interface TerminalChatSessionsOptions {
   readonly terminals: SessionTerminals
   readonly eventsUrl: (ref: SessionRef) => string
   readonly stream: (ref: SessionRef) => SessionStream
+  readonly resolveRebound?: (source: SessionRef, next: SessionRef, reason: string, spec: ProviderRunSpec) => Promise<ProviderRunSpec>
+  readonly validateMode?: (ref: SessionRef, spec: ProviderRunSpec) => Promise<void>
   readonly beforeOpen: (ref: SessionRef) => Promise<void>
   readonly observe: (ref: SessionRef, cwd: string) => Promise<() => Promise<void>>
   readonly refresh: (ref: SessionRef) => Promise<void>
@@ -110,7 +114,16 @@ export class TerminalChatSessions {
       const opened = await this.options.terminals.open(target.kind === 'resume' ? target : { ...target, sessionId: ref.id },
         spec, { ...size, eventsUrl: this.options.eventsUrl(ref) })
       chat.opened = true
+      if (spec.runMode) chat.runMode = spec.runMode
       chat.spec = opened.adopted ? await this.options.terminals.spec(ref) ?? spec : spec
+      // Adopted processes must use this session's immutable prompt/tool policy.
+      if (chat.spec.runMode !== spec.runMode || chat.spec.systemInstructions !== spec.systemInstructions) {
+        if (chat.active || (await this.options.terminals.state(ref))?.phase === 'running') {
+          throw new SessionError('session-busy', 'Wait for the terminal reply before applying the session mode')
+        }
+        await this.restartForMode(chat, spec, size)
+      }
+      this.publishConfig(chat)
       chat.target ??= target
       chat.awaitingReady = !opened.adopted || chat.awaitingReady
       if (!opened.adopted) { chat.instanceId = ''; chat.updatedAt = 0; chat.telemetryOffset = 0 }
@@ -156,6 +169,13 @@ export class TerminalChatSessions {
       throw new SessionError('invalid-request', 'Terminal event belongs to another session')
     }
     const chat = this.chat(ref, state.cwd)
+    const persistedSpec = chat.spec ?? await this.options.terminals.spec(ref)
+    if (persistedSpec) chat.spec = persistedSpec
+    if (!chat.runMode && persistedSpec?.runMode) chat.runMode = persistedSpec.runMode
+    if (state.event === 'prompt') {
+      const spec = chat.spec ?? await this.options.terminals.spec(ref)
+      if (spec) await this.options.validateMode?.(ref, spec)
+    }
     chat.cwd = state.cwd
     if (chat.instanceId && chat.instanceId !== state.instanceId) return
     chat.instanceId = state.instanceId
@@ -198,6 +218,9 @@ export class TerminalChatSessions {
     const old = this.chats.get(sessionRefKey(ref))
     if (!old && this.chats.get(sessionRefKey({ ...ref, id: state.sessionId }))?.instanceId === state.instanceId) return
     if (old?.instanceId && old.instanceId !== state.instanceId) return
+    const sourceSpec = old?.spec ?? await this.options.terminals.spec(ref)
+    const nextRef = { ...ref, id: state.sessionId }
+    const nextSpec = sourceSpec ? await this.options.resolveRebound?.(ref, nextRef, state.source ?? '', { ...sourceSpec, cwd: state.cwd }) ?? sourceSpec : undefined
     const queue = old?.queue.splice(0) ?? []
     if (old) {
       await this.finish(old, /^\/(clear|resume|fork)(\s|$)/u.test(old.active?.text.trim() ?? '')
@@ -212,13 +235,27 @@ export class TerminalChatSessions {
     this.chats.delete(sessionRefKey(ref))
     const chat = this.chat(next, state.cwd)
     chat.model = old?.model ?? ''
-    if (old?.spec) chat.spec = { ...old.spec, cwd: state.cwd }
+    if (nextSpec?.runMode) chat.runMode = nextSpec.runMode
+    if (sourceSpec) chat.spec = { ...sourceSpec, cwd: state.cwd }
     chat.target = state.source === 'fork' ? { kind: 'fork', source: ref, sessionId: next.id } : { kind: 'resume', session: next }
     chat.telemetryOffset = old?.telemetryOffset ?? 0
-    chat.queue.push(...queue)
+    chat.backgroundActive = old?.backgroundActive ?? this.options.stream(ref).tasks.hasActive
+    chat.queue.push(...queue.map((pending) => ({ ...pending, spec: nextSpec ? { ...pending.spec,
+      ...(nextSpec.runMode ? { runMode: nextSpec.runMode } : {}),
+      ...(nextSpec.systemInstructions ? { systemInstructions: nextSpec.systemInstructions } : {}),
+    } : pending.spec })))
     await this.event(next, state)
-    chat.releaseHistory = await this.options.observe(next, state.cwd)
-    this.options.stream(ref).publish({ type: 'session.rebound', nextSessionId: next.id })
+    try {
+      if (nextSpec && (sourceSpec?.runMode !== nextSpec.runMode || sourceSpec?.systemInstructions !== nextSpec.systemInstructions)) {
+        await this.restartForMode(chat, nextSpec, { cols: 120, rows: 40 })
+      }
+    } finally {
+      // Native commands already changed the transcript. Keep both views bound
+      // even if tasks prevent a restart; the prompt hook blocks a wrong mode.
+      this.publishConfig(chat)
+      chat.releaseHistory = await this.options.observe(next, state.cwd)
+      this.options.stream(ref).publish({ type: 'session.rebound', nextSessionId: next.id })
+    }
     void this.drain(chat)
   }
 
@@ -342,6 +379,22 @@ export class TerminalChatSessions {
       this.chats.set(key, chat)
     }
     return chat
+  }
+
+  private publishConfig(chat: TerminalChat): void {
+    if (!chat.spec) return
+    this.options.stream(chat.ref).publish({ type: 'session.config', config: {
+      model: chat.model || chat.spec.model, cwd: chat.cwd, context: chat.status?.context ?? emptyContextUsage(),
+      ...(chat.runMode ? { runMode: chat.runMode } : {}),
+      ...(chat.spec.profileId ? { profileId: chat.spec.profileId } : {}), ...(chat.spec.effort ? { effort: chat.spec.effort } : {}),
+    } })
+  }
+
+  private async restartForMode(chat: TerminalChat, spec: ProviderRunSpec, size: TerminalSize): Promise<void> {
+    chat.instanceId = ''; chat.updatedAt = 0; chat.awaitingReady = true; chat.telemetryOffset = 0
+    await this.options.terminals.configure(chat.ref, spec, { ...size, eventsUrl: this.options.eventsUrl(chat.ref) },
+      AbortSignal.timeout(30000), true, !(chat.backgroundActive ?? this.options.stream(chat.ref).tasks.hasActive))
+    chat.spec = spec
   }
 
   private async recordInterrupted(chat: TerminalChat): Promise<void> {
@@ -513,7 +566,7 @@ export class TerminalChatSessions {
 
   list(provider: SessionRef['provider']) {
     return [...this.chats.values()].filter((chat) => chat.ref.provider === provider).map((chat) => ({
-      ref: chat.ref, ...(chat.active ? { runId: chat.active.runId, startedAt: chat.active.startedAt } : {}) }))
+      ref: chat.ref, ...(chat.runMode ? { runMode: chat.runMode } : {}), ...(chat.active ? { runId: chat.active.runId, startedAt: chat.active.startedAt } : {}) }))
   }
 
   private readTelemetry(chat: TerminalChat): Promise<void> {
@@ -547,6 +600,7 @@ export class TerminalChatSessions {
           chat.cwd = status.cwd || chat.cwd
           if (chat.spec) chat.spec = { ...chat.spec, cwd: chat.cwd, model: status.model, modelContext: splitModelContext(status.model).context, ...(status.effort ? { effort: status.effort } : {}) }
           const config: SessionConfiguration = { model: status.model, cwd: chat.cwd, context: status.context,
+            ...(chat.runMode ? { runMode: chat.runMode } : {}),
             ...(status.profileId ? { profileId: status.profileId } : {}), ...(status.effort ? { effort: status.effort } : {}) }
           if (JSON.stringify(config) !== JSON.stringify(chat.config)) {
             const modelChanged = chat.config?.model !== config.model || chat.config.profileId !== config.profileId

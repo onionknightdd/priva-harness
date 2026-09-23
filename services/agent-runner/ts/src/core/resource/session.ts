@@ -23,6 +23,7 @@ export type SessionMessageType =
 export type SessionErrorKind =
   | 'session-not-found'
   | 'session-busy'
+  | 'run-mode-conflict'
   | 'invalid-request'
   | 'io-failure'
 
@@ -324,3 +325,9 @@ function isColorSlot(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value < TAG_COLOR_SLOTS
 }
 import type { BackgroundTask } from './background-task.js'
+
+export function assertRunMode(current: RunMode | null | undefined, requested: RunMode | undefined): void {
+  if (current && requested && current !== requested) {
+    throw new SessionError('run-mode-conflict', `This session uses ${current} mode. Start a new chat to use ${requested} mode.`)
+  }
+}

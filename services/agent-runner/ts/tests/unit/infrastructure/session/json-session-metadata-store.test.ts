@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -17,6 +17,29 @@ describe('JsonSessionMetadataStore', () => {
 
   afterEach(async () => {
     await rm(runtimeHome, { recursive: true, force: true })
+  })
+
+  it('repairs old Claude mode labels once while preserving Pi and unrelated metadata', async () => {
+    await writeFile(store.filePath, JSON.stringify({ version: 1,
+      sessions: { 'claude:old': { runMode: 'agent', pinned: true, tags: ['work'] }, 'pi:old': { runMode: 'agent' } },
+      recaps: { 'claude:old': { text: 'summary', turns: 1 } }, lastResponseModels: {}, tagColors: { work: 2 } }))
+    expect(await store.get({ provider: 'claude', id: 'old' })).toMatchObject({ runMode: 'code', flags: { pinned: true }, tags: ['work'], recap: { text: 'summary' } })
+    expect((await store.get({ provider: 'pi', id: 'old' })).runMode).toBe('agent')
+    await store.upsert({ provider: 'claude', id: 'new' }, { runMode: 'agent' })
+    const reopened = new JsonSessionMetadataStore({ runtimeHome })
+    expect((await reopened.get({ provider: 'claude', id: 'new' })).runMode).toBe('agent')
+    expect(JSON.parse(await readFile(store.filePath, 'utf8'))).toMatchObject({ version: 2, tagColors: { work: 2 } })
+  })
+
+  it('allows only one of two conflicting concurrent first bindings', async () => {
+    const ref = { provider: 'claude', id: 'race' } as const
+    const other = new JsonSessionMetadataStore({ runtimeHome })
+    const results = await Promise.allSettled([store.upsert(ref, { runMode: 'agent' }), other.upsert(ref, { runMode: 'code' })])
+    expect(results.filter((item) => item.status === 'fulfilled')).toHaveLength(1)
+    expect(results.find((item) => item.status === 'rejected')).toMatchObject({ reason: { kind: 'run-mode-conflict' } })
+    const winner = (await store.get(ref)).runMode
+    await other.upsert(ref, { pinned: true })
+    expect((await store.get(ref)).runMode).toBe(winner)
   })
 
   it('stores flags, tags, recap, and last_response_model under a provider-scoped key', async () => {

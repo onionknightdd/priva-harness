@@ -1,3 +1,4 @@
+import { CLAUDE_DISALLOWED_TOOLS } from '../../../../src/provider/claude/claude-tool-policy.js'
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -7,7 +8,6 @@ import { TerminalError } from '../../../../src/core/contract/terminal-service.js
 import { resolveBundledClaudeExecutable } from '../../../../src/provider/claude/claude-executable.js'
 import { ensureClaudeProjectTrusted } from '../../../../src/provider/claude/claude-project-trust.js'
 import { claudeTerminalLaunch } from '../../../../src/provider/claude/claude-terminal-launch.js'
-import { CLAUDE_DISALLOWED_TOOLS } from '../../../../src/provider/claude/claude-runtime.js'
 import { testRunSpec } from '../../../support/run-spec.js'
 
 describe('claudeTerminalLaunch', () => {

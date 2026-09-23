@@ -63,10 +63,12 @@ function quote(value: string): string { return `'${value.replaceAll("'", "'\\''"
 // re-adopt a live TUI without guessing whether its model is still responding.
 const HOOK_RELAY = String.raw`
 const fs = require('node:fs/promises');
+let submittingPrompt = false;
 async function main() {
   let input = '';
   for await (const chunk of process.stdin) input += chunk;
   const hook = JSON.parse(input);
+  submittingPrompt = hook.hook_event_name === 'UserPromptSubmit';
   const instanceId = process.argv[5];
   if (await fs.readFile(process.argv[4], 'utf8') !== instanceId) return;
   if (!hook.hook_event_name && hook.model) {
@@ -126,7 +128,10 @@ async function main() {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ ...state, terminalId: process.argv[6] }), signal: AbortSignal.timeout(5000)
   });
-  if (!response.ok) throw new Error('Terminal sync returned HTTP ' + response.status);
+  if (!response.ok) {
+    const body = await response.json();
+    throw new Error(body.detail || 'Terminal sync returned HTTP ' + response.status);
+  }
 }
-main().catch(error => { process.stderr.write('Terminal sync: ' + error.message + '\n'); process.exitCode = 1; });
+main().catch(error => { process.stderr.write('Terminal sync: ' + error.message + '\n'); process.exitCode = submittingPrompt ? 2 : 1; });
 `

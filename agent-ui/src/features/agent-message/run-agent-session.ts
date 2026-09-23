@@ -8,6 +8,7 @@ export type AgentRunEffort = "low" | "medium" | "high" | "xhigh" | "max"
 export type AgentRunInit = {
   text: string; attachments?: MessageAttachment[]; model: string; harness: AgentRunHarness
   cwd: string; effort?: AgentRunEffort; sessionId?: string; fork?: boolean; promptSuggestions?: boolean
+  runMode?: "agent" | "code"
   theme?: "light" | "dark"
 }
 

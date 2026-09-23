@@ -1,7 +1,8 @@
+import { PLATFORM_INSTRUCTIONS } from '../../../../src/harness/prompt/platform-instructions.js'
+import { CLAUDE_DISALLOWED_TOOLS } from '../../../../src/provider/claude/claude-tool-policy.js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
-  CLAUDE_DISALLOWED_TOOLS,
   resolveClaudeQueryOptions,
   resolveClaudeQuerySettings,
 } from '../../../../src/provider/claude/claude-runtime.js'
@@ -11,6 +12,8 @@ import { PRODUCT_MCP_TOOL_TIMEOUT_MS } from '../../../../src/provider/claude/too
 const spec = {
   cwd: '/work/repo',
   provider: 'claude' as const,
+  runMode: 'code' as const,
+  systemInstructions: PLATFORM_INSTRUCTIONS,
   model: 'deepseek-v4-flash',
   baseUrl: 'https://api.deepseek.com/anthropic',
   authToken: 'secret',
@@ -62,7 +65,7 @@ describe('resolveClaudeQueryOptions', () => {
     expect(options.includePartialMessages).toBe(true)
     expect(options.permissionMode).toBe('bypassPermissions')
     expect(options.promptSuggestions).toBe(true)
-    expect(options.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code' })
+    expect(options.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code', append: PLATFORM_INSTRUCTIONS })
     expect(options.settingSources).toEqual(['user', 'project', 'local'])
     expect(options.effort).toBeUndefined()
     expect(options.resume).toBeUndefined()
@@ -189,4 +192,14 @@ describe('resolveClaudeQueryOptions', () => {
       },
     })
   })
+})
+
+it('replaces the Code prompt and excludes only the approved extra tools in Agent mode', () => {
+  const agent = resolveClaudeQueryOptions({ ...spec, runMode: 'agent' })
+  const code = resolveClaudeQueryOptions(spec)
+  expect(agent.systemPrompt).toBe(PLATFORM_INSTRUCTIONS)
+  expect(code.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code', append: PLATFORM_INSTRUCTIONS })
+  expect(agent.disallowedTools).toEqual([...CLAUDE_DISALLOWED_TOOLS, 'EnterPlanMode', 'ExitPlanMode', 'EnterWorktree', 'ExitWorktree', 'ReportFindings'])
+  expect(code.disallowedTools).toEqual([...CLAUDE_DISALLOWED_TOOLS])
+  expect(agent.permissionMode).toBe(code.permissionMode)
 })

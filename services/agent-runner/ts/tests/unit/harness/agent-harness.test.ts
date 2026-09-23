@@ -45,18 +45,19 @@ describe('AgentHarness', () => {
       events.push(event)
     }
 
-    expect(events[0]).toMatchObject({
+    expect(events[0]).toMatchObject({ type: 'session.config', config: { runMode: 'code' } })
+    expect(events[1]).toMatchObject({
       type: 'run.started',
       v: 2,
-      seq: 1,
+      seq: 2,
       harness: 'claude',
       model: 'm',
     })
     expect(events[0]).toHaveProperty('runId')
-    expect(events[1]).toMatchObject({ type: 'assistant.delta', text: 'Hi', seq: 2, harness: 'claude' })
-    expect(events[2]).toMatchObject({ type: 'run.completed', sessionId: 'session-1', seq: 3 })
+    expect(events[2]).toMatchObject({ type: 'assistant.delta', text: 'Hi', seq: 3, harness: 'claude' })
+    expect(events[3]).toMatchObject({ type: 'run.completed', sessionId: provider.lastRuntime?.session.id, seq: 4 })
     expect(provider.released).toEqual(['dispose'])
-    expect(provider.targets).toEqual([{ kind: 'new', provider: 'claude' }])
+    expect(provider.targets).toEqual([{ kind: 'new', provider: 'claude', sessionId: expect.any(String) as string }])
   })
 
   it('opens a resume or fork session target from run options', async () => {
@@ -115,7 +116,7 @@ describe('AgentHarness', () => {
     }
     expect(forked.length).toBeGreaterThan(0)
     expect(provider.targets).toEqual([
-      { kind: 'fork', source: { provider: 'claude', id: 'sess-1' } },
+      { kind: 'fork', source: { provider: 'claude', id: 'sess-1' }, sessionId: expect.any(String) as string },
     ])
   })
 
@@ -141,17 +142,17 @@ describe('AgentHarness', () => {
       cwd: '/tmp',
       liveRuns,
     })
-    const live = harness.launch(
+    const live = await harness.launch(
       { text: 'hi' },
       testRunSpec({ cwd: '/tmp' }),
       { source: 'web', session: { kind: 'resume', session: { provider: 'claude', id: 'sess-1' } } },
     )
     expect(liveRuns.listActive()).toHaveLength(1)
-    expect(() => harness.launch(
+    await expect(harness.launch(
       { text: 'again' },
       testRunSpec({ cwd: '/tmp' }),
       { source: 'web', session: { kind: 'resume', session: { provider: 'claude', id: 'sess-1' } } },
-    )).toThrow('Session has a live run')
+    )).rejects.toThrow('Session has a live run')
     releaseGate()
     await live.waitForComplete()
     expect(liveRuns.listActive()).toEqual([])
@@ -189,7 +190,7 @@ describe('AgentHarness', () => {
       cwd: '/tmp',
       liveRuns,
     })
-    const live = harness.launch(
+    const live = await harness.launch(
       { text: 'hi' },
       testRunSpec({ cwd: '/tmp' }),
       { source: 'web', session: { kind: 'resume', session: { provider: 'claude', id: 'sess-drain' } } },
@@ -321,7 +322,7 @@ describe('AgentHarness', () => {
     )) {
       void _event
     }
-    expect(await harness.readContextUsage({ provider: 'claude', id: 'session-1' })).toEqual(usage)
+    expect(await harness.readContextUsage(provider.lastRuntime?.session ?? { provider: 'claude', id: '' })).toEqual(usage)
     expect(await harness.readContextUsage({ provider: 'claude', id: 'missing' })).toEqual(
       emptyContextUsage(),
     )
@@ -391,7 +392,7 @@ describe('AgentHarness', () => {
       measured.push(session.id)
       return Promise.resolve({ ...emptyContextUsage(), used: 1, limit: 2 })
     }
-    const live = harness.launch(
+    const live = await harness.launch(
       { text: 'again' },
       testRunSpec({ cwd: '/tmp' }),
       { source: 'web', session: { kind: 'resume', session: { provider: 'claude', id: 'running-1' } } },
@@ -424,7 +425,7 @@ async function warmAfterLaunch(sessionId: string) {
     cwd: '/tmp',
     liveRuns,
   })
-  const live = harness.launch(
+  const live = await harness.launch(
     { text: 'hi' },
     testRunSpec({ cwd: '/tmp' }),
     { source: 'web', session: { kind: 'resume', session: { provider: 'claude', id: sessionId } } },

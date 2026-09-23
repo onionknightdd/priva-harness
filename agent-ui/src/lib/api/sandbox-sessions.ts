@@ -123,7 +123,7 @@ function mapSession(session: SessionInfoResponse): SessionInfo {
     tagColors: session.tag_colors ?? {},
     pinned: Boolean(session.pinned),
     archived: Boolean(session.archived),
-    runMode: session.run_mode ?? "agent",
+    runMode: session.run_mode,
   }
 }
 

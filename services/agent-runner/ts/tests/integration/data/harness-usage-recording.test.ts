@@ -88,7 +88,7 @@ describe('harness usage recording end to end', () => {
     const harness = new AgentHarness({ providers: { claude: completed, pi: failed }, cwd: '/tmp', recorder })
 
     const consume = async (spec: ReturnType<typeof testRunSpec>, runId: string): Promise<void> => {
-      for await (const frame of harness.run({ text: 'go' }, { signal: new AbortController().signal }, spec, { source: 'web', runId })) {
+      for await (const frame of harness.run({ text: 'go' }, { signal: new AbortController().signal }, spec, { source: 'web', runId, session: { kind: 'new', provider: spec.provider, sessionId: 'session-1' } })) {
         expect(frame.runId).toBe(runId)
       }
     }
@@ -116,10 +116,10 @@ describe('harness usage recording end to end', () => {
         { model: 'sonnet', output_tokens: 15, cost_usd: 0.019 },
       ])
       expect(db.prepare('SELECT action, run_id, session_id FROM audit_event ORDER BY id').all()).toEqual([
-        { action: 'run.started', run_id: 'r-ok', session_id: null },
+        { action: 'run.started', run_id: 'r-ok', session_id: 'session-1' },
         { action: 'session.created', run_id: 'r-ok', session_id: 'session-1' },
         { action: 'run.finished', run_id: 'r-ok', session_id: 'session-1' },
-        { action: 'run.started', run_id: 'r-bad', session_id: null },
+        { action: 'run.started', run_id: 'r-bad', session_id: 'session-1' },
         { action: 'session.created', run_id: 'r-bad', session_id: 'session-1' },
         { action: 'run.finished', run_id: 'r-bad', session_id: 'session-1' },
       ])

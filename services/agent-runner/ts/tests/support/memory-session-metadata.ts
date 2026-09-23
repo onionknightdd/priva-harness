@@ -1,6 +1,7 @@
 import type { SessionRef } from '../../src/core/contract/agent-provider.js'
 import type { SessionMetadataRepository } from '../../src/core/contract/session-metadata-repository.js'
 import {
+  assertRunMode,
   emptySessionMetadata,
   reserveTagColors,
   sessionRefKey,
@@ -31,7 +32,8 @@ export class MemorySessionMetadataRepository implements SessionMetadataRepositor
   }
 
   async upsert(ref: SessionRef, patch: SessionMetadataPatch): Promise<SessionMetadataRecord> {
-    const current = await this.get(ref)
+    const current = this.records.get(sessionRefKey(ref)) ?? emptySessionMetadata()
+    assertRunMode(current.runMode, patch.runMode)
     const next: SessionMetadataRecord = {
       backgroundTasks: patch.backgroundTasks ?? current.backgroundTasks,
       flags: {
@@ -48,6 +50,7 @@ export class MemorySessionMetadataRepository implements SessionMetadataRepositor
     }
     this.colors = reserveTagColors(this.colors, next.tags)
     this.records.set(sessionRefKey(ref), next)
+    await Promise.resolve()
     return next
   }
 

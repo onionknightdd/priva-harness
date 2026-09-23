@@ -22,13 +22,13 @@ async function drain(harness: AgentHarness, signal = new AbortController().signa
     { text, attachments: [{ path: '/tmp/a.txt', name: 'a.txt', mimeType: 'text/plain', size: 3 }] },
     { signal },
     testRunSpec({ cwd: '/work', profileId: 'p1', model: 'sonnet' }),
-    { source: 'subagent-test', runId: 'run-1' },
+    { source: 'subagent-test', runId: 'run-1', session: { kind: 'new', provider: 'claude', sessionId: 'session-1' } },
   )) frames.push(frame)
   return frames
 }
 
 describe('RunLedger through AgentHarness', () => {
-  it('records started, session back-fill and a completed finish with accounting', async () => {
+  it('records the preassigned Claude session and a completed finish with accounting', async () => {
     const recorder = new MemoryDataRecorder()
     const { harness } = harnessWith([
       { type: 'assistant.delta', messageId: 'm', blockId: 'm:0', index: 0, text: 'Hi' },
@@ -40,7 +40,7 @@ describe('RunLedger through AgentHarness', () => {
     ], recorder)
     await drain(harness)
 
-    expect(recorder.records.map((record) => record.kind)).toEqual(['run.started', 'run.session', 'audit', 'run.finished'])
+    expect(recorder.records.map((record) => record.kind)).toEqual(['run.started', 'audit', 'run.finished'])
     expect(recorder.ofKind('audit')[0]).toMatchObject({
       action: 'session.created', runId: 'run-1', sessionId: 'session-1', details: { provider: 'claude', cwd: '/work' },
     })
@@ -49,8 +49,8 @@ describe('RunLedger through AgentHarness', () => {
       promptChars: 'hello there'.length, attachmentCount: 1,
       details: { promptPreview: 'hello there', attachments: ['a.txt'], cwd: '/work' },
     })
-    expect(recorder.ofKind('run.started')[0]).not.toHaveProperty('sessionId')
-    expect(recorder.ofKind('run.session')[0]).toEqual({ kind: 'run.session', runId: 'run-1', sessionId: 'session-1' })
+    expect(recorder.ofKind('run.started')[0]).toHaveProperty('sessionId', 'session-1')
+    expect(recorder.ofKind('run.session')).toEqual([])
     expect(recorder.ofKind('run.finished')[0]).toMatchObject({
       runId: 'run-1', sessionId: 'session-1', outcome: 'completed', apiDurationMs: 4, numTurns: 2,
       usage: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4 }, costUsd: 0.5,
@@ -79,7 +79,7 @@ describe('RunLedger through AgentHarness', () => {
     const { harness } = harnessWith([{ type: 'run.completed', model: 'm', durationMs: 1 }], recorder)
     const frames = harness.run(
       { text: 'branch' }, { signal: new AbortController().signal }, testRunSpec(),
-      { source: 'web', session: { kind: 'fork', source: { provider: 'claude', id: 'sess-1' } } },
+      { source: 'web', session: { kind: 'fork', source: { provider: 'claude', id: 'sess-1' }, sessionId: 'fork-sess-1' } },
     )
     for await (const frame of frames) expect(frame.runId).toBeDefined()
     expect(recorder.ofKind('audit')).toEqual([
@@ -139,7 +139,7 @@ describe('RunLedger through AgentHarness', () => {
     provider.openSession = () => Promise.reject(new Error('no such session'))
     await expect(drain(harness)).rejects.toThrow('no such session')
 
-    expect(recorder.records.map((record) => record.kind)).toEqual(['run.started', 'run.finished'])
+    expect(recorder.records.map((record) => record.kind)).toEqual(['run.started', 'audit', 'run.finished'])
     expect(recorder.ofKind('run.finished')[0]).toMatchObject({ outcome: 'failed', failureCode: 'runtime_crash' })
   })
 

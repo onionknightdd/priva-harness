@@ -4,6 +4,7 @@ import { z } from 'zod'
 
 import type { SessionTarget } from '../../core/contract/agent-provider.js'
 import { isEffortLevel } from '../../core/contract/agent-provider.js'
+import { SessionError } from '../../core/resource/session.js'
 import { TerminalError, type TerminalAttachment } from '../../core/contract/terminal-service.js'
 import { isRunHarnessId, providerIdForHarness } from '../../core/resource/run-harness.js'
 import type { AgentProfileService } from '../../harness/config/agent-profile-service.js'
@@ -36,6 +37,7 @@ export interface TerminalRouteOptions {
 const querySchema = z.object({
   harness: z.string().refine(isRunHarnessId, 'Unknown harness'),
   sessionId: z.string().trim().min(1).optional(),
+  runMode: z.enum(['agent', 'code']).optional(),
   cwd: z.string().trim().min(1),
   model: z.string().trim().min(1),
   effort: z.string().refine(isEffortLevel, 'Unknown effort level').optional(),
@@ -63,7 +65,7 @@ async function handleTerminalSocket(socket: WebSocket, rawQuery: unknown, option
     fail(socket, 'invalid-request', query.error.issues.map((issue) => issue.message).join('; '))
     return
   }
-  const { harness, sessionId, cwd, model, effort, cols, rows, theme } = query.data
+  const { harness, sessionId, cwd, model, effort, cols, rows, theme, runMode } = query.data
   const provider = providerIdForHarness(harness)
   const target: SessionTarget = sessionId === undefined
     ? { kind: 'new', provider }
@@ -74,7 +76,7 @@ async function handleTerminalSocket(socket: WebSocket, rawQuery: unknown, option
   socket.once('close', () => { unbindSession?.(); void attachment?.detach(); void stopHistory?.() })
   try {
     const spec = await buildRunSpec(options, {
-      harness, model, cwd, ...(effort === undefined ? {} : { effort }),
+      harness, model, cwd, ...(runMode ? { runMode } : {}), ...(effort === undefined ? {} : { effort }),
     })
     const opened = await options.harness.openTerminal(target, spec, { cols, rows, ...(theme === undefined ? {} : { colorScheme: theme }) })
     let currentSession = opened.session
@@ -121,7 +123,7 @@ async function handleTerminalSocket(socket: WebSocket, rawQuery: unknown, option
       live.resize(parsed.data.cols, parsed.data.rows).catch((error: unknown) => { fail(socket, 'io-failure', describe(error)) })
     })
   } catch (error) {
-    if (error instanceof TerminalError) fail(socket, error.kind, error.message)
+    if (error instanceof TerminalError || error instanceof SessionError) fail(socket, error.kind, error.message)
     else fail(socket, 'io-failure', describe(error))
   }
 }

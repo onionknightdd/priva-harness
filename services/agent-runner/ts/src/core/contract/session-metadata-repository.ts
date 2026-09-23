@@ -8,6 +8,7 @@ export interface SessionMetadataRepository {
   get(ref: SessionRef): Promise<SessionMetadataRecord>
   list(refs: readonly SessionRef[]): Promise<ReadonlyMap<string, SessionMetadataRecord>>
   tagColors(tags: readonly string[]): Promise<Readonly<Record<string, number>>>
+  /** Atomically bind an unset runMode; reject attempts to change a bound mode. */
   upsert(ref: SessionRef, patch: SessionMetadataPatch): Promise<SessionMetadataRecord>
   delete(ref: SessionRef): Promise<void>
 }

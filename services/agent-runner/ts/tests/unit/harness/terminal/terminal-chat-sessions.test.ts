@@ -244,9 +244,10 @@ describe('TerminalChatSessions', () => {
       const events: StreamFrame[] = []
       for await (const event of harness.run({ text: 'programmatic' }, { signal: new AbortController().signal }, spec,
         { source: 'subagent-test', keepRuntimeWarm: false })) events.push(event)
-      expect(provider.targets).toEqual([{ kind: 'new', provider: 'claude' }])
+      expect(provider.targets).toEqual([{ kind: 'new', provider: 'claude', sessionId: expect.any(String) as string }])
       expect(service.ensure).not.toHaveBeenCalled()
-      expect(events[0]).toMatchObject({ type: 'run.started' })
+      expect(events[0]).toMatchObject({ type: 'session.config', config: { runMode: 'code' } })
+      expect(events[1]).toMatchObject({ type: 'run.started' })
       expect(events[0]).not.toHaveProperty('driver', 'terminal')
     } finally { await harness.disposePool() }
   })
@@ -340,4 +341,31 @@ describe('TerminalChatSessions', () => {
     ]))
     expect(service.paste).toHaveBeenCalledTimes(1)
   })
+})
+
+it('keeps the native rebind visible and blocks a mismatched prompt when tasks prevent a mode restart', async () => {
+  const streams = new Map<string, SessionStream>()
+  const streamFor = (ref: { provider: 'claude' | 'pi'; id: string }) => {
+    let stream = streams.get(ref.id)
+    if (!stream) { stream = new SessionStream(ref); streams.set(ref.id, stream) }
+    return stream
+  }
+  const { driver, ref, spec, provider, service, event } = setup(1000, {
+    stream: streamFor,
+    resolveRebound: (_source, _next, _reason, spec) => Promise.resolve({ ...spec, runMode: 'agent' }),
+    validateMode: (_ref, spec) => spec.runMode === 'agent' ? Promise.resolve() : Promise.reject(new Error('Session mode mismatch')),
+  })
+  Object.assign(provider, { configureTerminal: () => Promise.resolve('restart' as const) })
+  await event('ready')
+  streamFor(ref).publish({ type: 'task.updated', task: { taskId: 'background', kind: 'bash', status: 'running' } })
+  await expect(driver.event(ref, { sessionId: 'agent-target', instanceId: 'instance', cwd: spec.cwd,
+    event: 'ready', phase: 'idle', source: 'resume', updatedAt: 3 })).rejects.toThrow('background tasks')
+  expect(service.restart).not.toHaveBeenCalled()
+  const next = { ...ref, id: 'agent-target' }
+  expect(streamFor(next).snapshot().config?.runMode).toBe('agent')
+  const replay: StreamFrame[] = []
+  streamFor(ref).subscribe((frame) => replay.push(frame), { streamId: streamFor(ref).streamId, seq: 0 })
+  expect(replay.some((frame) => frame.type === 'session.rebound' && frame.nextSessionId === next.id)).toBe(true)
+  await expect(driver.event(next, { sessionId: next.id, instanceId: 'instance', cwd: spec.cwd,
+    event: 'prompt', phase: 'running', prompt: 'must not execute', updatedAt: 4 })).rejects.toThrow('Session mode mismatch')
 })

@@ -137,7 +137,7 @@ function handleRunSocket(socket: WebSocket, options: RunRouteOptions): void {
         { text: frame.text, ...(attachments ? { attachments } : {}) }, spec, frame.runId ?? randomUUID())
       return
     }
-    const live = options.harness.launch(
+    const live = await options.harness.launch(
       { text: frame.text, ...(attachments ? { attachments } : {}) }, spec,
       { source: 'web', session: sessionTargetFromInit(frame), ...(frame.runId ? { runId: frame.runId } : {}) },
     )

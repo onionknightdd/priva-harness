@@ -15,7 +15,7 @@ const selectionFile = 'claude-terminal-selection.json'
 
 function selection(spec: ProviderRunSpec) {
   return { model: spec.model, ...(spec.effort ? { effort: spec.effort } : {}),
-    profile: createHash('sha256').update(JSON.stringify([spec.baseUrl, spec.authToken, spec.imageTools, spec.promptSuggestions])).digest('hex') }
+    profile: createHash('sha256').update(JSON.stringify([spec.baseUrl, spec.authToken, spec.imageTools, spec.promptSuggestions, spec.runMode, spec.systemInstructions])).digest('hex') }
 }
 
 export async function saveClaudeTerminalSelection(scratchDir: string, spec: ProviderRunSpec): Promise<void> {

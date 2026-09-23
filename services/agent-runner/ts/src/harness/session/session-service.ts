@@ -33,6 +33,7 @@ import { foldThread } from '../../core/resource/fold-thread.js'
 import type { ThreadMessage } from '../../core/resource/thread.js'
 import type { ModelProfileService } from '../config/model-profile-service.js'
 import type { LiveRunRecord, LiveRunRegistry } from '../run/live-run-registry.js'
+import { SessionRunModes } from './session-run-mode.js'
 import { nextForkTitle, sessionStem } from './fork-session-title.js'
 
 export interface SessionServiceOptions {
@@ -154,7 +155,11 @@ export class SessionService {
     | ((ref: SessionRef, spec?: ProviderRunSpec) => Promise<ContextUsage>)
     | undefined
 
-  constructor(private readonly options: SessionServiceOptions) {}
+  readonly runModes: SessionRunModes
+
+  constructor(private readonly options: SessionServiceOptions) {
+    this.runModes = new SessionRunModes(options.metadata)
+  }
 
   bindWarmListing(listWarm: (harness: ProviderId) => readonly SessionRef[]): void {
     this.warmListing = listWarm
@@ -343,10 +348,12 @@ export class SessionService {
       source.cwd === null || source.cwd === '' ? {} : { cwd: source.cwd },
     )
     const title = nextForkTitle(stem, listed.map((session) => sessionStem(session)))
+    const runMode = harness === 'claude' ? await this.runModes.bind(ref, await this.runModes.get(ref)) : undefined
     const forked = await provider.sessions.fork(ref, {
       title,
       ...(upToMessageId === undefined ? {} : { upToMessageId }),
     })
+    if (runMode) await this.runModes.bind(forked.ref, runMode)
     const [view] = await this.toViews([forked])
     if (view === undefined) {
       throw new SessionError('io-failure', 'Forked session could not be read')
@@ -404,7 +411,7 @@ export class SessionService {
     if (ref.id.trim() === '') return
     const current = await this.options.metadata.get(ref)
     await this.options.metadata.upsert(ref, {
-      ...(current.runMode === null ? { runMode: 'agent' as const } : {}),
+      ...(ref.provider === 'pi' && current.runMode === null ? { runMode: 'agent' as const } : {}),
       lastResponseModel: {
         profileId: input.profileId,
         model: {

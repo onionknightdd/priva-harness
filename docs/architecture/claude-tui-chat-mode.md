@@ -164,6 +164,9 @@ tmux 的 `capture-pane -P` 不暴露其未完成的 UTF-8 字符。若快照后�
 | 客户端 → 服务端 | 二进制 | 键击 |
 | 客户端 → 服务端 | 文本 | `{type:'resize', cols, rows}` |
 
+终端 query 和聊天 `run.start` 均支持可选 `runMode=agent|code`；仅 Claude 支持。
+新会话省略时默认 Agent，恢复时省略则继承已绑定模式，显式冲突返回错误。
+
 未带 `sessionId` 时创建新会话终端并在 `ready` 中返回 id；带 `sessionId` 时
 `--resume`。同一会话第二个查看者收到 `adopted: true`，不会重复启动。
 首次启动尚未完成时，并发查看者等待同一个预检 / 启动任务；启动失败会通知所有
@@ -174,6 +177,9 @@ tmux 的 `capture-pane -P` 不暴露其未完成的 UTF-8 字符。若快照后�
 `ClaudeProvider.terminalLaunch` 与 `resolveClaudeQueryOptions` 保持同一套配置来源：
 
 - 二进制：`@anthropic-ai/claude-agent-sdk-<platform>-<arch>/claude`；
+- 模式：由 harness 在启动前锁定，Agent 用 `--system-prompt`，Code 用
+  `--append-system-prompt` 保留原生提示；两种驱动共用工具策略，详见
+  [Claude Agent / Code 模式](claude-agent-code-mode.md)。
 - 参数：`--session-id|--resume`、`--model`、`--permission-mode bypassPermissions`、
   `--settings <scratch>/claude-settings.json`（`resolveClaudeQuerySettings` +
   `skipDangerousModePermissionPrompt`）、`--disallowedTools`、`--effort`；

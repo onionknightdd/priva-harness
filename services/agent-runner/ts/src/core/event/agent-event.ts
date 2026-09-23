@@ -1,3 +1,4 @@
+import type { RunMode } from '../resource/session.js'
 import type { WorkflowState } from '../resource/workflow.js'
 import type { InteractionRequest, InteractionResolution } from '../resource/interaction.js'
 import type { BackgroundTask, TaskNotification, TaskReplyTarget } from '../resource/background-task.js'
@@ -120,6 +121,7 @@ export interface BlockAddress {
 }
 
 export interface SessionConfiguration {
+  readonly runMode?: RunMode
   readonly model: string
   readonly profileId?: string
   readonly effort?: EffortLevel

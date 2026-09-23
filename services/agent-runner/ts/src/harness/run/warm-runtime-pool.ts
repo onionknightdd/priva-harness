@@ -6,13 +6,15 @@ export const WARM_POOL_LIMIT = 5
 export const WARM_IDLE_MS = 10 * 60 * 1000
 
 export function identityFingerprint(spec: ProviderRunSpec): string {
-  return [
+  return JSON.stringify([
     spec.provider,
+    spec.runMode ?? '',
+    spec.systemInstructions ?? '',
     spec.cwd,
     spec.profileId ?? '',
     spec.baseUrl,
     spec.authToken,
-  ].join('|')
+  ])
 }
 
 export function canApplyWarmRunSpec(

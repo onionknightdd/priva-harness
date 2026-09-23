@@ -32,8 +32,8 @@ export function useAgentMessage() {
   const { runHarnessId } = useHarness()
   const { queueBehavior, inputSuggestions, setLastModelReference } = useAgentPreferences()
   const { threadMessages, messagesStatus, transcriptEpoch } = useChatThread()
-  const { runCwd, runSessionId } = useActiveSession()
-  const { bindRunSession } = useChatSessionActions()
+  const { runCwd, runSessionId, runMode } = useActiveSession()
+  const { bindRunSession, setRunModePending } = useChatSessionActions()
   const { refresh } = useSessionList()
   const { beginLiveSession, endLiveSession } = useLiveSessions()
   const composerAttachments = useComposerAttachments(runCwd, runHarnessId, runSessionId)
@@ -90,7 +90,7 @@ export function useAgentMessage() {
         if (config.effort) setEffort(config.effort)
       }
       setContextUsage(config.context)
-      if (id && config.cwd && config.cwd !== runCwd) bindRunSession(id, { cwd: config.cwd })
+      if (id && ((config.cwd && config.cwd !== runCwd) || (config.runMode && config.runMode !== runMode))) bindRunSession(id, { cwd: config.cwd, ...(config.runMode ? { runMode: config.runMode } : {}) })
     }
     if (frame.type === 'session.config') return
     const key = `${runHarnessId}:${id}`
@@ -217,6 +217,7 @@ export function useAgentMessage() {
     const user = { ...createAgentThreadMessage("user", content), id: `${assistant.id}:user`,
       ...(files.length ? { attachments: files } : {}),
       ...(!files.length && isCompactCommandUserMessage(content) ? { compact: { phase: "compacting" as const } } : {}) }
+    if (runHarnessId === "claude") setRunModePending(true)
     pendingIdsRef.current.add(assistant.id)
     seedTitleRef.current = content || files.map((file) => file.name).join(", ")
     setLastModelReference(modelReference)
@@ -228,6 +229,7 @@ export function useAgentMessage() {
     const failed = (error: unknown) => {
       if (generation !== generationRef.current) return
       pendingIdsRef.current.delete(assistant.id)
+      if (pendingIdsRef.current.size === 0) setRunModePending(false)
       setMessages((current) => current.map((message) => message.id === assistant.id ? {
         ...message, status: "error", content: error instanceof Error ? error.message : t("agentMessage.sendFailed"),
       } : message))
@@ -241,10 +243,11 @@ export function useAgentMessage() {
       await connection.waitForIdle()
       if (generation !== generationRef.current) return
       void connection.start({ text: content, attachments: files, model: modelReference, harness: runHarnessId,
+        ...(runHarnessId === "claude" ? { runMode } : {}),
         cwd: runCwd.trim(), effort, promptSuggestions: inputSuggestions,
         theme: resolvedTheme === "dark" ? "dark" : "light" }, assistant.id).catch(failed)
     }).catch(failed)
-  }, [interactions.length, attachments, slashCommand, draft, modelReference, runHarnessId, runCwd, ensureConnection, setLastModelReference, clearAttachments, queueBehavior, effort, inputSuggestions, resolvedTheme, t])
+  }, [interactions.length, attachments, slashCommand, draft, modelReference, runHarnessId, runCwd, ensureConnection, setLastModelReference, clearAttachments, queueBehavior, effort, inputSuggestions, resolvedTheme, runMode, setRunModePending, t])
 
   const respondPermission = React.useCallback((response: InteractionResponse) => {
     const connection = connectionRef.current

@@ -9,6 +9,7 @@ import {
   forkSession,
   listSessionThread,
   type SessionInfo,
+  type SessionRunMode,
 } from "@/lib/api/sandbox-sessions"
 
 import { threadMessagesFromApi } from "./session-thread-messages"
@@ -44,6 +45,8 @@ export type SessionListValue = Omit<
 >
 
 export type ActiveSessionValue = {
+  runMode: SessionRunMode
+  runModeLocked: boolean
   activeSession: SessionInfo | null
   runCwd: string
   runSessionId: string | null
@@ -63,9 +66,11 @@ export type ChatSessionActions = {
   openSession: (session: SessionInfo) => void
   closeSession: () => void
   startNewChat: (cwd?: string) => void
+  setDraftRunMode: (mode: SessionRunMode) => void
+  setRunModePending: (pending: boolean) => void
   setDraftCwd: (cwd: string) => void
   forkFrom: (input: ForkFromInput) => Promise<void>
-  bindRunSession: (sessionId: string, seed?: { firstPrompt?: string; cwd?: string; previousSessionId?: string }) => void
+  bindRunSession: (sessionId: string, seed?: { firstPrompt?: string; cwd?: string; previousSessionId?: string; runMode?: SessionRunMode }) => void
   reloadThread: () => Promise<AgentThreadMessage[]>
 }
 
@@ -80,6 +85,7 @@ const ChatSessionActionsContext =
 // Actions read the latest state through this ref instead of closing over it,
 // which is what keeps their identity stable across renders.
 type LatestSessionState = {
+  runMode: SessionRunMode
   activeCwd: string
   activeSession: SessionInfo | null
   groups: SessionProjectsValue["groups"]
@@ -89,7 +95,7 @@ type LatestSessionState = {
   runSessionId: string | null
 }
 
-function liveSessionStub(sessionId: string, cwd: string): SessionInfo {
+function liveSessionStub(sessionId: string, cwd: string, runMode: SessionRunMode): SessionInfo {
   return {
     sessionId,
     summary: "",
@@ -102,7 +108,7 @@ function liveSessionStub(sessionId: string, cwd: string): SessionInfo {
     tagColors: {},
     pinned: false,
     archived: false,
-    runMode: "agent",
+    runMode,
   }
 }
 
@@ -146,6 +152,14 @@ export function ChatSessionProvider({
     "idle" | "loading" | "ready" | "error"
   >("idle")
   const [transcriptEpoch, setTranscriptEpoch] = React.useState(0)
+  const [draftRunMode, setDraftRunModeState] = React.useState<SessionRunMode>("agent")
+  const [modePending, setModePendingState] = React.useState(false)
+  const modePendingRef = React.useRef(false)
+  const runMode = activeSession?.runMode ?? draftRunMode
+  const setRunModePending = React.useCallback((pending: boolean) => {
+    modePendingRef.current = pending
+    setModePendingState(pending)
+  }, [])
   const [runCwd, setRunCwd] = React.useState("")
   const [runSessionId, setRunSessionId] = React.useState<string | null>(null)
   const [forking, setForking] = React.useState(false)
@@ -155,6 +169,7 @@ export function ChatSessionProvider({
   const forkingRef = React.useRef(false)
   const latest = React.useRef<LatestSessionState>({
     activeCwd,
+    runMode,
     activeSession,
     groups,
     messagesStatus,
@@ -166,6 +181,7 @@ export function ChatSessionProvider({
   React.useLayoutEffect(() => {
     latest.current = {
       activeCwd,
+      runMode,
       activeSession,
       groups,
       messagesStatus,
@@ -182,6 +198,8 @@ export function ChatSessionProvider({
   const closeSession = React.useCallback(() => {
     skipTranscriptLoadRef.current = false
     viewedSessionIdRef.current = null
+    setDraftRunModeState("agent")
+    setRunModePending(false)
     setActiveSession(null)
     setThreadMessages([])
     setMessagesStatus("idle")
@@ -189,12 +207,14 @@ export function ChatSessionProvider({
     setRunCwd(latest.current.activeCwd)
     setForkError(null)
     bumpTranscript()
-  }, [bumpTranscript])
+  }, [bumpTranscript, setRunModePending])
 
   const startNewChat = React.useCallback(
     (cwd?: string) => {
       skipTranscriptLoadRef.current = false
       viewedSessionIdRef.current = null
+      setDraftRunModeState("agent")
+      setRunModePending(false)
       setActiveSession(null)
       setThreadMessages([])
       setMessagesStatus("idle")
@@ -203,8 +223,14 @@ export function ChatSessionProvider({
       setForkError(null)
       bumpTranscript()
     },
-    [bumpTranscript]
+    [bumpTranscript, setRunModePending]
   )
+
+  const setDraftRunMode = React.useCallback((mode: SessionRunMode) => {
+    const state = latest.current
+    if (state.runHarnessId !== "claude" || state.activeSession || state.runSessionId || modePendingRef.current) return
+    setDraftRunModeState(mode)
+  }, [])
 
   const setDraftCwd = React.useCallback((cwd: string) => {
     const state = latest.current
@@ -216,6 +242,8 @@ export function ChatSessionProvider({
   React.useEffect(() => {
     skipTranscriptLoadRef.current = false
     viewedSessionIdRef.current = null
+    setDraftRunModeState("agent")
+    setRunModePending(false)
     setActiveSession(null)
     setThreadMessages([])
     setMessagesStatus("idle")
@@ -225,7 +253,7 @@ export function ChatSessionProvider({
     setForkError(null)
     forkingRef.current = false
     bumpTranscript()
-  }, [bumpTranscript, runHarnessId])
+  }, [bumpTranscript, runHarnessId, setRunModePending])
 
   React.useEffect(() => {
     if (activeSession || runSessionId) {
@@ -255,6 +283,7 @@ export function ChatSessionProvider({
       next.firstPrompt !== activeSession.firstPrompt ||
       next.pinned !== activeSession.pinned ||
       next.cwd !== activeSession.cwd ||
+      next.runMode !== activeSession.runMode ||
       next.lastModified !== activeSession.lastModified
     ) {
       setActiveSession(next)
@@ -271,6 +300,7 @@ export function ChatSessionProvider({
       return
     }
 
+    const sessionId = activeSession.sessionId
     const controller = new AbortController()
     // openSession already cleared the thread and set "loading"; only write
     // when something else selected the session, so no extra render happens
@@ -290,6 +320,7 @@ export function ChatSessionProvider({
 
         setThreadMessages(threadMessagesFromApi(payload.messages))
         setMessagesStatus("ready")
+        setActiveSession((current) => current?.sessionId === sessionId && current.runMode !== payload.runMode ? { ...current, runMode: payload.runMode } : current)
         bumpTranscript()
       })
       .catch((error: unknown) => {
@@ -402,7 +433,7 @@ export function ChatSessionProvider({
   )
 
   const bindRunSession = React.useCallback(
-    (sessionId: string, seed?: { firstPrompt?: string; cwd?: string; previousSessionId?: string }) => {
+    (sessionId: string, seed?: { firstPrompt?: string; cwd?: string; previousSessionId?: string; runMode?: SessionRunMode }) => {
       const viewed = viewedSessionIdRef.current
       if (viewed !== null && viewed !== sessionId && viewed !== seed?.previousSessionId) {
         return
@@ -411,27 +442,30 @@ export function ChatSessionProvider({
       skipTranscriptLoadRef.current = true
       setRunSessionId(sessionId)
       if (seed?.cwd) setRunCwd(seed.cwd)
-      const { groups, runCwd } = latest.current
+      setRunModePending(false)
+      const { groups, runCwd, runMode } = latest.current
       const listed = groups
         .flatMap((group) => group.sessions)
         .find((session) => session.sessionId === sessionId)
       const prompt = seed?.firstPrompt?.trim() ?? ""
-      const next =
-        listed ??
-        {
-          ...liveSessionStub(sessionId, seed?.cwd ?? runCwd),
-          ...(prompt === ""
-            ? {}
-            : { firstPrompt: prompt, summary: prompt }),
-        }
+      const next: SessionInfo = {
+        ...(listed ?? {
+          ...liveSessionStub(sessionId, seed?.cwd ?? runCwd, seed?.runMode ?? runMode),
+          ...(prompt === "" ? {} : { firstPrompt: prompt, summary: prompt }),
+        }),
+        ...(seed?.runMode ? { runMode: seed.runMode } : {}),
+      }
       setActiveSession((current) =>
-        current?.sessionId === sessionId ? (seed?.cwd && seed.cwd !== current.cwd ? { ...current, cwd: seed.cwd } : current) : next
+        current?.sessionId === sessionId
+          ? ((seed?.cwd && seed.cwd !== current.cwd) || (seed?.runMode && seed.runMode !== current.runMode)
+            ? { ...current, ...(seed.cwd ? { cwd: seed.cwd } : {}), ...(seed.runMode ? { runMode: seed.runMode } : {}) } : current)
+          : { ...next, ...(seed?.runMode ? { runMode: seed.runMode } : {}) }
       )
-      if (listed === undefined) {
+      if (listed === undefined || listed.runMode !== next.runMode) {
         prependSession(next)
       }
     },
-    [prependSession]
+    [prependSession, setRunModePending]
   )
 
   const remove = React.useCallback(
@@ -542,6 +576,8 @@ export function ChatSessionProvider({
       runCwd,
       runSessionId,
       highlightedSessionId,
+      runMode,
+      runModeLocked: Boolean(activeSession || runSessionId || modePending),
       canFork,
       forking,
       forkError,
@@ -552,6 +588,8 @@ export function ChatSessionProvider({
       forkError,
       forking,
       highlightedSessionId,
+      runMode,
+      modePending,
       runCwd,
       runSessionId,
     ]
@@ -568,6 +606,8 @@ export function ChatSessionProvider({
       closeSession,
       startNewChat,
       setDraftCwd,
+      setDraftRunMode,
+      setRunModePending,
       forkFrom,
       bindRunSession,
       reloadThread,
@@ -579,6 +619,8 @@ export function ChatSessionProvider({
       openSession,
       reloadThread,
       setDraftCwd,
+      setDraftRunMode,
+      setRunModePending,
       startNewChat,
     ]
   )

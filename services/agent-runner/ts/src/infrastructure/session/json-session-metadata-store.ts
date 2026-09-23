@@ -14,6 +14,7 @@ import { basename, dirname, join, resolve } from 'node:path'
 import type { SessionRef } from '../../core/contract/agent-provider.js'
 import type { SessionMetadataRepository } from '../../core/contract/session-metadata-repository.js'
 import {
+  assertRunMode,
   isRunMode,
   reserveTagColors,
   SessionError,
@@ -29,7 +30,7 @@ const STORE_FILE_NAME = 'session-metadata.json'
 const STORE_LOCK_WAIT_MS = 10_000
 const STORE_LOCK_STALE_MS = 30_000
 const LOCK_RETRY_MS = 25
-const STORE_VERSION = 1
+const STORE_VERSION = 2
 
 export interface JsonSessionMetadataStoreOptions {
   readonly runtimeHome: string
@@ -96,6 +97,7 @@ export class JsonSessionMetadataStore implements SessionMetadataRepository {
     return await this.transact((document) => {
       const key = sessionRefKey(ref)
       const current = recordFromDocument(document, key)
+      assertRunMode(current.runMode, patch.runMode)
       const next: SessionMetadataRecord = {
         backgroundTasks: patch.backgroundTasks ?? current.backgroundTasks,
         flags: {
@@ -187,7 +189,15 @@ export class JsonSessionMetadataStore implements SessionMetadataRepository {
     } catch (error) {
       throw new SessionError('io-failure', `Could not parse ${STORE_FILE_NAME}`, { cause: error })
     }
-    return parseDocument(parsed)
+    const document = parseDocument(parsed)
+    if (document.version < STORE_VERSION) {
+      const upgraded = { ...document, version: STORE_VERSION, sessions: Object.fromEntries(
+        Object.entries(document.sessions).map(([key, flags]) => [key, key.startsWith('claude:') ? { ...flags, runMode: 'code' } : flags]),
+      ) }
+      await this.writeUnlocked(upgraded)
+      return upgraded
+    }
+    return document
   }
 
   private async writeUnlocked(document: SessionMetadataDocument): Promise<void> {
@@ -228,7 +238,7 @@ function parseDocument(value: unknown): SessionMetadataDocument {
   }
   const record = value as Record<string, unknown>
   return {
-    version: typeof record['version'] === 'number' ? record['version'] : STORE_VERSION,
+    version: typeof record['version'] === 'number' ? record['version'] : 1,
     sessions: asObject(record['sessions']),
     recaps: asObject(record['recaps']),
     lastResponseModels: asObject(record['lastResponseModels']),

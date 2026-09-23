@@ -1,6 +1,10 @@
-import { expect, it } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { SessionStream } from '../../../../src/harness/session/session-stream.js'
 import type { ThreadMessage } from '../../../../src/core/resource/thread.js'
+
+// Reconnection snapshots include wall-clock timestamps as well as projected text.
+beforeEach(() => { vi.spyOn(Date, 'now').mockReturnValue(10) })
+afterEach(() => { vi.restoreAllMocks() })
 
 const user: ThreadMessage = { id: 'native-user', role: 'user', content: 'question', createdAt: new Date(0).toISOString(), status: 'complete' }
 const native = (text: string): ThreadMessage => ({ id: 'native-assistant', role: 'assistant', content: text,

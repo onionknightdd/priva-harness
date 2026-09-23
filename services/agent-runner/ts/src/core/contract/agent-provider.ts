@@ -1,4 +1,5 @@
 import type { InteractionResponse } from '../resource/interaction.js'
+import type { RunMode } from '../resource/session.js'
 import type { AgentEvent } from '../event/agent-event.js'
 import type { ContextUsage } from '../resource/context-usage.js'
 import type { SlashCommand } from '../resource/slash-command.js'
@@ -36,6 +37,9 @@ export type SessionTarget =
   | { kind: 'fork'; source: SessionRef; sessionId?: string }
 
 export interface ProviderRunSpec {
+  /** Claude execution policy, resolved by the harness before opening a driver. */
+  readonly runMode?: RunMode
+  readonly systemInstructions?: string
   readonly cwd: string
   readonly provider: ProviderId
   readonly model: string

@@ -8,7 +8,6 @@ import {
   type TerminalLaunchSpec,
 } from '../../core/contract/terminal-service.js'
 import {
-  CLAUDE_DISALLOWED_TOOLS,
   resolveClaudeQueryEnv,
   resolveClaudeQuerySettings,
 } from './claude-runtime.js'
@@ -16,6 +15,9 @@ import { writeClaudeTerminalHooks } from './claude-terminal-hooks.js'
 import { saveClaudeTerminalSelection } from './claude-terminal-model.js'
 import type { ToolDefinition } from '../../core/tool/define-tool.js'
 import { writeNativeProductConfig } from './tools/native-product-launch.js'
+
+import { claudeDisallowedTools } from './claude-tool-policy.js'
+import { claudeSystemPromptArgs } from './claude-system-prompt.js'
 
 const SETTINGS_FILE = 'claude-settings.json'
 
@@ -53,7 +55,8 @@ export async function claudeTerminalLaunch(input: ClaudeTerminalLaunchInput): Pr
     '--permission-mode', 'bypassPermissions',
     '--settings', settingsPath,
     ...await writeNativeProductConfig(context.scratchDir, target, spec, input.tools ?? []),
-    '--disallowedTools', CLAUDE_DISALLOWED_TOOLS.join(','),
+    '--disallowedTools', claudeDisallowedTools(spec.runMode).join(','),
+    ...claudeSystemPromptArgs(spec),
     ...(spec.effort === undefined ? [] : ['--effort', spec.effort]),
   ]
   return {

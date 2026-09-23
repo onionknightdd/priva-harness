@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isRunMode, type RunMode } from '../../../core/resource/session.js'
 import { interactionResponseSchema, type InteractionResponse } from '../../../core/resource/interaction.js'
 import { userAttachmentSchema, type UserAttachment } from '../../../core/run/user-turn.js'
 import {
@@ -14,6 +15,7 @@ import {
 
 export interface InitFrame {
   readonly type: 'run.start'
+  readonly runMode?: RunMode
   readonly runId?: string
   readonly text: string
   readonly attachments?: readonly UserAttachment[]
@@ -102,6 +104,10 @@ export function parseInitFrame(raw: unknown): ParseInitResult {
   if (!isRunHarnessId(harness)) {
     return { ok: false, message: 'Init harness must be claude or pi' }
   }
+  const runMode = raw['runMode']
+  if (runMode !== undefined && (!isRunMode(runMode) || harness !== 'claude')) {
+    return { ok: false, message: 'runMode must be agent or code and is only supported for Claude' }
+  }
   const cwd = raw['cwd']
   if (typeof cwd !== 'string' || cwd.trim() === '') {
     return { ok: false, message: 'Init cwd must be a non-empty string' }
@@ -134,6 +140,7 @@ export function parseInitFrame(raw: unknown): ParseInitResult {
     ok: true,
     frame: {
       type: 'run.start',
+      ...(runMode === undefined ? {} : { runMode }),
       ...(runId === undefined ? {} : { runId: runId.trim() }),
       text,
       ...(attachments.data?.length ? { attachments: attachments.data } : {}),

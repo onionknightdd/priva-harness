@@ -1,140 +1,52 @@
-import * as React from "react"
-import {
-  CircleQuestionMarkIcon,
-  Code2Icon,
-  MessageSquareShareIcon,
-} from "lucide-react"
-import { AnimatePresence, motion, useReducedMotion } from "motion/react"
+import { CircleQuestionMarkIcon, Code2Icon, MessageSquareShareIcon } from "lucide-react"
+import { useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-} from "@/components/assistant-ui/tabs"
+import { Tabs, TabsList, TabsTrigger } from "@/components/assistant-ui/tabs"
 import { TabsTriggerContent } from "@/components/assistant-ui/tabs-trigger-content"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogTrigger } from "@/components/ui/dialog"
 import { TooltipHint } from "@/components/ui/tooltip"
-
-type SidebarMode = "agent" | "code"
-
-const TAB_LIST_WIDTH = 224
-const TAB_ROW_WITH_HELP_WIDTH = 270
+import { useActiveSession, useChatSessionActions } from "@/features/chat-session"
+import { useHarness } from "./harness-context"
+import { ModeComparisonDialog } from "./mode-comparison-dialog"
 
 export function SidebarModeTabs() {
-  const rowRef = React.useRef<HTMLDivElement>(null)
-  const [mode, setMode] = React.useState<SidebarMode>("agent")
-  const [availableWidth, setAvailableWidth] = React.useState<number | null>(
-    null
-  )
-  const shouldReduceMotion = useReducedMotion()
+  const { runHarnessId } = useHarness()
+  return runHarnessId === "claude" ? <ClaudeModeTabs /> : null
+}
+
+function ClaudeModeTabs() {
+  const { runMode, runModeLocked } = useActiveSession()
+  const { setDraftRunMode } = useChatSessionActions()
+  const reduceMotion = Boolean(useReducedMotion())
   const { t } = useTranslation()
 
-  React.useLayoutEffect(() => {
-    const row = rowRef.current
-
-    if (!row) {
-      return
-    }
-
-    const updateWidth = () => {
-      setAvailableWidth(row.getBoundingClientRect().width)
-    }
-    const resizeObserver = new ResizeObserver(updateWidth)
-
-    updateWidth()
-    resizeObserver.observe(row)
-
-    return () => resizeObserver.disconnect()
-  }, [])
-
-  const showTabs =
-    availableWidth === null || availableWidth >= TAB_LIST_WIDTH
-  const showHelp =
-    availableWidth === null || availableWidth >= TAB_ROW_WITH_HELP_WIDTH
-  const activeModeLabel =
-    mode === "agent" ? t("sidebar.modes.agent") : t("sidebar.modes.code")
-  const helpLabel = t("sidebar.modes.help", { mode: activeModeLabel })
-
   return (
-    <div
-      ref={rowRef}
-      className="w-full min-w-0 group-data-[collapsible=icon]:hidden"
-    >
-      {showTabs && (
-        <div className="flex items-center gap-1.5 overflow-hidden">
-          <Tabs
-            value={mode}
-            onValueChange={(value) => {
-              if (value === "agent" || value === "code") {
-                setMode(value)
-              }
-            }}
-            className="w-56 min-w-56 shrink-0"
-          >
-            <TabsList
-              variant="default"
-              size="lg"
-              className="w-56 min-w-56 overflow-hidden"
-              aria-label={t("sidebar.modes.label")}
-            >
-              <TabsTrigger
-                value="agent"
-                className="group-data-[size=lg]/tabs-list:text-base dark:data-active:text-white"
-              >
-                <TabsTriggerContent
-                  active={mode === "agent"}
-                  icon={MessageSquareShareIcon}
-                  label={t("sidebar.modes.agent")}
-                  reduceMotion={Boolean(shouldReduceMotion)}
-                />
+    <div className="@container w-full min-w-0 group-data-[collapsible=icon]:hidden">
+      <div className="flex min-w-0 items-center gap-1">
+        <Tabs value={runMode} onValueChange={(value) => {
+          if (!runModeLocked && (value === "agent" || value === "code")) setDraftRunMode(value)
+        }} className="min-w-0 max-w-56 flex-1">
+          <TabsList variant="default" size="lg" className="w-full min-w-0 overflow-hidden" aria-label={t("sidebar.modes.label")}
+            title={runModeLocked ? t("sidebar.modes.locked") : undefined}>
+            {([ ["agent", MessageSquareShareIcon], ["code", Code2Icon] ] as const).map(([mode, icon]) => (
+              <TabsTrigger key={mode} value={mode} disabled={runModeLocked}
+                className="min-w-0 flex-1 group-data-[size=lg]/tabs-list:px-1 group-data-[size=lg]/tabs-list:text-sm dark:data-active:text-white @[240px]:group-data-[size=lg]/tabs-list:text-base [&_svg]:hidden @[240px]:[&_svg]:block">
+                <TabsTriggerContent active={runMode === mode} icon={icon} label={t(`sidebar.modes.${mode}`)} reduceMotion={reduceMotion} />
               </TabsTrigger>
-              <TabsTrigger
-                value="code"
-                className="group-data-[size=lg]/tabs-list:text-base dark:data-active:text-white"
-              >
-                <TabsTriggerContent
-                  active={mode === "code"}
-                  icon={Code2Icon}
-                  label={t("sidebar.modes.code")}
-                  reduceMotion={Boolean(shouldReduceMotion)}
-                />
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-
-          <AnimatePresence initial={false}>
-            {showHelp && (
-              <motion.div
-                initial={
-                  shouldReduceMotion
-                    ? false
-                    : { opacity: 0, x: -4, scale: 0.88 }
-                }
-                animate={{ opacity: 1, x: 0, scale: 1 }}
-                exit={
-                  shouldReduceMotion
-                    ? { opacity: 0 }
-                    : { opacity: 0, x: -4, scale: 0.88 }
-                }
-                transition={{ duration: shouldReduceMotion ? 0 : 0.16 }}
-              >
-                <TooltipHint content={helpLabel}>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-lg"
-                    data-mode={mode}
-                    aria-label={helpLabel}
-                  >
-                    <CircleQuestionMarkIcon />
-                  </Button>
-                </TooltipHint>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      )}
+            ))}
+          </TabsList>
+        </Tabs>
+        <Dialog>
+          <TooltipHint content={t("sidebar.modes.help")}>
+            <DialogTrigger render={<Button type="button" variant="ghost" size="icon" className="shrink-0" aria-label={t("sidebar.modes.help")} />}>
+              <CircleQuestionMarkIcon />
+            </DialogTrigger>
+          </TooltipHint>
+          <ModeComparisonDialog />
+        </Dialog>
+      </div>
     </div>
   )
 }

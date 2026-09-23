@@ -21,6 +21,8 @@ import { isRunResultEvent } from '../core/event/agent-event.js'
 import type { SlashCommand } from '../core/resource/slash-command.js'
 import type { UserTurn } from '../core/run/user-turn.js'
 import { SessionError } from '../core/resource/session.js'
+import { SessionRunModes } from './session/session-run-mode.js'
+import { PLATFORM_INSTRUCTIONS } from './prompt/platform-instructions.js'
 import { SessionStream } from './session/session-stream.js'
 import { sessionRefKey } from '../core/resource/session.js'
 import { userTurnFromText } from '../core/run/user-turn.js'
@@ -67,6 +69,7 @@ export interface SlashCommandCatalog {
 }
 
 export class AgentHarness {
+  private readonly runModes: SessionRunModes
   private readonly liveRuns: LiveRunRegistry | undefined
   private readonly pool: WarmRuntimePool | undefined
   private readonly streams = new Map<string, SessionStream>()
@@ -82,12 +85,13 @@ export class AgentHarness {
   private readonly knownSkills = new Map<ProviderId, Set<string>>()
 
   constructor(private readonly options: AgentHarnessOptions) {
+    this.runModes = options.sessions?.runModes ?? new SessionRunModes()
     this.liveRuns = options.liveRuns
     options.sessions?.bindLiveThreadReader((ref) => this.streams.get(sessionRefKey(ref))?.snapshot().messages)
     options.sessions?.bindBackgroundReader((provider) => [...this.streams.values()].filter((stream) => stream.session.provider === provider).map((stream) => ({ sessionId: stream.session.id, tasks: stream.tasks.list() })))
     options.sessions?.bindNativeRunningReader((provider) => (this.terminalChats?.list(provider) ?? []).flatMap((chat) => chat.runId ? [{
       sessionId: chat.ref.id, runId: chat.runId, status: 'running' as const, startedAt: chat.startedAt ?? Date.now(),
-      lastSeq: this.sessionStream(chat.ref).snapshot().seq, firstSeq: 0, firstUserUuid: null, pendingPermission: null, runMode: 'code' as const, harness: provider,
+      lastSeq: this.sessionStream(chat.ref).snapshot().seq, firstSeq: 0, firstUserUuid: null, pendingPermission: null, runMode: chat.runMode ?? 'code', harness: provider,
     }] : []))
     this.pool = options.pool ?? (
       options.liveRuns === undefined
@@ -163,6 +167,14 @@ export class AgentHarness {
     this.terminals = terminals
     this.terminalChats = new TerminalChatSessions({
       terminals, eventsUrl, stream: (ref) => this.sessionStream(ref),
+      validateMode: async (ref, spec) => { await this.runModes.resolve({ kind: 'resume', session: ref }, spec) },
+      resolveRebound: async (source, next, reason, spec) => {
+        const base = { ...spec }
+        delete base.runMode
+        const target: SessionTarget = reason === 'resume' ? { kind: 'resume', session: next }
+          : { kind: 'fork', source, sessionId: next.id }
+        return this.runModes.resolve(target, base)
+      },
       beforeOpen: async (ref) => {
         if (this.sdkSessions.has(sessionRefKey(ref)) || this.liveForSession(ref)) {
           throw new SessionError('session-busy', 'Wait for the current chat reply before opening Terminal')
@@ -190,7 +202,7 @@ export class AgentHarness {
     const resolved = target.kind === 'resume' ? target : { ...target, sessionId: target.sessionId ?? randomUUID() }
     const key = sessionRefKey(resolved.kind === 'resume' ? resolved.session : { provider: spec.provider, id: resolved.sessionId })
     this.openingTerminals.set(key, (this.openingTerminals.get(key) ?? 0) + 1)
-    try { return await this.terminalChats.open(resolved, spec, size) }
+    try { return await this.terminalChats.open(resolved, await this.runModes.resolve(resolved, spec), size) }
     finally {
       const remaining = (this.openingTerminals.get(key) ?? 1) - 1
       if (remaining) this.openingTerminals.set(key, remaining)
@@ -200,7 +212,7 @@ export class AgentHarness {
 
   async submitTerminal(ref: SessionRef, turn: UserTurn, spec: ProviderRunSpec, runId: string): Promise<void> {
     if (!this.terminalChats) throw new SessionError('invalid-request', 'Terminal driver is unavailable')
-    await this.terminalChats.submit(ref, turn, spec, runId)
+    await this.terminalChats.submit(ref, turn, await this.runModes.resolve({ kind: 'resume', session: ref }, spec), runId)
   }
 
   async terminalEvent(ref: SessionRef, state: TerminalSessionState): Promise<void> {
@@ -277,13 +289,14 @@ export class AgentHarness {
     live.publish(event)
   }
 
-  launch(
+  async launch(
     turn: UserTurn,
     spec: ProviderRunSpec,
     runOptions: AgentRunOptions,
-  ): LiveRun {
+  ): Promise<LiveRun> {
     const liveRuns = this.requireLiveRuns()
-    const session = this.prepareSession(spec, runOptions.session, true)
+    const session = this.prepareSession(spec, runOptions.session)
+    spec = await this.runModes.resolve(session, spec)
     this.rejectBusy(session)
     const runId = runOptions.runId ?? randomUUID()
     const abort = new AbortController()
@@ -291,6 +304,7 @@ export class AgentHarness {
       runId,
       provider: spec.provider,
       cwd: spec.cwd,
+      ...(spec.runMode ? { runMode: spec.runMode } : {}),
       abort,
     })
     this.bindPreparedSession(liveRuns, runId, session)
@@ -333,6 +347,7 @@ export class AgentHarness {
     ref: SessionRef,
     spec: ProviderRunSpec,
   ): Promise<ContextUsage> {
+    spec = await this.runModes.resolve({ kind: 'resume', session: ref }, spec)
     const provider = this.options.providers[ref.provider]
     const measure = contextUsageMeasureOf(provider)
     if (measure !== undefined) {
@@ -361,7 +376,8 @@ export class AgentHarness {
     }
     const commands = await this.options.providers[options.provider].listSlashCommands({
       cwd: options.cwd,
-      ...(options.spec === undefined ? {} : { spec: options.spec }),
+      ...(options.spec === undefined ? {} : { spec: options.provider === 'claude'
+        ? { ...options.spec, runMode: 'code', systemInstructions: PLATFORM_INSTRUCTIONS } : options.spec }),
     })
     this.rememberSkills(options.provider, commands)
     return {
@@ -401,7 +417,8 @@ export class AgentHarness {
   ): AsyncIterable<StreamFrame> {
     const runId = runOptions.runId ?? randomUUID()
 
-    const session = this.prepareSession(spec, runOptions.session, false)
+    const session = this.prepareSession(spec, runOptions.session)
+    spec = await this.runModes.resolve(session, spec)
     const sdkRef = sessionRefOf(session)
     const sdkKey = sdkRef ? sessionRefKey(sdkRef) : undefined
     if (sdkKey) {
@@ -436,6 +453,10 @@ export class AgentHarness {
       ledger.attachSession(runtime.session.id)
       const stamper = new EnvelopeStamper(runId, spec.provider, Date.now, runtime.session.id)
       try {
+        if (spec.runMode) yield stamper.stamp({ type: 'session.config', config: {
+          model: spec.model, cwd: spec.cwd, runMode: spec.runMode, context: emptyContextUsage(),
+          ...(spec.profileId ? { profileId: spec.profileId } : {}), ...(spec.effort ? { effort: spec.effort } : {}),
+        } })
         yield stamper.stamp({
           type: 'run.started', model: spec.model,
           userMessage: {
@@ -529,6 +550,7 @@ export class AgentHarness {
       runId,
       provider: spec.provider,
       cwd: spec.cwd,
+      ...(spec.runMode ? { runMode: spec.runMode } : {}),
       abort,
     })
     liveRuns.attachSession(runId, session.id)
@@ -605,24 +627,10 @@ export class AgentHarness {
     this.knownSkills.set(provider, names)
   }
 
-  private prepareSession(
-    spec: ProviderRunSpec,
-    session: SessionTarget | undefined,
-    preassign: boolean,
-  ): SessionTarget {
-    if (session === undefined) {
-      if (preassign && spec.provider === 'claude') {
-        return { kind: 'new', provider: 'claude', sessionId: randomUUID() }
-      }
-      return { kind: 'new', provider: spec.provider }
-    }
-    if (preassign && session.kind === 'new' && spec.provider === 'claude' && session.sessionId === undefined) {
-      return { kind: 'new', provider: 'claude', sessionId: randomUUID() }
-    }
-    if (preassign && session.kind === 'fork' && spec.provider === 'claude' && session.sessionId === undefined) {
-      return { kind: 'fork', source: session.source, sessionId: randomUUID() }
-    }
-    return session
+  private prepareSession(spec: ProviderRunSpec, session: SessionTarget | undefined): SessionTarget {
+    const target = session ?? { kind: 'new', provider: spec.provider }
+    if (spec.provider !== 'claude' || target.kind === 'resume') return target
+    return { ...target, sessionId: target.sessionId ?? randomUUID() }
   }
 
   private bindPreparedSession(

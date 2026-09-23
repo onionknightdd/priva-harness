@@ -1,3 +1,4 @@
+import type { RunMode } from '../../core/resource/session.js'
 import type { EffortLevel, ProviderRunSpec } from '../../core/contract/agent-provider.js'
 import {
   providerIdForHarness,
@@ -16,6 +17,7 @@ export interface RunSpecRequest {
   readonly harness: RunHarnessId
   readonly model: string
   readonly cwd: string
+  readonly runMode?: RunMode
   readonly effort?: EffortLevel
   readonly promptSuggestions?: boolean
 }
@@ -31,6 +33,7 @@ export async function buildRunSpec(services: RunSpecServices, request: RunSpecRe
   const baseUrl = rewriteProviderBaseUrl(resolved.profile.baseUrl, request.harness)
   return {
     cwd: request.cwd,
+    ...(request.runMode === undefined ? {} : { runMode: request.runMode }),
     provider: providerIdForHarness(request.harness),
     model: resolved.model,
     baseUrl,

@@ -150,6 +150,25 @@ Harness 选择菜单仅保留 Pi 和 Claude Agent SDK，移除 DeepSeek Harness 
               ^ 同一水平中心位置
 ```
 
+### Claude Agent / Code 模式（2026-09-23）
+
+侧栏现有模式 Tabs 绑定会话状态，仅 Claude 显示，Pi 隐藏 Tabs 和问号。
+新会话默认 Agent，发送首条消息后即锁定；尚未建立会话的启动失败恢复可选状态。
+既有会话、分支、原生换绑和重连采用服务端模式。要切换模式需新建对话。
+问号使用共享 Dialog，点击展示 Agent / Code 对比表，锁定状态仍可查看帮助。
+
+```text
+Claude 侧栏                         Dialog
+[ Agent | Code ] [?] ------------> 对比项 | Agent | Code
+                                   任务 / 指引 / 工具 / 能力 / 权限
+Pi：整行隐藏                       会话模式固定说明       [关闭]
+```
+
+Tabs 沿用共享滑块和激活图标动效；窄侧栏压缩 Tabs 宽度并隐藏装饰图标，保留完整
+模式文字及问号；图标折叠栏隐藏整行。Dialog 使用共享弹层动效、主题和焦点管理，
+桌面最大 560px，移动端保留两侧 16px，三列表格换行，超出高度内部滚动。
+键盘 Enter 打开、Escape 关闭后返回问号，减少动态效果沿用共享组件规则。
+
 ### 焦点框与用户消息底色
 
 2026-09-10：应用焦点框统一使用 `ring-inset`，包括共享 `focusRing`、基础组件、
@@ -1972,6 +1991,14 @@ rg -n '@base-ui/react|motion/react|gsap' agent-ui/src
 ```
 
 ## Development and verification
+
+Claude 模式浏览器回归：在独立开发服务器 origin 打开
+`/tests/features/sidebar/header/mode-tabs-browser.html`，点击 **Run mode checks**。
+使用隔离网络验证真实 context / 发送链路的草稿模式、首次发送锁定、失败解锁、
+服务端绑定、延迟换绑快照、Pi 隐藏与请求不携带 runMode、对比表、164px 控件行。
+追加 `?zh&dark&reduced-motion`，在 390px 视口复测中文、深色和减少动态效果；
+手动用 Enter 打开问号、Escape 关闭并检查焦点返回。样例设置自己的本地测试偏好。
+
 
 原生输入建议的状态回归（仓库根目录）：
 

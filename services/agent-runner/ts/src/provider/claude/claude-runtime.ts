@@ -1,3 +1,5 @@
+import { claudeSystemPrompt } from './claude-system-prompt.js'
+import { claudeDisallowedTools } from './claude-tool-policy.js'
 import { InteractionCoordinator } from '../../core/run/interaction-coordinator.js'
 import { answersByQuestion, normalizeQuestions, type InteractionResponse } from '../../core/resource/interaction.js'
 import { taskNotification } from '../../core/resource/background-task.js'
@@ -30,21 +32,6 @@ import { imageToolsFromSpec } from '../../core/tool/image-tool-shared.js'
 import { ClaudeEventMapper } from './claude-event-mapper.js'
 import { claudeUserMessage } from './claude-user-message.js'
 import { compileClaudeCustomTools } from './tools/compile-custom-tools.js'
-
-export const CLAUDE_DISALLOWED_TOOLS = [
-  'NotebookEdit',
-  'WebFetch',
-  'WebSearch',
-  'ScheduleWakeup',
-  'RemoteTrigger',
-  'PushNotification',
-  'Artifact',
-  'Projects',
-  'DesignSync',
-  'ReadMcpResourceDirTool',
-  'RefreshMcpTools',
-  'ShowOnboardingRolePicker',
-] as const
 
 export const CLAUDE_DISABLED_SKILLS = [
   'dataviz',
@@ -348,14 +335,14 @@ export function resolveClaudeQueryOptions(
     model: spec.model,
     agentProgressSummaries: true,
     allowDangerouslySkipPermissions: true,
-    disallowedTools: [...CLAUDE_DISALLOWED_TOOLS],
+    disallowedTools: claudeDisallowedTools(spec.runMode),
     enableFileCheckpointing: true,
     forwardSubagentText: true,
     includePartialMessages: true,
     perTaskStopAffordance: true,
     permissionMode: 'bypassPermissions',
     promptSuggestions: spec.promptSuggestions !== false,
-    systemPrompt: { type: 'preset', preset: 'claude_code' },
+    systemPrompt: claudeSystemPrompt(spec),
     settingSources: ['user', 'project', 'local'],
     settings: resolveClaudeQuerySettings(spec),
     env: resolveClaudeQueryEnv(spec),

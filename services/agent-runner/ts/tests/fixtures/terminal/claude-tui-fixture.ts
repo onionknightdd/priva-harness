@@ -24,7 +24,7 @@ export function nativeClaudeAvailable(): boolean {
   catch { return false }
 }
 
-export interface ModelRequest { model: string; stream?: boolean; tools?: Record<string, unknown>[]; messages: { role: string; content: string | Record<string, unknown>[] }[] }
+export interface ModelRequest { system?: unknown; model: string; stream?: boolean; tools?: Record<string, unknown>[]; messages: { role: string; content: string | Record<string, unknown>[] }[] }
 export type ModelResponse = (body: ModelRequest, reply: FastifyReply) => unknown
 
 export async function nativeClaudeFixture(respond: ModelResponse, recorder?: DataRecorder, options: { permissionMode?: 'default' } = {}) {
@@ -77,8 +77,8 @@ export async function nativeClaudeFixture(respond: ModelResponse, recorder?: Dat
   return {
     root, configDir, harness, terminals, frames, requests, socket, sdkOpen, profile, services, base,
     get ref() { return { provider: 'claude', id: sessionId } as const },
-    send(text: string, runId: string, model = 'claude-sonnet-4-6', options: { effort?: string; profileId?: string } = {}) {
-      socket.send(JSON.stringify({ type: 'run.start', harness: 'claude', cwd: root, text, runId,
+    send(text: string, runId: string, model = 'claude-sonnet-4-6', options: { effort?: string; profileId?: string; runMode?: 'agent' | 'code' } = {}) {
+      socket.send(JSON.stringify({ type: 'run.start', harness: 'claude', cwd: root, text, runId, ...(options.runMode ? { runMode: options.runMode } : {}),
         model: `${options.profileId ?? profile.id}:${model}`, ...(options.effort ? { effort: options.effort } : {}), ...(sessionId ? { sessionId } : {}) }))
     },
     async dispose() {

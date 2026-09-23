@@ -187,7 +187,8 @@ function isValidationError(error: unknown): error is Error & { validation: unkno
 function statusForSessionError(kind: SessionErrorKind): number {
   switch (kind) {
     case 'session-not-found': return 404
-    case 'session-busy': return 409
+    case 'session-busy':
+    case 'run-mode-conflict': return 409
     case 'invalid-request': return 400
     case 'io-failure': return 500
   }

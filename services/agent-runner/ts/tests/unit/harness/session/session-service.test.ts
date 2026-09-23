@@ -148,10 +148,13 @@ describe('SessionService last_response_model', () => {
       activeCwd: '/work',
     })
 
+    await service.runModes.bind({ provider: 'claude', id: 'orig' }, 'agent')
     const first = await service.fork('claude', 'orig', { stem: '设计 API' })
+    expect(first.runMode).toBe('agent')
     expect(first.customTitle).toBe('设计 API (1)')
     const nested = await service.fork('claude', first.sessionId, { stem: '设计 API (1)' })
     expect(nested.customTitle).toBe('设计 API (1) (1)')
+    expect(nested.runMode).toBe('agent')
     const second = await service.fork('claude', 'orig', { stem: '设计 API' })
     expect(second.customTitle).toBe('设计 API (2)')
   })

@@ -20,7 +20,7 @@ const STREAM_PROTOCOL_VERSION = 2
 
 export type StreamFrame = {
   prompts?: string[]
-  config?: { model: string; profileId?: string; effort?: AgentRunEffort; cwd: string; context: ContextUsage }
+  config?: { runMode?: "agent" | "code"; model: string; profileId?: string; effort?: AgentRunEffort; cwd: string; context: ContextUsage }
   runningToolIds?: string[]
   nextSessionId?: string
   driver?: "terminal"
