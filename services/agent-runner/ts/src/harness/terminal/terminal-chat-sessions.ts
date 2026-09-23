@@ -19,6 +19,7 @@ import { TerminalInteractions } from './terminal-interactions.js'
 import type { ThreadReplayItem } from '../../core/resource/thread.js'
 
 interface PendingTurn { readonly runId: string; readonly turn: UserTurn; readonly spec: ProviderRunSpec }
+interface PendingConfiguration { readonly requestId: string; readonly spec: ProviderRunSpec }
 interface ActiveTurn {
   readonly runId: string
   readonly text: string
@@ -39,7 +40,7 @@ interface ActiveTurn {
 interface TerminalChat {
   readonly ref: SessionRef
   cwd: string
-  readonly queue: PendingTurn[]
+  readonly queue: (PendingTurn | PendingConfiguration)[]
   readonly accepted: Set<string>
   active: ActiveTurn | undefined
   updatedAt: number
@@ -89,6 +90,7 @@ export class TerminalChatSessions {
   private readonly textMonitor: NodeJS.Timeout
   private polling = false
   private disposed = false
+  private readonly configurationAbort = new AbortController()
   private readonly resourcesDirty = new Set<string>()
 
   constructor(private readonly options: TerminalChatSessionsOptions) {
@@ -154,6 +156,16 @@ export class TerminalChatSessions {
   }
 
   invalidateResources(): void { for (const key of this.chats.keys()) this.resourcesDirty.add(key) }
+
+  async configure(ref: SessionRef, spec: ProviderRunSpec, requestId: string): Promise<void> {
+    if (!await this.options.terminals.isAlive(ref)) throw new SessionError('invalid-request', 'Claude terminal exited before changing its model')
+    const state = await this.options.terminals.state(ref)
+    const chat = this.chat(ref, state?.cwd ?? spec.cwd)
+    if (chat.cwd !== spec.cwd) throw new SessionError('invalid-request', 'The model selection working directory differs from the running terminal')
+    if (state) await this.event(ref, state)
+    chat.queue.push({ requestId, spec })
+    void this.drain(chat)
+  }
 
   async event(ref: SessionRef, state: TerminalSessionState): Promise<void> {
     if (ref.id !== state.sessionId) {
@@ -344,7 +356,7 @@ export class TerminalChatSessions {
     const chat = this.chats.get(sessionRefKey(ref))
     if (!chat) return
     this.publishSuggestion(chat)
-    for (const pending of chat.queue.splice(0)) this.options.stream(ref).publish({ type: 'error', code: 'run.start', message: reason }, pending.runId)
+    for (const pending of chat.queue.splice(0)) this.failCommand(chat, pending, reason)
     await this.finish(chat, { type: 'run.failed', message: reason })
     await chat.releaseHistory?.()
     this.chats.delete(sessionRefKey(ref))
@@ -352,6 +364,7 @@ export class TerminalChatSessions {
 
   async dispose(): Promise<void> {
     this.disposed = true
+    this.configurationAbort.abort()
     clearInterval(this.monitor)
     clearInterval(this.textMonitor)
     for (const chat of this.chats.values()) {
@@ -381,9 +394,9 @@ export class TerminalChatSessions {
     return chat
   }
 
-  private publishConfig(chat: TerminalChat): void {
+  private publishConfig(chat: TerminalChat, requestId?: string): void {
     if (!chat.spec) return
-    this.options.stream(chat.ref).publish({ type: 'session.config', config: {
+    this.options.stream(chat.ref).publish({ type: 'session.config', ...(requestId ? { requestId } : {}), config: {
       model: chat.model || chat.spec.model, cwd: chat.cwd, context: chat.status?.context ?? emptyContextUsage(),
       ...(chat.runMode ? { runMode: chat.runMode } : {}),
       ...(chat.spec.profileId ? { profileId: chat.spec.profileId } : {}), ...(chat.spec.effort ? { effort: chat.spec.effort } : {}),
@@ -437,16 +450,21 @@ export class TerminalChatSessions {
   }
 
   private async drain(chat: TerminalChat): Promise<void> {
-    if (chat.pumping || this.isBusy(chat) || chat.finishing) return
+    if (this.disposed || chat.pumping || this.isBusy(chat) || chat.finishing) return
     chat.pumping = true
     try {
-      while (!this.isBusy(chat) && chat.queue.length) {
+      while (!this.isDisposed() && !this.isBusy(chat) && chat.queue.length) {
         // A native user can begin a turn between the chat request and its injection.
         const state = await this.options.terminals.state(chat.ref)
         if (state?.phase === 'running' && state.updatedAt > chat.updatedAt) await this.event(chat.ref, state)
         if (this.isBusy(chat)) return
         const pending = chat.queue.shift()
         if (!pending) return
+        if ('requestId' in pending) {
+          try { await this.applyConfiguration(chat, pending) }
+          catch (error) { this.failCommand(chat, pending, error instanceof Error ? error.message : String(error)) }
+          continue
+        }
         try {
           await this.inject(chat, pending)
         } catch (error) {
@@ -456,8 +474,7 @@ export class TerminalChatSessions {
         }
       }
     } catch (error) {
-      for (const pending of chat.queue.splice(0)) this.options.stream(chat.ref).publish({ type: 'error', code: 'run.start',
-        message: error instanceof Error ? error.message : String(error) }, pending.runId)
+      for (const pending of chat.queue.splice(0)) this.failCommand(chat, pending, error instanceof Error ? error.message : String(error))
     } finally {
       chat.pumping = false
       if (!this.isBusy(chat) && chat.queue.length) void this.drain(chat)
@@ -465,6 +482,42 @@ export class TerminalChatSessions {
   }
 
   private isBusy(chat: TerminalChat): boolean { return chat.active !== undefined }
+
+  private failCommand(chat: TerminalChat, pending: PendingTurn | PendingConfiguration, message: string): void {
+    this.options.stream(chat.ref).publish({ type: 'error', message,
+      ...('requestId' in pending ? { code: 'session.configure', requestId: pending.requestId } : { code: 'run.start' }) },
+    'runId' in pending ? pending.runId : undefined)
+  }
+
+  private async applyConfiguration(chat: TerminalChat, pending: PendingConfiguration): Promise<void> {
+    const signal = AbortSignal.any([AbortSignal.timeout(45000), this.configurationAbort.signal])
+    const restarted = await this.options.terminals.configure(chat.ref, pending.spec,
+      { cols: 120, rows: 40, eventsUrl: this.options.eventsUrl(chat.ref) }, signal, false,
+      !(chat.backgroundActive ?? this.options.stream(chat.ref).tasks.hasActive))
+    chat.spec = pending.spec
+    chat.model = pending.spec.model
+    if (restarted) {
+      chat.instanceId = ''; chat.updatedAt = 0; chat.telemetryOffset = 0; chat.awaitingReady = true
+      delete chat.status
+    }
+    if (chat.awaitingReady) await this.waitForConfiguration(chat, signal)
+    else await this.readTelemetry(chat)
+    await this.options.refresh(chat.ref)
+    await this.options.configured?.(chat.ref, chat.spec, chat.model)
+    this.publishConfig(chat, pending.requestId)
+  }
+
+  private async waitForConfiguration(chat: TerminalChat, signal: AbortSignal): Promise<void> {
+    // A restarted profile is acknowledged only after its new native driver reports ready.
+    while (chat.awaitingReady || !chat.status) {
+      signal.throwIfAborted()
+      if (this.disposed || !await this.options.terminals.isAlive(chat.ref)) throw new Error('Claude exited while changing its model')
+      const state = await this.options.terminals.state(chat.ref)
+      if (state) await this.event(chat.ref, state)
+      await this.readTelemetry(chat)
+      await delay(100, undefined, { signal })
+    }
+  }
 
   private async inject(chat: TerminalChat, pending: PendingTurn): Promise<void> {
     chat.spec = pending.spec

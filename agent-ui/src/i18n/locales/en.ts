@@ -203,6 +203,8 @@ export const en = {
     mentionFileGroup: "File",
     removeSlashCommand: "Remove /{{name}}",
     sessionReset: "Session reset",
+    modelChanged: "Switched to {{model}}",
+    modelChanging: "Changing model…",
     conversationCompacting: "Compacting conversation",
     conversationCompacted: "Conversation compacted",
     conversationCompactedExpand: "Show compact summary",

@@ -131,7 +131,7 @@ export interface SessionConfiguration {
 
 export type AgentEvent = (
   | { readonly type: 'session.rebound'; readonly nextSessionId: string }
-  | { readonly type: 'session.config'; readonly config: SessionConfiguration }
+  | { readonly type: 'session.config'; readonly config: SessionConfiguration; readonly requestId?: string }
   | { readonly type: 'terminal.focus'; readonly reason: string }
   | { readonly type: 'tasks.snapshot'; readonly tasks: readonly BackgroundTask[] }
   | { readonly type: 'task.updated' | 'task.notification'; readonly task: BackgroundTask }

@@ -7,6 +7,7 @@ import type { ThreadReplayItem } from '../../../core/resource/thread.js'
 import { isSyntheticNoResponseAssistant } from './claude-transcript.js'
 import type { UserAttachment } from '../../../core/run/user-turn.js'
 import { claudePromptText } from '../claude-prompt-text.js'
+import { claudeModelChange } from './claude-model-command.js'
 
 export function replayClaudeSessionMessages(
   messages: readonly SessionMessage[],
@@ -14,8 +15,17 @@ export function replayClaudeSessionMessages(
 ): ThreadReplayItem[] {
   const mapper = new ClaudeEventMapper()
   const items: ThreadReplayItem[] = []
+  const modelChanges = new Map(messages.filter((message) => message.origin?.['type'] === 'model-command-result')
+    .map((message) => [message.origin?.['commandId'], claudeModelChange(userContent(message.message))]))
 
   for (const message of messages) {
+    if (message.origin?.['type'] === 'model-command-result') continue
+    if (message.origin?.['type'] === 'model-command') {
+      mapper.beginUserTurn()
+      items.push({ kind: 'user', id: message.uuid, content: '/model',
+        modelChange: modelChanges.get(message.uuid) ?? {}, createdAt: isoFromTimestamp(message.timestamp) })
+      continue
+    }
     const sdk = toClaudeSdkMessage(message)
     const events = sdk ? mapper.push(sdk) : []
     if (taskNotification(message.origin, userContent(message.message))) {

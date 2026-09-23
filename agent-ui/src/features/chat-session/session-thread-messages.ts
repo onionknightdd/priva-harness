@@ -14,6 +14,7 @@ type ThreadApiMessage = {
   nestedAgents?: unknown
   workflows?: unknown
   compact?: AgentThreadMessage["compact"]
+  modelChange?: AgentThreadMessage["modelChange"]
   interactions?: AgentThreadMessage["interactions"]
 }
 
@@ -30,6 +31,7 @@ export function threadMessagesFromApi(
     status: item.status,
     ...(item.transcriptUuid ? { transcriptUuid: item.transcriptUuid } : {}),
     ...(item.compact === undefined ? {} : { compact: item.compact }),
+    ...(item.modelChange === undefined ? {} : { modelChange: item.modelChange }),
     ...(item.interactions === undefined ? {} : { interactions: item.interactions }),
     ...(item.role === "assistant"
       ? {

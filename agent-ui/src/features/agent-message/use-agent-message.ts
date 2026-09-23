@@ -59,6 +59,8 @@ export function useAgentMessage() {
   const contextRequestRef = React.useRef(0)
   const hasSnapshotRef = React.useRef(false)
   const nativeConfigRef = React.useRef<string | undefined>(undefined)
+  const latestConfigRef = React.useRef<StreamFrame["config"]>(undefined)
+  const configurationRequestRef = React.useRef<string | undefined>(undefined)
 
   const refreshContext = React.useCallback((sessionId: string) => {
     if (!runHarnessId) return
@@ -81,10 +83,12 @@ export function useAgentMessage() {
     if (frame.type === 'session.rebound') return
     if (frame.config) {
       const config = frame.config
-      // Context updates are frequent. Only a native selection change replaces
-      // a locally chosen model that has not been submitted yet.
+      latestConfigRef.current = config
+      const acknowledged = Boolean(frame.requestId && frame.requestId === configurationRequestRef.current)
+      if (acknowledged) configurationRequestRef.current = undefined
+      // Keep the latest choice visible while older native confirmations arrive.
       const selection = JSON.stringify([id, config.profileId, config.model, config.effort])
-      if (selection !== nativeConfigRef.current) {
+      if (!configurationRequestRef.current && (acknowledged || selection !== nativeConfigRef.current)) {
         nativeConfigRef.current = selection
         if (config.profileId) setModelReference(`${config.profileId}:${config.model}`)
         if (config.effort) setEffort(config.effort)
@@ -176,6 +180,8 @@ export function useAgentMessage() {
     pendingIdsRef.current.clear()
     hasSnapshotRef.current = false
     nativeConfigRef.current = undefined
+    latestConfigRef.current = undefined
+    configurationRequestRef.current = undefined
     setConnected(false)
     setInteractions([])
     setActiveRunId(null)
@@ -253,6 +259,28 @@ export function useAgentMessage() {
     const connection = connectionRef.current
     return connection ? connection.respondPermission(response) : Promise.reject(new Error("Connection unavailable"))
   }, [])
+  const synchronizeSelection = React.useCallback((model: string | null, nextEffort: AgentRunEffort) => {
+    if (!model || runHarnessId !== "claude" || !runSessionId) return
+    const requestId = crypto.randomUUID(), generation = generationRef.current
+    configurationRequestRef.current = requestId
+    setConnectionError(null)
+    void ensureConnection().configure({ model, cwd: runCwd, effort: nextEffort, promptSuggestions: inputSuggestions }, requestId).catch((error: unknown) => {
+      if (generation !== generationRef.current || configurationRequestRef.current !== requestId) return
+      configurationRequestRef.current = undefined
+      const native = latestConfigRef.current
+      if (native?.profileId) setModelReference(`${native.profileId}:${native.model}`)
+      if (native?.effort) setEffort(native.effort)
+      setConnectionError(error instanceof Error ? error.message : String(error))
+    })
+  }, [runHarnessId, runSessionId, runCwd, inputSuggestions, ensureConnection])
+  const changeModelReference = React.useCallback((model: string | null, source?: "user") => {
+    setModelReference(model)
+    if (source === "user") synchronizeSelection(model, effort)
+  }, [effort, synchronizeSelection])
+  const changeEffort = React.useCallback((next: AgentRunEffort) => {
+    setEffort(next)
+    synchronizeSelection(modelReference, next)
+  }, [modelReference, synchronizeSelection])
   const stop = React.useCallback(() => connectionRef.current?.abort(), [])
   const dismissPromptSuggestion = React.useCallback(() => setSuggestion((current) =>
     current && !current.dismissed ? { ...current, dismissed: true } : current), [])
@@ -267,6 +295,7 @@ export function useAgentMessage() {
     promptSuggestion: inputSuggestions && isConnected && !isStreaming && suggestion?.scope === `${runHarnessId}:${runSessionId}` && !suggestion.dismissed ? suggestion.text : undefined,
     dismissPromptSuggestion,
     canSubmit: Boolean(!interactions.length && (draft.trim() || slashCommand || attachments.length) && readyComposerAttachments(attachments) !== null && modelReference && runHarnessId && runCwd.trim()),
-    modelReady: Boolean(modelReference && runHarnessId), slashCommand, setDraft: updateDraft, setSlashCommand, setModelReference, setEffort, submit, stop,
+    modelReady: Boolean(modelReference && runHarnessId), slashCommand, setDraft: updateDraft, setSlashCommand,
+    setModelReference: changeModelReference, setEffort: changeEffort, submit, stop,
   }
 }

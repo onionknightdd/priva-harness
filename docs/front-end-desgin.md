@@ -1688,10 +1688,31 @@ Terminal tab -------------------------------------------------> attach viewer
 ```
 
 原生能力绑定沿用现有布局：`session.config` / snapshot.config 更新模型、effort、cwd 与上下文环；
-仅原生模型选择变化时覆盖选择器，普通 context 刷新不覆盖尚未提交的手动选择。
+仅原生模型选择变化时覆盖选择器，普通 context 刷新不覆盖待确认的手动选择。
 模型与 effort 由 `useAgentMessage` 持有，选择器通过受控 props 显示并回报用户选择，
 不保存独立副本。profile 加载中不清空已到达的原生状态；问答完成后重新挂载选择器时
 沿用会话当前值。原生回传不触发保存 profile 默认模型。
+已有 Claude 会话中，手动选择模型或 effort 立即发送 `session.configure`；空闲时应用，
+生成中在本轮结束后执行，不需要再发送聊天消息。默认值初始化和原生回传不触发配置请求。
+连续选择时保留最新选择，直到对应 requestId 获得原生确认；失败显示现有连接错误并恢复
+已知原生选择。Pi 与尚未创建的新会话保持发送时应用选择。
+
+原生 `/model` 的命令 XML 和 stdout 合并为一张 `ModelChangeCard`，复用 Card 与 Cpu 图标，
+使用现有语义颜色、150ms 淡入及 reduced-motion；窄屏自然换行。卡片由后端 modelChange
+元数据驱动，显示“已切换为 {模型}”，确认前显示“正在切换模型…”，非成功结果保留原生
+可读输出，不显示 XML。2026-09-24 已确认布局：
+
+```text
+桌面：侧栏 | 消息区                                | Workspace
+           | [模型图标] 已切换为 Haiku 4.5         |
+           | [Composer …… Haiku 4.5 ▼  ↑]         |
+窄屏：     | [模型图标] 已切换为                    |
+           |            Haiku 4.5                 |
+           | [Composer …… 模型 ▼  ↑]              |
+
+Composer 选择 -> session.configure -> TUI /model -> 原生确认 -> 卡片及两端选择器
+TUI 选择 -------------------------------------> 原生确认 -> 卡片及 Composer
+```
 snapshot.runningToolIds 恢复等待工具结束的状态。TUI 产生的内嵌图片从转录映射到现有附件卡片，
 产品 MCP 的 visualize / canvas / 图片别名继续使用既有工具卡片。
 

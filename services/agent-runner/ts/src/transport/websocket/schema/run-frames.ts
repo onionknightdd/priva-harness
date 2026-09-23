@@ -37,6 +37,17 @@ export interface SubscribeFrame {
   readonly sessionId: string
 }
 
+export interface ConfigureFrame {
+  readonly type: 'session.configure'
+  readonly requestId: string
+  readonly harness: 'claude'
+  readonly sessionId: string
+  readonly model: string
+  readonly cwd: string
+  readonly effort?: EffortLevel
+  readonly promptSuggestions?: boolean
+}
+
 export interface AbortFrame {
   readonly type: 'run.abort'
   readonly harness: RunHarnessId
@@ -47,7 +58,7 @@ export interface AbortFrame {
 export interface StopTaskFrame { readonly type: 'task.stop'; readonly harness: RunHarnessId; readonly sessionId: string; readonly taskId: string }
 
 export type PermissionFrame = { readonly type: 'permission.respond'; readonly harness: 'claude' | 'pi'; readonly sessionId: string } & InteractionResponse
-export type ClientFrame = InitFrame | SubscribeFrame | AbortFrame | StopTaskFrame | PermissionFrame
+export type ClientFrame = InitFrame | SubscribeFrame | AbortFrame | StopTaskFrame | PermissionFrame | ConfigureFrame
 
 export type ParseClientResult =
   | { readonly ok: true; readonly frame: ClientFrame }
@@ -62,6 +73,16 @@ export function parseClientFrame(raw: unknown): ParseClientResult {
     return { ok: false, message: 'Frame must be a JSON object' }
   }
   const type = raw['type']
+  if (type === 'session.configure') {
+    const result = z.object({ type: z.literal('session.configure'), requestId: z.string().trim().min(1),
+      harness: z.literal('claude'), sessionId: z.string().trim().min(1), model: z.string().trim().min(1), cwd: z.string().trim().min(1),
+      effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(), promptSuggestions: z.boolean().optional(),
+    }).safeParse(raw)
+    if (!result.success) return { ok: false, message: 'Invalid session configuration' }
+    const { effort, promptSuggestions, ...frame } = result.data
+    return { ok: true, frame: { ...frame, ...(effort === undefined ? {} : { effort }),
+      ...(promptSuggestions === undefined ? {} : { promptSuggestions }) } }
+  }
   if (type === 'permission.respond') {
     const address = z.object({ type: z.literal('permission.respond'), harness: z.enum(['claude', 'pi']), sessionId: z.string().trim().min(1) }).safeParse(raw)
     const response = interactionResponseSchema.safeParse(raw)
@@ -74,7 +95,7 @@ export function parseClientFrame(raw: unknown): ParseClientResult {
   if (type === 'run.start') return parseInitFrame(raw)
   if (type === 'session.subscribe') return parseSubscribeFrame(raw)
   if (type === 'run.abort') return parseAbortFrame(raw)
-  return { ok: false, message: 'Message must be run.start, session.subscribe, run.abort, task.stop or permission.respond' }
+  return { ok: false, message: 'Message must be run.start, session.subscribe, session.configure, run.abort, task.stop or permission.respond' }
 }
 
 export function parseInitFrame(raw: unknown): ParseInitResult {

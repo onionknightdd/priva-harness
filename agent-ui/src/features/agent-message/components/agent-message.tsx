@@ -87,7 +87,7 @@ export function AgentMessage({
   slashCommand: SlashCommand | null
   onDraftChange: (draft: string) => void
   onSlashCommandChange: (command: SlashCommand | null) => void
-  onModelReferenceChange: (model: string | null) => void
+  onModelReferenceChange: (model: string | null, source?: "user") => void
   onEffortChange: (effort: ComposerEffort) => void
   onSubmit: () => void
   onStop: () => void

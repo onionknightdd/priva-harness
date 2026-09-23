@@ -203,6 +203,8 @@ export const zhCN = {
     mentionFileGroup: "文件",
     removeSlashCommand: "移除 /{{name}}",
     sessionReset: "会话已重置",
+    modelChanged: "已切换为 {{model}}",
+    modelChanging: "正在切换模型…",
     conversationCompacting: "会话压缩中",
     conversationCompacted: "会话已压缩",
     conversationCompactedExpand: "展开压缩摘要",

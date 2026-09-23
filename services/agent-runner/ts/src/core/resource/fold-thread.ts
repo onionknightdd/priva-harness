@@ -70,6 +70,7 @@ export function foldThread(items: readonly ThreadReplayItem[]): ThreadMessage[] 
         status: 'complete',
         transcriptUuid: item.id,
         ...(compact === undefined ? {} : { compact }),
+        ...(item.modelChange === undefined ? {} : { modelChange: item.modelChange }),
       })
       continue
     }

@@ -306,6 +306,7 @@ export function listSessionThread(
       created_at: string
       status: "streaming" | "complete" | "error"
       transcript_uuid: string | null
+      model_change?: { model?: string; output?: string }
       blocks?: unknown
       nested_agents?: unknown
       workflows?: unknown
@@ -331,6 +332,7 @@ export function listSessionThread(
       createdAt: item.created_at,
       status: item.status,
       ...(item.transcript_uuid ? { transcriptUuid: item.transcript_uuid } : {}),
+      ...(item.model_change === undefined ? {} : { modelChange: item.model_change }),
       ...(item.blocks === undefined ? {} : { blocks: item.blocks }),
       ...(item.nested_agents === undefined
         ? {}

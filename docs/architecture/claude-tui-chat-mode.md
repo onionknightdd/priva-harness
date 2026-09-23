@@ -374,14 +374,19 @@ TMPDIR=/tmp npm test -- tests/integration/transport/websocket/terminal-notificat
 
 ### 4.13 气泡模型与 effort
 
-气泡选择在下一条消息注入前应用。相同服务配置下向原生输入框提交 `/model <id>`、
-`/effort <level>`；只自动确认这两个命令的明确确认对话框。statusLine 写入带当前
-instanceId 的 model / effort，收到原生确认后才发送用户消息。超时或不支持的值报错，
-不悄悄用旧模型发送；TUI 内手动改过模型时也读取实际状态再应用气泡选择。
+已有 Claude 会话的 Composer 手动选择通过 `session.configure` 立即入队；空闲时马上应用，
+生成中等待当前轮次结束。配置与聊天输入共用串行队列，但配置不创建 run、不发送用户消息，
+也不调用模型。新会话尚无 sessionId 时保留本地选择，首次发送时初始化原生进程。
+相同服务配置下向原生输入框提交 `/model <id>`、`/effort <level>`；只自动确认这两个
+命令的明确确认对话框。statusLine 写入当前 instanceId 的 model / effort 后，
+回传带 requestId 的 `session.config` 确认。超时或不支持的值返回同 requestId 的错误。
+发送聊天前仍核对实际配置，避免用旧模型执行消息。
 
 ```text
-气泡选择 -> 等当前轮次完成 -> /model、/effort -> statusLine 确认 -> 注入消息
-         -> 服务地址 / 凭证 / 图片模型 / 建议设置变化 -> 原 pane respawn --resume -> 注入消息
+Composer 手动选择 -> session.configure -> 空闲 / 等当前轮次完成 -> /model、/effort
+                    |                                      -> statusLine -> session.config(requestId)
+                    +-> 环境变化 -> 原 pane respawn --resume -> 新实例 ready + statusLine -> 确认
+原生 /model -> caveat + command + stdout -> modelChange -> Web UI 卡片
 ```
 
 环境配置不能通过 /model 更新，因此换服务地址、凭证、图片模型或建议设置时，在轮次空闲且
@@ -389,8 +394,14 @@ instanceId 的 model / effort，收到原生确认后才发送用户消息。超
 应用，原生 context window 确认后回传扩展上下文标志，无需单独重启。
 
 statusLine 同时回传 model / effort / cwd / context，`session.config` 和重连快照更新气泡选择器、
-工作目录及上下文环。上下文频繁刷新不会覆盖用户尚未提交的新模型选择；仅原生选择本身变化时
-更新选择器。模型元数据只在模型或 profile 变化时保存。
+工作目录及上下文环。配置请求未确认时保留最后一次手动选择，避免较早的回包覆盖它；
+收到对应确认才采用原生实际模型名。失败时显示错误并恢复最后已知原生选择。
+上下文频繁刷新不触发配置命令；模型元数据按原生确认结果保存。
+
+转录中的 `/model` 命令通过原生 `isMeta` caveat、promptId 和 parentUuid 链识别，
+命令与 stdout 合并为同 UUID 的 modelChange 卡片；未收到结果时显示切换中，成功后
+展示原生确认的模型名，非成功输出保留为可读文本。用户粘贴的 XML 不赋予命令标记。
+HTTP 历史和 WebSocket 快照都携带此结构，重新打开会话仍显示同一卡片。
 
 选择器的模型与 effort 直接受 `useAgentMessage` 控制，经页面和 Composer 向下传递；
 组件不再另存一份选择值。原生 `/model` 与 `/effort` 更新、问答后输入框重新挂载、

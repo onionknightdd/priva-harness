@@ -38,7 +38,7 @@ export function connectAgentSession(target: { harness: AgentRunHarness; sessionI
   const idleWaiters: Array<() => void> = []
   const toolWaiters: Array<() => void> = []
   const tools = new Set<string>()
-  const queued: Array<{ text: string; runId?: string }> = []
+  const queued: Array<{ text: string; runId?: string; requestId?: string }> = []
 
   const notifyIdle = () => {
     if (activeRunId || pending.size) return
@@ -48,11 +48,12 @@ export function connectAgentSession(target: { harness: AgentRunHarness; sessionI
     if (closed) throw new Error("Session connection is closed")
     const text = JSON.stringify(frame)
     const runId = frame.type === "run.start" ? String(frame.runId) : undefined
+    const requestId = typeof frame.requestId === "string" ? frame.requestId : undefined
     if (socket.readyState === WebSocket.OPEN) {
       const waiter = runId ? pending.get(runId) : undefined
       if (waiter) waiter.sentEpoch = connectionEpoch
       socket.send(text)
-    } else queued.push({ text, runId })
+    } else queued.push({ text, runId, requestId })
   }
   const connect = () => {
     const epoch = ++connectionEpoch
@@ -64,6 +65,7 @@ export function connectAgentSession(target: { harness: AgentRunHarness; sessionI
       if (sessionId) socket.send(JSON.stringify({ type: "session.subscribe", harness: target.harness,
         sessionId, sinceSeq: cursor?.seq ?? 0, ...(cursor ? { streamId: cursor.streamId } : {}) }))
       for (const command of queued.splice(0)) {
+        if (command.requestId && !replies.has(command.requestId)) continue
         const waiter = command.runId ? pending.get(command.runId) : undefined
         if (waiter) waiter.sentEpoch = epoch
         socket.send(command.text)
@@ -132,8 +134,12 @@ export function connectAgentSession(target: { harness: AgentRunHarness; sessionI
         replies.get(requestId)?.resolve()
         replies.delete(requestId)
       }
+      if (frame.type === "session.config" && frame.requestId) {
+        replies.get(frame.requestId)?.resolve()
+        replies.delete(frame.requestId)
+      }
       if (frame.type === "error" && frame.requestId) {
-        replies.get(frame.requestId)?.reject(new Error(frame.message ?? "Interaction response failed"))
+        replies.get(frame.requestId)?.reject(new Error(frame.message ?? "Session command failed"))
         replies.delete(frame.requestId)
       }
       if (frame.type === "error" && !frame.requestId) {
@@ -165,6 +171,14 @@ export function connectAgentSession(target: { harness: AgentRunHarness; sessionI
   }
   connect()
   return {
+    configure(init: Pick<AgentRunInit, "model" | "cwd" | "effort" | "promptSuggestions">, requestId: string): Promise<void> {
+      if (!sessionId || target.harness !== "claude") return Promise.reject(new Error("Model synchronization requires an existing Claude session"))
+      return new Promise((resolve, reject) => {
+        replies.set(requestId, { resolve, reject })
+        try { send({ ...init, type: "session.configure", harness: target.harness, sessionId, requestId }) }
+        catch (error) { replies.delete(requestId); reject(error) }
+      })
+    },
     get sessionId() { return sessionId },
     start(init: AgentRunInit, runId: string): Promise<void> {
       return new Promise((resolve, reject) => {

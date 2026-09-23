@@ -33,6 +33,7 @@ import {
 import { PopupsArmedContext } from "@/components/ui/popups-armed-context"
 import { useForkAvailability } from "../fork-context"
 import { userMessageSurface } from "../slash-command-envelope"
+import { ModelChangeCard } from "./model-change-card"
 import { AssistantProcess } from "./assistant-process"
 import { assistantTimeline } from "../assistant-timeline"
 import { TaskNotificationCard } from "./task-notification-card"
@@ -227,6 +228,7 @@ export const AgentMessageItem = React.memo(function AgentMessageItem({
   const armPopups = () => setPopupsArmed(true)
 
   if (message.role === "user" && !message.attachments?.length) {
+    if (message.modelChange) return <ModelChangeCard change={message.modelChange} />
     const surface = userMessageSurface(message.content, message.compact)
     if (surface === "hidden") {
       return null

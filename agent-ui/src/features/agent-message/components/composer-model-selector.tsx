@@ -492,7 +492,7 @@ export function ComposerModelSelector({
 }: {
   modelReference: string | null
   effort: ComposerEffort
-  onModelReferenceChange: (model: string | null) => void
+  onModelReferenceChange: (model: string | null, source?: "user") => void
   onEffortChange: (effort: ComposerEffort) => void
 }) {
   const { t } = useTranslation()
@@ -643,7 +643,7 @@ export function ComposerModelSelector({
 
       const reference = `${next.profileId}:${next.modelId}`
       setLastModelReference(reference)
-      onModelReferenceChange(reference)
+      onModelReferenceChange(reference, "user")
       setSaveError(null)
 
       if (sessionModel === "last-used") {

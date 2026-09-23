@@ -91,6 +91,7 @@ export type AgentThreadMessage = {
   createdAt: string
   status: AgentMessageStatus
   transcriptUuid?: string
+  modelChange?: { model?: string; output?: string }
   blocks?: StreamBlock[]
   nestedAgents?: NestedAgent[]
   workflows?: WorkflowCard[]

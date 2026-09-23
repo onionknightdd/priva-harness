@@ -215,6 +215,12 @@ export class AgentHarness {
     await this.terminalChats.submit(ref, turn, await this.runModes.resolve({ kind: 'resume', session: ref }, spec), runId)
   }
 
+  async configureTerminal(ref: SessionRef, spec: ProviderRunSpec, requestId: string): Promise<void> {
+    if (!this.terminalChats) throw new SessionError('invalid-request', 'Terminal driver is unavailable')
+    if (!await this.terminals?.isAlive(ref)) await this.openTerminal({ kind: 'resume', session: ref }, spec, { cols: 120, rows: 40 })
+    await this.terminalChats.configure(ref, await this.runModes.resolve({ kind: 'resume', session: ref }, spec), requestId)
+  }
+
   async terminalEvent(ref: SessionRef, state: TerminalSessionState): Promise<void> {
     if (!await this.terminals?.isAlive(ref)) return
     if ((await this.terminals?.state(ref))?.instanceId !== state.instanceId) return
