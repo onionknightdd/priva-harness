@@ -69,10 +69,21 @@ test("builds the terminal socket URL from the run parameters", () => {
     assert.deepEqual(Object.fromEntries(url.searchParams), {
       harness: "claude", cwd: "/work/repo", model: "p:m", cols: "100", rows: "30", sessionId: "s1", effort: "high", theme: "light",
     })
-    const fresh = new URL(terminalSocketUrl({ harness: "claude", cwd: "/w", model: "m", sessionId: null, cols: 80, rows: 24 }))
-    assert.equal(fresh.searchParams.has("sessionId"), false)
-    assert.equal(fresh.searchParams.has("effort"), false)
-    assert.equal(fresh.searchParams.has("theme"), false)
+    const minimal = new URL(terminalSocketUrl({ harness: "claude", cwd: "/w", model: "m", sessionId: "s1", cols: 80, rows: 24 }))
+    assert.equal(minimal.searchParams.get("sessionId"), "s1")
+    assert.equal(minimal.searchParams.has("effort"), false)
+    assert.equal(minimal.searchParams.has("theme"), false)
+  })
+})
+
+test("does not open a terminal socket for a conversation without a session", () => {
+  withFakeSocket(() => {
+    const count = Socket.instances.length
+    assert.throws(() => connectTerminalSession(
+      { harness: "claude", cwd: "/w", model: "m", sessionId: "", cols: 80, rows: 24 },
+      { onOutput: () => {}, onStatus: () => {} }
+    ), /Start a conversation in Chat/)
+    assert.equal(Socket.instances.length, count)
   })
 })
 
@@ -94,7 +105,7 @@ test("streams output, reports lifecycle and encodes input as binary frames", () 
     const statuses: TerminalSessionStatus[] = []
     const output: number[] = []
     const session = connectTerminalSession(
-      { harness: "claude", cwd: "/w", model: "m", sessionId: null, cols: 80, rows: 24 },
+      { harness: "claude", cwd: "/w", model: "m", sessionId: "s1", cols: 80, rows: 24 },
       { onOutput: (chunk) => output.push(...chunk), onStatus: (status) => statuses.push(status) }
     )
     const socket = Socket.instances.at(-1)!
@@ -104,8 +115,8 @@ test("streams output, reports lifecycle and encodes input as binary frames", () 
     session.send("dropped before open")
     assert.equal(socket.sent.length, 0)
     socket.open()
-    socket.text({ type: "ready", sessionId: "new-id", adopted: false, cols: 80, rows: 24 })
-    assert.deepEqual(statuses.at(-1), { phase: "ready", sessionId: "new-id", adopted: false, cols: 80, rows: 24 })
+    socket.text({ type: "ready", sessionId: "s1", adopted: true, cols: 80, rows: 24 })
+    assert.deepEqual(statuses.at(-1), { phase: "ready", sessionId: "s1", adopted: true, cols: 80, rows: 24 })
     socket.binary([0x68, 0x69, 0x1b, 0x5b, 0x4b])
     assert.deepEqual(output, [0x68, 0x69, 0x1b, 0x5b, 0x4b])
 

@@ -56,8 +56,8 @@ export const RUN_FAILURE_CODES = [
 ] as const
 export type RunFailureCode = (typeof RUN_FAILURE_CODES)[number]
 
-// Turn-level accounting shared by run.completed and run.failed: a failed turn
-// was still billed for whatever it consumed before failing.
+// All terminal outcomes carry the usage consumed, including failed and
+// interrupted turns.
 export interface RunAccounting {
   readonly durationMs?: number
   readonly apiDurationMs?: number
@@ -222,12 +222,12 @@ export type AgentEvent = (
       readonly sessionId?: string
       readonly model?: string
     } & RunAccounting)
-  | {
+  | ({
       readonly type: 'run.aborted'
       readonly message?: string
       readonly sessionId?: string
       readonly model?: string
-    }
+    } & RunAccounting)
   | { readonly type: 'error'; readonly code?: string; readonly message: string; readonly requestId?: string }
   | {
       readonly type: 'replay.gap'

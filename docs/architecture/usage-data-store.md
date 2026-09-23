@@ -132,7 +132,7 @@ tests/integration/data/                     harness → worker → SQLite 端到
 
 ## 事件层：provider 如何上报一轮的用量
 
-`run.completed` 与 `run.failed` 共享 `RunAccounting`（`core/event/agent-event.ts`）：
+`run.completed`、`run.failed` 与 `run.aborted` 共享 `RunAccounting`（`core/event/agent-event.ts`）：
 `durationMs`、`apiDurationMs?`、`numTurns?`、`usage?`、`byModel?`、`costUsd?`。失败事件另有
 `code: RunFailureCode` 与 `apiErrorStatus?`。
 
@@ -165,7 +165,7 @@ Pi 对无报价模型给出 `cost.total = 0` 而非缺失，因此 Pi 侧无法�
  forward() 中的终态事件           ──► run.finished
    run.completed                       outcome=completed + RunAccounting
    run.failed                          outcome=failed, failure_code=event.code ?? unknown
-   run.aborted                         outcome=aborted
+   run.aborted                         outcome=aborted + RunAccounting
    error                               outcome=failed, failure_code=transport_error
  forward() catch / openSession 抛错 ──► outcome=failed, failure_code=runtime_crash
  流结束但没有终态                 ──► signal 已 abort → aborted；否则 failed/unknown
@@ -185,7 +185,7 @@ Pi 对无报价模型给出 `cost.total = 0` 而非缺失，因此 Pi 侧无法�
 | `tool.completed` 且工具名为 `Skill` | 额外 `skill.invoked`，target = input.skill，`via: 'tool'` | |
 | 提示词以 `/name` 开头 | `skill.invoked`，`via: 'prompt'` | 只有 `name` 出现在该 provider 最近一次 `listSlashCommands` 结果的 `kind = 'skill'` 名单（含别名）中才记，避免把路径或内建命令当成技能；harness 从未列过该 provider 的命令时不记 |
 | `permission.resolved`（`kind = 'tool'`） | `permission.resolved`，target = 工具名 | details：decision、reason（answered / skipped / timeout / cancelled）、requestReason、从 `permission.requested` 起算的 `latencyMs` |
-| `permission.resolved`（`kind = 'question'`） | `question.answered`，target = 工具名 | 与权限分开计数；details 含 answers |
+| `permission.resolved`（`kind = 'question'`） | `question.answered`，target = 工具名 | 与权限分开计数；details 含 answers，以及可用的 toolUseId |
 | `session.compacted` | `session.compacted` | details 只有 `summaryChars` |
 | `agent.started` / `agent.completed` | `agent.completed`，target = 子代理名 | details：agentId、ok、status、durationMs |
 | `workflow.started` / `workflow.completed` | `workflow.completed`，target = 工作流名 | details：workflowToolUseId、status、durationMs |
@@ -200,15 +200,31 @@ Claude 原生 UI 路径也使用 `RunLedger`，但事件来源是 tmux 中 CLI �
 ```text
 UserPromptSubmit -> 原生 runId / RunLedger
 tool / permission / subagent / compact hooks -> 同一账本的审计
-Stop -> flush 转录 -> API message.id 去重后的 usage 差值 -> run.finished
-     -> hook 返回后的 statusLine -> 同实例 cost / API 时长差值
+Stop / 中断 -> 等待在途写入 -> flush 转录 -> API message.id usage 差值
+                         -> 同实例 statusLine cost / API 时长差值
+                         -> run.finished（completed / failed / aborted）
+
+镜像 hook 关闭 -> 收起失效卡片；审计暂存取消，等待原生结果
+原生工具结果 / ElicitationResult -> 原请求关联 + 去重 -> 问答 / 审批审计
+轮次结束仍未解决的请求 -> 取消审计
 ```
 
 气泡发送沿用客户端 runId，TUI 发送由服务端生成；SDK 仍仅承担程序化运行。
 同一 API message 的分块 usage 取各字段最大值，避免工具块 / 正文块重复收费；模型账本忽略
-synthetic 消息，已归属子代理的转录参与本轮差值。最终费用状态最多等 2 秒，未刷新则不写 costUsd，
-由现有 runsWithoutCost 表达未知。此统计不完整覆盖原生辅助请求、轮次结束后的后台增量和中断时
+synthetic 消息，已归属子代理的转录参与本轮差值。气泡停止、TUI Escape / Ctrl+C 和原生手动
+拒绝工具都结算已产生的 usage、byModel、API 时长和费用，保留 aborted，下一轮重新取基线。
+最终费用状态最多等 2 秒。中断可能不再刷新 statusLine，此时仍保留本轮内已确认的正数费用 / API
+时长增量；旧基线没有增量时不写 costUsd，由现有 runsWithoutCost 表达未知，不能记成免费。
+中断时同步失败会发布明确错误，仍保留 aborted 结果。此统计不完整覆盖原生辅助请求、轮次结束后的后台增量和中断时
 未落盘的 usage，也不包含产品图片服务费用，因此不是供应商账单的替代。
+
+`TerminalInteractions` 在落审计前合并镜像与原生结果。PermissionRequest 缺少 tool_use_id 时，
+仅使用 PreToolUse 中同一 agent、工具及完整输入的唯一匹配。AskUserQuestion 的原生答案从
+PostToolUse 或转录结构化 metadata 读取，保留原 requestId、toolUseId 与等待时间；重复回放或
+气泡重发不重复记账。普通工具的 PostToolUseFailure 表示批准后执行失败，审批仍记 allow。
+原生手动拒绝从转录的拒绝 metadata 确认，不按任意工具错误文本推断，并结清被中断的轮次。
+MCP 表单的 ElicitationResult 按 server / elicitationId 关联，保留 accept / decline / cancel 和
+转换后的结构化答案。HTTP 镜像关闭本身不立即写成用户拒绝。
 
 ## 路由层审计
 

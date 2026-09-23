@@ -101,7 +101,7 @@ export class RunLedger {
         this.finish({ outcome: 'failed', failureCode: event.code ?? 'unknown', ...accountingOf(event) }, event)
         return
       case 'run.aborted':
-        this.finish({ outcome: 'aborted' }, event)
+        this.finish({ outcome: 'aborted', ...accountingOf(event) }, event)
         return
       case 'error':
         this.finish({ outcome: 'failed', failureCode: 'transport_error' }, event)
@@ -238,6 +238,7 @@ export class RunLedger {
     if (request.kind === 'question') {
       this.audit('question.answered', request.tool, {
         requestId: request.requestId, decision, reason, questions: request.questions.length,
+        ...(request.toolUseId === undefined ? {} : { toolUseId: request.toolUseId }),
         ...(answers === undefined ? {} : { answers }), ...latency,
       })
       return
@@ -283,7 +284,7 @@ export class RunLedger {
 
 type TerminalAccounting = Pick<RunFinishedRecord, 'apiDurationMs' | 'numTurns' | 'usage' | 'costUsd' | 'byModel'>
 
-function accountingOf(event: Extract<AgentEvent, { type: 'run.completed' | 'run.failed' }>): TerminalAccounting {
+function accountingOf(event: Extract<AgentEvent, { type: 'run.completed' | 'run.failed' | 'run.aborted' }>): TerminalAccounting {
   return {
     ...(event.apiDurationMs === undefined ? {} : { apiDurationMs: event.apiDurationMs }),
     ...(event.numTurns === undefined ? {} : { numTurns: event.numTurns }),

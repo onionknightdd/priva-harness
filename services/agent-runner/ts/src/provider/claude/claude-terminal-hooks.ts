@@ -50,7 +50,7 @@ export async function writeClaudeTerminalHooks(scratchDir: string, eventsUrl: st
   const displayCommand = `[ "$(cat ${quote(join(scratchDir, INSTANCE_FILE))})" = ${quote(instanceId)} ] || exit 0; payload=$(tr -d '\\r\\n'); printf '%s\\n' "$payload" >> ${quote(join(scratchDir, 'claude-terminal-text.jsonl'))}`
   const command = [process.execPath, script, eventsUrl, join(scratchDir, STATE_FILE), join(scratchDir, INSTANCE_FILE), instanceId, basename(scratchDir)].map(quote).join(' ')
   return { statusLine: { type: 'command', command }, hooks: { ...Object.fromEntries(['SessionStart', 'UserPromptSubmit', 'Stop', 'StopFailure', 'SessionEnd',
-    'PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PreCompact', 'PostCompact', 'SubagentStart', 'SubagentStop', 'CwdChanged'].map((event) =>
+    'PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'ElicitationResult', 'PreCompact', 'PostCompact', 'SubagentStart', 'SubagentStop', 'CwdChanged'].map((event) =>
     [event, [{ hooks: [{ type: 'command', command, timeout: 10 }] }]])),
     MessageDisplay: [{ hooks: [{ type: 'command', command: displayCommand, timeout: 2 }] }],
     PermissionRequest: [{ hooks: [{ type: 'command', command, timeout: 620 }] }],
@@ -77,7 +77,7 @@ async function main() {
     process.stdout.write(hook.model.display_name + (hook.effort?.level ? ' · ' + hook.effort.level : ''));
     return;
   }
-  if (['PreToolUse','PostToolUse','PostToolUseFailure','PreCompact','PostCompact','SubagentStart','SubagentStop','CwdChanged'].includes(hook.hook_event_name)) {
+  if (['PreToolUse','PostToolUse','PostToolUseFailure','ElicitationResult','PreCompact','PostCompact','SubagentStart','SubagentStop','CwdChanged'].includes(hook.hook_event_name)) {
     await fs.appendFile(require('node:path').join(require('node:path').dirname(process.argv[3]), 'claude-terminal-events.jsonl'), JSON.stringify({ ...hook, instanceId }) + '\n', { mode: 0o600 });
     if (hook.hook_event_name === 'CwdChanged') {
       const path = process.argv[3], temp = path + '.' + process.pid + '.tmp';
@@ -96,8 +96,10 @@ async function main() {
     const response = await fetch(process.argv[2].replace(/events$/, elicitation ? 'elicitation' : 'question'), {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ terminalId: process.argv[6], sessionId: hook.session_id, instanceId, cwd: hook.cwd,
-        ...(elicitation ? { serverName: hook.mcp_server_name, message: hook.message, mode: hook.mode || 'form', schema: hook.requested_schema }
-          : { tool: hook.tool_name, input: hook.tool_input, ...(hook.tool_use_id ? { toolUseId: hook.tool_use_id } : {}) }) }),
+        ...(elicitation ? { serverName: hook.mcp_server_name, message: hook.message, mode: hook.mode || 'form', schema: hook.requested_schema,
+              ...(hook.elicitation_id ? { elicitationId: hook.elicitation_id } : {}) }
+          : { tool: hook.tool_name, input: hook.tool_input, ...(hook.tool_use_id ? { toolUseId: hook.tool_use_id } : {}),
+              ...(hook.agent_id ? { agentId: hook.agent_id } : {}) }) }),
       signal: AbortSignal.timeout(610000)
     });
     if (!response.ok) throw new Error('Terminal question returned HTTP ' + response.status);

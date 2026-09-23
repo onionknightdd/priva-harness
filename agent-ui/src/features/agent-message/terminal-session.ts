@@ -11,7 +11,7 @@ export type TerminalSessionOptions = {
   harness: RunHarnessId
   cwd: string
   model: string
-  sessionId?: string | null
+  sessionId: string
   effort?: AgentRunEffort
   cols: number
   rows: number
@@ -39,15 +39,16 @@ export type TerminalSession = {
 }
 
 export function terminalSocketUrl(options: TerminalSessionOptions): string {
+  if (!options.sessionId.trim()) throw new Error("Start a conversation in Chat before opening Terminal")
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
   const params = new URLSearchParams({
     harness: options.harness,
     cwd: options.cwd,
     model: options.model,
+    sessionId: options.sessionId,
     cols: String(options.cols),
     rows: String(options.rows),
   })
-  if (options.sessionId) params.set("sessionId", options.sessionId)
   if (options.effort) params.set("effort", options.effort)
   if (options.theme) params.set("theme", options.theme)
   return `${protocol}//${window.location.host}/api/sandbox/agent/ws/terminal?${params.toString()}`

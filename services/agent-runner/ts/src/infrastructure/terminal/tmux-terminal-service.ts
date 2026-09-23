@@ -43,7 +43,7 @@ const SERVER_OPTIONS: readonly (readonly string[])[] = [
   ['focus-events', 'on'],
   ['exit-empty', 'on'],
   ['destroy-unattached', 'off'],
-  ['mouse', 'off'],
+  ['mouse', 'on'],
   ['set-clipboard', 'off'],
 ]
 
@@ -131,18 +131,21 @@ export class TmuxTerminalService implements TerminalService {
     const envArgs = Object.entries(launch.env)
       .filter(([name, value]) => !HOST_TERMINAL_VARIABLES.includes(name) && this.env[name] !== value)
       .flatMap(([name, value]) => ['-e', `${name}=${value}`])
-    // `default-terminal` must be in place before the first pane is created,
-    // hence the explicit start-server ahead of new-session.
+    // Configure the server before creating its first pane: native TUIs check
+    // mouse/focus support during startup, as well as the terminal type.
     const args = [
       'start-server', ';',
-      'set-option', '-g', 'default-terminal', PANE_TERM, ';',
+      'set-option', '-g', 'default-terminal', PANE_TERM,
+    ]
+    for (const [name = '', value = ''] of SERVER_OPTIONS) args.push(';', 'set-option', '-g', name, value)
+    args.push(
+      ';',
       'new-session', '-d', '-s', SESSION_NAME,
       '-x', String(launch.cols), '-y', String(launch.rows),
       '-c', launch.cwd,
       ...envArgs,
       '--', launch.command, ...launch.args,
-    ]
-    for (const [name = '', value = ''] of SERVER_OPTIONS) args.push(';', 'set-option', '-g', name, value)
+    )
     try {
       await this.run(key, args)
     } catch (error) {

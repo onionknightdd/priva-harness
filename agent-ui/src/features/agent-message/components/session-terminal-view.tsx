@@ -86,11 +86,9 @@ export type SessionTerminalViewProps = {
   cwd: string
   model: string | null
   effort: AgentRunEffort
-  sessionId: string | null
+  sessionId: string
   /** Hidden views keep their terminal and socket alive; only the surface is collapsed. */
   hidden: boolean
-  /** Called once a terminal opened without a session id has been assigned one by the runner. */
-  onSessionReady?: (sessionId: string) => void
   onSessionRebound?: (sessionId: string) => void
 }
 
@@ -101,7 +99,6 @@ export function SessionTerminalView({
   effort,
   sessionId,
   hidden,
-  onSessionReady,
   onSessionRebound,
 }: SessionTerminalViewProps) {
   const { t } = useTranslation()
@@ -111,9 +108,7 @@ export function SessionTerminalView({
   const terminalRef = React.useRef<Terminal | null>(null)
   const fitRef = React.useRef<FitAddon | null>(null)
   const sessionRef = React.useRef<TerminalSession | null>(null)
-  const knownSessionIdRef = React.useRef<string | null>(sessionId)
-  const onSessionReadyRef = React.useRef(onSessionReady)
-  onSessionReadyRef.current = onSessionReady
+  const knownSessionIdRef = React.useRef(sessionId)
   const onSessionReboundRef = React.useRef(onSessionRebound)
   onSessionReboundRef.current = onSessionRebound
   const [status, setStatus] = React.useState<TerminalSessionStatus>({ phase: "connecting" })
@@ -222,9 +217,7 @@ export function SessionTerminalView({
         onStatus: (next) => {
           setStatus(next)
           if (next.phase === "ready") {
-            const wasNew = knownSessionIdRef.current === null
             knownSessionIdRef.current = next.sessionId
-            if (wasNew) onSessionReadyRef.current?.(next.sessionId)
             // Announce the viewer's real size once the runner has attached.
             session.resize(terminal.cols, terminal.rows)
             if (!hidden) terminal.focus()

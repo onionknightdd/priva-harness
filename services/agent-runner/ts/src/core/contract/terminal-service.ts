@@ -90,6 +90,7 @@ export interface TerminalTextBatch {
 
 export interface TerminalQuestion {
   readonly tool?: string
+  readonly agentId?: string
   readonly sessionId: string
   readonly instanceId: string
   readonly cwd: string
@@ -102,6 +103,7 @@ export interface TerminalElicitation {
   readonly instanceId: string
   readonly cwd: string
   readonly serverName: string
+  readonly elicitationId?: string
   readonly message: string
   readonly schema?: Record<string, unknown>
   readonly mode?: 'form' | 'url'

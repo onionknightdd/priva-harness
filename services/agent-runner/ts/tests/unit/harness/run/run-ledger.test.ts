@@ -96,6 +96,10 @@ describe('RunLedger through AgentHarness', () => {
         { outcome: 'failed', failureCode: 'api_error', usage: { input: 5, output: 0 } }],
       [{ type: 'run.failed', message: 'nope', model: 'm' }, { outcome: 'failed', failureCode: 'unknown' }],
       [{ type: 'run.aborted', message: 'stop' }, { outcome: 'aborted' }],
+      [{ type: 'run.aborted', message: 'stop', apiDurationMs: 12, numTurns: 1, costUsd: 0.03,
+        usage: { input: 10, output: 5 }, byModel: { m: { input: 10, output: 5 } } },
+      { outcome: 'aborted', apiDurationMs: 12, numTurns: 1, costUsd: 0.03,
+        usage: { input: 10, output: 5 }, byModel: { m: { input: 10, output: 5 } } }],
       [{ type: 'error', message: 'socket gone' }, { outcome: 'failed', failureCode: 'transport_error' }],
     ]
     for (const [event, expected] of cases) {

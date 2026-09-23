@@ -55,6 +55,14 @@ export function replayClaudeSessionMessages(
         const raw = block?.['toolUseResult'] ?? block?.['tool_use_result'] ?? sdk?.tool_use_result ?? sdk?.toolUseResult
         const resolution = questionResolutionFromToolResult(event.id, event.name, raw, !event.ok)
         if (resolution) items.push({ kind: 'frame', event: { type: 'permission.resolved', resolution }, createdAt })
+        else if (!event.ok && raw === 'User rejected tool use') {
+          // Native manual denial skips PostToolUse/Failure. Use the transcript's
+          // structured result marker, never a tool's arbitrary error text.
+          items.push({ kind: 'frame', createdAt, event: { type: 'permission.resolved', resolution: {
+            request: { kind: 'tool', requestId: `history:${event.id}`, toolUseId: event.id, tool: event.name, expiresAt: 0 },
+            decision: 'deny', reason: 'skipped',
+          } } })
+        }
       }
     }
   }

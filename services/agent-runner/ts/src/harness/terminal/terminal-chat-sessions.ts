@@ -14,6 +14,8 @@ import { userTurnFromText, userTurnText, type UserTurn } from '../../core/run/us
 import type { SessionStream } from '../session/session-stream.js'
 import type { OpenedSessionTerminal, SessionTerminals, TerminalSize } from './session-terminals.js'
 import { splitModelContext } from '../../core/resource/model-profile.js'
+import { TerminalInteractions } from './terminal-interactions.js'
+import type { ThreadReplayItem } from '../../core/resource/thread.js'
 
 interface PendingTurn { readonly runId: string; readonly turn: UserTurn; readonly spec: ProviderRunSpec }
 interface ActiveTurn {
@@ -31,6 +33,7 @@ interface ActiveTurn {
   ledger?: RunLedger
   accounting?: () => Promise<RunAccounting>
   initialStatus?: TerminalStatus
+  readonly interactions: TerminalInteractions
 }
 interface TerminalChat {
   readonly ref: SessionRef
@@ -225,7 +228,7 @@ export class TerminalChatSessions {
     chat.active.abort.abort()
     await this.options.terminals.sendKeys(ref, ['Escape'])
     await this.recordInterrupted(chat)
-    await this.finish(chat, { type: 'run.aborted', message: 'Interrupted' })
+    await this.finish(chat, { type: 'run.aborted', message: 'Interrupted' }, chat.updatedAt)
     return true
   }
 
@@ -236,9 +239,11 @@ export class TerminalChatSessions {
     if (!active) throw new SessionError('invalid-request', 'The question has no active terminal turn')
     this.options.stream(ref).publish({ type: 'session.state', state: 'requires_action' }, active.runId)
     const tool = question.tool ?? 'AskUserQuestion'
+    await this.readTelemetry(chat)
+    const toolUseId = active.interactions.toolId(question)
     const result = await chat.interactions.request({ ...(tool === 'AskUserQuestion' ? { kind: 'question' as const, questions: normalizeQuestions(question.input['questions']) } : { kind: 'tool' as const }), tool,
       input: question.input,
-      ...(question.toolUseId ? { toolUseId: question.toolUseId } : {}) },
+      ...(toolUseId ? { toolUseId } : {}) },
     { signal: AbortSignal.any([signal, active.abort.signal]) })
     if (chat.active === active && !active.abort.signal.aborted) this.options.stream(ref).publish({ type: 'session.state', state: 'running' }, active.runId)
     return { hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: result.decision === 'allow'
@@ -258,7 +263,8 @@ export class TerminalChatSessions {
     if (!active) throw new SessionError('invalid-request', 'The elicitation has no active terminal turn')
     this.options.stream(ref).publish({ type: 'session.state', state: 'requires_action' }, active.runId)
     const result = await chat.interactions.request({ kind: 'question', tool: `mcp__${input.serverName}__elicitation`,
-      title: input.message, questions: form.questions }, { signal: AbortSignal.any([signal, active.abort.signal]), validate: (response) => { form.content(response) } })
+      title: input.message, questions: form.questions, input: { schema: input.schema, ...(input.elicitationId ? { elicitationId: input.elicitationId } : {}) } },
+    { signal: AbortSignal.any([signal, active.abort.signal]), validate: (response) => { form.content(response) } })
     if (chat.active === active && !active.abort.signal.aborted) this.options.stream(ref).publish({ type: 'session.state', state: 'running' }, active.runId)
     return { hookSpecificOutput: { hookEventName: 'Elicitation', action: result.decision === 'allow' ? 'accept' : result.reason === 'skipped' ? 'decline' : 'cancel',
       ...(result.decision === 'allow' ? { content: form.content({ decision: 'allow', ...(result.answers ? { answers: result.answers } : {}) }) } : {}) } }
@@ -271,13 +277,29 @@ export class TerminalChatSessions {
     return true
   }
 
+  history(ref: SessionRef, items: readonly ThreadReplayItem[]): void {
+    const chat = this.chats.get(sessionRefKey(ref))
+    const active = chat?.active
+    if (!chat || !active) return
+    for (const item of items) if (item.kind === 'frame') {
+      const resolved = active.interactions.native(item.event, 'transcript')
+      if (resolved && item.event.type === 'permission.resolved' && item.event.resolution.request.kind === 'tool'
+        && resolved.decision === 'deny' && resolved.reason === 'skipped' && !chat.finishing) {
+        // Native manual rejection interrupts the loop without emitting Stop.
+        // Do not await completion inside the transcript observer it refreshes.
+        void this.recordInterrupted(chat).then(() => this.finish(chat, { type: 'run.aborted', message: 'Tool use rejected in terminal' }, chat.updatedAt))
+          .catch((error: unknown) => this.options.stream(ref).publish({ type: 'error', code: 'terminal.completion', message: error instanceof Error ? error.message : String(error) }))
+      }
+    }
+  }
+
   async input(ref: SessionRef, bytes: Uint8Array): Promise<void> {
     // Arrow/function keys are multi-byte escape sequences, not cancellation.
     if (bytes.length !== 1 || (bytes[0] !== 27 && bytes[0] !== 3)) return
     const chat = this.chats.get(sessionRefKey(ref))
     if (chat?.active) {
       await this.recordInterrupted(chat)
-      await this.finish(chat, { type: 'run.aborted', message: 'Interrupted in terminal' })
+      await this.finish(chat, { type: 'run.aborted', message: 'Interrupted in terminal' }, chat.updatedAt)
     }
   }
 
@@ -299,6 +321,7 @@ export class TerminalChatSessions {
       await chat.completion
       chat.interactions.cancelAll()
       chat.active?.abort.abort()
+      chat.active?.interactions.finish()
       clearTimeout(chat.active?.timer)
       await chat.active?.releaseHistory?.()
       chat.active?.ledger?.settle(true)
@@ -314,8 +337,7 @@ export class TerminalChatSessions {
       chat = { ref, cwd, queue: [], accepted: new Set(), active: undefined, updatedAt: 0, pumping: false, finishing: false, model: '', instanceId: '', opened: false, awaitingReady: false, telemetryOffset: 0,
         interactions: new InteractionCoordinator((event) => {
           const active = this.chats.get(key)?.active
-          active?.ledger?.observe(event)
-          this.options.stream(ref).publish(event, active?.runId)
+          if (event.type === 'permission.requested' || event.type === 'permission.resolved') active?.interactions.mirror(event)
         }) }
       this.chats.set(key, chat)
     }
@@ -331,7 +353,11 @@ export class TerminalChatSessions {
 
   private async begin(chat: TerminalChat, text: string, runId: string, model: string, confirmed: boolean, startedAt = Date.now(), nativePrompt = false): Promise<ActiveTurn> {
     this.publishSuggestion(chat)
-    const active: ActiveTurn = { runId, text, model, confirmed, textOffset: 0, startedAt, abort: new AbortController() }
+    const active: ActiveTurn = { runId, text, model, confirmed, textOffset: 0, startedAt, abort: new AbortController(),
+      interactions: new TerminalInteractions((event) => {
+        active.ledger?.observe(event)
+        this.options.stream(chat.ref).publish(event, runId)
+      }, (event) => this.options.stream(chat.ref).publish(event, runId)) }
     chat.active = active
     const spec = chat.spec ?? await this.options.terminals.spec(chat.ref)
     if (spec) chat.spec = spec
@@ -431,7 +457,6 @@ export class TerminalChatSessions {
       await active.textRead
       await this.readText(chat)
       await this.readTelemetry(chat)
-      await this.options.refresh(chat.ref)
       if (statusAfter && active.initialStatus?.updatedAt) {
         const deadline = Date.now() + 2000
         while (!this.disposed && (chat.status?.updatedAt ?? 0) < statusAfter && Date.now() < deadline) {
@@ -439,19 +464,31 @@ export class TerminalChatSessions {
           await this.readTelemetry(chat)
         }
       }
-      if (result.type === 'run.completed' || result.type === 'run.failed') {
+      // Interruption does not emit Stop. Give pending status/transcript writes
+      // time to finish before settling the usage that Claude has reported.
+      await this.options.refresh(chat.ref)
+      if (result.type === 'run.completed' || result.type === 'run.failed' || result.type === 'run.aborted') {
         const accounting = await active.accounting?.()
         const before = active.initialStatus, after = chat.status
         const fresh = !statusAfter || (after?.updatedAt ?? 0) >= statusAfter
-        const costUsd = fresh && after?.costUsd !== undefined && before?.costUsd !== undefined && after.instanceId === before.instanceId
+        // Claude can leave statusLine unchanged on Escape. A positive delta
+        // already reported during this turn is still incurred cost; an old,
+        // unchanged baseline must not be presented as a known zero bill.
+        const interruptedStatus = result.type === 'run.aborted' && (after?.updatedAt ?? 0) >= active.startedAt
+        const costUsd = after?.costUsd !== undefined && before?.costUsd !== undefined && after.instanceId === before.instanceId
+          && (fresh || (interruptedStatus && after.costUsd > before.costUsd))
           ? Math.max(0, after.costUsd - before.costUsd) : undefined
-        const apiDurationMs = fresh && after?.apiDurationMs !== undefined && before?.apiDurationMs !== undefined && after.instanceId === before.instanceId
+        const apiDurationMs = after?.apiDurationMs !== undefined && before?.apiDurationMs !== undefined && after.instanceId === before.instanceId
+          && (fresh || (interruptedStatus && after.apiDurationMs > before.apiDurationMs))
           ? Math.max(0, after.apiDurationMs - before.apiDurationMs) : undefined
         final = { ...result, ...accounting, ...(costUsd === undefined ? {} : { costUsd }), ...(apiDurationMs === undefined ? {} : { apiDurationMs }) }
       }
     } catch (error) {
-      final = { type: 'run.failed', message: `Could not synchronize terminal completion: ${error instanceof Error ? error.message : String(error)}` }
+      const message = `Could not synchronize terminal completion: ${error instanceof Error ? error.message : String(error)}`
+      if (result.type === 'run.aborted') this.options.stream(chat.ref).publish({ type: 'error', code: 'terminal.completion', message }, active.runId)
+      else final = { type: 'run.failed', message }
     } finally {
+      active.interactions.finish()
       active.ledger?.observe(final)
       this.options.stream(chat.ref).publish(final, active.runId)
       this.options.stream(chat.ref).publish({ type: 'session.state', state: 'idle' }, active.runId)
@@ -490,6 +527,8 @@ export class TerminalChatSessions {
           if (item.sessionId !== chat.ref.id || (chat.instanceId && item.instanceId !== chat.instanceId)) continue
           if (item.cwd) { chat.cwd = item.cwd; if (chat.spec) chat.spec = { ...chat.spec, cwd: item.cwd } }
           const event = item.event
+          chat.active?.interactions.native(event, 'hook')
+          if (event.type === 'permission.resolved') continue
           if (event.type === 'tasks.snapshot') chat.backgroundActive = event.tasks.some((task) => !['completed', 'failed', 'cancelled'].includes(task.status))
           ;(chat.active?.ledger ?? chat.lastLedger)?.observe(event)
           // Child tools are projected by their owning transcript. An agent_id

@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -51,7 +51,10 @@ describe.skipIf(!tmuxAvailable())('TmuxTerminalService', () => {
     cwd = join(root, 'work')
     await rm(cwd, { recursive: true, force: true })
     await mkdir(cwd)
-    service = new TmuxTerminalService({ rootDir: join(root, 'terminals'), sweepIntervalMs: 0, idleTimeoutMs: 60_000, now: () => now })
+    // Personal tmux options must not mask missing service configuration.
+    const tmuxBinary = join(root, 'tmux-isolated')
+    await writeFile(tmuxBinary, '#!/bin/sh\nexec tmux -f /dev/null "$@"\n', { mode: 0o700 })
+    service = new TmuxTerminalService({ rootDir: join(root, 'terminals'), tmuxBinary, sweepIntervalMs: 0, idleTimeoutMs: 60_000, now: () => now })
   })
   afterEach(async () => {
     await service.dispose()
@@ -59,6 +62,17 @@ describe.skipIf(!tmuxAvailable())('TmuxTerminalService', () => {
       try { execFileSync('tmux', ['-S', join(root, 'terminals', dir, 'tmux.sock'), 'kill-server'], { stdio: 'ignore' }) } catch { /* already gone */ }
     }
     await rm(root, { recursive: true, force: true })
+  })
+
+  it('starts terminals with mouse and focus support and the configured history limit', async () => {
+    await service.ensure('options', shellLaunch(cwd))
+    const options = execFileSync('tmux', [
+      '-S', await service.socketPath('options'),
+      'show-options', '-Av', '-t', 'main', 'mouse', ';',
+      'show-options', '-sv', 'focus-events', ';',
+      'display-message', '-p', '-t', 'main', '#{history_limit}',
+    ], { encoding: 'utf8' })
+    expect(options.trim().split('\n')).toEqual(['on', 'on', '20000'])
   })
 
   it('launches once, adopts on the second ensure, and streams input and output through an attachment', async () => {

@@ -43,3 +43,13 @@ it('maps native permissions-independent tool failures, agents, compaction and ba
   expect(mapTerminalHook({ ...raw, hook_event_name: 'Stop', background_tasks: [{ id: 'job', type: 'local_bash', status: 'running' }] })[0]?.event)
     .toMatchObject({ type: 'tasks.snapshot', tasks: [{ taskId: 'job', control: 'terminal', kind: 'bash', status: 'running' }] })
 })
+
+it('keeps native question answers and MCP elicitation decisions structured', () => {
+  const raw = { instanceId: 'i', session_id: 's' }
+  const events = mapTerminalHook({ ...raw, hook_event_name: 'PostToolUse', tool_use_id: 'ask', tool_name: 'AskUserQuestion',
+    tool_response: { questions: [{ question: 'Color?', options: [{ label: 'Blue' }] }], answers: { 'Color?': 'Blue' } } })
+  expect(events[1]?.event).toMatchObject({ type: 'permission.resolved', resolution: { decision: 'allow', reason: 'answered',
+    request: { toolUseId: 'ask' }, answers: { q0: { selected: [], text: 'Blue' } } } })
+  expect(mapTerminalHook({ ...raw, hook_event_name: 'ElicitationResult', mcp_server_name: 'form', elicitation_id: 'e', action: 'accept', content: { count: 0 } })[0]?.event)
+    .toEqual({ type: 'ext', vendor: 'claude', name: 'elicitation.result', data: { serverName: 'form', elicitationId: 'e', action: 'accept', content: { count: 0 } } })
+})

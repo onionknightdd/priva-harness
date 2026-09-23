@@ -2,6 +2,7 @@ import type { ProviderSessionStore } from '../../core/contract/provider-session-
 import { foldThread } from '../../core/resource/fold-thread.js'
 import { SessionError } from '../../core/resource/session.js'
 import type { SessionStream } from '../session/session-stream.js'
+import type { ThreadReplayItem } from '../../core/resource/thread.js'
 
 /** One native transcript observer shared by all viewers of a terminal. */
 export class TerminalHistoryMirror {
@@ -11,7 +12,8 @@ export class TerminalHistoryMirror {
   private unwatch: (() => void) | undefined
   private lastHistory: string | undefined
 
-  constructor(private readonly store: ProviderSessionStore, private readonly stream: SessionStream) {}
+  constructor(private readonly store: ProviderSessionStore, private readonly stream: SessionStream,
+    private readonly observed?: (items: readonly ThreadReplayItem[]) => void) {}
 
   async start(cwd: string): Promise<void> {
     this.unwatch = await this.store.watch?.(this.stream.session, cwd, (error) => {
@@ -45,6 +47,7 @@ export class TerminalHistoryMirror {
         const items = await this.store.replay(this.stream.session)
         if (this.stopped) return
         const history = foldThread(items)
+        this.observed?.(items)
         const fingerprint = JSON.stringify(history)
         // An unchanged disk read must not discard a just-accepted prompt
         // before Claude has appended its native user record.

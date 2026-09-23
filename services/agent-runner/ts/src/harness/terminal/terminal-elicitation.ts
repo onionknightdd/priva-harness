@@ -36,5 +36,17 @@ export function terminalElicitationForm(schema: Record<string, unknown>) {
     if (!parsed.success) throw new Error(parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; '))
     return values
   }
-  return { questions, content }
+  const answers = (values: Record<string, unknown>): Record<string, QuestionAnswer> => {
+    validator.parse(values)
+    return Object.fromEntries(fields.map(({ key }, index) => {
+      const question = questions[index]
+      if (!question) throw new Error(`Missing question for ${key}`)
+      const value = values[key]
+      if (value !== undefined && typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') throw new Error(`Invalid answer for ${key}`)
+      const label = value === undefined ? question.options.at(-1)?.label ?? '' : String(value)
+      return [question.id, question.options.some((option) => option.label === label)
+        ? { selected: [label], text: '' } : { selected: [], text: label }]
+    }))
+  }
+  return { questions, content, answers }
 }

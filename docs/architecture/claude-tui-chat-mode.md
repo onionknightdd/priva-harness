@@ -107,6 +107,15 @@ tmux server 与 pane 继承的是经 `paneEnvironment` 清洗过的 runner 环�
 再过滤一次。否则一个由 systemd / CI 启动的 runner 会让 Claude Code 判定"不支持颜色"，
 浏览器里的 TUI 变成纯黑白。
 
+私有 tmux 的全部选项在 `new-session` 前应用，包括 `mouse on`、`focus-events on`、
+历史容量和窗口尺寸策略。Claude 启动时即可检测到鼠标与焦点支持，避免出现 tmux 鼠标配置提示。
+这些设置只作用于私有 server，无需修改用户的 `~/.tmux.conf`。已运行的会话保留原配置；
+升级后需在 TUI 中执行 `/exit` 并重新打开，让新进程使用新配置，刷新浏览器不会替换后台进程。
+
+```text
+start-server -> set-option (mouse/focus/terminal/...) -> new-session -> Claude TUI
+```
+
 ### 4.4 tmux 控制模式
 
 查看者不通过伪终端 attach，而是起一个 `tmux -S <sock> -C attach` 子进程：
@@ -240,8 +249,8 @@ TUI -> native JSONL -> provider watch/replay -> TerminalHistoryMirror
 
 `/ws/session` 的 Claude `run.start` 总是先通过 `TerminalChatSessions.open` 创建、
 恢复或 fork 原生会话，再排队注入消息。新对话仍懒创建：首条气泡发送时才启动 TUI，
-无需先访问 Terminal 视图；直接进入 Terminal 也可创建同一种会话。后续切换视图仅
-附加查看者。新进程使用首条请求的模型、effort 和主题；气泡启动的默认尺寸为 120×40，
+新对话在收到服务端确认的 session id 前禁用 Terminal 标签，不挂载终端或建立终端连接；
+只能从气泡发起。拿到 id 后才允许切换，后续切换视图仅附加查看者。新进程使用首条请求的模型、effort 和主题；气泡启动的默认尺寸为 120×40，
 终端查看者接入后按实际尺寸调整。
 
 进程已退出时，下次发送从同一转录重新启动 TUI。终端不可用或启动失败会明确报错，
@@ -250,8 +259,10 @@ TUI -> native JSONL -> provider watch/replay -> TerminalHistoryMirror
 已由 TUI 控制的会话。Pi 的 UI 路径保持原状。
 
 ```text
-Claude UI run.start -> open/resume/fork TUI -> queue -> ready composer -> paste + Enter
-Terminal view       -> attach viewer -------------------------------> same process
+New Chat -> ChatComposer (Terminal disabled)
+Claude UI run.start -> open/resume/fork TUI -> confirm session id -> enable Terminal
+                                          -> queue -> ready composer -> paste + Enter
+Terminal view       -> attach viewer --------------------------------> same process
 Programmatic call   -> AgentHarness.run/launch -> SDK (session exclusion)
 
 Claude hooks -> local HTTP -> run.started / session.state / run.completed
@@ -306,7 +317,7 @@ optimistic user + native user ----------------------> one user + assistant
 
 升级前已经运行的 TUI 没有当前 hooks / instanceId。需在该终端执行 `/exit` 并重新打开一次，
 继续使用原会话记录；仅刷新浏览器不会替换后台进程。不会为了升级强行关闭活动终端。
-运行中模型与交互同步见以下各节；统一的 TUI 用量归集仍未完成。
+运行中模型、交互同步与统一的 TUI 用量归集见以下各节。
 
 真实 Claude TUI 回归使用隔离的 `CLAUDE_CONFIG_DIR`、临时项目和本地模拟模型端点，
 覆盖首条气泡创建、随后附加终端、中文 / 多行输入、双向交替、断线重连、进程退出后
@@ -398,18 +409,22 @@ Claude AskUserQuestion -> PermissionRequest -> coordinator -> 气泡问答卡片
           |                                      ^               |
           | 原生 TUI 回答                         +---- 答案 ------+
           v                                      |
-取消等待的 hook / HTTP ----> 收起卡片       allow(updatedInput) -> Claude 继续
-native tool_result ------> 权威回答记录 ------> 两侧历史
+取消等待的 hook / HTTP ----> 收起卡片，审计暂存取消  allow(updatedInput) -> Claude 继续
+native tool_result ------> 关联原请求、去重 ------> 两侧历史 + 结构化审计
 ```
 
 浏览器断开不会取消原生问答；重新订阅从 session.snapshot 恢复待答卡片。在 TUI 回答时，
-Claude 取消等待中的 hook，HTTP 关闭信号撤销气泡请求；最终答案以原生 tool_result 为准。
+Claude 取消等待中的 hook；HTTP 关闭只撤销等待，不立即按用户取消记账。
+最终答案以原生 PostToolUse / tool_result 为准，关联原 requestId、toolUseId 后只记录一次。
 停止、终端退出和 /clear 撤销挂起请求，不遗留无法提交的卡片。
 
 普通工具审批只返回 allow / deny，不允许气泡修改原生工具输入。子代理的权限与问答使用
 同一通道。`Elicitation` 的 string / number / integer / boolean 表单复用既有问答 UI，
 枚举与可选字段提供选项；提交时按 MCP JSON Schema 验证，错误保留请求以便修改后重试。
 URL 认证或复杂表单通过 `terminal.focus` 打开同一终端，由原生界面处理。
+`ElicitationResult` 补充原生表单最终 action / content，转换为同一问答审计。
+普通工具执行失败不等于用户拒绝：PostToolUseFailure 仍确认审批为 allow；手动拒绝从
+转录的原生拒绝 metadata 确认，并结束没有 Stop hook 的中断轮次。
 
 ### 4.15 /clear 重绑定
 
@@ -465,10 +480,11 @@ TUI 中 JSX 只显示工具结果文本；切到气泡后，相同转录的 MCP 
 ### 4.17 事件、上下文和用量
 
 ```text
-Pre/PostToolUse / Failure / SubagentStart/Stop / Pre/PostCompact
+Pre/PostToolUse / Failure / ElicitationResult / SubagentStart/Stop / Pre/PostCompact
                      -> instanceId 隔离的事件日志 -> SessionStream + RunLedger
 statusLine           -> session.config / context  -> 气泡选择器与上下文环
-主转录 + 已归属子代理 -> 按 API message.id 去重差值 -> run.finished -> SQLite
+完成 / 失败 / 中断 -> 主转录 + 已归属子代理 -> API message.id 去重差值
+                  -> 同实例 statusLine 费用差值 -> run.finished -> SQLite
 ```
 
 `PreToolUse` 维护 runningToolIds，快照恢复后“等待工具结束再插入”仍有依据。
@@ -481,6 +497,9 @@ context 使用最新请求的 input + cache_read + cache_creation，排除输出
 消息。UserPromptSubmit 在 API 调用前采集费用基线；Stop hook 先返回，等最终 statusLine
 刷新后计算同一实例的费用 / API 时长差值，最多等待 2 秒。拿不到新状态时费用保持未知，
 不能把旧状态的差值 0 当成免费调用。转录同步失败也会结清气泡为失败，避免永远 running。
+气泡停止、TUI Escape / Ctrl+C 和原生手动拒绝工具也走同一结算，保留 aborted 状态。
+中断后 statusLine 可能不再刷新：已在本轮上报的正数费用 / API 时长差值仍计入，未知部分不估算。
+中断的同步错误显式上报，同时保留 aborted；下一轮基线排除已结算的 token 与费用。
 
 ### 4.18 资源、原生附件与命令
 
@@ -506,7 +525,8 @@ stash，保留整份多行草稿，避免 Ctrl+A/K 只删除最后一行而拼�
 打开同一会话 `/tasks`，由用户在原生列表中选择并停止任务。
 
 真实 CLI 集成回归增加 `terminal-capabilities.test.ts`、`terminal-elicitation.test.ts`、
-`terminal-resources.test.ts`：本地模拟模型验证产品 MCP / JSX、typed 表单、用量 / 工具账本、
+`terminal-resources.test.ts`、`terminal-interruption-usage.test.ts`、`terminal-permission-audit.test.ts`：
+本地模拟模型验证产品 MCP / JSX、typed 表单、中断结算 / 下一轮去重、TUI 审批审计、用量 / 工具账本、
 草稿保护、MCP 资源刷新、/context 本地完成，以及空会话 /compact 拒绝与短对话 /compact 成功。
 压缩回归逐轮校验 compacting、compacted（含摘要）、completed 的顺序，避免前一轮事件掩盖失败。
 构建后验证生产 stdio 入口：

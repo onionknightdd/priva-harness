@@ -27,7 +27,7 @@ export function nativeClaudeAvailable(): boolean {
 export interface ModelRequest { model: string; stream?: boolean; tools?: Record<string, unknown>[]; messages: { role: string; content: string | Record<string, unknown>[] }[] }
 export type ModelResponse = (body: ModelRequest, reply: FastifyReply) => unknown
 
-export async function nativeClaudeFixture(respond: ModelResponse, recorder?: DataRecorder) {
+export async function nativeClaudeFixture(respond: ModelResponse, recorder?: DataRecorder, options: { permissionMode?: 'default' } = {}) {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'priva-tui-l3-')))
   const configDir = join(root, 'claude')
   await mkdir(configDir)
@@ -48,6 +48,14 @@ export async function nativeClaudeFixture(respond: ModelResponse, recorder?: Dat
   const profile = await services.modelProfileService.createProfile({ label: 'Isolated native test',
     baseUrl: `http://127.0.0.1:${modelServer.addresses()[0]?.port ?? 0}`, authToken: 'fixture-token', defaultModel: 'claude-sonnet-4-6' })
   const provider = new ClaudeProvider({ globalConfigDir: configDir, globalConfigFilePath: join(configDir, '.claude.json'), tools: productTools })
+  const permissionMode = options.permissionMode
+  if (permissionMode) {
+    const launch = provider.terminalLaunch.bind(provider)
+    vi.spyOn(provider, 'terminalLaunch').mockImplementation(async (...args) => {
+      const spec = await launch(...args)
+      return { ...spec, args: spec.args.map((arg, index) => spec.args[index - 1] === '--permission-mode' ? permissionMode : arg) }
+    })
+  }
   const sdkOpen = vi.spyOn(provider, 'openSession')
   const providers = { claude: provider, pi: new FakeAgentProvider('pi', []) }
   const harness = new AgentHarness({ providers, cwd: root, ...(recorder ? { recorder } : {}) })

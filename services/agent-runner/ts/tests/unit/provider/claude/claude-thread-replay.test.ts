@@ -29,6 +29,17 @@ describe('replayClaudeSessionMessages', () => {
     expect(thread[1]?.blocks?.find((block) => block.type === 'tool_use')).toMatchObject({ tool: { output: text } })
   })
 
+  it.each([true, false])('distinguishes native denial metadata from arbitrary tool error text (native=%s)', (native) => {
+    const items = replayClaudeSessionMessages([
+      session('assistant', 'a1', { content: [{ type: 'tool_use', id: 'write', name: 'Write', input: { file_path: '/tmp/example' } }] }),
+      session('user', 'result', { content: [{ type: 'tool_result', tool_use_id: 'write', is_error: true,
+        content: 'User rejected tool use', ...(native ? { toolUseResult: 'User rejected tool use' } : {}) }] }),
+    ])
+    const resolutions = items.filter((item) => item.kind === 'frame' && item.event.type === 'permission.resolved')
+    expect(resolutions).toHaveLength(native ? 1 : 0)
+    if (native) expect(resolutions[0]).toMatchObject({ event: { resolution: { decision: 'deny', reason: 'skipped', request: { toolUseId: 'write' } } } })
+  })
+
   it('restores answered summaries from JSONL metadata omitted by the SDK history API', () => {
     const questions = [{ question: 'Which region?', options: [{ label: 'Asia' }], multiSelect: false }, { question: 'Any details?', options: [] }]
     const native = {

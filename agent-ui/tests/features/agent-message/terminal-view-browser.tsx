@@ -26,6 +26,7 @@ let activeRunId: string | undefined
 let config: StreamFrame["config"]
 let prompts: string[] = []
 let lastSentModel = ""
+let finishStartup: ((failed: boolean) => void) | undefined
 let sessionId = appMode ? "new-session-1" : "terminal-regression"
 const messages: AgentThreadMessage[] = []
 const sockets: TerminalSocket[] = []
@@ -76,8 +77,15 @@ class TerminalSocket extends EventTarget {
       }
       if (frame.type === "run.start" && frame.runId && frame.text) {
         lastSentModel = `${frame.model} / ${frame.effort}`
-        if (!this.subscribed) { this.subscribed = true; subscriptions++; this.snapshot() }
-        replyInTerminal(frame.text, frame.runId)
+        const { text, runId } = frame
+        const start = (failed: boolean) => {
+          if (this.readyState !== 1) return
+          if (failed) { this.reply({ v: 2, type: "error", code: "run.start", runId, message: "Fixture Claude startup failed" }); return }
+          if (!this.subscribed) { this.subscribed = true; subscriptions++; this.snapshot() }
+          replyInTerminal(text, runId)
+        }
+        if (!this.subscribed && (document.getElementById("hold-startup") as HTMLInputElement).checked) finishStartup = start
+        else start(false)
       }
       return
     }
@@ -142,12 +150,15 @@ function replyInTerminal(content: string, runId: string) {
   }, 100)
 }
 Object.defineProperty(window, "WebSocket", { configurable: true, value: TerminalSocket })
+summary()
 Object.assign(document.getElementById("checks")!.style, { position: "fixed", inset: "0 0 auto", height: "70px", padding: "8px", zIndex: "100" })
 const host = document.getElementById("root")!
 Object.assign(host.style, { position: "fixed", inset: "80px 0 0", display: "flex", overflow: "hidden" })
 createRoot(host).render(<React.StrictMode><MotionConfig reducedMotion={options.has("reduced-motion") ? "always" : "user"}><ThemeProvider attribute="class" forcedTheme={options.has("dark") ? "dark" : "light"}>
   {appMode ? <App /> : <SessionTerminalView harness="claude" cwd="/test" model="test:model" effort="medium" sessionId={sessionId} hidden={false} />}
 </ThemeProvider></MotionConfig></React.StrictMode>)
+document.getElementById("start")!.onclick = () => { finishStartup?.(false); finishStartup = undefined }
+document.getElementById("fail-start")!.onclick = () => { finishStartup?.(true); finishStartup = undefined }
 document.getElementById("model")!.onclick = () => {
   config = { profileId: "test", model: "claude-opus-4-6[1m]", effort: "high", cwd: "/workspace/work/existing", context: emptyContextUsage() }
   broadcast({ type: "session.config", config })

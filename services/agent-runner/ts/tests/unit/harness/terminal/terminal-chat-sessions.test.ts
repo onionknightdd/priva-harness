@@ -1,11 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { TerminalComposer, TerminalInput, TerminalService, TerminalSessionState } from '../../../../src/core/contract/terminal-service.js'
+import type { TerminalComposer, TerminalInput, TerminalService, TerminalSessionState, TerminalTelemetry } from '../../../../src/core/contract/terminal-service.js'
 import type { StreamFrame } from '../../../../src/core/event/agent-event.js'
 import { SessionStream } from '../../../../src/harness/session/session-stream.js'
 import { AgentHarness } from '../../../../src/harness/agent-harness.js'
 import { SessionTerminals } from '../../../../src/harness/terminal/session-terminals.js'
-import { TerminalChatSessions } from '../../../../src/harness/terminal/terminal-chat-sessions.js'
+import { TerminalChatSessions, type TerminalChatSessionsOptions } from '../../../../src/harness/terminal/terminal-chat-sessions.js'
+import { RunLedger } from '../../../../src/harness/run/run-ledger.js'
+import { MemoryDataRecorder } from '../../../support/memory-data-recorder.js'
+import { emptyContextUsage } from '../../../../src/core/resource/context-usage.js'
 import { FakeAgentProvider } from '../../../support/fake-agent-provider.js'
 import { testRunSpec } from '../../../support/run-spec.js'
 import { claudePromptText } from '../../../../src/provider/claude/claude-prompt-text.js'
@@ -13,7 +16,7 @@ import { claudePromptText } from '../../../../src/provider/claude/claude-prompt-
 const drivers: TerminalChatSessions[] = []
 afterEach(async () => { for (const driver of drivers.splice(0)) await driver.dispose() })
 
-function setup(timeout = 1000) {
+function setup(timeout = 1000, options: Partial<TerminalChatSessionsOptions> = {}) {
   const ref = { provider: 'claude', id: 'terminal-session' } as const
   const spec = testRunSpec()
   let state: TerminalSessionState | undefined = { sessionId: ref.id, instanceId: 'instance', cwd: spec.cwd, event: 'ready', phase: 'idle', updatedAt: 1 }
@@ -22,6 +25,7 @@ function setup(timeout = 1000) {
     readTerminalSpec: vi.fn(() => Promise.resolve(spec)),
     parseTerminalComposer: vi.fn<(screen: string) => TerminalComposer | undefined>(),
     terminalPromptText: vi.fn(claudePromptText),
+    readTerminalTelemetry: vi.fn<() => Promise<TerminalTelemetry>>().mockResolvedValue({ offset: 0, events: [] }),
     readTerminalState: vi.fn(() => Promise.resolve(state)),
     recordTerminalState: vi.fn((_dir: string, next: TerminalSessionState) => { state = next; return Promise.resolve() }),
     submitTerminalInput: vi.fn(async (input: TerminalInput, text: string) => { await input.paste(text); await input.sendKeys(['Enter']) }),
@@ -41,7 +45,7 @@ function setup(timeout = 1000) {
   const refresh = vi.fn(() => Promise.resolve())
   const released = vi.fn(() => Promise.resolve())
   const driver = new TerminalChatSessions({ terminals, eventsUrl: () => 'http://localhost/events',
-    stream: () => stream, beforeOpen: () => Promise.resolve(), observe: () => Promise.resolve(released), refresh, confirmationTimeoutMs: timeout })
+    stream: () => stream, beforeOpen: () => Promise.resolve(), observe: () => Promise.resolve(released), refresh, confirmationTimeoutMs: timeout, ...options })
   drivers.push(driver)
   const event = async (event: TerminalSessionState['event'], prompt?: string, source?: string) => {
     state = { sessionId: ref.id, instanceId: 'instance', cwd: spec.cwd, event, updatedAt: (state?.updatedAt ?? 0) + 1,
@@ -147,6 +151,64 @@ describe('TerminalChatSessions', () => {
     await opened
     expect(stream.snapshot().prompts).toEqual([])
   })
+  it.each(['bubble', 'escape', 'ctrl-c'])('settles interrupted usage once after the final native status (%s)', async (input) => {
+    const recorder = new MemoryDataRecorder()
+    const accounting = vi.fn().mockResolvedValue({ usage: { input: 10, output: 5 }, byModel: { m: { input: 10, output: 5 } }, numTurns: 1 })
+    const { event, provider, driver, ref, frames, refresh } = setup(1000, {
+      ledger: (session, runId, turn, spec, sessionTarget) => new RunLedger(recorder, { sessionId: session.id, runId, turn, spec, sessionTarget, source: 'web' }),
+      accounting: () => Promise.resolve(accounting),
+    })
+    const status = { sessionId: ref.id, instanceId: 'instance', model: 'm', cwd: '/workspace', context: emptyContextUsage(),
+      updatedAt: 1, costUsd: 0.1, apiDurationMs: 100 }
+    provider.readTerminalTelemetry.mockResolvedValue({ offset: 0, events: [], status })
+    await event('prompt', 'working')
+    refresh.mockImplementation(async () => { expect(provider.readTerminalTelemetry).toHaveBeenCalled(); await Promise.resolve() })
+    const timer = setTimeout(() => provider.readTerminalTelemetry.mockResolvedValue({ offset: 0, events: [],
+      status: { ...status, updatedAt: Date.now() + 1, costUsd: 0.13, apiDurationMs: 150 } }), 100)
+    try {
+      if (input === 'bubble') await driver.abort(ref)
+      else await driver.input(ref, Buffer.from(input === 'escape' ? '\x1b' : '\x03'))
+    } finally { clearTimeout(timer) }
+    await event('stop')
+    expect(accounting).toHaveBeenCalledTimes(1)
+    expect(frames.filter((frame) => frame.type === 'run.aborted')).toHaveLength(1)
+    expect(recorder.ofKind('run.finished')).toEqual([expect.objectContaining({ outcome: 'aborted',
+      usage: { input: 10, output: 5 }, byModel: { m: { input: 10, output: 5 } }, numTurns: 1,
+      costUsd: expect.closeTo(0.03) as number, apiDurationMs: 50 })])
+  })
+
+  it('keeps the interrupted outcome and reports accounting failure explicitly', async () => {
+    const { driver, ref, event, frames } = setup(1000, { accounting: () => Promise.resolve(() => Promise.reject(new Error('usage unreadable'))) })
+    await event('prompt', 'working')
+    await driver.abort(ref)
+    expect(frames).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'error', code: 'terminal.completion', message: expect.stringContaining('usage unreadable') as string }),
+      expect.objectContaining({ type: 'run.aborted' }),
+    ]))
+    expect(frames.some((frame) => frame.type === 'run.failed')).toBe(false)
+  })
+
+  it.each([false, true])('settles only confirmed positive cost when interruption does not refresh status (reported=%s)', async (reported) => {
+    const { provider, event, driver, ref, frames } = setup(1000, {
+      accounting: () => Promise.resolve(() => Promise.resolve({ usage: { input: 10, output: 5 } })),
+    })
+    const status = { sessionId: ref.id, instanceId: 'instance', model: 'm', cwd: '/work', context: emptyContextUsage(),
+      updatedAt: Date.now() - 1000, costUsd: 0.1, apiDurationMs: 100 }
+    provider.readTerminalTelemetry.mockResolvedValue({ offset: 0, events: [], status })
+    await event('prompt', 'working')
+    if (reported) provider.readTerminalTelemetry.mockResolvedValue({ offset: 0, events: [], status: {
+      ...status, updatedAt: Date.now() - 1, costUsd: 0.13, apiDurationMs: 150,
+    } })
+    await driver.abort(ref)
+    const result = frames.find((frame) => frame.type === 'run.aborted')
+    expect(result).toMatchObject({ usage: { input: 10, output: 5 } })
+    if (reported) expect(result).toMatchObject({ costUsd: expect.closeTo(0.03) as number, apiDurationMs: 50 })
+    else {
+      expect(result).not.toHaveProperty('costUsd')
+      expect(result).not.toHaveProperty('apiDurationMs')
+    }
+  })
+
   it('mirrors generic tool approval and leaves URL elicitation in the native UI', async () => {
     const { driver, ref, spec, frames, stream } = setup()
     const pending = driver.question(ref, { sessionId: ref.id, instanceId: 'instance', cwd: spec.cwd, tool: 'Read',

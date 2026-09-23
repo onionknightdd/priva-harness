@@ -7,6 +7,7 @@ import { emptyContextUsage } from '../../core/resource/context-usage.js'
 import type { AgentEvent } from '../../core/event/agent-event.js'
 import { taskKind, taskStatus } from '../../core/resource/background-task.js'
 import { claudeToolOutput } from './claude-event-mapper.js'
+import { questionResolutionFromToolResult } from '../../core/resource/interaction-history.js'
 
 export async function readClaudeTerminalSpec(scratchDir: string): Promise<ProviderRunSpec | undefined> {
   return await readJson(join(scratchDir, 'claude-terminal-run-spec.json')) as ProviderRunSpec | undefined
@@ -83,9 +84,14 @@ export function mapTerminalHook(raw: Record<string, unknown>): TerminalActivity[
       const content = asRecord(response)?.['content'] ?? response
       event = { type: 'tool.completed', id, name, ok: raw['hook_event_name'] === 'PostToolUse' && asRecord(response)?.['isError'] !== true,
         output: stringField(raw, 'error') ?? claudeToolOutput({ content }, { tool_use_result: response }, {}, name),
-        ...(durationMs === undefined ? {} : { durationMs }), ...channel }; break
+        ...(durationMs === undefined ? {} : { durationMs }), ...channel }
+      const resolution = questionResolutionFromToolResult(id, name, response, !event.ok)
+      return [{ sessionId, instanceId, event }, ...(resolution ? [{ sessionId, instanceId, event: { type: 'permission.resolved' as const, resolution } }] : [])]
     }
     case 'PreCompact': if (!agentId) event = { type: 'session.compacting' }; break
+    case 'ElicitationResult': event = { type: 'ext', vendor: 'claude', name: 'elicitation.result', data: {
+      serverName: raw['mcp_server_name'], elicitationId: raw['elicitation_id'], action: raw['action'], content: raw['content'],
+    } }; break
     case 'PostCompact': if (!agentId) event = { type: 'session.compacted', summary: stringField(raw, 'compact_summary') ?? '' }; break
     case 'SubagentStart': if (agentId) event = { type: 'agent.started', agentId, name: stringField(raw, 'agent_type') ?? 'Agent' }; break
     case 'SubagentStop': if (agentId) event = { type: 'agent.completed', agentId, ok: true }; break

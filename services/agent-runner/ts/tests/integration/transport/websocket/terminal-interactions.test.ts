@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest'
 import { WebSocket } from 'ws'
 import type { StreamFrame } from '../../../../src/core/event/agent-event.js'
+import { MemoryDataRecorder } from '../../../support/memory-data-recorder.js'
 import { modelMessage, nativeClaudeAvailable, nativeClaudeFixture } from '../../../fixtures/terminal/claude-tui-fixture.js'
 
 it.skipIf(!nativeClaudeAvailable()).each(['allow', 'deny'] as const)('resumes a pending native question after browser reconnect and handles %s', async (decision) => {
@@ -41,11 +42,12 @@ it.skipIf(!nativeClaudeAvailable()).each(['allow', 'deny'] as const)('resumes a 
 
 it.skipIf(!nativeClaudeAvailable())('retires the mirrored question when answered directly in the native TUI', async () => {
   let calls = 0
+  const recorder = new MemoryDataRecorder()
   const fixture = await nativeClaudeFixture((body, reply) => modelMessage(body, reply, (body.stream ? ++calls : 0) === 1
     ? [{ type: 'tool_use', id: 'ask-native', name: 'AskUserQuestion', input: { questions: [
       { question: 'Choose a color?', header: 'Color', options: [{ label: 'Red', description: 'Red' }, { label: 'Blue', description: 'Blue' }], multiSelect: false },
     ] } }]
-    : [{ type: 'text', text: 'Native answer received' }], `native-question-${calls}`))
+    : [{ type: 'text', text: 'Native answer received' }], `native-question-${calls}`), recorder)
   try {
     fixture.send('Ask a color question', 'ask-native')
     await expect.poll(() => fixture.frames.some((frame) => frame.type === 'permission.requested'), { timeout: 30000 }).toBe(true)
@@ -58,6 +60,10 @@ it.skipIf(!nativeClaudeAvailable())('retires the mirrored question when answered
     expect(fixture.harness.sessionStream(fixture.ref).snapshot().interactions).toHaveLength(0)
     await expect.poll(() => fixture.harness.sessionStream(fixture.ref).snapshot().messages.some((message) => message.interactions?.some((item) => item.answers?.['q0']?.text === 'Blue'))).toBe(true)
     expect(fixture.frames.some((frame) => frame.type === 'permission.resolved')).toBe(true)
+    expect(recorder.ofKind('audit').filter((record) => record.action === 'question.answered')).toEqual([
+      expect.objectContaining({ runId: 'ask-native', sessionId: fixture.ref.id,
+        details: expect.objectContaining({ decision: 'allow', reason: 'answered', answers: { q0: { selected: [], text: 'Blue' } } }) as unknown }),
+    ])
     expect(fixture.sdkOpen).not.toHaveBeenCalled()
   } catch (error) {
     console.error(await fixture.terminals.capture(fixture.ref), fixture.frames.filter((frame) => ['error', 'run.failed'].includes(frame.type)))

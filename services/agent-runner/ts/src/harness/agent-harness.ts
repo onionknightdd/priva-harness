@@ -132,7 +132,7 @@ export class AgentHarness {
     const key = sessionRefKey(ref)
     let entry = this.terminalHistories.get(key)
     if (entry === undefined) {
-      const mirror = new TerminalHistoryMirror(store, this.sessionStream(ref))
+      const mirror = new TerminalHistoryMirror(store, this.sessionStream(ref), (items) => this.terminalChats?.history(ref, items))
       entry = { mirror, ready: mirror.start(cwd), viewers: 0 }
       this.terminalHistories.set(key, entry)
     }
