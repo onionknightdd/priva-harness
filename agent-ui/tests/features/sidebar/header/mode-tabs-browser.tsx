@@ -31,12 +31,22 @@ function Page() {
   const latest = React.useRef({ active, actions, agent })
   latest.current = { active, actions, agent }
   const assert = (condition: unknown, text: string) => { if (!condition) throw new Error(text) }
+  const checkModeTabState = (locked: boolean) => {
+    const tabs = [...document.querySelectorAll<HTMLButtonElement>('#mode-row [role="tab"]')]
+    assert(tabs.length === 2 && tabs.every((tab) => {
+      const style = getComputedStyle(tab)
+      return (tab.getAttribute('aria-disabled') === 'true') === locked &&
+        Number(style.opacity) === (locked ? 0.5 : 1) &&
+        (style.pointerEvents === 'none') === locked
+    }), locked ? 'Locked mode tabs are visibly disabled and ignore pointer input' : 'Draft mode tabs restore their enabled appearance and pointer input')
+  }
   checks = async () => {
     setResult("Running…")
     try {
       actions.startNewChat("/workspace/work/existing")
       await wait()
       assert(latest.current.active.runMode === "agent", "New chats default to Agent")
+      checkModeTabState(false)
       const code = Array.from(document.querySelectorAll<HTMLButtonElement>('[role=tab]')).find((item) => item.textContent === 'Code')!
       code.click(); await wait()
       assert(latest.current.active.runMode === "code", "Tabs update the draft mode")
@@ -45,12 +55,14 @@ function Page() {
       await wait()
       latest.current.agent.submit(); await wait()
       assert(latest.current.active.runModeLocked, "Sending the first turn locks the switch immediately")
+      checkModeTabState(true)
       const socket = fixture.sockets.at(-1)!
       const init = socket.sent.find((frame) => frame.type === 'run.start')!
       assert(init.runMode === 'code', "Claude frame contains Code")
       socket.reply({ v: 2, type: 'error', code: 'run.start', runId: init.runId, message: 'Fixture startup failure' })
       await wait()
       assert(!latest.current.active.runModeLocked, "A failed initial launch unlocks the draft")
+      checkModeTabState(false)
       latest.current.agent.setDraft("Retry mode probe"); await wait(); latest.current.agent.submit(); await wait()
       const retry = socket.sent.filter((frame) => frame.type === 'run.start').at(-1)!
       socket.reply({ v: 2, type: 'session.config', sessionId: 'bound-code', streamId: 'modes', seq: 1,
@@ -58,6 +70,7 @@ function Page() {
       socket.reply({ v: 2, type: 'run.completed', runId: retry.runId, sessionId: 'bound-code', streamId: 'modes', seq: 2 })
       await wait()
       assert(latest.current.active.runMode === 'code' && latest.current.active.runModeLocked, "Server binding preserves and locks Code")
+      checkModeTabState(true)
       latest.current.actions.setDraftRunMode('agent'); await wait()
       assert(latest.current.active.runMode === 'code', "Bound sessions cannot change mode")
       socket.reply({ v: 2, type: 'session.rebound', sessionId: 'bound-code', nextSessionId: 'native-agent', streamId: 'modes', seq: 3 })
@@ -82,7 +95,8 @@ function Page() {
       assert(piFrame.harness === 'pi' && !('runMode' in piFrame), "Pi requests preserve their existing shape")
       harness.setHarnessId('claude'); await wait(); setWidth(280)
       assert(latest.current.active.runMode === 'agent', 'Returning to Claude starts an Agent draft')
-      setResult('PASS: draft selection, request, startup failure, binding, locking, native rebind, comparison, narrow width, Pi visibility and request')
+      checkModeTabState(false)
+      setResult('PASS: draft selection, request, startup failure, binding, locking and disabled styling, native rebind, comparison, narrow width, Pi visibility and request')
     } catch (error) { setResult(`FAIL: ${String(error)}`); throw error }
   }
   return <main className="min-h-screen bg-background p-6 text-foreground">

@@ -158,12 +158,16 @@ Harness 选择菜单仅保留 Pi 和 Claude Agent SDK，移除 DeepSeek Harness 
 新会话默认 Agent，发送首条消息后即锁定；尚未建立会话的启动失败恢复可选状态。
 既有会话、分支、原生换绑和重连采用服务端模式。要切换模式需新建对话。
 问号使用共享 Dialog，点击展示 Agent / Code 对比表，锁定状态仍可查看帮助。
+2026-09-24：锁定时 Agent / Code 两项文字与图标均置灰，并停止鼠标交互；共享
+`TabsTrigger` 使用 Base UI 的 `data-disabled` 状态匹配禁用样式。保留当前模式指示，
+首次启动失败或新建对话后恢复正常外观。
 
 ```text
 Claude 侧栏                         Dialog
 [ Agent | Code ] [?] ------------> 对比项 | Agent | Code
                                    任务 / 指引 / 工具 / 能力 / 权限
 Pi：整行隐藏                       会话模式固定说明       [关闭]
+会话锁定 -> [ Agent disabled | Code disabled ] [? 可用]
 ```
 
 Tabs 沿用共享滑块和激活图标动效；窄侧栏压缩 Tabs 宽度并隐藏装饰图标，保留完整
@@ -2009,7 +2013,7 @@ rg -n '@base-ui/react|motion/react|gsap' agent-ui/src
 
 Claude 模式浏览器回归：在独立开发服务器 origin 打开
 `/tests/features/sidebar/header/mode-tabs-browser.html`，点击 **Run mode checks**。
-使用隔离网络验证真实 context / 发送链路的草稿模式、首次发送锁定、失败解锁、
+使用隔离网络验证真实 context / 发送链路的草稿模式、首次发送锁定并置灰、失败解锁并恢复样式、
 服务端绑定、延迟换绑快照、Pi 隐藏与请求不携带 runMode、对比表、164px 控件行。
 追加 `?zh&dark&reduced-motion`，在 390px 视口复测中文、深色和减少动态效果；
 手动用 Enter 打开问号、Escape 关闭并检查焦点返回。样例设置自己的本地测试偏好。
