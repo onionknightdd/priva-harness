@@ -92,7 +92,7 @@ describe('canvas tool', () => {
     await expect(readFile(expected, 'utf8')).resolves.toBe(html)
   })
 
-  it('rejects a blank payload and a missing or unsafe path', async () => {
+  it('rejects a blank payload, a missing path, and a non-html path', async () => {
     const context = await toolContext()
     await expect(canvasTool.execute({ html: '   ' }, context)).resolves.toEqual({
       ok: false,
@@ -100,14 +100,15 @@ describe('canvas tool', () => {
     })
     await expect(
       canvasTool.execute({ path: 'missing.html' }, context),
-    ).resolves.toMatchObject({
+    ).resolves.toEqual({
       ok: false,
+      text: `canvas path does not exist: ${path.join(context.cwd, 'missing.html')}`,
     })
     await expect(
       canvasTool.execute({ path: '../secret.html' }, context),
     ).resolves.toEqual({
       ok: false,
-      text: 'canvas path must stay inside the workspace',
+      text: `canvas path does not exist: ${path.resolve(context.cwd, '../secret.html')}`,
     })
     await expect(
       canvasTool.execute({ path: 'notes.txt' }, context),
@@ -115,6 +116,42 @@ describe('canvas tool', () => {
       ok: false,
       text: 'canvas path must be an .html file',
     })
+  })
+
+  it('reads and writes an html file outside the working directory in place', async () => {
+    const context = await toolContext()
+    const outside = await mkdtemp(path.join(tmpdir(), 'canvas-outside-'))
+    const filePath = path.join(outside, 'board.html')
+    await writeFile(filePath, '<p>keep me</p>', 'utf8')
+
+    await expect(canvasTool.execute({ path: filePath }, context)).resolves.toEqual({
+      ok: true,
+      text: filePath,
+    })
+    await expect(readFile(filePath, 'utf8')).resolves.toBe('<p>keep me</p>')
+
+    const html = '<h1>Saved outside</h1>'
+    await expect(
+      canvasTool.execute({ html, path: filePath }, context),
+    ).resolves.toEqual({ ok: true, text: filePath })
+    await expect(readFile(filePath, 'utf8')).resolves.toBe(html)
+    await expect(
+      readFile(path.join(context.cwd, '.canvas', 'board.html'), 'utf8'),
+    ).rejects.toThrow()
+  })
+
+  it('resolves a relative path outside the working directory and writes it there', async () => {
+    const parent = await mkdtemp(path.join(tmpdir(), 'canvas-parent-'))
+    const cwd = path.join(parent, 'session')
+    await mkdir(cwd)
+    const context = await toolContext(cwd)
+    const html = '<p>relative</p>'
+    const target = path.join(parent, 'board.html')
+
+    await expect(
+      canvasTool.execute({ html, path: '../board.html' }, context),
+    ).resolves.toEqual({ ok: true, text: target })
+    await expect(readFile(target, 'utf8')).resolves.toBe(html)
   })
 
   it('keeps sanitized names inside .canvas', () => {
