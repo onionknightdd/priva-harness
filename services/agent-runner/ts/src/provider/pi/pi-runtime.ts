@@ -1,3 +1,6 @@
+import { readFile } from 'node:fs/promises'
+import { extname } from 'node:path'
+
 import type { InteractionResponse } from '../../core/resource/interaction.js'
 import { BackgroundTasks, taskIsActive } from '../../core/resource/background-task.js'
 import { asRecord, stringField } from '../../core/event/json-record.js'
@@ -29,9 +32,9 @@ export interface PiAgentSession {
   readonly modelId: string
   readonly isStreaming: boolean
   subscribe(listener: (event: PiSessionEvent) => void): () => void
-  prompt(text: string): Promise<void>
-  followUp(text: string): Promise<void>
-  steer(text: string): Promise<void>
+  prompt(text: string, images?: readonly PiImageContent[]): Promise<void>
+  followUp(text: string, images?: readonly PiImageContent[]): Promise<void>
+  steer(text: string, images?: readonly PiImageContent[]): Promise<void>
   compact?(customInstructions?: string): Promise<void>
   getContextUsage?(): { tokens: number | null; contextWindow: number } | undefined
   abort(): Promise<void>
@@ -129,7 +132,7 @@ export class PiRuntime implements AgentRuntime {
         this.events?.close()
         return
       }
-      await this.send(userTurnText(turn))
+      await this.send(turn)
     })().then(
       () => undefined,
       (error: unknown) => {
@@ -207,14 +210,16 @@ export class PiRuntime implements AgentRuntime {
     })
   }
 
-  private send(text: string): Promise<void> {
+  private async send(turn: UserTurn): Promise<void> {
+    const text = userTurnText(turn)
+    const images = await piImageContents(turn.imagePaths)
     if (isCompactCommandContent(text) && this.agentSession.compact !== undefined) {
       return this.compactSession(text)
     }
-    if (!this.agentSession.isStreaming) return this.agentSession.prompt(text)
-    if (this.queueBehavior === 'steer') return this.agentSession.steer(text)
-    if (this.queueBehavior === 'interrupt') return this.interruptThenPrompt(text)
-    return this.agentSession.followUp(text)
+    if (!this.agentSession.isStreaming) return this.agentSession.prompt(text, images)
+    if (this.queueBehavior === 'steer') return this.agentSession.steer(text, images)
+    if (this.queueBehavior === 'interrupt') return this.interruptThenPrompt(text, images)
+    return this.agentSession.followUp(text, images)
   }
 
   private async compactSession(text: string): Promise<void> {
@@ -227,8 +232,23 @@ export class PiRuntime implements AgentRuntime {
     })
   }
 
-  private async interruptThenPrompt(text: string): Promise<void> {
+  private async interruptThenPrompt(text: string, images?: readonly PiImageContent[]): Promise<void> {
     await this.agentSession.abort()
-    await this.agentSession.prompt(text)
+    await this.agentSession.prompt(text, images)
   }
+}
+
+export type PiImageContent = { type: 'image'; data: string; mimeType: string }
+
+const PI_IMAGE_MIME: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' }
+
+async function piImageContents(paths: readonly string[] | undefined): Promise<PiImageContent[] | undefined> {
+  if (!paths?.length) return undefined
+  const images: PiImageContent[] = []
+  for (const imagePath of paths) {
+    const mimeType = PI_IMAGE_MIME[extname(imagePath).toLowerCase()]
+    if (!mimeType) continue
+    images.push({ type: 'image', data: (await readFile(imagePath)).toString('base64'), mimeType })
+  }
+  return images.length ? images : undefined
 }

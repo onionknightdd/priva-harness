@@ -1570,6 +1570,9 @@ HTTP 历史、`session.snapshot` 和 `run.started.userMessage` 共用
 
 ```text
 upload -> absolute file path -> AgentAttachments -> run.start.text
+图片且当前模型在 imageUnderstanding 中 -> 同一上传路径，但 run.start.imagePaths
+    -> Claude 单独粘贴该路径（REPL 收成 [Image #N]）/ Pi prompt images
+不支持图片的模型仍只走 AgentAttachments。气泡去掉 [Image #N]，图片附件显示缩略图。
 HTTP history / session.snapshot / run.started.userMessage
     -> restoreUserMessageAttachments -> body + merged attachment cards
 ```

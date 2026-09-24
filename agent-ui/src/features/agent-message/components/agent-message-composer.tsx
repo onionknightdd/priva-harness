@@ -50,6 +50,10 @@ const COMPOSER_MULTI_PAD_TOP = 8
 const COMPOSER_SINGLE_PAD_Y = (7 * 2) / 3
 const COMPOSER_CHIP_GAP = 8
 const COMPOSER_LEFT_FALLBACK_PX = 46
+
+function dragHasFiles(transfer: DataTransfer) {
+  return Array.from(transfer.types).includes("Files")
+}
 const COMPACT_LINE_SLACK_PX = 8
 
 let measureContext: CanvasRenderingContext2D | null = null
@@ -320,6 +324,7 @@ export function AgentMessageComposer({
   const [dismissedQuery, setDismissedQuery] = React.useState<string | null>(null)
   const [dismissedMention, setDismissedMention] = React.useState<string | null>(null)
   const [highlightedIndex, setHighlightedIndex] = React.useState(0)
+  const [dragOver, setDragOver] = React.useState(false)
   const [mentionTrigger, setMentionTrigger] = React.useState<MentionTrigger | null>(null)
   const slashTrigger =
     slashCommand === null ? parseSlashTrigger(draft) : null
@@ -480,7 +485,31 @@ export function AgentMessageComposer({
           role="group"
           data-slot="input-group"
           data-composer-line={singleLine ? "single" : "multi"}
-          className="group/input-group relative w-full min-w-0 overflow-hidden rounded-3xl border border-input shadow-xs dark:bg-input/30"
+          className={cn(
+            "group/input-group relative w-full min-w-0 overflow-hidden rounded-3xl border border-input shadow-xs dark:bg-input/30",
+            dragOver && "border-ring bg-accent/40",
+          )}
+          onDragEnter={(event) => {
+            if (!dragHasFiles(event.dataTransfer)) return
+            event.preventDefault()
+            setDragOver(true)
+          }}
+          onDragOver={(event) => {
+            if (!dragHasFiles(event.dataTransfer)) return
+            event.preventDefault()
+            event.dataTransfer.dropEffect = "copy"
+          }}
+          onDragLeave={(event) => {
+            if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
+            setDragOver(false)
+          }}
+          onDrop={(event) => {
+            if (!dragHasFiles(event.dataTransfer)) return
+            event.preventDefault()
+            setDragOver(false)
+            const files = Array.from(event.dataTransfer.files)
+            if (files.length > 0) onFilesSelected(files)
+          }}
           onClick={(event) => {
             const target = event.target
             if (

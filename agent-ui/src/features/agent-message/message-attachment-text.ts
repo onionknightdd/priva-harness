@@ -47,12 +47,25 @@ export function restoreUserMessageAttachments<
 >(message: T): T {
   if (message.role !== "user") return message
   const parsed = attachmentsFromMessageText(message.content)
-  if (!parsed) return message
+  if (!parsed) {
+    if (!message.attachments?.some((file) => file.mimeType.startsWith("image/"))) return message
+    const content = withoutNativeImagePlaceholders(message.content)
+    return content === message.content ? message : { ...message, content }
+  }
   // Native images may accompany the manifest. Keep them and prefer the
   // structured metadata when both sources refer to the same file.
   const files = new Map([...parsed.attachments, ...message.attachments ?? []]
     .map((file) => [file.path, file]))
-  return { ...message, content: parsed.content, attachments: [...files.values()] }
+  const attachments = [...files.values()]
+  const content = attachments.some((file) => file.mimeType.startsWith("image/"))
+    ? withoutNativeImagePlaceholders(parsed.content)
+    : parsed.content
+  return { ...message, content, attachments }
+}
+
+/** Claude stores the input chip label next to the image block. The bubble shows the image. */
+export function withoutNativeImagePlaceholders(text: string): string {
+  return text.replace(/[ \t]*\[Image #\d+\][ \t]*/g, " ").replace(/[ ]{2,}/g, " ").trim()
 }
 
 export function attachmentMessageSummary(text: string): string {

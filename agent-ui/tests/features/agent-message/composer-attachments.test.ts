@@ -5,6 +5,7 @@ import {
   createComposerAttachments,
   formatComposerAttachmentSize,
   isImageAttachment,
+  partitionComposerUploads,
   readyComposerAttachments,
   revokeComposerAttachment,
 } from "../../../src/features/agent-message/composer-attachments.ts"
@@ -41,6 +42,19 @@ describe("readyComposerAttachments", () => {
     assert.equal(readyComposerAttachments([{ ...attachment, status: "done" }]), null)
     assert.equal(readyComposerAttachments([{ ...attachment, status: "done", uploaded }, attachment]), null)
     assert.deepEqual(readyComposerAttachments([{ ...attachment, status: "done", uploaded }]), [uploaded])
+  })
+})
+
+describe("partitionComposerUploads", () => {
+  const image = { path: "/workspace/.priva-attachments/a/shot.png", name: "shot.png", size: 4, mimeType: "image/png" }
+  const note = { path: "/workspace/.priva-attachments/a/note.txt", name: "note.txt", size: 4, mimeType: "text/plain" }
+
+  it("keeps every file in the upload manifest when the model cannot view images", () => {
+    assert.deepEqual(partitionComposerUploads([image, note], false), { files: [image, note], imagePaths: [] })
+  })
+
+  it("sends vision images as paths and leaves other files in the manifest", () => {
+    assert.deepEqual(partitionComposerUploads([image, note], true), { files: [note], imagePaths: [image.path] })
   })
 })
 

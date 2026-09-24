@@ -534,7 +534,9 @@ context 使用最新请求的 input + cache_read + cache_creation，排除输出
                     |
                 下一条消息使用新资源
 
-TUI 粘贴图片 -> 原生 base64 image -> 按内容哈希的 0600 附件文件 -> 气泡附件卡片
+TUI 粘贴图片 -> 原生 base64 image -> 按内容哈希的 0600 附件文件 -> 气泡缩略图
+WebUI 拖入且模型支持图片 -> 上传后的绝对路径单独 bracketed paste -> REPL 收成 [Image #N]
+模型不支持图片 -> 与普通文件相同，只粘贴 AgentAttachments 清单
 /context -> 原生本地命令输出 -> 完成气泡请求
 /compact -> Pre/PostCompact -> 压缩状态；原生拒绝 -> 明确失败
 ```

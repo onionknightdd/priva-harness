@@ -16,7 +16,8 @@ import { fetchSessionContextUsage } from "@/lib/api/sandbox-sessions"
 import type { SlashCommand } from "@/lib/api/slash-commands"
 import { createAgentThreadMessage, type AgentThreadMessage } from "./agent-message-data"
 import { composeSlashMessage } from "./composer-slash-command"
-import { readyComposerAttachments } from "./composer-attachments"
+import { partitionComposerUploads, readyComposerAttachments } from "./composer-attachments"
+import { listModelProfiles } from "@/features/model-settings/model-profile-api"
 import { useComposerAttachments } from "./use-composer-attachments"
 import { connectAgentSession, type AgentSessionConnection, type AgentRunEffort } from "./run-agent-session"
 import { bindTaskStop, setBackgroundTasks, updateBackgroundTask } from "./background-task-store"
@@ -43,6 +44,7 @@ export function useAgentMessage() {
   const [suggestion, setSuggestion] = React.useState<PromptSuggestion | null>(null)
   const [slashCommand, setSlashCommand] = React.useState<SlashCommand | null>(null)
   const [modelReference, setModelReference] = React.useState<string | null>(null)
+  const [imageInputModels, setImageInputModels] = React.useState<ReadonlySet<string>>(() => new Set())
   const [effort, setEffort] = React.useState<AgentRunEffort>("medium")
   const [messages, setMessages] = React.useState<AgentThreadMessage[]>([])
   const [connectionError, setConnectionError] = React.useState<string | null>(null)
@@ -214,18 +216,34 @@ export function useAgentMessage() {
     unbindStopRef.current?.()
   }, [])
 
+  React.useEffect(() => {
+    const controller = new AbortController()
+    void listModelProfiles(controller.signal).then((collection) => {
+      const ids = new Set<string>()
+      for (const profile of collection.profiles) {
+        for (const modelId of profile.modelCapabilities.imageUnderstanding) ids.add(`${profile.id}:${modelId}`)
+      }
+      setImageInputModels(ids)
+    }).catch(() => undefined)
+    return () => controller.abort()
+  }, [])
+
   const submit = React.useCallback(() => {
-    const files = readyComposerAttachments(attachments)
+    const uploaded = readyComposerAttachments(attachments)
+    const acceptsImages = modelReference !== null && imageInputModels.has(modelReference)
+    const partitioned = uploaded ? partitionComposerUploads(uploaded, acceptsImages) : null
+    const files = partitioned?.files ?? null
+    const imagePaths = partitioned?.imagePaths ?? []
     const content = (slashCommand ? composeSlashMessage(slashCommand.name, draft) : draft).trim()
-    if (interactions.length || !files || (!content && !files.length) || !modelReference || !runHarnessId || !runCwd.trim()) return
+    if (interactions.length || !uploaded || (!content && !uploaded.length) || !modelReference || !runHarnessId || !runCwd.trim()) return
     const connection = ensureConnection()
     const assistant = createAgentThreadMessage("assistant", "", "streaming")
     const user = { ...createAgentThreadMessage("user", content), id: `${assistant.id}:user`,
-      ...(files.length ? { attachments: files } : {}),
-      ...(!files.length && isCompactCommandUserMessage(content) ? { compact: { phase: "compacting" as const } } : {}) }
+      ...(uploaded.length ? { attachments: uploaded } : {}),
+      ...(!uploaded.length && isCompactCommandUserMessage(content) ? { compact: { phase: "compacting" as const } } : {}) }
     if (runHarnessId === "claude") setRunModePending(true)
     pendingIdsRef.current.add(assistant.id)
-    seedTitleRef.current = content || files.map((file) => file.name).join(", ")
+    seedTitleRef.current = content || uploaded.map((file) => file.name).join(", ")
     setLastModelReference(modelReference)
     setDraft(""); setSlashCommand(null); clearAttachments()
     setSuggestion(null)
@@ -248,12 +266,12 @@ export function useAgentMessage() {
       }
       await connection.waitForIdle()
       if (generation !== generationRef.current) return
-      void connection.start({ text: content, attachments: files, model: modelReference, harness: runHarnessId,
+      void connection.start({ text: content, attachments: files ?? [], ...(imagePaths.length ? { imagePaths } : {}), model: modelReference, harness: runHarnessId,
         ...(runHarnessId === "claude" ? { runMode } : {}),
         cwd: runCwd.trim(), effort, promptSuggestions: inputSuggestions,
         theme: resolvedTheme === "dark" ? "dark" : "light" }, assistant.id).catch(failed)
     }).catch(failed)
-  }, [interactions.length, attachments, slashCommand, draft, modelReference, runHarnessId, runCwd, ensureConnection, setLastModelReference, clearAttachments, queueBehavior, effort, inputSuggestions, resolvedTheme, runMode, setRunModePending, t])
+  }, [interactions.length, attachments, imageInputModels, slashCommand, draft, modelReference, runHarnessId, runCwd, ensureConnection, setLastModelReference, clearAttachments, queueBehavior, effort, inputSuggestions, resolvedTheme, runMode, setRunModePending, t])
 
   const respondPermission = React.useCallback((response: InteractionResponse) => {
     const connection = connectionRef.current

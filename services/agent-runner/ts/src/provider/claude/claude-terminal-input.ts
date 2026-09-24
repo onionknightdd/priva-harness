@@ -1,10 +1,15 @@
+import { copyFile, mkdir } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { extname, join } from 'node:path'
 import { setTimeout } from 'node:timers/promises'
 import { stripVTControlCharacters } from 'node:util'
 
 import { TerminalError, type TerminalInput } from '../../core/contract/terminal-service.js'
 import { claudeComposer } from './claude-terminal-composer.js'
 
-export async function submitClaudeTerminalInput(input: TerminalInput, text: string, signal: AbortSignal): Promise<void> {
+const IMAGE_PASTE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp'])
+
+export async function submitClaudeTerminalInput(input: TerminalInput, text: string, signal: AbortSignal, imagePaths: readonly string[] = []): Promise<void> {
   const screen = await waitFor(input, signal, (screen) => claudeComposer(screen) !== undefined,
     'Claude input is not ready. Open Terminal to resolve its startup dialog or menu.', 30000)
   signal.throwIfAborted()
@@ -16,12 +21,28 @@ export async function submitClaudeTerminalInput(input: TerminalInput, text: stri
       'Claude did not stash its input draft. Open Terminal before sending again.', 5000)
   }
   signal.throwIfAborted()
-  await input.paste(text)
-  // Claude coalesces fast input bursts: Enter before paste commit becomes a
-  // newline in the draft. Observe the draft before submitting, then let the
-  // lifecycle hook provide the authoritative acceptance acknowledgement.
-  await waitFor(input, signal, (screen) => Boolean(claudeComposer(screen)?.text.trim()),
-    'Claude did not display the pasted message. Open Terminal to inspect its input.', 10000)
+  for (const imagePath of imagePaths) {
+    const safePath = await safeImagePastePath(imagePath)
+    await input.paste(safePath)
+    // The REPL replaces a pasted image path with [Image #N]. Wait until that
+    // chip is visible so the following text paste does not ride along as a path.
+    await waitFor(input, signal, (screen) => {
+      const draft = claudeComposer(screen)?.text ?? ''
+      return /\[Image #\d+\]/u.test(draft) && !draft.includes(safePath)
+    }, 'Claude did not attach the pasted image. Open Terminal to inspect its input.', 10000)
+  }
+  if (text.trim()) {
+    await input.paste(text)
+    // Claude coalesces fast input bursts: Enter before paste commit becomes a
+    // newline in the draft. Observe the draft before submitting, then let the
+    // lifecycle hook provide the authoritative acceptance acknowledgement.
+    await waitFor(input, signal, (screen) => (claudeComposer(screen)?.text ?? '').includes(text.trim().split('\n')[0] ?? text),
+      'Claude did not display the pasted message. Open Terminal to inspect its input.', 10000)
+  } else if (imagePaths.length === 0) {
+    await input.paste(text)
+    await waitFor(input, signal, (screen) => Boolean(claudeComposer(screen)?.text.trim()),
+      'Claude did not display the pasted message. Open Terminal to inspect its input.', 10000)
+  }
   await setTimeout(100, undefined, { signal })
   signal.throwIfAborted()
   await input.sendKeys(['Enter'])
@@ -44,6 +65,18 @@ export async function completeClaudeLocalCommand(input: TerminalInput, text: str
   await waitFor(input, signal, (screen) => claudeComposer(screen)?.text.trim() === '' && /context usage|context window|tokens.*\//iu.test(stripVTControlCharacters(screen)),
     'Claude did not finish /context. Open Terminal to inspect its response.', 30000)
   return true
+}
+
+/** Claude treats one pasted absolute image path as an image chip. Spaces break that match. */
+export async function safeImagePastePath(imagePath: string): Promise<string> {
+  const extension = extname(imagePath).toLowerCase()
+  if (imagePath.startsWith('/') && IMAGE_PASTE_EXTENSIONS.has(extension) && !/[\s"'\\]/u.test(imagePath)) return imagePath
+  const suffix = IMAGE_PASTE_EXTENSIONS.has(extension) ? extension : '.png'
+  const directory = join(tmpdir(), 'priva-image-paste')
+  await mkdir(directory, { recursive: true, mode: 0o700 })
+  const safe = join(directory, `${Date.now().toString(36)}-${Math.random().toString(16).slice(2)}${suffix}`)
+  await copyFile(imagePath, safe)
+  return safe
 }
 
 async function waitFor(input: TerminalInput, signal: AbortSignal, ready: (screen: string) => boolean,

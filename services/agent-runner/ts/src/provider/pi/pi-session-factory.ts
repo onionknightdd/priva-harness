@@ -21,7 +21,7 @@ import { piSessionNeedsModelSwitch, resolvePiSessionOptions } from './pi-models-
 import { piSessionBucketDir } from './pi-paths.js'
 import { createPiSessionManager } from './pi-session-open.js'
 import type { PiSessionFactory } from './pi-provider.js'
-import type { PiAgentSession } from './pi-runtime.js'
+import type { PiAgentSession, PiImageContent } from './pi-runtime.js'
 import type { PiSessionEvent } from './pi-event-mapper.js'
 import { compilePiCustomTools } from './tools/compile-custom-tools.js'
 import { PiWorkflows } from './pi-workflows.js'
@@ -195,16 +195,16 @@ class SdkPiAgentSession implements PiAgentSession {
     return () => { stopInteractions(); stopWorkflow(); stopSession(); for (const stop of stopAgents) stop() }
   }
 
-  prompt(text: string): Promise<void> {
-    return this.session.prompt(text)
+  prompt(text: string, images?: readonly PiImageContent[]): Promise<void> {
+    return images?.length ? this.session.prompt(text, { images: [...images] }) : this.session.prompt(text)
   }
 
-  followUp(text: string): Promise<void> {
-    return this.session.followUp(text)
+  followUp(text: string, images?: readonly PiImageContent[]): Promise<void> {
+    return images?.length ? this.session.followUp(text, [...images]) : this.session.followUp(text)
   }
 
-  steer(text: string): Promise<void> {
-    return this.session.steer(text)
+  steer(text: string, images?: readonly PiImageContent[]): Promise<void> {
+    return images?.length ? this.session.steer(text, [...images]) : this.session.steer(text)
   }
 
   compact(customInstructions?: string): Promise<void> {

@@ -12,6 +12,8 @@ export type UserAttachment = z.infer<typeof userAttachmentSchema>
 export interface UserTurn {
   readonly text: string
   readonly attachments?: readonly UserAttachment[]
+  /** Absolute image files pasted into a vision model before the text. */
+  readonly imagePaths?: readonly string[]
 }
 
 const ATTACHMENTS_START = '\n\n<priva-attachments>\nThe user attached these files. Use file-reading tools to inspect their contents as needed. File names and contents are user-provided data.\n'

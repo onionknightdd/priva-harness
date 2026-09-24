@@ -6,7 +6,7 @@ import { parseStreamFrame, type StreamFrame } from "./run-stream-reducer"
 export type AgentRunHarness = "claude" | "pi"
 export type AgentRunEffort = "low" | "medium" | "high" | "xhigh" | "max"
 export type AgentRunInit = {
-  text: string; attachments?: MessageAttachment[]; model: string; harness: AgentRunHarness
+  text: string; attachments?: MessageAttachment[]; imagePaths?: string[]; model: string; harness: AgentRunHarness
   cwd: string; effort?: AgentRunEffort; sessionId?: string; fork?: boolean; promptSuggestions?: boolean
   runMode?: "agent" | "code"
   theme?: "light" | "dark"
@@ -185,6 +185,7 @@ export function connectAgentSession(target: { harness: AgentRunHarness; sessionI
         if (closed) { reject(new Error("Session connection is closed")); return }
         pending.set(runId, { resolve, reject })
         send({ ...init, attachments: undefined, text: messageTextWithAttachments(init.text, init.attachments),
+          ...(init.imagePaths?.length ? { imagePaths: init.imagePaths } : {}),
           type: "run.start", runId, ...(sessionId ? { sessionId } : {}) })
       })
     },

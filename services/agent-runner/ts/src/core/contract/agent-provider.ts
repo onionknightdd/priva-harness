@@ -97,7 +97,7 @@ export interface AgentProvider {
   /** Remove native prompt envelopes for display/correlation, never for submission. */
   terminalPromptText?(prompt: string): string
   parseTerminalComposer?(screen: string): TerminalComposer | undefined
-  submitTerminalInput?(input: TerminalInput, text: string, signal: AbortSignal): Promise<void>
+  submitTerminalInput?(input: TerminalInput, text: string, signal: AbortSignal, imagePaths?: readonly string[]): Promise<void>
   completeTerminalCommand?(input: TerminalInput, text: string, signal: AbortSignal): Promise<boolean>
   configureTerminal?(input: TerminalInput, scratchDir: string, spec: ProviderRunSpec, signal: AbortSignal): Promise<'applied' | 'restart'>
 }

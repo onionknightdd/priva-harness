@@ -528,7 +528,7 @@ export class TerminalChatSessions {
       this.resourcesDirty.delete(sessionRefKey(chat.ref))
     }
     chat.model = pending.spec.model
-    await this.options.terminals.submit(chat.ref, active.text, active.abort.signal)
+    await this.options.terminals.submit(chat.ref, active.text, active.abort.signal, pending.turn.imagePaths)
     if (await this.options.terminals.completeCommand(chat.ref, active.text, active.abort.signal)) {
       await this.finish(chat, { type: 'run.completed', model: chat.model, durationMs: Date.now() - active.startedAt })
       return

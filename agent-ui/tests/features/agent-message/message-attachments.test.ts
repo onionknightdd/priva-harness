@@ -9,7 +9,7 @@ import { promisify } from "node:util"
 
 import { connectAgentSession } from "../../../src/features/agent-message/run-agent-session.ts"
 import { threadMessagesFromApi } from "../../../src/features/chat-session/session-thread-messages.ts"
-import { attachmentMessageSummary, attachmentsFromMessageText, messageTextWithAttachments } from "../../../src/features/agent-message/message-attachment-text.ts"
+import { attachmentMessageSummary, attachmentsFromMessageText, messageTextWithAttachments, restoreUserMessageAttachments } from "../../../src/features/agent-message/message-attachment-text.ts"
 
 const attachments = [{ path: "/workspace/.priva-attachments/file-a/销售.csv", name: "销售.csv", size: 12, mimeType: "text/csv" }]
 
@@ -29,6 +29,13 @@ it("round-trips multiple attachments and Markdown, backslashes, and newline char
   const text = "Explain `AgentAttachments` in this message."
   const encoded = messageTextWithAttachments(text, unusual)
   assert.deepEqual(attachmentsFromMessageText(encoded), { content: text, attachments: unusual })
+})
+
+it("drops the native image chip label when the message already has an image attachment", () => {
+  const image = { path: "/tmp/attachments/board.png", name: "Image 1.png", size: 8, mimeType: "image/png" }
+  const restored = restoreUserMessageAttachments({ role: "user", content: "[Image #1] 看这张图", attachments: [image] })
+  assert.equal(restored.content, "看这张图")
+  assert.deepEqual(restored.attachments, [image])
 })
 
 it("leaves ordinary text and incomplete or invalid attachment blocks visible", () => {

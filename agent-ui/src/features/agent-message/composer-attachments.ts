@@ -26,6 +26,22 @@ export function createComposerAttachments(
   }))
 }
 
+const VISION_IMAGE_EXTENSION = /\.(png|jpe?g|gif|webp)$/i
+
+export function partitionComposerUploads(
+  files: readonly MessageAttachment[],
+  acceptsImages: boolean,
+): { files: MessageAttachment[]; imagePaths: string[] } {
+  if (!acceptsImages) return { files: [...files], imagePaths: [] }
+  const imagePaths: string[] = []
+  const rest: MessageAttachment[] = []
+  for (const file of files) {
+    if (file.mimeType.startsWith("image/") && VISION_IMAGE_EXTENSION.test(file.path)) imagePaths.push(file.path)
+    else rest.push(file)
+  }
+  return { files: rest, imagePaths }
+}
+
 export function readyComposerAttachments(attachments: readonly ComposerAttachment[]): MessageAttachment[] | null {
   if (attachments.some((attachment) => attachment.status !== "done" || !attachment.uploaded)) return null
   return attachments.map((attachment) => attachment.uploaded!)

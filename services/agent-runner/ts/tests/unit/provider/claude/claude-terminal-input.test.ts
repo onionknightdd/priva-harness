@@ -55,6 +55,18 @@ describe('Claude terminal input', () => {
     expect(capture.mock.calls).toHaveLength(4)
   })
 
+  it('pastes each image path and waits for the image chip before the message text', async () => {
+    const capture = vi.fn()
+      .mockResolvedValueOnce(screen())
+      .mockResolvedValueOnce(screen('/tmp/board.png'))
+      .mockResolvedValueOnce(screen('[Image #1]'))
+      .mockResolvedValue(screen('[Image #1] 看这张图'))
+    const input = { capture, isAlive: vi.fn().mockResolvedValue(true), paste: vi.fn().mockResolvedValue(undefined), sendKeys: vi.fn().mockResolvedValue(undefined) } satisfies TerminalInput
+    await submitClaudeTerminalInput(input, '看这张图', new AbortController().signal, ['/tmp/board.png'])
+    expect(input.paste.mock.calls).toEqual([['/tmp/board.png'], ['看这张图']])
+    expect(input.sendKeys.mock.calls).toEqual([[['Enter']]])
+  })
+
   it('never pastes into a dead or cancelled startup', async () => {
     const input = { capture: vi.fn(), isAlive: vi.fn().mockResolvedValue(false), paste: vi.fn(), sendKeys: vi.fn() } satisfies TerminalInput
     await expect(submitClaudeTerminalInput(input, 'hello', new AbortController().signal)).rejects.toThrow('exited')

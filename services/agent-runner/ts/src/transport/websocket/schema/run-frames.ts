@@ -19,6 +19,7 @@ export interface InitFrame {
   readonly runId?: string
   readonly text: string
   readonly attachments?: readonly UserAttachment[]
+  readonly imagePaths?: readonly string[]
   readonly model: string
   readonly harness: RunHarnessId
   readonly cwd: string
@@ -114,7 +115,11 @@ export function parseInitFrame(raw: unknown): ParseInitResult {
   if (!attachments.success) {
     return { ok: false, message: 'Init attachments must contain a path, name, MIME type, and non-negative file size' }
   }
-  if (typeof text !== 'string' || (text.trim() === '' && !attachments.data?.length)) {
+  const imagePaths = z.array(z.string().min(1)).optional().safeParse(raw['imagePaths'])
+  if (!imagePaths.success) {
+    return { ok: false, message: 'Init imagePaths must be absolute file paths' }
+  }
+  if (typeof text !== 'string' || (text.trim() === '' && !attachments.data?.length && !imagePaths.data?.length)) {
     return { ok: false, message: 'Init text must be a non-empty string' }
   }
   const model = raw['model']
@@ -165,6 +170,7 @@ export function parseInitFrame(raw: unknown): ParseInitResult {
       ...(runId === undefined ? {} : { runId: runId.trim() }),
       text,
       ...(attachments.data?.length ? { attachments: attachments.data } : {}),
+      ...(imagePaths.data?.length ? { imagePaths: imagePaths.data } : {}),
       model: model.trim(),
       harness,
       cwd: cwd.trim(),

@@ -123,6 +123,11 @@ function handleRunSocket(socket: WebSocket, options: RunRouteOptions): void {
     const attachments = frame.attachments === undefined ? undefined : await Promise.all(
       frame.attachments.map((attachment) => options.fileSystem.inspectAttachment(attachment.path)),
     )
+    const turn = {
+      text: frame.text,
+      ...(attachments ? { attachments } : {}),
+      ...(frame.imagePaths?.length ? { imagePaths: frame.imagePaths } : {}),
+    }
     if (frame.sessionId && !frame.fork) {
       const next = await options.harness.loadSessionStream({ provider: frame.harness, id: frame.sessionId })
       if (stream && stream !== next) throw new Error('Start a new connection to change sessions')
@@ -139,12 +144,11 @@ function handleRunSocket(socket: WebSocket, options: RunRouteOptions): void {
       await stopTerminalHistory?.()
       stopTerminalHistory = await options.harness.observeTerminalHistory(opened.session, spec.cwd)
       if (!socketOpen(socket)) { await stopTerminalHistory(); return }
-      await options.harness.submitTerminal(opened.session,
-        { text: frame.text, ...(attachments ? { attachments } : {}) }, spec, frame.runId ?? randomUUID())
+      await options.harness.submitTerminal(opened.session, turn, spec, frame.runId ?? randomUUID())
       return
     }
     const live = await options.harness.launch(
-      { text: frame.text, ...(attachments ? { attachments } : {}) }, spec,
+      turn, spec,
       { source: 'web', session: sessionTargetFromInit(frame), ...(frame.runId ? { runId: frame.runId } : {}) },
     )
     if (stream) return

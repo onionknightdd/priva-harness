@@ -139,13 +139,13 @@ export class SessionTerminals {
     return this.options.terminals.paste(SessionTerminals.key(ref), text)
   }
 
-  async submit(ref: SessionRef, text: string, signal: AbortSignal): Promise<void> {
+  async submit(ref: SessionRef, text: string, signal: AbortSignal, imagePaths?: readonly string[]): Promise<void> {
     const provider = this.options.providers[ref.provider]
     if (!provider.submitTerminalInput) throw new TerminalError('unsupported', `The ${ref.provider} terminal does not support chat input`)
     await provider.submitTerminalInput({
       isAlive: () => this.isAlive(ref), capture: () => this.capture(ref, { styled: true }),
       paste: (value) => this.paste(ref, value), sendKeys: (keys) => this.sendKeys(ref, keys),
-    }, text, signal)
+    }, text, signal, imagePaths)
   }
 
   async completeCommand(ref: SessionRef, text: string, signal: AbortSignal): Promise<boolean> {
