@@ -55,6 +55,17 @@ describe('Claude terminal input', () => {
     expect(capture.mock.calls).toHaveLength(4)
   })
 
+  it('submits when Claude collapses a multiline attachment paste into a pasted-text chip', async () => {
+    const manifest = '看这个\n\n```AgentAttachments\n- name: note.txt\n  path: /tmp/note.txt\n```'
+    const capture = vi.fn()
+      .mockResolvedValueOnce(screen())
+      .mockResolvedValue(screen('[Pasted text #1 +4 lines]'))
+    const input = { capture, isAlive: vi.fn().mockResolvedValue(true), paste: vi.fn().mockResolvedValue(undefined), sendKeys: vi.fn().mockResolvedValue(undefined) } satisfies TerminalInput
+    await submitClaudeTerminalInput(input, manifest, new AbortController().signal)
+    expect(input.paste).toHaveBeenCalledWith(manifest)
+    expect(input.sendKeys.mock.calls).toEqual([[['Enter']]])
+  })
+
   it('pastes each image path and waits for the image chip before the message text', async () => {
     const capture = vi.fn()
       .mockResolvedValueOnce(screen())

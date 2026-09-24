@@ -21,23 +21,29 @@ export async function submitClaudeTerminalInput(input: TerminalInput, text: stri
       'Claude did not stash its input draft. Open Terminal before sending again.', 5000)
   }
   signal.throwIfAborted()
+  let draftBeforeText = ''
   for (const imagePath of imagePaths) {
     const safePath = await safeImagePastePath(imagePath)
     await input.paste(safePath)
     // The REPL replaces a pasted image path with [Image #N]. Wait until that
     // chip is visible so the following text paste does not ride along as a path.
-    await waitFor(input, signal, (screen) => {
+    const attached = await waitFor(input, signal, (screen) => {
       const draft = claudeComposer(screen)?.text ?? ''
       return /\[Image #\d+\]/u.test(draft) && !draft.includes(safePath)
     }, 'Claude did not attach the pasted image. Open Terminal to inspect its input.', 10000)
+    draftBeforeText = claudeComposer(attached)?.text ?? ''
   }
   if (text.trim()) {
+    const firstLine = text.trim().split('\n')[0] ?? text
     await input.paste(text)
     // Claude coalesces fast input bursts: Enter before paste commit becomes a
-    // newline in the draft. Observe the draft before submitting, then let the
-    // lifecycle hook provide the authoritative acceptance acknowledgement.
-    await waitFor(input, signal, (screen) => (claudeComposer(screen)?.text ?? '').includes(text.trim().split('\n')[0] ?? text),
-      'Claude did not display the pasted message. Open Terminal to inspect its input.', 10000)
+    // newline in the draft. A long or multiline paste is shown as [Pasted text #N]
+    // instead of the original characters, so either form means the paste landed.
+    await waitFor(input, signal, (screen) => {
+      const draft = claudeComposer(screen)?.text ?? ''
+      if (!draft.trim() || draft === draftBeforeText) return false
+      return draft.includes(firstLine) || /\[Pasted text #\d+/u.test(draft)
+    }, 'Claude did not display the pasted message. Open Terminal to inspect its input.', 10000)
   } else if (imagePaths.length === 0) {
     await input.paste(text)
     await waitFor(input, signal, (screen) => Boolean(claudeComposer(screen)?.text.trim()),
