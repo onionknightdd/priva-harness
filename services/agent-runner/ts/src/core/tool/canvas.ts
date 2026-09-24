@@ -32,7 +32,7 @@ export const canvasTool = defineTool({
       path: {
         type: 'string',
         description:
-          'Existing workspace .html file to reload in preview after you edited it. Relative to the working directory or absolute inside it. Do not pass html with this path.',
+          'HTML file to open or overwrite, including a path outside the working directory. Relative paths resolve from the working directory. Content is written back to this path. Pass path alone after editing so the preview reloads it.',
       },
       name: {
         type: 'string',
@@ -56,7 +56,7 @@ export const canvasTool = defineTool({
 
     try {
       if (filePathArg !== '') {
-        const filePath = resolveWorkspaceFilePath(context.cwd, filePathArg)
+        const filePath = resolveCanvasTargetPath(context.cwd, filePathArg)
         if (!isHtmlFilePath(filePath)) {
           return { ok: false, text: 'canvas path must be an .html file' }
         }
@@ -127,14 +127,9 @@ export function resolveCanvasFilePath(cwd: string, fileName: string): string {
   return filePath
 }
 
-export function resolveWorkspaceFilePath(cwd: string, raw: string): string {
+export function resolveCanvasTargetPath(cwd: string, raw: string): string {
   const root = path.resolve(cwd)
-  const filePath = path.isAbsolute(raw) ? path.resolve(raw) : path.resolve(root, raw)
-  const relative = path.relative(root, filePath)
-  if (relative === '' || relative.startsWith('..') || path.isAbsolute(relative)) {
-    throw new Error('canvas path must stay inside the workspace')
-  }
-  return filePath
+  return path.isAbsolute(raw) ? path.resolve(raw) : path.resolve(root, raw)
 }
 
 export function isHtmlFilePath(filePath: string): boolean {
