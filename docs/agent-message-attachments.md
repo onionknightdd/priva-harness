@@ -23,7 +23,8 @@ Send -> frontend formats user text + Markdown attachment manifest
                          Claude / Pi native user message
                                       |
                                       v
-                         transcript -> thread API -> frontend parses manifest
+                         transcript -> HTTP history / WebSocket messages
+                                      -> shared frontend manifest parser
                                       |
                                       v
                          user message with attachments above original text
@@ -65,8 +66,12 @@ embedded into the prompt; images and documents are inspected using the available
 tools. The envelope remains in the native transcript for resume/fork.
 
 The frontend uses Streamdown's Markdown block parser to recognize code blocks
-whose language is exactly `AgentAttachments` when loading user messages from the
-thread API, restoring the original body and structured attachments. Ordinary code
+whose language is exactly `AgentAttachments`. HTTP thread history,
+`session.snapshot`, and `run.started.userMessage` all use
+`restoreUserMessageAttachments` before updating message state, restoring the
+original body and structured attachments without changing IDs or other metadata.
+Manifest files and native image attachments are merged by path; structured
+attachment metadata takes precedence for duplicate paths. Ordinary code
 blocks and examples nested inside another code fence remain text. Assistant
 messages are left intact. Invalid or incomplete manifests remain visible as ordinary text.
 Session summaries have the manifest removed even if the provider flattened or

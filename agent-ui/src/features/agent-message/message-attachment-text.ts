@@ -1,5 +1,6 @@
 import { parseMarkdownIntoBlocks } from "streamdown"
 
+import type { AgentThreadMessage } from "./agent-message-data"
 import type { MessageAttachment } from "./message-attachment"
 
 const ATTACHMENTS_LANGUAGE = "AgentAttachments"
@@ -38,6 +39,20 @@ export function attachmentsFromMessageText(text: string): {
     if (content.endsWith("\n\n")) content = content.slice(0, -2)
   }
   return attachments.length ? { content, attachments } : undefined
+}
+
+/** HTTP history and live messages carry the same transcript manifest. */
+export function restoreUserMessageAttachments<
+  T extends Pick<AgentThreadMessage, "role" | "content" | "attachments">,
+>(message: T): T {
+  if (message.role !== "user") return message
+  const parsed = attachmentsFromMessageText(message.content)
+  if (!parsed) return message
+  // Native images may accompany the manifest. Keep them and prefer the
+  // structured metadata when both sources refer to the same file.
+  const files = new Map([...parsed.attachments, ...message.attachments ?? []]
+    .map((file) => [file.path, file]))
+  return { ...message, content: parsed.content, attachments: [...files.values()] }
 }
 
 export function attachmentMessageSummary(text: string): string {

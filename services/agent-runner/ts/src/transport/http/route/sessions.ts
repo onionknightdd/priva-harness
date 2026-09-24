@@ -345,9 +345,11 @@ export const sessionRoutes: FastifyPluginCallback<SessionRoutesOptions> = (
 function toThreadMessageResponse(message: ThreadMessage): Record<string, unknown> {
   return {
     id: message.id,
+    ...(message.renderId === undefined ? {} : { render_id: message.renderId }),
     role: message.role,
     content: message.content,
     ...(message.modelChange === undefined ? {} : { model_change: message.modelChange }),
+    ...(message.interactions === undefined ? {} : { interactions: message.interactions }),
     ...(message.attachments === undefined ? {} : { attachments: message.attachments }),
     created_at: message.createdAt,
     status: message.status,
@@ -365,6 +367,8 @@ function toThreadMessageResponse(message: ThreadMessage): Record<string, unknown
             inbox: agent.inbox.map((item) => ({
               body: item.body,
               source: item.source,
+              ...(item.deliveryId === undefined ? {} : { delivery_id: item.deliveryId }),
+              ...(item.afterBlockCount === undefined ? {} : { after_block_count: item.afterBlockCount }),
               ...(item.senderName === undefined ? {} : { sender_name: item.senderName }),
             })),
           })),

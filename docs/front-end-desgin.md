@@ -1552,6 +1552,10 @@ attachments 数组。每个条目使用 name、path、MIME、size 四个字段�
 绝对路径，size 是字节数。多个条目用空行分开，字段内的反斜杠、CR、LF 分别转义为
 `\\`、`\r`、`\n`。历史回放将完整有效的标记还原为附件卡片；不完整或无效标记保留为正文。
 附件清单与选区引用标记可出现在同一条消息中，分别解析。
+HTTP 历史、`session.snapshot` 和 `run.started.userMessage` 共用
+`restoreUserMessageAttachments`，先恢复附件再合并进消息状态，保留原生 ID、renderId
+及其他卡片字段。清单与原生图片附件按路径合并，同一路径优先使用服务端结构化元数据；
+已经解析的消息、助手消息和无效清单保持原样，避免确认回包或重连把附件变回正文。
 
 ````text
 用户正文
@@ -1566,7 +1570,8 @@ attachments 数组。每个条目使用 name、path、MIME、size 四个字段�
 
 ```text
 upload -> absolute file path -> AgentAttachments -> run.start.text
-transcript -> attachmentsFromMessageText -> body + attachment cards
+HTTP history / session.snapshot / run.started.userMessage
+    -> restoreUserMessageAttachments -> body + merged attachment cards
 ```
 
 ### Composer 原生输入建议
@@ -1680,6 +1685,10 @@ new text after return -> normal streaming animation
 仍采用原生值。前端快照合并保留已有 renderId；消息组件、轮次、回复分段和滚动锚点
 都使用该标识，确认回包不重新挂载气泡、不重放入场动画，也不重置首条消息的展示窗口。
 后续快照不再携带临时关联时仍保留已建立的渲染标识；相同正文的不同发送保持独立。
+HTTP 线程响应同样传递 renderId、已完成问答 interactions，以及子 Agent 收件箱的
+deliveryId / afterBlockCount；客户端映射保留 failed / cancelled 状态，历史恢复时
+不丢问答卡片、不把失败任务变成运行中，也不把收件箱消息统一移到过程末尾。
+工具卡片同时保留尚未完成的 `inputRaw`，使历史加载后接续的输入增量仍能完整解析。
 完成和停止沿用 run 事件；活动 TUI 的历史快照保留 `activeRunId`，避免提前恢复 idle。
 已获 `run.started` 确认的请求在断线后可由权威 idle 快照结清，原生 UUID 无需匹配
 客户端 runId；不自动重发未确认的消息。程序化 SDK 路径在后端保留。

@@ -1,9 +1,10 @@
 import { workflowFromSnapshot } from "@/features/agent-message/workflow-data"
-import { attachmentsFromMessageText } from "@/features/agent-message/message-attachment-text"
+import { restoreUserMessageAttachments } from "@/features/agent-message/message-attachment-text"
 import type { AgentThreadMessage, NestedAgent, StreamBlock, ToolCard, WorkflowCard } from "@/features/agent-message/agent-message-data"
 
 type ThreadApiMessage = {
   id: string
+  renderId?: string
   role: "user" | "assistant"
   content: string
   attachments?: AgentThreadMessage["attachments"]
@@ -21,12 +22,12 @@ type ThreadApiMessage = {
 export function threadMessagesFromApi(
   messages: readonly ThreadApiMessage[]
 ): AgentThreadMessage[] {
-  return messages.map((item) => ({
+  return messages.map((item) => restoreUserMessageAttachments({
     id: item.id,
+    ...(item.renderId === undefined ? {} : { renderId: item.renderId }),
     role: item.role,
     content: item.content,
     ...(item.attachments === undefined ? {} : { attachments: item.attachments }),
-    ...(item.role === "user" ? attachmentsFromMessageText(item.content) : undefined),
     createdAt: item.createdAt,
     status: item.status,
     ...(item.transcriptUuid ? { transcriptUuid: item.transcriptUuid } : {}),
@@ -125,6 +126,7 @@ function asToolCard(raw: unknown, id: string, fallbackName: string): ToolCard | 
     name: typeof record.name === "string" ? record.name : fallbackName,
     status,
     ...(record.input === undefined ? {} : { input: record.input }),
+    ...(typeof record.inputRaw === "string" ? { inputRaw: record.inputRaw } : {}),
     ...(typeof record.ok === "boolean" ? { ok: record.ok } : {}),
     ...(typeof record.tokens === "number" ? { tokens: record.tokens } : {}),
     ...(typeof record.durationMs === "number" ? { durationMs: record.durationMs } : {}),

@@ -1,5 +1,6 @@
 import { syncBackgroundOverview, type BackgroundTask } from "@/features/agent-message/background-task-store"
 import type { MessageAttachment } from "@/features/agent-message/message-attachment"
+import type { InteractionResolution } from "@/features/agent-message/interaction-data"
 import { attachmentMessageSummary } from "@/features/agent-message/message-attachment-text"
 const SESSION_API_PREFIX = "/api/sandbox/agent/sessions"
 
@@ -300,6 +301,7 @@ export function listSessionThread(
   return requestJson<{
     messages: Array<{
       id: string
+      render_id?: string
       role: "user" | "assistant"
       content: string
       attachments?: MessageAttachment[]
@@ -307,6 +309,7 @@ export function listSessionThread(
       status: "streaming" | "complete" | "error"
       transcript_uuid: string | null
       model_change?: { model?: string; output?: string }
+      interactions?: InteractionResolution[]
       blocks?: unknown
       nested_agents?: unknown
       workflows?: unknown
@@ -326,6 +329,7 @@ export function listSessionThread(
     liveRunId: payload.live_run_id,
     messages: payload.messages.map((item) => ({
       id: item.id,
+      ...(item.render_id === undefined ? {} : { renderId: item.render_id }),
       role: item.role,
       content: item.content,
       ...(item.attachments === undefined ? {} : { attachments: item.attachments }),
@@ -333,6 +337,7 @@ export function listSessionThread(
       status: item.status,
       ...(item.transcript_uuid ? { transcriptUuid: item.transcript_uuid } : {}),
       ...(item.model_change === undefined ? {} : { modelChange: item.model_change }),
+      ...(item.interactions === undefined ? {} : { interactions: item.interactions }),
       ...(item.blocks === undefined ? {} : { blocks: item.blocks }),
       ...(item.nested_agents === undefined
         ? {}
@@ -366,7 +371,7 @@ function mapNestedAgents(raw: unknown) {
     return [
       {
         parentToolUseId,
-        status: record.status === "completed" ? "completed" as const : "running" as const,
+        status: record.status === "failed" ? "failed" as const : record.status === "cancelled" ? "cancelled" as const : record.status === "completed" ? "completed" as const : "running" as const,
         blocks: Array.isArray(record.blocks) ? record.blocks : [],
         inbox: Array.isArray(record.inbox) ? record.inbox.map(mapInbox) : [],
         ...(typeof record.agent_id === "string"
@@ -396,6 +401,8 @@ function mapInbox(raw: unknown) {
   return {
     body,
     source,
+    ...(typeof record.delivery_id === "string" ? { deliveryId: record.delivery_id } : {}),
+    ...(typeof record.after_block_count === "number" ? { afterBlockCount: record.after_block_count } : {}),
     ...(senderName === undefined ? {} : { senderName }),
   }
 }

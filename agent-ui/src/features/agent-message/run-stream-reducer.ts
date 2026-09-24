@@ -15,6 +15,7 @@ import {
 } from "./agent-message-data"
 import { applyThreadCompactFrame } from "./slash-command-envelope"
 import { frameAtMs, freezeMessageThinking, stampMessageThinkingTimes } from "./thinking-time"
+import { restoreUserMessageAttachments } from "./message-attachment-text"
 
 const STREAM_PROTOCOL_VERSION = 2
 
@@ -107,7 +108,8 @@ export function mergeSnapshotMessages(
 ): AgentThreadMessage[] {
   const byId = new Map(current.map((message) => [message.id, message]))
   const byRenderId = new Map(current.map((message) => [message.renderId ?? message.id, message]))
-  return snapshot.map((message) => {
+  return snapshot.map((rawMessage) => {
+    const message = restoreUserMessageAttachments(rawMessage)
     const existing = byId.get(message.id) ?? (message.renderId ? byRenderId.get(message.renderId) : undefined)
     if (!existing) return message
     const next = existing.renderId || message.renderId || existing.id !== message.id
@@ -137,7 +139,7 @@ export function applyThreadStreamFrame(
   const targetId = owner?.id ?? frame.messageTargetId ?? assistantId
   if (frame.type === "run.started") {
     const next = [...messages]
-    if (frame.userMessage && !next.some((message) => message.id === frame.userMessage?.id)) next.push(frame.userMessage)
+    if (frame.userMessage && !next.some((message) => message.id === frame.userMessage?.id)) next.push(restoreUserMessageAttachments(frame.userMessage))
     if (!frame.userMessage && !frame.replyTo) return next
     if (!next.some((message) => message.id === targetId)) next.push(emptyAssistant(targetId, frame))
     return next.map((message) => message.id === targetId ? { ...message, status: "streaming" } : message)
