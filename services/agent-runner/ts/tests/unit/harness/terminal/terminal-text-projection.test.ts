@@ -61,6 +61,21 @@ it('recovers a running native turn with a saved assistant prefix, even when the 
   expect(stream.snapshot().messages.at(-1)?.content).toBe('continued')
 })
 
+it.each([
+  ['[Image #1] question', 'question'],
+  ['[Image #1] [Image #2]\nquestion', 'question'],
+  ['[Image #1]', ''],
+])('reconciles native image chip %j with submitted %j without a second user', (nativeContent, submitted) => {
+  const nativeUser = { ...user, content: nativeContent }
+  const stream = new SessionStream({ provider: 'claude', id: 's' })
+  stream.publish({ type: 'run.started', driver: 'terminal', userMessage: { ...user, id: 'r:user', content: submitted } }, 'r')
+  stream.replaceHistory([nativeUser, native('answer')])
+  expect(stream.snapshot().messages.filter((message) => message.role === 'user')).toMatchObject([{ id: 'native-user', content: nativeContent }])
+  stream.publishTerminalText(delta('answer', 0, 'display-1', true))
+  stream.publish({ type: 'run.completed', model: 'm', durationMs: 1 }, 'r')
+  expect(stream.snapshot().messages).toMatchObject([nativeUser, native('answer')])
+})
+
 it('reconciles native paste whitespace without retaining a provisional user or an empty reply', () => {
   const pasted = { ...user, content: 'line one\nline two' }
   const stream = new SessionStream({ provider: 'claude', id: 's' })

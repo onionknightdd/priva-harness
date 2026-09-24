@@ -84,6 +84,29 @@ describe('TerminalChatSessions', () => {
     await expect.poll(() => frames.some((frame) => frame.type === 'run.completed' && frame.runId === 'pasted')).toBe(true)
   })
 
+  it('acknowledges an image chip as the submitted text and keeps a single user message', async () => {
+    const { submit, event, frames, stream, provider } = setup(100)
+    const text = '看这张图'
+    provider.submitTerminalInput.mockImplementation(async (input, prompt) => {
+      await input.paste(prompt)
+      stream.replaceHistory([{ id: 'native-user', role: 'user', content: `[Image #1] ${text}`, createdAt: new Date(0).toISOString(), status: 'complete' }])
+      await event('prompt', `[Image #1] ${text}`)
+      await input.sendKeys(['Enter'])
+    })
+    await submit(text, 'image')
+    await expect.poll(() => stream.snapshot().messages.some((message) => message.id === 'native-user')).toBe(true)
+    const delays = vi.fn()
+    const timer = setTimeout(delays, 150)
+    try {
+      await expect.poll(() => delays.mock.calls.length).toBe(1)
+      expect(frames.some((frame) => frame.type === 'run.failed')).toBe(false)
+      expect(stream.snapshot().activeRunId).toBe('image')
+      expect(stream.snapshot().messages.filter((message) => message.role === 'user')).toMatchObject([
+        { id: 'native-user', content: `[Image #1] ${text}` },
+      ])
+    } finally { clearTimeout(timer) }
+  })
+
   it.each([{ source: 'system', notification: true }, { source: 'user', notification: false },
     { source: undefined, notification: true }, { source: undefined, notification: false }])('uses native input provenance for notifications without hiding pasted XML ($source, notification=$notification)', async ({ source, notification }) => {
     const { event, stream, frames, refresh } = setup()

@@ -761,4 +761,7 @@ export class TerminalChatSessions {
   private isDisposed(): boolean { return this.disposed }
 }
 
-function normalize(text: string): string { return text.replaceAll('\r\n', '\n').trim() }
+function normalize(text: string): string {
+  // [Image #N] is Claude's vision-paste label, not part of the submitted text.
+  return text.replaceAll('\r\n', '\n').replace(/[ \t]*\[Image #\d+\][ \t]*/g, ' ').replace(/ {2,}/g, ' ').trim()
+}

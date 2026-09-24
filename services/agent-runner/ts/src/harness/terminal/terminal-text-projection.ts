@@ -31,7 +31,7 @@ export class TerminalTextProjection {
   }
 
   merge(history: readonly ThreadMessage[]): readonly ThreadMessage[] {
-    // Native paste handling may trim outer whitespace or normalize line endings.
+    // Native paste may trim whitespace, normalize line endings, or prefix [Image #N].
     this.userId ??= history.find((message) => message.role === 'user' && !this.previousUsers.has(message.id) &&
       normalize(message.content) === normalize(this.user.content))?.id
     const userIndex = this.userId ? history.findIndex((message) => message.id === this.userId) : -1
@@ -84,4 +84,7 @@ export class TerminalTextProjection {
   }
 }
 
-function normalize(text: string): string { return text.replaceAll('\r\n', '\n').trim() }
+function normalize(text: string): string {
+  // [Image #N] is Claude's vision-paste label, not part of the submitted text.
+  return text.replaceAll('\r\n', '\n').replace(/[ \t]*\[Image #\d+\][ \t]*/g, ' ').replace(/ {2,}/g, ' ').trim()
+}
