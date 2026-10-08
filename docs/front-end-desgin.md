@@ -1661,6 +1661,15 @@ Terminal 视图用 xterm.js（`@xterm/xterm` + `addon-fit` + `addon-webgl`，Web
 建立独立层叠上下文，避免透明的 WebGL 链接层截获覆盖层按钮的鼠标点击。替换或关闭
 WebSocket 后，客户端丢弃该连接迟到的控制帧和输出，以免覆盖新连接状态。
 
+`/exit` 指令不显示在聊天消息区。纯文本命令和原生 `command-name` / `command-message`
+XML 共用 `userMessageSurface` 的隐藏规则，实时消息及历史回放均在轮次分组前过滤。
+Terminal 继续显示原有的“已退出 / 重新打开”提示，原始转录保留命令记录。
+
+```text
+/exit text or native command XML -> hidden from Chat
+terminal exit event              -> exited overlay + reopen action
+```
+
 首条气泡启动原生会话并取得 id 后建立聊天订阅；切换回对话沿用已收到的 `session.snapshot`，
 无需重新打开会话或刷新页面。转录写入后的消息回显见
 [终端架构文档](architecture/claude-tui-chat-mode.md#410-tui-消息回显到聊天气泡)。

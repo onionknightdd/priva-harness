@@ -57,6 +57,7 @@ export function userMessageSurface(
   if (hasAttachments) return "bubble"
   const text = content.trim()
   if (
+    isSlashCommandUserMessage(text, "exit") ||
     LOCAL_COMMAND_STDOUT.test(text) ||
     LOCAL_COMMAND_CAVEAT.test(text) ||
     isCompactContinuationSummary(text)
