@@ -1,15 +1,13 @@
 import { format, parseISO } from "date-fns"
 import { enUS, zhCN } from "date-fns/locale"
-import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { useId, useMemo, useState, type CSSProperties } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Tabs, TabsList, TabsTrigger } from "@/components/assistant-ui/tabs"
-import { DateTimePicker } from "@/components/datetime-picker"
+import { DateRangePickerDropdown, type DateRange } from "@/components/motion/date-range-picker"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { formatTokenCount } from "@/features/agent-message/context-usage"
-import { EASE_OUT } from "@/lib/ease"
 import { cn } from "@/lib/utils"
 
 import {
@@ -41,28 +39,6 @@ function isPreset(value: unknown): value is RangePreset {
 
 function localToday() {
   return format(new Date(), "yyyy-MM-dd")
-}
-
-// A date that changes rolls vertically: the old text leaves upward while the
-// new one enters from below, like a counter ticking over. `popLayout` frees
-// the leaving text's slot at once so the button never widens mid-swap.
-function RollingText({ text, reduceMotion }: { text: string; reduceMotion: boolean }) {
-  return (
-    <span className="relative inline-grid overflow-hidden leading-4">
-      <AnimatePresence initial={false} mode="popLayout">
-        <motion.span
-          key={text}
-          className="col-start-1 row-start-1 whitespace-nowrap"
-          initial={reduceMotion ? false : { y: 10, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={reduceMotion ? { opacity: 0 } : { y: -10, opacity: 0 }}
-          transition={{ duration: reduceMotion ? 0 : 0.18, ease: EASE_OUT }}
-        >
-          {text}
-        </motion.span>
-      </AnimatePresence>
-    </span>
-  )
 }
 
 // Card text wraps on narrow cards. Each segment between separators is an
@@ -106,10 +82,11 @@ export function UsageOverviewCards() {
   const zh = i18n.language.startsWith("zh")
   const locale = zh ? zhCN : enUS
   const titleId = useId()
-  const reduceMotion = Boolean(useReducedMotion())
   const today = useMemo(localToday, [])
   const [range, setRange] = useState<LocalDateRange>(() => presetRange(DEFAULT_PRESET, today))
-  // Which tab is lit is derived from the dates: editing a picker to a range
+  const [rangeOpen, setRangeOpen] = useState(false)
+  const [draftRange, setDraftRange] = useState<DateRange | null>(range)
+  // Which tab is lit is derived from the dates: selecting a range
   // no preset covers moves the highlight to 「自定义区间」 by itself. Choosing
   // that tab explicitly keeps it lit even while the dates still equal a preset,
   // so the user can start editing from the current range.
@@ -118,9 +95,6 @@ export function UsageOverviewCards() {
   const activeTab = customChosen || preset === null ? CUSTOM_RANGE : String(preset)
   const summary = useUsageRange(range)
 
-  const fromDate = parseISO(range.from)
-  const toDate = parseISO(range.to)
-  const todayDate = parseISO(today)
   const dayLabel = (date: string) => format(parseISO(date), zh ? "yyyy年M月d日" : "MMM d, yyyy", { locale })
   const shortDay = (date: string) => format(parseISO(date), zh ? "M月d日" : "MMM d", { locale })
   const none = t("usage.overview.none")
@@ -161,20 +135,6 @@ export function UsageOverviewCards() {
     ]
   })()
 
-  const pickerTrigger = (label: string) => ({ value, setOpen }: { value: Date | undefined; setOpen: (open: boolean) => void }) => (
-    <Button
-      variant="secondary"
-      size="xs"
-      // Fixed width with room to spare: "2026年12月31日" and "Sep 1, 2026"
-      // must not resize the row when the range changes.
-      className="w-32 justify-center overflow-hidden tabular-nums"
-      aria-label={label}
-      onClick={() => setOpen(true)}
-    >
-      <RollingText text={value ? dayLabel(format(value, "yyyy-MM-dd")) : none} reduceMotion={reduceMotion} />
-    </Button>
-  )
-
   return (
     <section
       aria-labelledby={titleId}
@@ -209,34 +169,25 @@ export function UsageOverviewCards() {
               </TabsTrigger>
             </TabsList>
           </Tabs>
-          {/* The pickers always mirror the active range, so a preset shows its
-              exact dates and editing either end turns the range custom. */}
-          <div className="flex items-center gap-1.5">
-            <DateTimePicker
-              hideTime
-              locale={locale}
-              value={fromDate}
-              max={toDate}
-              doneLabel={t("usage.overview.done")}
-              onChange={(date) => {
-                if (date) setRange({ from: format(date, "yyyy-MM-dd"), to: range.to })
-              }}
-              renderTrigger={pickerTrigger(t("usage.overview.from"))}
-            />
-            <span aria-hidden className="text-xs text-muted-foreground">–</span>
-            <DateTimePicker
-              hideTime
-              locale={locale}
-              value={toDate}
-              min={fromDate}
-              max={todayDate}
-              doneLabel={t("usage.overview.done")}
-              onChange={(date) => {
-                if (date) setRange({ from: range.from, to: format(date, "yyyy-MM-dd") })
-              }}
-              renderTrigger={pickerTrigger(t("usage.overview.to"))}
-            />
-          </div>
+          <DateRangePickerDropdown
+            value={rangeOpen ? draftRange : range}
+            open={rangeOpen}
+            onOpenChange={(open) => {
+              if (open) setDraftRange(range)
+              setRangeOpen(open)
+            }}
+            onValueChange={(next) => {
+              setDraftRange(next)
+              // A partial selection stays in the calendar until both endpoints
+              // are chosen; dismissing it keeps the last applied statistics.
+              if (next?.to) setRange({ from: next.from, to: next.to })
+            }}
+            max={today}
+            locale={zh ? "zh-CN" : "en-US"}
+            label={t("usage.overview.rangeLabel")}
+            closeOnSelect
+            showSummary
+          />
         </div>
       </div>
       {summary.error ? (

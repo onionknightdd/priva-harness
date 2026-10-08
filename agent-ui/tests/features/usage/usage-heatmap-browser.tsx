@@ -290,15 +290,18 @@ async function runChecks() {
     check("the overview sits above the activity block", cardsSection.getBoundingClientRect().bottom <= activity.getBoundingClientRect().top)
     check("the Token activity tab uses the gauge icon", panelTabs[0]!.querySelector("svg.lucide-gauge") !== null)
     const cardValues = () => Array.from(cardsSection.querySelectorAll<HTMLElement>('[data-slot="card"] p:nth-child(2)')).map((node) => node.textContent)
-    const pickerButtons = () => Array.from(cardsSection.querySelectorAll<HTMLButtonElement>('button[aria-label]')).filter((button) => [i18n.t("usage.overview.from"), i18n.t("usage.overview.to")].includes(button.getAttribute("aria-label")!))
+    const pickerButton = () => cardsSection.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!
     const presetTabs = () => Array.from(cardsSection.querySelectorAll<HTMLButtonElement>('[data-slot="tabs-trigger"]'))
-    const dayLabel = (date: string) => {
-      const [year, month, day] = date.split("-").map(Number)
-      return i18n.language.startsWith("zh") ? `${year}年${month}月${day}日` : new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short", day: "numeric" }).format(new Date(year!, month! - 1, day))
+    const rangeLabel = (from: string, to: string) => {
+      const locale = i18n.language.startsWith("zh") ? "zh-CN" : "en-US"
+      const label = (date: string, includeYear: boolean) => new Intl.DateTimeFormat(locale, {
+        ...(includeYear ? { year: "numeric" as const } : {}), month: "short", day: "numeric", timeZone: "UTC",
+      }).format(new Date(`${date}T00:00:00Z`))
+      return `${label(from, from.slice(0, 4) !== to.slice(0, 4))} – ${label(to, true)}`
     }
     check("overview renders five cards in the requested order", Array.from(cardsSection.querySelectorAll('[data-slot="card"] p:first-child')).map((node) => node.textContent).join("|") === ["tokens", "cacheHitRate", "sessions", "peakDay", "longestStreak"].map((key) => i18n.t(`usage.overview.cards.${key}`)).join("|"))
     check("the default range is one year ending today", await waitFor(() => rangeRequests.some((url) => url.includes(`from=${shiftLocalDate(todayIso, -364)}&to=${todayIso}`))))
-    check("the one-year preset is active and both pickers show its dates", presetTabs()[2]?.getAttribute("aria-selected") === "true" && pickerButtons().map((button) => button.textContent).join("|") === `${dayLabel(shiftLocalDate(todayIso, -364))}|${dayLabel(todayIso)}`)
+    check("the one-year preset is active and the range picker shows its dates", presetTabs()[2]?.getAttribute("aria-selected") === "true" && pickerButton().textContent === rangeLabel(shiftLocalDate(todayIso, -364), todayIso))
     check("card values arrive from the range summary", await waitFor(() => cardValues()[0] !== i18n.t("usage.overview.none") && cardValues()[4]?.includes(String(syntheticRange(shiftLocalDate(todayIso, -364), todayIso).longestStreak?.days)) === true))
     check("the cache hit rate card shows the share of prompt tokens read from cache", cardValues()[1] === "70%")
     check("the sessions card reads 「sessions, turns」 as one value with days · projects below", (() => {
@@ -325,38 +328,42 @@ async function runChecks() {
 
     await act(async () => { presetTabs()[0]!.click() })
     check("choosing 7 days re-requests the last seven local days", await waitFor(() => rangeRequests.some((url) => url.includes(`from=${shiftLocalDate(todayIso, -6)}&to=${todayIso}`))))
-    check("the pickers follow the preset", await waitFor(() => pickerButtons()[0]?.textContent === dayLabel(shiftLocalDate(todayIso, -6))))
-    check("date buttons keep one fixed width across ranges", pickerButtons().every((button) => Math.abs(button.getBoundingClientRect().width - 128) < 0.5))
-    check("date buttons are filled, not outlined", pickerButtons().every((button) => {
-      const style = getComputedStyle(button)
-      return style.borderTopColor === "rgba(0, 0, 0, 0)" && style.backgroundColor !== "rgba(0, 0, 0, 0)"
-    }))
-    check("the leaving date rolls out and only the new one remains", await waitFor(() => pickerButtons()[0]!.querySelectorAll("span span").length === 1))
+    check("the range picker follows the preset", await waitFor(() => pickerButton().textContent === rangeLabel(shiftLocalDate(todayIso, -6), todayIso)))
     check("card values change with the range", await waitFor(() => cardValues()[0] !== yearTokens))
 
-    await act(async () => { pickerButtons()[0]!.click() })
-    const dayCell = await waitFor(() => document.querySelector(`[data-day] button, [data-day]`) !== null)
-    check("the start-date picker opens a calendar", dayCell)
+    await act(async () => { pickerButton().click() })
+    const calendar = () => document.querySelector<HTMLElement>('[data-morph-popover-portal]:not([inert]) [role="dialog"]')
+    check("the range picker opens a calendar", await waitFor(() => !!calendar()?.querySelector('[role="gridcell"] button')))
     // Measured once the popover's scale-in has settled.
     check("the calendar is compact: 32px day cells", await waitFor(() => {
-      const cell = document.querySelector<HTMLElement>('[data-slot="popover-content"] [data-day] button')
-      return cell !== null && Math.abs(cell.getBoundingClientRect().width - 32) < 0.5 && Math.abs(cell.getBoundingClientRect().height - 32) < 0.5
+      const cell = calendar()?.querySelector<HTMLElement>('[role="gridcell"] button')
+      return !!cell && Math.abs(cell.getBoundingClientRect().width - 32) < 0.5 && Math.abs(cell.getBoundingClientRect().height - 32) < 0.5
     }))
     const target = shiftLocalDate(todayIso, -2)
-    const targetButton = document.querySelector<HTMLButtonElement>(`[data-day="${target}"] button`) ?? Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.getAttribute("aria-label")?.includes(String(Number(target.slice(-2)))) && button.closest('[data-slot="popover-content"]'))
-    if (!targetButton) throw new Error("day button not found")
-    await act(async () => { targetButton.click() })
-    const done = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-slot="popover-content"] button')).find((button) => button.textContent === i18n.t("usage.overview.done"))
-    if (!done) throw new Error("done button not found")
-    await act(async () => { done.click() })
-    check("picking a start date moves the highlight to the custom range tab", await waitFor(() => rangeRequests.some((url) => url.includes(`from=${target}&to=${todayIso}`))) && presetTabs().map((tab) => tab.getAttribute("aria-selected")).join("|") === "false|false|false|true")
-    check("the start picker shows the chosen day", await waitFor(() => pickerButtons()[0]?.textContent === dayLabel(target)))
+    const chooseDay = async (date: string) => {
+      const locale = i18n.language.startsWith("zh") ? "zh-CN" : "en-US"
+      const label = new Intl.DateTimeFormat(locale, { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(`${date}T00:00:00Z`))
+      let button = calendar()?.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
+      if (!button) {
+        const next = calendar()?.querySelector<HTMLButtonElement>(`button[aria-label="${i18n.t("dateRangePicker.nextMonth")}"]`)
+        if (!next) throw new Error("next-month button not found")
+        await act(async () => { next.click() })
+        await waitFor(() => !!calendar()?.querySelector(`button[aria-label="${label}"]`))
+        button = calendar()?.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
+      }
+      if (!button) throw new Error("day button not found")
+      await act(async () => { button.click() })
+    }
+    await chooseDay(target)
+    await chooseDay(todayIso)
+    check("picking a range moves the highlight to the custom range tab", await waitFor(() => rangeRequests.some((url) => url.includes(`from=${target}&to=${todayIso}`))) && presetTabs().map((tab) => tab.getAttribute("aria-selected")).join("|") === "false|false|false|true")
+    check("the picker shows the chosen range", await waitFor(() => pickerButton().textContent === rangeLabel(target, todayIso)))
 
     await act(async () => { presetTabs()[1]!.click() })
-    check("a preset takes over from the custom tab", await waitFor(() => presetTabs()[1]?.getAttribute("aria-selected") === "true" && pickerButtons()[0]?.textContent === dayLabel(shiftLocalDate(todayIso, -29))))
+    check("a preset takes over from the custom tab", await waitFor(() => presetTabs()[1]?.getAttribute("aria-selected") === "true" && pickerButton().textContent === rangeLabel(shiftLocalDate(todayIso, -29), todayIso)))
     const requestsBeforeCustom = rangeRequests.length
     await act(async () => { presetTabs()[3]!.click() })
-    check("choosing the custom tab keeps the dates and lights only that tab", presetTabs()[3]?.getAttribute("aria-selected") === "true" && presetTabs()[1]?.getAttribute("aria-selected") === "false" && pickerButtons()[0]?.textContent === dayLabel(shiftLocalDate(todayIso, -29)) && rangeRequests.length === requestsBeforeCustom)
+    check("choosing the custom tab keeps the dates and lights only that tab", presetTabs()[3]?.getAttribute("aria-selected") === "true" && presetTabs()[1]?.getAttribute("aria-selected") === "false" && pickerButton().textContent === rangeLabel(shiftLocalDate(todayIso, -29), todayIso) && rangeRequests.length === requestsBeforeCustom)
 
     // --- model table -------------------------------------------------------
     const table = host.querySelector<HTMLElement>('[data-test="models"] table')!

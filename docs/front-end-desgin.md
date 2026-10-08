@@ -599,7 +599,7 @@ Tab 列表 `-mr-2` 抵消末项内边距）。三种模式都由同一份 `heatm
 数值多出的一行由中间空间吸收。
 
 ```text
-概览                        7 天  30 天  1 年  自定义区间  [2025年9月14日] – [2026年9月13日]
+概览                        7 天  30 天  1 年  自定义区间  [2025年9月14日 – 2026年9月13日]
 +----------+----------+----------+----------+----------+
 | 总 Token | 缓存命中率| 会话     | 单日最高 | 最长连续 |
 | 10.1M    | 70%      | 174，    | 163.9K   | 10 天    |
@@ -614,34 +614,43 @@ Tab 列表 `-mr-2` 抵消末项内边距）。三种模式都由同一份 `heatm
 副行给出缓存读取与写入的 token 量。
 
 区间由 `GET /api/sandbox/usage/range?tz&from&to` 单独请求，默认「1 年」（今天及之前 364 天），
-7 / 30 / 1 年是三组 from / to 预设，其后是「自定义区间」，用 `text` 变体 Tabs 切换；右侧两个日期
-选择器始终显示当前区间的起止，预设选中后同样更新。高亮由日期推导：改动任一端后若不再与任何预设
+7 / 30 / 1 年是三组 from / to 预设，其后是「自定义区间」，用 `text` 变体 Tabs 切换；右侧日期区间
+选择器显示当前区间的起止，预设选中后同样更新。高亮由日期推导：所选区间若不再与任何预设
 吻合，自动切到「自定义区间」；直接点「自定义区间」则保留当前日期、只移动高亮、不重新请求，
-用户从当前区间开始编辑。之后再选预设则回到预设。结束日不晚于
-今天，开始日不晚于结束日。「项目」= 不同工作目录（后端 `run_fact.cwd`），「最长连续」按所选
+用户从当前区间开始编辑。之后再选预设则回到预设。可选日期不晚于
+今天，起止日期按先后顺序排列。「项目」= 不同工作目录（后端 `run_fact.cwd`），「最长连续」按所选
 区间内计算。切换时保留上一组数字并降到 60% 透明度，新值到达后逐个 150ms 淡入（按文本 key），
-不做数字滚动；reduced-motion 直接替换。区间只作用于卡片，热力图与模型活动不变。两个日期按钮固定 128px 宽、内容居中，
-「2026年12月31日」和「Sep 1, 2026」都不会撑动这一行；日期文字变化时旧值上移淡出、
-新值自下 10px 滚入（180ms、共享 `EASE_OUT`、`AnimatePresence mode="popLayout"`），
-reduced-motion 直接替换。
+不做数字滚动；reduced-motion 直接替换。区间只作用于卡片，热力图与模型活动不变。
 
-日期选择器按用户指定使用 [shadcn-datetime-picker](https://github.com/huybuidac/shadcn-datetime-picker)：
+2026-10-08：日期选择器按用户指定改为 [BeUI Date Range Picker](https://beui.dev/components/motion/date-range-picker)：
 
 ```sh
-npx shadcn@latest add https://shadcn-datetime-picker-pro.vercel.app/r/datetime-picker.json
-npx shadcn@latest add scroll-area
+npx shadcn add @beui/date-range-picker
 ```
 
-源码位于 `components/datetime-picker.tsx`，依赖 `react-day-picker@^9` 与既有 `date-fns`；
-CLI 会同时想安装 `@radix-ui/react-icons` 和一个名为 `cn` 的无关包，并提示覆盖 `button.tsx`，
-这些都要拒绝。本地改动（重装后需恢复）：`PopoverTrigger asChild` 改为 Base UI 的 `render`，
-`CalendarIcon` 改用 lucide，新增 `doneLabel` 让确认按钮跟随应用语言，月份标题使用传入的
-`locale`；日历收紧为 32px 日格、`text-xs` 星期、`icon-sm` 翻月按钮、14px 半粗月份标题，
-比上游的 36px 网格窄约 30px。用量页只用 `hideTime` 的日期模式，传 `locale`（zhCN / enUS）与 `min` / `max`，
-触发器为 `secondary` / `xs` 的 Button（无边框、`secondary` 底色），显示「2026年9月13日 / Sep 13, 2026」。
-`ui/scroll-area.tsx` 为其依赖一同安装（Base UI ScrollArea），生成的 `import { cn } from "cn"`
-需改回 `@/lib/utils`。Base UI 的滚动条覆盖在视口之上，年份 / 月份网格因此加 `pe-3`
-给它留出右侧槽位，不再遮住最后一列。
+使用 `components/motion/date-range-picker.tsx` 的 `DateRangePickerDropdown`，
+数据、键盘导航及日期工具位于同名子目录；弹层使用随 registry 安装的
+`popover-morph.tsx` 和 `popover-position.ts`，悬停能力由 `lib/hooks/use-hover-capable.ts` 提供。
+安装时保留现有 `lib/ease.ts` 与 `lib/utils.ts`，复用共享动效参数和主题 token。
+旧 `datetime-picker.tsx`、仅供它使用的 `ui/scroll-area.tsx` 和 `react-day-picker` 依赖已移除。
+
+页面使用一个区间按钮，弹层显示起止摘要、月份 / 年份跳转、32px 日格、所选天数与清除操作。
+首次选日建立草稿，再次选日完成区间并自动关闭；仅完整区间才请求概览。
+清除或只选起点不会清空统计，中途关闭后恢复已应用区间，再打开从已应用日期开始。
+日期以 `YYYY-MM-DD` 传递，`max` 为本地今天，`locale` 为 `zh-CN` / `en-US`。
+可见文案、键盘说明与读屏播报接入 `dateRangePicker` 翻译；焦点环统一为 `ring-inset`，
+这些本地适配在重装后需保留。弹层沿用 BeUI 展开 / 收起与月份切换动效，减少动态效果时移除位移和缩放。
+窄屏工具栏自动换行，日历最大宽度为视口减 24px。
+
+```text
+概览 [7 天 | 30 天 | 1 年 | 自定义区间] [开始日期 – 结束日期]
+                                         |
+                                         v
+                               BeUI DateRangePickerDropdown
+                               起止摘要 / 月份年份 / 日历
+                               选起点 -> 选终点 -> 更新概览
+                               中途关闭 -> 保留已应用区间
+```
 
 ### 模型表
 
@@ -1892,8 +1901,7 @@ App TooltipProvider -> 首次悬浮 1s -> 连续切换 0ms
 | Resizable | [ui/resizable](../agent-ui/src/components/ui/resizable.tsx)，`react-resizable-panels` | 本地分隔手柄、伸缩面板 | 文件浏览器、资源列表/详情分栏 |
 | Tree | [reui/tree](../agent-ui/src/components/reui/tree.tsx) + [file-browser-tree](../agent-ui/src/features/file-browser/components/file-browser-tree.tsx) | Headless Tree 的树模型 + ReUI 外观 + Motion 高亮 / 文字溢出反馈 | 文件浏览器；[SkillResourceTree](../agent-ui/src/features/resources/skill-resource-tree.tsx) 也复用 FileBrowserTree，使用 compact 变体 |
 | Card / Item / Separator | [ui/card](../agent-ui/src/components/ui/card.tsx)、[ui/item](../agent-ui/src/components/ui/item.tsx)、[ui/separator](../agent-ui/src/components/ui/separator.tsx) | token 化卡片、列表项、分隔线；Separator 用 Base UI | 工具结果、模型列表、Profile、用量概览卡片 |
-| DatePicker | [datetime-picker](../agent-ui/src/components/datetime-picker.tsx)，shadcn-datetime-picker（react-day-picker v9 + date-fns）+ 本地 Base UI 适配 | 日历弹层，支持 min / max、时区、可选时间；用量页只用日期模式、`secondary` / `xs` 触发按钮 | 用量概览区间起止 |
-| ScrollArea | [ui/scroll-area](../agent-ui/src/components/ui/scroll-area.tsx)，Base UI ScrollArea | shadcn 滚动区与滚动条 | datetime-picker 时间列（用量页未启用） |
+| DateRangePicker | [motion/date-range-picker](../agent-ui/src/components/motion/date-range-picker.tsx)，BeUI + Motion + Intl | 日期区间弹层，支持 min / max、月份年份跳转、键盘导航及减少动态效果；本地接入中英文翻译和 inset 焦点环 | 用量概览区间起止 |
 | Avatar | [ui/avatar](../agent-ui/src/components/ui/avatar.tsx)，Base UI Avatar | 圆形头像及 fallback | 用户菜单、Profile |
 | Chart | [ui/chart](../agent-ui/src/components/ui/chart.tsx) + Recharts | `chart-*` token 与本地图表 Tooltip；用量页堆叠柱读取 `usage-series-1…6` token；这里的 Tooltip 是图表数据提示 | 用量页模型活动、Profile 模型用量 |
 | CalendarHeatmap | [heatmap/calendar-heatmap](../agent-ui/src/components/heatmap/calendar-heatmap.tsx)，`@heatmap` registry（SVG + date-fns）+ 本地 `ring-inset` / `monthLabelPosition` / `splitYears` | 网格热力图；基础默认读 chart token，用量页读取共享 `heatmap` token，Profile 调用点仍传固定蓝色 | 用量页 Token 活动、Profile Token 日历 |
@@ -1947,7 +1955,7 @@ Chat composer 上下留白缩小三分之一：单行上下内边距各为 14/3p
 - [ai-elements/jsx-preview.tsx](../agent-ui/src/components/ai-elements/jsx-preview.tsx)：未发现调用；实际可视化内容使用 `visualize-sandbox`，不能将 `react-jsx-parser` 记为当前页面渲染路径。
 - `Toggle` 组件没有独立业务实例，但 `toggleVariants` 正在被 ToggleGroup 使用，不能将整个文件当成未使用。
 - Animate UI 的 `IconButton` / 粒子按钮没有业务实例；主题按钮只复用该文件的 `buttonVariants`，不能将粒子效果记为已展示。
-- 尚无独立通用入口的类型包括 Checkbox、RadioGroup、Slider、Accordion、Command、Toast、Table/DataTable。日期选择使用 [datetime-picker](../agent-ui/src/components/datetime-picker.tsx)（用量页区间）。菜单中的 CheckboxItem / RadioItem 不等于已经建立了通用表单组件；当前错误反馈主要是页面内提示。需要时先核对 shadcn 的 Base UI 实现及本地依赖，不预装整套组件。
+- 尚无独立通用入口的类型包括 Checkbox、RadioGroup、Slider、Accordion、Command、Toast、Table/DataTable。日期选择使用 [BeUI DateRangePicker](../agent-ui/src/components/motion/date-range-picker.tsx)（用量页区间）。菜单中的 CheckboxItem / RadioItem 不等于已经建立了通用表单组件；当前错误反馈主要是页面内提示。需要时先核对 shadcn 的 Base UI 实现及本地依赖，不预装整套组件。
 
 ## Recommendations
 
@@ -2387,9 +2395,9 @@ MCP 页面的既有浏览器样例：打开 `/tests/features/resources/mcp-brows
 透明度、悬浮单元的日期与
 token 提示及离开后关闭、模型面板卸载热力图与模式切换、前 5 个模型 + 其他的六个系列且无图例、
 12–13 个月份柱位、系列 token 和切回热力图的恢复，以及概览五张卡的顺序与桌面单行、缓存命中率 70%、会话卡「会话数，共计 N 轮」同样式且只在逗号后折行、五卡等宽等高且副行同基线、12px 内边距、副行的活跃天数 · 项目数、默认一年区间与
-预设高亮、选择器跟随预设、7 天重请求与数值变化、日期按钮固定宽度与滚动切换后只剩新值、
+预设高亮、区间选择器跟随预设、7 天重请求与数值变化、
 概览位于活动块上方、Gauge 图标、四个区间 Tab 以「自定义区间」结尾、日历 32px 日格、
-打开开始日期日历并选日后高亮自动移到「自定义区间」、再选预设即回到预设、直接点「自定义区间」保留日期且不重新请求，
+打开 BeUI 区间日历并选完起止后高亮自动移到「自定义区间」、再选预设即回到预设、直接点「自定义区间」保留日期且不重新请求，
 以及模型表的排序与「其他」行、26px 行高与右对齐、份额合计、色板对应和份额条终态宽度，
 两个活动面板等高且切换后下方内容位置不变；
 页面用同一份合成数据拦截 `/api/sandbox/usage/range`；追加 `?zh&dark` 检查中文与深色，`&panel=models` 直接打开模型面板，
