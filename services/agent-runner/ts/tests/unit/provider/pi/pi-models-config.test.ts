@@ -32,6 +32,16 @@ describe('resolvePiSessionOptions', () => {
 })
 
 describe('buildPiModelsConfig', () => {
+  it('overrides both custom and built-in model windows without changing the model ID', () => {
+    for (const model of ['custom:model', 'gpt-5.4']) {
+      for (const contextWindow of [200_000, 1_000_000] as const) {
+        const options = resolvePiSessionOptions({ model, baseUrl: 'https://example.test/v1', authToken: 't', contextWindow })
+        expect(options.modelId).toBe(model)
+        expect(options.modelsConfig.providers.openai.models[0]).toMatchObject({ id: model, contextWindow })
+      }
+    }
+  })
+
   it('maps resolved env onto a stable OpenAI-compatible provider', () => {
     expect(
       buildPiModelsConfig('https://api.deepseek.com/v1', 'deepseek-v4-flash', 'secret'),
@@ -54,7 +64,7 @@ describe('buildPiModelsConfig', () => {
               name: 'deepseek-v4-flash',
               reasoning: false,
               input: ['text'],
-              contextWindow: 1_000_000,
+              contextWindow: 200_000,
               maxTokens: 8192,
             },
           ],

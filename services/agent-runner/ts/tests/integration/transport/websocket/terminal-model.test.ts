@@ -34,10 +34,17 @@ it.skipIf(!nativeClaudeAvailable())('applies the bubble model selection to the s
     await fixture.terminals.sendKeys(fixture.ref, ['Enter'])
     await expect.poll(() => fixture.frames.filter((frame) => frame.type === 'session.config').at(-1)).toMatchObject({ config: { effort: 'high', profileId: replacement.id } })
     const extendedInstance = (await fixture.terminals.state(fixture.ref))?.instanceId
-    fixture.send('Use extended context', 'extended', 'claude-opus-4-6[1m]', { profileId: replacement.id, effort: 'high' })
+    fixture.send('Use extended context', 'extended', 'claude-opus-4-6', { profileId: replacement.id, effort: 'high', contextWindow: 1000000 })
     await expect.poll(() => fixture.frames.some((frame) => frame.type === 'run.completed' && frame.runId === 'extended'), { timeout: 20000 }).toBe(true)
-    expect((await fixture.terminals.state(fixture.ref))?.instanceId).toBe(extendedInstance)
-    expect(fixture.frames.filter((frame) => frame.type === 'session.config').at(-1)).toMatchObject({ config: { model: 'claude-opus-4-6[1m]', context: { limit: 1000000 } } })
+    expect((await fixture.terminals.state(fixture.ref))?.instanceId).not.toBe(extendedInstance)
+    expect(fixture.frames.filter((frame) => frame.type === 'session.config').at(-1)).toMatchObject({ config: { model: 'claude-opus-4-6[1m]', contextWindow: 1000000, context: { limit: 1000000 } } })
+    const beforeConfigure = fixture.frames.filter((frame) => frame.type === 'run.started').length
+    fixture.socket.send(JSON.stringify({ type: 'session.configure', harness: 'claude', sessionId: fixture.ref.id,
+      requestId: 'shrink', cwd: fixture.root, model: `${replacement.id}:claude-opus-4-6`, effort: 'high', contextWindow: 200000 }))
+    await expect.poll(() => fixture.frames.find((frame) => frame.type === 'session.config' && frame.requestId === 'shrink'), { timeout: 20000 })
+      .toMatchObject({ config: { model: 'claude-opus-4-6', contextWindow: 200000, context: { limit: 200000 } } })
+    expect(fixture.frames.filter((frame) => frame.type === 'run.started')).toHaveLength(beforeConfigure)
+    expect(fixture.ref.id).toBe(session)
     expect(exits).toEqual([])
     expect(fixture.sdkOpen).not.toHaveBeenCalled()
   } catch (error) {

@@ -1,4 +1,5 @@
 import { emptyContextUsage } from '../../core/resource/context-usage.js'
+import { DEFAULT_CONTEXT_WINDOW, isContextWindow } from '../../core/resource/model-context.js'
 import { randomUUID } from 'node:crypto'
 import { setTimeout as delay } from 'node:timers/promises'
 
@@ -14,7 +15,6 @@ import { SessionError, sessionRefKey, type RunMode } from '../../core/resource/s
 import { userTurnFromText, userTurnText, type UserTurn } from '../../core/run/user-turn.js'
 import type { SessionStream } from '../session/session-stream.js'
 import type { OpenedSessionTerminal, SessionTerminals, TerminalSize } from './session-terminals.js'
-import { splitModelContext } from '../../core/resource/model-profile.js'
 import { TerminalInteractions } from './terminal-interactions.js'
 import type { ThreadReplayItem } from '../../core/resource/thread.js'
 
@@ -45,6 +45,7 @@ interface TerminalChat {
   active: ActiveTurn | undefined
   updatedAt: number
   pumping: boolean
+  applyingConfiguration?: boolean
   finishing: boolean
   completion?: Promise<void>
   model: string
@@ -398,6 +399,7 @@ export class TerminalChatSessions {
     if (!chat.spec) return
     this.options.stream(chat.ref).publish({ type: 'session.config', ...(requestId ? { requestId } : {}), config: {
       model: chat.model || chat.spec.model, cwd: chat.cwd, context: chat.status?.context ?? emptyContextUsage(),
+      contextWindow: chat.spec.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
       ...(chat.runMode ? { runMode: chat.runMode } : {}),
       ...(chat.spec.profileId ? { profileId: chat.spec.profileId } : {}), ...(chat.spec.effort ? { effort: chat.spec.effort } : {}),
     } })
@@ -490,21 +492,40 @@ export class TerminalChatSessions {
   }
 
   private async applyConfiguration(chat: TerminalChat, pending: PendingConfiguration): Promise<void> {
-    const signal = AbortSignal.any([AbortSignal.timeout(45000), this.configurationAbort.signal])
-    const restarted = await this.options.terminals.configure(chat.ref, pending.spec,
-      { cols: 120, rows: 40, eventsUrl: this.options.eventsUrl(chat.ref) }, signal, false,
-      !(chat.backgroundActive ?? this.options.stream(chat.ref).tasks.hasActive))
-    chat.spec = pending.spec
-    chat.model = pending.spec.model
-    if (restarted) {
-      chat.instanceId = ''; chat.updatedAt = 0; chat.telemetryOffset = 0; chat.awaitingReady = true
-      delete chat.status
-    }
-    if (chat.awaitingReady) await this.waitForConfiguration(chat, signal)
-    else await this.readTelemetry(chat)
-    await this.options.refresh(chat.ref)
-    await this.options.configured?.(chat.ref, chat.spec, chat.model)
-    this.publishConfig(chat, pending.requestId)
+    const signal = AbortSignal.any([AbortSignal.timeout(120000), this.configurationAbort.signal])
+    const previous = chat.spec
+    let applied = false
+    chat.applyingConfiguration = true
+    try {
+      const restarted = await this.options.terminals.configure(chat.ref, pending.spec,
+        { cols: 120, rows: 40, eventsUrl: this.options.eventsUrl(chat.ref) }, signal, false,
+        !(chat.backgroundActive ?? this.options.stream(chat.ref).tasks.hasActive))
+      applied = true
+      chat.spec = pending.spec
+      chat.model = pending.spec.model
+      if (restarted) {
+        chat.instanceId = ''; chat.updatedAt = 0; chat.telemetryOffset = 0; chat.awaitingReady = true
+        delete chat.status
+      }
+      if (chat.awaitingReady) await this.waitForConfiguration(chat, signal)
+      else await this.readTelemetry(chat)
+      const desiredWindow = pending.spec.contextWindow ?? DEFAULT_CONTEXT_WINDOW
+      if (chat.status?.context.limit !== desiredWindow) {
+        throw new Error(`Claude did not apply the ${desiredWindow} token context window`)
+      }
+      await this.options.refresh(chat.ref)
+      await this.options.configured?.(chat.ref, chat.spec, chat.model)
+      this.publishConfig(chat, pending.requestId)
+    } catch (error) {
+      if (previous && (applied || previous.model !== chat.spec?.model || previous.effort !== chat.spec.effort || previous.contextWindow !== chat.spec.contextWindow)) {
+        await this.restartForMode(chat, previous, { cols: 120, rows: 40 })
+        delete chat.status
+        await this.waitForConfiguration(chat, AbortSignal.any([AbortSignal.timeout(30000), this.configurationAbort.signal]))
+        await this.options.configured?.(chat.ref, previous, chat.model)
+        this.publishConfig(chat)
+      }
+      throw error
+    } finally { chat.applyingConfiguration = false }
   }
 
   private async waitForConfiguration(chat: TerminalChat, signal: AbortSignal): Promise<void> {
@@ -651,12 +672,14 @@ export class TerminalChatSessions {
           chat.status = status
           chat.model = status.model
           chat.cwd = status.cwd || chat.cwd
-          if (chat.spec) chat.spec = { ...chat.spec, cwd: chat.cwd, model: status.model, modelContext: splitModelContext(status.model).context, ...(status.effort ? { effort: status.effort } : {}) }
+          const contextWindow = isContextWindow(status.context.limit) ? status.context.limit : chat.spec?.contextWindow ?? DEFAULT_CONTEXT_WINDOW
+          if (chat.spec) chat.spec = { ...chat.spec, cwd: chat.cwd, model: status.model, contextWindow, ...(status.effort ? { effort: status.effort } : {}) }
           const config: SessionConfiguration = { model: status.model, cwd: chat.cwd, context: status.context,
+            contextWindow,
             ...(chat.runMode ? { runMode: chat.runMode } : {}),
             ...(status.profileId ? { profileId: status.profileId } : {}), ...(status.effort ? { effort: status.effort } : {}) }
-          if (JSON.stringify(config) !== JSON.stringify(chat.config)) {
-            const modelChanged = chat.config?.model !== config.model || chat.config.profileId !== config.profileId
+          if (!chat.applyingConfiguration && JSON.stringify(config) !== JSON.stringify(chat.config)) {
+            const modelChanged = chat.config?.model !== config.model || chat.config.profileId !== config.profileId || chat.config.contextWindow !== contextWindow
             chat.config = config
             this.options.stream(chat.ref).publish({ type: 'session.config', config })
             if (modelChanged && chat.spec) await this.options.configured?.(chat.ref, chat.spec, status.model)

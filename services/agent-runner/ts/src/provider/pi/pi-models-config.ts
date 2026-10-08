@@ -1,4 +1,5 @@
 import type { ProviderRunSpec } from '../../core/contract/agent-provider.js'
+import { DEFAULT_CONTEXT_WINDOW, type ContextWindow } from '../../core/resource/model-context.js'
 import {
   PI_RUN_PROVIDER_ID,
   resolveProviderRunEnv,
@@ -25,7 +26,7 @@ export function piSessionNeedsModelSwitch(
 }
 
 export function resolvePiSessionOptions(
-  spec: Pick<ProviderRunSpec, 'model' | 'baseUrl' | 'authToken'>,
+  spec: Pick<ProviderRunSpec, 'model' | 'baseUrl' | 'authToken' | 'contextWindow'>,
 ): PiSessionOptions {
   const env = resolveProviderRunEnv({
     provider: 'pi',
@@ -41,11 +42,12 @@ export function resolvePiSessionOptions(
       env['OPENAI_BASE_URL'] ?? '',
       spec.model,
       env['OPENAI_API_KEY'] ?? '',
+      spec.contextWindow,
     ),
   }
 }
 
-export function buildPiModelsConfig(baseUrl: string, modelId: string, apiKey = '') {
+export function buildPiModelsConfig(baseUrl: string, modelId: string, apiKey = '', contextWindow: ContextWindow = DEFAULT_CONTEXT_WINDOW) {
   return {
     providers: {
       [PI_RUN_PROVIDER_ID]: {
@@ -65,7 +67,7 @@ export function buildPiModelsConfig(baseUrl: string, modelId: string, apiKey = '
             name: modelId,
             reasoning: false,
             input: ['text'],
-            contextWindow: 1_000_000,
+            contextWindow,
             maxTokens: 8192,
           },
         ],

@@ -8,14 +8,17 @@ import { TerminalError, type TerminalInput } from '../../core/contract/terminal-
 import { submitClaudeTerminalInput } from './claude-terminal-input.js'
 import { stripVTControlCharacters } from 'node:util'
 import { splitModelContext } from '../../core/resource/model-profile.js'
+import { DEFAULT_CONTEXT_WINDOW } from '../../core/resource/model-context.js'
+import { terminalStatus } from './claude-terminal-telemetry.js'
 
-const selectionSchema = z.object({ model: z.string(), effort: z.string().optional(), profile: z.string() })
+const selectionSchema = z.object({ model: z.string(), effort: z.string().optional(), profile: z.string(), contextWindow: z.number() })
 const statusSchema = z.object({ instanceId: z.string(), model: z.object({ id: z.string() }), effort: z.object({ level: z.string() }).optional(), context_window: z.object({ context_window_size: z.number() }).optional() })
 const selectionFile = 'claude-terminal-selection.json'
 
 function selection(spec: ProviderRunSpec) {
-  return { model: spec.model, ...(spec.effort ? { effort: spec.effort } : {}),
-    profile: createHash('sha256').update(JSON.stringify([spec.baseUrl, spec.authToken, spec.imageTools, spec.promptSuggestions, spec.runMode, spec.systemInstructions])).digest('hex') }
+  const contextWindow = spec.contextWindow ?? DEFAULT_CONTEXT_WINDOW
+  return { model: spec.model, contextWindow, ...(spec.effort ? { effort: spec.effort } : {}),
+    profile: createHash('sha256').update(JSON.stringify([spec.baseUrl, spec.authToken, spec.imageTools, spec.promptSuggestions, spec.runMode, spec.systemInstructions, contextWindow])).digest('hex') }
 }
 
 export async function saveClaudeTerminalSelection(scratchDir: string, spec: ProviderRunSpec): Promise<void> {
@@ -31,8 +34,20 @@ export async function saveClaudeTerminalSelection(scratchDir: string, spec: Prov
 export async function configureClaudeTerminal(input: TerminalInput, scratchDir: string, spec: ProviderRunSpec, signal: AbortSignal): Promise<'applied' | 'restart'> {
   const previous = selectionSchema.parse(JSON.parse(await readFile(join(scratchDir, selectionFile), 'utf8')) as unknown)
   const next = selection(spec)
+  const reported = await readStatus(scratchDir)
+  const instanceId = await readFile(join(scratchDir, 'claude-terminal-instance'), 'utf8')
+  const status = reported?.instanceId === instanceId ? reported : undefined
+  if (status?.used !== undefined && status.used > next.contextWindow && previous.contextWindow > next.contextWindow) {
+    await submitClaudeTerminalInput(input, '/compact', signal)
+    do {
+      signal.throwIfAborted()
+      if (!await input.isAlive()) throw new TerminalError('not-found', 'Claude exited while compacting context')
+      const compacted = await readStatus(scratchDir)
+      if (compacted?.instanceId === instanceId && compacted.used !== undefined && compacted.used < next.contextWindow) break
+      await setTimeout(100, undefined, { signal })
+    } while (!signal.aborted)
+  }
   if (previous.profile !== next.profile) return 'restart'
-  const status = await readStatus(scratchDir)
   const current = status?.instanceId === await readFile(join(scratchDir, 'claude-terminal-instance'), 'utf8') ? status : previous
   if (!modelMatches(current.model, next.model)) await change(input, scratchDir, 'model', next.model, signal)
   if (next.effort && current.effort !== next.effort) await change(input, scratchDir, 'effort', next.effort, signal)
@@ -63,14 +78,17 @@ async function change(input: TerminalInput, scratchDir: string, field: 'model' |
 
 function modelMatches(actual: string | undefined, value: string): boolean {
   const from = splitModelContext(actual), to = splitModelContext(value)
-  if (to.context === '1m' && from.context !== '1m') return false
+  if (to.context !== from.context) return false
   return from.modelId === to.modelId || (/^(sonnet|opus|haiku)$/u.test(to.modelId ?? '') && Boolean(from.modelId?.includes(to.modelId ?? '')))
 }
 
-async function readStatus(scratchDir: string): Promise<{ instanceId: string; model: string; effort?: string } | undefined> {
+async function readStatus(scratchDir: string): Promise<{ instanceId: string; model: string; effort?: string; used?: number } | undefined> {
   try {
-    const status = statusSchema.parse(JSON.parse(await readFile(join(scratchDir, 'claude-terminal-status.json'), 'utf8')) as unknown)
+    const raw = JSON.parse(await readFile(join(scratchDir, 'claude-terminal-status.json'), 'utf8')) as Record<string, unknown>
+    const status = statusSchema.parse(raw)
+    const used = terminalStatus(raw)?.context.used
     return { instanceId: status.instanceId, model: status.context_window && status.context_window.context_window_size >= 1000000 && !status.model.id.endsWith('[1m]') ? `${status.model.id}[1m]` : status.model.id,
+      ...(used === undefined || used === null ? {} : { used }),
       ...(status.effort ? { effort: status.effort.level } : {}) }
   }
   catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; return undefined }

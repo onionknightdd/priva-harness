@@ -37,6 +37,7 @@ export function AgentMessagePage() {
         cwd={runCwd}
         model={agentMessage.modelReference}
         effort={agentMessage.effort}
+        contextWindow={agentMessage.contextWindow}
         sessionId={viewedSessionId}
         hidden={!terminalView}
         onSessionRebound={rebindTerminalSession}
@@ -61,11 +62,14 @@ export function AgentMessagePage() {
       modelReady={agentMessage.modelReady}
       modelReference={agentMessage.modelReference}
       effort={agentMessage.effort}
+        contextWindow={agentMessage.contextWindow}
+      configurationPending={agentMessage.configurationPending}
       slashCommand={agentMessage.slashCommand}
       onDraftChange={agentMessage.setDraft}
       onSlashCommandChange={agentMessage.setSlashCommand}
       onModelReferenceChange={agentMessage.setModelReference}
       onEffortChange={agentMessage.setEffort}
+      onContextWindowChange={agentMessage.setContextWindow}
       onSubmit={agentMessage.submit}
       onStop={agentMessage.stop}
     />

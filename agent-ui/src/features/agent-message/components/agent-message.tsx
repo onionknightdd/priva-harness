@@ -1,3 +1,4 @@
+import type { ContextWindow } from "../model-context"
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react"
 import type { InteractionRequest, InteractionResponse } from '../interaction-data'
 import { InteractionCard } from './interaction-card'
@@ -57,11 +58,14 @@ export function AgentMessage({
   modelReady,
   modelReference,
   effort,
+  contextWindow,
+  configurationPending,
   slashCommand,
   onDraftChange,
   onSlashCommandChange,
   onModelReferenceChange,
   onEffortChange,
+  onContextWindowChange,
   onSubmit,
   onStop,
 }: {
@@ -84,11 +88,14 @@ export function AgentMessage({
   modelReady: boolean
   modelReference: string | null
   effort: ComposerEffort
+  contextWindow: ContextWindow
+  configurationPending: boolean
   slashCommand: SlashCommand | null
   onDraftChange: (draft: string) => void
   onSlashCommandChange: (command: SlashCommand | null) => void
   onModelReferenceChange: (model: string | null, source?: "user") => void
   onEffortChange: (effort: ComposerEffort) => void
+  onContextWindowChange: (window: ContextWindow) => void
   onSubmit: () => void
   onStop: () => void
 }) {
@@ -256,6 +263,8 @@ export function AgentMessage({
           modelReady={modelReady}
           modelReference={modelReference}
           effort={effort}
+          contextWindow={contextWindow}
+          configurationPending={configurationPending}
           slashCommand={slashCommand}
           shellRef={composerShellRef}
           editorRef={composerEditorRef}
@@ -263,6 +272,7 @@ export function AgentMessage({
           onSlashCommandChange={onSlashCommandChange}
           onModelReferenceChange={onModelReferenceChange}
           onEffortChange={onEffortChange}
+          onContextWindowChange={onContextWindowChange}
           onSubmit={onSubmit}
           onStop={onStop}
         />}

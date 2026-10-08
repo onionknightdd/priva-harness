@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isContextWindow, type ContextWindow } from '../../../core/resource/model-context.js'
 import { isRunMode, type RunMode } from '../../../core/resource/session.js'
 import { interactionResponseSchema, type InteractionResponse } from '../../../core/resource/interaction.js'
 import { userAttachmentSchema, type UserAttachment } from '../../../core/run/user-turn.js'
@@ -14,6 +15,7 @@ import {
 } from '../../../core/resource/run-harness.js'
 
 export interface InitFrame {
+  readonly contextWindow?: ContextWindow
   readonly type: 'run.start'
   readonly runMode?: RunMode
   readonly runId?: string
@@ -39,9 +41,10 @@ export interface SubscribeFrame {
 }
 
 export interface ConfigureFrame {
+  readonly contextWindow?: ContextWindow
   readonly type: 'session.configure'
   readonly requestId: string
-  readonly harness: 'claude'
+  readonly harness: RunHarnessId
   readonly sessionId: string
   readonly model: string
   readonly cwd: string
@@ -76,13 +79,15 @@ export function parseClientFrame(raw: unknown): ParseClientResult {
   const type = raw['type']
   if (type === 'session.configure') {
     const result = z.object({ type: z.literal('session.configure'), requestId: z.string().trim().min(1),
-      harness: z.literal('claude'), sessionId: z.string().trim().min(1), model: z.string().trim().min(1), cwd: z.string().trim().min(1),
+      harness: z.enum(['claude', 'pi']), sessionId: z.string().trim().min(1), model: z.string().trim().min(1), cwd: z.string().trim().min(1),
+      contextWindow: z.union([z.literal(200000), z.literal(1000000)]).optional(),
       effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(), promptSuggestions: z.boolean().optional(),
     }).safeParse(raw)
     if (!result.success) return { ok: false, message: 'Invalid session configuration' }
-    const { effort, promptSuggestions, ...frame } = result.data
+    const { effort, promptSuggestions, contextWindow, ...frame } = result.data
     return { ok: true, frame: { ...frame, ...(effort === undefined ? {} : { effort }),
-      ...(promptSuggestions === undefined ? {} : { promptSuggestions }) } }
+      ...(promptSuggestions === undefined ? {} : { promptSuggestions }),
+      ...(contextWindow === undefined ? {} : { contextWindow }) } }
   }
   if (type === 'permission.respond') {
     const address = z.object({ type: z.literal('permission.respond'), harness: z.enum(['claude', 'pi']), sessionId: z.string().trim().min(1) }).safeParse(raw)
@@ -139,6 +144,10 @@ export function parseInitFrame(raw: unknown): ParseInitResult {
     return { ok: false, message: 'Init cwd must be a non-empty string' }
   }
   const effort = raw['effort']
+  const contextWindow = raw['contextWindow']
+  if (contextWindow !== undefined && !isContextWindow(contextWindow)) {
+    return { ok: false, message: 'Context window must be 200000 or 1000000' }
+  }
   if (effort !== undefined && !isEffortLevel(effort)) {
     return { ok: false, message: 'Init effort must be low, medium, high, xhigh, or max' }
   }
@@ -175,6 +184,7 @@ export function parseInitFrame(raw: unknown): ParseInitResult {
       harness,
       cwd: cwd.trim(),
       ...(effort === undefined ? {} : { effort }),
+      ...(contextWindow === undefined ? {} : { contextWindow }),
       ...(sessionId === undefined ? {} : { sessionId: sessionId.trim() }),
       ...(fork === true ? { fork: true } : {}),
       ...(promptSuggestions === undefined ? {} : { promptSuggestions }),

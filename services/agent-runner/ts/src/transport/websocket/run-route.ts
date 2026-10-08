@@ -96,7 +96,7 @@ function handleRunSocket(socket: WebSocket, options: RunRouteOptions): void {
     if (frame.type === 'session.configure') {
       if (stream?.session.id !== frame.sessionId || stream.session.provider !== frame.harness) throw new Error('Configuration belongs to another session')
       const spec = await buildRunSpec(options, frame)
-      await options.harness.configureTerminal(stream.session, spec, frame.requestId)
+      await options.harness.configureSession(stream.session, spec, frame.requestId)
       return
     }
     if (frame.type === 'task.stop') {

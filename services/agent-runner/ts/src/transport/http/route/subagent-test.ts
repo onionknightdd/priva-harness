@@ -43,9 +43,9 @@ export const subagentTestRoutes: FastifyPluginCallback<{
     async function* events() {
       try {
         for await (const frame of options.harness.run({ text }, { signal: controller.signal }, {
-          provider: query.harness, cwd, model: resolved.model,
+          provider: query.harness, cwd, model: query.harness === 'pi' ? resolved.modelId : resolved.model,
           baseUrl: rewriteProviderBaseUrl(resolved.profile.baseUrl, query.harness), authToken: resolved.profile.authToken,
-          profileId: resolved.profile.id, modelContext: resolved.capabilities.context, queueBehavior: profile.queueBehavior,
+          profileId: resolved.profile.id, contextWindow: resolved.capabilities.context === '1m' ? 1_000_000 : 200_000, queueBehavior: profile.queueBehavior,
         }, { source: 'subagent-test', keepRuntimeWarm: false })) yield `data: ${JSON.stringify(frame)}\n\n`
       } catch (error) {
         if (!controller.signal.aborted) yield `data: ${JSON.stringify({ type: 'run.failed', message: error instanceof Error ? error.message : String(error) })}\n\n`

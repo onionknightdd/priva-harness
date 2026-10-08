@@ -4,7 +4,7 @@ import { createEventBus, type EventBus } from '@earendil-works/pi-coding-agent'
 import { asRecord, stringField } from '../../core/event/json-record.js'
 import { taskStatus } from '../../core/resource/background-task.js'
 import { randomUUID } from 'node:crypto'
-import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -17,7 +17,8 @@ import {
 import type { ProviderRunSpec, SessionTarget } from '../../core/contract/agent-provider.js'
 import type { ToolDefinition } from '../../core/tool/define-tool.js'
 import { imageToolsFromSpec } from '../../core/tool/image-tool-shared.js'
-import { piSessionNeedsModelSwitch, resolvePiSessionOptions } from './pi-models-config.js'
+import { buildPiModelsConfig, piSessionNeedsModelSwitch, resolvePiSessionOptions, type PiSessionOptions } from './pi-models-config.js'
+import { DEFAULT_CONTEXT_WINDOW, type ContextWindow } from '../../core/resource/model-context.js'
 import { piSessionBucketDir } from './pi-paths.js'
 import { createPiSessionManager } from './pi-session-open.js'
 import type { PiSessionFactory } from './pi-provider.js'
@@ -94,6 +95,7 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
         workflows,
         eventBus,
         interactions,
+        options,
       )
     } catch (error) {
       workflows?.dispose()
@@ -124,6 +126,7 @@ class SdkPiAgentSession implements PiAgentSession {
     private readonly workflows: PiWorkflows,
     private readonly eventBus: EventBus,
     private readonly interactions: PiInteractions,
+    private readonly runOptions: PiSessionOptions,
   ) {
     this.currentModelId = modelId
     workflows.bindResultDelivery((workflow, result) => session.sendCustomMessage({
@@ -151,15 +154,36 @@ class SdkPiAgentSession implements PiAgentSession {
     return this.currentModelId
   }
 
-  async setRunModel(modelId: string): Promise<void> {
-    if (modelId === this.currentModelId) return
-    const model = this.modelRuntime.getModel(this.providerId, modelId)
-    if (model === undefined) {
-      throw new Error(`Unknown model ${modelId}`)
+  async setRunModel(modelId: string, contextWindow: ContextWindow = DEFAULT_CONTEXT_WINDOW): Promise<void> {
+    if (modelId === this.currentModelId && this.session.model?.contextWindow === contextWindow) return
+    const budget = contextWindow - this.session.settingsManager.getCompactionSettings().reserveTokens
+    const usage = this.session.getContextUsage()
+    if (usage?.tokens !== null && usage?.tokens !== undefined && usage.tokens > budget) {
+      await this.session.compact()
+      const compacted = this.session.getContextUsage()
+      if (compacted?.tokens !== null && compacted?.tokens !== undefined && compacted.tokens > budget) {
+        throw new Error('Context still exceeds the selected window after compaction')
+      }
     }
-    await this.session.setModel(model)
-    this.workflows.setModel(modelId)
-    this.currentModelId = modelId
+    const path = join(this.runDir, 'models.json')
+    const previousConfig = await readFile(path, 'utf8')
+    const previousModel = this.session.model
+    const config = buildPiModelsConfig(this.runOptions.env['OPENAI_BASE_URL'] ?? '', modelId,
+      this.runOptions.env['OPENAI_API_KEY'] ?? '', contextWindow)
+    try {
+      await writeFile(path, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 })
+      await this.modelRuntime.refresh()
+      const model = this.modelRuntime.getModel(this.providerId, modelId)
+      if (!model) throw new Error(`Unknown model ${modelId}`)
+      await this.session.setModel(model)
+      this.workflows.setModel(modelId)
+      this.currentModelId = modelId
+    } catch (error) {
+      await writeFile(path, previousConfig, { mode: 0o600 })
+      await this.modelRuntime.refresh()
+      if (previousModel) await this.session.setModel(previousModel)
+      throw error
+    }
   }
 
   bindProgressEmit(emit: ((chunk: string) => void) | undefined): void {

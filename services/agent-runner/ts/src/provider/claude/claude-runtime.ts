@@ -1,4 +1,5 @@
 import { claudeSystemPrompt } from './claude-system-prompt.js'
+import { DEFAULT_CONTEXT_WINDOW } from '../../core/resource/model-context.js'
 import { claudeDisallowedTools } from './claude-tool-policy.js'
 import { InteractionCoordinator } from '../../core/run/interaction-coordinator.js'
 import { answersByQuestion, normalizeQuestions, type InteractionResponse } from '../../core/resource/interaction.js'
@@ -402,11 +403,16 @@ export function resolveClaudeQuerySettings(
 export function resolveClaudeQueryEnv(
   spec: ProviderRunSpec,
 ): Record<string, string> {
+  const contextWindow = spec.contextWindow ?? DEFAULT_CONTEXT_WINDOW
   return mergeProviderProcessEnv(
     resolveProviderRunEnv(spec),
     new Set(profileEnvKeys('claude')),
     {
       CLAUDE_CODE_HARBOR_KITE: '1',
+      CLAUDE_CODE_DISABLE_1M_CONTEXT: contextWindow === 200_000 ? '1' : '0',
+      CLAUDE_CODE_MAX_CONTEXT_TOKENS: String(contextWindow),
+      // The session selection owns this budget, including inherited runner settings.
+      CLAUDE_CODE_AUTO_COMPACT_WINDOW: String(contextWindow),
     },
   )
 }

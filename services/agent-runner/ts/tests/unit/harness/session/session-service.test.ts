@@ -19,6 +19,28 @@ describe('SessionService last_response_model', () => {
     await Promise.all(roots.splice(0).map(async (root) => await rm(root, { recursive: true, force: true })))
   })
 
+  it.each(['claude', 'pi'] as const)('restores the saved %s window independently of model defaults', async (harness) => {
+    const root = await mkdtemp(join(tmpdir(), 'context-restore-'))
+    roots.push(root)
+    const modelProfiles = createTestModelProfileService(root)
+    const profile = await modelProfiles.createProfile({ label: 'Fixture', baseUrl: 'https://example.test', authToken: 'test', defaultModel: 'm' })
+    const provider = new FakeAgentProvider(harness, [])
+    const ref = { provider: harness, id: 'saved' }
+    provider.sessions.seed({ ref, summary: 'Saved', lastModified: 1, fileSize: 1,
+      cwd: '/work', customTitle: null, firstPrompt: 'Hi', gitBranch: null, tag: null })
+    const metadata = new MemorySessionMetadataRepository()
+    const service = new SessionService({ providers: { claude: provider, pi: provider }, metadata,
+      modelProfiles, liveRuns: new LiveRunRegistry(), activeCwd: '/tmp' })
+    expect(await service.configuration(ref)).toBeUndefined()
+    for (const context of ['1m', null] as const) {
+      await service.recordRunCompleted(ref, { profileId: profile.id, modelId: 'm', context })
+      expect(await service.configuration(ref)).toMatchObject({
+        model: harness === 'claude' && context ? 'm[1m]' : 'm',
+        contextWindow: context ? 1000000 : 200000, profileId: profile.id,
+      })
+    }
+  })
+
   it('uses metadata profile source, unique transcript mapping, and omits unmapped stored ids', async () => {
     const runtimeHome = await mkdtemp(join(tmpdir(), 'priva-session-service-'))
     roots.push(runtimeHome)

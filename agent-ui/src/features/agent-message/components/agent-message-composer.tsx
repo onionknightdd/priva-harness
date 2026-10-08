@@ -1,3 +1,4 @@
+import type { ContextWindow } from "../model-context"
 import * as React from "react"
 import { ArrowUpIcon, SquareIcon } from "lucide-react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
@@ -188,24 +189,30 @@ function ComposerControls({
   modelReady,
   modelReference,
   effort,
+  contextWindow,
+  configurationPending,
   sendLabel,
   stopLabel,
   modelRequired,
   onStop,
   onModelReferenceChange,
   onEffortChange,
+  onContextWindowChange,
 }: {
   action: "send" | "stop"
   canSubmit: boolean
   modelReady: boolean
   modelReference: string | null
   effort: ComposerEffort
+  contextWindow: ContextWindow
+  configurationPending: boolean
   sendLabel: string
   stopLabel: string
   modelRequired: string
   onStop: () => void
   onModelReferenceChange: (model: string | null, source?: "user") => void
   onEffortChange: (effort: ComposerEffort) => void
+  onContextWindowChange: (window: ContextWindow) => void
 }) {
   const stopping = action === "stop"
   const actionLabel = stopping ? stopLabel : sendLabel
@@ -223,8 +230,11 @@ function ComposerControls({
         <ComposerModelSelector
           modelReference={modelReference}
           effort={effort}
+          contextWindow={contextWindow}
+          configurationPending={configurationPending}
           onModelReferenceChange={onModelReferenceChange}
           onEffortChange={onEffortChange}
+          onContextWindowChange={onContextWindowChange}
         />
       </div>
       <Separator
@@ -277,6 +287,8 @@ export function AgentMessageComposer({
   modelReady,
   modelReference,
   effort,
+  contextWindow,
+  configurationPending,
   slashCommand,
   shellRef: shellRefProp,
   editorRef: editorRefProp,
@@ -284,6 +296,7 @@ export function AgentMessageComposer({
   onSlashCommandChange,
   onModelReferenceChange,
   onEffortChange,
+  onContextWindowChange,
   onSubmit,
   onStop,
 }: {
@@ -300,6 +313,8 @@ export function AgentMessageComposer({
   modelReady: boolean
   modelReference: string | null
   effort: ComposerEffort
+  contextWindow: ContextWindow
+  configurationPending: boolean
   slashCommand: SlashCommand | null
   shellRef?: React.RefObject<HTMLDivElement | null>
   editorRef?: React.RefObject<ComposerEditorHandle | null>
@@ -307,6 +322,7 @@ export function AgentMessageComposer({
   onSlashCommandChange: (command: SlashCommand | null) => void
   onModelReferenceChange: (model: string | null, source?: "user") => void
   onEffortChange: (effort: ComposerEffort) => void
+  onContextWindowChange: (window: ContextWindow) => void
   onSubmit: () => void
   onStop: () => void
 }) {
@@ -809,12 +825,15 @@ export function AgentMessageComposer({
                 modelReady={modelReady}
                 modelReference={modelReference}
                 effort={effort}
+                contextWindow={contextWindow}
+                configurationPending={configurationPending}
                 sendLabel={t("agentMessage.send")}
                 stopLabel={t("agentMessage.stop")}
                 modelRequired={t("agentMessage.modelRequired")}
                 onStop={onStop}
                 onModelReferenceChange={onModelReferenceChange}
                 onEffortChange={onEffortChange}
+                onContextWindowChange={onContextWindowChange}
               />
             </motion.div>
           </div>

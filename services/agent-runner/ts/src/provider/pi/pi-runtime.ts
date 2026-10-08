@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { extname } from 'node:path'
+import { DEFAULT_CONTEXT_WINDOW, type ContextWindow } from '../../core/resource/model-context.js'
 
 import type { InteractionResponse } from '../../core/resource/interaction.js'
 import { BackgroundTasks, taskIsActive } from '../../core/resource/background-task.js'
@@ -40,7 +41,7 @@ export interface PiAgentSession {
   abort(): Promise<void>
   dispose(): Promise<void>
   bindProgressEmit?(emit: ((chunk: string) => void) | undefined): void
-  setRunModel?(modelId: string): Promise<void>
+  setRunModel?(modelId: string, contextWindow?: ContextWindow): Promise<void>
 }
 
 export class PiRuntime implements AgentRuntime {
@@ -163,11 +164,12 @@ export class PiRuntime implements AgentRuntime {
   }
 
   async applyRunSpec(spec: ProviderRunSpec): Promise<void> {
-    if (spec.model !== this.agentSession.modelId) {
+    const contextWindow = spec.contextWindow ?? DEFAULT_CONTEXT_WINDOW
+    if (spec.model !== this.agentSession.modelId || (spec.contextWindow !== undefined && this.agentSession.getContextUsage?.()?.contextWindow !== contextWindow)) {
       if (this.agentSession.setRunModel === undefined) {
         throw new Error('Pi session cannot change model in place')
       }
-      await this.agentSession.setRunModel(spec.model)
+      await this.agentSession.setRunModel(spec.model, contextWindow)
     }
     this.queueBehavior = spec.queueBehavior ?? 'follow-up'
   }
@@ -238,7 +240,7 @@ export class PiRuntime implements AgentRuntime {
   }
 }
 
-export type PiImageContent = { type: 'image'; data: string; mimeType: string }
+export interface PiImageContent { type: 'image'; data: string; mimeType: string }
 
 const PI_IMAGE_MIME: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' }
 

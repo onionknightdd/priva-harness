@@ -1,5 +1,6 @@
 import type { AgentRuntime, ProviderRunSpec, SessionRef } from '../../core/contract/agent-provider.js'
 import type { AgentEvent } from '../../core/event/agent-event.js'
+import { DEFAULT_CONTEXT_WINDOW } from '../../core/resource/model-context.js'
 import { SessionError, sessionRefKey } from '../../core/resource/session.js'
 
 export const WARM_POOL_LIMIT = 5
@@ -23,7 +24,7 @@ export function canApplyWarmRunSpec(
 ): boolean {
   return identityFingerprint(current) === identityFingerprint(next)
     && current.effort === next.effort
-    && current.modelContext === next.modelContext
+    && (current.provider === 'pi' || (current.contextWindow ?? DEFAULT_CONTEXT_WINDOW) === (next.contextWindow ?? DEFAULT_CONTEXT_WINDOW))
     && current.promptSuggestions === next.promptSuggestions
 }
 
@@ -96,9 +97,8 @@ export class WarmRuntimePool {
             if (generation !== this.resourceGeneration) throw new Error('Resources changed while acquiring the session')
             return lease.runtime
           } catch (error) {
-            if (lease.runtime.hasBackgroundTasks) {
-              this.busy.delete(lease.runtime)
-              this.idle.set(key, lease)
+            if (lease.runtime.hasBackgroundTasks || lease.spec.contextWindow !== spec.contextWindow) {
+              await this.recycle(lease.runtime, lease.spec, lease.session)
               throw error
             }
             this.busy.delete(lease.runtime)

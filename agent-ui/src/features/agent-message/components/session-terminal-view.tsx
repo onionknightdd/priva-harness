@@ -1,3 +1,4 @@
+import type { ContextWindow } from "../model-context"
 import * as React from "react"
 import { useTranslation } from "react-i18next"
 import { useTheme } from "next-themes"
@@ -85,6 +86,7 @@ export type SessionTerminalViewProps = {
   harness: RunHarnessId
   cwd: string
   model: string | null
+  contextWindow: ContextWindow
   effort: AgentRunEffort
   sessionId: string
   /** Hidden views keep their terminal and socket alive; only the surface is collapsed. */
@@ -97,6 +99,7 @@ export function SessionTerminalView({
   cwd,
   model,
   effort,
+  contextWindow,
   sessionId,
   hidden,
   onSessionRebound,
@@ -203,6 +206,7 @@ export function SessionTerminalView({
         cwd: cwd.trim(),
         model,
         effort,
+        contextWindow,
         sessionId: knownSessionIdRef.current,
         cols: terminal.cols,
         rows: terminal.rows,
@@ -233,7 +237,7 @@ export function SessionTerminalView({
     // `hidden` only affects focus and is read at ready time; `resolvedTheme`
     // is read at launch only, a running TUI keeps its theme.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [harness, cwd, model, effort, generation])
+  }, [harness, cwd, model, effort, contextWindow, generation])
 
   // Coming back from the chat view: the surface may have been resized while collapsed.
   React.useEffect(() => {

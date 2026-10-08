@@ -1,3 +1,5 @@
+import { ComposerContextWindow } from "./composer-context-window"
+import type { ContextWindow } from "../model-context"
 import * as React from "react"
 import { CheckIcon, ChevronDownIcon, SearchIcon } from "lucide-react"
 import gsap from "gsap"
@@ -487,13 +489,19 @@ function EffortSubmenu({
 export function ComposerModelSelector({
   modelReference,
   effort,
+  contextWindow,
+  configurationPending,
   onModelReferenceChange,
   onEffortChange,
+  onContextWindowChange,
 }: {
   modelReference: string | null
   effort: ComposerEffort
+  contextWindow: ContextWindow
+  configurationPending: boolean
   onModelReferenceChange: (model: string | null, source?: "user") => void
   onEffortChange: (effort: ComposerEffort) => void
+  onContextWindowChange: (window: ContextWindow) => void
 }) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
@@ -711,6 +719,8 @@ export function ComposerModelSelector({
           profile: selection.profileLabel,
           model: selection.modelId,
           effort,
+  contextWindow,
+  configurationPending,
         })
       : `${selection.profileLabel}, ${t("agentMessage.effortAria", {
           level: effort,
@@ -824,6 +834,7 @@ export function ComposerModelSelector({
         )}
         <DropdownMenuSeparator />
         <EffortSubmenu effort={effort} onEffortChange={onEffortChange} />
+        <ComposerContextWindow value={contextWindow} pending={configurationPending} onChange={onContextWindowChange} />
       </DropdownMenuContent>
     </DropdownMenu>
   )

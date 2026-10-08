@@ -77,9 +77,9 @@ export async function nativeClaudeFixture(respond: ModelResponse, recorder?: Dat
   return {
     root, configDir, harness, terminals, frames, requests, socket, sdkOpen, profile, services, base,
     get ref() { return { provider: 'claude', id: sessionId } as const },
-    send(text: string, runId: string, model = 'claude-sonnet-4-6', options: { effort?: string; profileId?: string; runMode?: 'agent' | 'code' } = {}) {
+    send(text: string, runId: string, model = 'claude-sonnet-4-6', options: { effort?: string; contextWindow?: 200000 | 1000000; profileId?: string; runMode?: 'agent' | 'code' } = {}) {
       socket.send(JSON.stringify({ type: 'run.start', harness: 'claude', cwd: root, text, runId, ...(options.runMode ? { runMode: options.runMode } : {}),
-        model: `${options.profileId ?? profile.id}:${model}`, ...(options.effort ? { effort: options.effort } : {}), ...(sessionId ? { sessionId } : {}) }))
+        contextWindow: options.contextWindow ?? 200000, model: `${options.profileId ?? profile.id}:${model}`, ...(options.effort ? { effort: options.effort } : {}), ...(sessionId ? { sessionId } : {}) }))
     },
     async dispose() {
       socket.close()

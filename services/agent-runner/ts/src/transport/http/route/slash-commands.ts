@@ -67,11 +67,11 @@ async function listingRunSpec(
   return {
     cwd,
     provider,
-    model: resolved.model,
+    model: provider === 'pi' ? resolved.modelId : resolved.model,
     baseUrl: rewriteProviderBaseUrl(resolved.profile.baseUrl, provider),
     authToken: resolved.profile.authToken,
     profileId: resolved.profile.id,
-    modelContext: resolved.capabilities.context,
+    contextWindow: resolved.capabilities.context === '1m' ? 1_000_000 : 200_000,
   }
 }
 

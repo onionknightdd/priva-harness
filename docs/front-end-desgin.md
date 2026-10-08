@@ -1728,10 +1728,34 @@ optimistic message ID -> snapshot.renderId -> same mounted bubble / reply / scro
 模型与 effort 由 `useAgentMessage` 持有，选择器通过受控 props 显示并回报用户选择，
 不保存独立副本。profile 加载中不清空已到达的原生状态；问答完成后重新挂载选择器时
 沿用会话当前值。原生回传不触发保存 profile 默认模型。
-已有 Claude 会话中，手动选择模型或 effort 立即发送 `session.configure`；空闲时应用，
+已有 Claude / Pi 会话中，手动选择模型、effort 或上下文窗口立即发送 `session.configure`；空闲时应用，
 生成中在本轮结束后执行，不需要再发送聊天消息。默认值初始化和原生回传不触发配置请求。
 连续选择时保留最新选择，直到对应 requestId 获得原生确认；失败显示现有连接错误并恢复
-已知原生选择。Pi 与尚未创建的新会话保持发送时应用选择。
+已知原生选择。尚未创建的新会话在首次发送时应用选择。
+
+2026-10-09：仅会话输入框的 Model selector 在「思考强度」下新增「上下文窗口」子菜单。
+所有模型均提供 200K / 1M，新会话默认 200K，恢复会话读取已保存的选择。
+选择 1M 后保持子菜单打开，并在 1M 选项下方自动显示共享 Tooltip：
+「若当前模型不支持 1M 上下文窗口，使用该配置可能导致请求报错。」
+切回 200K 或关闭子菜单时隐藏，选择 1M 后也可再次悬停或键盘聚焦查看。
+沿用菜单与 Tooltip 的现有动效、主题和 reduced-motion；菜单在窄屏按可用空间翻转。
+上下文窗口独立于模型 ID；`useAgentMessage` 持有状态，`run.start`、`session.configure`
+与终端连接参数携带数值 `contextWindow`（200000 / 1000000）。等待配置确认期间显示
+加载状态并暂停发送新消息，停止当前回复仍可用。配置确认同时更新上下文环。
+设置页的默认模型与多模态模型选择器不增加该选项。
+
+```text
+会话输入框 Model selector
+  模型配置          >
+  思考强度 medium   >
+  上下文窗口 200K   >  (o) 200K
+                        ( ) 1M
+                             +-> 选择后在下方显示不支持窗口的风险提示
+
+contextWindow -> run.start / session.configure -> Claude env + [1m] / Pi models.json
+              <- session.config(requestId)    <- 实际运行时确认
+              -> 会话保存 / 恢复；失败恢复已确认的选择
+```
 
 原生 `/model` 的命令 XML 和 stdout 合并为一张 `ModelChangeCard`，复用 Card 与 Cpu 图标，
 使用现有语义颜色、150ms 淡入及 reduced-motion；窄屏自然换行。卡片由后端 modelChange

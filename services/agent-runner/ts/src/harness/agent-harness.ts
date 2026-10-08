@@ -1,5 +1,7 @@
 import type { InteractionResponse } from '../core/resource/interaction.js'
 import { randomUUID } from 'node:crypto'
+import { DEFAULT_CONTEXT_WINDOW } from '../core/resource/model-context.js'
+import { applyModelContext, splitModelContext } from '../core/resource/model-profile.js'
 
 import type {
   AgentProvider,
@@ -69,6 +71,8 @@ export interface SlashCommandCatalog {
 }
 
 export class AgentHarness {
+  private readonly configuring = new Map<string, Promise<void>>()
+  private readonly pumps = new Map<LiveRun, Promise<void>>()
   private readonly runModes: SessionRunModes
   private readonly liveRuns: LiveRunRegistry | undefined
   private readonly pool: WarmRuntimePool | undefined
@@ -118,12 +122,14 @@ export class AgentHarness {
     const loading = this.loadingStreams.get(key)
     if (loading) return loading
     const promise = (async () => {
-      const [history, tasks] = await Promise.all([
+      const [history, tasks, config] = await Promise.all([
         this.options.sessions?.thread(ref.provider, ref.id), this.options.sessions?.savedBackgroundTasks(ref),
+        this.options.sessions?.configuration(ref),
       ])
       const stream = this.streams.get(key) ?? new SessionStream(ref, history?.messages, 4096,
         (tasks) => this.options.sessions?.saveBackgroundTasks(ref, tasks) ?? Promise.resolve(), tasks)
       this.streams.set(key, stream)
+      if (config && !stream.snapshot().config) stream.publish({ type: 'session.config', config })
       return stream
     })()
     this.loadingStreams.set(key, promise)
@@ -217,8 +223,54 @@ export class AgentHarness {
 
   async configureTerminal(ref: SessionRef, spec: ProviderRunSpec, requestId: string): Promise<void> {
     if (!this.terminalChats) throw new SessionError('invalid-request', 'Terminal driver is unavailable')
-    if (!await this.terminals?.isAlive(ref)) await this.openTerminal({ kind: 'resume', session: ref }, spec, { cols: 120, rows: 40 })
+    if (!await this.terminals?.isAlive(ref)) {
+      const saved = await this.options.sessions?.configuration(ref)
+      const contextWindow = saved?.contextWindow ?? DEFAULT_CONTEXT_WINDOW
+      await this.openTerminal({ kind: 'resume', session: ref }, { ...spec, contextWindow,
+        model: applyModelContext(spec.model, contextWindow === 1_000_000 ? '1m' : null) }, { cols: 120, rows: 40 })
+    }
     await this.terminalChats.configure(ref, await this.runModes.resolve({ kind: 'resume', session: ref }, spec), requestId)
+  }
+
+  async configureSession(ref: SessionRef, spec: ProviderRunSpec, requestId: string): Promise<void> {
+    if (ref.provider === 'claude') return this.configureTerminal(ref, spec, requestId)
+    const key = sessionRefKey(ref)
+    // Queue without blocking the socket: a running turn may still need an answer or abort.
+    const previous = this.configuring.get(key) ?? Promise.resolve()
+    const pending = previous.then(async () => {
+      const live = this.liveRuns?.liveForSession(ref)
+      const pumping = [...this.pumps].find(([run]) => run.provider === ref.provider && run.sessionId === ref.id)?.[1]
+      await (pumping ?? live?.waitForComplete())
+      const target = { kind: 'resume', session: ref } as const
+      spec = await this.runModes.resolve(target, spec)
+      const saved = await this.options.sessions?.configuration(ref)
+      const open = async () => {
+        const runtime = await this.options.providers[ref.provider].openSession(target, {
+          ...spec, contextWindow: saved?.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
+        })
+        try { await runtime.applyRunSpec(spec); return runtime }
+        catch (error) { await runtime.release('dispose'); throw error }
+      }
+      const runtime = this.pool
+        ? await this.pool.acquire(ref, spec, open)
+        : await open()
+      try {
+        const context = await runtime.getContextUsage()
+        await this.recordCompleted(ref, spec, spec.model)
+        this.sessionStream(ref).publish({ type: 'session.config', requestId, config: {
+          model: spec.model, cwd: spec.cwd, contextWindow: spec.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
+          context,
+          ...(spec.runMode ? { runMode: spec.runMode } : {}),
+          ...(spec.profileId ? { profileId: spec.profileId } : {}), ...(spec.effort ? { effort: spec.effort } : {}),
+        } })
+      } finally {
+        if (this.pool) await this.pool.recycle(runtime, spec, ref)
+        else await runtime.release('dispose')
+      }
+    }).catch((error: unknown) => {
+      this.sessionStream(ref).publish({ type: 'error', code: 'session.configure', requestId, message: errorMessage(error) })
+    }).finally(() => { if (this.configuring.get(key) === pending) this.configuring.delete(key) })
+    this.configuring.set(key, pending)
   }
 
   async terminalEvent(ref: SessionRef, state: TerminalSessionState): Promise<void> {
@@ -314,7 +366,8 @@ export class AgentHarness {
       abort,
     })
     this.bindPreparedSession(liveRuns, runId, session)
-    void this.pumpLive(live, turn, spec, session, runOptions.source)
+    const pumping = this.pumpLive(live, turn, spec, session, runOptions.source).finally(() => { this.pumps.delete(live) })
+    this.pumps.set(live, pumping)
     return live
   }
 
@@ -459,8 +512,9 @@ export class AgentHarness {
       ledger.attachSession(runtime.session.id)
       const stamper = new EnvelopeStamper(runId, spec.provider, Date.now, runtime.session.id)
       try {
-        if (spec.runMode) yield stamper.stamp({ type: 'session.config', config: {
-          model: spec.model, cwd: spec.cwd, runMode: spec.runMode, context: emptyContextUsage(),
+        yield stamper.stamp({ type: 'session.config', config: {
+          model: spec.model, cwd: spec.cwd, contextWindow: spec.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
+          ...(spec.runMode ? { runMode: spec.runMode } : {}), context: await runtime.getContextUsage(),
           ...(spec.profileId ? { profileId: spec.profileId } : {}), ...(spec.effort ? { effort: spec.effort } : {}),
         } })
         yield stamper.stamp({
@@ -656,6 +710,8 @@ export class AgentHarness {
   }
 
   private rejectBusy(session: SessionTarget): void {
+    const ref = sessionRefOf(session)
+    if (ref && this.configuring.has(sessionRefKey(ref))) throw new SessionError('session-busy', 'Wait for the session configuration to finish applying')
     if (this.liveRuns === undefined) return
     if (session.kind === 'resume') {
       if (this.liveRuns.liveRunningForSession(session.session) !== undefined) {
@@ -684,8 +740,8 @@ export class AgentHarness {
     if (this.options.sessions === undefined || spec.profileId === undefined) return
     await this.options.sessions.recordRunCompleted(session, {
       profileId: spec.profileId,
-      modelId,
-      context: spec.modelContext ?? null,
+      modelId: splitModelContext(modelId).modelId ?? modelId,
+      context: spec.contextWindow === 1_000_000 ? '1m' : null,
     })
   }
 }

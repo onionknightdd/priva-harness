@@ -12,6 +12,47 @@ describe('AgentHarness', () => {
     vi.useRealTimers()
   })
 
+  it('queues Pi context configuration until the runtime has finished releasing its turn', async () => {
+    const provider = new FakeAgentProvider('pi', [{ type: 'run.completed', model: 'm', durationMs: 1 }])
+    let finish!: () => void
+    const cleanup = new Promise<void>((resolve) => { finish = resolve })
+    const open = provider.openSession.bind(provider)
+    vi.spyOn(provider, 'openSession').mockImplementation(async (target, spec) => {
+      const runtime = await open(target, spec)
+      const run = runtime.run.bind(runtime)
+      vi.spyOn(runtime, 'run').mockImplementation(async function* (turn, context) {
+        try { yield* run(turn, context) } finally { await cleanup }
+      })
+      return runtime
+    })
+    const harness = new AgentHarness({ providers: { pi: provider, claude: new FakeAgentProvider('claude', []) },
+      cwd: '/tmp', liveRuns: new LiveRunRegistry() })
+    try {
+      const spec = testRunSpec({ provider: 'pi', contextWindow: 200000 })
+      const live = await harness.launch({ text: 'hi' }, spec, { source: 'web' })
+      await live.waitForComplete()
+      const runtime = provider.lastRuntime
+      if (!runtime) throw new Error('Missing Pi runtime')
+      const applied = vi.spyOn(runtime, 'applyRunSpec')
+      const events: StreamFrame[] = []
+      harness.sessionStream(runtime.session).subscribe((event) => { events.push(event) })
+      await harness.configureSession(runtime.session, { ...spec, contextWindow: 1000000 }, 'window')
+      await Promise.resolve()
+      expect(applied).not.toHaveBeenCalled()
+      finish()
+      await expect.poll(() => events.find((event) => event.type === 'session.config' && event.requestId === 'window'))
+        .toMatchObject({ config: { model: 'm', contextWindow: 1000000 } })
+      expect(applied).toHaveBeenCalledWith(expect.objectContaining({ contextWindow: 1000000 }))
+      expect(provider.targets).toHaveLength(1)
+      applied.mockRejectedValueOnce(new Error('Compaction failed'))
+      await harness.configureSession(runtime.session, { ...spec, contextWindow: 200000 }, 'shrink')
+      await expect.poll(() => events.find((event) => event.type === 'error' && event.requestId === 'shrink'))
+        .toMatchObject({ message: 'Compaction failed' })
+      expect(provider.targets).toHaveLength(1)
+      expect(harness.sessionStream(runtime.session).snapshot().config?.contextWindow).toBe(1000000)
+    } finally { finish(); await harness.disposePool() }
+  })
+
   it('emits run.started, forwards provider events, and releases the runtime', async () => {
     const provider = new FakeAgentProvider('claude', [
       {

@@ -1,3 +1,4 @@
+import type { SessionConfiguration } from '../../core/event/agent-event.js'
 import type { BackgroundTask } from '../../core/resource/background-task.js'
 import { applyStreamFrame } from '../../core/resource/apply-stream-frame.js'
 import { realpath, stat } from 'node:fs/promises'
@@ -10,7 +11,7 @@ import type {
 } from '../../core/contract/agent-provider.js'
 import { emptyContextUsage } from '../../core/resource/context-usage.js'
 import type { ContextUsage } from '../../core/resource/context-usage.js'
-import { applyModelContext } from '../../core/resource/model-profile.js'
+import { applyModelContext, splitModelContext } from '../../core/resource/model-profile.js'
 import { rewriteProviderBaseUrl } from '../../core/resource/run-harness.js'
 import type { SessionMetadataRepository } from '../../core/contract/session-metadata-repository.js'
 import {
@@ -137,6 +138,23 @@ export interface RecordRunCompletedInput {
 }
 
 export class SessionService {
+  async configuration(ref: SessionRef): Promise<SessionConfiguration | undefined> {
+    const metadata = await this.options.metadata.get(ref)
+    const selected = metadata.lastResponseModel
+    if (!selected) return undefined
+    const info = await this.provider(ref.provider).sessions.read(ref)
+    const contextWindow = selected.model.capabilities.context === '1m' ? 1_000_000 : 200_000
+    return {
+      model: ref.provider === 'claude'
+        ? applyModelContext(selected.model.id, selected.model.capabilities.context)
+        : splitModelContext(selected.model.id).modelId ?? selected.model.id,
+      ...(selected.profileId ? { profileId: selected.profileId } : {}),
+      cwd: info.cwd ?? this.options.activeCwd,
+      ...(metadata.runMode ? { runMode: metadata.runMode } : {}),
+      contextWindow,
+      context: { ...emptyContextUsage(), limit: contextWindow },
+    }
+  }
   private nativeRunningReader: ((harness: ProviderId) => readonly RunningSessionView[]) | undefined
   bindNativeRunningReader(read: NonNullable<SessionService['nativeRunningReader']>): void { this.nativeRunningReader = read }
   private liveThreadReader: ((ref: SessionRef) => readonly ThreadMessage[] | undefined) | undefined
@@ -456,11 +474,11 @@ export class SessionService {
       return {
         cwd,
         provider: ref.provider,
-        model: resolved.model,
+        model: ref.provider === 'pi' ? resolved.modelId : resolved.model,
         baseUrl: rewriteProviderBaseUrl(resolved.profile.baseUrl, ref.provider),
         authToken: resolved.profile.authToken,
         profileId: resolved.profile.id,
-        modelContext: resolved.capabilities.context,
+        contextWindow: resolved.capabilities.context === '1m' ? 1_000_000 : 200_000,
       }
     } catch {
       return undefined

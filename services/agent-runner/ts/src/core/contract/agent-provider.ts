@@ -1,4 +1,5 @@
 import type { InteractionResponse } from '../resource/interaction.js'
+import type { ContextWindow } from '../resource/model-context.js'
 import type { RunMode } from '../resource/session.js'
 import type { AgentEvent } from '../event/agent-event.js'
 import type { ContextUsage } from '../resource/context-usage.js'
@@ -46,7 +47,7 @@ export interface ProviderRunSpec {
   readonly baseUrl: string
   readonly authToken: string
   readonly profileId?: string
-  readonly modelContext?: '1m' | null
+  readonly contextWindow?: ContextWindow
   readonly effort?: EffortLevel
   readonly queueBehavior?: QueueBehavior
   readonly promptSuggestions?: boolean

@@ -1,3 +1,4 @@
+import type { ContextWindow } from "./model-context"
 import { dequal } from "dequal"
 import type { AgentRunEffort } from './run-agent-session'
 import type { ContextUsage } from './context-usage'
@@ -21,7 +22,7 @@ const STREAM_PROTOCOL_VERSION = 2
 
 export type StreamFrame = {
   prompts?: string[]
-  config?: { runMode?: "agent" | "code"; model: string; profileId?: string; effort?: AgentRunEffort; cwd: string; context: ContextUsage }
+  config?: { contextWindow: ContextWindow; runMode?: "agent" | "code"; model: string; profileId?: string; effort?: AgentRunEffort; cwd: string; context: ContextUsage }
   runningToolIds?: string[]
   nextSessionId?: string
   driver?: "terminal"

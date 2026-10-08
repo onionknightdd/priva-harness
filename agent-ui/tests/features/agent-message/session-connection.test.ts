@@ -17,6 +17,33 @@ class Socket extends EventTarget {
   close() { this.readyState = 3; this.dispatchEvent(new Event("close")) }
 }
 
+for (const harness of ["claude", "pi"] as const) test(`${harness} context configuration waits for the matching acknowledgment and rejects failure`, async () => {
+  const originals = ["window", "WebSocket"].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const)
+  Object.defineProperty(globalThis, "window", { configurable: true, value: { location: { protocol: "http:", host: "localhost" } } })
+  Object.defineProperty(globalThis, "WebSocket", { configurable: true, value: Socket })
+  const connection = connectAgentSession({ harness, sessionId: "session" }, { onFrame: () => {}, onError: () => {}, onSession: () => {}, onConnection: () => {} })
+  try {
+    const socket = Socket.instances.at(-1)!
+    socket.open()
+    let confirmed = false
+    const pending = connection.configure({ model: "profile:custom", cwd: "/work", contextWindow: 1000000 }, "window")
+      .then(() => { confirmed = true })
+    assert.deepEqual(socket.sent.at(-1), { type: "session.configure", harness, sessionId: "session", requestId: "window",
+      model: "profile:custom", cwd: "/work", contextWindow: 1000000 })
+    socket.frame({ type: "session.config", seq: 1, requestId: "older" })
+    await Promise.resolve()
+    assert.equal(confirmed, false)
+    socket.frame({ type: "session.config", seq: 2, requestId: "window" })
+    await pending
+    const rejected = assert.rejects(connection.configure({ model: "profile:custom", cwd: "/work", contextWindow: 200000 }, "shrink"), /Compaction failed/)
+    socket.frame({ type: "error", code: "session.configure", requestId: "shrink", message: "Compaction failed" })
+    await rejected
+  } finally {
+    connection.disconnect()
+    for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key) }
+  }
+})
+
 test("a response completion leaves the session connected for task notices and another response", async () => {
   const originals = ["window", "WebSocket"].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const)
   Object.defineProperty(globalThis, "window", { configurable: true, value: { location: { protocol: "http:", host: "localhost" } } })

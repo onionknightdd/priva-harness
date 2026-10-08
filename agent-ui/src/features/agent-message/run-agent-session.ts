@@ -1,3 +1,4 @@
+import type { ContextWindow } from "./model-context"
 import type { InteractionResponse } from "./interaction-data"
 import type { MessageAttachment } from "./message-attachment"
 import { messageTextWithAttachments } from "./message-attachment-text"
@@ -7,7 +8,7 @@ export type AgentRunHarness = "claude" | "pi"
 export type AgentRunEffort = "low" | "medium" | "high" | "xhigh" | "max"
 export type AgentRunInit = {
   text: string; attachments?: MessageAttachment[]; imagePaths?: string[]; model: string; harness: AgentRunHarness
-  cwd: string; effort?: AgentRunEffort; sessionId?: string; fork?: boolean; promptSuggestions?: boolean
+  cwd: string; contextWindow?: ContextWindow; effort?: AgentRunEffort; sessionId?: string; fork?: boolean; promptSuggestions?: boolean
   runMode?: "agent" | "code"
   theme?: "light" | "dark"
 }
@@ -171,8 +172,8 @@ export function connectAgentSession(target: { harness: AgentRunHarness; sessionI
   }
   connect()
   return {
-    configure(init: Pick<AgentRunInit, "model" | "cwd" | "effort" | "promptSuggestions">, requestId: string): Promise<void> {
-      if (!sessionId || target.harness !== "claude") return Promise.reject(new Error("Model synchronization requires an existing Claude session"))
+    configure(init: Pick<AgentRunInit, "model" | "cwd" | "effort" | "contextWindow" | "promptSuggestions">, requestId: string): Promise<void> {
+      if (!sessionId) return Promise.reject(new Error("Model synchronization requires an existing session"))
       return new Promise((resolve, reject) => {
         replies.set(requestId, { resolve, reject })
         try { send({ ...init, type: "session.configure", harness: target.harness, sessionId, requestId }) }

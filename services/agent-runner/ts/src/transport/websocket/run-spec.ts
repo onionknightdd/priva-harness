@@ -1,4 +1,6 @@
 import type { RunMode } from '../../core/resource/session.js'
+import { DEFAULT_CONTEXT_WINDOW, type ContextWindow } from '../../core/resource/model-context.js'
+import { applyModelContext } from '../../core/resource/model-profile.js'
 import type { EffortLevel, ProviderRunSpec } from '../../core/contract/agent-provider.js'
 import {
   providerIdForHarness,
@@ -19,6 +21,7 @@ export interface RunSpecRequest {
   readonly cwd: string
   readonly runMode?: RunMode
   readonly effort?: EffortLevel
+  readonly contextWindow?: ContextWindow
   readonly promptSuggestions?: boolean
 }
 
@@ -31,15 +34,18 @@ export async function buildRunSpec(services: RunSpecServices, request: RunSpecRe
   const resolved = await services.modelProfileService.resolve(request.model)
   const agentProfile = await services.agentProfileService.read()
   const baseUrl = rewriteProviderBaseUrl(resolved.profile.baseUrl, request.harness)
+  const contextWindow = request.contextWindow ?? DEFAULT_CONTEXT_WINDOW
   return {
     cwd: request.cwd,
     ...(request.runMode === undefined ? {} : { runMode: request.runMode }),
     provider: providerIdForHarness(request.harness),
-    model: resolved.model,
+    model: request.harness === 'claude'
+      ? applyModelContext(resolved.modelId, contextWindow === 1_000_000 ? '1m' : null)
+      : resolved.modelId,
     baseUrl,
     authToken: resolved.profile.authToken,
     profileId: resolved.profile.id,
-    modelContext: resolved.capabilities.context,
+    contextWindow,
     queueBehavior: agentProfile.queueBehavior,
     ...(request.effort === undefined ? {} : { effort: request.effort }),
     ...(request.promptSuggestions === undefined

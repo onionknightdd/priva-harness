@@ -1,3 +1,4 @@
+import type { ContextWindow } from "./model-context"
 import type { AgentRunEffort } from "./run-agent-session"
 import type { RunHarnessId } from "@/features/sidebar/header/harness-options"
 
@@ -12,6 +13,7 @@ export type TerminalSessionOptions = {
   cwd: string
   model: string
   sessionId: string
+  contextWindow?: ContextWindow
   effort?: AgentRunEffort
   cols: number
   rows: number
@@ -49,6 +51,7 @@ export function terminalSocketUrl(options: TerminalSessionOptions): string {
     cols: String(options.cols),
     rows: String(options.rows),
   })
+  if (options.contextWindow) params.set("contextWindow", String(options.contextWindow))
   if (options.effort) params.set("effort", options.effort)
   if (options.theme) params.set("theme", options.theme)
   return `${protocol}//${window.location.host}/api/sandbox/agent/ws/terminal?${params.toString()}`

@@ -153,7 +153,7 @@ tmux 的 `capture-pane -P` 不暴露其未完成的 UTF-8 字符。若快照后�
 
 ### 4.5 WS 线协议
 
-`GET /api/sandbox/agent/ws/terminal?harness=claude&cwd=…&model=…[&sessionId=…][&effort=…][&cols=…&rows=…][&theme=light|dark]`
+`GET /api/sandbox/agent/ws/terminal?harness=claude&cwd=…&model=…[&sessionId=…][&effort=…][&contextWindow=200000|1000000][&cols=…&rows=…][&theme=light|dark]`
 
 | 方向 | 帧 | 内容 |
 |---|---|---|
@@ -383,7 +383,8 @@ TMPDIR=/tmp npm test -- tests/integration/transport/websocket/terminal-notificat
 
 已有 Claude 会话的 Composer 手动选择通过 `session.configure` 立即入队；空闲时马上应用，
 生成中等待当前轮次结束。配置与聊天输入共用串行队列，但配置不创建 run、不发送用户消息，
-也不调用模型。新会话尚无 sessionId 时保留本地选择，首次发送时初始化原生进程。
+通常不调用模型；缩小窗口且已用上下文超过目标时先执行原生 `/compact`。
+新会话尚无 sessionId 时保留本地选择，首次发送时初始化原生进程。
 相同服务配置下向原生输入框提交 `/model <id>`、`/effort <level>`；只自动确认这两个
 命令的明确确认对话框。statusLine 写入当前 instanceId 的 model / effort 后，
 回传带 requestId 的 `session.config` 确认。超时或不支持的值返回同 requestId 的错误。
@@ -396,9 +397,21 @@ Composer 手动选择 -> session.configure -> 空闲 / 等当前轮次完成 -> 
 原生 /model -> caveat + command + stdout -> modelChange -> Web UI 卡片
 ```
 
-环境配置不能通过 /model 更新，因此换服务地址、凭证、图片模型或建议设置时，在轮次空闲且
-没有后台任务后重启同一 pane，resume 同一转录。查看者连接保留。`[1m]` 选择通过 `/model`
-应用，原生 context window 确认后回传扩展上下文标志，无需单独重启。
+环境配置不能通过 /model 更新，因此换服务地址、凭证、图片模型、建议设置或上下文窗口时，
+在轮次空闲且没有后台任务后重启同一 pane，resume 同一转录。查看者连接保留。
+窗口选择独立于模型名，默认 200000；1000000 为 Claude 模型追加 `[1m]`。
+200K 设置 `CLAUDE_CODE_DISABLE_1M_CONTEXT=1`，1M 设置为 `0`；两档均显式设置
+`CLAUDE_CODE_MAX_CONTEXT_TOKENS` 和 `CLAUDE_CODE_AUTO_COMPACT_WINDOW`，覆盖继承的环境值。
+这是必要的，因为部分 Claude 模型默认拥有 1M，仅删除模型后缀不能限制为 200K。
+重启后等待新实例 ready 与 statusLine 的实际窗口确认，再返回 requestId；失败恢复先前配置。
+会话元数据保存已确认窗口，重连快照恢复；不修改全局 profile 的默认模型。
+
+```text
+Composer 200K / 1M -> contextWindow -> 验证 200000 / 1000000
+  Claude -> [1m] + 显式窗口环境 -> 必要时 /compact -> 原 pane respawn --resume -> statusLine 确认
+  Pi     -> 等当前运行时清理完毕 -> 必要时 compact -> models.json + registry.refresh + setModel
+           -> session.config(requestId) -> 保存会话选择 / 恢复上下文环
+```
 
 statusLine 同时回传 model / effort / cwd / context，`session.config` 和重连快照更新气泡选择器、
 工作目录及上下文环。配置请求未确认时保留最后一次手动选择，避免较早的回包覆盖它；

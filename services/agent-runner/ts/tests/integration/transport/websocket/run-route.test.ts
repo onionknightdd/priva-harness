@@ -104,7 +104,8 @@ describe('WS /api/sandbox/agent/ws/session', () => {
     }))
     const received = await frames
 
-    expect(received[0]).toMatchObject({ type: 'run.started', v: 2, seq: 1, harness: 'pi' })
+    expect(received[0]).toMatchObject({ type: 'session.config', config: { contextWindow: 200000 }, harness: 'pi' })
+    expect(received[1]).toMatchObject({ type: 'run.started', v: 2, seq: 2, harness: 'pi' })
     expect(received[0]).toHaveProperty('runId')
     expect(received[0]).toHaveProperty('seq')
     expect(received).toEqual(expect.arrayContaining([

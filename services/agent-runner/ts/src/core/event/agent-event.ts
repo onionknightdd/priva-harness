@@ -1,3 +1,4 @@
+import type { ContextWindow } from '../resource/model-context.js'
 import type { RunMode } from '../resource/session.js'
 import type { WorkflowState } from '../resource/workflow.js'
 import type { InteractionRequest, InteractionResolution } from '../resource/interaction.js'
@@ -121,6 +122,7 @@ export interface BlockAddress {
 }
 
 export interface SessionConfiguration {
+  readonly contextWindow: ContextWindow
   readonly runMode?: RunMode
   readonly model: string
   readonly profileId?: string

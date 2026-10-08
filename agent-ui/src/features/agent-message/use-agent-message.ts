@@ -25,6 +25,7 @@ import { isCompactCommandUserMessage } from "./slash-command-envelope"
 import { contextUsageFromApi, emptyContextUsage, type ContextUsage } from "./context-usage"
 import { applyThreadStreamFrame, mergeSnapshotMessages, type StreamFrame } from "./run-stream-reducer"
 import { updatePromptSuggestion, type PromptSuggestion } from "./prompt-suggestion"
+import { baseModelReference, DEFAULT_CONTEXT_WINDOW, type ContextWindow } from "./model-context"
 
 export function useAgentMessage() {
   const { t } = useTranslation()
@@ -46,6 +47,8 @@ export function useAgentMessage() {
   const [modelReference, setModelReference] = React.useState<string | null>(null)
   const [imageInputModels, setImageInputModels] = React.useState<ReadonlySet<string>>(() => new Set())
   const [effort, setEffort] = React.useState<AgentRunEffort>("medium")
+  const [contextWindow, setContextWindow] = React.useState<ContextWindow>(DEFAULT_CONTEXT_WINDOW)
+  const [configurationPending, setConfigurationPending] = React.useState(false)
   const [messages, setMessages] = React.useState<AgentThreadMessage[]>([])
   const [connectionError, setConnectionError] = React.useState<string | null>(null)
   const [isConnected, setConnected] = React.useState(false)
@@ -87,14 +90,16 @@ export function useAgentMessage() {
       const config = frame.config
       latestConfigRef.current = config
       const acknowledged = Boolean(frame.requestId && frame.requestId === configurationRequestRef.current)
-      if (acknowledged) configurationRequestRef.current = undefined
+      if (acknowledged) { configurationRequestRef.current = undefined; setConfigurationPending(false) }
       // Keep the latest choice visible while older native confirmations arrive.
-      const selection = JSON.stringify([id, config.profileId, config.model, config.effort])
+      const selection = JSON.stringify([id, config.profileId, config.model, config.effort, config.contextWindow])
       if (!configurationRequestRef.current && (acknowledged || selection !== nativeConfigRef.current)) {
         nativeConfigRef.current = selection
-        if (config.profileId) setModelReference(`${config.profileId}:${config.model}`)
+        if (config.profileId) setModelReference(baseModelReference(`${config.profileId}:${config.model}`))
         if (config.effort) setEffort(config.effort)
+        setContextWindow(config.contextWindow)
       }
+      contextRequestRef.current++
       setContextUsage(config.context)
       if (id && ((config.cwd && config.cwd !== runCwd) || (config.runMode && config.runMode !== runMode))) bindRunSession(id, { cwd: config.cwd, ...(config.runMode ? { runMode: config.runMode } : {}) })
     }
@@ -184,11 +189,17 @@ export function useAgentMessage() {
     nativeConfigRef.current = undefined
     latestConfigRef.current = undefined
     configurationRequestRef.current = undefined
+    setConfigurationPending(false)
+    setContextWindow(DEFAULT_CONTEXT_WINDOW)
     setConnected(false)
     setInteractions([])
     setActiveRunId(null)
     setSuggestion(null)
   }, [])
+
+  React.useEffect(() => {
+    if (!runSessionId) setContextWindow(DEFAULT_CONTEXT_WINDOW)
+  }, [runHarnessId, runSessionId])
 
   React.useEffect(() => {
     const connection = connectionRef.current
@@ -235,7 +246,7 @@ export function useAgentMessage() {
     const files = partitioned?.files ?? null
     const imagePaths = partitioned?.imagePaths ?? []
     const content = (slashCommand ? composeSlashMessage(slashCommand.name, draft) : draft).trim()
-    if (interactions.length || !uploaded || (!content && !uploaded.length) || !modelReference || !runHarnessId || !runCwd.trim()) return
+    if (configurationRequestRef.current || interactions.length || !uploaded || (!content && !uploaded.length) || !modelReference || !runHarnessId || !runCwd.trim()) return
     const connection = ensureConnection()
     const assistant = createAgentThreadMessage("assistant", "", "streaming")
     const user = { ...createAgentThreadMessage("user", content), id: `${assistant.id}:user`,
@@ -268,37 +279,45 @@ export function useAgentMessage() {
       if (generation !== generationRef.current) return
       void connection.start({ text: content, attachments: files ?? [], ...(imagePaths.length ? { imagePaths } : {}), model: modelReference, harness: runHarnessId,
         ...(runHarnessId === "claude" ? { runMode } : {}),
-        cwd: runCwd.trim(), effort, promptSuggestions: inputSuggestions,
+        cwd: runCwd.trim(), effort, contextWindow, promptSuggestions: inputSuggestions,
         theme: resolvedTheme === "dark" ? "dark" : "light" }, assistant.id).catch(failed)
     }).catch(failed)
-  }, [interactions.length, attachments, imageInputModels, slashCommand, draft, modelReference, runHarnessId, runCwd, ensureConnection, setLastModelReference, clearAttachments, queueBehavior, effort, inputSuggestions, resolvedTheme, runMode, setRunModePending, t])
+  }, [interactions.length, attachments, imageInputModels, slashCommand, draft, modelReference, runHarnessId, runCwd, ensureConnection, setLastModelReference, clearAttachments, queueBehavior, effort, contextWindow, inputSuggestions, resolvedTheme, runMode, setRunModePending, t])
 
   const respondPermission = React.useCallback((response: InteractionResponse) => {
     const connection = connectionRef.current
     return connection ? connection.respondPermission(response) : Promise.reject(new Error("Connection unavailable"))
   }, [])
-  const synchronizeSelection = React.useCallback((model: string | null, nextEffort: AgentRunEffort) => {
-    if (!model || runHarnessId !== "claude" || !runSessionId) return
+  const synchronizeSelection = React.useCallback((model: string | null, nextEffort: AgentRunEffort, nextWindow: ContextWindow) => {
+    if (!model || !runHarnessId || !runSessionId) return
     const requestId = crypto.randomUUID(), generation = generationRef.current
     configurationRequestRef.current = requestId
+    setConfigurationPending(true)
     setConnectionError(null)
-    void ensureConnection().configure({ model, cwd: runCwd, effort: nextEffort, promptSuggestions: inputSuggestions }, requestId).catch((error: unknown) => {
+    void ensureConnection().configure({ model, cwd: runCwd, effort: nextEffort, contextWindow: nextWindow, promptSuggestions: inputSuggestions }, requestId).catch((error: unknown) => {
       if (generation !== generationRef.current || configurationRequestRef.current !== requestId) return
       configurationRequestRef.current = undefined
+      setConfigurationPending(false)
       const native = latestConfigRef.current
-      if (native?.profileId) setModelReference(`${native.profileId}:${native.model}`)
+      if (native?.profileId) setModelReference(baseModelReference(`${native.profileId}:${native.model}`))
       if (native?.effort) setEffort(native.effort)
+      setContextWindow(native?.contextWindow ?? DEFAULT_CONTEXT_WINDOW)
       setConnectionError(error instanceof Error ? error.message : String(error))
     })
   }, [runHarnessId, runSessionId, runCwd, inputSuggestions, ensureConnection])
   const changeModelReference = React.useCallback((model: string | null, source?: "user") => {
-    setModelReference(model)
-    if (source === "user") synchronizeSelection(model, effort)
-  }, [effort, synchronizeSelection])
+    const reference = model === null ? null : baseModelReference(model)
+    setModelReference(reference)
+    if (source === "user") synchronizeSelection(reference, effort, contextWindow)
+  }, [effort, contextWindow, synchronizeSelection])
   const changeEffort = React.useCallback((next: AgentRunEffort) => {
     setEffort(next)
-    synchronizeSelection(modelReference, next)
-  }, [modelReference, synchronizeSelection])
+    synchronizeSelection(modelReference, next, contextWindow)
+  }, [modelReference, contextWindow, synchronizeSelection])
+  const changeContextWindow = React.useCallback((next: ContextWindow) => {
+    setContextWindow(next)
+    synchronizeSelection(modelReference, effort, next)
+  }, [modelReference, effort, synchronizeSelection])
   const stop = React.useCallback(() => connectionRef.current?.abort(), [])
   const dismissPromptSuggestion = React.useCallback(() => setSuggestion((current) =>
     current && !current.dismissed ? { ...current, dismissed: true } : current), [])
@@ -308,12 +327,12 @@ export function useAgentMessage() {
   }, [dismissPromptSuggestion])
   const isStreaming = activeRunId !== null || messages.some((message) => message.status === "streaming")
   return {
-    interactions, respondPermission, composerAttachments, draft, messages, contextUsage, modelReference, effort, isConnected, connectionError,
+    interactions, respondPermission, composerAttachments, draft, messages, contextUsage, modelReference, effort, contextWindow, configurationPending, isConnected, connectionError,
     isStreaming,
     promptSuggestion: inputSuggestions && isConnected && !isStreaming && suggestion?.scope === `${runHarnessId}:${runSessionId}` && !suggestion.dismissed ? suggestion.text : undefined,
     dismissPromptSuggestion,
-    canSubmit: Boolean(!interactions.length && (draft.trim() || slashCommand || attachments.length) && readyComposerAttachments(attachments) !== null && modelReference && runHarnessId && runCwd.trim()),
+    canSubmit: Boolean(!configurationPending && !interactions.length && (draft.trim() || slashCommand || attachments.length) && readyComposerAttachments(attachments) !== null && modelReference && runHarnessId && runCwd.trim()),
     modelReady: Boolean(modelReference && runHarnessId), slashCommand, setDraft: updateDraft, setSlashCommand,
-    setModelReference: changeModelReference, setEffort: changeEffort, submit, stop,
+    setModelReference: changeModelReference, setEffort: changeEffort, setContextWindow: changeContextWindow, submit, stop,
   }
 }

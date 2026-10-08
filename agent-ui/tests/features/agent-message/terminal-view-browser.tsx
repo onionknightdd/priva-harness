@@ -75,15 +75,28 @@ class TerminalSocket extends EventTarget {
   }
   send(data: string | ArrayBuffer) {
     if (typeof data === "string") {
-      const frame = JSON.parse(data) as { type: string; text?: string; runId?: string; model?: string; effort?: string }
+      const frame = JSON.parse(data) as { type: string; text?: string; runId?: string; model?: string; effort?: "low" | "medium" | "high"; requestId?: string; contextWindow?: 200000 | 1000000; cwd?: string }
       if (frame.type === "session.subscribe") {
         this.subscribed = true
         subscriptions++
         this.snapshot()
         summary()
       }
+      if (frame.type === "session.configure" && frame.model) {
+        const separator = frame.model.indexOf(":")
+        config = { profileId: frame.model.slice(0, separator), model: frame.model.slice(separator + 1),
+          effort: frame.effort, cwd: frame.cwd ?? "/workspace/work/existing", contextWindow: frame.contextWindow ?? 200000,
+          context: { ...emptyContextUsage(), limit: frame.contextWindow ?? 200000 } }
+        broadcast({ type: "session.config", requestId: frame.requestId, config })
+      }
       if (frame.type === "run.start" && frame.runId && frame.text) {
-        lastSentModel = `${frame.model} / ${frame.effort}`
+        lastSentModel = `${frame.model} / ${frame.effort} / ${frame.contextWindow}`
+        if (frame.model) {
+          const separator = frame.model.indexOf(":")
+          config = { profileId: frame.model.slice(0, separator), model: frame.model.slice(separator + 1),
+            effort: frame.effort, cwd: frame.cwd ?? "/workspace/work/existing", contextWindow: frame.contextWindow ?? 200000,
+            context: { ...emptyContextUsage(), limit: frame.contextWindow ?? 200000 } }
+        }
         const { text, runId } = frame
         const start = (failed: boolean) => {
           if (this.readyState !== 1) return
@@ -162,12 +175,12 @@ Object.assign(document.getElementById("checks")!.style, { position: "fixed", ins
 const host = document.getElementById("root")!
 Object.assign(host.style, { position: "fixed", inset: "80px 0 0", display: "flex", overflow: "hidden" })
 createRoot(host).render(<React.StrictMode><MotionConfig reducedMotion={options.has("reduced-motion") ? "always" : "user"}><ThemeProvider attribute="class" forcedTheme={options.has("dark") ? "dark" : "light"}>
-  {appMode ? <App /> : <SessionTerminalView harness="claude" cwd="/test" model="test:model" effort="medium" sessionId={sessionId} hidden={false} />}
+  {appMode ? <App /> : <SessionTerminalView harness="claude" cwd="/test" model="test:model" effort="medium" contextWindow={200000} sessionId={sessionId} hidden={false} />}
 </ThemeProvider></MotionConfig></React.StrictMode>)
 document.getElementById("start")!.onclick = () => { finishStartup?.(false); finishStartup = undefined }
 document.getElementById("fail-start")!.onclick = () => { finishStartup?.(true); finishStartup = undefined }
 document.getElementById("model")!.onclick = () => {
-  config = { profileId: "test", model: "claude-opus-4-6[1m]", effort: "high", cwd: "/workspace/work/existing", context: emptyContextUsage() }
+  config = { contextWindow: 1000000, profileId: "test", model: "claude-opus-4-6[1m]", effort: "high", cwd: "/workspace/work/existing", context: emptyContextUsage() }
   broadcast({ type: "session.config", config })
 }
 document.getElementById("context")!.onclick = () => {
