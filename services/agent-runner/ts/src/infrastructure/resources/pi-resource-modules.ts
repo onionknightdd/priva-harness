@@ -24,7 +24,12 @@ let agentMemory: Promise<{ resolveMemoryDir(name: string, scope: 'user' | 'proje
 // Import pure discovery helpers only; extension factories are never executed by listings.
 export async function piDefaultAgents(): Promise<Map<string, DefaultAgent>> {
   defaults ??= loader.import(join(subagentsRoot, 'src/default-agents.ts'))
-  return (await defaults).DEFAULT_AGENTS
+  // Match the runtime's default inheritance without mutating package exports.
+  return new Map([...(await defaults).DEFAULT_AGENTS].map(([name, agent]) => {
+    const inherited = { ...agent }
+    delete inherited.model
+    return [name, inherited]
+  }))
 }
 export async function piMemoryModule(): Promise<MemoryModule> {
   memory ??= loader.import(join(piCodeRoot, 'extensions/memory.ts'))

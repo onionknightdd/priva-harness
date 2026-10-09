@@ -39,6 +39,11 @@ function pluginLoader(cwd: string) {
       if (filename.startsWith(subagentsRoot) || filename.startsWith(piCodeRoot)) {
         source = `const process = Object.create(globalThis.process); process.cwd = () => ${JSON.stringify(cwd)}; process.env = { ...globalThis.process.env, CLAUDE_CODE_DISABLE_AUTO_MEMORY: globalThis.process.env.PI_CODE_DISABLE_AUTO_MEMORY };\n${source}`
       }
+      if (filename === join(subagentsRoot, 'src/default-agents.ts')) {
+        // Built-ins inherit the current parent model, including Explore. Apply
+        // before custom agents overlay the registry so their models still win.
+        source += '\nfor (const agent of DEFAULT_AGENTS.values()) delete agent.model;\n'
+      }
       if (filename === join(piCodeRoot, 'extensions/memory.ts')) {
         // Only substitute configuration dependencies. Storage, prompt, tools,
         // index limits and lifecycle remain the installed pi-code implementation.

@@ -42,9 +42,19 @@ describe('subagent and memory resources', () => {
     expect(items).toHaveLength(3)
     expect(items.filter((item) => item.effective).map((item) => item.description)).toEqual(['Project'])
     expect(list.groups[0]?.source.level).toBe('default')
+    const defaults = required(list.groups[0]).items
+    expect(defaults.map((item) => item.model)).toEqual([null, null, null])
+    for (const item of defaults) expect((await service.subagents.get({ harness: 'pi', cwd }, item.id)).definition).not.toHaveProperty('model')
     expect(list.groups.find((group) => group.source.origin === 'shared')?.source.writable).toBe(false)
     expect((await service.subagents.list({ harness: 'pi' })).groups.flatMap((group) => group.items).every((item) => item.effective === null)).toBe(true)
     expect((await service.subagents.list({ harness: 'pi', cwd: other })).groups.flatMap((group) => group.items).find((item) => item.name === 'reviewer')).toMatchObject({ description: 'Global', effective: true })
+  })
+
+  it('preserves a custom Pi model when it overrides a default agent', async () => {
+    await file(join(cwd, '.pi/agents/Explore.md'), agent('Custom Explore', { name: 'Explore', model: 'openai/custom-model' }))
+    const list = await service.subagents.list({ harness: 'pi', cwd })
+    const explore = list.groups.flatMap((group) => group.items).filter((item) => item.name === 'Explore')
+    expect(explore).toMatchObject([{ model: null, effective: false }, { model: 'openai/custom-model', effective: true }])
   })
 
   it.each(['claude', 'pi'] as const)('creates, renames, edits and deletes %s agents without clobbering external changes', async (harness) => {

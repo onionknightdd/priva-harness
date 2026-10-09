@@ -7,6 +7,9 @@ const CLAUDE_PROFILE_ENV_KEYS = [
   'ANTHROPIC_API_KEY',
   'ANTHROPIC_AUTH_TOKEN',
   'ANTHROPIC_MODEL',
+  'CLAUDE_CODE_SUBAGENT_MODEL',
+  'CLAUDE_CODE_SUBAGENT_MODEL_FORCE',
+  'CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP',
 ] as const
 
 const PI_PROFILE_ENV_KEYS = [
@@ -35,6 +38,11 @@ export function resolveProviderRunEnv(
       ANTHROPIC_API_KEY: spec.authToken,
       ANTHROPIC_AUTH_TOKEN: spec.authToken,
       ANTHROPIC_MODEL: spec.model,
+      // Default inheritance follows /model and SDK setModel; explicit agent
+      // models still win. Disable Explore's Opus cap for custom model IDs.
+      CLAUDE_CODE_SUBAGENT_MODEL: 'inherit',
+      CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '0',
+      CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP: '1',
     })
   }
   return assignedEnv({

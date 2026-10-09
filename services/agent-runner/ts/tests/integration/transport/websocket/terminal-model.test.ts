@@ -2,6 +2,38 @@ import { expect, it } from 'vitest'
 import type { TerminalAttachment } from '../../../../src/core/contract/terminal-service.js'
 import { modelMessage, nativeClaudeAvailable, nativeClaudeFixture } from '../../../fixtures/terminal/claude-tui-fixture.js'
 
+it.skipIf(!nativeClaudeAvailable())('keeps Explore on the selected custom model before and after a native model switch', async () => {
+  const children: { turn: string; model: string }[] = []
+  const launched = new Set<string>()
+  const fixture = await nativeClaudeFixture((body, reply) => {
+    const child = /explore-model-child:(\w+)/u.exec(JSON.stringify(body.messages.find((message) => message.role === 'user')?.content))?.[1]
+    if (child) {
+      children.push({ turn: child, model: body.model })
+      return modelMessage(body, reply, [{ type: 'text', text: 'Exploration complete.' }], `child-${child}`)
+    }
+    const turn = /explore-model-parent:(\w+)/u.exec(JSON.stringify(body.messages.filter((message) => message.role === 'user').at(-1)?.content))?.[1]
+    if (turn && !launched.has(turn) && body.tools?.some((tool) => tool['name'] === 'Agent')) {
+      launched.add(turn)
+      return modelMessage(body, reply, [{ type: 'tool_use', id: `explore-${turn}`, name: 'Agent', input: {
+        subagent_type: 'Explore', description: 'Check inherited model', prompt: `explore-model-child:${turn} Reply OK without tools.`,
+      } }], `launch-${turn}`)
+    }
+    return modelMessage(body, reply, [{ type: 'text', text: 'Done.' }])
+  })
+  try {
+    fixture.send('explore-model-parent:first', 'first', 'custom-model-first')
+    await expect.poll(() => children, { timeout: 30000 }).toEqual([{ turn: 'first', model: 'custom-model-first' }])
+    await expect.poll(() => fixture.frames.some((frame) => frame.type === 'run.completed' && frame.runId === 'first')).toBe(true)
+    const instance = (await fixture.terminals.state(fixture.ref))?.instanceId
+    fixture.send('explore-model-parent:second', 'second', 'custom-model-second')
+    await expect.poll(() => children, { timeout: 20000 }).toEqual([
+      { turn: 'first', model: 'custom-model-first' }, { turn: 'second', model: 'custom-model-second' },
+    ])
+    expect((await fixture.terminals.state(fixture.ref))?.instanceId).toBe(instance)
+    expect(fixture.sdkOpen).not.toHaveBeenCalled()
+  } finally { await fixture.dispose() }
+}, 60000)
+
 it.skipIf(!nativeClaudeAvailable())('applies the bubble model selection to the same native Claude process before sending', async () => {
   let calls = 0
   const fixture = await nativeClaudeFixture((body, reply) => modelMessage(body, reply, [{ type: 'text', text: `model answer ${++calls}` }], `model-${calls}`))

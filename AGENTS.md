@@ -35,6 +35,7 @@ check the compiled production loader, run after `npm run build` from
 `services/agent-runner/ts/`:
 
 - `node --import tsx tests/fixtures/resources/pi-mcp-probe.ts dist/provider/pi/pi-resource-loader.js`
+- `node --import tsx tests/fixtures/resources/pi-subagent-model-probe.ts dist/provider/pi/pi-resource-loader.js`
 
 To verify the compiled Claude native product MCP entry point after building:
 

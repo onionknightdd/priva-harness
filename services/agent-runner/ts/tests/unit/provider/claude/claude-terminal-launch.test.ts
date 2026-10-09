@@ -40,6 +40,9 @@ describe('claudeTerminalLaunch', () => {
     expect(launch.env).toMatchObject({
       ANTHROPIC_AUTH_TOKEN: 'secret',
       ANTHROPIC_MODEL: 'deepseek-v4-flash',
+      CLAUDE_CODE_SUBAGENT_MODEL: 'inherit',
+      CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '0',
+      CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP: '1',
       CLAUDE_CODE_HARBOR_KITE: '1',
       DISABLE_AUTOUPDATER: '1',
     })
@@ -48,7 +51,8 @@ describe('claudeTerminalLaunch', () => {
     const settings = JSON.parse(await readFile(settingsPath ?? '', 'utf8')) as Record<string, unknown>
     expect(settings).toMatchObject({
       skipDangerousModePermissionPrompt: true,
-      env: { ANTHROPIC_AUTH_TOKEN: 'secret' },
+      env: { ANTHROPIC_AUTH_TOKEN: 'secret', CLAUDE_CODE_SUBAGENT_MODEL: 'inherit',
+        CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '0', CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP: '1' },
     })
   })
 

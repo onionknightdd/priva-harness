@@ -25,7 +25,7 @@ Subagent test --> AgentHarness.run --> selected provider --> SSE AgentEvent fram
 
 ## Packages and runtime
 
-- Claude Agent SDK: installed `0.3.250` (Claude CLI `2.1.250`). Runs explicitly
+- Claude Agent SDK: installed `0.3.278` (Claude CLI `2.1.278`). Runs explicitly
   enable the `user`, `project`, and `local` settings sources.
 - Pi SDK: installed `0.84.2`.
 - Pi subagents: pinned `@tintinweb/pi-subagents@0.19.0`.
@@ -72,6 +72,29 @@ An explicit existing absolute `cwd` can be queried even before a session exists.
 Listing does not start a model session, install packages, or recursively crawl
 all working-tree files. File contents load on demand; subagent contents needed
 for metadata are cached against inode, nanosecond timestamps and size.
+
+## Subagent model selection
+
+Claude and Pi default agents (`Explore`, `Plan`, `general-purpose`) use the
+current parent model. Custom agents without a model inherit it; explicit model
+choices keep the provider's native resolution and precedence. Changing the main
+model affects subsequent spawns, including in a warm session.
+
+```text
+Current parent model --> built-in defaults / custom agent without model
+Explicit model       --> native resolution --> custom agent / explicit call
+```
+
+Claude uses session environment defaults with forced overrides disabled and
+Explore's inheritance cap disabled. See [Claude TUI launch](claude-tui-chat-mode.md#46-claude-tui-启动)
+for the exact native flags and upgrade checks.
+
+Pi's isolated module loader removes model pins only from the package's
+`DEFAULT_AGENTS`, before user definitions overlay the registry. This removes
+Explore's hardcoded `anthropic/claude-haiku-4-5` even when Anthropic credentials
+are available. A same-named custom agent retains its declared model. The resource
+catalog exposes these built-ins without a model, matching runtime inheritance.
+Custom files and the installed package files are not rewritten.
 
 ## Memory
 
@@ -178,9 +201,18 @@ and `npm run build`.
 
 Focused tests cover source precedence, native field names, source identity,
 CRUD/rename, stale edits, symlinks, independent memory settings, shared
-repository memory, package loading, isolated project factories, and SSE routes.
+repository memory, package loading, isolated project factories, model inheritance
+and explicit overrides across warm model switches, and SSE routes.
 HTTP test runs use a fake model provider; a paid live model request is not part
 of this verification.
+
+The Pi model probe uses real subagent sessions against a local Responses server,
+with an available Anthropic Haiku fixture to ensure default inheritance does not
+depend on missing credentials. To also verify the compiled loader after building:
+
+```sh
+node --import tsx tests/fixtures/resources/pi-subagent-model-probe.ts dist/provider/pi/pi-resource-loader.js
+```
 
 From the repository root, the browser streaming decoder tests run with:
 

@@ -189,6 +189,29 @@ tmux 的 `capture-pane -P` 不暴露其未完成的 UTF-8 字符。若快照后�
   （API key 末 20 位指纹）；查看者带 `theme` 时同步写入 Claude Code 的 `theme`
   （`light` / `dark`），只在实际启动时生效，认领已运行的终端不改主题。
 
+模型配置由 `core/resource/provider-run-env.ts` 同时写入进程环境与会话级的
+`settings.env`。Claude 的 Explore、Plan、general-purpose 默认继承当前会话模型，
+自定义子代理未指定模型时也继承，明确指定时保留：
+`CLAUDE_CODE_SUBAGENT_MODEL=inherit`、`CLAUDE_CODE_SUBAGENT_MODEL_FORCE=0`，并设置
+`CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP=1`。最后一项是当前捆绑 CLI 的原生开关，
+用于关闭内置 Explore 对模型继承的 Opus 上限；2.1.278 中不含 haiku / sonnet / opus
+的自定义模型 ID 也会触发该上限。原生 SDK / TUI 集成测试覆盖这项行为，升级依赖时必须通过。
+显式关闭强制继承，避免 runner 环境或用户设置中的同名变量覆盖自定义 agent 的
+`model`。Agent 调用明确传入的模型仍遵循 Claude 原生优先级。
+使用 `inherit` 而非启动时的模型 ID，使 SDK `setModel`、气泡选择器和
+终端 `/model` 切换后创建的子代理立即跟随当前模型；已经运行的子代理不会被重新选型。
+Pi 的对应策略见 [Subagents / Memory](subagents-memory-migration.md#subagent-model-selection)。
+
+```text
+provider-run-env.ts -> process env + flag settings.env -> Claude SDK / TUI
+                                                              |
+Agent model selection ----------------------------------------+
+  +-- explicit model ------------------------> native model resolution
+  +-- default / omitted / inherit -----------> current session model
+                                                  ^
+                                 SDK setModel / TUI /model
+```
+
 同一 runner 内的预置操作按配置文件路径串行执行完整的读 / 改 / 写，避免并发首次
 连接丢失项目信任或 API key 批准记录。每次写入使用独立临时文件并原子重命名，结束
 后清理临时文件；失败保留错误并释放队列，不阻塞后续重试。

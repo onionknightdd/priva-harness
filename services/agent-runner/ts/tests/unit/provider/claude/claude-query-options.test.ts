@@ -26,6 +26,9 @@ describe('resolveClaudeQuerySettings', () => {
       ANTHROPIC_API_KEY: 'secret',
       ANTHROPIC_AUTH_TOKEN: 'secret',
       ANTHROPIC_MODEL: 'deepseek-v4-flash',
+      CLAUDE_CODE_SUBAGENT_MODEL: 'inherit',
+      CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '0',
+      CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP: '1',
     })
     expect(
       resolveClaudeQuerySettings({
@@ -35,6 +38,9 @@ describe('resolveClaudeQuerySettings', () => {
       }).env,
     ).toEqual({
       ANTHROPIC_MODEL: 'deepseek-v4-flash',
+      CLAUDE_CODE_SUBAGENT_MODEL: 'inherit',
+      CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '0',
+      CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP: '1',
     })
   })
 })
@@ -102,6 +108,20 @@ describe('resolveClaudeQueryOptions', () => {
 
     expect(options.env?.['CLAUDE_CONFIG_DIR']).toBe('/native/claude')
     expect(options.env?.['PI_CODING_AGENT_DIR']).toBe('/native/pi')
+  })
+
+  it('overrides inherited subagent model settings for the current session', () => {
+    vi.stubEnv('CLAUDE_CODE_SUBAGENT_MODEL', 'haiku')
+    vi.stubEnv('CLAUDE_CODE_SUBAGENT_MODEL_FORCE', '1')
+    vi.stubEnv('CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP', '0')
+
+    const options = resolveClaudeQueryOptions(spec)
+
+    expect(options.env).toMatchObject({
+      CLAUDE_CODE_SUBAGENT_MODEL: 'inherit',
+      CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '0',
+      CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP: '1',
+    })
   })
 
   it('omits empty overlay env keys and maps effort, resume, and fork', () => {

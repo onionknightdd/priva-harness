@@ -19,6 +19,9 @@ describe('resolveProviderRunEnv', () => {
       ANTHROPIC_API_KEY: 'secret',
       ANTHROPIC_AUTH_TOKEN: 'secret',
       ANTHROPIC_MODEL: 'deepseek-v4-flash',
+      CLAUDE_CODE_SUBAGENT_MODEL: 'inherit',
+      CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '0',
+      CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP: '1',
     })
   })
 
@@ -46,6 +49,9 @@ describe('resolveProviderRunEnv', () => {
       }),
     ).toEqual({
       ANTHROPIC_MODEL: 'm',
+      CLAUDE_CODE_SUBAGENT_MODEL: 'inherit',
+      CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '0',
+      CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP: '1',
     })
   })
 })

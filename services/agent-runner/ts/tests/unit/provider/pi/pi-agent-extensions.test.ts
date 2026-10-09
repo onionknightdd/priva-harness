@@ -8,6 +8,11 @@ import { expect, it, vi } from 'vitest'
 import { createPiResourceLoader } from '../../../../src/provider/pi/pi-resource-loader.js'
 import { piMemoryModule } from '../../../../src/provider/pi/pi-agent-extensions.js'
 
+it('inherits the current model for built-ins and unconfigured custom agents while preserving custom model overrides', async () => {
+  const { stdout } = await promisify(execFile)(process.execPath, ['--import', import.meta.resolve('tsx'), 'tests/fixtures/resources/pi-subagent-model-probe.ts'], { timeout: 20000 })
+  expect(stdout).toContain('default inheritance, custom overrides and warm model switches passed')
+}, 25000)
+
 it('binds the real memory extension and writes only to each selected project store', async () => {
   const { stdout } = await promisify(execFile)(process.execPath, ['--import', import.meta.resolve('tsx'), 'tests/fixtures/resources/pi-memory-probe.ts'], { timeout: 20000 })
   expect(stdout).toContain('independent settings and isolated stores passed')
