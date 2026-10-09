@@ -182,8 +182,8 @@ export function ToolApproval({
           {labels?.statuses[status] ?? getStatusCopy(status)}
         </span>
         <CollapsibleTrigger data-interaction-toggle aria-label={currentOpen ? labels?.collapse ?? "Collapse" : labels?.expand ?? "Expand"}
-          render={<Button size="icon-xs" variant="ghost" className="shrink-0" />}>
-          <ChevronDown aria-hidden className={cn("transition-transform duration-200 ease-out motion-reduce:transition-none", currentOpen && "rotate-180", (reduce || keyboard) && "transition-none")} />
+          render={<Button size="icon-xs" variant="outline" className="shrink-0 text-foreground" />}>
+          <ChevronDown aria-hidden strokeWidth={2.5} className={cn("size-4 transition-transform duration-200 ease-out motion-reduce:transition-none", currentOpen && "rotate-180", (reduce || keyboard) && "transition-none")} />
         </CollapsibleTrigger>
       </div>
 

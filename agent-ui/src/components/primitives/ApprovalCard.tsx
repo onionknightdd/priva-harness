@@ -94,8 +94,8 @@ export default function ApprovalCard({ questions, labels, disabled = false, subm
         <h3 key={question.id} ref={focusHeading} id={headingId} tabIndex={-1}
           className={cn("min-w-0 flex-1 text-sm leading-6 font-medium outline-none", open ? "max-h-[25dvh] overflow-y-auto whitespace-pre-wrap break-words" : "truncate")}>{question.q}</h3>
         <CollapsibleTrigger data-interaction-toggle aria-label={open ? labels.collapse : labels.expand}
-          render={<Button size="icon-xs" variant="ghost" className="shrink-0" />}>
-          <ChevronDownIcon aria-hidden className={cn("transition-transform duration-200 ease-out motion-reduce:transition-none", open && "rotate-180", (reduce || collapseKeyboard) && "transition-none")} />
+          render={<Button size="icon-xs" variant="outline" className="shrink-0 text-foreground" />}>
+          <ChevronDownIcon aria-hidden strokeWidth={2.5} className={cn("size-4 transition-transform duration-200 ease-out motion-reduce:transition-none", open && "rotate-180", (reduce || collapseKeyboard) && "transition-none")} />
         </CollapsibleTrigger>
         {submitting ? <span role="status" className="sr-only">{labels.submitting}</span> : null}
       </div>
