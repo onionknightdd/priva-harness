@@ -862,7 +862,7 @@ Chat / message list
 入口为 `components/primitives/ApprovalCard.tsx`、`GlideMenu.tsx`、
 `components/agents/tool-approval.tsx`；业务组合和结果摘要位于
 `features/agent-message/components/interaction-card.tsx`。它们复用本地 Button、Input、
-AgentCode、AgentDisclosure 和主题 token；上游演示用 Button / foundation 全局样式不纳入应用。
+AgentCode、Collapsible 和主题 token；上游演示用 Button / foundation 全局样式不纳入应用。
 
 问答支持单选、多选、自定义文本、前后翻题和整组跳过。末题明确提交，提交错误保留
 答案，断线禁用操作；服务端确认后才移除卡片。工具显示原始参数，允许本次或跳过。
@@ -937,6 +937,28 @@ npx shadcn add @beui/tool-approval
 
 再次安装时保留已有 AgentCode、AgentDisclosure 和共享 ease，审阅本地协议接入、
 错误 / 跳过 / 自定义文本处理和主题适配，不能直接覆盖为上游演示逻辑。
+
+2026-10-09：待处理问答和工具审批均支持整体折叠，默认展开，标题右侧使用共享
+Button / CollapsibleTrigger 的箭头入口。问答标题保留当前题号及问题，展开时完整
+换行、超长问题内部滚动，收起时单行截断；工具标题保留请求标题、工具名和审批状态。
+正文与底部操作栏一起收起，卡片继续占用 composer 插槽。断线和提交错误提示始终
+位于折叠区域之外；提交中仍可折叠，并保留标题状态。每个新请求默认展开。
+
+```text
+Composer slot
+  +-- expanded  [question + progress / tool + status] [^]
+  |            [options + input / reason + parameters]
+  |            [navigation]             [skip] [submit]
+  +-- collapsed [question + progress / tool + status] [v]
+               [connection / submission error, if any]
+```
+
+两类卡片复用 Base UI Collapsible 和共享 `collapsePanel`，正文使用 `keepMounted`
+保留答案、当前题号及已渲染参数；收起时立即设为 `inert` / `aria-hidden`，隐藏操作
+不可聚焦。收起问答会取消尚未执行的鼠标单选自动翻题计时器。ToolApproval 的
+`open/defaultOpen/onOpenChange` 现在控制整张卡片的正文及操作栏，移除独立“查看详情”
+入口，提交状态变化不再自动收起。面板高度和箭头共用 200ms / `EASE_OUT` 过渡，
+键盘触发及减少动态效果模式下即时切换。桌面和窄屏使用相同结构。
 
 ### Workspace 初始状态
 
@@ -2238,7 +2260,8 @@ Mermaid 浏览器回归：打开 `/tests/components/ai-elements/mermaid-browser.
 
 审批与问答浏览器回归：打开 `/tests/features/agent-message/interaction-browser.html`，
 点击 **Run interaction checks**。使用真实 App 和隔离的 WebSocket/HTTP 样例，覆盖
-等宽替换、单选 / 多选 / 自定义文本、等待确认、失败重试、草稿恢复、审批队列、
+等宽替换、单选 / 多选 / 自定义文本、整体折叠和题号 / 答案保留、取消自动翻题、
+收起时的提交状态与错误提示、下一张请求自动展开、等待确认、失败重试、草稿恢复、审批队列、
 跳过和断线重连，避免访问真实模型。追加 `?zh&dark&reduced-motion`，并使用 390px
 视口检查中文、深色、减少动态效果和窄屏；**Show question / Show tool approval**
 可单独查看卡片。用真实 Tab / Enter 验证选择与翻题。

@@ -13,17 +13,16 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   type ReactNode,
   useCallback,
-  useEffect,
-  useId,
-  useRef,
   useState,
 } from "react";
 import {
   AgentCode,
   type AgentCodeLanguage,
 } from "@/components/agents/agent-code";
-import { AgentDisclosure } from "@/components/agents/agent-disclosure";
-import { EASE_OUT, SPRING_PRESS, SPRING_SWAP } from "@/lib/ease";
+import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { EASE_OUT, SPRING_PRESS } from "@/lib/ease";
+import { collapsePanel } from "@/lib/surfaces";
 import { cn } from "@/lib/utils";
 
 export type ToolApprovalStatus =
@@ -61,7 +60,7 @@ export interface ToolApprovalProps {
   onDeny?: () => void;
   className?: string;
   disabled?: boolean;
-  labels?: { title: string; details: string; allow: string; deny: string; alwaysAllow: string; statuses: Record<ToolApprovalStatus, string> };
+  labels?: { title: string; collapse: string; expand: string; allow: string; deny: string; alwaysAllow: string; statuses: Record<ToolApprovalStatus, string> };
 }
 
 function getStatusCopy(status: ToolApprovalStatus) {
@@ -113,7 +112,7 @@ export function ToolApproval({
   parameters = [],
   status = "pending",
   open,
-  defaultOpen = false,
+  defaultOpen = true,
   onOpenChange,
   onApprove,
   onAlwaysAllow,
@@ -123,10 +122,8 @@ export function ToolApproval({
   labels,
 }: ToolApprovalProps) {
   const reduce = useReducedMotion() ?? false;
-  const baseId = useId();
-  const detailsId = `${baseId}-details`;
-  const previousStatus = useRef(status);
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
+  const [keyboard, setKeyboard] = useState(false);
   const currentOpen = open ?? internalOpen;
   const setOpen = useCallback(
     (next: boolean) => {
@@ -139,15 +136,13 @@ export function ToolApproval({
   const pending = status === "pending";
   const error = status === "error";
 
-  useEffect(() => {
-    if (previousStatus.current === "pending" && status !== "pending") {
-      setOpen(false);
-    }
-    previousStatus.current = status;
-  }, [setOpen, status]);
-
   return (
-    <div
+    <Collapsible
+      open={currentOpen}
+      onOpenChange={(nextOpen, details) => {
+        setKeyboard(!("detail" in details.event) || details.event.detail === 0);
+        setOpen(nextOpen);
+      }}
       data-state={status}
       aria-busy={busy}
       className={cn(
@@ -155,11 +150,11 @@ export function ToolApproval({
         className,
       )}
     >
-      <div className="flex items-start gap-3 p-4">
+      <div className="flex items-center gap-2 px-4 py-2">
         <span
           aria-hidden="true"
           className={cn(
-            "mt-0.5 grid size-8 shrink-0 place-items-center rounded-xl border border-border/60 bg-background text-muted-foreground",
+            "shrink-0 text-muted-foreground",
             error && "text-destructive",
           )}
         >
@@ -176,110 +171,84 @@ export function ToolApproval({
           )}
         </span>
 
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
-            <div className="min-w-0">
-              <div className="font-medium text-foreground">{labels?.title ?? title}</div>
-              <div className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
-                {tool}
-              </div>
-            </div>
-            <span
-              className={cn(
-                "shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
-                getStatusBadgeClass(status),
-              )}
-            >
-              {labels?.statuses[status] ?? getStatusCopy(status)}
-            </span>
-          </div>
-          {description ? (
-            <p className="mt-2 leading-5 text-muted-foreground">{description}</p>
-          ) : null}
-
-          {parameters.length ? (
-            <button
-              type="button"
-              aria-expanded={currentOpen}
-              aria-controls={detailsId}
-              onClick={() => setOpen(!currentOpen)}
-              className="mt-2 inline-flex items-center gap-1 rounded-md text-xs font-medium text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {labels?.details ?? "View details"}
-              <motion.span
-                aria-hidden="true"
-                animate={{ transform: currentOpen ? "rotate(180deg)" : "rotate(0deg)" }}
-                transition={reduce ? { duration: 0 } : SPRING_SWAP}
-              >
-                <ChevronDown className="size-3.5" />
-              </motion.span>
-            </button>
-          ) : null}
-        </div>
+        <div className={cn("min-w-0 flex-1 font-medium text-foreground", currentOpen ? "max-h-[25dvh] overflow-y-auto whitespace-pre-wrap break-words" : "truncate")}>{labels?.title ?? title}</div>
+        <span className="max-w-1/4 truncate font-mono text-xs text-muted-foreground">{tool}</span>
+        <span
+          className={cn(
+            "shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
+            getStatusBadgeClass(status),
+          )}
+        >
+          {labels?.statuses[status] ?? getStatusCopy(status)}
+        </span>
+        <CollapsibleTrigger data-interaction-toggle aria-label={currentOpen ? labels?.collapse ?? "Collapse" : labels?.expand ?? "Expand"}
+          render={<Button size="icon-xs" variant="ghost" className="shrink-0" />}>
+          <ChevronDown aria-hidden className={cn("transition-transform duration-200 ease-out motion-reduce:transition-none", currentOpen && "rotate-180", (reduce || keyboard) && "transition-none")} />
+        </CollapsibleTrigger>
       </div>
 
-      <AgentDisclosure
-        id={detailsId}
-        open={currentOpen}
-        className="max-h-[min(50dvh,28rem)] overflow-y-auto overscroll-contain"
-      >
-        <dl className="mx-4 mb-4 grid gap-2 rounded-xl border border-border/50 bg-background/70 p-3">
-          {parameters.map((parameter) => (
-            <div
-              key={parameter.id}
-              className="grid min-w-0 gap-1 text-xs sm:grid-cols-[minmax(0,7rem)_minmax(0,1fr)] sm:items-start sm:gap-3"
-            >
-              <dt className="text-muted-foreground">{parameter.label}</dt>
-              <dd className="min-w-0 break-words font-mono text-foreground/85">
-                {parameter.value}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </AgentDisclosure>
+      <CollapsibleContent keepMounted inert={!currentOpen} aria-hidden={!currentOpen}
+        className={cn(collapsePanel, (reduce || keyboard) && "transition-none")}>
+        <div className="max-h-[min(50dvh,28rem)] overflow-y-auto overscroll-contain">
+          {description ? <p className="px-4 pb-3 leading-5 text-muted-foreground">{description}</p> : null}
+          {parameters.length ? <dl className="mx-4 mb-4 grid gap-2 rounded-xl border border-border/50 bg-background/70 p-3">
+            {parameters.map((parameter) => (
+              <div
+                key={parameter.id}
+                className="grid min-w-0 gap-1 text-xs sm:grid-cols-[minmax(0,7rem)_minmax(0,1fr)] sm:items-start sm:gap-3"
+              >
+                <dt className="text-muted-foreground">{parameter.label}</dt>
+                <dd className="min-w-0 break-words font-mono text-foreground/85">
+                  {parameter.value}
+                </dd>
+              </div>
+            ))}
+          </dl> : null}
+        </div>
 
-      <AnimatePresence initial={false}>
-        {pending ? (
-          <motion.div
-            initial={reduce ? { opacity: 0 } : { opacity: 0, transform: "translateY(4px)" }}
-            animate={{ opacity: 1, transform: "translateY(0px)" }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: reduce ? 0.12 : 0.22, ease: EASE_OUT }}
-            className="flex flex-wrap items-center gap-2 border-t border-border/60 px-4 py-3"
-          >
-            <motion.button
-              type="button"
-              disabled={disabled}
-              onClick={onApprove}
-              whileTap={reduce ? undefined : { transform: "scale(0.97)" }}
-              transition={SPRING_PRESS}
-              className="disabled:cursor-not-allowed disabled:opacity-50 rounded-xl bg-foreground px-3 py-1.5 text-xs font-medium text-background outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        <AnimatePresence initial={false}>
+          {pending ? (
+            <motion.div
+              initial={reduce ? { opacity: 0 } : { opacity: 0, transform: "translateY(4px)" }}
+              animate={{ opacity: 1, transform: "translateY(0px)" }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: reduce ? 0.12 : 0.22, ease: EASE_OUT }}
+              className="flex flex-wrap items-center justify-end gap-2 border-t border-border/60 px-4 py-3"
             >
-              {labels?.allow ?? "Allow once"}
-            </motion.button>
-            {onAlwaysAllow ? (
               <motion.button
                 type="button"
-                disabled={disabled}
-                onClick={onAlwaysAllow}
+                disabled={disabled || !currentOpen || !pending}
+                onClick={onApprove}
                 whileTap={reduce ? undefined : { transform: "scale(0.97)" }}
                 transition={SPRING_PRESS}
-                className="rounded-xl border border-border/60 bg-background px-3 py-1.5 text-xs font-medium text-foreground outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+                className="disabled:cursor-not-allowed disabled:opacity-50 rounded-xl bg-foreground px-3 py-1.5 text-xs font-medium text-background outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
-                {labels?.alwaysAllow ?? "Always allow"}
+                {labels?.allow ?? "Allow once"}
               </motion.button>
-            ) : null}
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={onDeny}
-              className="disabled:cursor-not-allowed disabled:opacity-50 rounded-xl px-3 py-1.5 text-xs font-medium text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {labels?.deny ?? "Deny"}
-            </button>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
-    </div>
+              {onAlwaysAllow ? (
+                <motion.button
+                  type="button"
+                  disabled={disabled || !currentOpen || !pending}
+                  onClick={onAlwaysAllow}
+                  whileTap={reduce ? undefined : { transform: "scale(0.97)" }}
+                  transition={SPRING_PRESS}
+                  className="rounded-xl border border-border/60 bg-background px-3 py-1.5 text-xs font-medium text-foreground outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {labels?.alwaysAllow ?? "Always allow"}
+                </motion.button>
+              ) : null}
+              <button
+                type="button"
+                disabled={disabled || !currentOpen || !pending}
+                onClick={onDeny}
+                className="disabled:cursor-not-allowed disabled:opacity-50 rounded-xl px-3 py-1.5 text-xs font-medium text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {labels?.deny ?? "Deny"}
+              </button>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

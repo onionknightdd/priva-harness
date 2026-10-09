@@ -36,7 +36,8 @@ export function InteractionCard({ request, count, connected, onRespond }: {
     {request.kind === "question" ? <ApprovalCard
       questions={request.questions.map((question) => ({ id: question.id, q: question.question, type: question.multiSelect ? "check" : "radio", options: question.options, allowCustom: question.allowCustom, initialText: question.initialText, multiline: question.multiline }))}
       labels={{ skip: t("interaction.skip"), continue: t("interaction.continue"), send: t("interaction.send"),
-        customPlaceholder: t("interaction.custom"), previous: t("interaction.previous"), next: t("interaction.next"), submitting: t("interaction.submitting") }}
+        customPlaceholder: t("interaction.custom"), previous: t("interaction.previous"), next: t("interaction.next"), submitting: t("interaction.submitting"),
+        collapse: t("common.collapse"), expand: t("common.expand") }}
       disabled={!connected} submitting={submitting} onSkip={skip}
       onSubmitted={(answers) => { void respond({ requestId: request.requestId, decision: "allow", answers }) }}
     /> : <ToolApproval
@@ -46,7 +47,7 @@ export function InteractionCard({ request, count, connected, onRespond }: {
         id: key, label: key, value: <ToolApprovalCode code={typeof value === "string" ? value : JSON.stringify(value, null, 2)} language={key === "command" ? "bash" : typeof value === "string" ? "text" : "json"} />,
       }))}
       onApprove={() => { void respond({ requestId: request.requestId, decision: "allow" }) }} onDeny={skip}
-      labels={{ title: request.title ?? t("interaction.toolTitle"), details: t("interaction.details"), allow: t("interaction.allow"), deny: t("interaction.skip"), alwaysAllow: "",
+      labels={{ title: request.title ?? t("interaction.toolTitle"), collapse: t("common.collapse"), expand: t("common.expand"), allow: t("interaction.allow"), deny: t("interaction.skip"), alwaysAllow: "",
         statuses: Object.fromEntries(["pending", "approving", "approved", "denied", "running", "complete", "error"].map((status) => [status, t(`interaction.status.${status}`)])) as Record<ToolApprovalStatus, string> }}
     />}
     {!connected ? <p role="status" className="mt-2 text-xs text-muted-foreground">{t("interaction.disconnected")}</p> : null}

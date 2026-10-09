@@ -95,12 +95,25 @@ async function runChecks() {
     await fill(host.querySelector<HTMLDivElement>('[data-agent-composer="prompt"]')!, "保留这段未发送草稿")
     const ask = question(); await show(ask)
     const card = () => host.querySelector<HTMLElement>("[data-interaction-card]")!
+    const toggle = () => card().querySelector<HTMLButtonElement>("[data-interaction-toggle]")!
+    const panel = () => card().querySelector<HTMLElement>('[data-slot="collapsible-content"]')!
     check("card replaces composer at exactly the same width", !host.querySelector("[data-composer-line]") && Math.abs(card().getBoundingClientRect().width - width) < 1)
+    check("new question requests start expanded", toggle().getAttribute("aria-expanded") === "true")
     await click([...card().querySelectorAll<HTMLButtonElement>("button")].find((node) => node.textContent?.includes("亚洲"))!)
+    const beforeFold = socket().sent.length
+    const expandedHeight = card().getBoundingClientRect().height
+    await click(toggle())
+    check("question collapse keeps a compact header and hides the form and actions", toggle().getAttribute("aria-expanded") === "false" && panel().inert && panel().getBoundingClientRect().height === 0 && card().getBoundingClientRect().height < expandedHeight && card().querySelector("h3")?.textContent === ask.questions[0].question)
+    check("collapsing does not answer the request or restore the composer", socket().sent.length === beforeFold && !host.querySelector("[data-composer-line]"))
+    await click(toggle())
+    check("single-choice selection survives collapse", card().querySelector('[data-menu-row][aria-pressed="true"]')?.textContent?.includes("亚洲") === true)
     await click(button(t("interaction.continue")))
     check("changing questions focuses the new heading", document.activeElement?.textContent === "需要支持哪些能力？")
     await click(button("权限审批")); await click(button("交互式问答"))
     await fill(card().querySelector<HTMLInputElement>("input")!, "保留自定义选项")
+    const answerInput = card().querySelector<HTMLInputElement>("input")!
+    await click(toggle()); await click(toggle())
+    check("collapse preserves the current question, selected options, and custom input", card().querySelector("h3")?.textContent === ask.questions[1].question && card().querySelectorAll('[data-menu-row][aria-pressed="true"]').length === 2 && card().querySelector("input") === answerInput && answerInput.value === "保留自定义选项")
     await click(button(t("interaction.continue")))
     await fill(card().querySelector<HTMLInputElement>("input")!, '中文 -> 东京，含 "引号"')
     await click(button(t("interaction.send")))
@@ -108,7 +121,11 @@ async function runChecks() {
     const answers = sent.answers as Record<string, { selected: string[]; text: string }>
     check("all selected and custom answers reach the response frame", sent.type === "permission.respond" && answers.q0.selected[0] === "亚洲" && answers.q1.selected.length === 2 && answers.q1.text === "保留自定义选项" && answers.q2.text.includes('"引号"'))
     check("sending does not clear the card before acknowledgment", Boolean(card()) && button(t("interaction.submitting")).disabled)
+    await click(toggle())
+    check("a submitting question can collapse and retains its pending status", toggle().getAttribute("aria-expanded") === "false" && card().querySelector('section[aria-busy="true"]') !== null && card().querySelector('[role="status"]')?.textContent === t("interaction.submitting"))
     await frame({ type: "error", code: "permission.respond", requestId: ask.requestId, message: "Temporary response failure" })
+    check("submission errors remain visible outside the collapsed body", toggle().getAttribute("aria-expanded") === "false" && Boolean(card().querySelector('[role="alert"]')) && !panel().contains(card().querySelector('[role="alert"]')))
+    await click(toggle())
     check("failure keeps answers and enables retry", Boolean(card().querySelector('[role="alert"]')) && card().querySelector<HTMLInputElement>("input")?.value === answers.q2.text && !button(t("interaction.send")).disabled)
     await click(button(t("interaction.send")))
     await resolve(ask, "allow", answers)
@@ -124,10 +141,16 @@ async function runChecks() {
     check("expanded answered content keeps the right edge and does not overflow", Math.abs(answered.getBoundingClientRect().right - userBubble.getBoundingClientRect().right) < 1 && answered.scrollWidth <= answered.clientWidth)
     const one = tool(); await show(one)
     const two = { ...tool(), requestId: `second-${seq}` }; await show(two)
+    const toolCommand = card().querySelector("dl")!
+    await click(toggle())
+    check("tool collapse hides parameters and approval actions while keeping its status", panel().inert && panel().getBoundingClientRect().height === 0 && card().textContent!.includes(t("interaction.status.pending")) && !toggle().disabled)
+    await click(toggle())
+    check("tool parameters remain mounted across collapse", card().querySelector("dl") === toolCommand && toggle().getAttribute("aria-expanded") === "true")
     await click(button(t("interaction.skip")))
     check("tool skip sends deny and waits for acknowledgment", socket().sent.at(-1)?.decision === "deny" && Boolean(card()))
+    await click(toggle())
     await resolve(one, "deny")
-    check("the next queued tool request becomes active", Boolean(card()) && card().dataset.interactionCard === "tool")
+    check("the next queued tool request becomes active and starts expanded", Boolean(card()) && card().dataset.interactionCard === "tool" && toggle().getAttribute("aria-expanded") === "true")
     await act(async () => socket().close()); await settle(450)
     await frame({ type: "session.snapshot", tasks: [], messages: [], activeRunId: runId, interactions: [two] })
     check("reconnect restores requests and does not replay uncertain approvals", socket().sent.every((item) => item.type === "session.subscribe") && Boolean(card()))
@@ -149,6 +172,14 @@ async function runChecks() {
     const edited = socket().sent.at(-1)?.answers as Record<string, { text: string }>
     check("Pi editor submissions preserve whitespace and line breaks", edited.q0.text === "  修改后的说明\n保持换行\n")
     await resolve(editor, "allow", edited)
+    const autoAdvance = question(); await show(autoAdvance)
+    await act(async () => {
+      card().querySelector<HTMLButtonElement>("[data-menu-row]")!.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }))
+      toggle().click()
+    })
+    await settle(320)
+    check("collapsing cancels pending automatic navigation", toggle().getAttribute("aria-expanded") === "false" && card().querySelector("h3")?.textContent === autoAdvance.questions[0].question)
+    await resolve(autoAdvance, "deny")
     const restoredAnswers = Object.fromEntries(Object.entries(answers).map(([id, answer]) => [id, { selected: [], text: [...answer.selected, ...(answer.text ? [answer.text] : [])].join(", ") }]))
     await frame({ type: "session.snapshot", activeRunId: runId, tasks: [], interactions: [], messages: [
       { id: "history-user", role: "user", content: "查看已保存的问答", createdAt: new Date(0).toISOString(), status: "complete" },
