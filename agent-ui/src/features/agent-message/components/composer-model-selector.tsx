@@ -717,10 +717,8 @@ export function ComposerModelSelector({
     ? selection.modelId
       ? t("agentMessage.modelSelectorAria", {
           profile: selection.profileLabel,
-          model: selection.modelId,
+          model: contextWindow === 1_000_000 ? `${selection.modelId} 1M` : selection.modelId,
           effort,
-  contextWindow,
-  configurationPending,
         })
       : `${selection.profileLabel}, ${t("agentMessage.effortAria", {
           level: effort,
@@ -774,6 +772,16 @@ export function ComposerModelSelector({
                   <OverflowFadeText className={COMPOSER_TEXT_CLASS}>
                     {displayModelName(selection.modelId)}
                   </OverflowFadeText>
+                  {contextWindow === 1_000_000 && (
+                    <motion.span
+                      className="shrink-0 text-muted-foreground/60"
+                      initial={shouldReduceMotion ? false : { opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: shouldReduceMotion ? 0 : 0.16 }}
+                    >
+                      1M
+                    </motion.span>
+                  )}
                   <ChevronDownIcon
                     className={cn(
                       "size-3.5 shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none",

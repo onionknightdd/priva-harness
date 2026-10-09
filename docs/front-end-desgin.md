@@ -1743,8 +1743,12 @@ optimistic message ID -> snapshot.renderId -> same mounted bubble / reply / scro
 与终端连接参数携带数值 `contextWindow`（200000 / 1000000）。等待配置确认期间显示
 加载状态并暂停发送新消息，停止当前回复仍可用。配置确认同时更新上下文环。
 设置页的默认模型与多模态模型选择器不增加该选项。
+启用 1M 时，输入框模型名称右侧、下拉箭头左侧显示 `1M`，使用
+`text-muted-foreground/60` 三级文本色及 160ms 淡入；200K 时隐藏。
+减少动态效果时立即显示，图标模式随模型名称收起，Tooltip 和可访问名称保留 `1M`。
 
 ```text
+触发器：[模型图标] 模型名称  1M  ▾
 会话输入框 Model selector
   模型配置          >
   思考强度 medium   >
