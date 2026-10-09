@@ -104,12 +104,16 @@ function PlainTrigger({
   })
 }
 
-function TooltipHint({ content, children }: { content?: ReactNode; children: ReactElement }) {
+function TooltipHint({ content, contentClassName, children }: {
+  content?: ReactNode
+  contentClassName?: string
+  children: ReactElement
+}) {
   // Preserve the child's data-slot when composing buttons, tabs, and menus.
   return (
     <Tooltip disabled={content == null || content === false || content === ""}>
       <DeferrableTrigger render={children} />
-      <TooltipContent className="whitespace-pre-line wrap-anywhere">{content}</TooltipContent>
+      <TooltipContent className={cn("whitespace-pre-line wrap-anywhere", contentClassName)}>{content}</TooltipContent>
     </Tooltip>
   )
 }

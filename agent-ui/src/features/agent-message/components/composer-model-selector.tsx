@@ -50,8 +50,9 @@ import {
 import { ProviderIcon } from "@/features/model-settings/provider-icon"
 import { useWorkspaceTakesMajority } from "@/features/workspace"
 import { TooltipHint } from "@/components/ui/tooltip"
+import "./composer-model-selector.css"
 
-const COMPOSER_MENU_WIDTH_CLASS = "w-56 min-w-56 max-w-56 text-sm"
+const COMPOSER_MENU_WIDTH_CLASS = "composer-model-menu w-56 min-w-56 max-w-56 text-sm"
 const COMPOSER_TEXT_CLASS = "text-sm font-normal"
 export const COMPOSER_MODEL_TRIGGER_MAX_CLASS = "max-w-[calc(8rem*5/3)]"
 const EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const
@@ -727,7 +728,7 @@ export function ComposerModelSelector({
 
   return (
     <DropdownMenu modal>
-      <TooltipHint content={saveError ?? triggerLabel}>
+      <TooltipHint content={saveError ?? triggerLabel} contentClassName="composer-model-tooltip">
         <DropdownMenuTrigger
           aria-label={triggerLabel}
           render={
@@ -772,16 +773,13 @@ export function ComposerModelSelector({
                   <OverflowFadeText className={COMPOSER_TEXT_CLASS}>
                     {displayModelName(selection.modelId)}
                   </OverflowFadeText>
-                  {contextWindow === 1_000_000 && (
-                    <motion.span
-                      className="shrink-0 text-muted-foreground/60"
-                      initial={shouldReduceMotion ? false : { opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ duration: shouldReduceMotion ? 0 : 0.16 }}
-                    >
-                      1M
-                    </motion.span>
-                  )}
+                  <span
+                    className="composer-model-fade shrink-0 text-muted-foreground/60"
+                    data-visible={contextWindow === 1_000_000}
+                    aria-hidden={contextWindow !== 1_000_000}
+                  >
+                    1M
+                  </span>
                   <ChevronDownIcon
                     className={cn(
                       "size-3.5 shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none",

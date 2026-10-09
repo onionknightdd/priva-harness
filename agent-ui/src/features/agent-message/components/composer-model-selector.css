@@ -1,0 +1,53 @@
+/* Scope motion to the composer, including its portalled submenus and hints. */
+.composer-model-menu {
+  transition-duration: 160ms;
+}
+
+.composer-model-tooltip {
+  /* Programmatic context changes can inherit the tooltip group's instant phase. */
+  transition: opacity 160ms var(--ease-out), scale 160ms var(--ease-out), translate 160ms var(--ease-out);
+}
+
+.composer-model-tooltip[data-ending-style] {
+  transition-duration: 125ms;
+}
+
+.composer-model-tooltip[data-instant="focus"] {
+  transition: none;
+}
+
+/* Keep these slots mounted so anchors stay put and rapid reversals crossfade. */
+.composer-model-fade,
+.composer-model-menu [data-slot="dropdown-menu-radio-item-indicator"] > span {
+  opacity: 1;
+  transition: opacity 160ms var(--ease-out);
+}
+
+.composer-model-fade[data-visible="false"],
+.composer-model-menu [data-slot="dropdown-menu-radio-item-indicator"] > span:is([data-starting-style], [data-ending-style]) {
+  opacity: 0;
+}
+
+.composer-model-fade[data-visible="false"] [data-slot="spinner"] {
+  animation-play-state: paused;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .composer-model-menu :is([role="menuitem"], [role="menuitemradio"]) {
+    transition: background-color 125ms ease, color 125ms ease;
+  }
+
+  .composer-model-menu :is([role="menuitem"], [role="menuitemradio"]):focus-visible {
+    transition: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-model-menu,
+  .composer-model-menu [data-slot],
+  .composer-model-menu [data-slot="dropdown-menu-radio-item-indicator"] > span,
+  .composer-model-tooltip,
+  .composer-model-fade {
+    transition: none;
+  }
+}

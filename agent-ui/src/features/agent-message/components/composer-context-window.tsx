@@ -27,11 +27,19 @@ export function ComposerContextWindow({ value, pending, onChange }: {
         openOnHover
       >
         <span className="min-w-0 flex-1">{t("agentMessage.contextWindowLabel")}</span>
-        {pending && <Spinner className="size-3.5 motion-reduce:animate-none" aria-label={t("agentMessage.configurationApplying")} />}
-        <span className="shrink-0 text-muted-foreground">{label}</span>
+        <span className="composer-model-fade size-3.5 shrink-0" data-visible={pending} aria-hidden={!pending}>
+          <Spinner className="size-3.5 motion-reduce:animate-none" aria-label={t("agentMessage.configurationApplying")} />
+        </span>
+        <span className="grid shrink-0 text-muted-foreground">
+          {["200K", "1M"].map((size) => (
+            <span key={size} className="composer-model-fade col-start-1 row-start-1 text-right" data-visible={size === label} aria-hidden={size !== label}>
+              {size}
+            </span>
+          ))}
+        </span>
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent
-        align="start" side="right" className="w-56 min-w-56 max-w-56 text-sm"
+        align="start" side="right" className="composer-model-menu w-56 min-w-56 max-w-56 text-sm"
         onClick={(event) => event.stopPropagation()}
         onPointerDown={(event) => event.stopPropagation()}
       >
@@ -46,7 +54,7 @@ export function ComposerContextWindow({ value, pending, onChange }: {
               closeOnClick={false}
               render={<DropdownMenuRadioItem value="1000000" closeOnClick={false} className="text-sm font-normal" />}
             >1M</TooltipTrigger>
-            <TooltipContent side="bottom" align="start" className="max-w-64 whitespace-normal">
+            <TooltipContent side="bottom" align="start" className="composer-model-tooltip max-w-64 whitespace-normal">
               {t("agentMessage.contextWindowWarning")}
             </TooltipContent>
           </Tooltip>
