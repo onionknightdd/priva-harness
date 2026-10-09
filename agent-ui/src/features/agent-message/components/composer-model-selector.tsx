@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next"
 
 import { CollapsingInline } from "@/components/motion/collapsing-inline"
 import { OverflowMarquee } from "@/components/motion/overflow-marquee"
+import { TextCascade } from "@/components/motion/text-cascade"
 import { Input } from "@/components/ui/input"
 import { InputGroupButton } from "@/components/ui/input-group"
 import {
@@ -444,11 +445,12 @@ function EffortSubmenu({
         </HoverMarquee>
         <span
           className={cn(
-            "shrink-0 text-muted-foreground",
+            "grid shrink-0 text-muted-foreground",
             COMPOSER_TEXT_CLASS
           )}
         >
-          {effort}
+          <span className="invisible col-start-1 row-start-1" aria-hidden="true">medium</span>
+          <TextCascade text={effort} className="col-start-1 row-start-1 text-right" />
         </span>
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent
