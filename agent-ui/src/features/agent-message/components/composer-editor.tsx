@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next"
 
 import { cn } from "@/lib/utils"
 
+import { isImageAttachment } from "../composer-attachments"
 import { composerDocument, createComposerState, insertMessageSelection, serializeComposerContent } from "../composer-editor-state"
 import { mentionTriggerFromState, mentionTriggersEqual, type MentionTrigger } from "../composer-mention"
 import type { MessageSelection } from "../message-select-action"
@@ -32,18 +33,19 @@ type ComposerEditorProps = Omit<ComponentProps<"div">, "onChange" | "onKeyDown" 
   draft: string
   placeholder: string
   onChange: (draft: string) => void
+  onImagesPaste: (images: File[]) => void
   onKeyDown: (event: KeyboardEvent, atStart: boolean) => boolean
   onMentionChange?: (trigger: MentionTrigger | null) => void
 }
 
-export function ComposerEditor({ ref, inputRef, draft, placeholder, onChange, onKeyDown, onMentionChange, className, ...props }: ComposerEditorProps) {
+export function ComposerEditor({ ref, inputRef, draft, placeholder, onChange, onImagesPaste, onKeyDown, onMentionChange, className, ...props }: ComposerEditorProps) {
   const { t } = useTranslation()
   const viewRef = useRef<EditorView | null>(null)
-  const latest = useRef({ draft, onChange, onKeyDown, onMentionChange })
+  const latest = useRef({ draft, onChange, onImagesPaste, onKeyDown, onMentionChange })
   const serialized = useRef(draft)
   const mentionRef = useRef<MentionTrigger | null>(null)
   const [portals, setPortals] = useState<QuotePortal[]>([])
-  useLayoutEffect(() => { latest.current = { draft, onChange, onKeyDown, onMentionChange } })
+  useLayoutEffect(() => { latest.current = { draft, onChange, onImagesPaste, onKeyDown, onMentionChange } })
 
   useImperativeHandle(ref, () => ({
     focus(atEnd = false) {
@@ -91,6 +93,12 @@ export function ComposerEditor({ ref, inputRef, draft, placeholder, onChange, on
       clipboardTextSerializer: (slice) => serializeComposerContent(slice.content),
       clipboardTextParser: (text) => new Slice(composerDocument(text).content, 0, 0),
       handlePaste(view, event) {
+        const images = Array.from(event.clipboardData?.files ?? []).filter(isImageAttachment)
+        if (images.length > 0) {
+          // Images belong in the attachment queue; leave the draft and selection intact.
+          latest.current.onImagesPaste(images)
+          return true
+        }
         const text = event.clipboardData?.getData("text/plain")
         if (text === undefined) return false
         view.dispatch(view.state.tr.replaceSelection(new Slice(composerDocument(text).content, 0, 0)).scrollIntoView())

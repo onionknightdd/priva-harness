@@ -658,6 +658,7 @@ export function AgentMessageComposer({
                         )
                   )}
                   onChange={onDraftChange}
+                  onImagesPaste={onFilesSelected}
                   onMentionChange={setMentionTrigger}
                   onKeyDown={(event, atStart) => {
                     if (visibleSuggestion && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {

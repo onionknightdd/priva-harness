@@ -43,16 +43,18 @@ async function mountEditor(initial = "") {
   let draft = initial
   let updateDraft: (value: string) => void = () => {}
   const keys: { key: string; atStart: boolean }[] = []
+  const pastedImages: File[][] = []
   function Fixture() {
     const [value, setValue] = useState(initial)
     updateDraft = setValue
     return <ComposerEditor ref={ref} inputRef={inputRef} draft={value} placeholder="输入消息"
       onChange={(next) => { draft = next; setValue(next) }}
+      onImagesPaste={(images) => { pastedImages.push(images) }}
       onKeyDown={(event, atStart) => { keys.push({ key: event.key, atStart }); return event.key === "Enter" && !event.shiftKey }} />
   }
   await act(async () => root.render(<React.StrictMode><Fixture /></React.StrictMode>))
   return {
-    host, ref, keys, input: inputRef.current!, draft: () => draft,
+    host, ref, keys, pastedImages, input: inputRef.current!, draft: () => draft,
     update: async (value: string) => { draft = value; await act(async () => updateDraft(value)) },
     unmount: async () => { await act(async () => root.unmount()); host.remove() },
   }
@@ -62,10 +64,10 @@ async function key(input: HTMLElement, name: string, options: KeyboardEventInit 
   await act(async () => { input.dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...options })) })
 }
 
-function clipboard(type: "paste" | "copy" | "cut", text = "") {
+function clipboard(type: "paste" | "copy" | "cut", text = "", files: File[] = []) {
   const data = new Map<string, string>([["text/plain", text]])
   const event = new Event(type, { bubbles: true, cancelable: true })
-  Object.defineProperty(event, "clipboardData", { value: { getData: (type: string) => data.get(type) ?? "", setData: (type: string, value: string) => data.set(type, value), clearData: () => data.clear() } })
+  Object.defineProperty(event, "clipboardData", { value: { files, getData: (type: string) => data.get(type) ?? "", setData: (type: string, value: string) => data.set(type, value), clearData: () => data.clear() } })
   return { event, data }
 }
 
@@ -163,6 +165,64 @@ test("plain-text paste, selection replacement and copy/cut preserve reference me
     assert.equal(cut.data.get("text/plain"), source)
     assert.equal(editor.draft(), "")
     assert.equal(editor.input.dataset.empty, "true")
+  } finally { await editor.unmount() }
+})
+
+test("pasting a screenshot adds an image without replacing the selected draft or its references", async () => {
+  const source = `前文 \n\n${formatMessageSelection(quote)}\n\n 后文`
+  const editor = await mountEditor(source)
+  try {
+    await act(async () => editor.ref.current!.focus())
+    await key(editor.input, "a", { ctrlKey: true, keyCode: 65 })
+    const image = new File(["screenshot"], "image.png", { type: "image/png" })
+    const pasted = clipboard("paste", "", [image])
+    await act(async () => editor.input.dispatchEvent(pasted.event))
+
+    assert.equal(pasted.event.defaultPrevented, true)
+    assert.equal(editor.pastedImages.length, 1)
+    assert.equal(editor.pastedImages[0][0], image)
+    assert.equal(editor.draft(), source)
+    assert.equal(editor.input.querySelectorAll("[data-message-selection-quote]").length, 1)
+    assert.equal(document.activeElement, editor.input)
+
+    await act(async () => editor.input.dispatchEvent(clipboard("paste", "replacement").event))
+    assert.equal(editor.draft(), "replacement", "image paste must preserve the text selection")
+    assert.equal(editor.pastedImages.length, 1)
+  } finally { await editor.unmount() }
+})
+
+test("image paste batches all images once and ignores accompanying HTML, URLs and other files", async () => {
+  const editor = await mountEditor("Keep this draft")
+  try {
+    await act(async () => editor.ref.current!.focus(true))
+    const images = [
+      new File(["png"], "first.png", { type: "image/png" }),
+      new File(["jpeg"], "second.jpg", { type: "image/jpeg" }),
+    ]
+    const other = new File(["note"], "note.txt", { type: "text/plain" })
+    const pasted = clipboard("paste", "https://example.com/first.png", [images[0], other, images[1]])
+    pasted.data.set("text/html", '<img src="https://example.com/first.png">')
+    await act(async () => editor.input.dispatchEvent(pasted.event))
+
+    assert.equal(pasted.event.defaultPrevented, true)
+    assert.equal(editor.pastedImages.length, 1)
+    assert.deepEqual(editor.pastedImages[0], images)
+    assert.equal(editor.draft(), "Keep this draft")
+    assert.equal(editor.input.querySelector("img"), null)
+
+    await act(async () => editor.input.dispatchEvent(clipboard("paste", "", [images[0]]).event))
+    assert.deepEqual(editor.pastedImages[1], [images[0]], "a later paste remains a separate attachment action")
+  } finally { await editor.unmount() }
+})
+
+test("pasting text with a non-image file keeps the existing text paste behavior", async () => {
+  const editor = await mountEditor("before ")
+  try {
+    await act(async () => editor.ref.current!.focus(true))
+    const pasted = clipboard("paste", "after", [new File(["pdf"], "file.pdf", { type: "application/pdf" })])
+    await act(async () => editor.input.dispatchEvent(pasted.event))
+    assert.equal(editor.draft(), "before after")
+    assert.deepEqual(editor.pastedImages, [])
   } finally { await editor.unmount() }
 })
 

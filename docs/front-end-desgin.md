@@ -1610,6 +1610,24 @@ HTTP history / session.snapshot / run.started.userMessage
     -> restoreUserMessageAttachments -> body + merged attachment cards
 ```
 
+### Composer 图片粘贴
+
+2026-10-09：ChatComposer 支持通过 Cmd+V / Ctrl+V 粘贴剪贴板图片（包括截图与
+复制的图片文件），同一次粘贴的多张图片一起加入现有附件队列。按 `image/*` MIME
+类型识别图片，复用附件缩略图、上传进度、失败重试、删除及减少动态效果；上传完成后
+才能发送，图片路径继续按当前模型能力发送。
+
+剪贴板包含图片文件时优先添加图片，忽略同次粘贴附带的 HTML / URL / 文字和非图片
+文件，保留现有草稿、行内引用、光标与文本选区。没有图片文件时沿用原有文本与引用
+粘贴逻辑；仅有图片 URL 或 HTML 的内容不自动下载为附件。
+
+```text
+Clipboard image files -> ComposerEditor -> existing attachment queue
+                                             -> preview / upload / retry / remove
+                                             -> send uploaded paths
+Clipboard text        -> existing text / message_select_action paste
+```
+
 ### Composer 原生输入建议
 
 2026-09-23：按用户确认，Claude Code TUI 的灰色输入建议同步到 ChatComposer。
@@ -2348,7 +2366,8 @@ node --test agent-ui/tests/features/agent-message/composer-attachments.test.ts a
 `/tests/features/project-directory/project-directory-browser.html`，点击
 **Run project directory checks**。使用真实 App 组件与隔离的目录 / 会话 / 上传 / WS
 模拟，覆盖两个入口、懒加载与键盘展开、路径错误和重试、新建重名及自动选择、
-草稿和上传保留、首条消息 cwd / 附件 / 分组、已有项目新对话、关闭后过期响应、
+草稿和上传保留、图片粘贴后的缩略图 / 上传 / 发送及草稿保留、首条消息 cwd / 附件 / 分组、
+已有项目新对话、关闭后过期响应、
 焦点恢复、嵌套弹窗背景模糊与关闭恢复、弹窗溢出，以及选择器、主文件浏览器和 Workspace 的根目录范围、深层导航、
 祖先目录补载、面包屑和越界输入；长目录滚动检查吸顶行贴合顶部、各层保持选中背景、缩进区域
 不透明、滚动区与吸顶行底色一致、两侧无额外留白，以及返回顶部后恢复正常背景。
@@ -2374,7 +2393,8 @@ node --test agent-ui/tests/features/file-browser/file-tree-content-width.test.ts
 后端 `POST /api/sandbox/files/exists` 的单元与 HTTP 集成用例包含在 Runner 的 `npm test` 中。
 
 选区角色与范围、浮层定位、文件引用、引用协议与截断、编辑器插入 / 删除 / 撤销、
-剪贴板、IME、发送清空、历史只读展示和完整原文 Tooltip 回归。
+剪贴板（截图 / 多图片 / 图片附带 HTML 与 URL、草稿和选区保留）、IME、发送清空、
+历史只读展示和完整原文 Tooltip 回归。
 DOM 用例使用 jsdom 模拟事件，不承担浏览器布局或视觉验收：
 
 ```sh
