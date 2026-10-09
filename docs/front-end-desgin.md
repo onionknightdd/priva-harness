@@ -1783,8 +1783,12 @@ optimistic message ID -> snapshot.renderId -> same mounted bubble / reply / scro
 菜单与 Tooltip 沿用共享弹层和主题，菜单在窄屏按可用空间翻转。
 会话选择器的主菜单及所有子菜单使用 160ms 进入 / 退出过渡，指针悬停底色使用
 125ms 过渡；Tooltip 使用 160ms 进入 / 125ms 退出，连续切换上下文时也保留过渡。
-上下文数值、加载状态和选中勾使用 160ms 淡入淡出；数值与加载图标保持占位，避免
-切换时内容跳动。所有过渡均可中途反向，键盘焦点即时反馈，减少动态效果时立即切换。
+「上下文窗口」右侧的 200K / 1M 使用
+[BeUI Text Cascade](https://beui.dev/components/motion/text-animation) 逐字滚动切换；
+采用官方 `text-cascade` 入口，复用现有 `ActionSwapText` 的 cascade 模式和共享弹簧，
+保持固定占位、右对齐及完整的可访问文本。加载状态和选中勾继续使用 160ms 淡入淡出，
+加载图标保持占位，避免切换时内容跳动。过渡可中途反向，键盘焦点即时反馈，
+减少动态效果时立即切换。
 上下文窗口独立于模型 ID；`useAgentMessage` 持有状态，`run.start`、`session.configure`
 与终端连接参数携带数值 `contextWindow`（200000 / 1000000）。等待配置确认期间显示
 加载状态并暂停发送新消息，停止当前回复仍可用。配置确认同时更新上下文环。
@@ -1977,6 +1981,7 @@ App TooltipProvider -> 首次悬浮 1s -> 连续切换 0ms
 | Tree | [reui/tree](../agent-ui/src/components/reui/tree.tsx) + [file-browser-tree](../agent-ui/src/features/file-browser/components/file-browser-tree.tsx) | Headless Tree 的树模型 + ReUI 外观 + Motion 高亮 / 文字溢出反馈 | 文件浏览器；[SkillResourceTree](../agent-ui/src/features/resources/skill-resource-tree.tsx) 也复用 FileBrowserTree，使用 compact 变体 |
 | Card / Item / Separator | [ui/card](../agent-ui/src/components/ui/card.tsx)、[ui/item](../agent-ui/src/components/ui/item.tsx)、[ui/separator](../agent-ui/src/components/ui/separator.tsx) | token 化卡片、列表项、分隔线；Separator 用 Base UI | 工具结果、模型列表、Profile、用量概览卡片 |
 | DateRangePicker | [motion/date-range-picker](../agent-ui/src/components/motion/date-range-picker.tsx)，BeUI + Motion + Intl | 日期区间弹层，支持 min / max、月份年份跳转、键盘导航及减少动态效果；本地接入中英文翻译和 inset 焦点环 | 用量概览区间起止 |
+| TextCascade | [motion/text-cascade](../agent-ui/src/components/motion/text-cascade.tsx)，BeUI + 现有 ActionSwapText | 逐字错开滚动切换，保留完整可访问文本；减少动态效果时直接更新 | 会话模型菜单右侧的 200K / 1M 数值 |
 | Avatar | [ui/avatar](../agent-ui/src/components/ui/avatar.tsx)，Base UI Avatar | 圆形头像及 fallback | 用户菜单、Profile |
 | Chart | [ui/chart](../agent-ui/src/components/ui/chart.tsx) + Recharts | `chart-*` token 与本地图表 Tooltip；用量页堆叠柱读取 `usage-series-1…6` token；这里的 Tooltip 是图表数据提示 | 用量页模型活动、Profile 模型用量 |
 | CalendarHeatmap | [heatmap/calendar-heatmap](../agent-ui/src/components/heatmap/calendar-heatmap.tsx)，`@heatmap` registry（SVG + date-fns）+ 本地 `ring-inset` / `monthLabelPosition` / `splitYears` | 网格热力图；基础默认读 chart token，用量页读取共享 `heatmap` token，Profile 调用点仍传固定蓝色 | 用量页 Token 活动、Profile Token 日历 |

@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
+import { TextCascade } from "@/components/motion/text-cascade"
 import {
   DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSub,
   DropdownMenuSubContent, DropdownMenuSubTrigger,
@@ -31,11 +32,8 @@ export function ComposerContextWindow({ value, pending, onChange }: {
           <Spinner className="size-3.5 motion-reduce:animate-none" aria-label={t("agentMessage.configurationApplying")} />
         </span>
         <span className="grid shrink-0 text-muted-foreground">
-          {["200K", "1M"].map((size) => (
-            <span key={size} className="composer-model-fade col-start-1 row-start-1 text-right" data-visible={size === label} aria-hidden={size !== label}>
-              {size}
-            </span>
-          ))}
+          <span className="invisible col-start-1 row-start-1" aria-hidden="true">200K</span>
+          <TextCascade text={label} className="col-start-1 row-start-1 text-right" />
         </span>
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent
