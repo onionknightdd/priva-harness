@@ -1952,6 +1952,11 @@ App TooltipProvider -> 首次悬浮 1s -> 连续切换 0ms
 | HTML 编辑器 | [html-visual-editor](../agent-ui/src/features/files/preview/renderers/html-visual-editor.tsx)，GrapesJS | 编辑器自带 UI；全局 CSS 当前明确保留默认粉/紫色点缀，形成应用内可见的独立风格 |
 | HTML / JSX 生成内容 | [html-renderer](../agent-ui/src/features/files/preview/renderers/html-renderer.tsx)、[visualize-sandbox](../agent-ui/src/features/agent-message/visualize-sandbox) | iframe 中的内容；JSX 沙箱另有 Button、Badge、Card、Progress、Separator 简化实现，传入主题颜色但不共享主应用全部字号、圆角与交互 |
 
+消息共用的 `MessageResponse` 通过 `createMathPlugin({ singleDollarTextMath: true })`
+启用单美元符号行内公式（如 `$E = mc^2$`），同时保留 `$$...$$` 行内及独立公式。
+历史消息和流式输出使用同一数学插件；正文中的字面美元符号可写为 `\$`，代码中的
+美元符号保持原文。
+
 CodeBlock 标题栏在复制按钮左侧提供自动换行按钮，默认关闭，各代码块独立切换，
 流式追加和消息完成时保留选择。MessageResponse 一旦使用流式渲染器，完成时仍保留
 同一渲染器，通过 `isAnimating` 结束流式状态，避免重建代码块；初始静态内容继续
