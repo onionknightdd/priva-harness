@@ -1004,6 +1004,7 @@ Desktop: sidebar | chat | Workspace [tasks] [files] [computer] [expand]
 Mobile:  full-width Workspace tabs / close
          Debian desktop fills the remaining Workspace area
 State:   connecting -> desktop / unavailable / disconnected [Reconnect]
+         network error / disconnected -> wait 3s -> connecting
 
 Computer tab + visible Workspace -> GET /api/sandbox/computer
   available:true -> lazy noVNC RFB -> /api/sandbox/computer/stream (WS/WSS)
@@ -1014,7 +1015,10 @@ Computer tab + visible Workspace -> GET /api/sandbox/computer
 使用 `@novnc/novnc` 的公开 RFB API；`scaleViewport=true` 将固定分辨率桌面缩放到面板，
 `resizeSession=false`，面板尺寸变化不修改共享桌面分辨率。画面由二进制 RFB WebSocket
 传送，不通过聊天消息或截图轮询。连接前读取 `{ available: boolean }`；无桌面、HTTP 错误、
-握手失败和断线均给出中英文状态及重连按钮，15 秒未建立连接时停止等待。
+握手失败和断线均给出中英文状态及重连按钮，每次连接最多等待 15 秒。
+网络错误、5xx/408/429、连接超时或桌面断线时，释放旧连接与输入，3 秒后自动新建连接；
+认证/安全握手失败、其他 4xx、非法状态响应和未配置桌面不自动重试。
+关闭 Workspace、切换标签或页面隐藏时同时取消重连计时器，恢复可见后才重新连接。
 状态切换使用 150ms 淡入，减少动态效果时立即切换并关闭 spinner 旋转。
 
 noVNC 只在电脑标签首次连接时加载；此面板不使用 `keepMounted`。隐藏整个 Workspace
@@ -2263,7 +2267,7 @@ Workspace 电脑连接与视图生命周期回归（仓库根目录）：
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/workspace/computer-connection.test.ts agent-ui/tests/features/workspace/workspace-computer-view.test.tsx agent-ui/tests/features/workspace/workspace-computer-navigation.test.tsx
 ```
 
-覆盖同源 WS/WSS、不可用 / HTTP / 握手错误、断线、重连、延迟响应和懒加载的取消、
+覆盖同源 WS/WSS、不可用 / HTTP / 握手错误、断线自动重连、取消重试、拒绝响应停止重试、延迟响应和懒加载的取消、
 关闭 Workspace / 切标签 / 页面隐藏时清理连接、恢复可见时重连及中英文状态；
 实时 computer 调用打开桌面 / 移动端面板，历史、重复事件与重连补发不切换标签。
 这些 DOM 与协议边界测试不替代 Debian 桌面真实连接、鼠标键盘和触摸的浏览器验证。

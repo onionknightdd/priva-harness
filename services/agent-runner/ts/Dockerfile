@@ -18,6 +18,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
       supervisor dbus-x11 at-spi2-core xvfb xauth x11-utils x11-xserver-utils x11vnc \
       libx11-6 libxi6 libxkbcommon0 \
       xfce4-session xfce4-panel xfce4-settings xfwm4 xfdesktop4 thunar \
+      sassc gtk2-engines-murrine gnome-themes-extra librsvg2-common \
       mousepad xterm chromium xdotool maim \
       fonts-noto-cjk fonts-noto-color-emoji \
     && rm -rf /var/lib/apt/lists/* \

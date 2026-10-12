@@ -45,6 +45,11 @@ The Debian 13 / minikube development environment is documented in
 [docs/development/debian-minikube.md](docs/development/debian-minikube.md).
 From the repository root, build and deploy with
 `bash deploy/agent-runner/dev.sh build` and `bash deploy/agent-runner/dev.sh deploy`.
+On macOS, install persistent UI / port forwarding with
+`bash deploy/agent-runner/dev.sh background install`; use `background status` or
+`background uninstall` to inspect or remove these user LaunchAgents.
+Apply the pinned Colloid-Dark GTK / Xfwm theme and Colloid icons to the desktop
+HOME volume with `bash deploy/agent-runner/dev.sh theme-colloid`.
 Run its Linux-only deployment probe with `bash deploy/agent-runner/dev.sh verify`.
 Run only the desktop probe with `bash deploy/agent-runner/dev.sh verify-desktop`.
 Run the Cua MCP integration probe with `bash deploy/agent-runner/dev.sh verify-computer`.

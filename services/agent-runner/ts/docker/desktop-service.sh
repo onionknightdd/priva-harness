@@ -15,7 +15,7 @@ case "${1:?desktop service required}" in
     exec dbus-daemon --session --nofork --nopidfile --address="$DBUS_SESSION_BUS_ADDRESS"
     ;;
   display)
-    exec Xvfb "$DISPLAY" -screen 0 1440x900x24 -nolisten tcp -auth "$XAUTHORITY" -noreset
+    exec Xvfb "$DISPLAY" -screen 0 1920x1080x24 -nolisten tcp -auth "$XAUTHORITY" -noreset
     ;;
   session)
     wait_for_display

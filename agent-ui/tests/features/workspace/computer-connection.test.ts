@@ -153,8 +153,7 @@ test("a stalled connection times out and cannot revive from a late status respon
   const originalSetTimeout = window.setTimeout
   let expire!: () => void
   window.setTimeout = ((handler: () => void, delay: number) => {
-    assert.equal(delay, 15_000)
-    expire = handler
+    if (delay === 15_000) expire = handler
     return originalSetTimeout.call(window, handler, delay)
   }) as typeof window.setTimeout
   const view = start()
@@ -167,4 +166,101 @@ test("a stalled connection times out and cannot revive from a late status respon
     await settle()
     assert.equal(FakeClient.instances.length, 0)
   } finally { view.close(); window.setTimeout = originalSetTimeout }
+})
+
+function controlTimers() {
+  const originalSet = window.setTimeout
+  const originalClear = window.clearTimeout
+  let sequence = 0
+  const timers = new Map<number, { delay: number; callback: () => void }>()
+  window.setTimeout = ((callback: () => void, delay: number) => {
+    timers.set(++sequence, { callback, delay })
+    return sequence
+  }) as typeof window.setTimeout
+  window.clearTimeout = (id) => { timers.delete(id) }
+  return {
+    timers,
+    tick(delay: number) {
+      for (const [id, timer] of [...timers]) {
+        if (timer.delay === delay) { timers.delete(id); timer.callback() }
+      }
+    },
+    restore() { window.setTimeout = originalSet; window.clearTimeout = originalClear },
+  }
+}
+
+test("a dropped stream releases input then reconnects without duplicating canvases", async () => {
+  const clock = controlTimers()
+  const view = start()
+  try {
+    latest().resolve(Response.json({ available: true }))
+    await settle()
+    const first = FakeClient.instances[0]
+    first.dispatchEvent(new Event("connect"))
+    first.dispatchEvent(new Event("disconnect"))
+    assert.deepEqual(first.events, ["blur", "disconnect"])
+    assert.equal(first.viewOnly, true)
+    assert.equal(requests.length, 1)
+    clock.tick(3_000)
+    assert.equal(requests.length, 2)
+    latest().resolve(Response.json({ available: true }))
+    await settle()
+    first.dispatchEvent(new Event("connect"))
+    assert.equal(view.states.at(-1), "connecting")
+    FakeClient.instances[1].dispatchEvent(new Event("connect"))
+    assert.equal(view.states.at(-1), "connected")
+    assert.equal(view.target.querySelectorAll("canvas").length, 1)
+  } finally { view.close(); clock.restore() }
+})
+
+test("temporary proxy failures retry, while denied requests and security failures stop", async () => {
+  const clock = controlTimers()
+  const view = start()
+  try {
+    latest().resolve(Response.json({}, { status: 502 }))
+    await settle()
+    clock.tick(3_000)
+    assert.equal(requests.length, 2)
+    latest().resolve(Response.json({}, { status: 403 }))
+    await settle()
+    clock.tick(3_000)
+    assert.equal(requests.length, 2)
+    assert.equal(clock.timers.size, 0)
+  } finally { view.close(); clock.restore() }
+
+  const securityClock = controlTimers()
+  const secured = start()
+  try {
+    latest().resolve(Response.json({ available: true }))
+    await settle()
+    FakeClient.instances.at(-1)!.dispatchEvent(new Event("securityfailure"))
+    assert.equal(securityClock.timers.size, 0)
+  } finally { secured.close(); securityClock.restore() }
+})
+
+test("closing the view cancels a scheduled reconnect, including an already queued callback", async () => {
+  const clock = controlTimers()
+  const view = start()
+  try {
+    latest().reject(new Error("Network offline"))
+    await settle()
+    const retry = [...clock.timers.values()].find((timer) => timer.delay === 3_000)!
+    assert.ok(retry)
+    view.stop()
+    assert.equal(clock.timers.size, 0)
+    retry.callback()
+    assert.equal(requests.length, 1)
+    assert.equal(view.target.childElementCount, 0)
+  } finally { view.close(); clock.restore() }
+})
+
+test("an invalid JSON response needs manual retry instead of an automatic retry loop", async () => {
+  const clock = controlTimers()
+  const view = start()
+  try {
+    latest().resolve(new Response("<html>Wrong server</html>"))
+    await settle()
+    assert.equal(view.states.at(-1), "failed")
+    assert.equal(clock.timers.size, 0)
+  } finally { view.close(); clock.restore() }
 })

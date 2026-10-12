@@ -16,7 +16,7 @@ assert.equal(process.env['COMPUTER_VNC_PORT'], '5900')
 assert.equal(process.env['DBUS_SESSION_BUS_ADDRESS'], 'unix:path=/tmp/priva-desktop/bus')
 
 const display = (await exec('xdpyinfo')).stdout
-assert.match(display, /dimensions:\s+1440x900 pixels/u)
+assert.match(display, /dimensions:\s+1920x1080 pixels/u)
 await exec('dbus-send', ['--session', '--type=method_call', '--print-reply', '--dest=org.freedesktop.DBus', '/', 'org.freedesktop.DBus.ListNames'])
 await exec('pgrep', ['-x', 'xfce4-session'])
 await exec('pgrep', ['-x', 'xfwm4'])
@@ -72,7 +72,7 @@ const framebuffer = await new Promise<{ width: number, height: number }>((resolv
     }
   })
 })
-assert.deepEqual(framebuffer, { width: 1440, height: 900 })
+assert.deepEqual(framebuffer, { width: 1920, height: 1080 })
 const listeners = (await readFile('/proc/net/tcp', 'utf8')).split('\n').filter((line) => /:170C\s/u.test(line) && /\s0A\s/u.test(line))
 assert.equal(listeners.length, 1, 'Expected exactly one IPv4 VNC listener')
 assert.match(listeners[0] ?? '', /0100007F:170C/u, 'VNC must listen only on 127.0.0.1')
@@ -98,8 +98,8 @@ try {
   assert.ok(visible, 'The test application did not create a visible X11 window')
   const screenshot = await exec('maim', [], { encoding: 'buffer', maxBuffer: 10 * 1024 * 1024 })
   assert.equal(screenshot.stdout.subarray(1, 4).toString(), 'PNG')
-  assert.equal(screenshot.stdout.readUInt32BE(16), 1440)
-  assert.equal(screenshot.stdout.readUInt32BE(20), 900)
+  assert.equal(screenshot.stdout.readUInt32BE(16), 1920)
+  assert.equal(screenshot.stdout.readUInt32BE(20), 1080)
   console.log(JSON.stringify({ os: 'Debian 13', display: ':99', framebuffer, checks: ['Xfce session and window manager', 'session D-Bus', 'Chromium, Mousepad and Thunar', 'Chinese fonts', 'VNC RFB handshake and loopback listener', 'visible test application', 'PNG screenshot', 'writable persistent HOME and workspace'] }, null, 2))
 } finally {
   app.kill('SIGTERM')

@@ -866,7 +866,7 @@ export const zhCN = {
       unavailable: "桌面不可用",
       unavailableDescription: "当前 Runner 没有可用的桌面。",
       disconnected: "桌面连接已断开",
-      disconnectedDescription: "重新连接后可继续操作桌面。",
+      disconnectedDescription: "桌面会自动重新连接，也可以立即重试。",
       failed: "无法连接桌面",
       failedDescription: "请检查 Runner 和桌面是否正在运行，然后重新连接。",
       reconnect: "重新连接",

@@ -76,6 +76,12 @@ case "${1:-help}" in
   watch)
     exec node "$ROOT/deploy/agent-runner/watch.mjs"
     ;;
+  background)
+    exec node "$ROOT/deploy/agent-runner/background.mjs" "${2:-status}"
+    ;;
+  theme-colloid)
+    "${KUBE[@]}" exec -i deployment/agent-runner -- bash < "$ROOT/deploy/agent-runner/colloid.sh"
+    ;;
   ui)
     cd "$ROOT/agent-ui"
     export AGENT_RUNNER_URL=http://127.0.0.1:18001
@@ -105,6 +111,6 @@ case "${1:-help}" in
     node "$ROOT/deploy/agent-runner/import-models.mjs" "$2" "$PROFILE" "$NAMESPACE" "${3:-}"
     ;;
   *)
-    echo 'Usage: deploy/agent-runner/dev.sh {build|deploy|sync|watch|forward|ui|shell|logs|status|verify|verify-desktop|verify-computer|import-models FILE [--connect-host-models]}'
+    echo 'Usage: deploy/agent-runner/dev.sh {build|deploy|sync|watch|forward|ui|background [install|status|uninstall]|theme-colloid|shell|logs|status|verify|verify-desktop|verify-computer|import-models FILE [--connect-host-models]}'
     ;;
 esac

@@ -871,7 +871,7 @@ export const en = {
       unavailable: "Desktop unavailable",
       unavailableDescription: "This Runner does not have a desktop available.",
       disconnected: "Desktop disconnected",
-      disconnectedDescription: "Reconnect to continue using the desktop.",
+      disconnectedDescription: "The desktop will reconnect automatically. You can also retry now.",
       failed: "Could not connect to the desktop",
       failedDescription: "Check that the Runner and desktop are running, then reconnect.",
       reconnect: "Reconnect",

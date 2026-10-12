@@ -65,7 +65,33 @@ bash deploy/agent-runner/dev.sh build
 `NPM_REGISTRY` 默认是 `https://registry.npmjs.org`，可按网络情况单独选择；仍使用
 原始 `package-lock.json` 的版本与 integrity 校验，不改写锁文件，也不复制宿主机 npm 配置。
 
-再在两个终端分别保持运行：
+macOS 推荐安装后台服务，只需运行一次；它会立即启动，之后随用户登录自动启动：
+
+```sh
+bash deploy/agent-runner/dev.sh background install
+bash deploy/agent-runner/dev.sh background status
+# 停止并移除自启动，保留日志：
+bash deploy/agent-runner/dev.sh background uninstall
+```
+
+安装前先停止手工运行的 Xfce `forward` / `ui`，否则安装器会明确报告端口占用，
+不会终止未知进程。再次 install 可更新本项目服务配置。脚本在
+`~/Library/LaunchAgents/` 安装 `com.priva-harness.xfce.forward.plist` 和
+`com.priva-harness.xfce.ui.plist`，使用 `KeepAlive` 及 10 秒启动节流；进程退出后由
+launchd 拉起，转发脚本继续处理 Pod 替换时的重连。
+日志位于 `~/Library/Logs/priva-harness/xfce-{forward,ui}.log`。
+只记录 Node/npm/kubectl 的路径及 minikube profile，不把交互 shell 的密钥环境复制进 plist。
+移动仓库或删除当前 Node 安装版本后，需要重新 install。退出 macOS 登录会停止这些用户
+服务；Mac 睡眠或 Docker/minikube 停止期间服务仍不可达，恢复条件后会重新连接。
+
+```text
+用户登录 -> launchd -> ui :15173 -> forward :18001 -> Runner Pod
+               |                    |
+               +-- 进程退出后重启 --+
+电脑 tab 断线 -> 释放输入 -> 3 秒后重试 -> 同一个桌面
+```
+
+如果需要在终端前台调试，也可在两个终端分别运行（不要与后台服务同时占用端口）：
 
 ```sh
 bash deploy/agent-runner/dev.sh forward
@@ -101,7 +127,7 @@ Runner 没有独立 `/health` 路由，Kubernetes 使用现有的
   curl、jq、procps、sqlite3、unzip 等开发工具；系统包在构建时安装。
 - 桌面使用 Xvfb `:99`、Xfce、Chromium、Thunar 文件管理器、Mousepad 文本编辑器、
   xterm 和中文/Emoji 字体。`xdotool`、`maim` 供后续工具集成与屏幕诊断。
-  桌面固定为 1440 × 900，浏览器端按容器宽度缩放；当前不承诺动态 RandR 分辨率调整。
+  桌面固定为 1920 × 1080，浏览器端按容器宽度缩放；当前不承诺动态 RandR 分辨率调整。
 - `supervisord` 管理 X11、会话 D-Bus、Xfce 和 x11vnc；启动入口等待桌面/VNC 就绪后
   执行 Runner，退出时终止并回收这些子进程。`tsx watch` 只重启 Runner，不重启桌面。
   Chromium 随容器启动，正常关闭后不强行重启，可从桌面「浏览器」图标重新打开。
@@ -120,6 +146,56 @@ Runner 没有独立 `/health` 路由，Kubernetes 使用现有的
   OOM，应根据 minikube 剩余容量调整此 Deployment 的资源额度。
 
 ## 代码变更与调试
+
+### Colloid 主题、图标与分辨率
+
+在运行中的 Xfce 主环境应用 [Colloid 官方主题](https://github.com/vinceliuice/Colloid-gtk-theme)
+和 [Colloid 图标](https://github.com/vinceliuice/Colloid-icon-theme)：
+
+```sh
+bash deploy/agent-runner/dev.sh theme-colloid
+```
+
+镜像提供 `sassc`、`gtk2-engines-murrine`、`gnome-themes-extra` 和 `librsvg2-common`；
+最后一个提供 SVG 加载器，避免图标回退及窗口按钮缺失。旧镜像先执行 build / deploy。
+安装脚本固定官方源码版本并校验归档 SHA-256：
+
+| 内容 | Commit | 归档 SHA-256 |
+| --- | --- | --- |
+| GTK / Xfwm4 | `fe11342f37f124f1b29d44cf33e9a06053f4bba2` | `385d29fcf256b69891b3e43e81695c938b4ec3a46628fc4efbfbed06bd4c1520` |
+| 图标 | `ceac6608ecd0e40025cbc2ebbd32bf0e0f4ebc6a` | `3f731f9f13b1c1403893561ff92adec7b3ab07c5495f55c78c111b07a10a296e` |
+
+```text
+theme-colloid -> 官方归档 + SHA-256 -> 临时 HOME 编译
+                                      |
+                                      v
+                              PVC 主题 / 图标目录
+                                      |
+                                      v
+                         xfconf 选择 Colloid-Dark
+```
+
+GTK / Xfwm4 使用默认蓝色、标准尺寸的 `Colloid-Dark`，安装到
+`/data/home/.themes/Colloid-Dark`。图标安装到 `/data/home/.local/share/icons/`，
+选择 `Colloid-Dark`；同时保留上游提供的 `Colloid` / `Colloid-Light`，因为深色图标
+通过相对链接复用浅色款的应用图标。安装结果包含上游许可证，壁纸不变。
+临时 HOME 隔离上游安装脚本的旧主题清理；已有非本脚本管理的同名目录会报错。
+主题文件和 xfconf 设置均随 HOME 保留；空白 PVC 需要显式运行该命令。
+
+当前 Xvfb 启动分辨率为 **1920×1080**。要修改固定分辨率，更新
+`docker/desktop-service.sh` 及 `tests/deployment/desktop-smoke.ts` 中的验收尺寸后重新
+build / deploy；会关闭当前桌面窗口，已保存的文件仍在 PVC。noVNC 继续按面板尺寸等比
+缩放，不修改共享桌面大小；在窄面板里文字会更小，可放大 Workspace。
+
+2026-10-12 实测：两个 LaunchAgent 的 plist 检查通过；分别向实际转发与 Vite 进程
+发送 SIGTERM，自动恢复约 1.1 秒、1.3 秒，API 均返回 200。这只验证退出后的恢复，
+不是重启 Mac 或睡眠唤醒的实测。主 Pod 已重建为 1920×1080，RFB 握手、截图尺寸及
+桌面探针通过。Colloid 安装后再次重建 Pod，GTK / Xfwm4 / 图标设置均保留为
+`Colloid-Dark`；SVG 加载器、文件管理器图标和窗口按钮已在实际桌面确认。
+同一电脑标签在 Pod 替换后自动恢复连接。最终镜像上的桌面探针及 Cua MCP 探针通过，
+包含前台中文输入、GUI 保存和文件内容比对；安装命令重复运行通过。
+
+### 同步与调试器
 
 ```text
 编辑本机 Runner 源码 -> dev.sh sync -> Pod /opt/agent-runner/src
@@ -238,7 +314,7 @@ bash deploy/agent-runner/dev.sh verify-desktop
 ```
 
 桌面探针只在目标 Linux 容器运行：检查 Xfce/窗口管理器、会话 D-Bus、中文字体和
-桌面应用；完成真实 RFB 3.8 握手并检查 1440 × 900 帧缓冲与回环监听；临时打开一个
+桌面应用；完成真实 RFB 3.8 握手并检查 1920 × 1080 帧缓冲与回环监听；临时打开一个
 xterm 窗口并用 `maim` 截图，检查 HOME/workspace 可读写。它会关闭自己的窗口并清理
 临时文件，不调用模型。它不单独证明跨 Pod 重建的数据持久化或 Agent 接管状态机。
 
@@ -369,7 +445,7 @@ HTTP 403；不信任客户端的 `X-Forwarded-Host`/`X-Forwarded-Proto`。Origin
 都会回收该连接的 TCP socket 与计时器，不重放未确认的输入。
 
 画面经现有 `:8001` HTTP/WebSocket 入口及 Vite 代理传输，部署没有新增对外 VNC 端口。
-浏览器使用 noVNC 缩放固定的 1440 × 900 桌面；此链路与模型观察屏幕或驱动电脑无关。
+浏览器使用 noVNC 缩放固定的 1920 × 1080 桌面；此链路与模型观察屏幕或驱动电脑无关。
 
 ## 容器桌面验证记录（2026-10-12）
 
@@ -453,7 +529,8 @@ Cua Driver 0.34.1 mcp --direct       Agent UI「电脑」
 | 双向观察 | 在 Agent UI 输入 `ui ok` 后，Cua 的 AT-SPI 读取同一编辑器立即返回该内容 |
 
 验证文件保留在容器 `/data/workspace/cua-mcp-validation-2026-10-12.txt`，可从
-Agent UI 文件标签或桌面编辑器检查。默认屏幕固定 1440×900；桌面重载与 Runner
+Agent UI 文件标签或桌面编辑器检查。该专项验证时屏幕为 1440×900，后续主环境已改为
+1920×1080；桌面重载与 Runner
 源码重载的行为不同，前者会关闭应用，后者已验证保留窗口。
 
 ### 已知限制：前台输入与上游中文截断
