@@ -1022,6 +1022,22 @@ noVNC 只在电脑标签首次连接时加载；此面板不使用 `keepMounted`
 画布可通过 Tab 聚焦，Control + Alt + Escape 将焦点退回面板，之后可用 Shift+Tab 返回
 标签栏。鼠标与触摸使用 noVNC 原生处理；本首版没有另设手机软件键盘或剪贴板工具栏。
 
+2026-10-12：当前会话实时收到任意 `mcp__computer__*` 的 `tool.started` 时，自动展开
+Agent Workspace 并选中「电脑」，包括子 Agent 调用与新增工具。桌面打开侧栏，窄屏打开
+现有全宽抽屉，沿用既有切换动效。已打开时保持当前面板；手动关闭或切走后，下一次新调用
+会再次打开。HTTP 历史、`session.snapshot`、工具输入 / 结果更新与重连补发均不触发导航。
+
+```text
+Session WebSocket -> tool.started (computer, live) -> open Workspace -> computer
+                 -> replay:true / snapshot       -> update messages only
+HTTP history ------------------------------------> update messages only
+```
+
+WebSocket 订阅同步补发的历史帧携带 `replay: true`；新发起回复在订阅建立前产生的帧
+仍作为当前调用交付。导航由 `use-agent-message` 的事件回调触发，复用连接的序号去重与
+会话代际校验，不从渲染后的消息列表推导。`useOpenWorkspaceTab` 使用独立的动作 context，
+聊天页无需订阅当前标签，切换标签不会因此重渲染消息列表。
+
 入口：[WorkspaceComputerView](../agent-ui/src/features/workspace/views/workspace-computer-view.tsx)、
 [computer-connection](../agent-ui/src/features/workspace/computer-connection.ts)。
 `@types/novnc__novnc` 的声明仍指向旧 `lib/rfb` 路径，`src/types/novnc.d.ts` 仅将该类型
@@ -1328,6 +1344,26 @@ mcp__github__list_issues
        输入 { ... }
        输出 ...
 ```
+
+2026-10-12：`computer` 服务的 62 个 Cua Driver 0.34.1 工具采用已确认的中英文
+动作标题，统一使用 Lucide `MousePointerClick`（`mouse-pointer-click`），图标继承
+工具行尺寸和文本颜色并设置 `aria-hidden`。中文标题采用“正在…”：`list_apps` 为
+“正在查看桌面应用”，`list_windows` 为“正在查看窗口”，`launch_app` 为“正在启动应用”。
+其他服务继续使用通用 MCP 标题与图标；未知 `computer` 工具保留真实工具名和统一光标图标。
+标题文案来自 `computerTool` 翻译，调用原名和输入输出保持原值。
+
+```text
+mcp__computer__tool + complete arguments
+  -> computer-tool-data -> localized action title
+  -> [MousePointerClick] 正在查看桌面应用 [状态] [展开]
+       输入 { ... }
+       输出 ...
+```
+
+光标显隐、网页对话框、网页鼠标操作和组件安装按明确参数细化文案；安装预览与实际
+安装分别显示。参数尚未完成或类型无效时显示该工具的基础动作标题，完整后更新。
+主聊天和 Workspace Agent 过程视图共用既有工具卡入口，状态、折叠、输入输出、复制、
+标题跑马灯及减少动态效果沿用 `ToolResult`。
 
 ### 图片工具卡片
 
@@ -2224,11 +2260,12 @@ Shift+Tab、Esc、已有草稿、重复快照、断线重连和原生会话重�
 Workspace 电脑连接与视图生命周期回归（仓库根目录）：
 
 ```sh
-./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/workspace/computer-connection.test.ts agent-ui/tests/features/workspace/workspace-computer-view.test.tsx
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/workspace/computer-connection.test.ts agent-ui/tests/features/workspace/workspace-computer-view.test.tsx agent-ui/tests/features/workspace/workspace-computer-navigation.test.tsx
 ```
 
 覆盖同源 WS/WSS、不可用 / HTTP / 握手错误、断线、重连、延迟响应和懒加载的取消、
-关闭 Workspace / 切标签 / 页面隐藏时清理连接、恢复可见时重连及中英文状态。
+关闭 Workspace / 切标签 / 页面隐藏时清理连接、恢复可见时重连及中英文状态；
+实时 computer 调用打开桌面 / 移动端面板，历史、重复事件与重连补发不切换标签。
 这些 DOM 与协议边界测试不替代 Debian 桌面真实连接、鼠标键盘和触摸的浏览器验证。
 
 模型选择器的原生回传、effort、问答后重新挂载及延迟 profile 加载回归（仓库根目录）：
@@ -2291,7 +2328,8 @@ Workspace 电脑连接与视图生命周期回归（仓库根目录）：
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/sidebar/content/session-projects.test.ts
 ```
 
-外部 MCP 工具名称解析、内置工具分流、流式输入、输出与错误、复制及中英文展示回归
+外部 MCP 工具名称解析、内置工具分流、流式输入、输出与错误、复制及中英文展示回归，
+包含 Computer 工具统一图标、动作标题、参数细化、安装预览与未知工具展示，
 使用 Node/jsdom，不启动浏览器：
 
 ```sh

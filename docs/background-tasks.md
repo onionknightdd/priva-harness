@@ -68,6 +68,19 @@ whose replies were lost. A stale cursor or process change resets via snapshot.
 The UI deduplicates streamed events and keeps unsent messages out of replay.
 Disconnect removes the subscriber; execution continues.
 
+Historical frames delivered synchronously when a WebSocket subscription attaches
+carry `replay: true`. The flag belongs to that delivery and does not mutate the
+buffered event. Frames from a newly requested run remain live even when produced
+before its first subscription attaches. UI side effects, such as opening the
+Workspace computer tab on a computer tool start, ignore replay deliveries and
+snapshots while still applying them to message state.
+
+```text
+session.subscribe -> buffered frames + replay:true -> restore messages
+                  -> subsequent live frames       -> messages + live UI actions
+run.start         -> new run frames                -> messages + live UI actions
+```
+
 ## Task state and history
 
 Tasks carry `taskId`, `kind`, `status`, and, when known, `toolUseId`,

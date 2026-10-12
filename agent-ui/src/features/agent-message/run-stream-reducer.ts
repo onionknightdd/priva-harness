@@ -21,6 +21,7 @@ import { restoreUserMessageAttachments } from "./message-attachment-text"
 const STREAM_PROTOCOL_VERSION = 2
 
 export type StreamFrame = {
+  replay?: true
   prompts?: string[]
   config?: { contextWindow: ContextWindow; runMode?: "agent" | "code"; model: string; profileId?: string; effort?: AgentRunEffort; cwd: string; context: ContextUsage }
   runningToolIds?: string[]

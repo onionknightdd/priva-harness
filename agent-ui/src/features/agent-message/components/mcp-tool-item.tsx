@@ -1,10 +1,12 @@
 import mcpIcon from "@lobehub/icons-static-svg/icons/mcp.svg"
+import { MousePointerClick } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { ToolResult } from "@/components/agents/tool-result"
 import { cn } from "@/lib/utils"
 
 import type { StreamBlock } from "../agent-message-data"
+import { computerToolTitleKey } from "../computer-tool-data"
 import { mcpToolInputText, type McpToolName } from "../mcp-tool-data"
 import { isToolRunning } from "../tool-activity"
 
@@ -15,26 +17,30 @@ export function McpToolItem({
   block: Extract<StreamBlock, { type: "tool_use" }>
   name: McpToolName
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const tool = block.tool
   const status = tool?.backgroundTask?.status === "failed" ? "error"
     : isToolRunning(tool) ? "running" : tool?.ok === false ? "error" : "success"
   const input = mcpToolInputText(block)
+  const titleKey = computerToolTitleKey(name, input)
+  const title = titleKey && i18n.exists(titleKey) ? t(titleKey) : `${name.serverName}:${name.toolName}`
   const output = tool?.output
   const copyText = [input, output].filter((text) => text !== undefined && text !== "").join("\n\n")
 
   return (
     <ToolResult
       tool={null}
-      title={`${name.serverName}:${name.toolName}`}
-      icon={
+      title={title}
+      icon={name.serverName === "computer" ? (
+        <MousePointerClick aria-hidden="true" className="size-[1em]" />
+      ) : (
         <span
           data-slot="mcp-tool-icon"
           aria-hidden="true"
           className="block size-[1em] bg-current"
           style={{ maskImage: `url("${mcpIcon}")`, maskPosition: "center", maskRepeat: "no-repeat", maskSize: "contain" }}
         />
-      }
+      )}
       status={status}
       defaultOpen={status === "running"}
       copyText={copyText || undefined}

@@ -134,3 +134,49 @@ test("native Bash keeps its terminal card while an external tool named Read uses
     assert.ok(external.title().textContent!.includes("files:Read"))
   } finally { await external.close() }
 })
+
+test("computer tools use localized action titles and the shared pointer icon through the real dispatcher", async () => {
+  const view = await mount({ ...completed, name: "mcp__computer__list_apps" }, "zh-CN")
+  try {
+    for (const [toolName, label] of [
+      ["list_apps", "正在查看桌面应用"],
+      ["list_windows", "正在查看窗口"],
+      ["launch_app", "正在启动应用"],
+    ]) {
+      await view.update({ ...completed, name: `mcp__computer__${toolName}` })
+      assert.ok(view.title().textContent!.includes(label))
+      assert.ok(!view.title().textContent!.includes("computer:"))
+      assert.equal(view.host.querySelector(".lucide-mouse-pointer-click")?.getAttribute("aria-hidden"), "true")
+      assert.equal(view.host.querySelector('[data-slot="mcp-tool-icon"]'), null)
+    }
+    await act(async () => { await i18n.changeLanguage("en") })
+    assert.ok(view.title().textContent!.includes("Launching an app"))
+    await view.update({ ...completed, name: "mcp__computer__future_tool" })
+    assert.ok(view.title().textContent!.includes("computer:future_tool"))
+    assert.ok(view.host.querySelector(".lucide-mouse-pointer-click"))
+    await view.update({ ...completed, name: "mcp__other__list_apps" })
+    assert.ok(view.title().textContent!.includes("other:list_apps"))
+    assert.ok(view.host.querySelector('[data-slot="mcp-tool-icon"]'))
+    assert.equal(view.host.querySelector(".lucide-mouse-pointer-click"), null)
+  } finally { await view.close() }
+})
+
+test("computer titles follow complete streaming arguments and preserve normal output and status behavior", async () => {
+  const block: ToolBlock = {
+    ...completed, name: "mcp__computer__browser_pointer", input: { action: "hover" },
+    tool: { ...completed.tool!, status: "started", input: { action: "drag" }, inputRaw: '{"action":"scroll",', output: undefined },
+  }
+  const view = await mount(block, "zh-CN")
+  try {
+    assert.ok(view.title().textContent!.includes("正在网页中执行鼠标操作"))
+    assert.equal(view.host.querySelector("pre")!.textContent, '{"action":"scroll",')
+    assert.ok(view.host.querySelector('[aria-busy="true"]'))
+    await view.update({ ...block, tool: { ...block.tool!, inputRaw: '{"action":"scroll","delta_y":200}', status: "running" } })
+    assert.ok(view.title().textContent!.includes("正在滚动网页内容"))
+    await view.update({ ...block, tool: { ...block.tool!, inputRaw: undefined, input: { action: "right_click" }, status: "completed", ok: false, output: "Original computer error" } })
+    assert.ok(view.title().textContent!.includes("正在右键点击网页元素"))
+    assert.ok(view.host.querySelector('[data-state="error"]'))
+    assert.equal(view.host.querySelector('[role="alert"]')!.textContent, "Original computer error")
+    assert.ok(view.host.querySelector(".lucide-mouse-pointer-click"))
+  } finally { await view.close() }
+})

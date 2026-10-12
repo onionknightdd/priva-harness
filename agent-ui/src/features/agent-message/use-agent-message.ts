@@ -26,8 +26,9 @@ import { contextUsageFromApi, emptyContextUsage, type ContextUsage } from "./con
 import { applyThreadStreamFrame, mergeSnapshotMessages, type StreamFrame } from "./run-stream-reducer"
 import { updatePromptSuggestion, type PromptSuggestion } from "./prompt-suggestion"
 import { baseModelReference, DEFAULT_CONTEXT_WINDOW, type ContextWindow } from "./model-context"
+import { isLiveComputerToolStart } from "./computer-tool-data"
 
-export function useAgentMessage() {
+export function useAgentMessage({ onComputerToolStarted }: { onComputerToolStarted?: () => void } = {}) {
   const { t } = useTranslation()
   const { resolvedTheme } = useTheme()
   const { preserveViewForSession, setView } = useSessionView()
@@ -79,6 +80,7 @@ export function useAgentMessage() {
   const receiveRef = React.useRef<(frame: StreamFrame) => void>(() => undefined)
   receiveRef.current = (frame) => {
     if (frame.type === 'terminal.focus') { setView('terminal'); return }
+    if (isLiveComputerToolStart(frame)) onComputerToolStarted?.()
     setInteractions((current) => updateInteractions(current, frame))
     const id = frame.sessionId ?? connectionRef.current?.sessionId
     if (id && ["suggestion.prompts", "session.snapshot", "run.started", "session.rebound"].includes(frame.type ?? "")) {

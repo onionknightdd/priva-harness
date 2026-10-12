@@ -31,6 +31,8 @@ const WorkspaceTabContext =
   React.createContext<WorkspaceTabContextValue | null>(null)
 const WorkspaceFilesContext =
   React.createContext<WorkspaceFilesContextValue | null>(null)
+const OpenWorkspaceTabContext =
+  React.createContext<((id: WorkspaceModuleId) => void) | null>(null)
 
 export function WorkspaceFilesProvider({
   children,
@@ -47,19 +49,20 @@ export function WorkspaceFilesProvider({
     React.useState<FilePreviewMode | null>(null)
   const [fileOpenNonce, setFileOpenNonce] = React.useState(0)
 
+  const openWorkspaceTab = React.useCallback((id: WorkspaceModuleId) => {
+    setActiveTabId(id)
+    if (isMobile) setOpenMobile(true)
+    else setOpen(true)
+  }, [isMobile, setOpen, setOpenMobile])
+
   const openFileInWorkspace = React.useCallback(
     (path: string, options?: OpenFileInWorkspaceOptions) => {
       setPendingFilePath(path)
       setPendingPreviewMode(options?.previewMode ?? null)
       setFileOpenNonce((current) => current + 1)
-      setActiveTabId("files")
-      if (isMobile) {
-        setOpenMobile(true)
-      } else {
-        setOpen(true)
-      }
+      openWorkspaceTab("files")
     },
-    [isMobile, setOpen, setOpenMobile]
+    [openWorkspaceTab]
   )
 
   const tabValue = React.useMemo(
@@ -78,12 +81,20 @@ export function WorkspaceFilesProvider({
   )
 
   return (
-    <WorkspaceTabContext.Provider value={tabValue}>
-      <WorkspaceFilesContext.Provider value={filesValue}>
-        {children}
-      </WorkspaceFilesContext.Provider>
-    </WorkspaceTabContext.Provider>
+    <OpenWorkspaceTabContext.Provider value={openWorkspaceTab}>
+      <WorkspaceTabContext.Provider value={tabValue}>
+        <WorkspaceFilesContext.Provider value={filesValue}>
+          {children}
+        </WorkspaceFilesContext.Provider>
+      </WorkspaceTabContext.Provider>
+    </OpenWorkspaceTabContext.Provider>
   )
+}
+
+export function useOpenWorkspaceTab() {
+  const context = React.useContext(OpenWorkspaceTabContext)
+  if (!context) throw new Error("useOpenWorkspaceTab must be used within WorkspaceFilesProvider")
+  return context
 }
 
 export function useWorkspaceTab() {

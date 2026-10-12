@@ -53,16 +53,20 @@ function handleRunSocket(socket: WebSocket, options: RunRouteOptions): void {
     if (closed) { await stopTerminalHistory(); return }
     subscribe(options.harness.sessionStream(ref))
   }
-  const subscribe = (next: SessionStream, cursor?: { streamId: string; seq: number }) => {
+  const subscribe = (next: SessionStream, cursor?: { streamId: string; seq: number }, liveRunId?: string) => {
     unsubscribe?.()
     stream = next
+    // SessionStream synchronously delivers history before returning the live subscription.
+    let replaying = true
     unsubscribe = next.subscribe((frame) => {
-      if (socketOpen(socket)) socket.send(encodeEvent(frame))
+      const replay = replaying && frame.runId !== liveRunId
+      if (socketOpen(socket)) socket.send(encodeEvent(replay ? { ...frame, replay: true } : frame))
       if (frame.type === 'session.rebound') {
         commands = commands.then(() => followRebind({ ...next.session, id: frame.nextSessionId }))
           .catch((error: unknown) => { sendError(socket, String(error), '', next.session.provider, 'session.subscribe') })
       }
     }, cursor)
+    replaying = false
   }
   socket.once('close', () => { closed = true; unsubscribe?.(); void stopTerminalHistory?.() })
   const handle = async (data: WebSocket.RawData): Promise<void> => {
@@ -155,7 +159,7 @@ function handleRunSocket(socket: WebSocket, options: RunRouteOptions): void {
     const id = await sessionOfLive(live)
     if (!id) { sendError(socket, 'Could not open the session', live.runId, frame.harness, 'run.start'); return }
     const next = options.harness.sessionStream({ provider: frame.harness, id })
-    subscribe(next, { streamId: next.streamId, seq: 0 })
+    subscribe(next, { streamId: next.streamId, seq: 0 }, live.runId)
   }
   socket.on('message', (data) => {
     commands = commands.then(() => handle(data)).catch((error: unknown) => {

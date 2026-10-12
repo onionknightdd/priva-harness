@@ -301,6 +301,8 @@ export type AgentEvent = (
 ) & { readonly replyTo?: TaskReplyTarget }
 
 export interface StreamEnvelope {
+  /** Set only on historical frames delivered by a WebSocket subscription. */
+  readonly replay?: true
   readonly messageTargetId?: string
   readonly v: typeof STREAM_PROTOCOL_VERSION
   readonly streamId?: string

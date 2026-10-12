@@ -3,6 +3,7 @@ import { useCallback, useEffect } from "react"
 import { useActiveSession, useChatSessionActions } from "@/features/chat-session"
 import { useHarness } from "@/features/sidebar/header/harness-context"
 import { useWorkspaceWorkflow } from "@/features/workspace/use-workspace-workflow"
+import { useOpenWorkspaceTab } from "@/features/workspace/workspace-files-context"
 import { useAgentMessage } from "./use-agent-message"
 import { AgentMessage } from "./components/agent-message"
 import { SessionTerminalView } from "./components/session-terminal-view"
@@ -10,7 +11,9 @@ import { harnessSupportsTerminal } from "./session-view"
 import { useSessionView } from "./session-view-context"
 
 export function AgentMessagePage() {
-  const agentMessage = useAgentMessage()
+  const openWorkspaceTab = useOpenWorkspaceTab()
+  const openComputer = useCallback(() => openWorkspaceTab("computer"), [openWorkspaceTab])
+  const agentMessage = useAgentMessage({ onComputerToolStarted: openComputer })
   const { syncWorkflows, syncAgents } = useWorkspaceWorkflow()
   const { activeSession, runSessionId, runCwd } = useActiveSession()
   const { bindRunSession } = useChatSessionActions()

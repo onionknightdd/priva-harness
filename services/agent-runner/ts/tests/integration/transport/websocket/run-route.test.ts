@@ -6,6 +6,7 @@ import type { FastifyInstance } from 'fastify'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { AgentHarness } from '../../../../src/harness/agent-harness.js'
+import type { StreamFrame } from '../../../../src/core/event/agent-event.js'
 import { LiveRunRegistry } from '../../../../src/harness/run/live-run-registry.js'
 import { NodeUserFileSystem } from '../../../../src/infrastructure/filesystem/node-user-file-system.js'
 import { buildHttpServer } from '../../../../src/transport/http/server.js'
@@ -20,6 +21,7 @@ describe('WS /api/sandbox/agent/ws/session', () => {
   let claudeProvider: FakeAgentProvider
   let piProvider: FakeAgentProvider
   let liveRuns: LiveRunRegistry
+  let harness: AgentHarness
   let agentProfileService: ReturnType<typeof createTestAgentServices>['agentProfileService']
 
   beforeEach(async () => {
@@ -71,18 +73,19 @@ describe('WS /api/sandbox/agent/ws/session', () => {
     })
     modelReference = `${profile.id}:m`
     liveRuns = new LiveRunRegistry()
+    harness = new AgentHarness({
+      providers: {
+        claude: claudeProvider,
+        pi: piProvider,
+      },
+      cwd: testRoot,
+      liveRuns,
+    })
     server = buildHttpServer({
       userFileSystem: new NodeUserFileSystem({ initialDirectory: testRoot }),
       modelProfileService,
       agentProfileService,
-      agentHarness: new AgentHarness({
-        providers: {
-          claude: claudeProvider,
-          pi: piProvider,
-        },
-        cwd: testRoot,
-        liveRuns,
-      }),
+      agentHarness: harness,
     })
     await server.ready()
   })
@@ -118,6 +121,29 @@ describe('WS /api/sandbox/agent/ws/session', () => {
     ]))
     expect(piProvider.targets[0]).toMatchObject({ kind: 'new', provider: 'pi' })
     expect(received[0]).toHaveProperty('sessionId')
+    expect(received.every((frame) => !(frame as StreamFrame).replay)).toBe(true)
+  })
+
+  it.each(['claude', 'pi'] as const)('marks %s subscription history as replay without marking subsequent live tools', async (provider) => {
+    const stream = harness.sessionStream({ provider, id: 'history' })
+    const tool = { type: 'tool.started' as const, messageId: 'message', blockId: 'tool', id: 'tool', name: 'mcp__computer__list_apps' }
+    const original = stream.publish(tool, 'old-run')
+    stream.publish({ type: 'session.snapshot', messages: [], tasks: [] })
+    stream.publish({ ...tool, id: 'nested', blockId: 'nested', parentToolUseId: 'agent' }, 'old-run')
+    const socket = await server.injectWS(SESSION_WEBSOCKET_PATH)
+    const received: StreamFrame[] = []
+    socket.on('message', (data: unknown) => received.push(JSON.parse(String(data)) as StreamFrame))
+    socket.send(JSON.stringify({ type: 'session.subscribe', harness: provider, sessionId: 'history', streamId: stream.streamId, sinceSeq: 0 }))
+    await waitFor(() => received.length === 4 ? true : undefined)
+    expect(received.slice(0, 3).every((frame) => frame.replay)).toBe(true)
+    expect(received[3]).toMatchObject({ type: 'session.snapshot', seq: 3 })
+    expect(original.replay).toBeUndefined()
+
+    stream.publish({ ...tool, id: 'live', blockId: 'live' }, 'new-run')
+    await waitFor(() => received[4])
+    expect(received[4]).toMatchObject({ type: 'tool.started', id: 'live', seq: 4 })
+    expect(received[4]?.replay).toBeUndefined()
+    socket.close()
   })
 
   it('reports an unavailable Claude UI terminal without starting the SDK', async () => {
