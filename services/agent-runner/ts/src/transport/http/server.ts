@@ -6,6 +6,7 @@ import Fastify, {
 } from 'fastify'
 
 import type { DataRecorder } from '../../core/contract/data-recorder.js'
+import type { ComputerConfig } from '../../computer-config.js'
 import type { GitStatusReader } from '../../core/contract/git-status-reader.js'
 import type { UsageReader } from '../../core/contract/usage-reader.js'
 import type { UserFileSystem } from '../../core/contract/user-file-system.js'
@@ -29,6 +30,7 @@ import type { ModelProfileService } from '../../harness/config/model-profile-ser
 import type { SessionService } from '../../harness/session/session-service.js'
 import type { SessionTerminals } from '../../harness/terminal/session-terminals.js'
 import { runWebsocketRoutes } from '../websocket/run-route.js'
+import { computerRoutes } from '../websocket/computer-route.js'
 import { terminalWebsocketRoutes } from '../websocket/terminal-route.js'
 import { agentProfileRoutes } from './route/agent-profile.js'
 import { gitStatusRoutes } from './route/git-status.js'
@@ -42,6 +44,7 @@ import { subagentTestRoutes } from './route/subagent-test.js'
 import { terminalEventRoutes } from './route/terminal-events.js'
 
 export interface BuildHttpServerOptions {
+  readonly computer?: ComputerConfig
   readonly userFileSystem: UserFileSystem
   readonly gitStatusReader?: GitStatusReader
   readonly modelProfileService: ModelProfileService
@@ -127,6 +130,8 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
     void server.register(gitStatusRoutes, { reader: options.gitStatusReader })
   }
   const recorder = options.recorder
+  void server.register(websocket)
+  void server.register(computerRoutes, options.computer === undefined ? {} : { computer: options.computer })
   void server.register(modelProfileRoutes, { service: options.modelProfileService, ...(recorder === undefined ? {} : { recorder }) })
   void server.register(agentProfileRoutes, { service: options.agentProfileService, ...(recorder === undefined ? {} : { recorder }) })
   if (options.resourceService !== undefined) {
@@ -147,7 +152,6 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
     void server.register(usageRoutes, { reader: options.usageReader })
   }
   if (options.agentHarness !== undefined) {
-    void server.register(websocket)
     void server.register(runWebsocketRoutes, {
       fileSystem: options.userFileSystem,
       harness: options.agentHarness,

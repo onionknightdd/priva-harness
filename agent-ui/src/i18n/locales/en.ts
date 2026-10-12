@@ -774,12 +774,25 @@ export const en = {
     home: {
       tasksAndActivity: "Tasks & Activity",
       files: "Files",
+      computer: "Computer",
       terminal: "Terminal",
       artifacts: "Artifacts",
       unavailable: "{{action}} is not available yet",
     },
     tabs: {
       listLabel: "Workspace modules",
+    },
+    computer: {
+      desktop: "Debian desktop",
+      keyboardHelp: "Click or focus the desktop to use its mouse and keyboard. Press Control + Alt + Escape to leave desktop keyboard control.",
+      connecting: "Connecting to the desktop…",
+      unavailable: "Desktop unavailable",
+      unavailableDescription: "This Runner does not have a desktop available.",
+      disconnected: "Desktop disconnected",
+      disconnectedDescription: "Reconnect to continue using the desktop.",
+      failed: "Could not connect to the desktop",
+      failedDescription: "Check that the Runner and desktop are running, then reconnect.",
+      reconnect: "Reconnect",
     },
   },
   language: {

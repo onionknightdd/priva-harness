@@ -990,6 +990,43 @@ Agent information
   Current panel content
 ```
 
+### Workspace 电脑桌面
+
+2026-10-12：按用户确认的简化首版，Workspace 首页与标签栏增加「电脑」，点击后直接
+显示 Debian 13 开发容器的完整桌面，并可使用鼠标、滚轮、键盘与 noVNC 触摸手势。
+复用现有 Workspace 调宽 / 放大控件；窄屏电脑标签将 Workspace 展开到整个视口宽度，
+画面铺满其内容区域，其他标签仍沿用原有抽屉宽度。
+不增加 Agent 控制、接管或交还工具栏。
+
+```text
+Desktop: sidebar | chat | Workspace [tasks] [files] [computer] [expand]
+                        | Debian desktop fills the remaining panel    |
+Mobile:  full-width Workspace tabs / close
+         Debian desktop fills the remaining Workspace area
+State:   connecting -> desktop / unavailable / disconnected [Reconnect]
+
+Computer tab + visible Workspace -> GET /api/sandbox/computer
+  available:true -> lazy noVNC RFB -> /api/sandbox/computer/stream (WS/WSS)
+  close / tab switch / page hidden -> release keyboard and disconnect
+  reopen / page visible           -> connect to the same persistent desktop
+```
+
+使用 `@novnc/novnc` 的公开 RFB API；`scaleViewport=true` 将固定分辨率桌面缩放到面板，
+`resizeSession=false`，面板尺寸变化不修改共享桌面分辨率。画面由二进制 RFB WebSocket
+传送，不通过聊天消息或截图轮询。连接前读取 `{ available: boolean }`；无桌面、HTTP 错误、
+握手失败和断线均给出中英文状态及重连按钮，15 秒未建立连接时停止等待。
+状态切换使用 150ms 淡入，减少动态效果时立即切换并关闭 spinner 旋转。
+
+noVNC 只在电脑标签首次连接时加载；此面板不使用 `keepMounted`。隐藏整个 Workspace
+或浏览器页面也会断开连接，避免隐藏画布继续处理键盘输入；不会关闭服务端桌面进程。
+画布可通过 Tab 聚焦，Control + Alt + Escape 将焦点退回面板，之后可用 Shift+Tab 返回
+标签栏。鼠标与触摸使用 noVNC 原生处理；本首版没有另设手机软件键盘或剪贴板工具栏。
+
+入口：[WorkspaceComputerView](../agent-ui/src/features/workspace/views/workspace-computer-view.tsx)、
+[computer-connection](../agent-ui/src/features/workspace/computer-connection.ts)。
+`@types/novnc__novnc` 的声明仍指向旧 `lib/rfb` 路径，`src/types/novnc.d.ts` 仅将该类型
+映射到 1.7 的包根 ESM 入口；运行时只导入公开包入口。
+
 ### Workspace 标签切换性能
 
 2026-09-12：「任务和活动」与「文件」互切时，保留挂载的文件浏览器不得随
@@ -2183,6 +2220,16 @@ Shift+Tab、Esc、已有草稿、重复快照、断线重连和原生会话重�
 - 静态分析：`npm run lint`
 - 生产构建：`npm run build`
 - 预览生产构建：`npm run preview`
+
+Workspace 电脑连接与视图生命周期回归（仓库根目录）：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/workspace/computer-connection.test.ts agent-ui/tests/features/workspace/workspace-computer-view.test.tsx
+```
+
+覆盖同源 WS/WSS、不可用 / HTTP / 握手错误、断线、重连、延迟响应和懒加载的取消、
+关闭 Workspace / 切标签 / 页面隐藏时清理连接、恢复可见时重连及中英文状态。
+这些 DOM 与协议边界测试不替代 Debian 桌面真实连接、鼠标键盘和触摸的浏览器验证。
 
 模型选择器的原生回传、effort、问答后重新挂载及延迟 profile 加载回归（仓库根目录）：
 

@@ -1,0 +1,107 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: priva-harness-dev
+  labels:
+    app.kubernetes.io/part-of: priva-harness
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: runner-data
+  namespace: priva-harness-dev
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-runner
+  namespace: priva-harness-dev
+spec:
+  replicas: 1
+  # One runner owns the SQLite database and native session transcripts.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: priva-harness-runner
+  template:
+    metadata:
+      labels:
+        app: priva-harness-runner
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: runner
+          image: priva-harness/agent-runner:debian13-dev
+          imagePullPolicy: Never
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          ports:
+            - name: http
+              containerPort: 8001
+            - name: inspector
+              containerPort: 9229
+          env:
+            - name: COMPUTER_ALLOWED_ORIGINS
+              value: http://127.0.0.1:15173,http://localhost:15173
+          resources:
+            requests:
+              cpu: 250m
+              memory: 768Mi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: browser-shm
+              mountPath: /dev/shm
+          startupProbe:
+            httpGet:
+              path: /api/sandbox/agent/profile
+              port: http
+            periodSeconds: 2
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /api/sandbox/agent/profile
+              port: http
+            periodSeconds: 3
+          # No liveness probe: a paused debugger must not kill the process.
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: runner-data
+        - name: browser-shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-runner
+  namespace: priva-harness-dev
+spec:
+  selector:
+    app: priva-harness-runner
+  ports:
+    - name: http
+      port: 8001
+      targetPort: http

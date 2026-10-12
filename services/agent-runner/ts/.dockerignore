@@ -1,0 +1,20 @@
+# Only source, tests and build inputs are allowed into the image context.
+*
+!package.json
+!package-lock.json
+!tsconfig.json
+!tsconfig.build.json
+!eslint.config.js
+!docker-entrypoint.sh
+!docker/
+!docker/**
+!src/
+!src/**
+!tests/
+!tests/**
+**/.env*
+**/*.local
+**/*.pem
+**/*.key
+**/node_modules
+**/.DS_Store

@@ -1,0 +1,4 @@
+# The Pod prohibits privilege escalation and nested user namespaces. Chromium's
+# sandbox cannot initialize there; the dedicated container is the boundary.
+# Debian's Chromium wrapper reads this for menu launches as well as our launcher.
+export CHROMIUM_FLAGS="${CHROMIUM_FLAGS:-} --no-sandbox --no-first-run --disable-session-crashed-bubble --password-store=basic --force-renderer-accessibility"

@@ -7,6 +7,7 @@ import { ExpandableTabs } from "@/components/motion/expandable-tabs"
 
 import { WorkspaceWorkflowView } from "./views/workspace-workflow-view"
 import { WorkspaceFileView } from "./views/workspace-file-view"
+import { WorkspaceComputerView } from "./views/workspace-computer-view"
 import { WorkspacePlaceholderView } from "./views/workspace-placeholder-view"
 import {
   WORKSPACE_MODULES,
@@ -22,6 +23,7 @@ function WorkspaceModuleContent({
   onFileBrowserMinimumWidthChange?: (width: number) => void
 }) {
   if (moduleId === "tasks") return <WorkspaceWorkflowView />
+  if (moduleId === "computer") return <WorkspaceComputerView />
   if (moduleId === "files") {
     return (
       <WorkspaceFileView

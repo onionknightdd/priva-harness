@@ -116,6 +116,12 @@ tmux server 与 pane 继承的是经 `paneEnvironment` 清洗过的 runner 环�
 start-server -> set-option (mouse/focus/terminal/...) -> new-session -> Claude TUI
 ```
 
+Debian 13 开发镜像固定使用 tmux 3.7c。发行版自带的 3.5a 在无窗口时设置
+`window-size manual` 会退出，并且缺少完整屏幕快照所需的 `bracket_paste_flag`。
+容器构建从上游固定版本源码安装并校验 SHA-256；部署探针必须通过真实
+`TmuxTerminalService.ensure/attach` 验证启动和快照。见
+[Debian / minikube 开发环境](../development/debian-minikube.md)。
+
 ### 4.4 tmux 控制模式
 
 查看者不通过伪终端 attach，而是起一个 `tmux -S <sock> -C attach` 子进程：

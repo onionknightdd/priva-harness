@@ -2,6 +2,8 @@ import { mkdir } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { pathToFileURL } from 'node:url'
 
+import { readComputerConfig } from './computer-config.js'
+
 import { AgentHarness } from './harness/agent-harness.js'
 import { AgentProfileService } from './harness/config/agent-profile-service.js'
 import { ConfigDistributor } from './harness/config/config-distributor.js'
@@ -40,6 +42,7 @@ import { buildHttpServer } from './transport/http/server.js'
 const DEFAULT_PORT = 8001
 
 export async function startServer(): Promise<void> {
+  const computer = readComputerConfig(process.env)
   const runtimeConfig = createRuntimeConfig(
     resolveRuntimeHome(process.env[RUNTIME_HOME_ENV]),
   )
@@ -119,6 +122,7 @@ export async function startServer(): Promise<void> {
     new PiConfigAdapter(),
   ])
   const server = buildHttpServer({
+    ...(computer === undefined ? {} : { computer }),
     resourceService: new LocalResourceService({
       claudeDir: claudeConfigDir,
       claudeConfigFilePath: claudeGlobalConfigFilePath(),

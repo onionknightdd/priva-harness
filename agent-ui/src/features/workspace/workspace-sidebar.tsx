@@ -110,6 +110,7 @@ export function WorkspaceSidebar({
       aria-label={t("workspace.label")}
       className={cn(
         "bg-workspace-panel [&_[data-slot=sidebar-inner]]:bg-workspace-panel!",
+        activeTabId === "computer" && "max-md:w-screen! max-md:max-w-none!",
         className
       )}
       style={style}

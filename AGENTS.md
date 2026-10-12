@@ -41,6 +41,23 @@ To verify the compiled Claude native product MCP entry point after building:
 
 - `node --import tsx tests/fixtures/terminal/native-product-probe.ts dist/provider/claude/tools/native-product-server.js`
 
+The Debian 13 / minikube development environment is documented in
+[docs/development/debian-minikube.md](docs/development/debian-minikube.md).
+From the repository root, build and deploy with
+`bash deploy/agent-runner/dev.sh build` and `bash deploy/agent-runner/dev.sh deploy`.
+Run its Linux-only deployment probe with `bash deploy/agent-runner/dev.sh verify`.
+Run only the desktop probe with `bash deploy/agent-runner/dev.sh verify-desktop`.
+Run the Cua MCP integration probe with `bash deploy/agent-runner/dev.sh verify-computer`.
+It performs visible input in its own temporary editor window; run desktop probes serially.
+For opt-in real model verification through the forwarded UI, run from the Runner
+directory: `node --import tsx tests/deployment/model-smoke.ts claude` (or `pi`).
+This calls the configured model and leaves a verification session and proof file.
+For real desktop MCP model verification, run from the Runner directory:
+`node --import tsx tests/deployment/computer-model-smoke.ts claude` (or `pi`).
+For models without image input, use
+`node --import tsx tests/deployment/computer-model-smoke.ts claude http://127.0.0.1:15173 PROFILE_ID --text-only`.
+This performs visible desktop actions and preserves its proof file and editor window.
+
 Usage statistics and audit records are stored in SQLite; before touching
 recording, retention, or the `dataRetention` setting, read
 [docs/architecture/usage-data-store.md](docs/architecture/usage-data-store.md).

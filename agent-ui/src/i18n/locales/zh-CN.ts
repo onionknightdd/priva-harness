@@ -769,12 +769,25 @@ export const zhCN = {
     home: {
       tasksAndActivity: "任务和活动",
       files: "文件",
+      computer: "电脑",
       terminal: "终端",
       artifacts: "产出",
       unavailable: "{{action}}暂不可用",
     },
     tabs: {
       listLabel: "Workspace 模块",
+    },
+    computer: {
+      desktop: "Debian 桌面",
+      keyboardHelp: "点击或聚焦桌面后即可使用鼠标和键盘。按 Control + Alt + Escape 退出桌面键盘控制。",
+      connecting: "正在连接桌面…",
+      unavailable: "桌面不可用",
+      unavailableDescription: "当前 Runner 没有可用的桌面。",
+      disconnected: "桌面连接已断开",
+      disconnectedDescription: "重新连接后可继续操作桌面。",
+      failed: "无法连接桌面",
+      failedDescription: "请检查 Runner 和桌面是否正在运行，然后重新连接。",
+      reconnect: "重新连接",
     },
   },
   language: {
