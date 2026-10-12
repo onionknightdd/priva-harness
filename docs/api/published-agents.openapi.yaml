@@ -1,0 +1,4728 @@
+# Proposed contract. Not implemented. See ../architecture/published-agents.md
+openapi: 3.1.1
+info:
+  title: Priva Published Agents API — proposed V1
+  version: 0.1.0-draft
+  description: DESIGN ONLY, not implemented. See docs/architecture/published-agents.md. Owner and
+    public APIs use separate authenticated ingress; internal endpoints use mTLS on non-public
+    listeners. Unknown fields are rejected. The runtime, access-mode and snapshot assumptions are
+    pending product confirmation. Public stream version 1 is separate from the private harness
+    stream protocol. Every ID lookup must additionally verify owner/session/lease scope.
+servers:
+  - url: /
+    description: Relative to the appropriate owner, public or internal listener; these need not share a host.
+tags:
+  - name: Capabilities
+  - name: Credentials
+  - name: Agents
+  - name: Drafts
+  - name: Releases
+  - name: Access
+  - name: Observability
+  - name: Public agents
+  - name: Sessions
+  - name: Runs
+  - name: Files
+  - name: Internal exports
+  - name: Internal execution
+paths:
+  /api/sandbox/publishing/capabilities:
+    get:
+      operationId: getPublishingCapabilities
+      tags:
+        - Capabilities
+      summary: Get tested runtime capabilities and policy choices
+      security:
+        - OwnerIdentity: []
+      responses:
+        "200":
+          description: Get tested runtime capabilities and policy choices
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Capabilities"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/sandbox/publishing/model-sources:
+    get:
+      operationId: listPublishingModelSources
+      tags:
+        - Credentials
+      summary: List sanitized private model-profile choices for publishing
+      description: Read-only owner-side projection. Current private profiles list and detail both include
+        auth_token, so do not reuse those payloads in the publishing UI. Return no auth token or raw
+        config. Model IDs can be discovered via the existing authenticated profile models endpoint;
+        creation validates the chosen profile/model pair.
+      security:
+        - OwnerIdentity: []
+      responses:
+        "200":
+          description: List sanitized private model-profile choices for publishing
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelSourceList"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/sandbox/publishing/credential-bindings:
+    get:
+      operationId: listCredentialBindings
+      tags:
+        - Credentials
+      summary: List owner credential binding metadata
+      security:
+        - OwnerIdentity: []
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: List owner credential binding metadata
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CredentialBindingPage"
+        default:
+          $ref: "#/components/responses/Error"
+    post:
+      operationId: createCredentialBinding
+      tags:
+        - Credentials
+      summary: Import a selected existing credential into a scoped server-side binding
+      description: Requires owner authorization and a matching private Runner. The owner adapter imports
+        secrets directly into a vault. No secret values appear in the draft, export bundle, public
+        API or response. Poll the owner binding list for pending/active/failed state. MCP scope must
+        already be enforceable.
+      security:
+        - OwnerIdentity: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CredentialBindingCreate"
+      responses:
+        "202":
+          description: Import a selected existing credential into a scoped server-side binding
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CredentialBinding"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/sandbox/publishing/credential-bindings/{bindingId}:
+    get:
+      operationId: getCredentialBinding
+      tags:
+        - Credentials
+      summary: Read one owner binding without secret material
+      security:
+        - OwnerIdentity: []
+      parameters:
+        - name: bindingId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+      responses:
+        "200":
+          description: Read one owner binding without secret material
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CredentialBinding"
+        default:
+          $ref: "#/components/responses/Error"
+    delete:
+      operationId: revokeCredentialBinding
+      tags:
+        - Credentials
+      summary: Revoke binding and request cancellation of dependent executions
+      description: Idempotent. Admission and broker authorization stop transactionally; already-started
+        external side effects may finish.
+      security:
+        - OwnerIdentity: []
+      parameters:
+        - name: bindingId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+      responses:
+        "202":
+          description: Revoke binding and request cancellation of dependent executions
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CredentialBinding"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/sandbox/publishing/credential-bindings/{bindingId}/refresh:
+    post:
+      operationId: refreshCredentialBindingSecret
+      tags:
+        - Credentials
+      summary: Refresh secret from the original source while preserving immutable scope
+      description: Owner-side adapter rereads the exact original source; succeeds only if
+        endpoint/model/resource authorization matches the binding configuration. Atomically rotate
+        vault material after verification, retain the old material on failure. No arbitrary secret
+        in request/response; no change to configuration revision. If scope or upstream changes,
+        return 409 and require a new binding/release. Revoked bindings cannot be revived.
+      security:
+        - OwnerIdentity: []
+      parameters:
+        - name: bindingId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties: {}
+              required: []
+      responses:
+        "200":
+          description: Refresh secret from the original source while preserving immutable scope
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CredentialBinding"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/sandbox/published-agents:
+    get:
+      operationId: listPublishedAgents
+      tags:
+        - Agents
+      summary: List owner published Agents
+      security:
+        - OwnerIdentity: []
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - name: includeArchived
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: List owner published Agents
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentPage"
+        default:
+          $ref: "#/components/responses/Error"
+    post:
+      operationId: createPublishedAgent
+      tags:
+        - Agents
+      summary: Create an inactive Agent with an editable initial draft
+      security:
+        - OwnerIdentity: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentCreate"
+      responses:
+        "201":
+          description: Create an inactive Agent with an editable initial draft
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+            ETag:
+              schema:
+                type: string
+                pattern: ^"[1-9][0-9]*"$
+              description: Strong revision ETag for this resource.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/sandbox/published-agents/{agentId}:
+    get:
+      operationId: getPublishedAgent
+      tags:
+        - Agents
+      summary: Get owner Agent metadata
+      security:
+        - OwnerIdentity: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+      responses:
+        "200":
+          description: Get owner Agent metadata
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+            ETag:
+              schema:
+                type: string
+                pattern: ^"[1-9][0-9]*"$
+              description: Strong revision ETag for this resource.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+        default:
+          $ref: "#/components/responses/Error"
+    patch:
+      operationId: updatePublishedAgent
+      tags:
+        - Agents
+      summary: Update Agent name and description
+      security:
+        - OwnerIdentity: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentPatch"
+      responses:
+        "200":
+          description: Update Agent name and description
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+            ETag:
+              schema:
+                type: string
+                pattern: ^"[1-9][0-9]*"$
+              description: Strong revision ETag for this resource.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+        default:
+          $ref: "#/components/responses/Error"
+    delete:
+      operationId: archivePublishedAgent
+      tags:
+        - Agents
+      summary: Disable and archive Agent; asynchronously cancel sessions and clean data
+      description: Returns archiving/archived. No new admission after the transaction commits. Owner
+        metadata remains readable through the retention period; does not hard-delete unrelated
+        native resources.
+      security:
+        - OwnerIdentity: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "202":
+          description: Disable and archive Agent; asynchronously cancel sessions and clean data
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+            ETag:
+              schema:
+                type: string
+                pattern: ^"[1-9][0-9]*"$
+              description: Strong revision ETag for this resource.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/sandbox/published-agents/{agentId}/draft:
+    get:
+      operationId: getAgentDraft
+      tags:
+        - Drafts
+      summary: Read the full editable draft
+      security:
+        - OwnerIdentity: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+      responses:
+        "200":
+          description: Read the full editable draft
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+            ETag:
+              schema:
+                type: string
+                pattern: ^"[1-9][0-9]*"$
+              description: Strong revision ETag for this resource.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Draft"
+        default:
+          $ref: "#/components/responses/Error"
+    put:
+      operationId: replaceAgentDraft
+      tags:
+        - Drafts
+      summary: Replace the full draft
+      description: The draft revision is independent of Agent metadata and activation revisions.
+        Referenced resources are resolved on the authenticated owner Runner only. Does not change a
+        release.
+      security:
+        - OwnerIdentity: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DraftSpec"
+      responses:
+        "200":
+          description: Replace the full draft
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+            ETag:
+              schema:
+                type: string
+                pattern: ^"[1-9][0-9]*"$
+              description: Strong revision ETag for this resource.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Draft"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/sandbox/published-agents/{agentId}/releases:
+    get:
+      operationId: listAgentReleases
+      tags:
+        - Releases
+      summary: List immutable release builds
+      security:
+        - OwnerIdentity: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: List immutable release builds
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReleasePage"
+        default:
+          $ref: "#/components/responses/Error"
+    post:
+      operationId: createAgentRelease
+      tags:
+        - Releases
+      summary: Freeze the requested draft revision and queue an isolated release build
+      description: 409 if draftRevision is stale. A worker snapshots approved bytes and probes executable
+        dependencies inside a build sandbox. No host-side MCP execution. Does not activate the
+        release.
+      security:
+        - OwnerIdentity: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReleaseCreate"
+      responses:
+        "202":
+          description: Freeze the requested draft revision and queue an isolated release build
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Release"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/sandbox/published-agents/{agentId}/releases/{releaseId}:
+    get:
+      operationId: getAgentRelease
+      tags:
+        - Releases
+      summary: Get build status, checks and immutable digests
+      security:
+        - OwnerIdentity: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+        - name: releaseId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+      responses:
+        "200":
+          description: Get build status, checks and immutable digests
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Release"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/sandbox/published-agents/{agentId}/releases/{releaseId}/manifest:
+    get:
+      operationId: getReleaseManifest
+      tags:
+        - Releases
+      summary: Read the final authorization manifest
+      description: Only ready/revoked releases with a completed manifest. Includes owner source paths for
+        review; never includes secret values. 409 while the manifest is incomplete.
+      security:
+        - OwnerIdentity: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+        - name: releaseId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Read the final authorization manifest
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManifestPage"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/sandbox/published-agents/{agentId}/releases/{releaseId}/preview-sessions:
+    post:
+      operationId: createReleasePreviewSession
+      tags:
+        - Releases
+      summary: Create an owner-only preview session using the real isolated runtime
+      description: Requires ready release but no activation. The returned session token uses the same
+        public session/run APIs and enforcement as normal invocation. Charge preview usage to the
+        owner.
+      security:
+        - OwnerIdentity: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+        - name: releaseId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionCreate"
+      responses:
+        "201":
+          description: Create an owner-only preview session using the real isolated runtime
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionGrant"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/sandbox/published-agents/{agentId}/releases/{releaseId}/revoke:
+    post:
+      operationId: revokeAgentRelease
+      tags:
+        - Releases
+      summary: Revoke release and close sessions pinned to it
+      description: Idempotent. If this is the active release, atomically disable activation. Existing
+        external side effects cannot be guaranteed reversible.
+      security:
+        - OwnerIdentity: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+        - name: releaseId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties: {}
+              required: []
+      responses:
+        "202":
+          description: Revoke release and close sessions pinned to it
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Release"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/sandbox/published-agents/{agentId}/activation:
+    get:
+      operationId: getAgentActivation
+      tags:
+        - Access
+      summary: Read active release and access mode
+      security:
+        - OwnerIdentity: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+      responses:
+        "200":
+          description: Read active release and access mode
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+            ETag:
+              schema:
+                type: string
+                pattern: ^"[1-9][0-9]*"$
+              description: Strong revision ETag for this resource.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Activation"
+        default:
+          $ref: "#/components/responses/Error"
+    put:
+      operationId: activateAgentRelease
+      tags:
+        - Access
+      summary: Activate exactly the reviewed ready release
+      description: Requires matching manifestDigest, passed checks, live bindings and platform capability.
+        New sessions pin this release; existing sessions keep their prior release. public requires
+        anonymous support and a positive budget. Changing public to api_key invalidates anonymous
+        sessions; key sessions remain subject to their grants.
+      security:
+        - OwnerIdentity: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ActivationPut"
+      responses:
+        "200":
+          description: Activate exactly the reviewed ready release
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+            ETag:
+              schema:
+                type: string
+                pattern: ^"[1-9][0-9]*"$
+              description: Strong revision ETag for this resource.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Activation"
+        default:
+          $ref: "#/components/responses/Error"
+    delete:
+      operationId: deactivatePublishedAgent
+      tags:
+        - Access
+      summary: Stop admission and request closure of all non-preview sessions
+      description: No admission or new broker authorization after the revocation transaction. Cancellation
+        and process exit are asynchronous. Existing owner previews remain isolated and can be closed
+        independently; archiving/release revocation closes them too.
+      security:
+        - OwnerIdentity: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "202":
+          description: Stop admission and request closure of all non-preview sessions
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+            ETag:
+              schema:
+                type: string
+                pattern: ^"[1-9][0-9]*"$
+              description: Strong revision ETag for this resource.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Activation"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/sandbox/published-agents/{agentId}/keys:
+    get:
+      operationId: listAgentApiKeys
+      tags:
+        - Access
+      summary: List key metadata without secrets
+      security:
+        - OwnerIdentity: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: List key metadata without secrets
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiKeyPage"
+        default:
+          $ref: "#/components/responses/Error"
+    post:
+      operationId: createAgentApiKey
+      tags:
+        - Access
+      summary: Create an expiring Agent API key
+      description: Expiry must be in the future and within platform policy. The key can create distinct
+        sessions, but cannot read previously created sessions without their session tokens.
+      security:
+        - OwnerIdentity: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KeyCreate"
+      responses:
+        "201":
+          description: Create an expiring Agent API key
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiKeyGrant"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/sandbox/published-agents/{agentId}/keys/{keyId}:
+    delete:
+      operationId: revokeAgentApiKey
+      tags:
+        - Access
+      summary: Revoke key and its derived session grants
+      description: Idempotent. No effect on sessions created with other keys or anonymous admission.
+      security:
+        - OwnerIdentity: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+        - name: keyId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+      responses:
+        "202":
+          description: Revoke key and its derived session grants
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiKey"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/sandbox/published-agents/{agentId}/runs:
+    get:
+      operationId: listOwnerAgentRuns
+      tags:
+        - Observability
+      summary: List execution metadata without caller prompt or response contents
+      security:
+        - OwnerIdentity: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/RunStatus"
+        - name: releaseId
+          in: query
+          required: false
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+        - name: purpose
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - invoke
+              - preview
+      responses:
+        "200":
+          description: List execution metadata without caller prompt or response contents
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunSummaryPage"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/sandbox/published-agents/{agentId}/usage:
+    get:
+      operationId: getAgentUsage
+      tags:
+        - Observability
+      summary: Get UTC daily usage and current reserved token budget
+      security:
+        - OwnerIdentity: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+      responses:
+        "200":
+          description: Get UTC daily usage and current reserved token budget
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsageReport"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/sandbox/published-agents/{agentId}/audit:
+    get:
+      operationId: listAgentAudit
+      tags:
+        - Observability
+      summary: List owner security metadata audit trail
+      security:
+        - OwnerIdentity: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: List owner security metadata audit trail
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditEntryPage"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}:
+    get:
+      operationId: getPublicAgent
+      tags:
+        - Public agents
+      summary: Get safe public Agent descriptor
+      description: Anonymous access only if active accessMode is public. api_key mode requires a key for
+        this Agent; missing/wrong-Agent authorization returns 404 to avoid existence disclosure. An
+        explicitly supplied invalid token never falls back to anonymous.
+      security:
+        - AgentApiKey: []
+        - {}
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+      responses:
+        "200":
+          description: Get safe public Agent descriptor
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentDescriptor"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}/sessions:
+    post:
+      operationId: createInvocationSession
+      tags:
+        - Sessions
+      summary: Create a caller-private session pinned to the active release
+      description: Creates authorization/state only; allocate the dedicated Pod when the first run passes
+        admission. Enforce maxActiveSessions including idle/logical sessions. Anonymous creation
+        requires public mode and multi-dimensional rate limits. API key sessions inherit key
+        revocation and expiry. The caller cannot choose release, provider, cwd or model. Invalid
+        supplied credentials do not fall back to anonymous. Anonymous retries are scoped to agentId
+        + high-entropy Idempotency-Key; keys must be client-generated with at least 128 bits of
+        entropy and are treated as temporary secrets, never logged. IP is only a rate-limit signal,
+        not session ownership.
+      security:
+        - AgentApiKey: []
+        - {}
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionCreate"
+      responses:
+        "201":
+          description: Create a caller-private session pinned to the active release
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionGrant"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/sessions/{sessionId}:
+    get:
+      operationId: getInvocationSession
+      tags:
+        - Sessions
+      summary: Get this capability-owned session
+      security:
+        - SessionToken: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+      responses:
+        "200":
+          description: Get this capability-owned session
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        default:
+          $ref: "#/components/responses/Error"
+    delete:
+      operationId: closeInvocationSession
+      tags:
+        - Sessions
+      summary: Close the session and cancel its active run
+      description: Idempotent, revokes new execution immediately. The same token can only poll this
+        closing/closed session for bounded cleanup status; content/run/file grants are revoked by
+        explicit deletion. Physical cleanup is asynchronous.
+      security:
+        - SessionToken: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+      responses:
+        "202":
+          description: Close the session and cancel its active run
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/sessions/{sessionId}/messages:
+    get:
+      operationId: listInvocationMessages
+      tags:
+        - Sessions
+      summary: List committed messages in this session
+      description: Stable creation order. Streaming partial assistant messages are in the run snapshot
+        until completed. Messages may reference expired/deleted input files; no private provider
+        history.
+      security:
+        - SessionToken: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: List committed messages in this session
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessagePage"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/sessions/{sessionId}/runs:
+    post:
+      operationId: createInvocationRun
+      tags:
+        - Runs
+      summary: Queue one run in this session
+      description: One non-terminal run per session; otherwise RUN_BUSY. Reserve quota transactionally
+        before returning. HTTP disconnect does not cancel execution. Reject unknown config fields
+        and cross-session file IDs. An expired/closed execution session cannot start a run even when
+        its token still permits reading old results.
+      security:
+        - SessionToken: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RunCreate"
+      responses:
+        "202":
+          description: Queue one run in this session
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/runs/{runId}:
+    get:
+      operationId: getInvocationRun
+      tags:
+        - Runs
+      summary: Get the authoritative run snapshot and current event cursor
+      security:
+        - SessionToken: []
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+      responses:
+        "200":
+          description: Get the authoritative run snapshot and current event cursor
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/runs/{runId}/events:
+    get:
+      operationId: streamInvocationRun
+      tags:
+        - Runs
+      summary: Replay and stream public SSE events
+      description: No cursor means 0. Header/query cursors must agree if both supplied. Ordered durable
+        sequence per run; delivery at least once. SSE id = seq, event = type, data = PublicEvent
+        JSON. Comment heartbeat ~15 seconds, no proxy buffering. Cursor too new => 400; purged
+        cursor => 410 EVENT_CURSOR_EXPIRED with snapshotPath. Replay terminal run through
+        run.finished, then close. Disconnect does not cancel. Recheck revocation while streaming.
+        Browser uses fetch Authorization rather than token in URL.
+      security:
+        - SessionToken: []
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+        - name: Last-Event-ID
+          in: header
+          required: false
+          schema:
+            type: string
+            pattern: ^(0|[1-9][0-9]*)$
+        - name: after
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: SSE stream. On terminal event close normally; on transport loss reconnect from last
+            handled seq.
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+            Cache-Control:
+              schema:
+                type: string
+              description: no-store
+            X-Accel-Buffering:
+              schema:
+                type: string
+              description: Disable response buffering; the value is "no".
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              example: |+
+                id: 1
+                event: run.status
+                data: {"v":1,"runId":"run_example","seq":1,"createdAt":"2026-09-28T00:00:00Z","type":"run.status","data":{"status":"queued"}}
+
+          x-event-schema:
+            $ref: "#/components/schemas/PublicEvent"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/runs/{runId}/cancel:
+    post:
+      operationId: cancelInvocationRun
+      tags:
+        - Runs
+      summary: Request idempotent cancellation
+      description: Returns cancelling or the already-existing terminal state. Do not claim stopped until
+        cancelled or another terminal result is persisted. Supervisor cancels all run child tasks.
+      security:
+        - SessionToken: []
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties: {}
+              required: []
+      responses:
+        "202":
+          description: Request idempotent cancellation
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/runs/{runId}/interactions/{interactionId}/responses:
+    post:
+      operationId: respondToInvocationInteraction
+      tags:
+        - Runs
+      summary: Answer a current business interaction
+      description: Validate interaction ownership, deadline and exact choice/text limits. Same interaction
+        and answer is idempotent; different second answer => 409. Cannot approve expanded file,
+        network, credential or command permissions.
+      security:
+        - SessionToken: []
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+        - name: interactionId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InteractionResponse"
+      responses:
+        "202":
+          description: Answer a current business interaction
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/sessions/{sessionId}/files:
+    post:
+      operationId: uploadInvocationFile
+      tags:
+        - Files
+      summary: Upload one input file into this active session
+      description: Exactly one file part. Platform/Agent limits and MIME support are checked while
+        streaming. Server chooses storage path; client filename is display-only. Do not extract
+        archives. No external download URL or relative/absolute destination path input. Orphaned
+        retries count against quota and are cleaned with the session.
+      security:
+        - SessionToken: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/FileUpload"
+      responses:
+        "201":
+          description: Upload one input file into this active session
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadedFile"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/files/{fileId}:
+    get:
+      operationId: getInvocationFile
+      tags:
+        - Files
+      summary: Get metadata for a session-owned input file
+      security:
+        - SessionToken: []
+      parameters:
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+      responses:
+        "200":
+          description: Get metadata for a session-owned input file
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadedFile"
+        default:
+          $ref: "#/components/responses/Error"
+    delete:
+      operationId: deleteInvocationFile
+      tags:
+        - Files
+      summary: Delete a session input file not used by a non-terminal run
+      description: 409 FILE_IN_USE while referenced by queued/running/waiting/cancelling run. Idempotent
+        for a deleted file owned by this session. No host path lookup.
+      security:
+        - SessionToken: []
+      parameters:
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+      responses:
+        "204":
+          description: Delete a session input file not used by a non-terminal run
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/runs/{runId}/artifacts:
+    get:
+      operationId: listInvocationArtifacts
+      tags:
+        - Files
+      summary: List published output artifacts owned by this run
+      security:
+        - SessionToken: []
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: List published output artifacts owned by this run
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArtifactPage"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/artifacts/{artifactId}/content:
+    get:
+      operationId: downloadInvocationArtifact
+      tags:
+        - Files
+      summary: Download an authorized immutable artifact
+      description: Validate owning session and data expiry before download. Recheck revocation for long
+        downloads. Stream through the gateway, not a permanent public object URL. Attachment
+        filename safely encoded; never serve untrusted HTML as a same-origin document.
+      security:
+        - SessionToken: []
+      parameters:
+        - name: artifactId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+      responses:
+        "200":
+          description: Artifact bytes with registered safe media type; octet-stream is the fallback.
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+            Content-Disposition:
+              schema:
+                type: string
+              description: attachment with a safely encoded display filename
+            Content-Length:
+              schema:
+                type: integer
+                minimum: 0
+              description: Validated artifact size
+            X-Content-Type-Options:
+              schema:
+                type: string
+              description: nosniff
+            Cache-Control:
+              schema:
+                type: string
+              description: private, no-store
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        default:
+          $ref: "#/components/responses/Error"
+  /internal/v1/worker-sessions/{sessionId}/next-run:
+    post:
+      operationId: claimNextSessionRun
+      tags:
+        - Internal execution
+      summary: Claim or re-fetch the next execution for this dedicated session supervisor
+      description: The mTLS identity is bound to this exact session and supervisor generation. Long-poll
+        at most 25 seconds; 204 if no queued work. An already assigned live execution returns the
+        same assignment to this supervisor; never start it twice. Atomically lease at most one
+        execution per session. Closed/revoked session => 409 SESSION_CLOSED and supervisor exits. A
+        lost generation is fenced, not silently replaced to resume side effects.
+      security:
+        - ServiceIdentity: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NextRunRequest"
+      responses:
+        "200":
+          description: Claim or re-fetch the next execution for this dedicated session supervisor
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecutionAssignment"
+        "204":
+          description: No queued execution within the bounded wait; safe to poll again.
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+        default:
+          $ref: "#/components/responses/Error"
+  /internal/v1/source-exports:
+    post:
+      operationId: createSourceExport
+      tags:
+        - Internal exports
+      summary: Create an immutable owner-bound export job
+      description: Only the control-plane identity assigned to this owner Runner. Verify signed
+        exportGrant audience, owner/release/draft digest and expiry against the canonical spec
+        bytes; grant must derive from authenticated persisted owner selection. Export authorized
+        data and sanitized definitions only. Credential material goes directly to the configured
+        vault via the owner binding adapter, never this bundle. No dynamic upload destinations.
+      security:
+        - ServiceIdentity: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SourceExportCreate"
+      responses:
+        "202":
+          description: Create an immutable owner-bound export job
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SourceExport"
+        default:
+          $ref: "#/components/responses/Error"
+  /internal/v1/source-exports/{exportId}:
+    get:
+      operationId: getSourceExport
+      tags:
+        - Internal exports
+      summary: Read the matching release export state
+      security:
+        - ServiceIdentity: []
+      parameters:
+        - name: exportId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+      responses:
+        "200":
+          description: Read the matching release export state
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SourceExport"
+        default:
+          $ref: "#/components/responses/Error"
+  /internal/v1/source-exports/{exportId}/content:
+    get:
+      operationId: downloadSourceExport
+      tags:
+        - Internal exports
+      summary: Download a ready immutable export bundle
+      description: Requires ready state, matching service owner/release scope and non-expired export;
+        otherwise 409/404/410. Verify digest before use and enforce safe archive extraction.
+      security:
+        - ServiceIdentity: []
+      parameters:
+        - name: exportId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+      responses:
+        "200":
+          description: Immutable archive containing only approved source data and sanitized resource
+            definitions.
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+            X-Bundle-Digest:
+              schema:
+                type: string
+                pattern: ^sha256:[a-f0-9]{64}$
+              description: Expected sha256 digest of returned bytes
+            Content-Length:
+              schema:
+                type: integer
+                minimum: 0
+              description: Bundle size
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        default:
+          $ref: "#/components/responses/Error"
+  /internal/v1/executions/{executionId}/heartbeat:
+    post:
+      operationId: heartbeatExecution
+      tags:
+        - Internal execution
+      summary: Renew a live execution lease within its fixed deadline
+      description: Validate supervisor certificate identity and lease epoch. Stale lease => 409
+        EXECUTION_FENCED. Expired/revoked jobs return cancel or reject; the supervisor terminates
+        the sandbox if unable to renew before its known deadline.
+      security:
+        - ServiceIdentity: []
+      parameters:
+        - name: executionId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Heartbeat"
+      responses:
+        "200":
+          description: Renew a live execution lease within its fixed deadline
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HeartbeatResult"
+        default:
+          $ref: "#/components/responses/Error"
+  /internal/v1/executions/{executionId}/events:
+    post:
+      operationId: appendExecutionEvents
+      tags:
+        - Internal execution
+      summary: Append a bounded, ordered public event batch
+      description: Persist before broadcast. Validate execution/session references, allowed transitions
+        and per-message limits. Duplicate batchId/body returns original receipt, sequence
+        gaps/conflicting duplicate => 409. This is not a generic privileged tool RPC.
+      security:
+        - ServiceIdentity: []
+      parameters:
+        - name: executionId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EventBatch"
+      responses:
+        "200":
+          description: Append a bounded, ordered public event batch
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventReceipt"
+        default:
+          $ref: "#/components/responses/Error"
+  /internal/v1/executions/{executionId}/complete:
+    post:
+      operationId: completeExecution
+      tags:
+        - Internal execution
+      summary: Commit one terminal result and reconcile reserved quota
+      description: Only the current fenced supervisor; lastAcknowledgedSeq must match durable sequence.
+        Commit terminal event, run snapshot and quota reconciliation together. Lost Worker is
+        finalized by coordinator, not auto-replayed after external side effects.
+      security:
+        - ServiceIdentity: []
+      parameters:
+        - name: executionId
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExecutionComplete"
+      responses:
+        "200":
+          description: Commit one terminal result and reconcile reserved quota
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Correlation identifier; also included in JSON error bodies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+        default:
+          $ref: "#/components/responses/Error"
+components:
+  securitySchemes:
+    OwnerIdentity:
+      type: http
+      scheme: bearer
+      bearerFormat: OIDC access token
+      description: Validate issuer, audience, expiry and owner binding. A cookie BFF may terminate this
+        scheme only with explicit CSRF protection. Never trust caller-provided owner headers.
+    AgentApiKey:
+      type: http
+      scheme: bearer
+      bearerFormat: agent API key
+      description: Allows descriptor and new sessions for exactly one active Agent. Does not enumerate or
+        access previous sessions.
+    SessionToken:
+      type: http
+      scheme: bearer
+      bearerFormat: session capability
+      description: One session and its descendant resources only; also check parent revocation epoch,
+        execution TTL and data expiry. Agent API keys cannot substitute for this token.
+    ServiceIdentity:
+      type: mutualTLS
+      description: Trusted control plane or supervisor identity with per-owner/per-execution
+        authorization. Internal network reachability alone is insufficient.
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+      description: "Required for this operation. Scope: authenticated identity (or anonymous admission
+        identity), route and key. 24-hour response retention. Different body => 409. Secret-bearing
+        responses are encrypted at rest; replay revalidates policy."
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: ^"[1-9][0-9]*"$
+      description: Strong ETag for this exact resource. Missing => 428; mismatch => 412. GET returns ETag.
+    From:
+      name: from
+      in: query
+      required: true
+      schema:
+        type: string
+        format: date-time
+      description: Inclusive UTC instant. Maximum report span 31 days.
+    To:
+      name: to
+      in: query
+      required: true
+      schema:
+        type: string
+        format: date-time
+      description: Exclusive UTC instant; greater than from.
+  responses:
+    Error:
+      description: "Structured error. Statuses: 400 malformed input/cursor; 401 missing/invalid token; 403
+        policy refusal; 404 absent or outside identity scope; 409 conflict; 410 expired data/cursor;
+        412 stale revision; 413 upload/body too large; 422 validation; 428 missing If-Match; 429
+        rate/budget limit; 500 internal failure; 503 unavailable. Cross-scope IDs use 404. 429
+        includes Retry-After. No private paths or secrets."
+      headers:
+        X-Request-Id:
+          schema:
+            type: string
+          description: Correlation identifier; also included in JSON error bodies.
+        Retry-After:
+          schema:
+            type: string
+          description: Seconds before retry; required on 429 and optional on transient 503.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Id:
+      type: string
+      description: Opaque server-generated identifier; never an authorization grant.
+      pattern: ^[a-z][a-z0-9_]{7,100}$
+    Digest:
+      type: string
+      pattern: ^sha256:[a-f0-9]{64}$
+    Harness:
+      type: string
+      enum:
+        - claude
+        - pi
+    RunStatus:
+      type: string
+      enum:
+        - queued
+        - running
+        - waiting_for_input
+        - cancelling
+        - completed
+        - failed
+        - cancelled
+    ErrorCode:
+      type: string
+      enum:
+        - VALIDATION_ERROR
+        - UNAUTHENTICATED
+        - FORBIDDEN
+        - NOT_FOUND
+        - CONFLICT
+        - PRECONDITION_REQUIRED
+        - REVISION_MISMATCH
+        - IDEMPOTENCY_CONFLICT
+        - RELEASE_NOT_READY
+        - DRAFT_INVALID
+        - SOURCE_CHANGED
+        - SOURCE_UNAVAILABLE
+        - SANDBOX_UNAVAILABLE
+        - FEATURE_UNAVAILABLE
+        - MCP_SCOPE_UNENFORCEABLE
+        - PROFILE_BINDING_UNAVAILABLE
+        - SESSION_CLOSED
+        - SESSION_EXPIRED
+        - TOKEN_EXPIRED
+        - KEY_REVOKED
+        - RELEASE_REVOKED
+        - AGENT_INACTIVE
+        - RUN_BUSY
+        - RATE_LIMITED
+        - BUDGET_EXCEEDED
+        - UPLOAD_TOO_LARGE
+        - FILE_IN_USE
+        - EVENT_CURSOR_EXPIRED
+        - INVALID_EVENT_CURSOR
+        - INTERACTION_EXPIRED
+        - INTERACTION_CONFLICT
+        - INTERNAL_ERROR
+        - WORKER_LOST
+        - RUN_TIMEOUT
+        - INTERACTION_TIMEOUT
+        - MODEL_ERROR
+        - MCP_ERROR
+        - RESOURCE_EXHAUSTED
+        - EXECUTION_FENCED
+        - EVENT_SEQUENCE_GAP
+        - INVALID_MANIFEST_CONFIRMATION
+        - POLICY_DENIED
+    ErrorDetails:
+      type: object
+      additionalProperties: false
+      properties:
+        field:
+          type: string
+        snapshotPath:
+          type: string
+        retryAfterSeconds:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 0
+        currentRevision:
+          type: integer
+          minimum: 0
+        checkIds:
+          type: array
+          items:
+            type: string
+      required: []
+    Error:
+      type: object
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          properties:
+            code:
+              $ref: "#/components/schemas/ErrorCode"
+            message:
+              type: string
+              description: Sanitized message; no secrets, raw prompts or private filesystem paths.
+            requestId:
+              type: string
+            retryable:
+              type: boolean
+            details:
+              $ref: "#/components/schemas/ErrorDetails"
+          required:
+            - code
+            - message
+            - requestId
+            - retryable
+      required:
+        - error
+    ExecutionError:
+      type: object
+      additionalProperties: false
+      properties:
+        code:
+          $ref: "#/components/schemas/ErrorCode"
+        message:
+          type: string
+        retryable:
+          type: boolean
+      required:
+        - code
+        - message
+        - retryable
+    SourceRef:
+      type: object
+      additionalProperties: false
+      properties:
+        resourceId:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        sourceId:
+          type: string
+          minLength: 1
+          maxLength: 2048
+      required:
+        - resourceId
+        - sourceId
+    Limits:
+      type: object
+      additionalProperties: false
+      properties:
+        sessionTtlSeconds:
+          type: integer
+          minimum: 60
+          maximum: 86400
+        idleTtlSeconds:
+          type: integer
+          minimum: 30
+          maximum: 3600
+        maxRunsPerSession:
+          type: integer
+          minimum: 1
+          maximum: 100
+        runTimeoutSeconds:
+          type: integer
+          minimum: 10
+          maximum: 900
+        maxInputTokensPerRun:
+          type: integer
+          minimum: 1
+          maximum: 1000000
+        maxOutputTokensPerRun:
+          type: integer
+          minimum: 1
+          maximum: 64000
+        maxToolCallsPerRun:
+          type: integer
+          minimum: 0
+          maximum: 500
+        maxConcurrentRuns:
+          type: integer
+          minimum: 1
+          maximum: 100
+        maxActiveSessions:
+          type: integer
+          minimum: 1
+          maximum: 1000
+        dailyTokenBudget:
+          type: integer
+          minimum: 1
+          maximum: 1000000000
+        maxUploadFileBytes:
+          type: integer
+          minimum: 1
+          maximum: 10485760
+        maxSessionUploadBytes:
+          type: integer
+          minimum: 1
+          maximum: 52428800
+      required:
+        - sessionTtlSeconds
+        - idleTtlSeconds
+        - maxRunsPerSession
+        - runTimeoutSeconds
+        - maxInputTokensPerRun
+        - maxOutputTokensPerRun
+        - maxToolCallsPerRun
+        - maxConcurrentRuns
+        - maxActiveSessions
+        - dailyTokenBudget
+        - maxUploadFileBytes
+        - maxSessionUploadBytes
+      description: Draft limits. Platform/runtime limits may be lower. Idle TTL <= session TTL; max file
+        bytes <= session bytes. UTC daily budget counts input + output tokens, including cached
+        input once, across model calls. Broker reserves/enforces quota transactionally.
+    PublicLimits:
+      type: object
+      additionalProperties: false
+      properties:
+        sessionTtlSeconds:
+          type: integer
+          minimum: 0
+        idleTtlSeconds:
+          type: integer
+          minimum: 0
+        maxRunsPerSession:
+          type: integer
+          minimum: 0
+        runTimeoutSeconds:
+          type: integer
+          minimum: 0
+        maxInputTextCharacters:
+          type: integer
+          minimum: 0
+        maxUploadFileBytes:
+          type: integer
+          minimum: 0
+        maxSessionUploadBytes:
+          type: integer
+          minimum: 0
+      required:
+        - sessionTtlSeconds
+        - idleTtlSeconds
+        - maxRunsPerSession
+        - runTimeoutSeconds
+        - maxInputTextCharacters
+        - maxUploadFileBytes
+        - maxSessionUploadBytes
+    RuntimeProfile:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        label:
+          type: string
+        harnesses:
+          type: array
+          items:
+            $ref: "#/components/schemas/Harness"
+          minItems: 1
+        imageDigest:
+          type: string
+          pattern: ^sha256:[a-f0-9]{64}$
+        sandboxPolicyVersion:
+          type: string
+        isolationVerified:
+          type: boolean
+        features:
+          type: array
+          items:
+            type: string
+        unavailableReason:
+          anyOf:
+            - type: string
+            - type: "null"
+      required:
+        - id
+        - label
+        - harnesses
+        - imageDigest
+        - sandboxPolicyVersion
+        - isolationVerified
+        - features
+        - unavailableReason
+    ResourcePolicy:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        label:
+          type: string
+        mcpResourceId:
+          type: string
+        allowedTools:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          uniqueItems: true
+        scopeSummary:
+          type: string
+        revision:
+          type: integer
+          minimum: 1
+        enforceable:
+          type: boolean
+      required:
+        - id
+        - label
+        - mcpResourceId
+        - allowedTools
+        - scopeSummary
+        - revision
+        - enforceable
+    Capabilities:
+      type: object
+      additionalProperties: false
+      properties:
+        harnesses:
+          type: array
+          items:
+            $ref: "#/components/schemas/Harness"
+        runtimeProfiles:
+          type: array
+          items:
+            $ref: "#/components/schemas/RuntimeProfile"
+        resourcePolicies:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResourcePolicy"
+        supportedFeatures:
+          type: array
+          items:
+            type: string
+            enum:
+              - skills
+              - mcp_stdio
+              - mcp_remote
+              - files
+              - anonymous
+              - shell
+              - interactions
+        defaultLimits:
+          $ref: "#/components/schemas/Limits"
+        maximumLimits:
+          $ref: "#/components/schemas/Limits"
+        maxApiKeyTtlSeconds:
+          type: integer
+          minimum: 1
+        resultRetentionSeconds:
+          type: integer
+          minimum: 1
+        auditRetentionDays:
+          type: integer
+          minimum: 1
+        maxCleanupDelaySeconds:
+          type: integer
+          minimum: 1
+        sourceAvailable:
+          type: boolean
+      required:
+        - harnesses
+        - runtimeProfiles
+        - resourcePolicies
+        - supportedFeatures
+        - defaultLimits
+        - maximumLimits
+        - maxApiKeyTtlSeconds
+        - resultRetentionSeconds
+        - auditRetentionDays
+        - maxCleanupDelaySeconds
+        - sourceAvailable
+    ModelSource:
+      type: object
+      additionalProperties: false
+      properties:
+        profileId:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        label:
+          type: string
+        defaultModel:
+          anyOf:
+            - type: string
+            - type: "null"
+        authConfigured:
+          type: boolean
+      required:
+        - profileId
+        - label
+        - defaultModel
+        - authConfigured
+    ModelSourceList:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModelSource"
+      required:
+        - items
+    ModelBindingCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        kind:
+          const: model
+          type: string
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        modelProfileId:
+          type: string
+          description: Existing private model-profile identifier, preserving its native format.
+          minLength: 1
+          maxLength: 2048
+        modelId:
+          type: string
+          description: Explicit selected upstream model, verified server-side and frozen into binding
+            configuration.
+          minLength: 1
+          maxLength: 512
+      required:
+        - kind
+        - name
+        - modelProfileId
+        - modelId
+    McpCredentialBindingCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        kind:
+          const: mcp
+          type: string
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        harness:
+          $ref: "#/components/schemas/Harness"
+        resourceCwd:
+          type: string
+          minLength: 1
+        source:
+          $ref: "#/components/schemas/SourceRef"
+        resourcePolicyId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+      required:
+        - kind
+        - name
+        - harness
+        - resourceCwd
+        - source
+        - resourcePolicyId
+    CredentialBindingCreate:
+      oneOf:
+        - $ref: "#/components/schemas/ModelBindingCreate"
+        - $ref: "#/components/schemas/McpCredentialBindingCreate"
+      discriminator:
+        propertyName: kind
+        mapping:
+          model: "#/components/schemas/ModelBindingCreate"
+          mcp: "#/components/schemas/McpCredentialBindingCreate"
+    CredentialBinding:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        kind:
+          type: string
+          enum:
+            - model
+            - mcp
+        name:
+          type: string
+        state:
+          type: string
+          enum:
+            - pending
+            - active
+            - failed
+            - revoked
+        revision:
+          type: integer
+          minimum: 1
+        scopeSummary:
+          type: string
+        resourcePolicyId:
+          anyOf:
+            - type: string
+              description: Opaque server-generated identifier; never an authorization grant.
+              pattern: ^[a-z][a-z0-9_]{7,100}$
+            - type: "null"
+        createdAt:
+          type: string
+          format: date-time
+        revokedAt:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        error:
+          anyOf:
+            - $ref: "#/components/schemas/ExecutionError"
+            - type: "null"
+      required:
+        - id
+        - kind
+        - name
+        - state
+        - revision
+        - scopeSummary
+        - resourcePolicyId
+        - createdAt
+        - revokedAt
+        - error
+    SnapshotRoot:
+      type: object
+      additionalProperties: false
+      properties:
+        sourcePath:
+          type: string
+          description: Owner-only source path. Resolve on the authenticated owner Runner, never on a public
+            Worker.
+          minLength: 1
+          maxLength: 4096
+        alias:
+          type: string
+          pattern: ^[a-z][a-z0-9_-]{0,47}$
+        mode:
+          type: string
+          enum:
+            - read_only
+            - workspace_template
+        includePatterns:
+          type: array
+          items:
+            type: string
+          maxItems: 100
+        excludePatterns:
+          type: array
+          items:
+            type: string
+          maxItems: 100
+      required:
+        - sourcePath
+        - alias
+        - mode
+        - includePatterns
+        - excludePatterns
+      description: Unique aliases; at most one workspace_template. Patterns select snapshot contents, not
+        a sandbox security boundary. Links and special files are rejected.
+    McpBinding:
+      type: object
+      additionalProperties: false
+      properties:
+        source:
+          $ref: "#/components/schemas/SourceRef"
+        allowedTools:
+          type: array
+          items:
+            type: string
+            minLength: 1
+          minItems: 1
+          uniqueItems: true
+          maxItems: 100
+        credentialBindingId:
+          anyOf:
+            - type: string
+              description: Opaque server-generated identifier; never an authorization grant.
+              pattern: ^[a-z][a-z0-9_]{7,100}$
+            - type: "null"
+        resourcePolicyId:
+          anyOf:
+            - type: string
+              description: Opaque server-generated identifier; never an authorization grant.
+              pattern: ^[a-z][a-z0-9_]{7,100}$
+            - type: "null"
+      required:
+        - source
+        - allowedTools
+        - credentialBindingId
+        - resourcePolicyId
+      description: Exact tool allowlist. Remote MCP requires an enforceable registered resource policy
+        even if it uses no secret. stdio dependencies must exist in the runtime profile. No raw
+        secrets.
+    ExecutionPolicy:
+      type: object
+      additionalProperties: false
+      properties:
+        runtimeProfileId:
+          anyOf:
+            - type: string
+              description: Opaque server-generated identifier; never an authorization grant.
+              pattern: ^[a-z][a-z0-9_]{7,100}$
+            - type: "null"
+        runMode:
+          type: string
+          enum:
+            - agent
+            - code
+        effort:
+          anyOf:
+            - type: string
+              enum:
+                - low
+                - medium
+                - high
+                - xhigh
+                - max
+            - type: "null"
+        shellToolEnabled:
+          type: boolean
+        network:
+          type: string
+          const: brokers_only
+      required:
+        - runtimeProfileId
+        - runMode
+        - effort
+        - shellToolEnabled
+        - network
+    DraftSpec:
+      type: object
+      additionalProperties: false
+      properties:
+        harness:
+          $ref: "#/components/schemas/Harness"
+        resourceCwd:
+          type: string
+          minLength: 1
+          maxLength: 4096
+        instructions:
+          type: string
+          maxLength: 100000
+        contextRefs:
+          type: array
+          items:
+            $ref: "#/components/schemas/SourceRef"
+          maxItems: 50
+        modelBindingId:
+          anyOf:
+            - type: string
+              description: Opaque server-generated identifier; never an authorization grant.
+              pattern: ^[a-z][a-z0-9_]{7,100}$
+            - type: "null"
+        snapshotRoots:
+          type: array
+          items:
+            $ref: "#/components/schemas/SnapshotRoot"
+          maxItems: 20
+        skillRefs:
+          type: array
+          items:
+            $ref: "#/components/schemas/SourceRef"
+          maxItems: 100
+        mcpBindings:
+          type: array
+          items:
+            $ref: "#/components/schemas/McpBinding"
+          maxItems: 50
+        execution:
+          $ref: "#/components/schemas/ExecutionPolicy"
+        limits:
+          $ref: "#/components/schemas/Limits"
+      required:
+        - harness
+        - resourceCwd
+        - instructions
+        - contextRefs
+        - modelBindingId
+        - snapshotRoots
+        - skillRefs
+        - mcpBindings
+        - execution
+        - limits
+      description: Full draft. Null model/runtime binding is allowed while editing, but release creation
+        rejects it. contextRefs select explicit Memory resources; no automatic private-session
+        history. Existing resources are read via authenticated private APIs.
+    Draft:
+      type: object
+      additionalProperties: false
+      properties:
+        revision:
+          type: integer
+          minimum: 1
+        updatedAt:
+          type: string
+          format: date-time
+        spec:
+          $ref: "#/components/schemas/DraftSpec"
+      required:
+        - revision
+        - updatedAt
+        - spec
+    AgentCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 2000
+        harness:
+          $ref: "#/components/schemas/Harness"
+      required:
+        - name
+        - harness
+    AgentPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 2000
+      required: []
+      minProperties: 1
+    Agent:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        name:
+          type: string
+        description:
+          type: string
+        state:
+          type: string
+          enum:
+            - inactive
+            - active
+            - archiving
+            - archived
+        activeReleaseId:
+          anyOf:
+            - type: string
+              description: Opaque server-generated identifier; never an authorization grant.
+              pattern: ^[a-z][a-z0-9_]{7,100}$
+            - type: "null"
+        revision:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - description
+        - state
+        - activeReleaseId
+        - revision
+        - createdAt
+        - updatedAt
+    Check:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum:
+            - pending
+            - passed
+            - failed
+        message:
+          type: string
+        code:
+          anyOf:
+            - $ref: "#/components/schemas/ErrorCode"
+            - type: "null"
+      required:
+        - id
+        - status
+        - message
+        - code
+    ReleaseCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        draftRevision:
+          type: integer
+          minimum: 1
+      required:
+        - draftRevision
+    Release:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        agentId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        number:
+          type: integer
+          minimum: 1
+        draftRevision:
+          type: integer
+          minimum: 1
+        frozenSpec:
+          $ref: "#/components/schemas/DraftSpec"
+        status:
+          type: string
+          enum:
+            - queued
+            - building
+            - ready
+            - failed
+            - revoked
+        bundleDigest:
+          anyOf:
+            - type: string
+              pattern: ^sha256:[a-f0-9]{64}$
+            - type: "null"
+        manifestDigest:
+          anyOf:
+            - type: string
+              pattern: ^sha256:[a-f0-9]{64}$
+            - type: "null"
+        runtimeImageDigest:
+          anyOf:
+            - type: string
+              pattern: ^sha256:[a-f0-9]{64}$
+            - type: "null"
+        checks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Check"
+        error:
+          anyOf:
+            - $ref: "#/components/schemas/ExecutionError"
+            - type: "null"
+        createdAt:
+          type: string
+          format: date-time
+        readyAt:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        revokedAt:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+      required:
+        - id
+        - agentId
+        - number
+        - draftRevision
+        - frozenSpec
+        - status
+        - bundleDigest
+        - manifestDigest
+        - runtimeImageDigest
+        - checks
+        - error
+        - createdAt
+        - readyAt
+        - revokedAt
+    ManifestEntry:
+      type: object
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum:
+            - file
+            - instructions
+            - skill
+            - mcp
+            - runtime
+            - policy
+        name:
+          type: string
+        sandboxPath:
+          anyOf:
+            - type: string
+            - type: "null"
+        sourcePath:
+          anyOf:
+            - type: string
+            - type: "null"
+        digest:
+          type: string
+          pattern: ^sha256:[a-f0-9]{64}$
+        sizeBytes:
+          type: integer
+          minimum: 0
+        scopeSummary:
+          anyOf:
+            - type: string
+            - type: "null"
+      required:
+        - kind
+        - name
+        - sandboxPath
+        - sourcePath
+        - digest
+        - sizeBytes
+        - scopeSummary
+    ManifestPage:
+      type: object
+      additionalProperties: false
+      properties:
+        releaseId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        manifestDigest:
+          type: string
+          pattern: ^sha256:[a-f0-9]{64}$
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/ManifestEntry"
+        nextCursor:
+          anyOf:
+            - type: string
+            - type: "null"
+      required:
+        - releaseId
+        - manifestDigest
+        - entries
+        - nextCursor
+      description: Owner-only complete authorization manifest, paginated with a cursor bound to the
+        immutable digest. No credential values. Public APIs never return this manifest.
+    Activation:
+      type: object
+      additionalProperties: false
+      properties:
+        agentId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        enabled:
+          type: boolean
+        releaseId:
+          anyOf:
+            - type: string
+              description: Opaque server-generated identifier; never an authorization grant.
+              pattern: ^[a-z][a-z0-9_]{7,100}$
+            - type: "null"
+        manifestDigest:
+          anyOf:
+            - type: string
+              pattern: ^sha256:[a-f0-9]{64}$
+            - type: "null"
+        accessMode:
+          type: string
+          enum:
+            - api_key
+            - public
+        revision:
+          type: integer
+          minimum: 1
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - agentId
+        - enabled
+        - releaseId
+        - manifestDigest
+        - accessMode
+        - revision
+        - updatedAt
+    ActivationPut:
+      type: object
+      additionalProperties: false
+      properties:
+        releaseId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        manifestDigest:
+          type: string
+          pattern: ^sha256:[a-f0-9]{64}$
+        accessMode:
+          type: string
+          enum:
+            - api_key
+            - public
+      required:
+        - releaseId
+        - manifestDigest
+        - accessMode
+    KeyCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        expiresAt:
+          type: string
+          format: date-time
+      required:
+        - name
+        - expiresAt
+    ApiKey:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        agentId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        name:
+          type: string
+        prefix:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        revokedAt:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+      required:
+        - id
+        - agentId
+        - name
+        - prefix
+        - createdAt
+        - expiresAt
+        - revokedAt
+    ApiKeyGrant:
+      type: object
+      additionalProperties: false
+      properties:
+        key:
+          $ref: "#/components/schemas/ApiKey"
+        token:
+          type: string
+          description: Shown on creation and an authorized idempotent replay only. Never log or put in URLs.
+          minLength: 32
+          maxLength: 2048
+          writeOnly: false
+      required:
+        - key
+        - token
+    AgentDescriptor:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        name:
+          type: string
+        description:
+          type: string
+        version:
+          type: integer
+          minimum: 1
+        accessMode:
+          type: string
+          enum:
+            - api_key
+            - public
+        features:
+          type: array
+          items:
+            type: string
+        limits:
+          $ref: "#/components/schemas/PublicLimits"
+      required:
+        - id
+        - name
+        - description
+        - version
+        - accessMode
+        - features
+        - limits
+    SessionCreate:
+      type: object
+      additionalProperties: false
+      properties: {}
+      required: []
+    Session:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        agentId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        releaseId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        purpose:
+          type: string
+          enum:
+            - invoke
+            - preview
+        state:
+          type: string
+          enum:
+            - active
+            - closing
+            - closed
+        closeReason:
+          anyOf:
+            - type: string
+              enum:
+                - client_closed
+                - idle_timeout
+                - execution_expired
+                - key_revoked
+                - release_revoked
+                - binding_revoked
+                - agent_inactive
+                - worker_lost
+            - type: "null"
+        createdAt:
+          type: string
+          format: date-time
+        lastActivityAt:
+          type: string
+          format: date-time
+        executionExpiresAt:
+          type: string
+          format: date-time
+        dataExpiresAt:
+          type: string
+          format: date-time
+        activeRunId:
+          anyOf:
+            - type: string
+              description: Opaque server-generated identifier; never an authorization grant.
+              pattern: ^[a-z][a-z0-9_]{7,100}$
+            - type: "null"
+      required:
+        - id
+        - agentId
+        - releaseId
+        - purpose
+        - state
+        - closeReason
+        - createdAt
+        - lastActivityAt
+        - executionExpiresAt
+        - dataExpiresAt
+        - activeRunId
+      description: Session state controls execution. Closed sessions can retain authorized read access
+        until dataExpiresAt, except explicit deletion/revocation. Reads and SSE heartbeats do not
+        extend execution lifetime.
+    SessionGrant:
+      type: object
+      additionalProperties: false
+      properties:
+        session:
+          $ref: "#/components/schemas/Session"
+        token:
+          type: string
+          description: Shown on creation and an authorized idempotent replay only. Never log or put in URLs.
+          minLength: 32
+          maxLength: 2048
+          writeOnly: false
+        tokenExpiresAt:
+          type: string
+          format: date-time
+      required:
+        - session
+        - token
+        - tokenExpiresAt
+      description: The token authorizes only this session. Its lifetime is bounded by data retention and
+        parent key expiry; executing still requires an active session and current policy. Save
+        securely; no token recovery from IDs.
+    RunInput:
+      type: object
+      additionalProperties: false
+      properties:
+        text:
+          type: string
+          maxLength: 20000
+        fileIds:
+          type: array
+          items:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+          maxItems: 20
+          uniqueItems: true
+      required:
+        - text
+      anyOf:
+        - properties:
+            text:
+              minLength: 1
+        - required:
+            - fileIds
+          properties:
+            fileIds:
+              minItems: 1
+      description: At least non-empty text or one input file. fileIds must belong to this session and be
+        usable by the chosen runtime. Unknown execution/configuration fields are rejected.
+    RunCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        input:
+          $ref: "#/components/schemas/RunInput"
+      required:
+        - input
+    Message:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        role:
+          type: string
+          enum:
+            - user
+            - assistant
+        text:
+          type: string
+        fileIds:
+          type: array
+          items:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+        artifactIds:
+          type: array
+          items:
+            type: string
+            description: Opaque server-generated identifier; never an authorization grant.
+            pattern: ^[a-z][a-z0-9_]{7,100}$
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - role
+        - text
+        - fileIds
+        - artifactIds
+        - createdAt
+    Usage:
+      type: object
+      additionalProperties: false
+      properties:
+        inputTokens:
+          type: integer
+          minimum: 0
+        outputTokens:
+          type: integer
+          minimum: 0
+        cachedInputTokens:
+          type: integer
+          minimum: 0
+        toolCalls:
+          type: integer
+          minimum: 0
+        final:
+          type: boolean
+      required:
+        - inputTokens
+        - outputTokens
+        - cachedInputTokens
+        - toolCalls
+        - final
+      description: cachedInputTokens is a subset of inputTokens, not an additional amount. Public
+        cumulative display; enforce budgets using trusted broker accounting.
+    Interaction:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        runId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        kind:
+          type: string
+          enum:
+            - text
+            - choice
+        question:
+          type: string
+        choices:
+          type: array
+          items:
+            type: string
+        maxAnswerCharacters:
+          type: integer
+          minimum: 1
+          maximum: 20000
+        expiresAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - runId
+        - kind
+        - question
+        - choices
+        - maxAnswerCharacters
+        - expiresAt
+      description: Business question only; no permission expansion. choice answers must exactly match one
+        choice, text uses maxAnswerCharacters. One outstanding interaction per run.
+    InteractionResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        answer:
+          type: string
+          minLength: 1
+          maxLength: 20000
+      required:
+        - answer
+    Run:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        sessionId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        agentId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        releaseId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        status:
+          $ref: "#/components/schemas/RunStatus"
+        input:
+          $ref: "#/components/schemas/RunInput"
+        output:
+          type: array
+          items:
+            $ref: "#/components/schemas/Message"
+        lastEventSeq:
+          type: integer
+          minimum: 0
+        usage:
+          $ref: "#/components/schemas/Usage"
+        interaction:
+          anyOf:
+            - $ref: "#/components/schemas/Interaction"
+            - type: "null"
+        error:
+          anyOf:
+            - $ref: "#/components/schemas/ExecutionError"
+            - type: "null"
+        createdAt:
+          type: string
+          format: date-time
+        startedAt:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        finishedAt:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+      required:
+        - id
+        - sessionId
+        - agentId
+        - releaseId
+        - status
+        - input
+        - output
+        - lastEventSeq
+        - usage
+        - interaction
+        - error
+        - createdAt
+        - startedAt
+        - finishedAt
+      description: Authoritative public snapshot, including text emitted so far and accepted public
+        artifacts. Final output is available independently of SSE. No native transcript, reasoning,
+        tool arguments or owner paths.
+    RunSummary:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        sessionId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        releaseId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        purpose:
+          type: string
+          enum:
+            - invoke
+            - preview
+        status:
+          $ref: "#/components/schemas/RunStatus"
+        usage:
+          $ref: "#/components/schemas/Usage"
+        errorCode:
+          anyOf:
+            - $ref: "#/components/schemas/ErrorCode"
+            - type: "null"
+        createdAt:
+          type: string
+          format: date-time
+        startedAt:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        finishedAt:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+      required:
+        - id
+        - sessionId
+        - releaseId
+        - purpose
+        - status
+        - usage
+        - errorCode
+        - createdAt
+        - startedAt
+        - finishedAt
+    UploadedFile:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        sessionId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        filename:
+          type: string
+        mediaType:
+          type: string
+        sizeBytes:
+          type: integer
+          minimum: 0
+        digest:
+          type: string
+          pattern: ^sha256:[a-f0-9]{64}$
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - sessionId
+        - filename
+        - mediaType
+        - sizeBytes
+        - digest
+        - createdAt
+        - expiresAt
+    FileUpload:
+      type: object
+      additionalProperties: false
+      properties:
+        file:
+          type: string
+          format: binary
+      required:
+        - file
+    Artifact:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        runId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        filename:
+          type: string
+        mediaType:
+          type: string
+        sizeBytes:
+          type: integer
+          minimum: 0
+        digest:
+          type: string
+          pattern: ^sha256:[a-f0-9]{64}$
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - runId
+        - filename
+        - mediaType
+        - sizeBytes
+        - digest
+        - createdAt
+        - expiresAt
+    UsageBucket:
+      type: object
+      additionalProperties: false
+      properties:
+        date:
+          type: string
+          format: date
+        runs:
+          type: integer
+          minimum: 0
+        completed:
+          type: integer
+          minimum: 0
+        failed:
+          type: integer
+          minimum: 0
+        cancelled:
+          type: integer
+          minimum: 0
+        inputTokens:
+          type: integer
+          minimum: 0
+        outputTokens:
+          type: integer
+          minimum: 0
+        cachedInputTokens:
+          type: integer
+          minimum: 0
+        toolCalls:
+          type: integer
+          minimum: 0
+        totalQueueMilliseconds:
+          type: integer
+          minimum: 0
+        totalRunMilliseconds:
+          type: integer
+          minimum: 0
+      required:
+        - date
+        - runs
+        - completed
+        - failed
+        - cancelled
+        - inputTokens
+        - outputTokens
+        - cachedInputTokens
+        - toolCalls
+        - totalQueueMilliseconds
+        - totalRunMilliseconds
+    UsageReport:
+      type: object
+      additionalProperties: false
+      properties:
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        timezone:
+          type: string
+          const: UTC
+        buckets:
+          type: array
+          items:
+            $ref: "#/components/schemas/UsageBucket"
+        todayBudget:
+          type: object
+          additionalProperties: false
+          properties:
+            limitTokens:
+              type: integer
+              minimum: 0
+            consumedTokens:
+              type: integer
+              minimum: 0
+            reservedTokens:
+              type: integer
+              minimum: 0
+          required:
+            - limitTokens
+            - consumedTokens
+            - reservedTokens
+      required:
+        - from
+        - to
+        - timezone
+        - buckets
+        - todayBudget
+    AuditEntry:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        actorType:
+          type: string
+          enum:
+            - owner
+            - system
+            - api_key
+        actorId:
+          anyOf:
+            - type: string
+              description: Opaque server-generated identifier; never an authorization grant.
+              pattern: ^[a-z][a-z0-9_]{7,100}$
+            - type: "null"
+        action:
+          type: string
+        targetId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        requestId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        details:
+          type: object
+          additionalProperties: false
+          properties:
+            releaseId:
+              type: string
+              description: Opaque server-generated identifier; never an authorization grant.
+              pattern: ^[a-z][a-z0-9_]{7,100}$
+            keyId:
+              type: string
+              description: Opaque server-generated identifier; never an authorization grant.
+              pattern: ^[a-z][a-z0-9_]{7,100}$
+            bindingId:
+              type: string
+              description: Opaque server-generated identifier; never an authorization grant.
+              pattern: ^[a-z][a-z0-9_]{7,100}$
+            runId:
+              type: string
+              description: Opaque server-generated identifier; never an authorization grant.
+              pattern: ^[a-z][a-z0-9_]{7,100}$
+            reason:
+              type: string
+          required: []
+      required:
+        - id
+        - actorType
+        - actorId
+        - action
+        - targetId
+        - requestId
+        - createdAt
+        - details
+    AgentPage:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Agent"
+        nextCursor:
+          anyOf:
+            - type: string
+            - type: "null"
+      required:
+        - items
+        - nextCursor
+    ReleasePage:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Release"
+        nextCursor:
+          anyOf:
+            - type: string
+            - type: "null"
+      required:
+        - items
+        - nextCursor
+    ApiKeyPage:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApiKey"
+        nextCursor:
+          anyOf:
+            - type: string
+            - type: "null"
+      required:
+        - items
+        - nextCursor
+    CredentialBindingPage:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CredentialBinding"
+        nextCursor:
+          anyOf:
+            - type: string
+            - type: "null"
+      required:
+        - items
+        - nextCursor
+    MessagePage:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Message"
+        nextCursor:
+          anyOf:
+            - type: string
+            - type: "null"
+      required:
+        - items
+        - nextCursor
+    RunSummaryPage:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/RunSummary"
+        nextCursor:
+          anyOf:
+            - type: string
+            - type: "null"
+      required:
+        - items
+        - nextCursor
+    ArtifactPage:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Artifact"
+        nextCursor:
+          anyOf:
+            - type: string
+            - type: "null"
+      required:
+        - items
+        - nextCursor
+    AuditEntryPage:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditEntry"
+        nextCursor:
+          anyOf:
+            - type: string
+            - type: "null"
+      required:
+        - items
+        - nextCursor
+    RunStatusData:
+      type: object
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum:
+            - queued
+            - running
+            - waiting_for_input
+            - cancelling
+      required:
+        - status
+    MessageDeltaData:
+      type: object
+      additionalProperties: false
+      properties:
+        messageId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        text:
+          type: string
+      required:
+        - messageId
+        - text
+    MessageCompletedData:
+      type: object
+      additionalProperties: false
+      properties:
+        message:
+          $ref: "#/components/schemas/Message"
+      required:
+        - message
+    ToolStatusData:
+      type: object
+      additionalProperties: false
+      properties:
+        toolCallId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        name:
+          type: string
+        status:
+          type: string
+          enum:
+            - started
+            - running
+            - completed
+            - failed
+      required:
+        - toolCallId
+        - name
+        - status
+    InteractionRequestedData:
+      type: object
+      additionalProperties: false
+      properties:
+        interaction:
+          $ref: "#/components/schemas/Interaction"
+      required:
+        - interaction
+    InteractionResolvedData:
+      type: object
+      additionalProperties: false
+      properties:
+        interactionId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+      required:
+        - interactionId
+    ArtifactReadyData:
+      type: object
+      additionalProperties: false
+      properties:
+        artifact:
+          $ref: "#/components/schemas/Artifact"
+      required:
+        - artifact
+    UsageUpdatedData:
+      type: object
+      additionalProperties: false
+      properties:
+        usage:
+          $ref: "#/components/schemas/Usage"
+      required:
+        - usage
+    RunFinishedData:
+      type: object
+      additionalProperties: false
+      properties:
+        run:
+          allOf:
+            - $ref: "#/components/schemas/Run"
+            - properties:
+                status:
+                  type: string
+                  enum:
+                    - completed
+                    - failed
+                    - cancelled
+      required:
+        - run
+      description: run.lastEventSeq equals this event seq.
+    RunStatusEvent:
+      type: object
+      additionalProperties: false
+      properties:
+        v:
+          type: integer
+          const: 1
+        runId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        seq:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        type:
+          type: string
+          const: run.status
+        data:
+          $ref: "#/components/schemas/RunStatusData"
+      required:
+        - v
+        - runId
+        - seq
+        - createdAt
+        - type
+        - data
+    RunStatusProposal:
+      type: object
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          const: run.status
+        data:
+          $ref: "#/components/schemas/RunStatusData"
+      required:
+        - type
+        - data
+    MessageDeltaEvent:
+      type: object
+      additionalProperties: false
+      properties:
+        v:
+          type: integer
+          const: 1
+        runId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        seq:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        type:
+          type: string
+          const: message.delta
+        data:
+          $ref: "#/components/schemas/MessageDeltaData"
+      required:
+        - v
+        - runId
+        - seq
+        - createdAt
+        - type
+        - data
+    MessageDeltaProposal:
+      type: object
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          const: message.delta
+        data:
+          $ref: "#/components/schemas/MessageDeltaData"
+      required:
+        - type
+        - data
+    MessageCompletedEvent:
+      type: object
+      additionalProperties: false
+      properties:
+        v:
+          type: integer
+          const: 1
+        runId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        seq:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        type:
+          type: string
+          const: message.completed
+        data:
+          $ref: "#/components/schemas/MessageCompletedData"
+      required:
+        - v
+        - runId
+        - seq
+        - createdAt
+        - type
+        - data
+    MessageCompletedProposal:
+      type: object
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          const: message.completed
+        data:
+          $ref: "#/components/schemas/MessageCompletedData"
+      required:
+        - type
+        - data
+    ToolStatusEvent:
+      type: object
+      additionalProperties: false
+      properties:
+        v:
+          type: integer
+          const: 1
+        runId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        seq:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        type:
+          type: string
+          const: tool.status
+        data:
+          $ref: "#/components/schemas/ToolStatusData"
+      required:
+        - v
+        - runId
+        - seq
+        - createdAt
+        - type
+        - data
+    ToolStatusProposal:
+      type: object
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          const: tool.status
+        data:
+          $ref: "#/components/schemas/ToolStatusData"
+      required:
+        - type
+        - data
+    InteractionRequestedEvent:
+      type: object
+      additionalProperties: false
+      properties:
+        v:
+          type: integer
+          const: 1
+        runId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        seq:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        type:
+          type: string
+          const: interaction.requested
+        data:
+          $ref: "#/components/schemas/InteractionRequestedData"
+      required:
+        - v
+        - runId
+        - seq
+        - createdAt
+        - type
+        - data
+    InteractionRequestedProposal:
+      type: object
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          const: interaction.requested
+        data:
+          $ref: "#/components/schemas/InteractionRequestedData"
+      required:
+        - type
+        - data
+    InteractionResolvedEvent:
+      type: object
+      additionalProperties: false
+      properties:
+        v:
+          type: integer
+          const: 1
+        runId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        seq:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        type:
+          type: string
+          const: interaction.resolved
+        data:
+          $ref: "#/components/schemas/InteractionResolvedData"
+      required:
+        - v
+        - runId
+        - seq
+        - createdAt
+        - type
+        - data
+    InteractionResolvedProposal:
+      type: object
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          const: interaction.resolved
+        data:
+          $ref: "#/components/schemas/InteractionResolvedData"
+      required:
+        - type
+        - data
+    ArtifactReadyEvent:
+      type: object
+      additionalProperties: false
+      properties:
+        v:
+          type: integer
+          const: 1
+        runId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        seq:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        type:
+          type: string
+          const: artifact.ready
+        data:
+          $ref: "#/components/schemas/ArtifactReadyData"
+      required:
+        - v
+        - runId
+        - seq
+        - createdAt
+        - type
+        - data
+    ArtifactReadyProposal:
+      type: object
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          const: artifact.ready
+        data:
+          $ref: "#/components/schemas/ArtifactReadyData"
+      required:
+        - type
+        - data
+    UsageUpdatedEvent:
+      type: object
+      additionalProperties: false
+      properties:
+        v:
+          type: integer
+          const: 1
+        runId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        seq:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        type:
+          type: string
+          const: usage.updated
+        data:
+          $ref: "#/components/schemas/UsageUpdatedData"
+      required:
+        - v
+        - runId
+        - seq
+        - createdAt
+        - type
+        - data
+    UsageUpdatedProposal:
+      type: object
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          const: usage.updated
+        data:
+          $ref: "#/components/schemas/UsageUpdatedData"
+      required:
+        - type
+        - data
+    RunFinishedEvent:
+      type: object
+      additionalProperties: false
+      properties:
+        v:
+          type: integer
+          const: 1
+        runId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        seq:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        type:
+          type: string
+          const: run.finished
+        data:
+          $ref: "#/components/schemas/RunFinishedData"
+      required:
+        - v
+        - runId
+        - seq
+        - createdAt
+        - type
+        - data
+    PublicEvent:
+      oneOf:
+        - $ref: "#/components/schemas/RunStatusEvent"
+        - $ref: "#/components/schemas/MessageDeltaEvent"
+        - $ref: "#/components/schemas/MessageCompletedEvent"
+        - $ref: "#/components/schemas/ToolStatusEvent"
+        - $ref: "#/components/schemas/InteractionRequestedEvent"
+        - $ref: "#/components/schemas/InteractionResolvedEvent"
+        - $ref: "#/components/schemas/ArtifactReadyEvent"
+        - $ref: "#/components/schemas/UsageUpdatedEvent"
+        - $ref: "#/components/schemas/RunFinishedEvent"
+      discriminator:
+        propertyName: type
+        mapping:
+          run.status: "#/components/schemas/RunStatusEvent"
+          message.delta: "#/components/schemas/MessageDeltaEvent"
+          message.completed: "#/components/schemas/MessageCompletedEvent"
+          tool.status: "#/components/schemas/ToolStatusEvent"
+          interaction.requested: "#/components/schemas/InteractionRequestedEvent"
+          interaction.resolved: "#/components/schemas/InteractionResolvedEvent"
+          artifact.ready: "#/components/schemas/ArtifactReadyEvent"
+          usage.updated: "#/components/schemas/UsageUpdatedEvent"
+          run.finished: "#/components/schemas/RunFinishedEvent"
+    EventProposal:
+      oneOf:
+        - $ref: "#/components/schemas/RunStatusProposal"
+        - $ref: "#/components/schemas/MessageDeltaProposal"
+        - $ref: "#/components/schemas/MessageCompletedProposal"
+        - $ref: "#/components/schemas/ToolStatusProposal"
+        - $ref: "#/components/schemas/InteractionRequestedProposal"
+        - $ref: "#/components/schemas/InteractionResolvedProposal"
+        - $ref: "#/components/schemas/ArtifactReadyProposal"
+        - $ref: "#/components/schemas/UsageUpdatedProposal"
+      description: Supervisor-origin public projection. Control plane verifies all session/run/file
+        references and allowed state transitions. Cannot append a terminal event through this
+        endpoint.
+    SourceExportCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        agentId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        releaseId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        draftRevision:
+          type: integer
+          minimum: 1
+        draftDigest:
+          type: string
+          pattern: ^sha256:[a-f0-9]{64}$
+        exportGrant:
+          type: string
+          description: "Short-lived control-plane signed authorization: owner Runner audience, releaseId,
+            draftDigest, expiry and one-use job nonce. Never pass to the sandbox."
+          minLength: 32
+          maxLength: 8192
+        spec:
+          $ref: "#/components/schemas/DraftSpec"
+      required:
+        - agentId
+        - releaseId
+        - draftRevision
+        - draftDigest
+        - exportGrant
+        - spec
+    SourceExport:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        agentId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        releaseId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        status:
+          type: string
+          enum:
+            - queued
+            - exporting
+            - ready
+            - failed
+        bundleDigest:
+          anyOf:
+            - type: string
+              pattern: ^sha256:[a-f0-9]{64}$
+            - type: "null"
+        sizeBytes:
+          type: integer
+          minimum: 0
+        error:
+          anyOf:
+            - $ref: "#/components/schemas/ExecutionError"
+            - type: "null"
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - agentId
+        - releaseId
+        - status
+        - bundleDigest
+        - sizeBytes
+        - error
+        - createdAt
+        - expiresAt
+    Lease:
+      type: object
+      additionalProperties: false
+      properties:
+        token:
+          type: string
+          minLength: 32
+          maxLength: 2048
+        epoch:
+          type: integer
+          minimum: 1
+      required:
+        - token
+        - epoch
+      description: Only a trusted supervisor receives this material. mTLS identity must match the
+        execution. Fencing rejects stale supervisors.
+    NextRunRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        waitSeconds:
+          type: integer
+          minimum: 0
+          maximum: 25
+      required:
+        - waitSeconds
+    ExecutionAssignment:
+      type: object
+      additionalProperties: false
+      properties:
+        executionId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        runId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        sessionId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        releaseId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        lease:
+          $ref: "#/components/schemas/Lease"
+        deadlineAt:
+          type: string
+          format: date-time
+        bundle:
+          type: object
+          additionalProperties: false
+          properties:
+            objectKey:
+              type: string
+            digest:
+              type: string
+              pattern: ^sha256:[a-f0-9]{64}$
+            manifestDigest:
+              type: string
+              pattern: ^sha256:[a-f0-9]{64}$
+          required:
+            - objectKey
+            - digest
+            - manifestDigest
+        launchGrant:
+          type: string
+          description: Signed policy grant binding this execution, release digests and deadline.
+          minLength: 32
+          maxLength: 8192
+        brokerToken:
+          type: string
+          description: Shown on creation and an authorized idempotent replay only. Never log or put in URLs.
+          minLength: 32
+          maxLength: 2048
+          writeOnly: false
+        input:
+          $ref: "#/components/schemas/RunInput"
+        inputFiles:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              fileId:
+                type: string
+                description: Opaque server-generated identifier; never an authorization grant.
+                pattern: ^[a-z][a-z0-9_]{7,100}$
+              objectKey:
+                type: string
+              digest:
+                type: string
+                pattern: ^sha256:[a-f0-9]{64}$
+              sizeBytes:
+                type: integer
+                minimum: 0
+            required:
+              - fileId
+              - objectKey
+              - digest
+              - sizeBytes
+      required:
+        - executionId
+        - runId
+        - sessionId
+        - releaseId
+        - lease
+        - deadlineAt
+        - bundle
+        - launchGrant
+        - brokerToken
+        - input
+        - inputFiles
+      description: Trusted supervisor only. Object keys are scoped to this assignment and resolved using
+        server-configured storage, not user-provided URLs. Mounts and normalized provider
+        configuration come from the signed immutable bundle. Do not pass owner-side source paths or
+        storage credentials into bwrap.
+    WorkerCommand:
+      type: object
+      additionalProperties: false
+      properties:
+        seq:
+          type: integer
+          minimum: 1
+        type:
+          type: string
+          const: interaction_response
+        interactionId:
+          type: string
+          description: Opaque server-generated identifier; never an authorization grant.
+          pattern: ^[a-z][a-z0-9_]{7,100}$
+        answer:
+          type: string
+          maxLength: 20000
+      required:
+        - seq
+        - type
+        - interactionId
+        - answer
+    Heartbeat:
+      type: object
+      additionalProperties: false
+      properties:
+        lease:
+          $ref: "#/components/schemas/Lease"
+        lastAcknowledgedSeq:
+          type: integer
+          minimum: 0
+        lastAppliedCommandSeq:
+          type: integer
+          minimum: 0
+      required:
+        - lease
+        - lastAcknowledgedSeq
+        - lastAppliedCommandSeq
+    HeartbeatResult:
+      type: object
+      additionalProperties: false
+      properties:
+        action:
+          type: string
+          enum:
+            - continue
+            - cancel
+        leaseExpiresAt:
+          type: string
+          format: date-time
+        acceptedSeq:
+          type: integer
+          minimum: 0
+        commands:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkerCommand"
+      required:
+        - action
+        - leaseExpiresAt
+        - acceptedSeq
+        - commands
+      description: Deliver unacknowledged control commands in order; supervisor deduplicates by seq and
+        acknowledges after applying. Cancellation takes priority over queued interaction responses.
+    EventBatch:
+      type: object
+      additionalProperties: false
+      properties:
+        lease:
+          $ref: "#/components/schemas/Lease"
+        batchId:
+          type: string
+          minLength: 8
+          maxLength: 128
+        firstSequence:
+          type: integer
+          minimum: 1
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventProposal"
+          minItems: 1
+          maxItems: 100
+      required:
+        - lease
+        - batchId
+        - firstSequence
+        - events
+      description: Maximum encoded body 1 MiB. Same batchId/body replays same receipt; different body
+        conflicts. New firstSequence must equal next durable sequence. Control plane assigns
+        timestamps, runId and v.
+    EventReceipt:
+      type: object
+      additionalProperties: false
+      properties:
+        acceptedThroughSeq:
+          type: integer
+          minimum: 1
+      required:
+        - acceptedThroughSeq
+    ExecutionComplete:
+      type: object
+      additionalProperties: false
+      properties:
+        lease:
+          $ref: "#/components/schemas/Lease"
+        lastAcknowledgedSeq:
+          type: integer
+          minimum: 0
+        status:
+          type: string
+          enum:
+            - completed
+            - failed
+            - cancelled
+        output:
+          type: array
+          items:
+            $ref: "#/components/schemas/Message"
+        error:
+          anyOf:
+            - $ref: "#/components/schemas/ExecutionError"
+            - type: "null"
+        reportedUsage:
+          $ref: "#/components/schemas/Usage"
+      required:
+        - lease
+        - lastAcknowledgedSeq
+        - status
+        - output
+        - error
+        - reportedUsage
+      description: Server reconciles broker metering, validates references, appends exactly one
+        run.finished, and commits quota settlement atomically. Failed status requires error. An
+        identical retry returns the existing terminal snapshot; conflicting terminal result is 409.
+x-design-invariants:
+  - No route here is implemented by this document.
+  - All non-upload JSON bodies reject undeclared properties; impose global encoded-body limits as
+    well as schema limits.
+  - Session tokens authorize resources; resource IDs and API keys alone never expose other caller
+    histories.
+  - Owner APIs and private resource/file APIs must not be reachable with public session/Agent
+    credentials.
+  - Snapshot and activation digests bind reviewed bytes; credentials stay outside bundles and
+    sandboxes.
+  - Any failed sandbox probe prevents execution. No local execution fallback.
+  - Anonymous Idempotency-Key is a 128-bit-or-stronger temporary secret used only for replaying
+    creation for that Agent.
+  - Closed execution sessions may retain read-only results until data expiry unless explicitly
+    deleted or revoked.
