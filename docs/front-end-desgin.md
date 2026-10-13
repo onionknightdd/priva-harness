@@ -1208,6 +1208,49 @@ Tree | Preview -> Tree      | Preview -> Tree fills the pane
 按用户要求不进行浏览器验证，运行下文文件树 / 预览和 Agent message 相关测试、
 `npm run lint` 和 `npm run build`。
 
+### Office 文件预览
+
+2026-10-13：当前支持的 DOCX / DOTX、XLSX 系列、PPTX 系列和 CSV 预览统一使用
+`@silurus/ooxml@0.88.0`。XLSX / CSV 共用顶部公式栏、底部工作表标签，以及单元格 /
+行列 / 全表选区、拖选、Shift 扩选、方向键、Tab、Escape 和复制；DOCX / PPTX
+保留连续滚动和原生文本选区。CSV 直接使用库的原生 CSV Worker 导入，按文本保留字段，
+识别 UTF-8 / UTF-16 BOM、引号内逗号和换行。旧 DocxEditor、CSV 虚拟表格与解析 Worker
+已移除；SheetJS 仅作为测试样例 ZIP 构造工具保留在 devDependencies。
+
+```text
+RichFilePreview
+  +-- spreadsheet -> CSV  -> native CSV load --+
+  |               -> XLSX -> XlsxWorkbook ----+-> XlsxSheetViewer
+  |                  CSV  -> d3-dsv values --------> active-cell formula bar
+  +-- presentation -> PPTX -> PptxScrollViewer
+  +-- document     -> DOCX -> DocxScrollViewer
+                                  |
+               preview selection bridge
+               +-- sheet ranges (zero-based)
+               +-- slide text / shapes / pixel boxes
+               +-- document text / source runs / page-point boxes
+```
+
+渲染器按格式懒加载；OOXML 的 Worker / WASM 由 Vite 打包为本地资源，关闭 Google Fonts
+自动请求。切换文件或卸载时销毁查看器和工作簿。应用外框沿用项目组件与 token，文档
+内容保留自身格式。XLSX / CSV 不再受旧表格 500 行 / 40 列预览上限约束。
+选区文本仍限制为 2,000 个单元格，坐标协议保持零基索引；CSV 行列选区沿用原生
+Excel 全网格范围。CSV 原生加载成功后使用 `d3-dsv` 解析只读文本值，公式栏按活动单元格
+坐标独立取值，不受选区上下文截断影响，也不改动当前选区。字段保持文本，包括公式外观
+的字符串。XLSX / CSV 公式栏保持单行高度，右侧箭头在下方打开等宽 Popover 浮层，
+浮层高度随换行后的内容自适应，上限为 160px 或剩余可用高度，超出后才纵向滚动。
+公式栏文本被当前宽度截断或包含换行时，点击文本自动展开；短文本保留原生选字操作。
+点击外部或按 Escape 收起，不改变工作表位置。
+浮层复用共享组件和 reduced-motion 动效。底部工作表栏固定在预览区域内、左对齐且不压缩标签，
+窄栏溢出时横向滚动，首个工作表始终可滚回。
+PPTX 返回原始幻灯片像素坐标及 shape 标识。DOCX 将 CSS 像素按缩放和 96/72 比例
+转回页面点坐标，返回实际段落 / run / source 定位及截断状态；旧编辑器的语义范围与表格
+内部 ID 字段已移除。所有格式保持只读预览。
+
+表格索引栏的 `--ooxml-xlsx-chrome-surface`、`surface-muted`、`selection-background`
+与文字颜色同步映射到项目主题 token，覆盖普通 / 选中行列及左上角，避免深色白字叠在默认
+浅底上。库监听主题变更并重绘 Canvas；工作表正文保持文件原有配色。
+
 ### 文件预览大小限制
 
 2026-09-10：`GET /api/sandbox/files/preview` 的文本内容上限为 3 MiB
@@ -2039,7 +2082,7 @@ Context Usage               ×
 | AI Elements + Streamdown | [ai-elements/message.tsx](../agent-ui/src/components/ai-elements/message.tsx) | 消息容器、操作区、流式 Markdown、代码/数学/Mermaid；复用本地 Button、Tooltip，另有内容样式。 |
 | Kibo UI 命名空间下的本地组件 | [status/index.tsx](../agent-ui/src/components/kibo-ui/status/index.tsx) | 会话状态点，已改为 `status-idle/running/warm` token 和 CSS ping。 |
 | 本地领域组件 | [agents](../agent-ui/src/components/agents)、[elements](../agent-ui/src/components/elements)、[motion](../agent-ui/src/components/motion)、[heatmap](../agent-ui/src/components/heatmap)、[interior](../agent-ui/src/components/interior) | 工具结果、Diff、任务计划、状态交换、热力图、Lightbox；没有明确来源证据的组件按本地实现记录，不推断上游。 |
-| 专业运行时库 | Recharts、Shiki、EmbedPDF、DocxEditor、PPTX Renderer、GrapesJS、SheetJS、TanStack Virtual | 分别负责图表、代码和文件内容；部分自带工具栏/视觉，见下表。 |
+| 专业运行时库 | Recharts、Shiki、EmbedPDF、@silurus/ooxml、GrapesJS | 分别负责图表、代码和文件内容；部分自带工具栏/视觉，见下表。 |
 
 [components.json](../agent-ui/components.json) 配置了 9 个扩展 registry：
 `@loading-ui`、`@heatmap`、`@reui`、`@assistant-ui`、`@animate-ui`、`@ai-elements`、
@@ -2129,7 +2172,7 @@ App TooltipProvider -> 首次悬浮 1s -> 连续切换 0ms
 | Avatar | [ui/avatar](../agent-ui/src/components/ui/avatar.tsx)，Base UI Avatar | 圆形头像及 fallback | 用户菜单、Profile |
 | Chart | [ui/chart](../agent-ui/src/components/ui/chart.tsx) + Recharts | `chart-*` token 与本地图表 Tooltip；用量页堆叠柱读取 `usage-series-1…6` token；这里的 Tooltip 是图表数据提示 | 用量页模型活动、Profile 模型用量 |
 | CalendarHeatmap | [heatmap/calendar-heatmap](../agent-ui/src/components/heatmap/calendar-heatmap.tsx)，`@heatmap` registry（SVG + date-fns）+ 本地 `ring-inset` / `monthLabelPosition` / `splitYears` | 网格热力图；基础默认读 chart token，用量页读取共享 `heatmap` token，Profile 调用点仍传固定蓝色 | 用量页 Token 活动、Profile Token 日历 |
-| Table / 数据网格 | [spreadsheet-renderer](../agent-ui/src/features/files/preview/renderers/spreadsheet-renderer.tsx)，SheetJS + TanStack Virtual + 原生 table | 工作簿解析、虚拟行列、粘性表头、本地单元格样式 | 表格文件预览；尚无通用 `ui/table` 或 DataTable 入口 |
+| Table / 数据网格 | [spreadsheet-renderer](../agent-ui/src/features/files/preview/renderers/spreadsheet-renderer.tsx)，XLSX / CSV 共用 @silurus/ooxml | 工作簿 / CSV 解析、按视口渲染、选区与公式栏 | 表格文件预览；尚无通用 `ui/table` 或 DataTable 入口 |
 | ScrollArea / 消息滚动 | [agents/code-block](../agent-ui/src/components/agents/code-block.tsx) 直接使用 Base UI ScrollArea；[ui/message-scroller](../agent-ui/src/components/ui/message-scroller.tsx) 包装 `@shadcn/react/message-scroller` | 代码滚动区与聊天跟随滚动；其余区域多用原生 overflow | 代码块、聊天历史 |
 | Direction | [ui/direction](../agent-ui/src/components/ui/direction.tsx)，Base UI DirectionProvider | 无独立视觉，仅方向上下文 | FileUpload 的内部依赖 |
 
@@ -2144,7 +2187,7 @@ App TooltipProvider -> 首次悬浮 1s -> 连续切换 0ms
 | Plan / Workflow | [elements/agent-plan](../agent-ui/src/components/elements/agent-plan.tsx)、[workflow-overview](../agent-ui/src/features/agent-message/components/workflow-overview.tsx)、[workflow-pipeline](../agent-ui/src/features/agent-message/components/workflow-pipeline.tsx) | 本地步骤/进度，组合 Card、Badge、Button 和 Disclosure |
 | Image / Lightbox | [image-renderer](../agent-ui/src/features/files/preview/renderers/image-renderer.tsx)、[interior/lightbox](../agent-ui/src/components/interior/lightbox.tsx) | 图片预览；Lightbox 为本地 Motion 手势/缩放和覆盖层实现 |
 | PDF | [pdf-renderer](../agent-ui/src/features/files/preview/renderers/pdf-renderer.tsx)，EmbedPDF | 库内查看器 UI，接入应用浅/深色与 Inter 配置；不是 shadcn 基础组件 |
-| DOCX / PPTX | [document-renderer](../agent-ui/src/features/files/preview/renderers/document-renderer.tsx)、[presentation-renderer](../agent-ui/src/features/files/preview/renderers/presentation-renderer.tsx) | DocxEditor / PPTX Renderer 渲染文档内容，应用外框使用项目 token |
+| DOCX / PPTX | [document-renderer](../agent-ui/src/features/files/preview/renderers/document-renderer.tsx)、[presentation-renderer](../agent-ui/src/features/files/preview/renderers/presentation-renderer.tsx) | @silurus/ooxml 渲染文档内容，应用外框使用项目 token |
 | HTML 编辑器 | [html-visual-editor](../agent-ui/src/features/files/preview/renderers/html-visual-editor.tsx)，GrapesJS | 编辑器自带 UI；全局 CSS 当前明确保留默认粉/紫色点缀，形成应用内可见的独立风格 |
 | HTML / JSX 生成内容 | [html-renderer](../agent-ui/src/features/files/preview/renderers/html-renderer.tsx)、[visualize-sandbox](../agent-ui/src/features/agent-message/visualize-sandbox) | iframe 中的内容；JSX 沙箱另有 Button、Badge、Card、Progress、Separator 简化实现，传入主题颜色但不共享主应用全部字号、圆角与交互 |
 
@@ -2574,6 +2617,20 @@ node --test agent-ui/tests/features/file-browser/file-tree-content-width.test.ts
 ```
 
 后端 `POST /api/sandbox/files/exists` 的单元与 HTTP 集成用例包含在 Runner 的 `npm test` 中。
+
+Office 预览的选区坐标、文本边界、CSV 编码与格式路由回归：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/files/preview/document-selection.test.ts agent-ui/tests/features/files/preview/office-selection.test.ts agent-ui/tests/features/files/preview/spreadsheet-model.test.ts agent-ui/tests/features/files/preview/csv-cell-values.test.ts
+```
+
+在开发服务器打开 `/tests/features/files/preview/office-browser.html`，点击
+**Run Office preview checks**，可检查真实 DOCX / XLSX / PPTX / CSV 渲染、选区 / 公式 /
+复制、工作表切换、损坏文件提示及卸载时的 Worker 释放。CSV 样例包含引号内逗号 / 换行
+和中文；DOCX 样例包含文本、表格和分页。追加 `?dark` 可检查深色主题的行号 / 列标对比度。
+点击 **Run spreadsheet checks** 可仅检查 CSV 超大选区取值、公式栏展开 / 滚动和窄栏工作表标签。
+点击 **Run formula bar checks** 可仅检查短文本选字、自适应浮层高度和长文本点击展开。
+样例在内存生成，不访问用户文件。
 
 选区角色与范围、浮层定位、文件引用、引用协议与截断、编辑器插入 / 删除 / 撤销、
 剪贴板（截图 / 多图片 / 图片附带 HTML 与 URL、草稿和选区保留）、IME、发送清空、

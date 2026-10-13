@@ -4,8 +4,8 @@ export {
   usePreviewSelectionReporter,
 } from "./use-preview-selection"
 export type {
-  DocxDocumentPosition,
-  DocxSemanticPosition,
+  DocxRunLocator,
+  DocxSourceLocator,
   DocumentSelectionPayload,
   PdfSelectionPayload,
   PresentationSelectionPayload,

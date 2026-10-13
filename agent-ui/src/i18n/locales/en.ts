@@ -640,6 +640,8 @@ export const en = {
     tooLargeDescription: "Text previews are limited to 3 MiB. Download the file to view it.",
     invalidJson: "The JSON content is invalid and cannot be rendered.",
     spreadsheetFormulaBar: "Formula bar",
+    expandFormulaBar: "Expand formula bar",
+    collapseFormulaBar: "Collapse formula bar",
     spreadsheetCellValue: "Selected cell value",
     spreadsheetGrid: "{{name}} spreadsheet",
     spreadsheetSheets: "Sheets",

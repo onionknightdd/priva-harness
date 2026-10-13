@@ -39,47 +39,27 @@ export type SpreadsheetSelectionPayload = PreviewSelectionPayloadBase & {
   ranges: SpreadsheetRange[]
 }
 
-export type DocxSemanticPosition = {
-  paragraphId: string
-  offset: number
+export type DocxSourceLocator = {
+  story: "body" | "header" | "footer" | "footnote" | "endnote" | "textbox"
+  storyInstance: string
+  path: number[]
 }
 
-export type DocxDocumentPosition =
-  | {
-      kind: "anchor"
-      paragraphId: string
-      search?: string
-      occurrence?: number
-    }
-  | {
-      kind: "location"
-      container:
-        | { part: "body" }
-        | { part: "header" | "footer"; relationshipId: string }
-        | { part: "footnote" | "endnote"; noteId: number }
-      path: number[]
-      offset?: number
-    }
+export type DocxRunLocator = {
+  /** Zero-based rendered page and text-run indexes. */
+  pageIndex: number
+  runIndex: number
+  paragraphId?: string
+  source?: DocxSourceLocator
+}
 
 export type DocumentSelectionPayload = PreviewSelectionPayloadBase & {
   kind: "document"
   pageIndexes: number[]
-  semanticRange?: {
-    anchor: DocxSemanticPosition
-    head: DocxSemanticPosition
-  }
-  documentRange?: {
-    from: DocxDocumentPosition
-    to: DocxDocumentPosition
-  }
-  table?: {
-    tableId: string
-    rowStart: number
-    rowEnd: number
-    columnStart: number
-    columnEnd: number
-    cellIds: string[]
-  }
+  paragraphIds: string[]
+  runs: DocxRunLocator[]
+  truncated: boolean
+  truncationReasons: ("text" | "runs")[]
 }
 
 export type PresentationSelectionPayload = PreviewSelectionPayloadBase & {

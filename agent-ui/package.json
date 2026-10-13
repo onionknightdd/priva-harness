@@ -10,11 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@aiden0z/pptx-renderer": "^1.2.4",
     "@animateicons/react": "^0.4.3",
     "@base-ui/react": "^1.7.0",
-    "@docx-editor.dev/core": "^2.4.1",
-    "@docx-editor.dev/react": "^2.4.1",
     "@embedpdf/react-pdf-viewer": "^2.15.0",
     "@fontsource-variable/inter": "^5.3.0",
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
@@ -28,17 +25,18 @@
     "@rjsf/validator-ajv8": "^6.10.0",
     "@shadcn/react": "^0.3.0",
     "@shikijs/transformers": "^4.4.3",
+    "@silurus/ooxml": "0.88.0",
     "@streamdown/cjk": "^1.0.3",
     "@streamdown/code": "^1.1.1",
     "@streamdown/math": "^1.0.2",
     "@streamdown/mermaid": "^1.0.2",
-    "@tanstack/react-virtual": "^3.14.10",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-webgl": "^0.19.0",
     "@xterm/xterm": "^6.0.0",
     "ai": "^7.0.71",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "d3-dsv": "3.0.1",
     "date-fns": "^4.4.0",
     "dequal": "^2.0.3",
     "grapesjs": "^0.22.16",
@@ -71,11 +69,11 @@
     "sucrase": "^3.35.1",
     "tailwind-merge": "^3.6.0",
     "tw-shimmer": "^0.4.12",
-    "unist-util-visit": "^5.1.0",
-    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+    "unist-util-visit": "^5.1.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
+    "@types/d3-dsv": "3.0.7",
     "@types/mdast": "^4.0.4",
     "@types/node": "^26.2.0",
     "@types/novnc__novnc": "^1.6.0",
@@ -87,6 +85,7 @@
     "oxlint": "^1.78.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
-    "vite": "^8.2.1"
+    "vite": "^8.2.1",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   }
 }

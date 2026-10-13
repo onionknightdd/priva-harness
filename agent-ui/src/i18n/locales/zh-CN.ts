@@ -638,6 +638,8 @@ export const zhCN = {
     tooLargeDescription: "文本预览上限为 3 MiB，请下载文件查看。",
     invalidJson: "JSON 内容无效，无法渲染。",
     spreadsheetFormulaBar: "公式栏",
+    expandFormulaBar: "展开公式栏",
+    collapseFormulaBar: "收起公式栏",
     spreadsheetCellValue: "选中单元格的值",
     spreadsheetGrid: "{{name}} 工作表",
     spreadsheetSheets: "工作表",

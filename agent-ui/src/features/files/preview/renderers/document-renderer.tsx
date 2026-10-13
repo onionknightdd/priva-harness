@@ -1,219 +1,91 @@
 import * as React from "react"
-import { selectionRects } from "@docx-editor.dev/core/layout"
-import type {
-  DocAnchor,
-  DocLocation,
-  DocRange,
-} from "@docx-editor.dev/core/contracts/types"
-import "@docx-editor.dev/core/styles/editor.css"
-import {
-  DocxEditor,
-  useDocxEditor,
-  useEditorState,
-} from "@docx-editor.dev/react"
+import { DocxScrollViewer } from "@silurus/ooxml/docx"
 import { useTranslation } from "react-i18next"
 
-import {
-  usePreviewSelectionReporter,
-  type DocxDocumentPosition,
-  type DocumentSelectionPayload,
-} from "@/features/files/selection"
+import { usePreviewSelectionReporter } from "@/features/files/selection"
 
 import { PreviewRequestState } from "../preview-request-state"
-import { useBinaryPreview } from "./use-binary-preview"
+import { documentPreviewSelection } from "./document-selection"
 
-function normalizeDocumentPosition(
-  position: DocAnchor | DocLocation
-): DocxDocumentPosition {
-  if ("paraId" in position) {
-    return {
-      kind: "anchor",
-      paragraphId: position.paraId,
-      search: position.search,
-      occurrence: position.occurrence,
-    }
-  }
-
-  const container = position.container
-  let normalizedContainer: Extract<
-    DocxDocumentPosition,
-    { kind: "location" }
-  >["container"]
-
-  if (container.part === "body") {
-    normalizedContainer = { part: "body" }
-  } else if ("rId" in container) {
-    normalizedContainer = {
-      part: container.part,
-      relationshipId: container.rId,
-    }
-  } else {
-    normalizedContainer = {
-      part: container.part,
-      noteId: container.noteId,
-    }
-  }
-
-  return {
-    kind: "location",
-    container: normalizedContainer,
-    path: [...position.path],
-    offset: position.offset,
-  }
-}
-
-function normalizeDocumentRange(range: DocRange | null) {
-  if (!range) {
-    return undefined
-  }
-
-  return {
-    from: normalizeDocumentPosition(range.from),
-    to: normalizeDocumentPosition(range.to),
-  }
-}
-
-function DocumentSelectionObserver({
-  fileId,
-  onParseError,
-}: {
-  fileId: string
-  onParseError: (error: string | null) => void
-}) {
-  const editor = useDocxEditor()
-  const parseError = useEditorState((snapshot) => snapshot.parseError)
-  const { clearSelection, reportSelection } =
-    usePreviewSelectionReporter(fileId)
+export function DocumentRenderer({ fileId, source }: { fileId: string; source: string }) {
+  const { t } = useTranslation()
+  const containerRef = React.useRef<HTMLDivElement>(null)
+  const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState<string | null>(null)
+  const { clearSelection, reportSelection } = usePreviewSelectionReporter(fileId)
 
   React.useEffect(() => {
-    onParseError(parseError)
-  }, [onParseError, parseError])
-
-  React.useEffect(() => {
-    if (!editor) {
-      return
+    const container = containerRef.current
+    if (!container) return
+    const controller = new AbortController()
+    let active = true
+    let viewer: DocxScrollViewer | undefined
+    let selectionFrame = 0
+    const fail = (reason: unknown) => {
+      if (!active) return
+      clearSelection()
+      setLoading(false)
+      setError(reason instanceof Error ? reason.message : String(reason))
     }
-
-    const updateSelection = (snapshot: ReturnType<typeof editor.snapshot>) => {
-      if (snapshot.selectionCollapsed) {
-        clearSelection()
-        return
-      }
-
-      const surface = editor.surface
-      const semanticRange = surface?.state().selection
-      const boxes = semanticRange
-        ? selectionRects(surface.layout(), semanticRange).map((rect) => ({
-            surfaceIndex: rect.pageIndex,
-            x: rect.x,
-            y: rect.y,
-            width: rect.width,
-            height: rect.height,
-          }))
-        : []
-      const pageIndexes = [
-        ...new Set(
-          boxes.length > 0
-            ? boxes.map((box) => box.surfaceIndex)
-            : [Math.max(0, snapshot.page.current - 1)]
-        ),
-      ]
-      const tableSelection = editor.getTableCellSelection()
-      const payload: DocumentSelectionPayload = {
-        kind: "document",
-        confidence: semanticRange ? "exact" : "inferred",
-        coordinateSpace: "docx-page-points",
-        text: editor.query({ type: "selectedText" }),
-        boxes,
-        pageIndexes,
-        semanticRange: semanticRange
-          ? {
-              anchor: { ...semanticRange.anchor },
-              head: { ...semanticRange.head },
-            }
-          : undefined,
-        documentRange: normalizeDocumentRange(snapshot.selection),
-        table: tableSelection
-          ? {
-              tableId: tableSelection.tableId,
-              rowStart: tableSelection.rows.from,
-              rowEnd: tableSelection.rows.to,
-              columnStart: tableSelection.columns.from,
-              columnEnd: tableSelection.columns.to,
-              cellIds: [...tableSelection.cellIds],
-            }
-          : undefined,
-      }
-
-      reportSelection(payload)
+    const updateSelection = () => {
+      if (!active || !viewer) return
+      const selection = documentPreviewSelection(container, viewer.getSelectionContext(), viewer.getScale())
+      if (selection) reportSelection(selection)
+      else clearSelection()
     }
+    setLoading(true)
+    setError(null)
+    clearSelection()
 
-    updateSelection(editor.snapshot())
-    const unsubscribe = editor.on("selectionChange", updateSelection)
+    void (async () => {
+      const response = await fetch(source, { signal: controller.signal })
+      if (!response.ok) throw new Error(response.statusText || "HTTP " + response.status)
+      const data = await response.arrayBuffer()
+      if (!active) return
+      const signature = new Uint8Array(data, 0, Math.min(4, data.byteLength))
+      if (signature[0] !== 0x50 || signature[1] !== 0x4b ||
+          signature[2] !== 0x03 || signature[3] !== 0x04) {
+        throw new Error(t("filePreview.loadFailedDescription"))
+      }
+      viewer = new DocxScrollViewer(container, {
+        useGoogleFonts: false,
+        enableTextSelection: true,
+        sliceLayout: true,
+        background: "transparent",
+        paddingTop: 20,
+        paddingBottom: 20,
+        paddingLeft: 16,
+        paddingRight: 16,
+        onError: fail,
+        onSelectionContextChange: updateSelection,
+        onScaleChange: () => {
+          cancelAnimationFrame(selectionFrame)
+          selectionFrame = requestAnimationFrame(updateSelection)
+        },
+      })
+      await viewer.load(data)
+      if (!active) return
+      if (viewer.pageCount === 0) throw new Error(t("filePreview.loadFailedDescription"))
+      setLoading(false)
+    })().catch(fail)
 
     return () => {
-      unsubscribe()
+      active = false
+      controller.abort()
+      cancelAnimationFrame(selectionFrame)
+      viewer?.destroy()
       clearSelection()
     }
-  }, [clearSelection, editor, reportSelection])
-
-  return null
-}
-
-export function DocumentRenderer({
-  fileId,
-  source,
-}: {
-  fileId: string
-  source: string
-}) {
-  const { i18n } = useTranslation()
-  const binary = useBinaryPreview(source)
-  const [parseError, setParseError] = React.useState<string | null>(null)
-  const document = React.useMemo(
-    () =>
-      binary.status === "ready"
-        ? new Uint8Array(binary.data)
-        : undefined,
-    [binary]
-  )
-
-  if (binary.status === "loading") {
-    return <PreviewRequestState loading />
-  }
-
-  if (binary.status === "error") {
-    return <PreviewRequestState error={binary.error} />
-  }
-
-  if (!document) {
-    return <PreviewRequestState />
-  }
-
-  if (parseError) {
-    return <PreviewRequestState error={parseError} />
-  }
+  }, [clearSelection, fileId, reportSelection, source, t])
 
   return (
-    <div className="h-full min-h-0 overflow-hidden bg-muted/30">
-      <DocxEditor.Root
-        document={document}
-        locale={i18n.resolvedLanguage ?? i18n.language}
-        mode="view"
-        zoomMode="auto"
-      >
-        <DocumentSelectionObserver
-          fileId={fileId}
-          onParseError={setParseError}
-        />
-        <DocxEditor.Loading className="h-full" />
-        <DocxEditor.Viewport
-          className="h-full min-h-0 overscroll-contain"
-          style={{ height: "100%" }}
-        >
-          <DocxEditor.Content />
-        </DocxEditor.Viewport>
-      </DocxEditor.Root>
+    <div className="relative h-full min-h-0 overflow-hidden bg-muted/30">
+      <div ref={containerRef} className="h-full min-h-0" />
+      {(loading || error) && (
+        <div className="absolute inset-0 bg-background/85">
+          <PreviewRequestState loading={loading} error={error ?? undefined} />
+        </div>
+      )}
     </div>
   )
 }
