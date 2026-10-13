@@ -2,11 +2,19 @@ import type { ProviderId, ProviderRunSpec } from '../contract/agent-provider.js'
 
 export const PI_RUN_PROVIDER_ID = 'openai'
 
+export const CLAUDE_DEFAULT_MODEL_ENV_KEYS = [
+  'ANTHROPIC_DEFAULT_OPUS_MODEL',
+  'ANTHROPIC_DEFAULT_SONNET_MODEL',
+  'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+  'ANTHROPIC_DEFAULT_FABLE_MODEL',
+] as const
+
 const CLAUDE_PROFILE_ENV_KEYS = [
   'ANTHROPIC_BASE_URL',
   'ANTHROPIC_API_KEY',
   'ANTHROPIC_AUTH_TOKEN',
   'ANTHROPIC_MODEL',
+  ...CLAUDE_DEFAULT_MODEL_ENV_KEYS,
   'CLAUDE_CODE_SUBAGENT_MODEL',
   'CLAUDE_CODE_SUBAGENT_MODEL_FORCE',
   'CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP',
@@ -38,8 +46,9 @@ export function resolveProviderRunEnv(
       ANTHROPIC_API_KEY: spec.authToken,
       ANTHROPIC_AUTH_TOKEN: spec.authToken,
       ANTHROPIC_MODEL: spec.model,
-      // Default inheritance follows /model and SDK setModel; explicit agent
-      // models still win. Disable Explore's Opus cap for custom model IDs.
+      ...resolveClaudeDefaultModelEnv(spec.model),
+      // Default inheritance follows the current model; explicit agent model
+      // IDs still win. Disable Explore's Opus cap for custom model IDs.
       CLAUDE_CODE_SUBAGENT_MODEL: 'inherit',
       CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '0',
       CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP: '1',
@@ -49,6 +58,10 @@ export function resolveProviderRunEnv(
     OPENAI_BASE_URL: spec.baseUrl,
     OPENAI_API_KEY: spec.authToken,
   })
+}
+
+export function resolveClaudeDefaultModelEnv(model: string): Record<string, string> {
+  return assignedEnv(Object.fromEntries(CLAUDE_DEFAULT_MODEL_ENV_KEYS.map((key) => [key, model])))
 }
 
 export function profileEnvKeys(provider: ProviderId): readonly string[] {

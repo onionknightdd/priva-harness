@@ -11,14 +11,15 @@ import { ClaudeRuntime } from '../../../../src/provider/claude/claude-runtime.js
 import { modelMessage, type ModelRequest } from '../../../fixtures/terminal/claude-tui-fixture.js'
 import { testRunSpec } from '../../../support/run-spec.js'
 
-it.skipIf(!resolveBundledClaudeExecutable())('inherits the current model for default and unconfigured agents while preserving explicit models across a warm SDK switch', async () => {
+it.skipIf(!resolveBundledClaudeExecutable())('keeps inherited and family-alias agents on the selected model across a warm SDK switch, preserving explicit model IDs', async () => {
   const root = await mkdtemp(join(tmpdir(), 'claude-subagent-model-'))
   const configDir = join(root, 'claude')
   await mkdir(join(configDir, 'agents'), { recursive: true })
   for (const [name, model] of [['pinned-model', 'custom-pinned-model'], ['unconfigured-model', undefined], ['inherited-model', 'inherit']]) {
     await writeFile(join(configDir, 'agents', `${name}.md`), `---\nname: ${name}\ndescription: Model selection regression fixture\n${model ? `model: ${model}\n` : ''}---\nReply OK without tools.\n`)
   }
-  const agentNames = ['Explore', 'Plan', 'general-purpose', 'pinned-model', 'unconfigured-model', 'inherited-model', 'explicit-haiku']
+  const agentNames = ['Explore', 'Plan', 'general-purpose', 'pinned-model', 'unconfigured-model', 'inherited-model',
+    'explicit-haiku', 'explicit-sonnet', 'explicit-opus', 'explicit-fable']
   const children: { turn: string; agent: string; model: string }[] = []
   const launched = new Set<string>()
   const server = Fastify()
@@ -35,9 +36,9 @@ it.skipIf(!resolveBundledClaudeExecutable())('inherits the current model for def
       launched.add(turn)
       return modelMessage(body, reply, agentNames.map((agent) => ({
         type: 'tool_use', id: `${turn}-${agent}`, name: 'Agent',
-        input: { subagent_type: agent === 'explicit-haiku' ? 'general-purpose' : agent,
+        input: { subagent_type: agent.startsWith('explicit-') ? 'general-purpose' : agent,
           description: `Check ${agent}`, prompt: `subagent-model-child:${turn}:${agent} Reply OK without tools.`,
-          ...(agent === 'explicit-haiku' ? { model: 'haiku' } : {}) },
+          ...(agent.startsWith('explicit-') ? { model: agent.slice('explicit-'.length) } : {}) },
       })), `launch-${turn}`)
     }
     return modelMessage(body, reply, [{ type: 'text', text: 'Model checks complete.' }])
@@ -65,8 +66,7 @@ it.skipIf(!resolveBundledClaudeExecutable())('inherits the current model for def
       const turnChildren = () => children.filter((child) => child.turn === turn)
       await expect.poll(() => turnChildren().map((child) => child.agent).sort()).toEqual([...agentNames].sort())
       for (const child of turnChildren()) {
-        expect(child.model).toEqual(child.agent === 'pinned-model' ? 'custom-pinned-model'
-          : child.agent === 'explicit-haiku' ? expect.stringMatching(/^claude-haiku-/u) : `custom-model-${turn}`)
+        expect(child.model).toEqual(child.agent === 'pinned-model' ? 'custom-pinned-model' : `custom-model-${turn}`)
       }
     }
     expect(starts).toBe(1)

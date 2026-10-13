@@ -30,7 +30,7 @@ export async function saveClaudeTerminalSelection(scratchDir: string, spec: Prov
   } finally { await rm(temp, { force: true }) }
 }
 
-/** Returns restart only for environment changes that a live /model cannot apply. */
+/** /model cannot refresh the four default-model aliases pinned by --settings at startup. */
 export async function configureClaudeTerminal(input: TerminalInput, scratchDir: string, spec: ProviderRunSpec, signal: AbortSignal): Promise<'applied' | 'restart'> {
   const previous = selectionSchema.parse(JSON.parse(await readFile(join(scratchDir, selectionFile), 'utf8')) as unknown)
   const next = selection(spec)
@@ -47,7 +47,7 @@ export async function configureClaudeTerminal(input: TerminalInput, scratchDir: 
       await setTimeout(100, undefined, { signal })
     } while (!signal.aborted)
   }
-  if (previous.profile !== next.profile) return 'restart'
+  if (previous.profile !== next.profile || previous.model !== next.model) return 'restart'
   const current = status?.instanceId === await readFile(join(scratchDir, 'claude-terminal-instance'), 'utf8') ? status : previous
   if (!modelMatches(current.model, next.model)) await change(input, scratchDir, 'model', next.model, signal)
   if (next.effort && current.effort !== next.effort) await change(input, scratchDir, 'effort', next.effort, signal)

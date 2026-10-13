@@ -141,6 +141,15 @@ describe('ClaudeRuntime stream input', () => {
     await query?.turnReady
     await runtime.applyRunSpec(testRunSpec({ model: 'm2' }))
     expect(query?.models).toEqual(['m2'])
+    expect(query?.settings).toHaveLength(1)
+    expect(query?.settings[0]?.model).toBe('m2')
+    expect(query?.settings[0]?.env).toMatchObject({
+      ANTHROPIC_MODEL: 'm2',
+      ANTHROPIC_DEFAULT_OPUS_MODEL: 'm2',
+      ANTHROPIC_DEFAULT_SONNET_MODEL: 'm2',
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: 'm2',
+      ANTHROPIC_DEFAULT_FABLE_MODEL: 'm2',
+    })
 
     const second = await collect(runtime.run(
       { text: 'again' },
@@ -211,10 +220,12 @@ class FakeClaudeQuery implements ClaudeQuery {
   readonly turnReady: Promise<void>
   readonly promptEnded: Promise<void>
   readonly models: string[] = []
+  readonly settings: Parameters<ClaudeQuery['applyFlagSettings']>[0][] = []
   readonly interrupt = (): Promise<undefined> => Promise.resolve(undefined)
   readonly close = (): void => undefined
-  readonly setModel = (model?: string): Promise<void> => {
-    this.models.push(model ?? '')
+  readonly applyFlagSettings: ClaudeQuery['applyFlagSettings'] = (settings) => {
+    this.settings.push(settings)
+    this.models.push(settings.model ?? '')
     return Promise.resolve()
   }
   readonly getContextUsage = (): Promise<SDKControlGetContextUsageResponse> => Promise.resolve({

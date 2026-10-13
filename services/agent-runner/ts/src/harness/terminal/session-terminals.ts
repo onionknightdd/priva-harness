@@ -161,7 +161,7 @@ export class SessionTerminals {
     const outcome = forceRestart ? 'restart' : await provider.configureTerminal({ isAlive: () => this.isAlive(ref), capture: () => this.capture(ref, { styled: true }),
       paste: (text) => this.paste(ref, text), sendKeys: (keys) => this.sendKeys(ref, keys) }, scratchDir, spec, signal)
     if (outcome !== 'restart') return false
-    if (!canRestart) throw new TerminalError('unsupported', 'Finish or stop background tasks before changing the model profile or reloading resources')
+    if (!canRestart) throw new TerminalError('unsupported', 'Finish or stop background tasks before changing the model, profile, or reloading resources')
     if (!provider.terminalLaunch) throw new TerminalError('unsupported', 'The terminal cannot be restarted')
     const launchTerminal = provider.terminalLaunch.bind(provider)
     const restarting = (async () => {

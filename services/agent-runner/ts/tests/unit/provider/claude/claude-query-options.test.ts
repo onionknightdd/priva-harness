@@ -26,6 +26,10 @@ describe('resolveClaudeQuerySettings', () => {
       ANTHROPIC_API_KEY: 'secret',
       ANTHROPIC_AUTH_TOKEN: 'secret',
       ANTHROPIC_MODEL: 'deepseek-v4-flash',
+      ANTHROPIC_DEFAULT_OPUS_MODEL: 'deepseek-v4-flash',
+      ANTHROPIC_DEFAULT_SONNET_MODEL: 'deepseek-v4-flash',
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: 'deepseek-v4-flash',
+      ANTHROPIC_DEFAULT_FABLE_MODEL: 'deepseek-v4-flash',
       CLAUDE_CODE_SUBAGENT_MODEL: 'inherit',
       CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '0',
       CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP: '1',
@@ -38,6 +42,10 @@ describe('resolveClaudeQuerySettings', () => {
       }).env,
     ).toEqual({
       ANTHROPIC_MODEL: 'deepseek-v4-flash',
+      ANTHROPIC_DEFAULT_OPUS_MODEL: 'deepseek-v4-flash',
+      ANTHROPIC_DEFAULT_SONNET_MODEL: 'deepseek-v4-flash',
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: 'deepseek-v4-flash',
+      ANTHROPIC_DEFAULT_FABLE_MODEL: 'deepseek-v4-flash',
       CLAUDE_CODE_SUBAGENT_MODEL: 'inherit',
       CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '0',
       CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP: '1',
@@ -123,6 +131,21 @@ describe('resolveClaudeQueryOptions', () => {
       CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '0',
       CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP: '1',
     })
+  })
+
+  it('overrides inherited model-family mappings in both the process and flag settings', () => {
+    for (const family of ['OPUS', 'SONNET', 'HAIKU', 'FABLE']) {
+      vi.stubEnv(`ANTHROPIC_DEFAULT_${family}_MODEL`, `old-${family.toLowerCase()}`)
+    }
+    const options = resolveClaudeQueryOptions(spec)
+    const expected = {
+      ANTHROPIC_DEFAULT_OPUS_MODEL: spec.model,
+      ANTHROPIC_DEFAULT_SONNET_MODEL: spec.model,
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: spec.model,
+      ANTHROPIC_DEFAULT_FABLE_MODEL: spec.model,
+    }
+    expect(options.env).toMatchObject(expected)
+    expect(options.settings).toMatchObject({ env: expected })
   })
 
   it('omits empty overlay env keys and maps effort, resume, and fork', () => {

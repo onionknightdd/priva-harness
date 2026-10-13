@@ -13,7 +13,7 @@ function fixture(configDir = '/tmp/claude') {
   const stopTask = vi.fn(() => Promise.resolve())
   const query: ClaudeQuery = {
     [Symbol.asyncIterator]: () => source.iterate()[Symbol.asyncIterator](),
-    close: () => source.close(), interrupt: () => Promise.resolve(undefined), setModel: () => Promise.resolve(),
+    close: () => source.close(), interrupt: () => Promise.resolve(undefined), applyFlagSettings: () => Promise.resolve(),
     getContextUsage: () => Promise.reject(new Error('unused')), stopTask,
   }
   const runtime = new ClaudeRuntime(testRunSpec(), { kind: 'resume', session: { provider: 'claude', id: 's' } }, configDir, ({ options }) => {

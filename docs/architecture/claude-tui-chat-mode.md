@@ -238,7 +238,30 @@ Pi 在原生 MCP 定义中写 `disabled` 和 `excludeTools`，过滤判断复用
 单工具禁用、服务禁用及恢复后的选择保留，不调用真实模型 API。
 
 模型配置由 `core/resource/provider-run-env.ts` 同时写入进程环境与会话级的
-`settings.env`。Claude 的 Explore、Plan、general-purpose 默认继承当前会话模型，
+`settings.env`。启动时 `ANTHROPIC_MODEL` 和
+`ANTHROPIC_DEFAULT_OPUS_MODEL`、`ANTHROPIC_DEFAULT_SONNET_MODEL`、
+`ANTHROPIC_DEFAULT_HAIKU_MODEL`、`ANTHROPIC_DEFAULT_FABLE_MODEL` 均设为所选模型，
+覆盖继承的同名变量。SDK 暖会话使用 `applyFlagSettings` 同时更新 `model` 与
+`env`，因此显式使用这四个家族别名的子代理也跟随当前选择；自定义子代理明确
+指定的具体模型 ID 保留原生优先级。
+
+Composer 的模型选择在启动或配置终端时同步保存到用户级
+`$CLAUDE_CONFIG_DIR/settings.json`（默认 `~/.claude/settings.json`）的 `model`
+和 `env.ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU,FABLE}_MODEL`。不改写项目的
+`.claude/settings.json` / `.claude/settings.local.json`，也不把 profile 凭证复制到用户配置。
+Docker 部署中该文件为 `/data/home/.claude/settings.json`。不同会话共用用户默认值，
+最后一次保存生效；已运行会话的环境及会话级 settings 保留各自选中的映射。
+更新按文件串行、原子替换，保留其他设置及环境变量；无变化时不重写，损坏的设置返回错误。
+
+```text
+Composer model -> user settings.json: model + env.ANTHROPIC_DEFAULT_*_MODEL
+               -> process env + session settings.env
+                  ANTHROPIC_MODEL = ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU,FABLE}_MODEL
+TUI model switch -> respawn --resume -> same session, updated aliases
+SDK model switch -> applyFlagSettings({ model, env }) -> same process, updated aliases
+```
+
+Claude 的 Explore、Plan、general-purpose 默认继承当前会话模型，
 自定义子代理未指定模型时也继承，明确指定时保留：
 `CLAUDE_CODE_SUBAGENT_MODEL=inherit`、`CLAUDE_CODE_SUBAGENT_MODEL_FORCE=0`，并设置
 `CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP=1`。最后一项是当前捆绑 CLI 的原生开关，
@@ -246,7 +269,7 @@ Pi 在原生 MCP 定义中写 `disabled` 和 `excludeTools`，过滤判断复用
 的自定义模型 ID 也会触发该上限。原生 SDK / TUI 集成测试覆盖这项行为，升级依赖时必须通过。
 显式关闭强制继承，避免 runner 环境或用户设置中的同名变量覆盖自定义 agent 的
 `model`。Agent 调用明确传入的模型仍遵循 Claude 原生优先级。
-使用 `inherit` 而非启动时的模型 ID，使 SDK `setModel`、气泡选择器和
+使用 `inherit` 而非启动时的模型 ID，使 SDK `applyFlagSettings`、气泡选择器和
 终端 `/model` 切换后创建的子代理立即跟随当前模型；已经运行的子代理不会被重新选型。
 Pi 的对应策略见 [Subagents / Memory](subagents-memory-migration.md#subagent-model-selection)。
 
@@ -257,7 +280,7 @@ Agent model selection ----------------------------------------+
   +-- explicit model ------------------------> native model resolution
   +-- default / omitted / inherit -----------> current session model
                                                   ^
-                                 SDK setModel / TUI /model
+                                 SDK applyFlagSettings / TUI /model
 ```
 
 同一 runner 内的预置操作按配置文件路径串行执行完整的读 / 改 / 写，避免并发首次
@@ -456,19 +479,27 @@ TMPDIR=/tmp npm test -- tests/integration/transport/websocket/terminal-notificat
 生成中等待当前轮次结束。配置与聊天输入共用串行队列，但配置不创建 run、不发送用户消息，
 通常不调用模型；缩小窗口且已用上下文超过目标时先执行原生 `/compact`。
 新会话尚无 sessionId 时保留本地选择，首次发送时初始化原生进程。
-相同服务配置下向原生输入框提交 `/model <id>`、`/effort <level>`；只自动确认这两个
-命令的明确确认对话框。statusLine 写入当前 instanceId 的 model / effort 后，
+模型变化时重新生成启动环境和会话 settings，重启同一 pane 并恢复同一会话。
+effort 单独变化仍提交原生 `/effort <level>`；映射未变但原生当前模型偏离时，
+用 `/model <id>` 恢复选择。只自动确认这两个命令的明确确认对话框。
+statusLine 写入当前 instanceId 的 model / effort 后，
 回传带 requestId 的 `session.config` 确认。超时或不支持的值返回同 requestId 的错误。
 发送聊天前仍核对实际配置，避免用旧模型执行消息。
 
 ```text
-Composer 手动选择 -> session.configure -> 空闲 / 等当前轮次完成 -> /model、/effort
-                    |                                      -> statusLine -> session.config(requestId)
-                    +-> 环境变化 -> 原 pane respawn --resume -> 新实例 ready + statusLine -> 确认
+Composer 手动选择 -> session.configure -> 空闲 / 等当前轮次完成
+                    +-> model / 环境变化 -> 保存映射 -> 原 pane respawn --resume
+                    |                                  -> 新实例 ready + statusLine -> 确认
+                    +-> effort -> /effort -> statusLine -> session.config(requestId)
 原生 /model -> caveat + command + stdout -> modelChange -> Web UI 卡片
 ```
 
-环境配置不能通过 /model 更新，因此换服务地址、凭证、图片模型、建议设置或上下文窗口时，
+原生终端的家族选项使用默认模型别名，不读取产品的 profile 模型目录；四个别名均映射到
+Composer 选择的实际模型，终端仍支持手动 `/model <完整ID>`。后者遵循原生行为，
+修改当前主模型及用户 `model`，本次 Composer 设置的四个别名保持映射；再次通过 Composer
+选择实际模型时统一重映射。
+CLI 启动时固定 `--settings` 的内容，运行中只改文件或执行 `/model` 都不能刷新其中的映射。
+因此切换模型、服务地址、凭证、图片模型、建议设置或上下文窗口时，
 在轮次空闲且没有后台任务后重启同一 pane，resume 同一转录。查看者连接保留。
 窗口选择独立于模型名，默认 200000；1000000 为 Claude 模型追加 `[1m]`。
 200K 设置 `CLAUDE_CODE_DISABLE_1M_CONTEXT=1`，1M 设置为 `0`；两档均显式设置
@@ -476,6 +507,8 @@ Composer 手动选择 -> session.configure -> 空闲 / 等当前轮次完成 -> 
 这是必要的，因为部分 Claude 模型默认拥有 1M，仅删除模型后缀不能限制为 200K。
 重启后等待新实例 ready 与 statusLine 的实际窗口确认，再返回 requestId；失败恢复先前配置。
 会话元数据保存已确认窗口，重连快照恢复；不修改全局 profile 的默认模型。
+`terminal-model.test.ts` 用真实 CLI 和本地模拟端点覆盖四种显式子代理别名的实际请求、
+切换后的重映射、选择后立即保存用户配置、项目配置保留以及同一会话 / 查看者连接的恢复。
 
 ```text
 Composer 200K / 1M -> contextWindow -> 验证 200000 / 1000000

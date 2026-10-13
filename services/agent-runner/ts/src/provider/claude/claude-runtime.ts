@@ -43,7 +43,7 @@ export const CLAUDE_DISABLED_SKILLS = [
   'run-skill-generator',
 ] as const
 
-export type ClaudeQuery = Pick<Query, 'interrupt' | 'close' | 'setModel' | 'getContextUsage'> & Partial<Pick<Query, 'stopTask'>>
+export type ClaudeQuery = Pick<Query, 'interrupt' | 'close' | 'applyFlagSettings' | 'getContextUsage'> & Partial<Pick<Query, 'stopTask'>>
   & AsyncIterable<SDKMessage>
 
 export type ClaudeQueryStart = (args: {
@@ -120,7 +120,7 @@ export class ClaudeRuntime implements AgentRuntime {
 
   async applyRunSpec(spec: ProviderRunSpec): Promise<void> {
     if (this.query !== undefined && this.spec.model !== spec.model) {
-      await this.query.setModel(spec.model)
+      await this.query.applyFlagSettings({ model: spec.model, env: resolveProviderRunEnv(spec) })
     }
     this.spec = spec
   }

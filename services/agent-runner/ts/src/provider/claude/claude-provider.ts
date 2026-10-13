@@ -9,6 +9,7 @@ import type {
 import type { ProviderSessionStore } from '../../core/contract/provider-session-store.js'
 import {
   TerminalError,
+  type TerminalInput,
   type TerminalLaunchContext,
   type TerminalLaunchSpec,
 } from '../../core/contract/terminal-service.js'
@@ -19,6 +20,7 @@ import { measureClaudeContextUsage } from './claude-context-usage.js'
 import { resolveBundledClaudeExecutable } from './claude-executable.js'
 import { claudeGlobalConfigFilePath } from './claude-paths.js'
 import { ensureClaudeProjectTrusted } from './claude-project-trust.js'
+import { saveClaudeModelSettings } from './claude-model-settings.js'
 import { ClaudeRuntime } from './claude-runtime.js'
 import { claudeTerminalLaunch } from './claude-terminal-launch.js'
 import { readClaudeTerminalState, recordClaudeTerminalState } from './claude-terminal-hooks.js'
@@ -56,7 +58,6 @@ export class ClaudeProvider implements AgentProvider {
   readonly parseTerminalComposer = claudeComposer
   readonly terminalPromptText = claudePromptText
   readonly completeTerminalCommand = completeClaudeLocalCommand
-  readonly configureTerminal = configureClaudeTerminal
   readonly sessions: ProviderSessionStore
 
   constructor(private readonly options: ClaudeProviderOptions) {
@@ -111,7 +112,15 @@ export class ClaudeProvider implements AgentProvider {
       this.options.globalConfigFilePath ?? claudeGlobalConfigFilePath(),
       { cwd: spec.cwd, apiKey: spec.authToken, ...(context.colorScheme === undefined ? {} : { colorScheme: context.colorScheme }) },
     )
-    return claudeTerminalLaunch({ target, spec, executable, context, tools: this.options.tools ?? [] })
+    const launch = await claudeTerminalLaunch({ target, spec, executable, context, tools: this.options.tools ?? [] })
+    await saveClaudeModelSettings(this.options.globalConfigDir, spec.model)
+    return launch
+  }
+
+  async configureTerminal(input: TerminalInput, scratchDir: string, spec: ProviderRunSpec, signal: AbortSignal): Promise<'applied' | 'restart'> {
+    const outcome = await configureClaudeTerminal(input, scratchDir, spec, signal)
+    if (outcome === 'applied') await saveClaudeModelSettings(this.options.globalConfigDir, spec.model)
+    return outcome
   }
 
   measureContextUsage(session: SessionRef, spec: ProviderRunSpec): Promise<ContextUsage> {

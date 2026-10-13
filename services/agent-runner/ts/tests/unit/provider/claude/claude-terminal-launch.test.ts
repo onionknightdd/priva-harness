@@ -40,6 +40,10 @@ describe('claudeTerminalLaunch', () => {
     expect(launch.env).toMatchObject({
       ANTHROPIC_AUTH_TOKEN: 'secret',
       ANTHROPIC_MODEL: 'deepseek-v4-flash',
+      ANTHROPIC_DEFAULT_OPUS_MODEL: 'deepseek-v4-flash',
+      ANTHROPIC_DEFAULT_SONNET_MODEL: 'deepseek-v4-flash',
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: 'deepseek-v4-flash',
+      ANTHROPIC_DEFAULT_FABLE_MODEL: 'deepseek-v4-flash',
       CLAUDE_CODE_SUBAGENT_MODEL: 'inherit',
       CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '0',
       CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP: '1',
@@ -52,7 +56,10 @@ describe('claudeTerminalLaunch', () => {
     expect(settings).toMatchObject({
       enableAllProjectMcpServers: true,
       skipDangerousModePermissionPrompt: true,
-      env: { ANTHROPIC_AUTH_TOKEN: 'secret', CLAUDE_CODE_SUBAGENT_MODEL: 'inherit',
+      env: { ANTHROPIC_AUTH_TOKEN: 'secret', ANTHROPIC_MODEL: 'deepseek-v4-flash',
+        ANTHROPIC_DEFAULT_OPUS_MODEL: 'deepseek-v4-flash', ANTHROPIC_DEFAULT_SONNET_MODEL: 'deepseek-v4-flash',
+        ANTHROPIC_DEFAULT_HAIKU_MODEL: 'deepseek-v4-flash', ANTHROPIC_DEFAULT_FABLE_MODEL: 'deepseek-v4-flash',
+        CLAUDE_CODE_SUBAGENT_MODEL: 'inherit',
         CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '0', CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP: '1' },
     })
   })

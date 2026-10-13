@@ -11,7 +11,7 @@ async function fixture() {
   const events: AgentEvent[] = []
   let callback: CanUseTool | undefined
   const query: ClaudeQuery = { [Symbol.asyncIterator]: () => source.iterate()[Symbol.asyncIterator](),
-    close: () => source.close(), interrupt: () => Promise.resolve(undefined), setModel: () => Promise.resolve(), getContextUsage: () => Promise.reject(new Error('unused')) }
+    close: () => source.close(), interrupt: () => Promise.resolve(undefined), applyFlagSettings: () => Promise.resolve(), getContextUsage: () => Promise.reject(new Error('unused')) }
   const runtime = new ClaudeRuntime(testRunSpec(), { kind: 'new', provider: 'claude', sessionId: 'interaction-test' }, '/tmp/priva-interaction-tests', ({ options }) => {
     callback = options.canUseTool
     return query
