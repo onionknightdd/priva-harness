@@ -1,9 +1,15 @@
+import type { AgentRunEffort } from "@/features/agent-message/run-agent-session"
+
+export const CLASSIFIER_APIS = ["typesafe-system-one", "cloudflare-workers-ai-system-one", "llama-cpp-classify", "openai-decisions"] as const
+export type ClassifierApi = (typeof CLASSIFIER_APIS)[number]
+
 const MODEL_PROFILE_API_PREFIX = "/api/sandbox/credentials/profiles"
 
 type ModelCapabilityCatalogResponse = {
   image_understanding: string[]
   image_generation: string[]
   image_edit: string[]
+  classification: string[]
 }
 
 type ModelProfileSummaryResponse = {
@@ -15,6 +21,9 @@ type ModelProfileSummaryResponse = {
   image_understanding_model: string | null
   image_generation_model: string | null
   image_edit_model: string | null
+  classifier_api: ClassifierApi | null
+  classifier_model: string | null
+  classifier_profile_id: string | null
   model_capabilities: ModelCapabilityCatalogResponse
   auth_token_set: boolean
   model_count: number | null
@@ -29,6 +38,12 @@ type ModelListResponse = {
   models: Array<{ id: string }>
 }
 
+type ModelCapabilitiesListResponse = {
+  models: Array<{ id: string; pi_effort_levels: AgentRunEffort[] }>
+}
+
+export type ProfileModelCapabilities = { id: string; piEffortLevels: readonly AgentRunEffort[] }
+
 type ErrorResponse = {
   detail?: string
 }
@@ -37,6 +52,7 @@ export type ModelCapabilityCatalog = {
   imageUnderstanding: string[]
   imageGeneration: string[]
   imageEdit: string[]
+  classification: string[]
 }
 
 export type ModelProfileSummary = {
@@ -47,6 +63,9 @@ export type ModelProfileSummary = {
   imageUnderstandingModel: string | null
   imageGenerationModel: string | null
   imageEditModel: string | null
+  classifierApi: ClassifierApi | null
+  classifierModel: string | null
+  classifierProfileId: string | null
   modelCapabilities: ModelCapabilityCatalog
   authTokenSet: boolean
   modelCount: number | null
@@ -65,6 +84,9 @@ export type ModelProfileCreateInput = {
   imageUnderstandingModel: string | null
   imageGenerationModel: string | null
   imageEditModel: string | null
+  classifierApi: ClassifierApi | null
+  classifierModel: string | null
+  classifierProfileId: string | null
   modelCapabilities?: ModelCapabilityCatalog
 }
 
@@ -76,6 +98,9 @@ export type ModelProfileUpdateInput = {
   imageUnderstandingModel: string | null
   imageGenerationModel: string | null
   imageEditModel: string | null
+  classifierApi: ClassifierApi | null
+  classifierModel: string | null
+  classifierProfileId: string | null
 }
 
 export type SavedModelProfileTestInput = {
@@ -87,6 +112,7 @@ export type ModelCapability =
   | "image_understanding"
   | "image_generation"
   | "image_edit"
+  | "classification"
 
 type ModelCapabilityProbeResponse = {
   model_id: string
@@ -150,6 +176,9 @@ function toProfileSummary(
     imageUnderstandingModel: profile.image_understanding_model,
     imageGenerationModel: profile.image_generation_model,
     imageEditModel: profile.image_edit_model,
+    classifierApi: profile.classifier_api,
+    classifierModel: profile.classifier_model,
+    classifierProfileId: profile.classifier_profile_id,
     modelCapabilities: toCapabilityCatalog(profile.model_capabilities),
     authTokenSet: profile.auth_token_set,
     modelCount: profile.model_count,
@@ -165,6 +194,9 @@ function toRequestBody(input: ModelProfileCreateInput) {
     image_understanding_model: input.imageUnderstandingModel,
     image_generation_model: input.imageGenerationModel,
     image_edit_model: input.imageEditModel,
+    classifier_api: input.classifierApi,
+    classifier_model: input.classifierModel,
+    classifier_profile_id: input.classifierProfileId,
     ...(input.modelCapabilities === undefined
       ? {}
       : {
@@ -172,6 +204,7 @@ function toRequestBody(input: ModelProfileCreateInput) {
             image_understanding: input.modelCapabilities.imageUnderstanding,
             image_generation: input.modelCapabilities.imageGeneration,
             image_edit: input.modelCapabilities.imageEdit,
+            classification: input.modelCapabilities.classification,
           },
         }),
   }
@@ -195,12 +228,19 @@ export async function listProfileModels(
   profileId: string,
   signal?: AbortSignal
 ): Promise<string[]> {
-  const response = await requestJson<ModelListResponse>(
+  return (await listProfileModelCapabilities(profileId, signal)).map((model) => model.id)
+}
+
+export async function listProfileModelCapabilities(
+  profileId: string,
+  signal?: AbortSignal
+): Promise<ProfileModelCapabilities[]> {
+  const response = await requestJson<ModelCapabilitiesListResponse>(
     profileEndpoint(profileId, "/models"),
     signal ? { signal } : undefined
   )
 
-  return response.models.map((model) => model.id)
+  return response.models.map((model) => ({ id: model.id, piEffortLevels: model.pi_effort_levels }))
 }
 
 export async function createModelProfile(input: ModelProfileCreateInput) {
@@ -232,6 +272,9 @@ export async function updateModelProfile(
         image_understanding_model: input.imageUnderstandingModel,
         image_generation_model: input.imageGenerationModel,
         image_edit_model: input.imageEditModel,
+        classifier_api: input.classifierApi,
+        classifier_model: input.classifierModel,
+        classifier_profile_id: input.classifierProfileId,
         ...(input.authToken === undefined
           ? {}
           : { auth_token: input.authToken }),
@@ -328,7 +371,7 @@ export async function probeDraftModelCapability(
 
 export async function probeSavedModelCapability(
   profileId: string,
-  input: SavedModelProfileTestInput,
+  input: SavedModelProfileTestInput & { classifierApi?: ClassifierApi | null; classifierProfileId?: string | null },
   modelId: string,
   capability: ModelCapability,
   signal?: AbortSignal
@@ -343,6 +386,8 @@ export async function probeSavedModelCapability(
         ...(input.authToken === undefined
           ? {}
           : { auth_token: input.authToken }),
+        ...(input.classifierApi === undefined ? {} : { classifier_api: input.classifierApi }),
+        ...(input.classifierProfileId === undefined ? {} : { classifier_profile_id: input.classifierProfileId }),
         model_id: modelId,
         capability,
       }),
@@ -368,6 +413,7 @@ export function emptyModelCapabilityCatalog(): ModelCapabilityCatalog {
     imageUnderstanding: [],
     imageGeneration: [],
     imageEdit: [],
+    classification: [],
   }
 }
 
@@ -378,6 +424,7 @@ function toCapabilityCatalog(
     imageUnderstanding: [...(raw?.image_understanding ?? [])],
     imageGeneration: [...(raw?.image_generation ?? [])],
     imageEdit: [...(raw?.image_edit ?? [])],
+    classification: [...(raw?.classification ?? [])],
   }
 }
 
@@ -391,6 +438,8 @@ function catalogKey(
       return "imageGeneration"
     case "image_edit":
       return "imageEdit"
+    case "classification":
+      return "classification"
   }
 }
 

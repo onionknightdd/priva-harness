@@ -54,7 +54,7 @@ describe('container computer MCP bootstrap', () => {
     await configure()
     const definition = { command: '/usr/local/bin/cua-driver', args: ['mcp', '--direct'], env: desktopEnv }
     expect(await readJson(claudePath)).toEqual({ mcpServers: { computer: { ...definition, type: 'stdio', alwaysLoad: true } } })
-    expect(await readJson(piPath)).toEqual({ mcpServers: { computer: { ...definition, lifecycle: 'eager' } } })
+    expect(await readJson(piPath)).toEqual({ mcpServers: { computer: { ...definition, exposure: 'codemode' } } })
     const sourceSkill = await readFile(resolve('docker/skills/computer-desktop/SKILL.md'), 'utf8')
     for (const directory of [claudeDir, piDir]) {
       const skill = join(directory, 'skills/computer-desktop/SKILL.md')
@@ -83,22 +83,22 @@ describe('container computer MCP bootstrap', () => {
     }
   })
 
-  it('retains unrelated native settings and accepts the existing Pi JSONC dictionary spelling', async () => {
+  it('retains unrelated native settings and existing native Pi servers', async () => {
     const claude = { theme: 'dark', projects: { '/workspace': { hasTrustDialogAccepted: true } },
       mcpServers: { existing: { command: 'other' } } }
     await json(claudePath, claude)
     await mkdir(piDir)
-    await writeFile(piPath, '{ /* user MCP settings */ "mcp-servers": { "existing": { "command": "other" }, }, "settings": { "toolPrefix": "server" }, }')
+    await json(piPath, { mcpServers: { existing: { command: 'other' } }, autoEnableCodemode: true })
     await configure()
     expect(await readJson(claudePath)).toMatchObject(claude)
-    expect(await readJson(piPath)).toMatchObject({ 'mcp-servers': { existing: { command: 'other' }, computer: { command: '/usr/local/bin/cua-driver' } }, settings: { toolPrefix: 'server' } })
-    expect((await readJson(piPath))['mcpServers']).toBeUndefined()
+    expect(await readJson(piPath)).toMatchObject({ mcpServers: { existing: { command: 'other' }, computer: { command: '/usr/local/bin/cua-driver' } }, autoEnableCodemode: true })
+    expect((await readJson(piPath))['mcp-servers']).toBeUndefined()
     expect(await readdir(claudeDir)).not.toEqual(expect.arrayContaining([expect.stringContaining('.tmp')]))
   })
 
   it('never rewrites an existing computer definition, disabled entry, policy, or user skill on restart', async () => {
     const claude = { mcpServers: { computer: { command: 'my-computer', args: ['custom'] } }, disabledMcpServers: ['computer'] }
-    const pi = { mcpServers: { computer: { disabled: true } }, settings: { directTools: false } }
+    const pi = { mcpServers: { computer: { command: 'my-computer', enabled: false, toolExposure: { click: 'hidden' } } } }
     await json(claudePath, claude)
     await json(piPath, pi)
     const skill = join(piDir, 'skills/computer-desktop/SKILL.md')
@@ -113,7 +113,7 @@ describe('container computer MCP bootstrap', () => {
     expect(await readFile(skill, 'utf8')).toBe('My existing desktop skill\n')
   })
 
-  it.each(['{ broken', '[]', '{"mcpServers":[]}', '{"mcpServers":null}', '{"mcpServers":{"computer":null}}'])('rejects invalid configuration before changing the other provider: %s', async (invalid) => {
+  it.each(['{ broken', '{ /* JSONC */ }', '{"mcp-servers":{}}', '{"settings":{}}', '{"mcpServers":{"computer":{"command":"custom","disabled":true}}}', '{"mcpServers":{"computer":{"command":"custom","lifecycle":"eager"}}}', '[]', '{"mcpServers":[]}', '{"mcpServers":null}', '{"mcpServers":{"computer":null}}'])('rejects invalid configuration before changing the other provider: %s', async (invalid) => {
     await json(claudePath, { mcpServers: { existing: { command: 'keep' } } })
     await mkdir(piDir)
     await writeFile(piPath, invalid)

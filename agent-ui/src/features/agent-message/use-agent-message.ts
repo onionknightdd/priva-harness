@@ -28,6 +28,8 @@ import { updatePromptSuggestion, type PromptSuggestion } from "./prompt-suggesti
 import { baseModelReference, DEFAULT_CONTEXT_WINDOW, type ContextWindow } from "./model-context"
 import { isLiveComputerToolStart } from "./computer-tool-data"
 
+const AWAITING_NATIVE_EFFORT_LEVELS: readonly AgentRunEffort[] = []
+
 export function useAgentMessage({ onComputerToolStarted }: { onComputerToolStarted?: () => void } = {}) {
   const { t } = useTranslation()
   const { resolvedTheme } = useTheme()
@@ -48,6 +50,7 @@ export function useAgentMessage({ onComputerToolStarted }: { onComputerToolStart
   const [modelReference, setModelReference] = React.useState<string | null>(null)
   const [imageInputModels, setImageInputModels] = React.useState<ReadonlySet<string>>(() => new Set())
   const [effort, setEffort] = React.useState<AgentRunEffort>("medium")
+  const [effortLevels, setEffortLevels] = React.useState<readonly AgentRunEffort[] | undefined>(undefined)
   const [contextWindow, setContextWindow] = React.useState<ContextWindow>(DEFAULT_CONTEXT_WINDOW)
   const [configurationPending, setConfigurationPending] = React.useState(false)
   const [messages, setMessages] = React.useState<AgentThreadMessage[]>([])
@@ -94,11 +97,12 @@ export function useAgentMessage({ onComputerToolStarted }: { onComputerToolStart
       const acknowledged = Boolean(frame.requestId && frame.requestId === configurationRequestRef.current)
       if (acknowledged) { configurationRequestRef.current = undefined; setConfigurationPending(false) }
       // Keep the latest choice visible while older native confirmations arrive.
-      const selection = JSON.stringify([id, config.profileId, config.model, config.effort, config.contextWindow])
+      const selection = JSON.stringify([id, config.profileId, config.model, config.effort, config.effortLevels, config.contextWindow])
       if (!configurationRequestRef.current && (acknowledged || selection !== nativeConfigRef.current)) {
         nativeConfigRef.current = selection
         if (config.profileId) setModelReference(baseModelReference(`${config.profileId}:${config.model}`))
-        if (config.effort) setEffort(config.effort)
+        if (config.effort !== undefined) setEffort(config.effort)
+        setEffortLevels(config.effortLevels)
         setContextWindow(config.contextWindow)
       }
       contextRequestRef.current++
@@ -192,6 +196,8 @@ export function useAgentMessage({ onComputerToolStarted }: { onComputerToolStart
     latestConfigRef.current = undefined
     configurationRequestRef.current = undefined
     setConfigurationPending(false)
+    setEffortLevels(undefined)
+    setEffort("medium")
     setContextWindow(DEFAULT_CONTEXT_WINDOW)
     setConnected(false)
     setInteractions([])
@@ -302,15 +308,20 @@ export function useAgentMessage({ onComputerToolStarted }: { onComputerToolStart
       setConfigurationPending(false)
       const native = latestConfigRef.current
       if (native?.profileId) setModelReference(baseModelReference(`${native.profileId}:${native.model}`))
-      if (native?.effort) setEffort(native.effort)
+      if (native?.effort !== undefined) setEffort(native.effort)
+      setEffortLevels(native?.effortLevels)
       setContextWindow(native?.contextWindow ?? DEFAULT_CONTEXT_WINDOW)
       setConnectionError(error instanceof Error ? error.message : String(error))
     })
   }, [runHarnessId, runSessionId, runCwd, inputSuggestions, ensureConnection])
-  const changeModelReference = React.useCallback((model: string | null, source?: "user") => {
+  const changeModelReference = React.useCallback((model: string | null, source?: "user", nextEffort = effort) => {
     const reference = model === null ? null : baseModelReference(model)
     setModelReference(reference)
-    if (source === "user") synchronizeSelection(reference, effort, contextWindow)
+    if (source === "user") {
+      setEffortLevels(undefined)
+      setEffort(nextEffort)
+      synchronizeSelection(reference, nextEffort, contextWindow)
+    }
   }, [effort, contextWindow, synchronizeSelection])
   const changeEffort = React.useCallback((next: AgentRunEffort) => {
     setEffort(next)
@@ -329,7 +340,11 @@ export function useAgentMessage({ onComputerToolStarted }: { onComputerToolStart
   }, [dismissPromptSuggestion])
   const isStreaming = activeRunId !== null || messages.some((message) => message.status === "streaming")
   return {
-    interactions, respondPermission, composerAttachments, draft, messages, contextUsage, modelReference, effort, contextWindow, configurationPending, isConnected, connectionError,
+    interactions, respondPermission, composerAttachments, draft, messages, contextUsage, modelReference, effort,
+    // Existing sessions wait for their native configuration instead of changing
+    // the TUI based on the profile catalog while reconnecting.
+    effortLevels: runSessionId ? effortLevels ?? AWAITING_NATIVE_EFFORT_LEVELS : effortLevels,
+    contextWindow, configurationPending, isConnected, connectionError,
     isStreaming,
     promptSuggestion: inputSuggestions && isConnected && !isStreaming && suggestion?.scope === `${runHarnessId}:${runSessionId}` && !suggestion.dismissed ? suggestion.text : undefined,
     dismissPromptSuggestion,

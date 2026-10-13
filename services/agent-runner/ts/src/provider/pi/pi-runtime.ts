@@ -8,6 +8,7 @@ import { asRecord, stringField } from '../../core/event/json-record.js'
 import { piTaskNotices } from './pi-background-tasks.js'
 import type {
   AgentRuntime,
+  EffortLevel,
   ProviderRunSpec,
   QueueBehavior,
   SessionRef,
@@ -42,6 +43,7 @@ export interface PiAgentSession {
   dispose(): Promise<void>
   bindProgressEmit?(emit: ((chunk: string) => void) | undefined): void
   setRunModel?(modelId: string, contextWindow?: ContextWindow): Promise<void>
+  setThinkingLevel?(level: EffortLevel): void
 }
 
 export class PiRuntime implements AgentRuntime {
@@ -114,7 +116,7 @@ export class PiRuntime implements AgentRuntime {
   }
 
   async *run(turn: UserTurn, context: TurnContext): AsyncIterable<AgentEvent> {
-    this.mapper?.beginUserTurn()
+    this.mapper?.beginRun()
     this.turnEnded = false
     this.events = new AsyncQueue<AgentEvent>()
     this.agentSession.bindProgressEmit?.((chunk) => this.emitToolProgress(chunk))
@@ -170,6 +172,10 @@ export class PiRuntime implements AgentRuntime {
         throw new Error('Pi session cannot change model in place')
       }
       await this.agentSession.setRunModel(spec.model, contextWindow)
+    }
+    if (spec.effort !== undefined) {
+      if (!this.agentSession.setThinkingLevel) throw new Error('Pi session cannot change thinking level in place')
+      this.agentSession.setThinkingLevel(spec.effort)
     }
     this.queueBehavior = spec.queueBehavior ?? 'follow-up'
   }

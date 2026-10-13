@@ -262,6 +262,7 @@ function syncTools(blocks: readonly ThreadBlock[], event: AgentEvent): ThreadBlo
   const toolAgentId = agentIdOf(event)
   const nextInput = mergeToolInput(base.tool?.input ?? base.input, input)
   const tool: ThreadToolCard = {
+    ...base.tool,
     id,
     name: nameOf(event) ?? base.tool?.name ?? base.name,
     status,
@@ -274,6 +275,14 @@ function syncTools(blocks: readonly ThreadBlock[], event: AgentEvent): ThreadBlo
       : {}),
     ...(launchStatus === undefined ? {} : { launchStatus }),
     ...(toolAgentId === undefined ? {} : { agentId: toolAgentId }),
+    ...(event.parentToolCallId === undefined ? {} : { parentToolCallId: event.parentToolCallId }),
+    ...(event.type === 'tool.completed' || event.type === 'tool.progress' ? {
+      ...(event.resultContent === undefined ? {} : { resultContent: event.resultContent }),
+      ...(event.structuredContent === undefined ? {} : { structuredContent: event.structuredContent }),
+      ...(event.modelCalls === undefined ? {} : { modelCalls: event.modelCalls }),
+      ...(event.artifacts === undefined ? {} : { artifacts: event.artifacts }),
+      ...(event.nestedCallsComplete === undefined ? {} : { nestedCallsComplete: event.nestedCallsComplete }),
+    } : {}),
   }
 
   const nextBlock: ThreadBlock = {

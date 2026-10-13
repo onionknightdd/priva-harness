@@ -7,6 +7,19 @@ export interface ImageBytes {
   readonly name: string
 }
 
+export interface ImageApiUsage {
+  readonly inputTokens: number
+  readonly outputTokens: number
+  readonly totalTokens: number
+  /** Only present when the upstream reports a monetary cost. */
+  readonly costUsd?: number
+}
+
+export interface ImageApiResult {
+  readonly images: readonly ImageBytes[]
+  readonly usage?: ImageApiUsage
+}
+
 export interface ImageApiOptions {
   readonly fetch?: (input: string, init?: RequestInit) => Promise<Response>
 }
@@ -28,7 +41,7 @@ export class CompatibleImageApi {
       readonly size?: string
       readonly signal?: AbortSignal
     },
-  ): Promise<ImageBytes> {
+  ): Promise<ImageApiResult> {
     const size = normalizeSize(input.size)
     return await this.requestJsonImage(
       profile,
@@ -47,7 +60,7 @@ export class CompatibleImageApi {
       readonly size?: string
       readonly signal?: AbortSignal
     },
-  ): Promise<ImageBytes> {
+  ): Promise<ImageApiResult> {
     const size = normalizeSize(input.size)
     const body = new FormData()
     body.set('model', model)
@@ -111,7 +124,7 @@ export class CompatibleImageApi {
     pathSuffix: string,
     body: Record<string, unknown>,
     signal?: AbortSignal,
-  ): Promise<ImageBytes> {
+  ): Promise<ImageApiResult> {
     const response = await this.postJson(profile, pathSuffix, body, signal)
     return await readImageResponse(response)
   }
@@ -120,7 +133,7 @@ export class CompatibleImageApi {
     profile: Pick<ModelProfile, 'baseUrl' | 'authToken'>,
     body: FormData,
     signal?: AbortSignal,
-  ): Promise<ImageBytes> {
+  ): Promise<ImageApiResult> {
     const response = await this.perform(
       firstEndpoint(profile.baseUrl, 'images/edits'),
       {
@@ -186,7 +199,7 @@ function authHeaders(profile: Pick<ModelProfile, 'authToken'>): Record<string, s
   }
 }
 
-async function readImageResponse(response: Response): Promise<ImageBytes> {
+async function readImageResponse(response: Response): Promise<ImageApiResult> {
   if (!response.ok) {
     const detail = await response.text()
     const error = new Error(detail === '' ? `image request failed (${response.status})` : detail)
@@ -197,19 +210,25 @@ async function readImageResponse(response: Response): Promise<ImageBytes> {
   if (contentType.includes('text/event-stream') && response.body !== null) {
     return await readImageSse(response.body)
   }
-  return imageFromPayload(parseImageApiPayload(await response.text()))
+  return imagesFromPayload(parseImageApiPayload(await response.text()))
 }
 
-async function readImageSse(body: ReadableStream<Uint8Array>): Promise<ImageBytes> {
-  let latest: ImageBytes | undefined
+async function readImageSse(body: ReadableStream<Uint8Array>): Promise<ImageApiResult> {
+  let latest: ImageApiResult | undefined
+  let usage: ImageApiUsage | undefined
   await forEachSseEvent(body, (event, type) => {
     if (event === '[DONE]') return
-    latest = imageFromPayload(parseImageApiPayload(event, type))
+    const payload = parseImageApiPayload(event, type)
+    usage = imageUsage(asRecord(payload)?.['usage']) ?? usage
+    const record = asRecord(payload)
+    if (record?.['b64_json'] !== undefined || record?.['data'] !== undefined || record?.['image'] !== undefined) {
+      latest = imagesFromPayload(payload)
+    }
   })
   if (latest === undefined) {
     throw new Error('image stream ended without an image')
   }
-  return latest
+  return { ...latest, ...(usage === undefined ? {} : { usage }) }
 }
 
 async function readChatCompletionResponse(
@@ -299,25 +318,40 @@ function parseImageApiPayload(raw: string, eventType?: string): unknown {
   return payload
 }
 
-function imageFromPayload(payload: unknown): ImageBytes {
+function imagesFromPayload(payload: unknown): ImageApiResult {
   const record = asRecord(payload)
-  const b64 =
-    stringField(record, 'b64_json')
-    ?? stringField(asRecord(firstData(record)), 'b64_json')
-    ?? stringField(asRecord(record?.['image']), 'b64_json')
-  if (b64 === undefined || b64 === '') {
-    throw new Error('image response did not include b64_json')
-  }
+  const entries = Array.isArray(record?.['data']) ? record['data'] : [record?.['image'] ?? payload]
+  const images = entries.map((entry): ImageBytes => {
+    const image = asRecord(entry)
+    const b64 = stringField(image, 'b64_json')
+    if (b64 === undefined || b64 === '') throw new Error('image response did not include b64_json')
+    const format = stringField(image, 'output_format') ?? stringField(record, 'output_format') ?? 'png'
+    const mime = format === 'jpeg' || format === 'jpg' ? 'image/jpeg' : format === 'webp' ? 'image/webp' : 'image/png'
+    return { bytes: Uint8Array.from(Buffer.from(b64, 'base64')), mime, name: `image.${mime.split('/')[1]}` }
+  })
+  if (images.length === 0) throw new Error('image response did not include b64_json')
+  const usage = imageUsage(record?.['usage'])
+  return { images, ...(usage === undefined ? {} : { usage }) }
+}
+
+function imageUsage(value: unknown): ImageApiUsage | undefined {
+  const usage = asRecord(value)
+  if (usage === undefined) return undefined
+  const inputTokens = finiteNonNegative(usage['input_tokens'] ?? usage['prompt_tokens'])
+  const outputTokens = finiteNonNegative(usage['output_tokens'] ?? usage['completion_tokens'])
+  const totalTokens = finiteNonNegative(usage['total_tokens'])
+  if (inputTokens === undefined && outputTokens === undefined && totalTokens === undefined) return undefined
+  const costUsd = finiteNonNegative(usage['cost'])
   return {
-    bytes: Uint8Array.from(Buffer.from(b64, 'base64')),
-    mime: 'image/png',
-    name: 'image.png',
+    inputTokens: inputTokens ?? 0,
+    outputTokens: outputTokens ?? 0,
+    totalTokens: totalTokens ?? (inputTokens ?? 0) + (outputTokens ?? 0),
+    ...(costUsd === undefined ? {} : { costUsd }),
   }
 }
 
-function firstData(record: Record<string, unknown> | undefined): unknown {
-  const data = record?.['data']
-  return Array.isArray(data) ? data[0] : undefined
+function finiteNonNegative(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined
 }
 
 function chatDeltaText(payload: unknown): string {

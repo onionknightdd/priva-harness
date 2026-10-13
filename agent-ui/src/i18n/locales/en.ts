@@ -47,6 +47,11 @@ export const en = {
     collapse: "Collapse",
   },
   toolCard: {
+    imageModel: "Image model",
+    classifierModel: "Classifier",
+    structuredResult: "Structured result",
+    nestedHistoryLimited: "Only a bounded summary of nested calls is available in this history.",
+
     input: "Input",
     output: "Output",
     unknown: "Unknown",
@@ -258,9 +263,9 @@ export const en = {
       terminal: "Terminal",
     },
     terminalView: {
-      label: "Claude Code terminal",
+      label: "Session terminal",
       connecting: "Connecting to the terminal…",
-      starting: "Starting Claude Code…",
+      starting: "Starting session terminal…",
       connected: "Connected",
       disconnected: "Disconnected",
       exited: "The terminal has exited",
@@ -321,6 +326,7 @@ export const en = {
     contextWindowAria: "Context window {{size}}",
     contextWindowWarning: "If the model does not support a 1M context window, this setting may cause requests to fail.",
     configurationApplying: "Applying configuration",
+    effortOff: "Off",
     effortMenuLabel: "Effort",
     effortAria: "Effort {{level}}",
     modelSelectorAria: "Model {{model}} in {{profile}}, {{effort}} effort",
@@ -811,6 +817,15 @@ export const en = {
       defaultModelPlaceholder: "Test the connection to load models",
       defaultModelDescription:
         "The model used when a request does not specify one.",
+      classifier: "Classification",
+      classifierDescription: "Configure a protocol and model for Pi models.classify. Reuse this profile or another profile’s connection and credentials. Testing calls the classification API.",
+      classifierProtocol: "Classification API",
+      classifierDisabled: "Disabled",
+      classifierConnection: "Connection profile",
+      classifierCurrentProfile: "Current profile",
+      classifierModel: "Classifier model",
+      classifierModelPlaceholder: "Enter a model ID or select a verified model",
+      classifierTest: "Test",
       multimodal: "Multimodal",
       multimodalDescription:
         "Configure a model to enable the corresponding multimodal capability. Each selection is automatically probed for support.",

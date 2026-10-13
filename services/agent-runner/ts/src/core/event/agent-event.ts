@@ -45,6 +45,36 @@ export interface ModelTokenUsage extends TokenUsage {
   readonly costUsd?: number
 }
 
+export interface ModelInvocation {
+  readonly id: string
+  readonly parentToolCallId: string
+  readonly operation: 'classify' | 'generateImages'
+  readonly provider: string
+  readonly model: string
+  readonly status: 'running' | 'completed' | 'failed' | 'aborted'
+  readonly durationMs?: number
+  readonly usage?: TokenUsage
+  readonly costUsd?: number
+  readonly pricingKnown?: boolean
+  readonly error?: string
+  readonly result?: unknown
+  readonly artifacts?: readonly ToolArtifact[]
+}
+
+export interface ToolArtifact {
+  readonly path: string
+  readonly mimeType: string
+}
+
+export interface ToolResultMetadata {
+  readonly resultContent?: readonly unknown[]
+  readonly structuredContent?: unknown
+  readonly modelCalls?: readonly ModelInvocation[]
+  readonly artifacts?: readonly ToolArtifact[]
+  /** False means the native transcript omitted some nested calls or arguments. */
+  readonly nestedCallsComplete?: boolean
+}
+
 export const RUN_FAILURE_CODES = [
   'max_turns',
   'max_budget',
@@ -112,6 +142,8 @@ export type ContentBlock =
 
 export interface EventChannel {
   readonly parentToolUseId?: string
+  /** A tool invoking another tool; independent of the subagent channel above. */
+  readonly parentToolCallId?: string
   readonly agentId?: string
 }
 
@@ -127,6 +159,7 @@ export interface SessionConfiguration {
   readonly model: string
   readonly profileId?: string
   readonly effort?: EffortLevel
+  readonly effortLevels?: readonly EffortLevel[]
   readonly cwd: string
   readonly context: ContextUsage
 }
@@ -200,7 +233,7 @@ export type AgentEvent = (
       readonly channel: 'stdout' | 'stderr' | 'log'
       readonly chunk: string
     } & Partial<BlockAddress> &
-      EventChannel)
+      EventChannel & ToolResultMetadata)
   | ({
       readonly type: 'tool.completed'
       readonly tokens?: number
@@ -211,7 +244,7 @@ export type AgentEvent = (
       readonly output: string
       readonly status?: string
     } & Partial<BlockAddress> &
-      EventChannel)
+      EventChannel & ToolResultMetadata)
   | ({
       readonly type: 'run.completed'
       readonly sessionId?: string

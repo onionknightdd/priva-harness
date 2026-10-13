@@ -18,6 +18,7 @@ import { writeNativeProductConfig } from './tools/native-product-launch.js'
 
 import { claudeDisallowedTools } from './claude-tool-policy.js'
 import { claudeSystemPromptArgs } from './claude-system-prompt.js'
+import { assertClaudeEffort } from './claude-effort.js'
 
 const SETTINGS_FILE = 'claude-settings.json'
 
@@ -40,6 +41,7 @@ export interface ClaudeTerminalLaunchInput {
  */
 export async function claudeTerminalLaunch(input: ClaudeTerminalLaunchInput): Promise<TerminalLaunchSpec> {
   const { target, spec, context } = input
+  assertClaudeEffort(spec.effort)
   const settingsPath = join(context.scratchDir, SETTINGS_FILE)
   const bridge = context.eventsUrl === undefined ? undefined : await writeClaudeTerminalHooks(context.scratchDir, context.eventsUrl)
   await saveClaudeTerminalSelection(context.scratchDir, spec)

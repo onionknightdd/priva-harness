@@ -2,6 +2,7 @@ import type { FastifyPluginCallback } from 'fastify'
 
 import type {
   ModelCapability,
+  ClassifierApi,
   ModelProfile,
   ModelProfileCreateInput,
   ModelProfilePatch,
@@ -23,6 +24,7 @@ import {
 } from '../schema/model-profile-schema.js'
 
 import type { DataRecorder } from '../../../core/contract/data-recorder.js'
+import type { EffortLevel } from '../../../core/contract/agent-provider.js'
 import { auditRoute } from '../route-audit.js'
 
 const MODEL_PROFILE_ROUTE_PREFIX = '/api/sandbox/credentials/profiles'
@@ -45,6 +47,7 @@ interface ModelCapabilityCatalogBody {
   readonly image_understanding?: readonly string[]
   readonly image_generation?: readonly string[]
   readonly image_edit?: readonly string[]
+  readonly classification?: readonly string[]
 }
 
 interface ModelProfileCreateBody {
@@ -55,6 +58,9 @@ interface ModelProfileCreateBody {
   readonly image_understanding_model?: string | null
   readonly image_generation_model?: string | null
   readonly image_edit_model?: string | null
+  readonly classifier_api?: ClassifierApi | null
+  readonly classifier_model?: string | null
+  readonly classifier_profile_id?: string | null
   readonly model_capabilities?: ModelCapabilityCatalogBody
 }
 
@@ -66,6 +72,9 @@ interface ModelProfilePatchBody {
   readonly image_understanding_model?: string | null
   readonly image_generation_model?: string | null
   readonly image_edit_model?: string | null
+  readonly classifier_api?: ClassifierApi | null
+  readonly classifier_model?: string | null
+  readonly classifier_profile_id?: string | null
 }
 
 interface SavedModelProfileTestBody {
@@ -82,10 +91,14 @@ interface DraftModelCapabilityProbeBody
   extends ModelProfileCreateBody, ModelCapabilityProbeBody {}
 
 interface SavedModelCapabilityProbeBody
-  extends SavedModelProfileTestBody, ModelCapabilityProbeBody {}
+  extends SavedModelProfileTestBody, ModelCapabilityProbeBody {
+  readonly classifier_api?: ClassifierApi | null
+  readonly classifier_profile_id?: string | null
+}
 
 export interface ModelProfileRoutesOptions {
   readonly service: ModelProfileService
+  readonly piEffortLevels?: (modelId: string) => readonly EffortLevel[]
   readonly recorder?: DataRecorder
 }
 
@@ -186,7 +199,9 @@ export const modelProfileRoutes: FastifyPluginCallback<ModelProfileRoutesOptions
     `${MODEL_PROFILE_ROUTE_PREFIX}/:profileId/models`,
     { schema: listProfileModelsSchema },
     async (request) => ({
-      models: await service.listModels(request.params.profileId),
+      models: (await service.listModels(request.params.profileId)).map((model) => ({ ...model,
+        ...(options.piEffortLevels ? { pi_effort_levels: options.piEffortLevels(model.id) } : {}),
+      })),
     }),
   )
 
@@ -210,7 +225,10 @@ export const modelProfileRoutes: FastifyPluginCallback<ModelProfileRoutesOptions
     async (request) => toCapabilityProbeResponse(
       await service.probeSavedModelCapability(
         request.params.profileId,
-        fromSavedTestBody(request.body),
+        { ...fromSavedTestBody(request.body),
+          ...(request.body.classifier_api === undefined ? {} : { classifierApi: request.body.classifier_api }),
+          ...(request.body.classifier_profile_id === undefined ? {} : { classifierProfileId: request.body.classifier_profile_id }),
+        },
         request.body.model_id,
         request.body.capability,
       ),
@@ -229,6 +247,9 @@ function fromCreateBody(body: ModelProfileCreateBody): ModelProfileCreateInput {
     imageUnderstandingModel: body.image_understanding_model ?? null,
     imageGenerationModel: body.image_generation_model ?? null,
     imageEditModel: body.image_edit_model ?? null,
+    classifierApi: body.classifier_api ?? null,
+    classifierModel: body.classifier_model ?? null,
+    classifierProfileId: body.classifier_profile_id ?? null,
     ...(body.model_capabilities === undefined
       ? {}
       : {
@@ -236,6 +257,7 @@ function fromCreateBody(body: ModelProfileCreateBody): ModelProfileCreateInput {
             imageUnderstanding: [...(body.model_capabilities.image_understanding ?? [])],
             imageGeneration: [...(body.model_capabilities.image_generation ?? [])],
             imageEdit: [...(body.model_capabilities.image_edit ?? [])],
+            classification: [...(body.model_capabilities.classification ?? [])],
           },
         }),
   }
@@ -256,6 +278,9 @@ function fromPatchBody(body: ModelProfilePatchBody): ModelProfilePatch {
     ...(body.image_edit_model === undefined
       ? {}
       : { imageEditModel: body.image_edit_model }),
+    ...(body.classifier_api === undefined ? {} : { classifierApi: body.classifier_api }),
+    ...(body.classifier_model === undefined ? {} : { classifierModel: body.classifier_model }),
+    ...(body.classifier_profile_id === undefined ? {} : { classifierProfileId: body.classifier_profile_id }),
   }
 }
 
@@ -286,10 +311,14 @@ function toProfileResponse(profile: ModelProfile): Record<string, unknown> {
     image_understanding_model: profile.imageUnderstandingModel,
     image_generation_model: profile.imageGenerationModel,
     image_edit_model: profile.imageEditModel,
+    classifier_api: profile.classifierApi,
+    classifier_model: profile.classifierModel,
+    classifier_profile_id: profile.classifierProfileId,
     model_capabilities: {
       image_understanding: [...profile.modelCapabilities.imageUnderstanding],
       image_generation: [...profile.modelCapabilities.imageGeneration],
       image_edit: [...profile.modelCapabilities.imageEdit],
+      classification: [...profile.modelCapabilities.classification],
     },
   }
 }

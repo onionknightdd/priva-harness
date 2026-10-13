@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 import type { StreamBlock } from "../agent-message-data"
 import { computerToolTitleKey } from "../computer-tool-data"
 import { mcpToolInputText, type McpToolName } from "../mcp-tool-data"
+import { StructuredResult } from "./codemode-tool-item"
 import { isToolRunning } from "../tool-activity"
 
 export function McpToolItem({
@@ -45,7 +46,7 @@ export function McpToolItem({
       defaultOpen={status === "running"}
       copyText={copyText || undefined}
     >
-      {input !== undefined || output ? (
+      {input !== undefined || output || tool?.structuredContent !== undefined ? (
         <dl className="flex min-w-0 flex-col gap-3">
           {input !== undefined ? (
             <div>
@@ -53,6 +54,7 @@ export function McpToolItem({
               <dd><pre className="whitespace-pre-wrap break-words font-mono text-sm text-muted-foreground [overflow-wrap:anywhere]">{input}</pre></dd>
             </div>
           ) : null}
+          {tool?.structuredContent !== undefined ? <div><dt className="mb-1 text-xs text-muted-foreground">{t("toolCard.structuredResult")}</dt><dd><StructuredResult value={tool.structuredContent} /></dd></div> : null}
           {output ? (
             <div>
               <dt className="mb-1 text-xs text-muted-foreground">{t("toolCard.output")}</dt>

@@ -18,7 +18,7 @@ export async function configureComputer(env = process.env) {
   const command = { command: '/usr/local/bin/cua-driver', args: ['mcp', '--direct'], env: desktopEnv }
   const plans = await Promise.all([
     planMcp(join(claudeDir, '.claude.json'), { ...command, type: 'stdio', alwaysLoad: true }),
-    planMcp(join(piDir, 'mcp.json'), { ...command, lifecycle: 'eager' }, true),
+    planMcp(join(piDir, 'mcp.json'), { ...command, exposure: 'codemode' }, true),
   ])
   const skill = await readFile(new URL('./skills/computer-desktop/SKILL.md', import.meta.url), 'utf8')
   const skillPaths = [claudeDir, piDir].map((directory) => join(directory, 'skills/computer-desktop/SKILL.md'))
@@ -62,14 +62,24 @@ async function regularFile(path) {
 async function planMcp(path, definition, pi = false) {
   let config = {}
   if (await regularFile(path)) {
-    try { config = JSON.parse(stripJsonComments(await readFile(path, 'utf8'), { trailingCommas: true })) }
+    try {
+      const content = await readFile(path, 'utf8')
+      config = JSON.parse(pi ? content : stripJsonComments(content, { trailingCommas: true }))
+    }
     catch { throw new Error(`Invalid JSON in desktop MCP configuration: ${path}`) }
   }
   if (!isRecord(config)) throw new Error(`Expected a JSON object in desktop MCP configuration: ${path}`)
-  const key = pi && config.mcpServers === undefined && config['mcp-servers'] !== undefined ? 'mcp-servers' : 'mcpServers'
+  if (pi && ['mcp-servers', 'settings', 'imports'].some((key) => Object.hasOwn(config, key))) {
+    throw new Error(`Legacy Pi adapter configuration in desktop MCP file ${path}; reconfigure using native mcpServers before starting`)
+  }
+  const key = 'mcpServers'
   const servers = config[key] === undefined ? {} : config[key]
   if (!isRecord(servers) || Object.values(servers).some((value) => !isRecord(value))) {
     throw new Error(`Expected an MCP server dictionary in ${path}`)
+  }
+  if (pi) for (const [name, server] of Object.entries(servers)) {
+    const legacy = ['disabled', 'includeTools', 'excludeTools', 'toolPrefix', 'httpTransport', 'socket', 'lifecycle', 'inheritEnv', 'bearerToken', 'bearerTokenEnv', 'bearerTokenStore', 'requestHeadersCommand', 'headersHelper', 'authProvider', 'connectionTimeout'].filter((key) => Object.hasOwn(server, key))
+    if (legacy.length) throw new Error(`Legacy Pi adapter fields (${legacy.join(', ')}) for ${name} in desktop MCP file ${path}; reconfigure the server using native Pi settings`)
   }
   // User overrides and disabled entries own this name, including on subsequent starts.
   if (Object.hasOwn(servers, 'computer')) return { path }

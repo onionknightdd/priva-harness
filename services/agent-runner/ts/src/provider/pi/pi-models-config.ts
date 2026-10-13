@@ -1,4 +1,5 @@
 import type { ProviderRunSpec } from '../../core/contract/agent-provider.js'
+import { resolvePiThinkingCapability } from './pi-thinking-levels.js'
 import { DEFAULT_CONTEXT_WINDOW, type ContextWindow } from '../../core/resource/model-context.js'
 import {
   PI_RUN_PROVIDER_ID,
@@ -41,18 +42,17 @@ export function resolvePiSessionOptions(
     modelsConfig: buildPiModelsConfig(
       env['OPENAI_BASE_URL'] ?? '',
       spec.model,
-      env['OPENAI_API_KEY'] ?? '',
       spec.contextWindow,
     ),
   }
 }
 
-export function buildPiModelsConfig(baseUrl: string, modelId: string, apiKey = '', contextWindow: ContextWindow = DEFAULT_CONTEXT_WINDOW) {
+export function buildPiModelsConfig(baseUrl: string, modelId: string, contextWindow: ContextWindow = DEFAULT_CONTEXT_WINDOW) {
+  const thinking = resolvePiThinkingCapability(modelId)
   return {
     providers: {
       [PI_RUN_PROVIDER_ID]: {
         ...(baseUrl === '' ? {} : { baseUrl }),
-        ...(apiKey === '' ? {} : { apiKey }),
         api: 'openai-responses',
         authHeader: true,
         compat: {
@@ -65,7 +65,8 @@ export function buildPiModelsConfig(baseUrl: string, modelId: string, apiKey = '
           {
             id: modelId,
             name: modelId,
-            reasoning: false,
+            reasoning: thinking.reasoning,
+            ...(thinking.thinkingLevelMap === undefined ? {} : { thinkingLevelMap: thinking.thinkingLevelMap }),
             input: ['text'],
             contextWindow,
             maxTokens: 8192,

@@ -44,6 +44,9 @@ const emptyProfileDraft: ProfileDraft = {
   imageUnderstandingModel: null,
   imageGenerationModel: null,
   imageEditModel: null,
+  classifierApi: null,
+  classifierModel: null,
+  classifierProfileId: null,
   modelCapabilities: emptyModelCapabilityCatalog(),
 }
 
@@ -56,6 +59,9 @@ function profileToDraft(profile: ModelProfileSummary): ProfileDraft {
     imageUnderstandingModel: profile.imageUnderstandingModel,
     imageGenerationModel: profile.imageGenerationModel,
     imageEditModel: profile.imageEditModel,
+    classifierApi: profile.classifierApi,
+    classifierModel: profile.classifierModel,
+    classifierProfileId: profile.classifierProfileId,
     modelCapabilities: profile.modelCapabilities,
   }
 }
@@ -236,6 +242,9 @@ export function ModelSettingsView() {
         draft.imageUnderstandingModel?.trim() || null,
       imageGenerationModel: draft.imageGenerationModel?.trim() || null,
       imageEditModel: draft.imageEditModel?.trim() || null,
+      classifierApi: draft.classifierApi,
+      classifierModel: draft.classifierModel?.trim() || null,
+      classifierProfileId: draft.classifierProfileId,
       modelCapabilities: draft.modelCapabilities,
     }),
     [draft]
@@ -262,6 +271,9 @@ export function ModelSettingsView() {
             draft.imageUnderstandingModel?.trim() || null,
           imageGenerationModel: draft.imageGenerationModel?.trim() || null,
           imageEditModel: draft.imageEditModel?.trim() || null,
+          classifierApi: draft.classifierApi,
+          classifierModel: draft.classifierModel?.trim() || null,
+          classifierProfileId: draft.classifierProfileId,
           ...(draft.authToken.trim()
             ? { authToken: draft.authToken.trim() }
             : {}),
@@ -457,6 +469,7 @@ export function ModelSettingsView() {
             modelIds={modelIds}
             profile={selectedProfile}
             profilesExist={profiles.length > 0}
+            profiles={profiles}
             testFeedback={testFeedback}
             testStatus={testStatus}
             onCancel={cancelCreating}

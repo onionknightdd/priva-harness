@@ -5,6 +5,34 @@ import { replayPiSessionMessages } from '../../../../src/provider/pi/pi-thread-r
 import type { SessionMessage } from '../../../../src/core/resource/session.js'
 
 describe('replayPiSessionMessages', () => {
+  it('restores bounded Codemode child calls and structured model results without creating an agent', () => {
+    const entry = (type: SessionMessage['type'], uuid: string, message: unknown): SessionMessage => ({ type, uuid, message, sessionId: 's', parentToolUseId: null, metadata: null, timestamp: 1 })
+    const thread = foldThread(replayPiSessionMessages([
+      entry('assistant', 'a1', { content: [{ type: 'toolCall', id: 'outer', name: 'codemode', arguments: { code: '...' } }] }),
+      entry('tool_result', 't1', { role: 'toolResult', toolCallId: 'outer', toolName: 'codemode', content: [{ type: 'text', text: 'done' }],
+        nestedCalls: { complete: false, calls: [{ id: 'outer/1', name: 'mcp__docs__find', status: 'ok', durationMs: 3 }] },
+        details: { harnessModelCalls: [{ id: 'model-1', parentToolCallId: 'outer', operation: 'classify', provider: 'p', model: 'judge', status: 'completed', result: { approved: true } }] },
+      }),
+    ]))
+    expect(thread[0]?.nestedAgents).toEqual([])
+    const tools = thread[0]?.blocks?.filter((block) => block.type === 'tool_use') ?? []
+    expect(tools[0]?.tool).toMatchObject({ id: 'outer', status: 'completed', nestedCallsComplete: false, modelCalls: [{ result: { approved: true } }] })
+    expect(tools[1]?.tool).toMatchObject({ id: 'outer/1', parentToolCallId: 'outer', status: 'completed', ok: true })
+  })
+
+  it('recovers model accounting and artifacts when the outer result was not persisted', () => {
+    const entry = (type: SessionMessage['type'], uuid: string, message: unknown): SessionMessage => ({ type, uuid, message, sessionId: 's', parentToolUseId: null, metadata: null, timestamp: 1 })
+    const thread = foldThread(replayPiSessionMessages([
+      entry('assistant', 'a1', { content: [{ type: 'toolCall', id: 'outer', name: 'codemode', arguments: { code: '...' } }] }),
+      entry('custom', 'c1', { customType: 'harness-model-invocations', data: { parentToolCallId: 'outer',
+        modelCalls: [{ id: 'a', parentToolCallId: 'outer', operation: 'generateImages', provider: 'p', model: 'image', status: 'completed', costUsd: 0.2 }],
+        artifacts: [{ path: '/workspace/.images/a.png', mimeType: 'image/png' }],
+      } }),
+    ]))
+    expect(thread[0]?.blocks?.find((block) => block.type === 'tool_use')?.tool).toMatchObject({
+      id: 'outer', status: 'completed', launchStatus: 'interrupted', modelCalls: [{ costUsd: 0.2 }], artifacts: [{ path: '/workspace/.images/a.png' }],
+    })
+  })
   it('restores answered question summaries from native tool details', () => {
     const entry = (type: SessionMessage['type'], uuid: string, message: unknown): SessionMessage => ({ type, uuid, message, sessionId: 's', parentToolUseId: null, metadata: null, timestamp: 1 })
     const questions = [{ question: 'Which region?', options: [{ label: 'Asia' }], multiSelect: false }]

@@ -111,6 +111,9 @@ export function MultimodalModelFields({
                     imageUnderstandingModel: null,
                     imageGenerationModel: null,
                     imageEditModel: null,
+                    classifierApi: null,
+                    classifierModel: null,
+                    classifierProfileId: null,
                   },
                   modelId,
                   capability
@@ -303,7 +306,7 @@ function CapabilityModelField({
   )
 }
 
-function CapabilityProbeResult({
+export function CapabilityProbeResult({
   errorMessage,
   status,
 }: {

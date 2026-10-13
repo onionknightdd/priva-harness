@@ -1935,6 +1935,58 @@ native rebind    -> reset cursor + preserve view  -> next session address
 终端管理；不在 UI 假装已经停止。URL 认证 / 不支持的复杂 MCP 表单也通过 terminal.focus 交给
 原生 TUI。/clear、/resume、/fork 的地址变化使用 previousSessionId 进行受控重绑定，保留当前视图。
 
+## Pi 原生能力增量（2026-10-13 已确认）
+
+Pi 与 Claude 共用现有 Chat / Terminal 切换位置。Pi 的空白对话仍禁用 Terminal，
+获得会话 ID 后启用；打开后切回 Chat 保留终端挂载，native session 换绑保留当前视图。
+终端状态文案使用“会话终端”，不固定为 Claude。
+
+模型 Profile 在现有聊天/图片模型区域之后增加分类协议、连接来源、模型及测试反馈。
+MCP 详情在现有服务元信息内加入“工具调用方式”，说明三种模式的发现与调用差异；
+单工具继续使用现有开关。Codemode 子调用保留在同一张工具卡片中。
+桌面沿用现有页面宽度，手机表单与详情字段按单列排列，不增加独立页面或分屏。
+
+```text
+模型 Profile                  MCP 详情                 会话
++-----------------------+    +--------------------+   +-------------------------+
+| 现有聊天 / 图片配置    |    | 服务 / 来源 / 启用 |   | [Chat] [Terminal]       |
+| 分类模型              |    | 工具调用方式 [选择]|   | Codemode 状态           |
+| 协议 / 连接 / 模型    |    | 工具列表 + 开关    |   |   MCP 子调用与结果      |
+| [测试] 状态     [保存]|    | 配置/认证提示      |   |   图片预览 / 分类结果   |
++-----------------------+    +--------------------+   | 原生对话框 -> 打开终端 |
+                                                     | 现有输入框              |
+                                                     +-------------------------+
+```
+
+共享运行机制见 [Pi 原生共享会话](architecture/pi-native-session.md)。
+
+### Pi 上下文用量（2026-10-13）
+
+按用户要求，Pi 上下文弹层仅展示原生已用量、窗口大小、占比和单色进度条，
+不展示分类列表或估算分类。沿用现有弹层宽度、关闭按钮、动画和未知用量状态；
+桌面与手机结构一致，Claude 继续展示原有分类。
+
+```text
+Context Usage               ×
+4%               ~8.1K / 200K
+[用量进度条]
+```
+
+### Pi Thinking effort（2026-10-13）
+
+按用户要求沿用现有模型菜单，只展示当前模型实际支持的档位。新会话读取模型
+列表的 `pi_effort_levels`，已有会话以原生 `session.config.effortLevels` 和
+`effort` 为准；等待原生配置时禁用选择，不用目录默认值覆盖 TUI。
+切换模型时一次提交模型与有效档位，回显原生实际值。Claude 仍显示原五档。
+桌面、手机继续使用同一菜单结构与现有展开动画。
+
+```text
+现有模型菜单 -> Thinking effort（deepseek-flash）
+                 关闭 / low / high / max
+                    |
+                 Chat <-> Pi 原生会话 <-> TUI
+```
+
 ## Layout approval
 
 以下两条布局要求从 `AGENTS.md` 原样迁入，继续生效。
@@ -2243,6 +2295,28 @@ rg -n '@base-ui/react|motion/react|gsap' agent-ui/src
 ```
 
 ## Development and verification
+
+模型分类配置与协议请求回归（仓库根目录）：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/model-settings/model-profile-api.test.ts agent-ui/tests/features/model-settings/model-capability-catalog.test.ts agent-ui/tests/features/model-settings/classifier-model-fields.test.tsx
+```
+
+浏览器打开 `/tests/features/model-settings/classifier-browser.html`，点击
+**Run classifier checks**。该隔离样例在现有模型表单中验证协议与连接来源、模型 ID 输入、
+测试请求、结果与保存，以及无水平溢出。追加 `?mobile&dark&zh` 在 390px iframe 中验证
+手机单列、深色与中文，不改变其他浏览器标签页的视口。网络请求由样例拦截，不调用真实模型。
+DOM 测试另覆盖停用、已保存凭证复用、测试失败保留输入、配置变更取消过期结果。
+
+```text
+现有模型配置表单
+  多模态
+  分类模型
+    [分类协议] [连接来源：当前配置 / 已有配置]  <- 手机为单列
+    [模型 ID：输入 / 已验证列表] [测试]
+    [探测状态]
+  [保存]
+```
 
 Claude 模式浏览器回归：在独立开发服务器 origin 打开
 `/tests/features/sidebar/header/mode-tabs-browser.html`，点击 **Run mode checks**。
@@ -2562,6 +2636,11 @@ PDF 预览回归：打开 `/tests/features/resources/skill-pdf-browser.html`，�
 **Run PDF preview checks**。在内存生成有效单页 PDF，通过实际的 SkillContent 和
 共享 PDF 查看器渲染，并检查二进制读取与源文件 Tab 禁用。
 
+Pi 原生 MCP 模式使用 `/tests/features/resources/mcp-browser.html?pi&reduced-motion`；
+详情中的“工具调用方式”对应原生 `exposure`（Codemode / 搜索后调用 / 直接调用），工具
+开关只控制启用或隐藏。追加 `&mobile&zh&dark`，使用 390px 视口检查中文深色单列。
+原生会话认证无法由独立检查器验证时显示“连接尚未验证”，保留 `/mcp` 操作提示。
+
 MCP 页面的既有浏览器样例：打开 `/tests/features/resources/mcp-browser.html`，点击
 **Run MCP browser checks**。使用隔离的服务、能力列表、网络及剪贴板样例，覆盖
 搜索 / Esc 焦点、分组与范围选择器移除、分栏、紧凑工具栏、自动检测成功 / 失败时的
@@ -2651,3 +2730,32 @@ Session WebSocket -> run.* -> assistant message / composer
 ```sh
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/*.test.ts
 ```
+
+### Pi Codemode 调用详情（2026-10-13）
+
+按已确认线框，Codemode 复用现有过程中的 `ToolResult`，在同一卡片内显示
+MCP 子调用、图片模型结果和分类结构化结果。子调用通过 `parentToolCallId`
+归属到最近的 Codemode；它与 subagent 通道独立，缺失父项的调用仍单独可见。
+代码默认折叠，模型调用展示 provider/model、状态和耗时；生成图片复用
+`ImageToolPreview` 与灯箱，同一持久化图片不重复显示。历史摘要被截断时明确标注。
+
+```text
+Codemode [状态]
+├─ JavaScript [展开代码]
+├─ MCP 服务:工具 [状态] -> 输入 / 输出 / 结构化结果
+├─ 图片模型 provider/model [状态] -> 图片预览 -> 灯箱
+└─ 分类模型 provider/model [状态] -> JSON 结果
+```
+
+沿用共享工具卡的状态、展开/收起动效及减少动态效果设置；不新增页面。
+数据与组件回归（仓库根目录）：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/codemode-data.test.ts agent-ui/tests/features/agent-message/codemode-tool-item.test.tsx
+```
+
+浏览器验证复用上面的 `image-tools-browser.config.ts` 隔离图片服务，打开
+`http://127.0.0.1:5175/tests/features/agent-message/codemode-tools-browser.html`。
+点击 Start calls / Complete calls 检查运行到完成；展开 JavaScript 与 MCP 子行，
+确认 JSON 结果、图片灯箱、取消行和历史摘要提示。追加 `?zh&dark&reduced-motion`
+及 `&mobile=390` 的真实 390px iframe 检查中文、深色、减少动态效果和无横向溢出。

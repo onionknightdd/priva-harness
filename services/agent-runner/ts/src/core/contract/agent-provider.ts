@@ -1,3 +1,4 @@
+import type { ClassifierRunConfig } from '../resource/model-profile.js'
 import type { InteractionResponse } from '../resource/interaction.js'
 import type { ContextWindow } from '../resource/model-context.js'
 import type { RunMode } from '../resource/session.js'
@@ -7,7 +8,7 @@ import type { SlashCommand } from '../resource/slash-command.js'
 import type { UserTurn } from '../run/user-turn.js'
 import type { ImageToolProfile } from '../tool/define-tool.js'
 import type { ProviderSessionStore } from './provider-session-store.js'
-import type { TerminalComposer, TerminalInput, TerminalLaunchContext, TerminalLaunchSpec, TerminalSessionState, TerminalTextBatch, TerminalTelemetry } from './terminal-service.js'
+import type { TerminalComposer, TerminalInput, TerminalLaunchContext, TerminalLaunchSpec, TerminalSessionState, TerminalStatus, TerminalTextBatch, TerminalTelemetry } from './terminal-service.js'
 
 export type ProviderId = 'claude' | 'pi'
 
@@ -16,12 +17,18 @@ export interface SessionRef {
   readonly id: string
 }
 
-export const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'] as const
+export const EFFORT_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const
+export const CLAUDE_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'] as const
 
 export type EffortLevel = (typeof EFFORT_LEVELS)[number]
+export type ClaudeEffortLevel = (typeof CLAUDE_EFFORT_LEVELS)[number]
 
 export function isEffortLevel(value: unknown): value is EffortLevel {
   return typeof value === 'string' && (EFFORT_LEVELS as readonly string[]).includes(value)
+}
+
+export function isClaudeEffortLevel(value: unknown): value is ClaudeEffortLevel {
+  return typeof value === 'string' && (CLAUDE_EFFORT_LEVELS as readonly string[]).includes(value)
 }
 
 export const QUEUE_BEHAVIORS = ['follow-up', 'steer', 'interrupt'] as const
@@ -51,6 +58,7 @@ export interface ProviderRunSpec {
   readonly effort?: EffortLevel
   readonly queueBehavior?: QueueBehavior
   readonly promptSuggestions?: boolean
+  readonly classifier?: ClassifierRunConfig
   readonly imageTools?: ImageToolProfile
 }
 
@@ -94,6 +102,7 @@ export interface AgentProvider {
   readTerminalTelemetry?(scratchDir: string, offset: number): Promise<TerminalTelemetry>
   readTerminalSpec?(scratchDir: string): Promise<ProviderRunSpec | undefined>
   readTerminalState?(scratchDir: string): Promise<TerminalSessionState | undefined>
+  readTerminalStatus?(scratchDir: string): Promise<TerminalStatus | undefined>
   recordTerminalState?(scratchDir: string, state: TerminalSessionState): Promise<void>
   /** Remove native prompt envelopes for display/correlation, never for submission. */
   terminalPromptText?(prompt: string): string
@@ -101,4 +110,10 @@ export interface AgentProvider {
   submitTerminalInput?(input: TerminalInput, text: string, signal: AbortSignal, imagePaths?: readonly string[]): Promise<void>
   completeTerminalCommand?(input: TerminalInput, text: string, signal: AbortSignal): Promise<boolean>
   configureTerminal?(input: TerminalInput, scratchDir: string, spec: ProviderRunSpec, signal: AbortSignal): Promise<'applied' | 'restart'>
+  /** Native structured drivers publish authoritative turn events instead of screen-derived lifecycle hooks. */
+  readonly structuredTerminal?: boolean
+  submitTerminalTurn?(scratchDir: string, text: string, signal: AbortSignal, imagePaths?: readonly string[], runId?: string): Promise<void>
+  abortTerminal?(scratchDir: string): Promise<void>
+  respondTerminalInteraction?(scratchDir: string, response: InteractionResponse): Promise<void>
+  stopTerminalTask?(scratchDir: string, taskId: string): Promise<void>
 }

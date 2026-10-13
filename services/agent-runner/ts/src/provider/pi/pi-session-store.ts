@@ -44,6 +44,7 @@ export interface PiContextEntry {
   readonly tokensAfter?: number
   readonly firstKeptEntryId?: string
   readonly customType?: string
+  readonly data?: unknown
   readonly content?: unknown
   readonly details?: unknown
   readonly display?: boolean
@@ -225,7 +226,14 @@ export function messagesFromContextEntries(
 ): SessionMessage[] {
   const messages: SessionMessage[] = []
   for (const entry of entries) {
-    if (entry.type === 'custom') continue
+    if (entry.type === 'custom') {
+      if (entry.customType === 'harness-model-invocations') messages.push({
+        type: 'custom', uuid: entry.id, sessionId,
+        message: { role: 'custom', customType: entry.customType, data: entry.data },
+        parentToolUseId: null, metadata: null, timestamp: null,
+      })
+      continue
+    }
     if (entry.type === 'message' && entry.message !== undefined) {
       const mapped = mapPiAgentMessage(entry.message, entry.id, sessionId)
       if (mapped !== undefined) messages.push(mapped)

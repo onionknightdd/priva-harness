@@ -106,3 +106,42 @@ test("inherited restrictions expose their reason and disable only the affected c
     assert.ok(page.host.textContent?.includes("mcp__example__* in user settings"))
   } finally { await page.close() }
 })
+
+test("Pi calling mode changes preserve current credentials and tool policy", async () => {
+  const native: McpDetail = { ...detail, source: { ...detail.source, harness: "pi" }, definition: { ...detail.definition, headers: { Authorization: "fixture" } } }
+  const latest = { ...native, definition: { ...native.definition, toolExposure: { install: "hidden" } } }
+  const mutations: Record<string, unknown>[] = []
+  let current = native
+  globalThis.fetch = async (input, init) => {
+    if (String(input).includes("capabilities")) return Response.json(capabilities)
+    if (!init?.method) return Response.json(latest)
+    const body = JSON.parse(String(init.body)) as { definition: Record<string, unknown> }
+    mutations.push(body)
+    current = { ...native, definition: body.definition }
+    return Response.json(current)
+  }
+  function Page() {
+    const [value, setValue] = React.useState(native)
+    return <ResourceDetailPane kind="mcp" detail={value} query={{ harness: "pi" }} file="" onChanged={() => assert.fail("Must preserve detail pane")} onResourceUpdated={async (updated) => setValue(updated as McpDetail)} />
+  }
+  const page = await render(<Page />)
+  try {
+    const select = page.host.querySelector<HTMLElement>('[data-mcp-call-mode] [role="combobox"]')!
+    assert.match(select.textContent ?? "", /Codemode/u)
+    await click(select)
+    await click([...document.querySelectorAll<HTMLElement>('[role="option"]')].find((option) => option.textContent === "Search before calling")!)
+    assert.deepEqual(mutations, [{ definition: { ...latest.definition, exposure: "deferred" } }])
+    assert.match(select.textContent ?? "", /Search before calling/u)
+    assert.ok(page.host.textContent?.includes("Saved."))
+  } finally { await page.close() }
+})
+
+test("Claude has no Pi calling mode and read-only Pi mode cannot be edited", async () => {
+  globalThis.fetch = async () => Response.json(capabilities)
+  const page = await render(<ResourceDetailPane kind="mcp" detail={detail} query={{ harness: "claude" }} file="" onChanged={() => {}} />)
+  try {
+    assert.equal(page.host.querySelector('[data-mcp-call-mode]'), null)
+    await page.update(<ResourceDetailPane kind="mcp" detail={{ ...detail, canToggle: false, source: { ...detail.source, harness: "pi", writable: false }, definition: { ...detail.definition, exposure: "direct" } }} query={{ harness: "pi" }} file="" onChanged={() => {}} />)
+    assert.ok(page.host.querySelector<HTMLButtonElement>('[data-mcp-call-mode] [role="combobox"]')?.disabled)
+  } finally { await page.close() }
+})

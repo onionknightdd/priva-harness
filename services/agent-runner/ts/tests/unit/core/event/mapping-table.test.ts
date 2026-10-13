@@ -40,7 +40,7 @@ describe('SDK to product mapping table', () => {
     expect(types).toContain('tool.started')
   })
 
-  it('maps Pi deltas, deferred tool id, and agent_end', () => {
+  it('maps Pi deltas, deferred tool id, and agent_settled', () => {
     const mapper = new PiEventMapper({ sessionId: 'pi-1', model: 'm' })
     const beforeId = mapper.push({
       type: 'message_update',
@@ -65,6 +65,7 @@ describe('SDK to product mapping table', () => {
       type: 'agent_end',
       messages: [{ role: 'assistant', model: 'm', usage: { input: 1, output: 1 } }],
     })
-    expect(ended[0]?.type).toBe('run.completed')
+    expect(ended).toEqual([])
+    expect(mapper.push({ type: 'agent_settled' })[0]?.type).toBe('run.completed')
   })
 })

@@ -1,3 +1,4 @@
+import { classifierImplementation, classifierModel } from '../../core/tool/classifier-api.js'
 import type { ModelEndpointClient } from '../../core/contract/model-profile.js'
 import {
   type ModelCapability,
@@ -86,8 +87,35 @@ export class CompatibleModelEndpointClient implements ModelEndpointClient {
           return await this.probeImageGeneration(profile, modelId, requestSignal)
         case 'image_edit':
           return await this.probeImageEdit(profile, modelId, requestSignal)
+        case 'classification':
+          return await this.probeClassification(profile, modelId, requestSignal)
       }
     })
+  }
+
+  private async probeClassification(profile: ModelProfile, modelId: string, signal: AbortSignal): Promise<boolean> {
+    if (profile.classifierApi === null) throw new ModelProfileError('invalid-model-id', 'Select a classifier API before probing classification')
+    const implementation = await classifierImplementation(profile.classifierApi)
+    let responseStatus: number | undefined
+    const result = await implementation.classify(classifierModel({
+      provider: `priva-classifier-${profile.id}`, api: profile.classifierApi, modelId,
+      baseUrl: profile.baseUrl, authToken: profile.authToken,
+    }), {
+      state: { value: true },
+      questions: { supported: { type: 'bool', instructions: 'Is value true?', criteria: { true: 'The value is true', false: 'The value is false' } } },
+    }, {
+      apiKey: profile.authToken, signal, maxRetries: 0,
+      fetch: async (input, init) => {
+        const response = await this.fetch(input, init)
+        responseStatus = response.status
+        return response
+      },
+    })
+    if (result.stopReason === 'aborted') throw signal.reason ?? new Error('Classification probe was aborted')
+    if (result.stopReason === 'error') {
+      throw new ModelProfileError(responseStatus === 401 || responseStatus === 403 ? 'upstream-auth-failed' : 'upstream-unavailable', result.errorMessage ?? 'Classification probe failed')
+    }
+    return result.answers['supported']?.type === 'bool'
   }
 
   private async probeImageUnderstanding(

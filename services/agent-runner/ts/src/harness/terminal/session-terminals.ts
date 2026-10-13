@@ -1,3 +1,4 @@
+import type { InteractionResponse } from '../../core/resource/interaction.js'
 import { randomUUID } from 'node:crypto'
 
 import type {
@@ -15,6 +16,7 @@ import {
   type TerminalComposer,
   type TerminalService,
   type TerminalSessionState,
+  type TerminalStatus,
   type TerminalTextBatch,
   type TerminalTelemetry,
 } from '../../core/contract/terminal-service.js'
@@ -110,6 +112,35 @@ export class SessionTerminals {
     return this.options.terminals.isAlive(SessionTerminals.key(ref))
   }
 
+  isStructured(ref: SessionRef): boolean {
+    return this.options.providers[ref.provider].structuredTerminal === true
+  }
+
+  async status(ref: SessionRef): Promise<TerminalStatus | undefined> {
+    return this.options.providers[ref.provider].readTerminalStatus?.(await this.options.terminals.scratchDir(SessionTerminals.key(ref)))
+  }
+
+  async abort(ref: SessionRef): Promise<boolean> {
+    const provider = this.options.providers[ref.provider]
+    if (!provider.abortTerminal) return false
+    await provider.abortTerminal(await this.options.terminals.scratchDir(SessionTerminals.key(ref)))
+    return true
+  }
+
+  async respond(ref: SessionRef, response: InteractionResponse): Promise<boolean> {
+    const provider = this.options.providers[ref.provider]
+    if (!provider.respondTerminalInteraction) return false
+    await provider.respondTerminalInteraction(await this.options.terminals.scratchDir(SessionTerminals.key(ref)), response)
+    return true
+  }
+
+  async stopTask(ref: SessionRef, taskId: string): Promise<boolean> {
+    const provider = this.options.providers[ref.provider]
+    if (!provider.stopTerminalTask) return false
+    await provider.stopTerminalTask(await this.options.terminals.scratchDir(SessionTerminals.key(ref)), taskId)
+    return true
+  }
+
   async text(ref: SessionRef, offset: number): Promise<TerminalTextBatch> {
     return await this.options.providers[ref.provider].readTerminalText?.(await this.options.terminals.scratchDir(SessionTerminals.key(ref)), offset)
       ?? { offset, deltas: [] }
@@ -139,8 +170,12 @@ export class SessionTerminals {
     return this.options.terminals.paste(SessionTerminals.key(ref), text)
   }
 
-  async submit(ref: SessionRef, text: string, signal: AbortSignal, imagePaths?: readonly string[]): Promise<void> {
+  async submit(ref: SessionRef, text: string, signal: AbortSignal, imagePaths?: readonly string[], runId?: string): Promise<void> {
     const provider = this.options.providers[ref.provider]
+    if (provider.submitTerminalTurn) {
+      await provider.submitTerminalTurn(await this.options.terminals.scratchDir(SessionTerminals.key(ref)), text, signal, imagePaths, runId)
+      return
+    }
     if (!provider.submitTerminalInput) throw new TerminalError('unsupported', `The ${ref.provider} terminal does not support chat input`)
     await provider.submitTerminalInput({
       isAlive: () => this.isAlive(ref), capture: () => this.capture(ref, { styled: true }),

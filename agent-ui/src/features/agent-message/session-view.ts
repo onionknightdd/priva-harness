@@ -4,7 +4,7 @@ export type SessionView = "chat" | "terminal"
 
 // Harnesses whose runner provider exposes a terminal-hosted TUI. Mirrors the
 // providers that implement `terminalLaunch` on the backend.
-const TERMINAL_HARNESSES: ReadonlySet<RunHarnessId> = new Set(["claude"])
+const TERMINAL_HARNESSES: ReadonlySet<RunHarnessId> = new Set(["claude", "pi"])
 
 export function harnessSupportsTerminal(harness: RunHarnessId | null): boolean {
   return harness !== null && TERMINAL_HARNESSES.has(harness)

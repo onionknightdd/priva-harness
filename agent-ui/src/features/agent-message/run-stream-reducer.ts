@@ -12,6 +12,7 @@ import {
   type NestedAgent,
   type StreamBlock,
   type ToolCard,
+  type ToolResultMetadata,
   type WorkflowCard,
 } from "./agent-message-data"
 import { applyThreadCompactFrame } from "./slash-command-envelope"
@@ -20,10 +21,10 @@ import { restoreUserMessageAttachments } from "./message-attachment-text"
 
 const STREAM_PROTOCOL_VERSION = 2
 
-export type StreamFrame = {
+export type StreamFrame = ToolResultMetadata & {
   replay?: true
   prompts?: string[]
-  config?: { contextWindow: ContextWindow; runMode?: "agent" | "code"; model: string; profileId?: string; effort?: AgentRunEffort; cwd: string; context: ContextUsage }
+  config?: { contextWindow: ContextWindow; runMode?: "agent" | "code"; model: string; profileId?: string; effort?: AgentRunEffort; effortLevels?: readonly AgentRunEffort[]; cwd: string; context: ContextUsage }
   runningToolIds?: string[]
   nextSessionId?: string
   driver?: "terminal"
@@ -48,6 +49,7 @@ export type StreamFrame = {
   message?: string
   sessionId?: string
   parentToolUseId?: string
+  parentToolCallId?: string
   agentId?: string
   messageId?: string
   blockId?: string
@@ -418,6 +420,7 @@ function syncTools(blocks: StreamBlock[], frame: StreamFrame): StreamBlock[] {
 
   const nextInput = mergeToolInput(base.tool?.input ?? base.input, frame.input)
   const tool: ToolCard = {
+    ...base.tool,
     id,
     name: frame.name ?? base.tool?.name ?? base.name,
     status:
@@ -433,6 +436,12 @@ function syncTools(blocks: StreamBlock[], frame: StreamFrame): StreamBlock[] {
     ...(kind === "tool.completed" ? { ok: frame.ok !== false, output: frame.output ?? "", ...(frame.tokens === undefined ? {} : { tokens: frame.tokens }), ...(frame.durationMs === undefined ? {} : { durationMs: frame.durationMs }) } : {}),
     ...(frame.status === undefined ? {} : { launchStatus: frame.status }),
     ...(frame.agentId === undefined ? {} : { agentId: frame.agentId }),
+    ...(frame.parentToolCallId === undefined ? {} : { parentToolCallId: frame.parentToolCallId }),
+    ...(frame.resultContent === undefined ? {} : { resultContent: frame.resultContent }),
+    ...(frame.structuredContent === undefined ? {} : { structuredContent: frame.structuredContent }),
+    ...(frame.modelCalls === undefined ? {} : { modelCalls: frame.modelCalls }),
+    ...(frame.artifacts === undefined ? {} : { artifacts: frame.artifacts }),
+    ...(frame.nestedCallsComplete === undefined ? {} : { nestedCallsComplete: frame.nestedCallsComplete }),
   }
 
   const nextBlock: StreamBlock = {

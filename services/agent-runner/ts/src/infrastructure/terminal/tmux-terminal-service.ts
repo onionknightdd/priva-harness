@@ -33,6 +33,11 @@ const PANE_TERM = 'screen-256color'
 const DEFAULT_IDLE_TIMEOUT_MS = 30 * 60 * 1000
 const DEFAULT_SWEEP_INTERVAL_MS = 60 * 1000
 
+const KEYBOARD_OPTIONS: readonly (readonly string[])[] = [
+  ['extended-keys', 'on'],
+  ['extended-keys-format', 'csi-u'],
+]
+
 const SERVER_OPTIONS: readonly (readonly string[])[] = [
   ['status', 'off'],
   // Viewers drive the size explicitly (`resize-window`) so the latest
@@ -45,6 +50,7 @@ const SERVER_OPTIONS: readonly (readonly string[])[] = [
   ['destroy-unattached', 'off'],
   ['mouse', 'on'],
   ['set-clipboard', 'off'],
+  ...KEYBOARD_OPTIONS,
 ]
 
 // Variables the runner process may carry that describe *its* (often
@@ -159,6 +165,7 @@ export class TmuxTerminalService implements TerminalService {
 
   async restart(key: string, launch: TerminalLaunchSpec): Promise<void> {
     const envArgs = Object.entries(launch.env).filter(([name]) => !HOST_TERMINAL_VARIABLES.includes(name)).flatMap(([name, value]) => ['-e', `${name}=${value}`])
+    await this.configureKeyboard(key)
     await this.run(key, ['respawn-pane', '-k', '-t', SESSION_NAME, '-c', launch.cwd, ...envArgs, '--', launch.command, ...launch.args])
   }
 
@@ -179,6 +186,8 @@ export class TmuxTerminalService implements TerminalService {
 
   async attach(key: string, cols: number, rows: number): Promise<TerminalAttachment> {
     if (!await this.isAlive(key)) throw new TerminalError('not-found', 'Terminal is not running')
+    // Upgrade surviving private servers without interrupting their TUI process.
+    await this.configureKeyboard(key)
     const client = await TmuxControlClient.open({
       tmuxBinary: this.tmux,
       socketPath: await this.socketPath(key),
@@ -385,6 +394,13 @@ export class TmuxTerminalService implements TerminalService {
     })
     if (snapshot === undefined) throw new TerminalError('io-failure', 'tmux did not return a screen snapshot')
     return snapshot
+  }
+
+  private async configureKeyboard(key: string): Promise<void> {
+    const args = KEYBOARD_OPTIONS.flatMap(([name = '', value = ''], index) => [
+      ...(index ? [';'] : []), 'set-option', '-s', name, value,
+    ])
+    await this.run(key, args)
   }
 
   private async terminalDir(key: string): Promise<string> {

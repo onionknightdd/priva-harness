@@ -10,13 +10,32 @@ import { encodeReadView } from '../../core/event/tool-read.js'
 import type { AgentEvent, ContentBlock } from '../../core/event/agent-event.js'
 import type { SessionMessage } from '../../core/resource/session.js'
 import type { ThreadReplayItem } from '../../core/resource/thread.js'
+import { piToolResultMetadata, replayPiNestedTools } from './pi-tool-result.js'
 
 export function replayPiSessionMessages(messages: readonly SessionMessage[]): ThreadReplayItem[] {
   const items: ThreadReplayItem[] = []
   const tasks = new BackgroundTasks()
   const replies = new TaskReplyTracker()
+  const toolMessages = new Map<string, string>()
+  const persistedResults = new Set(messages.filter((message) => message.type === 'tool_result')
+    .map((message) => stringField(asRecord(message.message) ?? {}, 'toolCallId')))
 
   for (const message of messages) {
+    const custom = message.type === 'custom' ? asRecord(message.message) : undefined
+    if (custom?.['customType'] === 'harness-model-invocations') {
+      const data = asRecord(custom['data'])
+      const id = data && stringField(data, 'parentToolCallId')
+      if (id) {
+        const metadata = piToolResultMetadata({ details: { harnessModelCalls: data['modelCalls'], harnessArtifacts: data['artifacts'] } })
+        const messageId = toolMessages.get(id) ?? message.uuid
+        const event: AgentEvent = persistedResults.has(id) ?
+          { type: 'tool.progress', id, messageId, blockId: id, channel: 'log', chunk: '', ...metadata } :
+          { type: 'tool.completed', id, name: 'codemode', messageId, blockId: id, ok: false,
+            output: 'Codemode was interrupted before its final result was saved.', status: 'interrupted', ...metadata }
+        items.push({ kind: 'frame', event, createdAt: isoFromTimestamp(message.timestamp) })
+      }
+      continue
+    }
     const notices = message.type === 'custom' ? piTaskNotices(message.message) : []
     if (notices.length) {
       const createdAt = isoFromTimestamp(message.timestamp)
@@ -71,6 +90,7 @@ export function replayPiSessionMessages(messages: readonly SessionMessage[]): Th
       })
       for (const block of blocks) {
         if (block.type !== 'tool_use') continue
+        toolMessages.set(block.id, messageId)
         items.push({
           kind: 'frame',
           event: replies.routeEvent(toolStartedEvent(messageId, block)),
@@ -88,6 +108,7 @@ export function replayPiSessionMessages(messages: readonly SessionMessage[]): Th
         stringField(inner, 'id') ??
         message.uuid
       const name = (stringField(inner, 'toolName') ?? stringField(inner, 'name') ?? 'unknown').toLowerCase()
+      const messageId = toolMessages.get(id) ?? message.uuid
       const workflow = piWorkflowToolResult(id, name, inner, undefined, true)
       const task = piBackgroundLaunch(id, name, inner)
       if (task) items.push({ kind: 'frame', event: { type: 'task.updated', task: tasks.update(task) }, createdAt: isoFromTimestamp(message.timestamp) })
@@ -100,11 +121,13 @@ export function replayPiSessionMessages(messages: readonly SessionMessage[]): Th
           name,
           ok: inner['isError'] !== true && inner['is_error'] !== true,
           output: completedToolOutput(name, inner),
-          messageId: message.uuid,
+          ...piToolResultMetadata(inner),
+          messageId,
           blockId: id,
         },
         createdAt: isoFromTimestamp(message.timestamp),
       })
+      for (const event of replayPiNestedTools(inner, id, messageId)) items.push({ kind: 'frame', event, createdAt: isoFromTimestamp(message.timestamp) })
       const resolution = questionResolutionFromToolResult(id, name, inner['details'], inner['isError'] === true || inner['is_error'] === true)
       if (resolution) items.push({ kind: 'frame', event: { type: 'permission.resolved', resolution }, createdAt: isoFromTimestamp(message.timestamp) })
     }

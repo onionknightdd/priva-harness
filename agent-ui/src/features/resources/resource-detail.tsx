@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/animate-u
 import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/animate-ui/components/radix/switch"
 import { OverflowMarquee } from "@/components/motion/overflow-marquee"
 import { ResourceIconButton } from "./resource-icon-button"
@@ -34,15 +35,16 @@ export function ResourceDetailPane({ kind, query, detail, file, onChanged, onRes
   const skill = "files" in detail ? detail : null
   const probe = useMcpProbe(skill ? null : detail as McpDetail, query)
   const canDelete = skill ? skill.canDelete : detail.source.writable
-  const mutate = async (method: "PATCH" | "DELETE", body?: unknown) => {
+  const mutate = async (method: "PATCH" | "DELETE", body?: Record<string, unknown> | (() => Promise<Record<string, unknown>>)) => {
     if (pending.current) return
     pending.current = true
     setBusy(true); setError(null); setSaved(false)
     try {
-      const updated = await resourceRequest<ResourceDetail>(`${kind}/${detail.id}`, query, body === undefined ? { method } : jsonRequest(method, body))
+      const payload = typeof body === "function" ? await body() : body
+      const updated = await resourceRequest<ResourceDetail>(`${kind}/${detail.id}`, query, payload === undefined ? { method } : jsonRequest(method, payload))
       if (method === "PATCH" && onResourceUpdated) await onResourceUpdated(updated)
       else onChanged(method === "DELETE" ? undefined : detail.id)
-      if (method === "PATCH") setSaved(true)
+      if (method === "PATCH") { setSaved(true); if (payload && "definition" in payload) probe.refresh() }
     } catch (reason) { setError(errorMessage(reason)) } finally { pending.current = false; setBusy(false) }
   }
   const toggleTool = async (name: string, enabled: boolean) => {
@@ -85,6 +87,10 @@ export function ResourceDetailPane({ kind, query, detail, file, onChanged, onRes
         <TooltipHint content={(detail as McpDetail).target}><Badge variant="outline" className="h-5 min-w-0 max-w-full shrink px-2 text-xs leading-none"><OverflowMarquee>{(detail as McpDetail).target}</OverflowMarquee></Badge></TooltipHint>
         {(detail as McpDetail).override && <Badge variant="secondary" className="h-5 px-2 text-xs leading-none">{t("resources.inherited")}</Badge>}
       </div>}
+      {!skill && query.harness === "pi" && <McpCallMode detail={detail as McpDetail} busy={busy} onChange={(exposure) => void mutate("PATCH", async () => {
+        const latest = await resourceRequest<McpDetail>(`mcp/${detail.id}`, query)
+        return { definition: { ...latest.definition, exposure } }
+      })} />}
       {!skill && saved && <p role="status" className="mt-2 text-xs text-muted-foreground">{t("resources.mcpSaved")}</p>}
       {!skill && !detail.canToggle && (detail as McpDetail).disabledReason && <p className="mt-2 break-words text-xs text-muted-foreground">{t("resources.mcpRestricted", { reason: (detail as McpDetail).disabledReason })}</p>}
     </div>
@@ -131,7 +137,7 @@ function McpContent({ detail, query, probe, busy, onToggleTool }: { detail: McpD
         </div>
       </div>
       {(["tools", "prompts", "resources"] as const).filter((key) => visited.has(key)).map((key) => <TabsContent key={key} forceMount value={key} className="flex min-h-0 flex-1 flex-col overflow-auto px-5 py-2 data-[state=inactive]:hidden sm:px-7" aria-busy={testing || undefined}>
-        {testing && !capabilities ? <ResourceLoading /> : !capabilities ? <ResourceEmpty text={t(detail.enabled ? "resources.testFailed" : "resources.disabled")} /> : capabilities[key].length === 0 ? <ResourceEmpty text={t("resources.noCapabilities")} /> : <div className="divide-y">{capabilities[key].map((entry, index) => {
+        {testing && !capabilities ? <ResourceLoading /> : !capabilities ? <ResourceEmpty text={t(!detail.enabled ? "resources.disabled" : probe.status === "unverified" ? "resources.serverStatus.unverified" : "resources.testFailed")} /> : capabilities[key].length === 0 ? <ResourceEmpty text={t("resources.noCapabilities")} /> : <div className="divide-y">{capabilities[key].map((entry, index) => {
           const name = typeof entry.name === "string" ? entry.name : typeof entry.uri === "string" ? entry.uri : t("resources.untitled")
           const state = states.get(name)
           const canToggle = detail.enabled && state?.canToggle
@@ -154,4 +160,20 @@ function McpContent({ detail, query, probe, busy, onToggleTool }: { detail: McpD
     </Tabs>
     {tool && selectedToolEnabled && <React.Suspense fallback={<ResourceLoading />}><ToolTestSheet key={String(tool.name)} tool={tool} query={query} serverId={detail.id} onClose={() => setTool(null)} /></React.Suspense>}
   </>
+}
+
+
+function McpCallMode({ detail, busy, onChange }: { detail: McpDetail; busy: boolean; onChange: (value: string) => void }) {
+  const { t } = useTranslation()
+  const labelId = React.useId()
+  const configured = (detail.effectiveDefinition ?? detail.definition).exposure
+  const current = configured === "codemode-deferred" || configured === undefined ? "codemode" : String(configured)
+  const modes = ["codemode", "deferred", "direct"] as const
+  return <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3" data-mcp-call-mode>
+    <span id={labelId} className="text-xs text-muted-foreground">{t("resources.toolCallMode")}</span>
+    <Select value={modes.includes(current as typeof modes[number]) ? current : null} onValueChange={(value) => { if (value && value !== current) onChange(value) }} disabled={!detail.canToggle || !detail.source.writable || busy}>
+      <SelectTrigger size="sm" aria-labelledby={labelId} className="w-full text-xs sm:w-48"><SelectValue placeholder={t("resources.toolCallHidden")}>{modes.includes(current as typeof modes[number]) ? t(`resources.toolCallModes.${current}`) : undefined}</SelectValue></SelectTrigger>
+      <SelectContent align="start">{modes.map((mode) => <SelectItem key={mode} value={mode}>{t(`resources.toolCallModes.${mode}`)}</SelectItem>)}</SelectContent>
+    </Select>
+  </div>
 }

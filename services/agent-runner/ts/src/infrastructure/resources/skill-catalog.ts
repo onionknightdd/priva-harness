@@ -1,7 +1,6 @@
 import { lstat, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
-import { createRequire } from 'node:module'
 import { lookup } from 'mime-types'
 
 import { resolveSettings } from '@anthropic-ai/claude-agent-sdk'
@@ -11,8 +10,6 @@ import { ResourceError, type ResourceGroup, type ResourceList, type ResourceQuer
 import { canonicalDirectory, containedFile, exists, inside, readText, record, resourceId, type ResourceFiles, strings } from './resource-files.js'
 import { type ProjectDirectories } from './project-directories.js'
 import { ancestors, claudePlugins, pluginComponentPaths, skillFiles, source, type ResourceEnvironment } from './resource-sources.js'
-
-export const bundledPiAdapterPath = dirname(createRequire(import.meta.url).resolve('pi-mcp-adapter'))
 
 export class SkillCatalog {
   constructor(
@@ -215,10 +212,7 @@ export class SkillCatalog {
     for (const root of roots.filter((entry) => entry.writable)) {
       this.group(result, await source('pi', root.cwd === null ? 'global' : 'project', 'directory', root.path, root.cwd, root.cwd === null ? 'Global · Pi skills' : `Project · ${root.cwd}`, true, true))
     }
-    const resources = [...resolved.skills.filter((item) => !/^npm:pi-mcp-adapter(?:@|$)/u.test(item.metadata.source)), {
-      path: join(bundledPiAdapterPath, 'skills'), enabled: true,
-      metadata: { source: 'npm:pi-mcp-adapter@2.32.1', scope: 'user' as const, origin: 'package' as const, baseDir: bundledPiAdapterPath },
-    }]
+    const resources = resolved.skills
     for (const resource of resources) {
       const native = roots.find((root) => inside(root.path, resource.path))
       const packaged = resource.metadata.origin === 'package'

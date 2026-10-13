@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { unzipSync, zipSync } from 'fflate'
+import { ProjectTrustStore } from '@earendil-works/pi-coding-agent'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { LocalResourceService } from '../../../../src/infrastructure/resources/local-resource-service.js'
@@ -31,6 +32,8 @@ describe('resource catalog', () => {
     claudeDir = join(root, 'claude')
     piDir = join(root, 'pi')
     for (const path of [join(cwd, '.git'), join(other, '.git'), claudeDir, piDir]) await mkdir(path, { recursive: true })
+    new ProjectTrustStore(piDir).set(cwd, true)
+    new ProjectTrustStore(piDir).set(other, true)
     vi.stubEnv('CLAUDE_CONFIG_DIR', claudeDir)
     vi.stubEnv('PI_CODING_AGENT_DIR', piDir)
     service = new LocalResourceService({ activeCwd: cwd, claudeDir, claudeConfigFilePath: join(claudeDir, '.claude.json'), piDir, discoverProjects: () => Promise.resolve([other, cwd, join(root, 'gone')]) })
@@ -91,17 +94,47 @@ describe('resource catalog', () => {
     await expect(service.mcp.create(query, { scope: 'project', name: 'server', definition: { command: 'duplicate' } })).rejects.toMatchObject({ statusCode: 409 })
   })
 
-  it('uses Pi field merges while retaining partial declarations by source', async () => {
+  it('uses native Pi state overrides without merging connection fields', async () => {
     await json(join(piDir, 'mcp.json'), { mcpServers: { fixture_merge: { command: 'node', args: ['global'], env: { ONE: '1' } } } })
-    await json(join(cwd, '.pi/mcp.json'), { mcpServers: { fixture_merge: { args: ['project'], env: { TWO: '2' }, disabled: true } } })
+    await json(join(cwd, '.pi/mcp.json'), { mcpServers: { fixture_merge: { enabled: false, toolExposure: { echo: 'hidden' } } } })
     const query = { harness: 'pi' as const, cwd }
     const list = await service.mcp.list(query)
     const group = present(list.groups.find((group) => group.source.path === join(cwd, '.pi/mcp.json')))
     const detail = await service.mcp.get(query, present(group.items[0]).id)
-    expect(detail.definition).toEqual({ args: ['project'], env: { TWO: '2' }, disabled: true })
-    expect(detail.effectiveDefinition).toMatchObject({ command: 'node', args: ['project'], disabled: true })
+    expect(detail.definition).toEqual({ enabled: false, toolExposure: { echo: 'hidden' } })
+    expect(detail.effectiveDefinition).toMatchObject({ command: 'node', args: ['global'], env: { ONE: '1' }, enabled: false })
     expect(detail.effective).toBe(true)
     expect(detail.enabled).toBe(false)
+  })
+
+  it('replaces Pi connections by project, excludes untrusted sources and ignores shared adapter locations', async () => {
+    await json(join(piDir, 'mcp.json'), { mcpServers: { files: { command: 'global', env: { PRIVATE: 'global-only' } } } })
+    await json(join(cwd, '.pi/mcp.json'), { mcpServers: { files: { command: 'project' } } })
+    await json(join(cwd, '.mcp.json'), { mcpServers: { ignored_shared: { command: 'shared' } } })
+    const query = { harness: 'pi' as const, cwd }
+    const list = await service.mcp.list(query)
+    expect(list.groups.flatMap((group) => group.items).some((item) => item.name === 'ignored_shared')).toBe(false)
+    expect(list.diagnostics.some((entry) => entry.path === join(cwd, '.mcp.json') && entry.message.includes('not loaded'))).toBe(true)
+    const project = present(list.groups.find((group) => group.source.scope === 'project')?.items[0])
+    expect((await service.mcp.get(query, project.id)).effectiveDefinition).toEqual({ command: 'project' })
+    new ProjectTrustStore(piDir).set(cwd, false)
+    const untrusted = await service.mcp.get(query, project.id)
+    expect(untrusted).toMatchObject({ enabled: false, effective: false, canToggle: false })
+    expect(untrusted.disabledReason).toContain('Trust')
+    await expect(service.capabilities(query, { id: project.id })).rejects.toMatchObject({ statusCode: 409 })
+    const global = present(list.groups.find((group) => group.source.scope === 'global')?.items[0])
+    expect((await service.mcp.get(query, global.id)).effectiveDefinition).toEqual({ command: 'global', env: { PRIVATE: 'global-only' } })
+  })
+
+  it('reports adapter flags instead of enabling a legacy Pi server or its tools', async () => {
+    await json(join(piDir, 'mcp.json'), { mcpServers: { old: { command: 'node', disabled: true, excludeTools: ['remove'] } } })
+    const query = { harness: 'pi' as const, cwd }
+    const list = await service.mcp.list(query)
+    expect(list.diagnostics.some((entry) => entry.message.includes('Obsolete'))).toBe(true)
+    const item = present(list.groups.flatMap((group) => group.items).find((item) => item.name === 'old'))
+    expect(item).toMatchObject({ enabled: false, canToggle: false, effective: false })
+    expect((await service.mcp.get(query, item.id)).effectiveDefinition).toBeNull()
+    expect(JSON.parse(await readFile(join(piDir, 'mcp.json'), 'utf8'))).toMatchObject({ mcpServers: { old: { disabled: true, excludeTools: ['remove'] } } })
   })
 
   it.each(['claude', 'pi'] as const)('uploads, previews, excludes and deletes a native %s skill', async (harness) => {
@@ -159,9 +192,10 @@ describe('resource catalog', () => {
     await expect(service.mcp.delete({ harness: 'claude', cwd }, present(linked.items[0]).id)).rejects.toMatchObject({ statusCode: 403 })
   })
 
-  it('stores Pi SSE transport in the adapter native field and rejects orphan partial overrides', async () => {
-    expect(validateMcpDefinition({ type: 'sse', url: 'https://example.com/sse' }, 'pi')).toEqual({ httpTransport: 'sse', url: 'https://example.com/sse' })
-    await expect(service.mcp.create({ harness: 'pi', cwd }, { name: 'orphan-override', scope: 'project', definition: { disabled: true } })).rejects.toMatchObject({ statusCode: 422 })
+  it('rejects Pi SSE, obsolete adapter flags and orphan partial overrides', async () => {
+    expect(() => validateMcpDefinition({ type: 'sse', url: 'https://example.com/sse' }, 'pi')).toThrow('legacy SSE')
+    expect(() => validateMcpDefinition({ command: 'node', disabled: true }, 'pi')).toThrow('Obsolete')
+    await expect(service.mcp.create({ harness: 'pi', cwd }, { name: 'orphan-override', scope: 'project', definition: { enabled: false } })).rejects.toMatchObject({ statusCode: 422 })
   })
 
   it('keeps explicitly configured Pi skill paths in their global source', async () => {

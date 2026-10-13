@@ -27,6 +27,7 @@ import { ClaudeSessionStore } from './provider/claude/session/claude-session-sto
 import { piGlobalDir, piSessionsRoot } from './provider/pi/pi-paths.js'
 import { PiConfigAdapter } from './provider/pi/config-adapter/pi-config-adapter.js'
 import { PiProvider } from './provider/pi/pi-provider.js'
+import { resolvePiThinkingCapability } from './provider/pi/pi-thinking-levels.js'
 import { PiSessionStore } from './provider/pi/pi-session-store.js'
 import { CodingAgentSessionFactory } from './provider/pi/pi-session-factory.js'
 import { defaultDataRetention, type DataRetention, type DataStoreLogger } from './core/resource/data-store.js'
@@ -134,6 +135,7 @@ export async function startServer(): Promise<void> {
     userFileSystem: fileSystem,
     gitStatusReader: new NodeGitStatusReader(fileSystem.initialDirectory),
     modelProfileService,
+    piEffortLevels: (modelId) => resolvePiThinkingCapability(modelId).effortLevels,
     agentProfileService,
     agentHarness,
     sessionTerminals,

@@ -36,6 +36,7 @@ describe('/api/sandbox/credentials/profiles', () => {
     server = buildHttpServer({
       userFileSystem: new NodeUserFileSystem({ initialDirectory: workspace }),
       modelProfileService: services.modelProfileService,
+      piEffortLevels: (modelId) => modelId === 'model-a' ? ['off', 'low', 'high', 'max'] : ['off'],
       agentProfileService: services.agentProfileService,
       recorder,
     })
@@ -70,10 +71,14 @@ describe('/api/sandbox/credentials/profiles', () => {
       image_understanding_model: 'vision-a',
       image_generation_model: 'image-a',
       image_edit_model: 'edit-a',
+      classifier_api: null,
+      classifier_model: null,
+      classifier_profile_id: null,
       model_capabilities: {
         image_understanding: [],
         image_generation: [],
         image_edit: [],
+        classification: [],
       },
       model_count: null,
     })
@@ -167,7 +172,10 @@ describe('/api/sandbox/credentials/profiles', () => {
       url: `/api/sandbox/credentials/profiles/${savedId}/models`,
     })
     expect(listResponse.statusCode).toBe(200)
-    expect(listResponse.json()).toEqual({ models: [{ id: 'model-a' }, { id: 'model-b' }] })
+    expect(listResponse.json()).toEqual({ models: [
+      { id: 'model-a', pi_effort_levels: ['off', 'low', 'high', 'max'] },
+      { id: 'model-b', pi_effort_levels: ['off'] },
+    ] })
 
     const savedTestResponse = await server.inject({
       method: 'POST',
@@ -259,6 +267,7 @@ describe('/api/sandbox/credentials/profiles', () => {
         image_understanding: [],
         image_generation: ['image-a'],
         image_edit: [],
+        classification: [],
       },
     })
 
@@ -297,6 +306,7 @@ describe('/api/sandbox/credentials/profiles', () => {
         image_understanding: [],
         image_generation: ['image-a'],
         image_edit: [],
+        classification: [],
       },
     })
   })
@@ -311,6 +321,7 @@ describe('/api/sandbox/credentials/profiles', () => {
           image_understanding: ['vision-a'],
           image_generation: ['gen-a'],
           image_edit: [],
+        classification: [],
         },
       },
     })
@@ -320,6 +331,7 @@ describe('/api/sandbox/credentials/profiles', () => {
         image_understanding: ['vision-a'],
         image_generation: ['gen-a'],
         image_edit: [],
+        classification: [],
       },
     })
   })
@@ -349,8 +361,27 @@ describe('/api/sandbox/credentials/profiles', () => {
         image_understanding: [],
         image_generation: [],
         image_edit: [],
+        classification: [],
       },
     })
+  })
+
+  it('round trips classification settings and probes through a selected connection profile', async () => {
+    const connection = await server.inject({ method: 'POST', url: '/api/sandbox/credentials/profiles', payload: {
+      ...profilePayload('classifier'), base_url: 'https://classifier.test/v1', auth_token: 'classifier-secret',
+    } })
+    const connectionId = generatedProfileId(connection.json())
+    const created = await server.inject({ method: 'POST', url: '/api/sandbox/credentials/profiles', payload: {
+      ...profilePayload('chat'), classifier_api: 'typesafe-system-one', classifier_model: 'jev-latest', classifier_profile_id: connectionId,
+    } })
+    expect(created.statusCode).toBe(201)
+    const id = generatedProfileId(created.json())
+    expect(created.json()).toMatchObject({ classifier_api: 'typesafe-system-one', classifier_model: 'jev-latest', classifier_profile_id: connectionId })
+    const probe = await server.inject({ method: 'POST', url: `/api/sandbox/credentials/profiles/${id}/capabilities/probe`, payload: { model_id: 'jev-latest', capability: 'classification' } })
+    expect(probe.statusCode).toBe(200)
+    expect(endpointClient.probes.at(-1)).toMatchObject({ profile: { baseUrl: 'https://classifier.test/v1', authToken: 'classifier-secret' }, modelId: 'jev-latest', capability: 'classification' })
+    expect((await server.inject({ method: 'GET', url: `/api/sandbox/credentials/profiles/${id}` })).json()).toMatchObject({ model_capabilities: { classification: ['jev-latest'] } })
+    expect((await server.inject({ method: 'DELETE', url: `/api/sandbox/credentials/profiles/${connectionId}` })).statusCode).toBe(409)
   })
 
   it('requires a ready profile before changing the default and promotes on deletion', async () => {

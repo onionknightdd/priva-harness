@@ -145,11 +145,16 @@ mapper 保存上一次 result 的 `modelUsage` 快照，本轮 = 累计 − 快�
 `max_turns`，`error_max_budget_usd` → `max_budget`，`api_error_status` 401/403 → `auth_error`，
 其他状态码 → `api_error`，否则 `provider_error`；压缩失败 → `compaction_failed`。
 
-**Pi**：`agent_end.messages` 是本轮新产生的全部消息，每条 assistant message 带一次 API 调用的
-`usage` 与 `model`。mapper 遍历求和并按模型分桶，`numTurns` = assistant message 数。Pi 只给
+**Pi**：`agent_end` 可能继续重试、压缩或消费队列；仅 `agent_settled` 结算本轮。mapper 收集
+`message_end` / `agent_end.messages` 并按原生消息身份去重。assistant message 的 `usage` 计入
+聊天模型，`numTurns` = assistant message 数；父 `toolResult.usage` 计入 Codemode 的模型与嵌套
+工具用量，不能再次叠加子调用的 usage。Codemode 的公开模型 registry 装饰器记录独立
+`invocationId`、父工具 ID、provider/model、usage、cost 与完成状态，用于把父汇总分摊到模型；
+未归因部分保留在 `Tools/summaries`。产品图片 provider 标注 `pricingKnown: false` 时不将
+原生必填的数值 `cost.total = 0` 解释成已知零费用。中断也结算已产生的用量。Pi 只给
 自由文本 `errorMessage`，失败码按文本启发式归类（401/403/unauthorized → `auth_error`，HTTP
 状态码 / rate limit / 网络错误 → `api_error`，其余 `provider_error`）；原文仍在 `message` 里。
-Pi 对无报价模型给出 `cost.total = 0` 而非缺失，因此 Pi 侧无法区分"零成本"与"无报价"。
+未提供产品价格标记的其他 Pi provider 仍可能把无报价表示成 `cost.total = 0`，无法仅凭原生字段区分零成本与无报价。
 
 **来源**：`AgentRunOptions.source: RunSource` 为必填，`run-route.ts` 传 `'web'`，
 `subagent-test.ts` 传 `'subagent-test'`；`'channel'`、`'scheduled'` 已预留在类型中。
@@ -182,6 +187,7 @@ Pi 对无报价模型给出 `cost.total = 0` 而非缺失，因此 Pi 侧无法�
 | --- | --- | --- |
 | `tool.started` / `tool.updated` / `tool.running` | 暂存 | 记住 input 与时间戳 |
 | `tool.completed` | `tool` 事实 + `tool.invoked` 审计 | 每个 `tool_use_id` 只记一次（Claude 的 Skill 结果会到两次）；`duration_ms` 优先用事件值，否则按 `tool.running`（Pi）或 `tool.started` 起算；`output_tokens` 目前只有 Claude 的 Agent 工具结果提供；details 存完整 input、前 200 字符 output、`outputChars` |
+| `tool.progress` / `tool.completed` 中完成的 `modelCalls` | `model.invoked` 审计 | 每个 invocationId 仅记一次；保存父工具 ID、provider/model、operation、结果状态、usage 与已知费用，不额外增加 run 总费用；不保存凭据或图片 base64 |
 | `tool.completed` 且工具名为 `Skill` | 额外 `skill.invoked`，target = input.skill，`via: 'tool'` | |
 | 提示词以 `/name` 开头 | `skill.invoked`，`via: 'prompt'` | 只有 `name` 出现在该 provider 最近一次 `listSlashCommands` 结果的 `kind = 'skill'` 名单（含别名）中才记，避免把路径或内建命令当成技能；harness 从未列过该 provider 的命令时不记 |
 | `permission.resolved`（`kind = 'tool'`） | `permission.resolved`，target = 工具名 | details：decision、reason（answered / skipped / timeout / cancelled）、requestReason、从 `permission.requested` 起算的 `latencyMs` |

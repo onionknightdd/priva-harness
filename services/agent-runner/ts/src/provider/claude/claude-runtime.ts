@@ -33,6 +33,7 @@ import { imageToolsFromSpec } from '../../core/tool/image-tool-shared.js'
 import { ClaudeEventMapper } from './claude-event-mapper.js'
 import { claudeUserMessage } from './claude-user-message.js'
 import { compileClaudeCustomTools } from './tools/compile-custom-tools.js'
+import { assertClaudeEffort } from './claude-effort.js'
 
 export const CLAUDE_DISABLED_SKILLS = [
   'dataviz',
@@ -119,6 +120,7 @@ export class ClaudeRuntime implements AgentRuntime {
   }
 
   async applyRunSpec(spec: ProviderRunSpec): Promise<void> {
+    assertClaudeEffort(spec.effort)
     if (this.query !== undefined && this.spec.model !== spec.model) {
       await this.query.applyFlagSettings({ model: spec.model, env: resolveProviderRunEnv(spec) })
     }
@@ -331,6 +333,7 @@ export function resolveClaudeQueryOptions(
   tools: readonly ToolDefinition[] = [],
   emitters: ClaudeToolEmitters = {},
 ): Options {
+  assertClaudeEffort(spec.effort)
   const options: Options = {
     cwd: spec.cwd,
     model: spec.model,

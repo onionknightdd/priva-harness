@@ -25,6 +25,7 @@ import type { UserTurn } from '../core/run/user-turn.js'
 import { SessionError } from '../core/resource/session.js'
 import { SessionRunModes } from './session/session-run-mode.js'
 import { PLATFORM_INSTRUCTIONS } from './prompt/platform-instructions.js'
+import { foldThread } from '../core/resource/fold-thread.js'
 import { SessionStream } from './session/session-stream.js'
 import { sessionRefKey } from '../core/resource/session.js'
 import { userTurnFromText } from '../core/run/user-turn.js'
@@ -188,13 +189,18 @@ export class AgentHarness {
         await this.pool?.releaseSession(ref)
       },
       observe: (ref, cwd) => this.observeTerminalHistory(ref, cwd),
-      refresh: async (ref) => { await this.terminalHistories.get(sessionRefKey(ref))?.mirror.refresh() },
+      refresh: async (ref) => {
+        if (!terminals.isStructured(ref)) { await this.terminalHistories.get(sessionRefKey(ref))?.mirror.refresh(); return }
+        try { this.sessionStream(ref).replaceHistory(foldThread(await this.options.providers[ref.provider].sessions.replay(ref))) }
+        catch (error) { if (!(error instanceof SessionError && error.kind === 'session-not-found')) throw error }
+      },
       ledger: (ref, runId, turn, spec, target) => {
         const knownSkills = this.knownSkills.get(spec.provider)
         return new RunLedger(this.options.recorder, { runId, spec, turn, source: 'web', sessionId: ref.id, sessionTarget: target,
           ...(knownSkills ? { knownSkills } : {}) })
       },
       accounting: async (ref) => {
+        if (terminals.isStructured(ref)) return () => Promise.resolve({})
         const store = this.options.providers[ref.provider].sessions
         const before = await readTerminalUsage(store, ref)
         return async () => terminalUsageDelta(before, await readTerminalUsage(store, ref))
@@ -233,7 +239,7 @@ export class AgentHarness {
   }
 
   async configureSession(ref: SessionRef, spec: ProviderRunSpec, requestId: string): Promise<void> {
-    if (ref.provider === 'claude') return this.configureTerminal(ref, spec, requestId)
+    if (this.options.providers[ref.provider].terminalLaunch) return this.configureTerminal(ref, spec, requestId)
     const key = sessionRefKey(ref)
     // Queue without blocking the socket: a running turn may still need an answer or abort.
     const previous = this.configuring.get(key) ?? Promise.resolve()
@@ -311,6 +317,7 @@ export class AgentHarness {
   async observeTerminalSession(ref: SessionRef): Promise<() => Promise<void>> {
     const state = await this.terminals?.state(ref)
     if (!state || !await this.terminals?.isAlive(ref)) return () => Promise.resolve()
+    await this.loadSessionStream(ref)
     await this.terminalChats?.event(ref, state)
     return this.observeTerminalHistory(ref, state.cwd)
   }
@@ -318,6 +325,7 @@ export class AgentHarness {
   async stopTask(ref: SessionRef, taskId: string): Promise<void> {
     if (this.terminalChats && await this.terminals?.isAlive(ref)) {
       if (!this.sessionStream(ref).tasks.get(taskId)) throw new SessionError('invalid-request', 'Unknown background task')
+      if (await this.terminals?.stopTask(ref, taskId)) return
       await this.terminalChats.manageTasks(ref)
       return
     }

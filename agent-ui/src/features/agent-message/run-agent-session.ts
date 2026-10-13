@@ -5,7 +5,7 @@ import { messageTextWithAttachments } from "./message-attachment-text"
 import { parseStreamFrame, type StreamFrame } from "./run-stream-reducer"
 
 export type AgentRunHarness = "claude" | "pi"
-export type AgentRunEffort = "low" | "medium" | "high" | "xhigh" | "max"
+export type AgentRunEffort = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
 export type AgentRunInit = {
   text: string; attachments?: MessageAttachment[]; imagePaths?: string[]; model: string; harness: AgentRunHarness
   cwd: string; contextWindow?: ContextWindow; effort?: AgentRunEffort; sessionId?: string; fork?: boolean; promptSuggestions?: boolean

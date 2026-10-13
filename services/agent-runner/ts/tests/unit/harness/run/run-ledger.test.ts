@@ -28,6 +28,22 @@ async function drain(harness: AgentHarness, signal = new AbortController().signa
 }
 
 describe('RunLedger through AgentHarness', () => {
+  it('audits each native model invocation once and retains parent tool attribution', async () => {
+    const recorder = new MemoryDataRecorder()
+    const call = { id: 'model-1', parentToolCallId: 'outer', operation: 'classify' as const, provider: 'p', model: 'judge', status: 'completed' as const, costUsd: 0.2 }
+    const { harness } = harnessWith([
+      { type: 'tool.progress', id: 'outer', channel: 'log', chunk: '', modelCalls: [call] },
+      { type: 'tool.completed', id: 'outer/1', parentToolCallId: 'outer', name: 'mcp__docs__read', ok: true, output: 'ok' },
+      { type: 'tool.completed', id: 'outer', name: 'codemode', ok: true, output: 'done', modelCalls: [call] },
+      { type: 'run.completed', model: 'm', durationMs: 1, costUsd: 0.2 },
+    ], recorder)
+    await drain(harness)
+    expect(recorder.ofKind('audit').filter((audit) => audit.action === 'model.invoked')).toEqual([
+      expect.objectContaining({ target: 'p/judge', details: expect.objectContaining({ invocationId: 'model-1', parentToolCallId: 'outer', costUsd: 0.2 }) as unknown }),
+    ])
+    expect(recorder.ofKind('tool')[0]).toMatchObject({ toolUseId: 'outer/1', details: { parentToolCallId: 'outer' } })
+    expect(recorder.ofKind('run.finished')[0]).toMatchObject({ costUsd: 0.2 })
+  })
   it('records the preassigned Claude session and a completed finish with accounting', async () => {
     const recorder = new MemoryDataRecorder()
     const { harness } = harnessWith([

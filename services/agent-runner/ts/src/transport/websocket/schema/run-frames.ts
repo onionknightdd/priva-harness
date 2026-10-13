@@ -4,6 +4,8 @@ import { isRunMode, type RunMode } from '../../../core/resource/session.js'
 import { interactionResponseSchema, type InteractionResponse } from '../../../core/resource/interaction.js'
 import { userAttachmentSchema, type UserAttachment } from '../../../core/run/user-turn.js'
 import {
+  EFFORT_LEVELS,
+  isClaudeEffortLevel,
   isEffortLevel,
   type EffortLevel,
   type SessionTarget,
@@ -81,10 +83,13 @@ export function parseClientFrame(raw: unknown): ParseClientResult {
     const result = z.object({ type: z.literal('session.configure'), requestId: z.string().trim().min(1),
       harness: z.enum(['claude', 'pi']), sessionId: z.string().trim().min(1), model: z.string().trim().min(1), cwd: z.string().trim().min(1),
       contextWindow: z.union([z.literal(200000), z.literal(1000000)]).optional(),
-      effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(), promptSuggestions: z.boolean().optional(),
+      effort: z.enum(EFFORT_LEVELS).optional(), promptSuggestions: z.boolean().optional(),
     }).safeParse(raw)
     if (!result.success) return { ok: false, message: 'Invalid session configuration' }
     const { effort, promptSuggestions, contextWindow, ...frame } = result.data
+    if (frame.harness === 'claude' && effort !== undefined && !isClaudeEffortLevel(effort)) {
+      return { ok: false, message: 'Claude effort must be low, medium, high, xhigh, or max' }
+    }
     return { ok: true, frame: { ...frame, ...(effort === undefined ? {} : { effort }),
       ...(promptSuggestions === undefined ? {} : { promptSuggestions }),
       ...(contextWindow === undefined ? {} : { contextWindow }) } }
@@ -149,7 +154,10 @@ export function parseInitFrame(raw: unknown): ParseInitResult {
     return { ok: false, message: 'Context window must be 200000 or 1000000' }
   }
   if (effort !== undefined && !isEffortLevel(effort)) {
-    return { ok: false, message: 'Init effort must be low, medium, high, xhigh, or max' }
+    return { ok: false, message: `Init effort must be ${EFFORT_LEVELS.join(', ')}` }
+  }
+  if (harness === 'claude' && effort !== undefined && !isClaudeEffortLevel(effort)) {
+    return { ok: false, message: 'Claude effort must be low, medium, high, xhigh, or max' }
   }
   const sessionId = raw['sessionId']
   if (sessionId !== undefined && (typeof sessionId !== 'string' || sessionId.trim() === '')) {

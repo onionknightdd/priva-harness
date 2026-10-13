@@ -10,7 +10,7 @@ import {
 
 test("only harnesses with a runner terminal driver offer the terminal view", () => {
   assert.equal(harnessSupportsTerminal("claude"), true)
-  assert.equal(harnessSupportsTerminal("pi"), false)
+  assert.equal(harnessSupportsTerminal("pi"), true)
   assert.equal(harnessSupportsTerminal(null), false)
 })
 

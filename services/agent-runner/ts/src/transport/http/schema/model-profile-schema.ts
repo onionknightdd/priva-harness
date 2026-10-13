@@ -1,6 +1,12 @@
+import { CLASSIFIER_APIS } from '../../../core/resource/model-profile.js'
+
 const nullableString = {
   anyOf: [{ type: 'string' }, { type: 'null' }],
 } as const
+
+const classifierApiSchema = { anyOf: [{ type: 'string', enum: CLASSIFIER_APIS }, { type: 'null' }] } as const
+
+const classifierProperties = { classifier_api: classifierApiSchema, classifier_model: nullableString, classifier_profile_id: nullableString } as const
 
 const modelProfileTags = ['model-profiles'] as const
 
@@ -12,11 +18,12 @@ const modelIdListSchema = {
 const modelCapabilitiesSchema = {
   type: 'object',
   additionalProperties: false,
-  required: ['image_understanding', 'image_generation', 'image_edit'],
+  required: ['image_understanding', 'image_generation', 'image_edit', 'classification'],
   properties: {
     image_understanding: modelIdListSchema,
     image_generation: modelIdListSchema,
     image_edit: modelIdListSchema,
+    classification: modelIdListSchema,
   },
 } as const
 
@@ -36,6 +43,7 @@ const profileProperties = {
   image_understanding_model: nullableString,
   image_generation_model: nullableString,
   image_edit_model: nullableString,
+  ...classifierProperties,
   model_capabilities: modelCapabilitiesSchema,
 } as const
 
@@ -48,6 +56,9 @@ const profileRequired = [
   'image_understanding_model',
   'image_generation_model',
   'image_edit_model',
+  'classifier_api',
+  'classifier_model',
+  'classifier_profile_id',
   'model_capabilities',
 ] as const
 
@@ -81,6 +92,7 @@ const modelProfileCreateBodySchema = {
     image_understanding_model: nullableString,
     image_generation_model: nullableString,
     image_edit_model: nullableString,
+    ...classifierProperties,
     model_capabilities: modelCapabilitiesSchema,
     ...removedHarnessModelProperties,
   },
@@ -106,7 +118,10 @@ const modelListResponseSchema = {
         type: 'object',
         additionalProperties: false,
         required: ['id'],
-        properties: { id: { type: 'string' } },
+        properties: {
+          id: { type: 'string' },
+          pi_effort_levels: { type: 'array', items: { type: 'string', enum: ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] } },
+        },
       },
     },
   },
@@ -162,6 +177,7 @@ export const updateModelProfileSchema = {
       image_understanding_model: nullableString,
       image_generation_model: nullableString,
       image_edit_model: nullableString,
+      ...classifierProperties,
       ...removedHarnessModelProperties,
     },
   },
@@ -207,7 +223,7 @@ export const testSavedModelProfileSchema = {
 
 const modelCapabilitySchema = {
   type: 'string',
-  enum: ['image_understanding', 'image_generation', 'image_edit'],
+  enum: ['image_understanding', 'image_generation', 'image_edit', 'classification'],
 } as const
 
 const modelCapabilityProbeResponseSchema = {
@@ -251,6 +267,8 @@ export const probeSavedModelCapabilitySchema = {
     required: ['model_id', 'capability'],
     properties: {
       ...savedModelProfileTestBodySchema.properties,
+      classifier_api: classifierApiSchema,
+      classifier_profile_id: nullableString,
       model_id: { type: 'string', minLength: 1, maxLength: 512 },
       capability: modelCapabilitySchema,
     },

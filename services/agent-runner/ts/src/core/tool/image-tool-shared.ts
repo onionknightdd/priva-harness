@@ -4,12 +4,12 @@ import path from 'node:path'
 import {
   emptyModelCapabilityCatalog,
   resolveCapabilityModel,
-  type ModelCapability,
+  type ImageCapability,
 } from '../resource/model-profile.js'
 import { imageArtifactFileName, resolveImageArtifactPath } from './image-artifact.js'
 import type { ImageToolProfile } from './define-tool.js'
 
-const CAPABILITY_ERROR: Record<ModelCapability, string> = {
+const CAPABILITY_ERROR: Record<ImageCapability, string> = {
   image_understanding: 'image_read failed: this profile has no image understanding model',
   image_generation: 'image_gen failed: this profile has no image generation model',
   image_edit: 'image_edit failed: this profile has no image edit model',
@@ -32,7 +32,7 @@ export function imageToolsFromSpec(spec: {
 
 export function requireImageModel(
   profile: ImageToolProfile | undefined,
-  capability: ModelCapability,
+  capability: ImageCapability,
 ):
   | { ok: true; model: string; profile: ImageToolProfile }
   | { ok: false; error: string } {

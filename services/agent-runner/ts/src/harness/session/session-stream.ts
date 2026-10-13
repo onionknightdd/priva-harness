@@ -95,10 +95,17 @@ export class SessionStream {
 
   async flush(): Promise<void> { await this.writes }
 
-  startTerminalTurn(runId: string, model: string, user: ThreadMessage, nativePrompt: boolean): void {
+  startTerminalTurn(runId: string, model: string, user: ThreadMessage, nativePrompt: boolean, structured = false): void {
+    if (structured) {
+      // A runner can re-adopt a live native turn after loading its partial transcript.
+      const startedAt = Date.parse(user.createdAt)
+      this.nativeHistory = this.messages.filter((message) => Date.parse(message.createdAt) < startedAt)
+      this.publishNativeSnapshot(this.nativeHistory)
+    }
     // UserPromptSubmit also fires for machine input and need not identify its
     // source. Only the native transcript may turn such a prompt into a bubble.
     this.publish({ type: 'run.started', driver: 'terminal', model, ...(!nativePrompt ? { userMessage: user } : {}) }, runId)
+    if (structured) this.terminalText = undefined
     if (nativePrompt) {
       this.terminalText = new TerminalTextProjection(runId, user, this.nativeHistory, true)
       this.publishNativeSnapshot(this.terminalText.merge(this.nativeHistory))

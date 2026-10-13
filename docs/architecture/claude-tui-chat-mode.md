@@ -43,7 +43,7 @@ UI 的输入核心交互是：用户既可以在消息气泡区的 ChatComposer 
 | Q11 | 队列仲裁 | 队列由服务端持有，`Stop` hook 到达时先 flush 再置 idle |
 | Q12 | 线协议 | 可演进，不保留旧帧兼容 |
 | Q13 | 首次启动对话框 | runner 预写 `~/.claude.json`（项目信任、onboarding、bypass 确认、自定义 API key 批准） |
-| — | Pi TUI | 留到下一个 MVP |
+| — | Pi TUI | 已接入原生结构化 Host，见 [Pi 原生共享会话](pi-native-session.md) |
 
 ## 3. 分层
 
@@ -56,7 +56,7 @@ L3  交互能力补齐（本轮已落地）
     AskUserQuestion 双向镜像；MessageDisplay 增量；/clear 轮转；模型 / effort 切换
 L4  Claude 产品能力（已落地）
     产品 stdio MCP；配置与上下文回传；事件审计 / 用量；资源刷新 / 附件 / 后台任务入口
-后续独立范围：Pi TUI
+Pi 的结构化 Host 复用上述终端设施，详见 pi-native-session.md。
 ```
 
 ## 4. L1：终端基础设施
@@ -108,12 +108,16 @@ tmux server 与 pane 继承的是经 `paneEnvironment` 清洗过的 runner 环�
 浏览器里的 TUI 变成纯黑白。
 
 私有 tmux 的全部选项在 `new-session` 前应用，包括 `mouse on`、`focus-events on`、
-历史容量和窗口尺寸策略。Claude 启动时即可检测到鼠标与焦点支持，避免出现 tmux 鼠标配置提示。
-这些设置只作用于私有 server，无需修改用户的 `~/.tmux.conf`。已运行的会话保留原配置；
+`extended-keys on`、`extended-keys-format csi-u`、历史容量和窗口尺寸策略。
+Claude / Pi 启动时即可检测到所需支持，避免原生 tmux 配置提示。
+键盘两项在 attach 和 respawn 前也应用，使旧私有 server 不必被杀掉重建；
+attach 只更新选项，不重启 TUI。已经输出的启动警告仍留在旧画面中。
+这些设置只作用于私有 server，无需修改用户的 `~/.tmux.conf`。其余启动配置仍保留原值；
 升级后需在 TUI 中执行 `/exit` 并重新打开，让新进程使用新配置，刷新浏览器不会替换后台进程。
 
 ```text
-start-server -> set-option (mouse/focus/terminal/...) -> new-session -> Claude TUI
+start-server -> set-option (mouse/focus/extended-keys/terminal/...) -> new-session -> Claude / Pi TUI
+existing server -> extended-keys on + csi-u -> attach / respawn
 ```
 
 Debian 13 开发镜像固定使用 tmux 3.7c。发行版自带的 3.5a 在无窗口时设置
@@ -232,8 +236,8 @@ tool test    -> 检查服务与工具状态 -> MCP callTool
 
 服务关闭会停止后续连接探测，工具选择保留；工具关闭不影响服务的其他工具、提示词和
 资源。所有工具关闭不等于关闭服务。运行中的调用不通过开关强行中断。
-Pi 在原生 MCP 定义中写 `disabled` 和 `excludeTools`，过滤判断复用 adapter 的公开 API；
-被其他来源覆盖或被更广过滤规则限制的条目不提供误导性的启用操作。
+Pi 使用原生 `enabled`、`exposure` 与 `toolExposure`；旧 adapter 字段明确报重配错误。
+具体配置来源、项目可信规则和工具调用方式见 [Pi 原生共享会话](pi-native-session.md)。
 原生 TUI 回归 `terminal-mcp-enablement.test.ts` 通过模拟模型请求中的真实工具清单验证
 单工具禁用、服务禁用及恢复后的选择保留，不调用真实模型 API。
 
@@ -356,7 +360,8 @@ TUI -> native JSONL -> provider watch/replay -> TerminalHistoryMirror
 进程已退出时，下次发送从同一转录重新启动 TUI。终端不可用或启动失败会明确报错，
 不会切换到 SDK。首次打开旧 SDK 会话前释放空闲 SDK runtime；SDK 尚有活动轮次或
 后台任务时返回 busy。程序化 `AgentHarness.run/launch` 保留 SDK，但不能同时写入
-已由 TUI 控制的会话。Pi 的 UI 路径保持原状。
+已由 TUI 控制的会话。Pi UI 也使用原生终端 Host；其结构化控制与事件通道见
+[Pi 原生共享会话](pi-native-session.md)。
 
 ```text
 New Chat -> ChatComposer (Terminal disabled)
@@ -513,7 +518,7 @@ CLI 启动时固定 `--settings` 的内容，运行中只改文件或执行 `/mo
 ```text
 Composer 200K / 1M -> contextWindow -> 验证 200000 / 1000000
   Claude -> [1m] + 显式窗口环境 -> 必要时 /compact -> 原 pane respawn --resume -> statusLine 确认
-  Pi     -> 等当前运行时清理完毕 -> 必要时 compact -> models.json + registry.refresh + setModel
+  Pi     -> 空闲 Host 结构化 configure -> 必要时 compact -> registry.refresh + setModel
            -> session.config(requestId) -> 保存会话选择 / 恢复上下文环
 ```
 
@@ -704,7 +709,7 @@ WebUI 只在当前会话已连接、空闲且输入框为空时显示建议，�
 
 ## 5. 已知限制
 
-- Pi TUI 不在本轮范围；Pi UI 与程序化 Claude 调用仍使用各自原有 runtime。
+- 下列 Claude CLI 信号限制不适用于 Pi；Pi 使用公开 SDK 的结构化事件，见 [Pi 原生共享会话](pi-native-session.md)。
 - MessageDisplay 按原生行 / 片段推送，不提供严格逐 token、thinking 或工具参数增量。
 - 原生输入建议从当前 TUI 画面读取；CLI 没有向这个交互式桥接提供 SDK 的结构化建议事件。
   UI 镜像当前可见建议，不额外请求模型；原生没有生成建议时不补造内容。

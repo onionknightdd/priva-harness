@@ -104,6 +104,13 @@ describe('PiSessionStore', () => {
       },
     ], 'bb-1').map((message) => message.type)).toEqual(['user'])
   })
+
+  it('preserves product model audit entries for interrupted Codemode recovery', () => {
+    const data = { parentToolCallId: 'outer', modelCalls: [], artifacts: [] }
+    expect(messagesFromContextEntries([{ type: 'custom', id: 'audit', customType: 'harness-model-invocations', data }], 's')).toEqual([
+      expect.objectContaining({ type: 'custom', message: { role: 'custom', customType: 'harness-model-invocations', data } }),
+    ])
+  })
 })
 
 function listed(path: string): PiListedSession {

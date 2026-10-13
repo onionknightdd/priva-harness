@@ -8,9 +8,10 @@ import { expect, it, vi } from 'vitest'
 import { createPiResourceLoader } from '../../../../src/provider/pi/pi-resource-loader.js'
 import { piMemoryModule } from '../../../../src/provider/pi/pi-agent-extensions.js'
 
-it('inherits the current model for built-ins and unconfigured custom agents while preserving custom model overrides', async () => {
+it('inherits agent models and disables Tintin workflows before binding the SDK workflow without changing project settings', async () => {
   const { stdout } = await promisify(execFile)(process.execPath, ['--import', import.meta.resolve('tsx'), 'tests/fixtures/resources/pi-subagent-model-probe.ts'], { timeout: 20000 })
   expect(stdout).toContain('default inheritance, custom overrides and warm model switches passed')
+  expect(stdout).toContain('native workflow disabled before registration for unset/true settings; SDK workflow binds without collision and project settings remain unchanged')
 }, 25000)
 
 it('binds the real memory extension and writes only to each selected project store', async () => {

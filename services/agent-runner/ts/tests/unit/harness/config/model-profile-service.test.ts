@@ -61,6 +61,7 @@ describe('ModelProfileService', () => {
       modelCapabilities: {
         imageUnderstanding: [],
         imageGeneration: [],
+        classification: [],
         imageEdit: [],
       },
     }
@@ -100,7 +101,8 @@ describe('ModelProfileService', () => {
     expect((await service.getProfile('gateway')).modelCapabilities).toEqual({
       imageUnderstanding: ['model-a'],
       imageGeneration: [],
-      imageEdit: [],
+      classification: [],
+        imageEdit: [],
     })
   })
 
@@ -134,6 +136,7 @@ describe('ModelProfileService', () => {
       imageUnderstanding: [],
       imageGeneration: ['image-a'],
       imageEdit: ['image-a'],
+      classification: [],
     })
   })
 
@@ -156,7 +159,8 @@ describe('ModelProfileService', () => {
     expect((await service.getProfile(profile.id)).modelCapabilities).toEqual({
       imageUnderstanding: [],
       imageGeneration: [],
-      imageEdit: [],
+      classification: [],
+        imageEdit: [],
     })
   })
 })
@@ -216,3 +220,35 @@ async function delay(milliseconds: number): Promise<void> {
     setTimeout(resolveDelay, milliseconds)
   })
 }
+
+describe('classifier profile bindings', () => {
+  it('resolves and probes through the explicitly selected connection, and prevents dangling deletion', async () => {
+    const seen: string[] = []
+    const client: ModelEndpointClient = {
+      listModels: () => Promise.resolve([]),
+      probeModelCapability: (profile, model, capability) => {
+        seen.push(`${profile.baseUrl}|${profile.authToken}|${profile.classifierApi}|${model}|${capability}`)
+        return Promise.resolve(true)
+      },
+    }
+    const service = new ModelProfileService(new MemoryModelProfileStore(), client)
+    const connection = await service.createProfile({ ...profileInput('classifier connection'), baseUrl: 'https://classifier.test/v1', authToken: 'classifier-key' })
+    const chat = await service.createProfile({ ...profileInput('chat'), classifierApi: 'typesafe-system-one', classifierModel: 'jev-latest', classifierProfileId: connection.id })
+    expect((await service.resolve(`${chat.id}:chat-model`)).classifier).toEqual({
+      provider: `priva-classifier-${connection.id}`, api: 'typesafe-system-one', modelId: 'jev-latest', baseUrl: 'https://classifier.test/v1', authToken: 'classifier-key',
+    })
+    await service.probeSavedModelCapability(chat.id, {}, 'jev-latest', 'classification')
+    expect(seen).toEqual(['https://classifier.test/v1|classifier-key|typesafe-system-one|jev-latest|classification'])
+    expect((await service.getProfile(chat.id)).modelCapabilities.classification).toEqual(['jev-latest'])
+    await expect(service.deleteProfile(connection.id)).rejects.toMatchObject({ kind: 'profile-not-ready' })
+    await service.updateProfile(chat.id, { classifierProfileId: null })
+    await expect(service.deleteProfile(connection.id)).resolves.toBeUndefined()
+  })
+
+  it('rejects missing connection references and incomplete classifier execution bindings', async () => {
+    const service = new ModelProfileService(new MemoryModelProfileStore(), endpointClient())
+    await expect(service.createProfile({ ...profileInput('chat'), classifierProfileId: 'missing' })).rejects.toMatchObject({ kind: 'profile-not-found' })
+    const profile = await service.createProfile({ ...profileInput('chat'), classifierModel: 'jev-latest' })
+    await expect(service.resolve(`${profile.id}:chat-model`)).rejects.toMatchObject({ kind: 'profile-not-ready' })
+  })
+})

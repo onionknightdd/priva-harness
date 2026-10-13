@@ -1,4 +1,4 @@
-import type { ModelCapabilityCatalog } from "./model-profile-api"
+import type { ClassifierApi, ModelCapabilityCatalog } from "./model-profile-api"
 
 export type ProfileDraft = {
   label: string
@@ -8,6 +8,9 @@ export type ProfileDraft = {
   imageUnderstandingModel: string | null
   imageGenerationModel: string | null
   imageEditModel: string | null
+  classifierApi: ClassifierApi | null
+  classifierModel: string | null
+  classifierProfileId: string | null
   modelCapabilities: ModelCapabilityCatalog
 }
 

@@ -11,6 +11,7 @@ import { LiveRunRegistry } from '../../../../src/harness/run/live-run-registry.j
 import { NodeUserFileSystem } from '../../../../src/infrastructure/filesystem/node-user-file-system.js'
 import { buildHttpServer } from '../../../../src/transport/http/server.js'
 import { SESSION_WEBSOCKET_PATH } from '../../../../src/transport/websocket/run-route.js'
+import { fakeStructuredTerminal } from '../../../support/fake-structured-terminal.js'
 import { FakeAgentProvider } from '../../../support/fake-agent-provider.js'
 import { createTestAgentServices } from '../../../support/model-profile.js'
 
@@ -19,7 +20,7 @@ describe('WS /api/sandbox/agent/ws/session', () => {
   let server: FastifyInstance
   let modelReference: string
   let claudeProvider: FakeAgentProvider
-  let piProvider: FakeAgentProvider
+  let piProvider: ReturnType<typeof fakeStructuredTerminal>['provider']
   let liveRuns: LiveRunRegistry
   let harness: AgentHarness
   let agentProfileService: ReturnType<typeof createTestAgentServices>['agentProfileService']
@@ -47,7 +48,7 @@ describe('WS /api/sandbox/agent/ws/session', () => {
         usage: { input: 1, output: 1 },
       },
     ])
-    piProvider = new FakeAgentProvider('pi', [
+    const native = fakeStructuredTerminal([
       {
         type: 'assistant.delta',
         messageId: 'msg_1',
@@ -61,7 +62,8 @@ describe('WS /api/sandbox/agent/ws/session', () => {
         model: 'm',
         durationMs: 3,
       },
-    ])
+    ], claudeProvider)
+    piProvider = native.provider
     const services = createTestAgentServices(join(testRoot, 'runtime'))
     const { modelProfileService } = services
     agentProfileService = services.agentProfileService
@@ -81,6 +83,7 @@ describe('WS /api/sandbox/agent/ws/session', () => {
       cwd: testRoot,
       liveRuns,
     })
+    harness.configureTerminalChats(native.terminals, () => 'http://localhost/events')
     server = buildHttpServer({
       userFileSystem: new NodeUserFileSystem({ initialDirectory: testRoot }),
       modelProfileService,
@@ -91,6 +94,7 @@ describe('WS /api/sandbox/agent/ws/session', () => {
   })
 
   afterEach(async () => {
+    await harness.disposePool()
     await server.close()
     await rm(testRoot, { recursive: true, force: true })
   })
@@ -107,8 +111,7 @@ describe('WS /api/sandbox/agent/ws/session', () => {
     }))
     const received = await frames
 
-    expect(received[0]).toMatchObject({ type: 'session.config', config: { contextWindow: 200000 }, harness: 'pi' })
-    expect(received[1]).toMatchObject({ type: 'run.started', v: 2, seq: 2, harness: 'pi' })
+    expect(received).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'session.snapshot', harness: 'pi' }), expect.objectContaining({ type: 'run.started', v: 2, harness: 'pi' })]))
     expect(received[0]).toHaveProperty('runId')
     expect(received[0]).toHaveProperty('seq')
     expect(received).toEqual(expect.arrayContaining([
@@ -121,7 +124,8 @@ describe('WS /api/sandbox/agent/ws/session', () => {
     ]))
     expect(piProvider.targets[0]).toMatchObject({ kind: 'new', provider: 'pi' })
     expect(received[0]).toHaveProperty('sessionId')
-    expect(received.every((frame) => !(frame as StreamFrame).replay)).toBe(true)
+    expect(received.filter((frame) => ['assistant.delta', 'run.completed'].includes((frame as StreamFrame).type)).every((frame) => !(frame as StreamFrame).replay)).toBe(true)
+    expect(piProvider.lastRuntime).toBeUndefined()
   })
 
   it.each(['claude', 'pi'] as const)('marks %s subscription history as replay without marking subsequent live tools', async (provider) => {
@@ -150,7 +154,7 @@ describe('WS /api/sandbox/agent/ws/session', () => {
     const socket = await server.injectWS(SESSION_WEBSOCKET_PATH)
     const frames = collectFrames(socket)
     socket.send(JSON.stringify({ type: 'run.start', harness: 'claude', text: 'hello', model: modelReference, cwd: testRoot }))
-    expect(await frames).toEqual([expect.objectContaining({ type: 'error', message: 'Terminal driver is unavailable' })])
+    expect(await frames).toEqual([expect.objectContaining({ type: 'error', message: 'The claude harness has no terminal driver' })])
     expect(claudeProvider.targets).toEqual([])
   })
 
@@ -249,7 +253,7 @@ describe('WS /api/sandbox/agent/ws/session', () => {
     ]))
   })
 
-  it('resumes SDK sessions and rejects unsupported forks', async () => {
+  it('resumes native sessions and rejects unsupported forks', async () => {
     const resume = await server.injectWS(SESSION_WEBSOCKET_PATH)
     const resumeFrames = collectFrames(resume)
     resume.send(JSON.stringify({
@@ -263,12 +267,7 @@ describe('WS /api/sandbox/agent/ws/session', () => {
     }))
     await resumeFrames
 
-    expect(piProvider.targets).toEqual([
-      {
-        kind: 'resume',
-        session: { provider: 'pi', id: 'sess-1' },
-      },
-    ])
+    expect(piProvider.targets).toEqual([{ kind: 'resume', session: { provider: 'pi', id: 'sess-1' } }])
     expect(piProvider.specs.at(-1)).toEqual(expect.objectContaining({
       cwd: '/work/repo',
       effort: 'low',
@@ -301,14 +300,13 @@ describe('WS /api/sandbox/agent/ws/session', () => {
       sessionId: 'pi-1',
       fork: true,
     }))
-    expect(await deniedFrames).toEqual([
+    expect(await deniedFrames).toEqual(expect.arrayContaining([
       expect.objectContaining({
         type: 'error',
         message: 'Pi does not support fork',
         v: 2,
-        seq: 1,
       }),
-    ])
+    ]))
   })
 
   it('applies queueBehavior from settings and ignores it on the init frame', async () => {
@@ -343,11 +341,12 @@ describe('WS /api/sandbox/agent/ws/session', () => {
       model: modelReference,
       harness: 'pi',
       cwd: testRoot,
+      sessionId: 'disconnect-session',
     }))
-    const live = await waitFor(() => liveRuns.listActive()[0])
-    expect(live.sessionId).toEqual(expect.any(String))
+    const sessionId = 'disconnect-session'
+    const live = await waitFor(() => { const snapshot = harness.sessionStream({ provider: 'pi', id: sessionId }).snapshot(); return snapshot.activeRunId ? { sessionId, runId: snapshot.activeRunId } : undefined })
     socket.close()
-    expect(liveRuns.listActive()).toHaveLength(1)
+    expect(harness.sessionStream({ provider: 'pi', id: live.sessionId }).snapshot().activeRunId).toBe(live.runId)
 
     const attach = await server.injectWS(SESSION_WEBSOCKET_PATH)
     const received: unknown[] = []
@@ -375,7 +374,7 @@ describe('WS /api/sandbox/agent/ws/session', () => {
       expect.objectContaining({ type: 'session.snapshot', activeRunId: live.runId }),
       expect.objectContaining({ type: 'run.completed', runId: live.runId }),
     ]))
-    expect(liveRuns.listActive()).toEqual([])
+    expect(harness.sessionStream({ provider: 'pi', id: live.sessionId }).snapshot().activeRunId).toBeUndefined()
   })
 
   it('aborts a live run from an abort frame after disconnect', async () => {
@@ -387,8 +386,10 @@ describe('WS /api/sandbox/agent/ws/session', () => {
       model: modelReference,
       harness: 'pi',
       cwd: testRoot,
+      sessionId: 'abort-session',
     }))
-    const live = await waitFor(() => liveRuns.listActive()[0])
+    const sessionId = 'abort-session'
+    const live = await waitFor(() => { const snapshot = harness.sessionStream({ provider: 'pi', id: sessionId }).snapshot(); return snapshot.activeRunId ? { sessionId, runId: snapshot.activeRunId } : undefined })
     socket.close()
 
     const abortSocket = await server.injectWS(SESSION_WEBSOCKET_PATH)
@@ -403,37 +404,31 @@ describe('WS /api/sandbox/agent/ws/session', () => {
     expect(received).toEqual(expect.arrayContaining([
       expect.objectContaining({ type: 'run.aborted', runId: live.runId }),
     ]))
-    expect(liveRuns.listActive()).toEqual([])
+    expect(harness.sessionStream({ provider: 'pi', id: live.sessionId }).snapshot().activeRunId).toBeUndefined()
   })
 
-  it('rejects a second init while the session is live', async () => {
-    piProvider.gate = new Promise(() => undefined)
+  it('queues another turn and deduplicates repeated run IDs in the same native session', async () => {
+    let releaseGate = (): void => undefined
+    piProvider.gate = new Promise((resolve) => { releaseGate = resolve })
     const socket = await server.injectWS(SESSION_WEBSOCKET_PATH)
-    socket.send(JSON.stringify({
-      type: 'run.start',
-      text: 'hi',
-      model: modelReference,
-      harness: 'pi',
-      cwd: testRoot,
-      sessionId: 'sess-busy',
-    }))
-    await waitFor(() => liveRuns.listActive()[0])
-
-    const busy = await server.injectWS(SESSION_WEBSOCKET_PATH)
-    const frames = collectFrames(busy)
-    busy.send(JSON.stringify({
-      type: 'run.start',
-      text: 'again',
-      model: modelReference,
-      harness: 'pi',
-      cwd: testRoot,
-      sessionId: 'sess-busy',
-    }))
-    expect(await frames).toEqual(expect.arrayContaining([
-      expect.objectContaining({ type: 'error', message: 'Session has a live run' }),
-    ]))
+    const received: StreamFrame[] = []
+    socket.on('message', (data: unknown) => received.push(JSON.parse(String(data)) as StreamFrame))
+    const send = (runId: string, text: string) => socket.send(JSON.stringify({ type: 'run.start', text, model: modelReference, harness: 'pi', cwd: testRoot, sessionId: 'sess-busy', runId }))
+    send('first', 'hi')
+    await waitFor(() => piProvider.turns[0])
+    send('first', 'duplicate')
+    send('second', 'again')
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    expect(piProvider.turns).toEqual([{ text: 'hi' }])
+    releaseGate()
+    await waitFor(() => received.find((frame) => frame.type === 'run.completed' && frame.runId === 'second'))
+    expect(piProvider.turns).toEqual([{ text: 'hi' }, { text: 'again' }])
+    expect(piProvider.targets).toHaveLength(1)
+    expect(received.filter((frame) => frame.type === 'run.started').map((frame) => frame.runId)).toEqual(['first', 'second'])
+    expect(piProvider.lastRuntime).toBeUndefined()
     socket.close()
   })
+
 })
 
 function collectFrames(socket: { on: (event: string, listener: (...args: unknown[]) => void) => void }): Promise<unknown[]> {

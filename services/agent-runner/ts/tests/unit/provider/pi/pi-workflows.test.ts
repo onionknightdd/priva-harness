@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { ModelRuntime, type ExtensionContext } from '@earendil-works/pi-coding-agent'
+import { ModelRuntime, type ExtensionToolContext } from '@earendil-works/pi-coding-agent'
 import { workflowProjectPaths } from '@quintinshaw/pi-dynamic-workflows'
 import { PiWorkflows } from '../../../../src/provider/pi/pi-workflows.js'
 import { buildPiModelsConfig } from '../../../../src/provider/pi/pi-models-config.js'
@@ -47,16 +47,18 @@ async function setup() {
   const address = server.address()
   if (!address || typeof address === 'string') throw new Error('Missing HTTP test port')
   const config = join(cwd, 'models.json')
-  await writeFile(config, JSON.stringify(buildPiModelsConfig(`http://127.0.0.1:${address.port}`, 'fixture-model', 'test-key')))
+  await writeFile(config, JSON.stringify(buildPiModelsConfig(`http://127.0.0.1:${address.port}`, 'fixture-model')))
   const modelRuntime = await ModelRuntime.create({ modelsPath: config, authPath: join(cwd, 'auth.json'), modelsStorePath: join(cwd, 'catalog.json') })
-  const bridge = new PiWorkflows({ cwd, agentDir: cwd, sessionId: 'session', modelRuntime, providerId: 'openai', modelId: 'fixture-model' })
+  await modelRuntime.setRuntimeApiKey('priva-chat', 'test-key')
+  const bridge = new PiWorkflows({ cwd, agentDir: cwd, sessionId: 'session', modelRuntime, providerId: 'priva-chat', modelId: 'fixture-model' })
   cleanups.push(() => { bridge.dispose(); return Promise.resolve() })
   const states: WorkflowState[] = []
   bridge.subscribe((event) => { if (event.workflow) states.push(event.workflow) })
   return { cwd, bridge, states, requests }
 }
 
-const context = { hasUI: false } as ExtensionContext
+const executeTool: ExtensionToolContext['executeTool'] = () => Promise.reject(new Error('Unexpected nested tool call'))
+const context = { hasUI: false, tools: [] as ExtensionToolContext['tools'], executeTool } as ExtensionToolContext
 
 describe('Pi workflow bridge with Responses transport', () => {
   it('inherits the host model, separates identical labels and persists full details', async () => {
@@ -68,7 +70,7 @@ describe('Pi workflow bridge with Responses transport', () => {
     await waitForTerminal(states)
     await bridge.flush()
     const state = states.at(-1)
-    expect(state?.status).toBe('completed')
+    expect(state?.status, JSON.stringify(state)).toBe('completed')
     expect(requests).toEqual(['fixture-model', 'fixture-model'])
     expect(state?.agents.map((a) => a.resultPreview).sort()).toEqual(['A', 'B'])
     const details = await Promise.all((state?.agents ?? []).map((a) => readPiWorkflowAgent(cwd, 'session', state?.workflowRunId ?? '', a.agentId ?? '')))
@@ -88,7 +90,7 @@ describe('Pi workflow bridge with Responses transport', () => {
     bridge.abort()
     await waitForTerminal(states)
     await bridge.flush()
-    expect(states.at(-1)?.status).toBe('cancelled')
+    expect(states.at(-1)?.status, JSON.stringify(states.at(-1))).toBe('cancelled')
     expect(states.at(-1)?.agents.every((a) => !['running', 'pending'].includes(a.state))).toBe(true)
   }, 15000)
 })

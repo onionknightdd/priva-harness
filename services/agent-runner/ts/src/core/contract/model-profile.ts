@@ -65,7 +65,7 @@ export interface ModelProfileCapabilities {
 
   probeSavedModelCapability(
     profileId: string,
-    patch: Pick<ModelProfilePatch, 'baseUrl' | 'authToken'>,
+    patch: Pick<ModelProfilePatch, 'baseUrl' | 'authToken' | 'classifierApi' | 'classifierProfileId'>,
     modelId: string,
     capability: ModelCapability,
     signal?: AbortSignal,

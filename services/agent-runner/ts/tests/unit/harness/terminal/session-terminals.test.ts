@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
+import type { AgentProvider } from '../../../../src/core/contract/agent-provider.js'
 import type { TerminalService } from '../../../../src/core/contract/terminal-service.js'
 import { SessionTerminals } from '../../../../src/harness/terminal/session-terminals.js'
 import { FakeAgentProvider } from '../../../support/fake-agent-provider.js'
@@ -28,7 +29,7 @@ function setup() {
   })
   const session = { provider: 'claude', id: 'same-session' } as const
   const open = () => terminals.open({ kind: 'resume', session }, testRunSpec(), { cols: 100, rows: 30 })
-  return { terminals, session, launch, service, open }
+  return { terminals, session, launch, service, open, provider }
 }
 
 describe('SessionTerminals.open', () => {
@@ -63,5 +64,37 @@ describe('SessionTerminals.open', () => {
     expect(launch).toHaveBeenCalledTimes(1)
     await expect(open()).resolves.toMatchObject({ adopted: false })
     expect(launch).toHaveBeenCalledTimes(2)
+  })
+})
+
+
+describe('SessionTerminals structured controls', () => {
+  it('routes structured operations to the provider without pasting or parsing the screen', async () => {
+    const { terminals, session, provider, service } = setup()
+    const submit = vi.fn<NonNullable<AgentProvider['submitTerminalTurn']>>().mockResolvedValue()
+    const abort = vi.fn<NonNullable<AgentProvider['abortTerminal']>>().mockResolvedValue()
+    const respond = vi.fn<NonNullable<AgentProvider['respondTerminalInteraction']>>().mockResolvedValue()
+    const stopTask = vi.fn<NonNullable<AgentProvider['stopTerminalTask']>>().mockResolvedValue()
+    Object.assign(provider, { structuredTerminal: true, submitTerminalTurn: submit, abortTerminal: abort, respondTerminalInteraction: respond, stopTerminalTask: stopTask })
+    const signal = new AbortController().signal
+    expect(terminals.isStructured(session)).toBe(true)
+    await terminals.submit(session, 'message', signal, ['image.png'], 'run-one')
+    expect(submit).toHaveBeenCalledWith('/scratch', 'message', signal, ['image.png'], 'run-one')
+    expect(await terminals.abort(session)).toBe(true)
+    expect(await terminals.respond(session, { requestId: 'question', decision: 'deny' })).toBe(true)
+    expect(await terminals.stopTask(session, 'task')).toBe(true)
+    expect(abort).toHaveBeenCalledWith('/scratch')
+    expect(respond).toHaveBeenCalledWith('/scratch', { requestId: 'question', decision: 'deny' })
+    expect(stopTask).toHaveBeenCalledWith('/scratch', 'task')
+    expect(service.paste).not.toHaveBeenCalled()
+    expect(service.capture).not.toHaveBeenCalled()
+  })
+
+  it('reports unsupported structured controls for the existing terminal driver', async () => {
+    const { terminals, session } = setup()
+    expect(terminals.isStructured(session)).toBe(false)
+    expect(await terminals.abort(session)).toBe(false)
+    expect(await terminals.respond(session, { requestId: 'question', decision: 'deny' })).toBe(false)
+    expect(await terminals.stopTask(session, 'task')).toBe(false)
   })
 })

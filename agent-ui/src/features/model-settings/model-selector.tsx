@@ -26,6 +26,7 @@ import {
 import { ProviderIcon } from "./provider-icon"
 
 export function ModelSelector({
+  allowCustom = false,
   catalog,
   className,
   disabled = false,
@@ -36,6 +37,7 @@ export function ModelSelector({
   value,
   onValueChange,
 }: {
+  allowCustom?: boolean
   catalog?: ModelCapabilityCatalog
   className?: string
   disabled?: boolean
@@ -53,8 +55,11 @@ export function ModelSelector({
       items={groups}
       value={value}
       disabled={disabled}
-      itemToStringLabel={displayModelName}
+      itemToStringLabel={allowCustom ? (modelId) => modelId : displayModelName}
       onValueChange={onValueChange}
+      onInputValueChange={allowCustom ? (text, details) => {
+        if (details.reason === "input-change") onValueChange(text || null)
+      } : undefined}
     >
       <ComboboxInput
         id={id}

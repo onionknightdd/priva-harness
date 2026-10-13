@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict'
 import { describe, expect, it, vi } from 'vitest'
 
 import { CompatibleImageApi, normalizeSize } from '../../../../src/core/tool/image-api.js'
@@ -41,7 +42,8 @@ describe('compatible image API', () => {
     })
     const api = new CompatibleImageApi({ fetch: fetchImpl })
     const image = await api.generate(profile, 'gen-a', { prompt: 'a cat' })
-    expect(Buffer.from(image.bytes).toString()).toBe('png-bytes')
+    assert.ok(image.images[0])
+    expect(Buffer.from(image.images[0].bytes).toString()).toBe('png-bytes')
     expect(fetchImpl).toHaveBeenCalledTimes(1)
   })
 
@@ -61,7 +63,8 @@ describe('compatible image API', () => {
       prompt: 'make it blue',
       images: [{ bytes: Uint8Array.from([1]), mime: 'image/png', name: 'a.png' }],
     })
-    expect(Buffer.from(image.bytes).toString()).toBe('png-bytes')
+    assert.ok(image.images[0])
+    expect(Buffer.from(image.images[0].bytes).toString()).toBe('png-bytes')
     expect(fetchImpl).toHaveBeenCalledTimes(1)
   })
 
@@ -134,7 +137,30 @@ describe('compatible image API', () => {
       { headers: { 'content-type': 'text/event-stream' } },
     )))
     const api = new CompatibleImageApi({ fetch: fetchImpl })
-    expect(Buffer.from((await api.generate(profile, 'gen-a', { prompt: 'a mountain' })).bytes).toString()).toBe('png-bytes')
+    const image = (await api.generate(profile, 'gen-a', { prompt: 'a mountain' })).images[0]
+    assert.ok(image)
+    expect(Buffer.from(image.bytes).toString()).toBe('png-bytes')
     await expect(api.read(profile, 'vision-a', { prompt: 'describe', image: sourceImage })).resolves.toBe('A mountain')
   })
+})
+
+it('keeps every generated image, its format, and the reported usage', async () => {
+  const api = new CompatibleImageApi({ fetch: () => Promise.resolve(Response.json({
+    output_format: 'webp', data: [{ b64_json: pngB64 }, { b64_json: pngB64 }],
+    usage: { input_tokens: 12, output_tokens: 30, total_tokens: 42, cost: 0.04 },
+  })) })
+  const result = await api.generate(profile, 'image-model', { prompt: 'two variations' })
+  expect(result.images).toHaveLength(2)
+  expect(result.images.map((image) => image.mime)).toEqual(['image/webp', 'image/webp'])
+  expect(result.usage).toEqual({ inputTokens: 12, outputTokens: 30, totalTokens: 42, costUsd: 0.04 })
+})
+
+it('keeps usage from a separate final SSE event without inventing a price', async () => {
+  const api = new CompatibleImageApi({ fetch: () => Promise.resolve(new Response(
+    `data: {"b64_json":"${pngB64}"}\n\ndata: {"usage":{"input_tokens":2,"output_tokens":3,"total_tokens":5}}\n\ndata: [DONE]\n\n`,
+    { headers: { 'content-type': 'text/event-stream' } },
+  )) })
+  const result = await api.generate(profile, 'image-model', { prompt: 'variation' })
+  expect(result.images).toHaveLength(1)
+  expect(result.usage).toEqual({ inputTokens: 2, outputTokens: 3, totalTokens: 5 })
 })

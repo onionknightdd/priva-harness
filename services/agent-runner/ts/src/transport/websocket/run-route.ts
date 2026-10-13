@@ -4,7 +4,6 @@ import type { WebSocket } from 'ws'
 
 import type { SessionRef } from '../../core/contract/agent-provider.js'
 import type { UserFileSystem } from '../../core/contract/user-file-system.js'
-import type { StreamFrame } from '../../core/event/agent-event.js'
 import { encodeEvent } from '../../core/event/encode-event.js'
 import { providerIdForHarness } from '../../core/resource/run-harness.js'
 import type { AgentHarness } from '../../harness/agent-harness.js'
@@ -111,7 +110,12 @@ function handleRunSocket(socket: WebSocket, options: RunRouteOptions): void {
     if (frame.type === 'run.abort') {
       if (frame.sessionId) {
         if (stream && (stream.session.id !== frame.sessionId || stream.session.provider !== frame.harness)) throw new Error('Run belongs to another session')
-        if (await options.harness.abortTerminal({ provider: frame.harness, id: frame.sessionId }, frame.runId)) return
+        const ref = { provider: frame.harness, id: frame.sessionId }
+        if (!stream) {
+          stopTerminalHistory = await options.harness.observeTerminalSession(ref)
+          subscribe(await options.harness.loadSessionStream(ref))
+        }
+        if (await options.harness.abortTerminal(ref, frame.runId)) return
       }
       const live = resolveLive(options.harness, frame)
       if (live && (live.provider !== frame.harness || (stream && live.sessionId !== stream.session.id))) throw new Error('Run belongs to another session')
@@ -138,46 +142,21 @@ function handleRunSocket(socket: WebSocket, options: RunRouteOptions): void {
       if (!stream && !closed) subscribe(next)
     }
     if (closed) return
-    if (frame.harness === 'claude') {
-      // Every Claude UI conversation starts with its native driver. Opening
-      // the Terminal view later only attaches a viewer to this same process.
-      const opened = await options.harness.openTerminal(sessionTargetFromInit(frame), spec,
-        { cols: 120, rows: 40, ...(frame.theme ? { colorScheme: frame.theme } : {}) })
-      const next = options.harness.sessionStream(opened.session)
-      if (socketOpen(socket) && stream !== next) subscribe(next)
-      await stopTerminalHistory?.()
-      stopTerminalHistory = await options.harness.observeTerminalHistory(opened.session, spec.cwd)
-      if (!socketOpen(socket)) { await stopTerminalHistory(); return }
-      await options.harness.submitTerminal(opened.session, turn, spec, frame.runId ?? randomUUID())
-      return
-    }
-    const live = await options.harness.launch(
-      turn, spec,
-      { source: 'web', session: sessionTargetFromInit(frame), ...(frame.runId ? { runId: frame.runId } : {}) },
-    )
-    if (stream) return
-    const id = await sessionOfLive(live)
-    if (!id) { sendError(socket, 'Could not open the session', live.runId, frame.harness, 'run.start'); return }
-    const next = options.harness.sessionStream({ provider: frame.harness, id })
-    subscribe(next, { streamId: next.streamId, seq: 0 }, live.runId)
+    // Every UI conversation starts with its native driver. Opening
+    // the Terminal view later only attaches a viewer to this same process.
+    const opened = await options.harness.openTerminal(sessionTargetFromInit(frame), spec,
+      { cols: 120, rows: 40, ...(frame.theme ? { colorScheme: frame.theme } : {}) })
+    const next = options.harness.sessionStream(opened.session)
+    if (socketOpen(socket) && stream !== next) subscribe(next)
+    await stopTerminalHistory?.()
+    stopTerminalHistory = await options.harness.observeTerminalHistory(opened.session, spec.cwd)
+    if (!socketOpen(socket)) { await stopTerminalHistory(); return }
+    await options.harness.submitTerminal(opened.session, turn, spec, frame.runId ?? randomUUID())
   }
   socket.on('message', (data) => {
     commands = commands.then(() => handle(data)).catch((error: unknown) => {
       sendError(socket, error instanceof Error ? error.message : String(error), commandRunId, stream?.session.provider ?? commandHarness, commandType, commandRequestId)
     })
-  })
-}
-
-async function sessionOfLive(live: LiveRun): Promise<string | null> {
-  if (live.sessionId) return live.sessionId
-  return await new Promise((resolve) => {
-    const listener = (frame: StreamFrame) => {
-      if (!frame.sessionId && !['run.failed', 'run.aborted'].includes(frame.type)) return
-      live.unsubscribe(listener)
-      resolve(frame.sessionId ?? null)
-    }
-    const subscription = live.subscribe(listener)
-    for (const frame of subscription.replay) listener(frame)
   })
 }
 

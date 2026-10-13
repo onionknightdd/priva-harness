@@ -6,6 +6,7 @@ import Fastify, {
 } from 'fastify'
 
 import type { DataRecorder } from '../../core/contract/data-recorder.js'
+import type { EffortLevel } from '../../core/contract/agent-provider.js'
 import type { ComputerConfig } from '../../computer-config.js'
 import type { GitStatusReader } from '../../core/contract/git-status-reader.js'
 import type { UsageReader } from '../../core/contract/usage-reader.js'
@@ -48,6 +49,7 @@ export interface BuildHttpServerOptions {
   readonly userFileSystem: UserFileSystem
   readonly gitStatusReader?: GitStatusReader
   readonly modelProfileService: ModelProfileService
+  readonly piEffortLevels?: (modelId: string) => readonly EffortLevel[]
   readonly agentProfileService: AgentProfileService
   readonly agentHarness?: AgentHarness
   readonly sessionTerminals?: SessionTerminals
@@ -132,7 +134,9 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
   const recorder = options.recorder
   void server.register(websocket)
   void server.register(computerRoutes, options.computer === undefined ? {} : { computer: options.computer })
-  void server.register(modelProfileRoutes, { service: options.modelProfileService, ...(recorder === undefined ? {} : { recorder }) })
+  void server.register(modelProfileRoutes, { service: options.modelProfileService,
+    ...(options.piEffortLevels ? { piEffortLevels: options.piEffortLevels } : {}),
+    ...(recorder === undefined ? {} : { recorder }) })
   void server.register(agentProfileRoutes, { service: options.agentProfileService, ...(recorder === undefined ? {} : { recorder }) })
   if (options.resourceService !== undefined) {
     void server.register(resourceRoutes, {

@@ -23,6 +23,7 @@ import {
   patchModelProfile,
   type ResolvedModelProfile,
   resolveModelProfile,
+  resolveClassifierRunConfig,
   summarizeModelProfile,
   withProbedCapability,
 } from '../../core/resource/model-profile.js'
@@ -61,6 +62,7 @@ export class ModelProfileService implements ModelProfileCapabilities, ModelProfi
           new Set(collection.profiles.map((candidate) => candidate.id)),
         ),
       })
+      validateClassifierReference(profile, collection)
       return {
         collection: {
           ...collection,
@@ -80,6 +82,7 @@ export class ModelProfileService implements ModelProfileCapabilities, ModelProfi
     return await this.store.transact((collection) => {
       const current = findProfile(collection, normalizedId)
       const updated = patchModelProfile(current, patch)
+      validateClassifierReference(updated, collection)
       return {
         collection: {
           ...collection,
@@ -113,6 +116,9 @@ export class ModelProfileService implements ModelProfileCapabilities, ModelProfi
     const normalizedId = normalizeModelProfileId(profileId)
     await this.store.transact((collection) => {
       findProfile(collection, normalizedId)
+      if (collection.profiles.some((profile) => profile.id !== normalizedId && profile.classifierProfileId === normalizedId)) {
+        throw new ModelProfileError('profile-not-ready', 'This profile is used as a classifier connection; select another connection before deleting it')
+      }
       const profiles = collection.profiles.filter((profile) => profile.id !== normalizedId)
       const defaultProfileId = collection.defaultProfileId === normalizedId
         ? profiles[0]?.id ?? null
@@ -201,7 +207,7 @@ export class ModelProfileService implements ModelProfileCapabilities, ModelProfi
 
   async probeSavedModelCapability(
     profileId: string,
-    patch: Pick<ModelProfilePatch, 'baseUrl' | 'authToken'>,
+    patch: Pick<ModelProfilePatch, 'baseUrl' | 'authToken' | 'classifierApi' | 'classifierProfileId'>,
     modelId: string,
     capability: ModelCapability,
     signal?: AbortSignal,
@@ -240,8 +246,13 @@ export class ModelProfileService implements ModelProfileCapabilities, ModelProfi
     signal?: AbortSignal,
   ): Promise<ModelCapabilityProbeResult> {
     const normalizedModelId = normalizeModelId(modelId)
+    let probeProfile = profile
+    if (capability === 'classification') {
+      const classifier = resolveClassifierRunConfig({ ...profile, classifierModel: normalizedModelId }, await this.store.read())
+      probeProfile = { ...profile, baseUrl: classifier.baseUrl, authToken: classifier.authToken }
+    }
     const supported = await this.endpointClient.probeModelCapability(
-      profile,
+      probeProfile,
       normalizedModelId,
       capability,
       signal,
@@ -347,4 +358,10 @@ function isUpstreamError(error: unknown): boolean {
     'upstream-timeout',
     'upstream-unavailable',
   ].includes(error.kind)
+}
+
+function validateClassifierReference(profile: ModelProfile, collection: ModelProfileCollection): void {
+  if (profile.classifierProfileId !== null && profile.classifierProfileId !== profile.id && !collection.profiles.some((candidate) => candidate.id === profile.classifierProfileId)) {
+    throw new ModelProfileError('profile-not-found', 'Classifier connection profile does not exist')
+  }
 }

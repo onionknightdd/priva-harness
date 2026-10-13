@@ -49,10 +49,12 @@ const TONE_CLASS: Record<ContextUsageTone, string> = {
 
 export function ComposerContextRing({
   usage = emptyContextUsage(),
+  showCategories = true,
   anchorRef,
   className,
 }: {
   usage?: ContextUsage
+  showCategories?: boolean
   anchorRef: React.RefObject<HTMLElement | null>
   className?: string
 }) {
@@ -99,7 +101,7 @@ export function ComposerContextRing({
     percent === null
       ? t("agentMessage.contextUsage.empty")
       : t("agentMessage.contextUsage.full", { percent })
-  const segments = contextUsageSegments(usage)
+  const segments = showCategories ? contextUsageSegments(usage) : []
 
   return (
     <div className={cn("flex size-6 items-center justify-center", className)}>
@@ -170,7 +172,7 @@ export function ComposerContextRing({
             percent={percent}
             transition={fillTransition}
           />
-          <ul className="m-0 flex list-none flex-col gap-4 p-0">
+          {showCategories && <ul className="m-0 flex list-none flex-col gap-4 p-0">
             {usage.categories.map((category) => (
               <li
                 key={category.id}
@@ -193,7 +195,7 @@ export function ComposerContextRing({
                 </span>
               </li>
             ))}
-          </ul>
+          </ul>}
         </PopoverContent>
       </Popover>
     </div>

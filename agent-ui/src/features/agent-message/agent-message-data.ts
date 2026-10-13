@@ -9,6 +9,30 @@ export type AgentMessageStatus = "streaming" | "complete" | "error"
 
 export type ToolCardStatus = "started" | "running" | "completed"
 
+export type ModelInvocation = {
+  id: string
+  parentToolCallId: string
+  operation: "classify" | "generateImages"
+  provider: string
+  model: string
+  status: "running" | "completed" | "failed" | "aborted"
+  durationMs?: number
+  usage?: { input: number; output: number; cacheRead?: number; cacheWrite?: number }
+  costUsd?: number
+  pricingKnown?: boolean
+  error?: string
+  result?: unknown
+  artifacts?: { path: string; mimeType: string }[]
+}
+
+export type ToolResultMetadata = {
+  resultContent?: readonly unknown[]
+  structuredContent?: unknown
+  modelCalls?: ModelInvocation[]
+  artifacts?: { path: string; mimeType: string }[]
+  nestedCallsComplete?: boolean
+}
+
 export type StreamBlock =
   | { type: "task_notification"; blockId: string; index: number; notification: import("./background-task-store").TaskNotification }
   | {
@@ -50,7 +74,8 @@ export type StreamBlock =
       kind: string
     }
 
-export type ToolCard = {
+export type ToolCard = ToolResultMetadata & {
+  parentToolCallId?: string
   backgroundTask?: import("./background-task-store").BackgroundTask
   tokens?: number
   durationMs?: number

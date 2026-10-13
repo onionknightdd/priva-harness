@@ -139,6 +139,7 @@ describe('model profile domain', () => {
       modelCapabilities: {
         imageUnderstanding: ['vision-a'],
         imageGeneration: ['gen-a'],
+        classification: [],
         imageEdit: [],
       },
     })

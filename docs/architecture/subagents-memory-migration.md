@@ -27,14 +27,19 @@ Subagent test --> AgentHarness.run --> selected provider --> SSE AgentEvent fram
 
 - Claude Agent SDK: installed `0.3.278` (Claude CLI `2.1.278`). Runs explicitly
   enable the `user`, `project`, and `local` settings sources.
-- Pi SDK: installed `0.84.2`.
-- Pi subagents: pinned `@tintinweb/pi-subagents@0.19.0`.
-- Pi automatic memory: pinned `pi-code@1.0.64`, only its memory extension is
+- Pi SDK: pinned `1.2.0`; the native TUI / Chat integration is described in
+  [Pi native sessions](pi-native-session.md).
+- Pi subagents: pinned `@tintinweb/pi-subagents@0.21.0`.
+- Pi automatic memory: pinned `pi-code@1.5.2`, only its memory extension is
   activated. The package requires Node `>=22.19`, now reflected by the runner.
-- Existing `pi-dynamic-workflows` remains the host's workflow implementation.
-  Tintin supplies subagent tools; its `SubagentWorkflow` tool and startup workflow
-  flag are not registered. Its own collision detector does not recognize the
-  lowercase `workflow` name used by the existing implementation.
+- Pinned `@quintinshaw/pi-dynamic-workflows@3.14.0` remains the host's workflow implementation.
+  Tintin supplies subagent tools. The session-local loader pins its native
+  `workflowsEnabled` switch to `false` before registration, so its
+  `SubagentWorkflow` tool, workflow menu and duplicate-orchestrator warning are
+  disabled together; its startup workflow flag is also not registered.
+  This host policy does not rewrite user `subagents.json` files. Setting
+  `workflowsEnabled: true` in those files does not add a second orchestrator
+  inside the harness; standalone Pi keeps the user's native setting.
 
 The runner uses each harness's native global directory: `~/.claude` and
 `~/.pi/agent` by default. It does not set or overwrite `CLAUDE_CONFIG_DIR` or

@@ -10,12 +10,14 @@ import { stripVTControlCharacters } from 'node:util'
 import { splitModelContext } from '../../core/resource/model-profile.js'
 import { DEFAULT_CONTEXT_WINDOW } from '../../core/resource/model-context.js'
 import { terminalStatus } from './claude-terminal-telemetry.js'
+import { assertClaudeEffort } from './claude-effort.js'
 
 const selectionSchema = z.object({ model: z.string(), effort: z.string().optional(), profile: z.string(), contextWindow: z.number() })
 const statusSchema = z.object({ instanceId: z.string(), model: z.object({ id: z.string() }), effort: z.object({ level: z.string() }).optional(), context_window: z.object({ context_window_size: z.number() }).optional() })
 const selectionFile = 'claude-terminal-selection.json'
 
 function selection(spec: ProviderRunSpec) {
+  assertClaudeEffort(spec.effort)
   const contextWindow = spec.contextWindow ?? DEFAULT_CONTEXT_WINDOW
   return { model: spec.model, contextWindow, ...(spec.effort ? { effort: spec.effort } : {}),
     profile: createHash('sha256').update(JSON.stringify([spec.baseUrl, spec.authToken, spec.imageTools, spec.promptSuggestions, spec.runMode, spec.systemInstructions, contextWindow])).digest('hex') }
@@ -32,6 +34,7 @@ export async function saveClaudeTerminalSelection(scratchDir: string, spec: Prov
 
 /** /model cannot refresh the four default-model aliases pinned by --settings at startup. */
 export async function configureClaudeTerminal(input: TerminalInput, scratchDir: string, spec: ProviderRunSpec, signal: AbortSignal): Promise<'applied' | 'restart'> {
+  assertClaudeEffort(spec.effort)
   const previous = selectionSchema.parse(JSON.parse(await readFile(join(scratchDir, selectionFile), 'utf8')) as unknown)
   const next = selection(spec)
   const reported = await readStatus(scratchDir)

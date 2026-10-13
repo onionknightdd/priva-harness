@@ -10,6 +10,7 @@ const output = document.querySelector<HTMLPreElement>("#results")!
 const root = createRoot(host)
 const params = new URLSearchParams(location.search)
 const mobile = params.has("mobile")
+const harness = params.has("pi") ? "pi" : "claude"
 document.documentElement.classList.toggle("dark", params.has("dark"))
 if (params.has("reduced-motion")) {
   const matchMedia = window.matchMedia.bind(window)
@@ -19,7 +20,7 @@ if (params.has("reduced-motion")) {
 }
 if (mobile) host.style.width = "100%"
 
-const source: ResourceSource = { id: "global", harness: "claude", scope: "global", origin: "settings", label: "Global MCP", path: "/fixture/agent/.claude.json", cwd: null, writable: true, canAdd: true }
+const source: ResourceSource = { id: "global", harness, scope: "global", origin: "settings", label: "Global MCP", path: harness === "pi" ? "/fixture/agent/mcp.json" : "/fixture/agent/.claude.json", cwd: null, writable: true, canAdd: true }
 const projects = ["/fixture/alpha", "/fixture/beta"]
 function server(name: string, origin: ResourceSource, enabled = true): McpDetail {
   const definition = { type: "http", url: `https://example.invalid/${name}/mcp` }
@@ -27,7 +28,7 @@ function server(name: string, origin: ResourceSource, enabled = true): McpDetail
 }
 const servers = [
   server("filesystem", source), server("documentation", source), server("disabled-server", { ...source, writable: false }, false),
-  ...projects.map((cwd) => server(cwd.split("/").at(-1)! + "-server", { ...source, id: cwd, cwd, scope: "project", path: `${cwd}/.mcp.json` })),
+  ...projects.map((cwd) => server(cwd.split("/").at(-1)! + "-server", { ...source, id: cwd, cwd, scope: "project", path: `${cwd}/${harness === "pi" ? ".pi/mcp.json" : ".mcp.json"}` })),
 ]
 const capabilities: McpCapabilities = {
   toolStates: [],
@@ -77,13 +78,14 @@ window.fetch = async (input, init) => {
   if (url.pathname.endsWith("/capabilities")) return failTest ? Response.json({ detail: "Fixture connection failed" }, { status: 500 }) : Response.json({ ...capabilities, toolStates: toolStates.get(found.id) })
   if (method === "PATCH") {
     if (failSave) return Response.json({ detail: "Fixture save failed" }, { status: 403 })
-    const input = JSON.parse(String(init?.body)) as { name?: string; enabled: boolean }
+    const input = JSON.parse(String(init?.body)) as { name?: string; enabled: boolean; definition?: Record<string, unknown> }
     if (url.pathname.endsWith("/tools")) {
       const state = toolStates.get(found.id)!.find((entry) => entry.name === input.name)!
       state.enabled = input.enabled
       return Response.json(state)
     }
-    found.enabled = input.enabled
+    if (input.definition) { found.definition = input.definition; found.effectiveDefinition = input.definition }
+    else found.enabled = input.enabled
     return Response.json(found)
   }
   if (method !== "GET") return Response.json({ detail: "Fixture does not write real configuration" }, { status: 403 })
@@ -103,7 +105,7 @@ document.querySelector<HTMLButtonElement>("#run")!.addEventListener("click", asy
     requests.length = 0; failTest = false; failSave = false
     for (const server of servers) { server.enabled = server.id !== "disabled-server"; toolStates.set(server.id, structuredClone(capabilities.toolStates)) }
     await i18n.changeLanguage("en")
-    root.render(<ResourceBrowser kind="mcp" harness="claude" />)
+    root.render(<ResourceBrowser kind="mcp" harness={harness} />)
     await until(() => row("filesystem"), "initial list")
     const header = host.querySelector<HTMLElement>("[data-mcp-list-header]")!
     check("all project groups are available without a scope selector", !host.querySelector('[role="combobox"]') && host.querySelectorAll('h2 [aria-expanded]').length === 3)
@@ -138,6 +140,7 @@ document.querySelector<HTMLButtonElement>("#run")!.addEventListener("click", asy
       findButton(i18n.t("resources.back")).click()
       await until(() => row("filesystem"), "mobile back")
       check("mobile returns to the service list", !host.querySelector("[data-mcp-header]"))
+      if (params.has("zh")) await i18n.changeLanguage("zh-CN")
       output.textContent = `${checks.join("\n")}\n${checks.length} checks passed`
       return
     }

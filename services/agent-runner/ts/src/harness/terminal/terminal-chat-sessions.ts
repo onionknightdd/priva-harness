@@ -7,7 +7,7 @@ import type { ProviderRunSpec, SessionRef, SessionTarget } from '../../core/cont
 import type { TerminalComposer, TerminalElicitation, TerminalQuestion, TerminalSessionState, TerminalStatus } from '../../core/contract/terminal-service.js'
 import { terminalElicitationForm } from './terminal-elicitation.js'
 import type { RunLedger } from '../run/run-ledger.js'
-import type { RunAccounting, SessionConfiguration } from '../../core/event/agent-event.js'
+import { isRunResultEvent, type RunAccounting, type SessionConfiguration } from '../../core/event/agent-event.js'
 import { InteractionCoordinator } from '../../core/run/interaction-coordinator.js'
 import { answersByQuestion, normalizeQuestions, type InteractionResponse } from '../../core/resource/interaction.js'
 import type { AgentEvent } from '../../core/event/agent-event.js'
@@ -42,6 +42,7 @@ interface TerminalChat {
   cwd: string
   readonly queue: (PendingTurn | PendingConfiguration)[]
   readonly accepted: Set<string>
+  readonly nativeRequests: Set<string>
   active: ActiveTurn | undefined
   updatedAt: number
   pumping: boolean
@@ -116,6 +117,7 @@ export class TerminalChatSessions {
       const chat = this.chat(ref, spec.cwd)
       const opened = await this.options.terminals.open(target.kind === 'resume' ? target : { ...target, sessionId: ref.id },
         spec, { ...size, eventsUrl: this.options.eventsUrl(ref) })
+      if (opened.adopted && !chat.opened && this.options.terminals.isStructured(ref)) chat.telemetryOffset = -1
       chat.opened = true
       if (spec.runMode) chat.runMode = spec.runMode
       chat.spec = opened.adopted ? await this.options.terminals.spec(ref) ?? spec : spec
@@ -143,12 +145,15 @@ export class TerminalChatSessions {
   }
 
   async submit(ref: SessionRef, turn: UserTurn, spec: ProviderRunSpec, runId: string): Promise<void> {
-    if (!await this.options.terminals.isAlive(ref)) throw new SessionError('invalid-request', 'Claude terminal exited; send again to reopen the session')
+    if (!await this.options.terminals.isAlive(ref)) throw new SessionError('invalid-request', 'Terminal exited; send again to reopen the session')
     const state = await this.options.terminals.state(ref)
     if (!state && !this.chats.get(sessionRefKey(ref))?.awaitingReady) throw new SessionError('invalid-request', 'This terminal was started before chat input synchronization was enabled. Exit it with /exit, then reopen Terminal once; the conversation is preserved.')
-    const chat = this.chat(ref, state?.cwd ?? spec.cwd)
+    let chat = this.chat(ref, state?.cwd ?? spec.cwd)
     if (chat.cwd !== spec.cwd) throw new SessionError('invalid-request', 'The message working directory differs from the running terminal')
-    if (state) await this.event(ref, state)
+    if (state) {
+      await this.event(ref, state)
+      chat = this.chat({ ...ref, id: state.sessionId }, state.cwd)
+    }
     if (chat.accepted.has(runId)) return
     chat.accepted.add(runId)
     if (chat.accepted.size > 4096) chat.accepted.delete(chat.accepted.values().next().value ?? '')
@@ -159,17 +164,26 @@ export class TerminalChatSessions {
   invalidateResources(): void { for (const key of this.chats.keys()) this.resourcesDirty.add(key) }
 
   async configure(ref: SessionRef, spec: ProviderRunSpec, requestId: string): Promise<void> {
-    if (!await this.options.terminals.isAlive(ref)) throw new SessionError('invalid-request', 'Claude terminal exited before changing its model')
+    if (!await this.options.terminals.isAlive(ref)) throw new SessionError('invalid-request', 'Terminal exited before changing its model')
     const state = await this.options.terminals.state(ref)
-    const chat = this.chat(ref, state?.cwd ?? spec.cwd)
+    let chat = this.chat(ref, state?.cwd ?? spec.cwd)
     if (chat.cwd !== spec.cwd) throw new SessionError('invalid-request', 'The model selection working directory differs from the running terminal')
-    if (state) await this.event(ref, state)
+    if (state) {
+      await this.event(ref, state)
+      chat = this.chat({ ...ref, id: state.sessionId }, state.cwd)
+    }
     chat.queue.push({ requestId, spec })
     void this.drain(chat)
   }
 
   async event(ref: SessionRef, state: TerminalSessionState): Promise<void> {
     if (ref.id !== state.sessionId) {
+      const previous = this.chats.get(sessionRefKey(ref))
+      if (previous && this.options.terminals.isStructured(ref)) {
+        // Drain the previous owner's final usage before moving the terminal key.
+        await this.readTelemetry(previous)
+        if (!this.chats.has(sessionRefKey(ref)) && this.chats.has(sessionRefKey({ ...ref, id: state.sessionId }))) return
+      }
       if (state.event === 'ready' && ['clear', 'resume', 'fork'].includes(state.source ?? '')) {
         const key = sessionRefKey(ref)
         const pending = this.rebinding.get(key)
@@ -196,6 +210,10 @@ export class TerminalChatSessions {
     chat.updatedAt = state.updatedAt
     chat.opened = true
     chat.awaitingReady = false
+    if (this.options.terminals.isStructured(ref)) {
+      if (state.event === 'exit') await this.exited(ref, state.message ?? 'Terminal exited')
+      return
+    }
     if (state.event === 'prompt') {
       const prompt = this.options.terminals.promptText(ref, state.prompt ?? '')
       // The synchronous UserPromptSubmit hook precedes the API call. Capture
@@ -214,7 +232,7 @@ export class TerminalChatSessions {
       return
     }
     if (state.event === 'exit') {
-      if (!['clear', 'resume', 'fork'].includes(state.reason ?? '')) await this.exited(ref, 'Claude terminal exited')
+      if (!['clear', 'resume', 'fork'].includes(state.reason ?? '')) await this.exited(ref, 'Terminal exited')
       return
     }
     if (state.event === 'stop' || state.event === 'failure') {
@@ -236,7 +254,7 @@ export class TerminalChatSessions {
     const nextSpec = sourceSpec ? await this.options.resolveRebound?.(ref, nextRef, state.source ?? '', { ...sourceSpec, cwd: state.cwd }) ?? sourceSpec : undefined
     const queue = old?.queue.splice(0) ?? []
     if (old) {
-      await this.finish(old, /^\/(clear|resume|fork)(\s|$)/u.test(old.active?.text.trim() ?? '')
+      await this.finish(old, /^\/(new|clear|resume|fork)(\s|$)/u.test(old.active?.text.trim() ?? '')
         ? { type: 'run.completed', model: old.model, durationMs: Date.now() - (old.active?.startedAt ?? Date.now()) }
         : { type: 'run.aborted', message: 'Session changed in terminal' })
       old.interactions.cancelAll()
@@ -275,7 +293,16 @@ export class TerminalChatSessions {
   async abort(ref: SessionRef, runId?: string): Promise<boolean> {
     const chat = this.chats.get(sessionRefKey(ref))
     if (!chat?.active || (runId && chat.active.runId !== runId)) return false
-    chat.active.abort.abort()
+    const active = chat.active
+    // Cancel input still waiting for native startup/trust as well as native work.
+    active.abort.abort()
+    if (await this.options.terminals.abort(ref)) {
+      await this.readTelemetry(chat)
+      // An accepted start can be durable before the next telemetry poll. Once
+      // confirmed, its native outcome owns usage and completion accounting.
+      if (chat.active === active && !active.confirmed) await this.finish(chat, { type: 'run.aborted', message: 'Interrupted' })
+      return true
+    }
     await this.options.terminals.sendKeys(ref, ['Escape'])
     await this.recordInterrupted(chat)
     await this.finish(chat, { type: 'run.aborted', message: 'Interrupted' }, chat.updatedAt)
@@ -322,6 +349,12 @@ export class TerminalChatSessions {
 
   respondPermission(ref: SessionRef, response: InteractionResponse): boolean {
     const chat = this.chats.get(sessionRefKey(ref))
+    if (chat?.nativeRequests.has(response.requestId)) {
+      void this.options.terminals.respond(ref, response).catch((error: unknown) => {
+        this.options.stream(ref).publish({ type: 'error', code: 'permission.respond', message: error instanceof Error ? error.message : String(error) })
+      })
+      return true
+    }
     if (!chat?.interactions.has(response.requestId)) return false
     chat.interactions.respond(response)
     return true
@@ -330,7 +363,7 @@ export class TerminalChatSessions {
   history(ref: SessionRef, items: readonly ThreadReplayItem[]): void {
     const chat = this.chats.get(sessionRefKey(ref))
     const active = chat?.active
-    if (!chat || !active) return
+    if (!chat || !active || this.options.terminals.isStructured(ref)) return
     for (const item of items) if (item.kind === 'frame') {
       const resolved = active.interactions.native(item.event, 'transcript')
       if (resolved && item.event.type === 'permission.resolved' && item.event.resolution.request.kind === 'tool'
@@ -344,6 +377,7 @@ export class TerminalChatSessions {
   }
 
   async input(ref: SessionRef, bytes: Uint8Array): Promise<void> {
+    if (this.options.terminals.isStructured(ref)) return
     // Arrow/function keys are multi-byte escape sequences, not cancellation.
     if (bytes.length !== 1 || (bytes[0] !== 27 && bytes[0] !== 3)) return
     const chat = this.chats.get(sessionRefKey(ref))
@@ -356,8 +390,14 @@ export class TerminalChatSessions {
   async exited(ref: SessionRef, reason: string): Promise<void> {
     const chat = this.chats.get(sessionRefKey(ref))
     if (!chat) return
-    this.publishSuggestion(chat)
+    // Settling native completion may resume the queue; fail it before draining
+    // the last events from a process that can no longer accept new input.
     for (const pending of chat.queue.splice(0)) this.failCommand(chat, pending, reason)
+    if (this.options.terminals.isStructured(ref)) {
+      await this.readTelemetry(chat)
+      if (this.chats.get(sessionRefKey(ref)) !== chat) return
+    }
+    this.publishSuggestion(chat)
     await this.finish(chat, { type: 'run.failed', message: reason })
     await chat.releaseHistory?.()
     this.chats.delete(sessionRefKey(ref))
@@ -385,7 +425,7 @@ export class TerminalChatSessions {
     const key = sessionRefKey(ref)
     let chat = this.chats.get(key)
     if (!chat) {
-      chat = { ref, cwd, queue: [], accepted: new Set(), active: undefined, updatedAt: 0, pumping: false, finishing: false, model: '', instanceId: '', opened: false, awaitingReady: false, telemetryOffset: 0,
+      chat = { ref, cwd, queue: [], accepted: new Set(), nativeRequests: new Set(), active: undefined, updatedAt: 0, pumping: false, finishing: false, model: '', instanceId: '', opened: false, awaitingReady: false, telemetryOffset: this.options.terminals.isStructured(ref) ? -1 : 0,
         interactions: new InteractionCoordinator((event) => {
           const active = this.chats.get(key)?.active
           if (event.type === 'permission.requested' || event.type === 'permission.resolved') active?.interactions.mirror(event)
@@ -397,11 +437,13 @@ export class TerminalChatSessions {
 
   private publishConfig(chat: TerminalChat, requestId?: string): void {
     if (!chat.spec) return
+    const effort = chat.status?.effort ?? chat.spec.effort
     this.options.stream(chat.ref).publish({ type: 'session.config', ...(requestId ? { requestId } : {}), config: {
       model: chat.model || chat.spec.model, cwd: chat.cwd, context: chat.status?.context ?? emptyContextUsage(),
       contextWindow: chat.spec.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
       ...(chat.runMode ? { runMode: chat.runMode } : {}),
-      ...(chat.spec.profileId ? { profileId: chat.spec.profileId } : {}), ...(chat.spec.effort ? { effort: chat.spec.effort } : {}),
+      ...(chat.spec.profileId ? { profileId: chat.spec.profileId } : {}), ...(effort === undefined ? {} : { effort }),
+      ...(chat.status?.effortLevels ? { effortLevels: chat.status.effortLevels } : {}),
     } })
   }
 
@@ -439,14 +481,14 @@ export class TerminalChatSessions {
     if (accounting) active.accounting = accounting
     if (chat.status) active.initialStatus = chat.status
     active.releaseHistory = await this.options.observe(chat.ref, chat.cwd)
-    await this.options.refresh(chat.ref)
+    if (!this.options.terminals.isStructured(chat.ref)) await this.options.refresh(chat.ref)
     const turn = userTurnFromText(text)
     const stream = this.options.stream(chat.ref)
     stream.startTerminalTurn(runId, model, {
       id: `${runId}:user`, role: 'user', content: turn.text,
       ...(turn.attachments?.length ? { attachments: turn.attachments } : {}),
       createdAt: new Date(active.startedAt).toISOString(), status: 'complete',
-    }, nativePrompt)
+    }, nativePrompt, this.options.terminals.isStructured(chat.ref))
     stream.publish({ type: 'session.state', state: 'running' }, runId)
     return active
   }
@@ -457,6 +499,10 @@ export class TerminalChatSessions {
     try {
       while (!this.isDisposed() && !this.isBusy(chat) && chat.queue.length) {
         // A native user can begin a turn between the chat request and its injection.
+        if (this.options.terminals.isStructured(chat.ref)) {
+          await chat.telemetryRead
+          await this.readTelemetry(chat)
+        }
         const state = await this.options.terminals.state(chat.ref)
         if (state?.phase === 'running' && state.updatedAt > chat.updatedAt) await this.event(chat.ref, state)
         if (this.isBusy(chat)) return
@@ -497,6 +543,7 @@ export class TerminalChatSessions {
     let applied = false
     chat.applyingConfiguration = true
     try {
+      await chat.telemetryRead
       const restarted = await this.options.terminals.configure(chat.ref, pending.spec,
         { cols: 120, rows: 40, eventsUrl: this.options.eventsUrl(chat.ref) }, signal, false,
         !(chat.backgroundActive ?? this.options.stream(chat.ref).tasks.hasActive))
@@ -508,10 +555,18 @@ export class TerminalChatSessions {
         delete chat.status
       }
       if (chat.awaitingReady) await this.waitForConfiguration(chat, signal)
-      else await this.readTelemetry(chat)
+      if (restarted && chat.ref.provider === 'pi') {
+        // Opening restores native thinking. An explicit configuration request
+        // must then apply the user's new choice, including a changed Profile.
+        await this.options.terminals.configure(chat.ref, pending.spec,
+          { cols: 120, rows: 40, eventsUrl: this.options.eventsUrl(chat.ref) }, signal, false, false)
+      }
+      // A poll begun before configure may still contain the previous selection.
+      await chat.telemetryRead
+      await this.readTelemetry(chat)
       const desiredWindow = pending.spec.contextWindow ?? DEFAULT_CONTEXT_WINDOW
       if (chat.status?.context.limit !== desiredWindow) {
-        throw new Error(`Claude did not apply the ${desiredWindow} token context window`)
+        throw new Error(`Terminal did not apply the ${desiredWindow} token context window`)
       }
       await this.options.refresh(chat.ref)
       await this.options.configured?.(chat.ref, chat.spec, chat.model)
@@ -532,7 +587,7 @@ export class TerminalChatSessions {
     // A restarted profile is acknowledged only after its new native driver reports ready.
     while (chat.awaitingReady || !chat.status) {
       signal.throwIfAborted()
-      if (this.disposed || !await this.options.terminals.isAlive(chat.ref)) throw new Error('Claude exited while changing its model')
+      if (this.disposed || !await this.options.terminals.isAlive(chat.ref)) throw new Error('Terminal exited while changing its model')
       const state = await this.options.terminals.state(chat.ref)
       if (state) await this.event(chat.ref, state)
       await this.readTelemetry(chat)
@@ -541,33 +596,39 @@ export class TerminalChatSessions {
   }
 
   private async inject(chat: TerminalChat, pending: PendingTurn): Promise<void> {
-    chat.spec = pending.spec
-    const active = await this.begin(chat, userTurnText(pending.turn), pending.runId, pending.spec.model, false)
-    if (await this.options.terminals.configure(chat.ref, pending.spec, { cols: 120, rows: 40, eventsUrl: this.options.eventsUrl(chat.ref) }, active.abort.signal,
+    // Effort changes use session.configure. Ordinary messages must retain any
+    // native TUI selection made since the client composed or queued the message.
+    const spec = chat.ref.provider === 'pi' && chat.status?.effort !== undefined
+      && pending.spec.model === chat.spec?.model && pending.spec.profileId === chat.spec.profileId
+      ? { ...pending.spec, effort: chat.status.effort }
+      : pending.spec
+    chat.spec = spec
+    const active = await this.begin(chat, userTurnText(pending.turn), pending.runId, spec.model, false)
+    if (await this.options.terminals.configure(chat.ref, spec, { cols: 120, rows: 40, eventsUrl: this.options.eventsUrl(chat.ref) }, active.abort.signal,
       this.resourcesDirty.has(sessionRefKey(chat.ref)), !(chat.backgroundActive ?? this.options.stream(chat.ref).tasks.hasActive))) {
       chat.instanceId = ''; chat.updatedAt = 0; chat.awaitingReady = true; chat.telemetryOffset = 0
       this.resourcesDirty.delete(sessionRefKey(chat.ref))
     }
-    chat.model = pending.spec.model
-    await this.options.terminals.submit(chat.ref, active.text, active.abort.signal, pending.turn.imagePaths)
+    chat.model = spec.model
+    await this.options.terminals.submit(chat.ref, active.text, active.abort.signal, pending.turn.imagePaths, pending.runId)
     if (await this.options.terminals.completeCommand(chat.ref, active.text, active.abort.signal)) {
       await this.finish(chat, { type: 'run.completed', model: chat.model, durationMs: Date.now() - active.startedAt })
       return
     }
     if (!active.confirmed && chat.active === active) {
       active.timer = setTimeout(() => {
-        void this.finish(chat, { type: 'run.failed', message: 'Claude did not acknowledge the message. Check the Terminal input or dialog before sending again; the message was not retried.' })
+        void this.finish(chat, { type: 'run.failed', message: 'Terminal did not acknowledge the message. Check the Terminal input or dialog before sending again; the message was not retried.' })
       }, this.options.confirmationTimeoutMs ?? 15000)
       active.timer.unref()
     }
   }
 
-  private finish(chat: TerminalChat, result: AgentEvent, statusAfter?: number): Promise<void> {
+  private finish(chat: TerminalChat, result: AgentEvent, statusAfter?: number, fromTelemetry = false): Promise<void> {
     if (chat.completion) return chat.completion
     const active = chat.active
     if (!active) return Promise.resolve()
     chat.finishing = true
-    chat.completion = this.finishTurn(chat, active, result, statusAfter).finally(() => {
+    chat.completion = this.finishTurn(chat, active, result, statusAfter, fromTelemetry).finally(() => {
       delete chat.completion
       chat.active = undefined
       chat.finishing = false
@@ -576,14 +637,14 @@ export class TerminalChatSessions {
     return chat.completion
   }
 
-  private async finishTurn(chat: TerminalChat, active: ActiveTurn, result: AgentEvent, statusAfter?: number): Promise<void> {
+  private async finishTurn(chat: TerminalChat, active: ActiveTurn, result: AgentEvent, statusAfter?: number, fromTelemetry = false): Promise<void> {
     active.abort.abort()
     clearTimeout(active.timer)
     let final = result
     try {
       await active.textRead
       await this.readText(chat)
-      await this.readTelemetry(chat)
+      if (!fromTelemetry && !this.options.terminals.isStructured(chat.ref)) await this.readTelemetry(chat)
       if (statusAfter && active.initialStatus?.updatedAt) {
         const deadline = Date.now() + 2000
         while (!this.disposed && (chat.status?.updatedAt ?? 0) < statusAfter && Date.now() < deadline) {
@@ -594,7 +655,7 @@ export class TerminalChatSessions {
       // Interruption does not emit Stop. Give pending status/transcript writes
       // time to finish before settling the usage that Claude has reported.
       await this.options.refresh(chat.ref)
-      if (result.type === 'run.completed' || result.type === 'run.failed' || result.type === 'run.aborted') {
+      if (!this.options.terminals.isStructured(chat.ref) && isRunResultEvent(result)) {
         const accounting = await active.accounting?.()
         const before = active.initialStatus, after = chat.status
         const fresh = !statusAfter || (after?.updatedAt ?? 0) >= statusAfter
@@ -643,9 +704,10 @@ export class TerminalChatSessions {
       ref: chat.ref, ...(chat.runMode ? { runMode: chat.runMode } : {}), ...(chat.active ? { runId: chat.active.runId, startedAt: chat.active.startedAt } : {}) }))
   }
 
-  private readTelemetry(chat: TerminalChat): Promise<void> {
-    if (chat.telemetryRead) return chat.telemetryRead
-    chat.telemetryRead = (async () => {
+  private readTelemetry(origin: TerminalChat): Promise<void> {
+    if (origin.telemetryRead) return origin.telemetryRead
+    origin.telemetryRead = (async () => {
+      let chat = origin
       try {
         const batch = await this.options.terminals.telemetry(chat.ref, chat.telemetryOffset)
         if (this.disposed) return
@@ -654,6 +716,43 @@ export class TerminalChatSessions {
           if (item.sessionId !== chat.ref.id || (chat.instanceId && item.instanceId !== chat.instanceId)) continue
           if (item.cwd) { chat.cwd = item.cwd; if (chat.spec) chat.spec = { ...chat.spec, cwd: item.cwd } }
           const event = item.event
+          if (this.options.terminals.isStructured(chat.ref)) {
+            if (event.type === 'run.started') {
+              if (!item.runId) throw new Error('Native terminal start is missing its run ID')
+              if (chat.active?.runId === item.runId) {
+                chat.active.confirmed = true
+                clearTimeout(chat.active.timer)
+              } else {
+                if (chat.active) await this.finish(chat, { type: 'run.aborted', message: 'A new native turn started' }, undefined, true)
+                const startedAt = event.userMessage ? Date.parse(event.userMessage.createdAt) : Date.now()
+                await this.begin(chat, event.userMessage?.content ?? '', item.runId, event.model ?? chat.model, true,
+                  Number.isFinite(startedAt) ? startedAt : Date.now())
+              }
+              continue
+            }
+            if (isRunResultEvent(event)) {
+              if (chat.active?.runId === item.runId) await this.finish(chat, event, undefined, true)
+              continue
+            }
+            if (event.type === 'session.rebound') {
+              const state = await this.options.terminals.state(chat.ref)
+              if (state?.sessionId !== event.nextSessionId) throw new Error('Native terminal rebind state is unavailable')
+              await this.rebind(chat.ref, { ...state, event: 'ready', source: state.source ?? 'resume' })
+              chat = this.chats.get(sessionRefKey({ ...chat.ref, id: event.nextSessionId })) ?? chat
+              chat.telemetryOffset = batch.offset
+              continue
+            }
+            if (event.type === 'permission.requested') {
+              chat.nativeRequests.add(event.request.requestId)
+              // Keep settled IDs so another tab's late answer reaches the native
+              // coordinator, which replays the first resolution idempotently.
+              if (chat.nativeRequests.size > 256) chat.nativeRequests.delete(chat.nativeRequests.values().next().value ?? '')
+            }
+            if (event.type === 'tasks.snapshot') chat.backgroundActive = event.tasks.some((task) => !['completed', 'failed', 'cancelled'].includes(task.status))
+            ;(chat.active?.ledger ?? chat.lastLedger)?.observe(event)
+            this.options.stream(chat.ref).publish(event, item.runId ?? chat.active?.runId)
+            continue
+          }
           chat.active?.interactions.native(event, 'hook')
           if (event.type === 'permission.resolved') continue
           if (event.type === 'tasks.snapshot') chat.backgroundActive = event.tasks.some((task) => !['completed', 'failed', 'cancelled'].includes(task.status))
@@ -677,7 +776,8 @@ export class TerminalChatSessions {
           const config: SessionConfiguration = { model: status.model, cwd: chat.cwd, context: status.context,
             contextWindow,
             ...(chat.runMode ? { runMode: chat.runMode } : {}),
-            ...(status.profileId ? { profileId: status.profileId } : {}), ...(status.effort ? { effort: status.effort } : {}) }
+            ...(status.profileId ? { profileId: status.profileId } : {}), ...(status.effort ? { effort: status.effort } : {}),
+            ...(status.effortLevels ? { effortLevels: status.effortLevels } : {}) }
           if (!chat.applyingConfiguration && JSON.stringify(config) !== JSON.stringify(chat.config)) {
             const modelChanged = chat.config?.model !== config.model || chat.config.profileId !== config.profileId || chat.config.contextWindow !== contextWindow
             chat.config = config
@@ -690,8 +790,8 @@ export class TerminalChatSessions {
         if (message !== chat.monitorError) this.options.stream(chat.ref).publish({ type: 'error', code: 'terminal.telemetry', message })
         chat.monitorError = message
       }
-    })().finally(() => { delete chat.telemetryRead })
-    return chat.telemetryRead
+    })().finally(() => { delete origin.telemetryRead })
+    return origin.telemetryRead
   }
 
   private publishSuggestion(chat: TerminalChat, suggestion?: string): void {
@@ -732,7 +832,7 @@ export class TerminalChatSessions {
 
   private readText(chat: TerminalChat): Promise<void> {
     const active = chat.active
-    if (!active?.confirmed) return Promise.resolve()
+    if (!active?.confirmed || this.options.terminals.isStructured(chat.ref)) return Promise.resolve()
     if (active.textRead) return active.textRead
     active.textRead = (async () => {
       try {
@@ -762,7 +862,7 @@ export class TerminalChatSessions {
           if (this.isDisposed()) break
           if (!alive) {
             if (this.chats.get(sessionRefKey(chat.ref)) !== chat || this.opening.has(sessionRefKey(chat.ref))) continue
-            await this.exited(chat.ref, 'Claude terminal exited')
+            await this.exited(chat.ref, 'Terminal exited')
             continue
           }
           const state = await this.options.terminals.state(chat.ref)

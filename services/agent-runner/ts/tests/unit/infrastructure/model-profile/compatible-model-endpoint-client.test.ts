@@ -206,3 +206,18 @@ function profile() {
     authToken: 'secret',
   })
 }
+
+it('probes the selected native classifier protocol with a typed question', async () => {
+  const calls: FetchCall[] = []
+  const fetch = createFetch(calls, () => jsonResponse(200, { answers: { supported: { type: 'noul', noul: 1 } } }))
+  const client = new CompatibleModelEndpointClient({ fetch })
+  const configured = { ...profile(), baseUrl: 'https://classifier.test/v1', classifierApi: 'typesafe-system-one' as const }
+  await expect(client.probeModelCapability(configured, 'jev-latest', 'classification')).resolves.toBe(true)
+  expect(calls[0]?.url).toBe('https://classifier.test/v1/systemone')
+  expect(JSON.parse(requestBody(calls[0]?.init.body))).toMatchObject({ model: 'jev-latest', state: { value: true }, questions: { supported: { type: 'noul' } } })
+})
+
+it('keeps classifier authentication failures actionable', async () => {
+  const client = new CompatibleModelEndpointClient({ fetch: createFetch([], () => jsonResponse(401, { error: 'Invalid key' })) })
+  await expect(client.probeModelCapability({ ...profile(), classifierApi: 'typesafe-system-one' }, 'jev-latest', 'classification')).rejects.toMatchObject({ kind: 'upstream-auth-failed' })
+})

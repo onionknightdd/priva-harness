@@ -189,6 +189,8 @@ function ComposerControls({
   modelReady,
   modelReference,
   effort,
+  isPi = false,
+  effortLevels,
   contextWindow,
   configurationPending,
   sendLabel,
@@ -204,13 +206,15 @@ function ComposerControls({
   modelReady: boolean
   modelReference: string | null
   effort: ComposerEffort
+  isPi?: boolean
+  effortLevels?: readonly ComposerEffort[]
   contextWindow: ContextWindow
   configurationPending: boolean
   sendLabel: string
   stopLabel: string
   modelRequired: string
   onStop: () => void
-  onModelReferenceChange: (model: string | null, source?: "user") => void
+  onModelReferenceChange: (model: string | null, source?: "user", effort?: ComposerEffort) => void
   onEffortChange: (effort: ComposerEffort) => void
   onContextWindowChange: (window: ContextWindow) => void
 }) {
@@ -230,6 +234,8 @@ function ComposerControls({
         <ComposerModelSelector
           modelReference={modelReference}
           effort={effort}
+          isPi={isPi}
+          effortLevels={effortLevels}
           contextWindow={contextWindow}
           configurationPending={configurationPending}
           onModelReferenceChange={onModelReferenceChange}
@@ -287,6 +293,8 @@ export function AgentMessageComposer({
   modelReady,
   modelReference,
   effort,
+  isPi = false,
+  effortLevels,
   contextWindow,
   configurationPending,
   slashCommand,
@@ -313,6 +321,8 @@ export function AgentMessageComposer({
   modelReady: boolean
   modelReference: string | null
   effort: ComposerEffort
+  isPi?: boolean
+  effortLevels?: readonly ComposerEffort[]
   contextWindow: ContextWindow
   configurationPending: boolean
   slashCommand: SlashCommand | null
@@ -320,7 +330,7 @@ export function AgentMessageComposer({
   editorRef?: React.RefObject<ComposerEditorHandle | null>
   onDraftChange: (draft: string) => void
   onSlashCommandChange: (command: SlashCommand | null) => void
-  onModelReferenceChange: (model: string | null, source?: "user") => void
+  onModelReferenceChange: (model: string | null, source?: "user", effort?: ComposerEffort) => void
   onEffortChange: (effort: ComposerEffort) => void
   onContextWindowChange: (window: ContextWindow) => void
   onSubmit: () => void
@@ -826,6 +836,8 @@ export function AgentMessageComposer({
                 modelReady={modelReady}
                 modelReference={modelReference}
                 effort={effort}
+                isPi={isPi}
+                effortLevels={effortLevels}
                 contextWindow={contextWindow}
                 configurationPending={configurationPending}
                 sendLabel={t("agentMessage.send")}

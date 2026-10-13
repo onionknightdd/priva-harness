@@ -1,7 +1,7 @@
 import type { RunMode } from '../../core/resource/session.js'
 import { DEFAULT_CONTEXT_WINDOW, type ContextWindow } from '../../core/resource/model-context.js'
 import { applyModelContext } from '../../core/resource/model-profile.js'
-import type { EffortLevel, ProviderRunSpec } from '../../core/contract/agent-provider.js'
+import { isClaudeEffortLevel, type EffortLevel, type ProviderRunSpec } from '../../core/contract/agent-provider.js'
 import {
   providerIdForHarness,
   rewriteProviderBaseUrl,
@@ -31,6 +31,9 @@ export interface RunSpecRequest {
  * chat run and the session terminal launch the same configuration.
  */
 export async function buildRunSpec(services: RunSpecServices, request: RunSpecRequest): Promise<ProviderRunSpec> {
+  if (request.harness === 'claude' && request.effort !== undefined && !isClaudeEffortLevel(request.effort)) {
+    throw new Error('Claude effort must be low, medium, high, xhigh, or max')
+  }
   const resolved = await services.modelProfileService.resolve(request.model)
   const agentProfile = await services.agentProfileService.read()
   const baseUrl = rewriteProviderBaseUrl(resolved.profile.baseUrl, request.harness)
@@ -51,6 +54,7 @@ export async function buildRunSpec(services: RunSpecServices, request: RunSpecRe
     ...(request.promptSuggestions === undefined
       ? {}
       : { promptSuggestions: request.promptSuggestions }),
+    ...(resolved.classifier === undefined ? {} : { classifier: resolved.classifier }),
     imageTools: {
       baseUrl,
       authToken: resolved.profile.authToken,

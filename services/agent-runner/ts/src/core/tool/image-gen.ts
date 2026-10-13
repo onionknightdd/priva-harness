@@ -45,12 +45,12 @@ export const imageGenTool = defineTool({
           ...(size === '' ? {} : { size }),
         },
       )
-      const filePath = await writeGeneratedImage({
+      const filePaths = await Promise.all(generated.images.map((image) => writeGeneratedImage({
         cwd: context.cwd,
-        mimeType: generated.mime,
-        bytes: generated.bytes,
-      })
-      return { ok: true, text: filePath }
+        mimeType: image.mime,
+        bytes: image.bytes,
+      })))
+      return { ok: true, text: filePaths.join('\n') }
     } catch (error) {
       return {
         ok: false,

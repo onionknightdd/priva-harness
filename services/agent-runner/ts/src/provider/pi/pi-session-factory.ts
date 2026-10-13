@@ -1,6 +1,6 @@
 import { PiInteractions } from './pi-interactions.js'
 import type { InteractionResponse } from '../../core/resource/interaction.js'
-import { createEventBus, type EventBus } from '@earendil-works/pi-coding-agent'
+import { createEventBus, type AgentSessionServices, type EventBus, type ExtensionUIContext, type InlineExtension, type SessionManager, type SessionStartEvent } from '@earendil-works/pi-coding-agent'
 import { asRecord, stringField } from '../../core/event/json-record.js'
 import { taskStatus } from '../../core/resource/background-task.js'
 import { randomUUID } from 'node:crypto'
@@ -14,7 +14,8 @@ import {
   SettingsManager,
 } from '@earendil-works/pi-coding-agent'
 
-import type { ProviderRunSpec, SessionTarget } from '../../core/contract/agent-provider.js'
+import type { EffortLevel, ProviderRunSpec, SessionTarget } from '../../core/contract/agent-provider.js'
+import { isEffortLevel } from '../../core/contract/agent-provider.js'
 import type { ToolDefinition } from '../../core/tool/define-tool.js'
 import { imageToolsFromSpec } from '../../core/tool/image-tool-shared.js'
 import { buildPiModelsConfig, piSessionNeedsModelSwitch, resolvePiSessionOptions, type PiSessionOptions } from './pi-models-config.js'
@@ -27,6 +28,14 @@ import type { PiSessionEvent } from './pi-event-mapper.js'
 import { compilePiCustomTools } from './tools/compile-custom-tools.js'
 import { PiWorkflows } from './pi-workflows.js'
 import { createPiResourceLoader } from './pi-resource-loader.js'
+import { piProjectTrusted } from '../../pi-config.js'
+import { registerPiProfileModels } from './pi-profile-models.js'
+
+export interface PiSessionFactoryOptions {
+  readonly sessionManager?: SessionManager
+  readonly sessionStartEvent?: SessionStartEvent
+  readonly extensions?: InlineExtension[]
+}
 
 export class CodingAgentSessionFactory implements PiSessionFactory {
   constructor(
@@ -34,7 +43,7 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
     private readonly tools: readonly ToolDefinition[] = [],
   ) {}
 
-  async open(spec: ProviderRunSpec, target: SessionTarget): Promise<PiAgentSession> {
+  async open(spec: ProviderRunSpec, target: SessionTarget, host: PiSessionFactoryOptions = {}): Promise<SdkPiAgentSession> {
     const options = resolvePiSessionOptions(spec)
     const runDir = join(tmpdir(), 'pi-model-runtime', randomUUID())
     await mkdir(runDir, { recursive: true, mode: 0o700 })
@@ -57,17 +66,24 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
 
     try {
       const modelRuntime = await ModelRuntime.create({ authPath, modelsPath })
+      await modelRuntime.setRuntimeApiKey(options.providerId, spec.authToken)
+      await registerPiProfileModels(modelRuntime, spec)
       const model = modelRuntime.getModel(options.providerId, options.modelId)
       if (model === undefined) {
         throw new Error(`Unknown model ${spec.model}`)
       }
 
-      const sessionManager = await createPiSessionManager(this.agentDir, spec, target)
-      const settingsManager = SettingsManager.create(spec.cwd, this.agentDir)
+      const sessionManager = host.sessionManager ?? await createPiSessionManager(this.agentDir, spec, target)
+      const thinkingLevel = sessionManager.getBranch().some((entry) => entry.type === 'thinking_level_change')
+        ? sessionManager.buildSessionContext().thinkingLevel
+        : spec.effort
+      if (thinkingLevel !== undefined && !isEffortLevel(thinkingLevel)) throw new Error(`Unsupported saved Pi thinking level: ${thinkingLevel}`)
+      const settingsManager = SettingsManager.create(spec.cwd, this.agentDir, { projectTrusted: piProjectTrusted(spec.cwd, this.agentDir) })
       workflows = new PiWorkflows({ cwd: spec.cwd, agentDir: this.agentDir,
         sessionId: sessionManager.getSessionId(), modelRuntime,
         providerId: options.providerId, modelId: options.modelId })
       const eventBus = createEventBus()
+      const resourceLoader = await createPiResourceLoader(spec.cwd, this.agentDir, settingsManager, eventBus, host.extensions)
       const { session } = await createAgentSession({
         cwd: spec.cwd,
         agentDir: this.agentDir,
@@ -75,8 +91,9 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
         modelRuntime,
         sessionManager,
         settingsManager,
-        resourceLoader: await createPiResourceLoader(spec.cwd, this.agentDir, settingsManager, eventBus),
-        thinkingLevel: 'off',
+        resourceLoader,
+        ...(host.sessionStartEvent ? { sessionStartEvent: host.sessionStartEvent } : {}),
+        ...(thinkingLevel === undefined ? {} : { thinkingLevel }),
         customTools: [workflows.tool, interactions.tool, ...compilePiCustomTools(this.tools, {
           cwd: spec.cwd, session: { provider: 'pi', id: sessionManager.getSessionId() },
           signal: new AbortController().signal, profile: imageToolsFromSpec(spec),
@@ -96,6 +113,7 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
         eventBus,
         interactions,
         options,
+        { cwd: spec.cwd, agentDir: this.agentDir, modelRuntime, settingsManager, resourceLoader, diagnostics: [] },
       )
     } catch (error) {
       workflows?.dispose()
@@ -111,13 +129,13 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
   }
 }
 
-class SdkPiAgentSession implements PiAgentSession {
+export class SdkPiAgentSession implements PiAgentSession {
   private currentModelId: string
   private closing: Promise<void> | undefined
   private initialized: Promise<void> | undefined
 
   constructor(
-    private readonly session: Awaited<ReturnType<typeof createAgentSession>>['session'],
+    readonly native: Awaited<ReturnType<typeof createAgentSession>>['session'],
     modelId: string,
     private readonly runDir: string,
     private readonly progressSink: { emit?: (chunk: string) => void } = {},
@@ -127,13 +145,22 @@ class SdkPiAgentSession implements PiAgentSession {
     private readonly eventBus: EventBus,
     private readonly interactions: PiInteractions,
     private readonly runOptions: PiSessionOptions,
+    readonly services: AgentSessionServices,
   ) {
     this.currentModelId = modelId
-    workflows.bindResultDelivery((workflow, result) => session.sendCustomMessage({
+    workflows.bindResultDelivery((workflow, result) => this.native.sendCustomMessage({
       customType: 'workflow-notification', display: false,
       content: `Workflow ${workflow.name ?? workflow.workflowRunId} ${workflow.status}. ${workflow.summary ?? ''}\n${result}`,
       details: { ...workflow, result },
     }, { deliverAs: 'followUp', triggerTurn: true }))
+  }
+
+  private get session() { return this.native }
+
+  bindTerminalUI(base: ExtensionUIContext = this.session.extensionRunner.getUIContext()): ExtensionUIContext {
+    const ui = this.interactions.ui(base, true)
+    this.session.extensionRunner.setUIContext(ui, 'tui')
+    return ui
   }
 
   initialize(): Promise<void> {
@@ -154,6 +181,10 @@ class SdkPiAgentSession implements PiAgentSession {
     return this.currentModelId
   }
 
+  setThinkingLevel(level: EffortLevel): void {
+    this.session.setThinkingLevel(level)
+  }
+
   async setRunModel(modelId: string, contextWindow: ContextWindow = DEFAULT_CONTEXT_WINDOW): Promise<void> {
     if (modelId === this.currentModelId && this.session.model?.contextWindow === contextWindow) return
     const budget = contextWindow - this.session.settingsManager.getCompactionSettings().reserveTokens
@@ -169,7 +200,7 @@ class SdkPiAgentSession implements PiAgentSession {
     const previousConfig = await readFile(path, 'utf8')
     const previousModel = this.session.model
     const config = buildPiModelsConfig(this.runOptions.env['OPENAI_BASE_URL'] ?? '', modelId,
-      this.runOptions.env['OPENAI_API_KEY'] ?? '', contextWindow)
+      contextWindow)
     try {
       await writeFile(path, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 })
       await this.modelRuntime.refresh()
@@ -223,12 +254,12 @@ class SdkPiAgentSession implements PiAgentSession {
     return images?.length ? this.session.prompt(text, { images: [...images] }) : this.session.prompt(text)
   }
 
-  followUp(text: string, images?: readonly PiImageContent[]): Promise<void> {
-    return images?.length ? this.session.followUp(text, [...images]) : this.session.followUp(text)
+  async followUp(text: string, images?: readonly PiImageContent[]): Promise<void> {
+    await (images?.length ? this.session.followUp(text, [...images]) : this.session.followUp(text))
   }
 
-  steer(text: string, images?: readonly PiImageContent[]): Promise<void> {
-    return images?.length ? this.session.steer(text, [...images]) : this.session.steer(text)
+  async steer(text: string, images?: readonly PiImageContent[]): Promise<void> {
+    await (images?.length ? this.session.steer(text, [...images]) : this.session.steer(text))
   }
 
   compact(customInstructions?: string): Promise<void> {
@@ -258,7 +289,7 @@ class SdkPiAgentSession implements PiAgentSession {
   }
 
   getContextUsage(): { tokens: number | null; contextWindow: number } | undefined {
-    return this.session.getContextUsage()
+    return this.session.getContextUsage() ?? (this.session.model ? { tokens: null, contextWindow: this.session.model.contextWindow } : undefined)
   }
 
   dispose(): Promise<void> {
@@ -274,7 +305,13 @@ class SdkPiAgentSession implements PiAgentSession {
       await this.session.extensionRunner.emit({ type: 'session_shutdown', reason: 'quit' })
     } finally {
       this.session.dispose()
-      await rm(this.runDir, { recursive: true, force: true })
+      await this.disposeResources()
     }
+  }
+
+  async disposeResources(): Promise<void> {
+    this.interactions.cancel()
+    this.workflows.dispose()
+    await rm(this.runDir, { recursive: true, force: true })
   }
 }

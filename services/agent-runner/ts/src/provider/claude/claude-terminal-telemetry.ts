@@ -1,6 +1,6 @@
 import { open, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { isEffortLevel, type ProviderRunSpec } from '../../core/contract/agent-provider.js'
+import { isClaudeEffortLevel, type ProviderRunSpec } from '../../core/contract/agent-provider.js'
 import type { TerminalActivity, TerminalStatus, TerminalTelemetry } from '../../core/contract/terminal-service.js'
 import { asRecord, numberField, stringField } from '../../core/event/json-record.js'
 import { emptyContextUsage } from '../../core/resource/context-usage.js'
@@ -54,7 +54,7 @@ export function terminalStatus(raw: Record<string, unknown>, spec?: ProviderRunS
   return { instanceId, sessionId, model: limit !== null && limit >= 1000000 && !model.endsWith('[1m]') ? `${model}[1m]` : model,
     cwd: stringField(asRecord(raw['workspace']) ?? {}, 'current_dir') ?? spec?.cwd ?? '',
     ...(typeof raw['updatedAt'] === 'number' ? { updatedAt: raw['updatedAt'] } : {}),
-    ...(isEffortLevel(effort) ? { effort } : {}), ...(spec?.profileId ? { profileId: spec.profileId } : {}),
+    ...(isClaudeEffortLevel(effort) ? { effort } : {}), ...(spec?.profileId ? { profileId: spec.profileId } : {}),
     context: { ...emptyContextUsage(), used, limit },
     ...(costUsd === undefined ? {} : { costUsd }), ...(apiDurationMs === undefined ? {} : { apiDurationMs }) }
 }

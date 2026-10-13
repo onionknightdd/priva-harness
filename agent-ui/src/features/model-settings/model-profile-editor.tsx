@@ -39,6 +39,7 @@ import type {
   ModelCapabilityCatalog,
   ModelProfileSummary,
 } from "./model-profile-api"
+import { ClassifierModelFields } from "./classifier-model-fields"
 import { ModelSelector } from "./model-selector"
 import { MultimodalModelFields } from "./multimodal-model-fields"
 import type {
@@ -69,6 +70,7 @@ export function ModelProfileEditor({
   modelIds,
   profile,
   profilesExist,
+  profiles,
   testFeedback,
   testStatus,
   onCancel,
@@ -89,6 +91,7 @@ export function ModelProfileEditor({
   modelIds: string[]
   profile: ModelProfileSummary | null
   profilesExist: boolean
+  profiles: readonly ModelProfileSummary[]
   testFeedback: ModelSettingsFeedback | null
   testStatus: ModelConnectionTestStatus
   onCancel: () => void
@@ -320,6 +323,8 @@ export function ModelProfileEditor({
               onCatalogChange={onCatalogChange}
               onDraftChange={(key, value) => onDraftChange(key, value)}
             />
+            <Separator />
+            <ClassifierModelFields draft={draft} profile={profile} profiles={profiles} disabled={busyAction !== null} onDraftChange={onDraftChange} onCatalogChange={onCatalogChange} />
           </FieldGroup>
 
           <div

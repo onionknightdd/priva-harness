@@ -64,15 +64,35 @@ describe.skipIf(!tmuxAvailable())('TmuxTerminalService', () => {
     await rm(root, { recursive: true, force: true })
   })
 
-  it('starts terminals with mouse and focus support and the configured history limit', async () => {
+  it('starts terminals with mouse, focus and extended keys support and the configured history limit', async () => {
     await service.ensure('options', shellLaunch(cwd))
     const options = execFileSync('tmux', [
       '-S', await service.socketPath('options'),
       'show-options', '-Av', '-t', 'main', 'mouse', ';',
       'show-options', '-sv', 'focus-events', ';',
+      'show-options', '-sv', 'extended-keys', ';',
+      'show-options', '-sv', 'extended-keys-format', ';',
       'display-message', '-p', '-t', 'main', '#{history_limit}',
     ], { encoding: 'utf8' })
-    expect(options.trim().split('\n')).toEqual(['on', 'on', '20000'])
+    expect(options.trim().split('\n')).toEqual(['on', 'on', 'on', 'csi-u', '20000'])
+  })
+
+  it('enables extended keys on an adopted server without restarting its pane and preserves them on restart', async () => {
+    const key = 'keyboard-options'
+    await service.ensure(key, shellLaunch(cwd))
+    const socket = await service.socketPath(key)
+    const tmux = (args: string[]) => execFileSync('tmux', ['-S', socket, ...args], { encoding: 'utf8' }).trim()
+    const pid = tmux(['display-message', '-p', '-t', 'main', '#{pane_pid}'])
+    const disable = () => tmux(['set-option', '-s', 'extended-keys', 'off', ';', 'set-option', '-s', 'extended-keys-format', 'xterm'])
+    const keyboard = () => tmux(['show-options', '-sv', 'extended-keys', ';', 'show-options', '-sv', 'extended-keys-format'])
+    disable()
+    const attachment = await service.attach(key, 80, 12)
+    expect(keyboard()).toBe('on\ncsi-u')
+    expect(tmux(['display-message', '-p', '-t', 'main', '#{pane_pid}'])).toBe(pid)
+    await attachment.detach()
+    disable()
+    await service.restart(key, shellLaunch(cwd))
+    expect(keyboard()).toBe('on\ncsi-u')
   })
 
   it('launches once, adopts on the second ensure, and streams input and output through an attachment', async () => {

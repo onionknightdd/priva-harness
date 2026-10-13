@@ -16,7 +16,7 @@ export async function createPiSessionManager(
   const sessionDir = piSessionBucketDir(agentDir, spec.cwd)
 
   if (target.kind === 'new') {
-    return SessionManager.create(spec.cwd, sessionDir)
+    return SessionManager.create(spec.cwd, sessionDir, target.sessionId ? { id: target.sessionId } : undefined)
   }
   if (target.kind === 'fork') {
     throw new SessionError('invalid-request', 'Pi does not support fork')

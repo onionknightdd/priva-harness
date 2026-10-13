@@ -72,6 +72,8 @@ import {
 } from "../tool-activity"
 import { QuoteSelectable } from "./quote-selectable"
 import { CanvasToolItem } from "./canvas-tool-item"
+import { codemodeParent } from "../codemode-tool-data"
+import { CodemodeToolItem } from "./codemode-tool-item"
 import { McpToolItem } from "./mcp-tool-item"
 import { VisualizeToolItem } from "./visualize-tool-item"
 import { isCanvasTool } from "../canvas-html"
@@ -141,6 +143,7 @@ export function AssistantProcess({
       continue
     }
     if (block.type === "tool_use") {
+      if (codemodeParent(block, blocks)) continue
       if (isQuestionTool(block.name)) {
         const resolution = message.interactions?.find((item) => item.request.toolUseId === block.id)
         if (resolution || block.tool?.status === "completed") rows.push(<QuestionSummary key={block.id} resolution={resolution} output={block.tool?.output} skipped={block.tool?.ok === false} />)
@@ -160,7 +163,7 @@ export function AssistantProcess({
         rows.push(<WorkflowToolItem key={block.id} workflow={workflow} />)
         renderedWorkflows.add(workflow.workflowToolUseId)
       } else {
-        rows.push(<ToolItem key={block.id} block={block} />)
+        rows.push(<ToolItem key={block.id} block={block} blocks={blocks} />)
       }
       if (block.tool?.backgroundTask && !isAgentTool(block.name)) rows.push(<BackgroundTaskCard key={`${block.id}:background`} task={block.tool.backgroundTask} />)
     }
@@ -332,9 +335,17 @@ export function ImageItem({
 
 export function ToolItem({
   block,
+  blocks = [],
 }: {
   block: Extract<StreamBlock, { type: "tool_use" }>
+  blocks?: readonly StreamBlock[]
 }) {
+  if (block.name === "codemode") {
+    return <CodemodeToolItem block={block}>
+      {blocks.filter((child): child is Extract<StreamBlock, { type: "tool_use" }> => child.type === "tool_use" && codemodeParent(child, blocks) === block.id)
+        .map((child) => <ToolItem key={child.id} block={child} blocks={blocks} />)}
+    </CodemodeToolItem>
+  }
   if (isBashTool(block.name)) {
     return <BashToolItem block={block} />
   }

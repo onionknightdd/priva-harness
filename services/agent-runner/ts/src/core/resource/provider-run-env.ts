@@ -1,6 +1,6 @@
 import type { ProviderId, ProviderRunSpec } from '../contract/agent-provider.js'
 
-export const PI_RUN_PROVIDER_ID = 'openai'
+export const PI_RUN_PROVIDER_ID = 'priva-chat'
 
 export const CLAUDE_DEFAULT_MODEL_ENV_KEYS = [
   'ANTHROPIC_DEFAULT_OPUS_MODEL',

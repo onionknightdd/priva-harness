@@ -23,6 +23,7 @@ import {
 import { canonicalProductToolName, isReadToolName } from '../../core/event/tool-names.js'
 import { patchFromToolDetails } from '../../core/event/tool-patch.js'
 import { encodeReadView } from '../../core/event/tool-read.js'
+import { piToolResultMetadata } from './pi-tool-result.js'
 
 export interface PiSessionEvent {
   readonly task?: BackgroundTask
@@ -32,6 +33,7 @@ export interface PiSessionEvent {
   readonly message?: unknown
   readonly messages?: unknown
   readonly toolCallId?: string
+  readonly parentToolCallId?: string
   readonly toolName?: string
   readonly args?: unknown
   readonly partialResult?: unknown
@@ -74,6 +76,12 @@ export class PiEventMapper {
   private readonly blocks = new Map<number, ContentBlock>()
   private readonly indexByToolId = new Map<string, number>()
   private lastToolId: string | undefined
+  private readonly runMessages = new Map<string, unknown>()
+  private readonly parentTools = new Map<string, string>()
+  private readonly toolMessages = new Map<string, string>()
+  private settled = true
+  private readonly messageKeys = new WeakMap<object, string>()
+  private messageKeySeq = 0
 
   constructor(private readonly options: PiEventMapperOptions) {
     this.startedAt = options.startedAt ?? Date.now()
@@ -86,6 +94,13 @@ export class PiEventMapper {
 
   latestToolId(): string | undefined {
     return this.lastToolId
+  }
+
+  beginRun(): void {
+    this.beginUserTurn()
+    this.startedAt = Date.now()
+    this.runMessages.clear()
+    this.settled = false
   }
 
   push(event: PiSessionEvent): AgentEvent[] {
@@ -105,13 +120,14 @@ export class PiEventMapper {
     if (event.type === 'background_error') return [{ type: 'error', message: event.errorMessage ?? 'Background result delivery failed' }]
     switch (event.type) {
       case 'agent_start':
-        this.startedAt = Date.now()
+        if (this.settled) this.beginRun()
         return [{ type: 'session.state', state: 'running' }]
       case 'workflow_progress':
         return event.workflow ? this.mapWorkflow(event.workflow) : []
       case 'message_update':
         return this.mapMessageUpdate(event)
       case 'message_end':
+        this.rememberRunMessages([event.message])
         return this.mapMessageEnd(event.message)
       case 'tool_execution_start':
         return this.mapToolExecutionStart(event)
@@ -120,7 +136,11 @@ export class PiEventMapper {
       case 'tool_execution_end':
         return this.mapToolExecutionEnd(event)
       case 'agent_end':
-        return [this.mapAgentEnd(event.messages)]
+        this.rememberRunMessages(event.messages)
+        return []
+      case 'agent_settled':
+        this.settled = true
+        return [this.mapAgentEnd([...this.runMessages.values()], event.aborted)]
       case 'compaction_start':
         return [{ type: 'session.compacting' }]
       case 'compaction_end':
@@ -263,6 +283,14 @@ export class PiEventMapper {
   private mapMessageEnd(raw: unknown): AgentEvent[] {
     this.rememberModel(asRecord(raw))
     const message = asRecord(raw)
+    if (message?.['role'] === 'toolResult') {
+      const toolCallId = stringField(message, 'toolCallId')
+      const toolName = stringField(message, 'toolName')
+      return this.mapToolExecutionEnd({ type: 'tool_execution_end',
+        ...(toolCallId === undefined ? {} : { toolCallId }), ...(toolName === undefined ? {} : { toolName }),
+        result: message, isError: message['isError'] === true,
+      })
+    }
     if (message === undefined || stringField(message, 'role') !== 'assistant') {
       return []
     }
@@ -281,14 +309,17 @@ export class PiEventMapper {
     const name = normalizeToolName(event.toolName ?? this.tools.get(id) ?? 'unknown')
     this.tools.set(id, name)
     this.lastToolId = id
-    const messageId = this.lastMessageId ?? this.ensureMessageId()
+    if (event.parentToolCallId) this.parentTools.set(id, event.parentToolCallId)
+    const messageId = (event.parentToolCallId === undefined ? undefined : this.toolMessages.get(event.parentToolCallId)) ?? this.lastMessageId ?? this.ensureMessageId()
+    this.toolMessages.set(id, messageId)
+    const parent = event.parentToolCallId ? { parentToolCallId: event.parentToolCallId } : {}
     const index = this.indexByToolId.get(id)
     const events: AgentEvent[] = []
     if (!this.started.has(id)) {
       this.started.add(id)
       events.push(
         event.args === undefined
-          ? { type: 'tool.started', messageId, blockId: id, ...(index === undefined ? {} : { index }), id, name }
+          ? { type: 'tool.started', messageId, blockId: id, ...(index === undefined ? {} : { index }), id, name, ...parent }
           : {
               type: 'tool.started',
               messageId,
@@ -297,13 +328,15 @@ export class PiEventMapper {
               id,
               name,
               input: event.args,
+              ...parent,
             },
       )
     }
     events.push({
       type: 'tool.running',
       id,
-      ...(this.lastMessageId === undefined ? {} : { messageId: this.lastMessageId }),
+      messageId,
+      ...parent,
       blockId: id,
       ...(index === undefined ? {} : { index }),
     })
@@ -315,16 +348,22 @@ export class PiEventMapper {
     if (id === undefined) return []
     const workflow = this.workflowEvent(id, event.toolName ?? this.tools.get(id) ?? '', event.partialResult)
     const chunk = toolOutput(event.partialResult)
+    const metadata = piToolResultMetadata(event.partialResult)
     if (workflow.length) return workflow
-    if (chunk === '') return []
+    if (chunk === '' && !metadata.modelCalls?.length && !metadata.artifacts?.length &&
+      metadata.structuredContent === undefined && !metadata.resultContent?.length) return []
     const index = this.indexByToolId.get(id)
+    const parentToolCallId = this.parentTools.get(id)
+    const messageId = this.toolMessages.get(id)
     return [
       {
         type: 'tool.progress',
         id,
         channel: 'stdout',
         chunk,
-        ...(this.lastMessageId === undefined ? {} : { messageId: this.lastMessageId }),
+        ...metadata,
+        ...(parentToolCallId === undefined ? {} : { parentToolCallId }),
+        ...(messageId === undefined ? {} : { messageId }),
         blockId: id,
         ...(index === undefined ? {} : { index }),
       },
@@ -339,6 +378,8 @@ export class PiEventMapper {
     const index = this.indexByToolId.get(id)
     const task = piBackgroundLaunch(id, name, event.result)
     const tasks: AgentEvent[] = task ? [{ type: 'task.updated', task }] : []
+    const parentToolCallId = this.parentTools.get(id)
+    const messageId = this.toolMessages.get(id) ?? this.lastMessageId
     return [
       ...tasks,
       ...workflow,
@@ -348,7 +389,9 @@ export class PiEventMapper {
         name,
         ok: event.isError !== true,
         output: completedToolOutput(name, event.result),
-        ...(this.lastMessageId === undefined ? {} : { messageId: this.lastMessageId }),
+        ...piToolResultMetadata(event.result),
+        ...(parentToolCallId === undefined ? {} : { parentToolCallId }),
+        ...(messageId === undefined ? {} : { messageId }),
         blockId: id,
         ...(index === undefined ? {} : { index }),
       },
@@ -396,7 +439,24 @@ export class PiEventMapper {
     ]
   }
 
-  private mapAgentEnd(messages: unknown): AgentEvent {
+  private rememberRunMessages(messages: unknown): void {
+    if (!Array.isArray(messages)) return
+    for (const message of messages) {
+      const raw = asRecord(message)
+      if (!raw || (raw['role'] !== 'assistant' && raw['role'] !== 'toolResult')) continue
+      let key = this.messageKeys.get(raw)
+      if (!key) {
+        key = raw['role'] === 'toolResult' && typeof raw['toolCallId'] === 'string' ? `tool:${raw['toolCallId']}` :
+          raw['id'] !== undefined || raw['timestamp'] !== undefined ?
+            `${raw['role']}:${String(raw['id'] ?? raw['timestamp'])}:${String(raw['model'])}:${JSON.stringify(raw['content'])}` :
+            `message:${++this.messageKeySeq}`
+        this.messageKeys.set(raw, key)
+      }
+      this.runMessages.set(key, message)
+    }
+  }
+
+  private mapAgentEnd(messages: unknown, aborted = false): AgentEvent {
     const model = this.model === '' ? this.options.model : this.model
     const accounting: RunAccounting = {
       durationMs: Math.max(0, Date.now() - this.startedAt),
@@ -404,15 +464,16 @@ export class PiEventMapper {
     }
     const sessionId = this.options.sessionId === '' ? undefined : this.options.sessionId
     const failure = assistantFailure(messages)
-    if (failure !== undefined) {
-      if (failure.aborted) {
+    if (failure?.aborted || aborted) {
         return {
           type: 'run.aborted',
           ...(sessionId === undefined ? {} : { sessionId }),
           model,
-          message: failure.message,
+          message: failure?.message ?? 'aborted',
+          ...accounting,
         }
-      }
+    }
+    if (failure !== undefined) {
       return {
         type: 'run.failed',
         message: failure.message,
@@ -640,7 +701,12 @@ function usageFromMessages(messages: unknown, fallbackModel: string): RunAccount
   let numTurns = 0
   for (const raw of messages) {
     const message = asRecord(raw)
-    if (message === undefined || stringField(message, 'role') !== 'assistant') continue
+    if (message === undefined) continue
+    if (stringField(message, 'role') === 'toolResult') {
+      addToolUsage(message, byModel)
+      continue
+    }
+    if (stringField(message, 'role') !== 'assistant') continue
     numTurns += 1
     const usage = asRecord(message['usage'])
     if (usage === undefined) continue
@@ -658,9 +724,8 @@ function usageFromMessages(messages: unknown, fallbackModel: string): RunAccount
     if (costUsd !== undefined) bucket.costUsd = (bucket.costUsd ?? 0) + costUsd
     byModel[model] = bucket
   }
-  if (numTurns === 0) return {}
   const models = Object.entries(byModel)
-  if (models.length === 0) return { numTurns }
+  if (models.length === 0) return numTurns ? { numTurns } : {}
 
   const total = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
   let costUsd: number | undefined
@@ -681,6 +746,42 @@ function usageFromMessages(messages: unknown, fallbackModel: string): RunAccount
     usage: total,
     byModel: perModel,
     ...(costUsd === undefined ? {} : { costUsd }),
+  }
+}
+
+interface UsageBucket { input: number; output: number; cacheRead: number; cacheWrite: number; costUsd: number | undefined }
+
+function addToolUsage(message: JsonRecord, buckets: Record<string, UsageBucket>): void {
+  const usage = asRecord(message['usage'])
+  if (!usage) return
+  const remainder: UsageBucket = {
+    input: numberField(usage, 'input') ?? 0, output: numberField(usage, 'output') ?? 0,
+    cacheRead: numberField(usage, 'cacheRead') ?? 0, cacheWrite: numberField(usage, 'cacheWrite') ?? 0,
+    costUsd: numberField(asRecord(usage['cost']) ?? {}, 'total'),
+  }
+  const invocations = piToolResultMetadata(message).modelCalls ?? []
+  for (const call of invocations) {
+    if (!call.usage) continue
+    const key = `${call.provider}/${call.model}`
+    const bucket = buckets[key] ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, costUsd: undefined }
+    for (const field of ['input', 'output', 'cacheRead', 'cacheWrite'] as const) {
+      // The outer tool result is the total; invocation records only attribute that total.
+      const attributed = Math.min(remainder[field], call.usage[field] ?? 0)
+      bucket[field] += attributed
+      remainder[field] = Math.max(0, remainder[field] - attributed)
+    }
+    if (call.costUsd !== undefined) {
+      const attributedCost = Math.min(remainder.costUsd ?? call.costUsd, call.costUsd)
+      bucket.costUsd = (bucket.costUsd ?? 0) + attributedCost
+      if (remainder.costUsd !== undefined) remainder.costUsd = Math.max(0, remainder.costUsd - attributedCost)
+    }
+    buckets[key] = bucket
+  }
+  if (remainder.input || remainder.output || remainder.cacheRead || remainder.cacheWrite || (remainder.costUsd ?? 0) > 0 || !invocations.length) {
+    const bucket = buckets['Tools/summaries'] ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, costUsd: undefined }
+    for (const field of ['input', 'output', 'cacheRead', 'cacheWrite'] as const) bucket[field] += remainder[field]
+    if (remainder.costUsd !== undefined) bucket.costUsd = (bucket.costUsd ?? 0) + remainder.costUsd
+    buckets['Tools/summaries'] = bucket
   }
 }
 

@@ -58,8 +58,8 @@ export class McpProbe {
   }
 
   private async connected<T>(definition: Record<string, unknown>, cwd: string, run: (client: Client) => Promise<T>): Promise<T> {
-    if (definition['disabled'] === true) throw new ResourceError(409, 'Enable this MCP server before testing it')
-    if (definition['auth'] === 'oauth' || definition['oauth'] !== undefined || definition['bearerTokenStore'] === true || definition['requestHeadersCommand'] !== undefined || definition['headersHelper'] !== undefined) throw new ResourceError(422, 'This authentication configuration is managed by the provider session; this test supports stdio and HTTP/SSE with explicit credentials')
+    if (definition['disabled'] === true || definition['enabled'] === false) throw new ResourceError(409, 'Enable this MCP server before testing it')
+    if (definition['auth'] !== undefined || definition['oauth'] !== undefined || definition['bearerTokenStore'] === true || definition['requestHeadersCommand'] !== undefined || definition['headersHelper'] !== undefined) throw new ResourceError(422, 'This authentication configuration is managed by the provider session; use native /mcp to authenticate and inspect this connection')
     const client = new Client({ name: 'priva-mcp-inspector', version: '1.0.0' })
     let transport: Transport
     if (typeof definition['command'] === 'string') {

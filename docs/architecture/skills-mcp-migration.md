@@ -1,7 +1,7 @@
 # Skills / MCP 迁移方案
 
-状态：已实施；布局经确认，15 个接口、来源分组页面与 Pi MCP 运行时已接通。
-核对日期：2026-09-08。
+状态：Skills / MCP 资源管理已实施；2026-10-13 将 Pi MCP 切换为 Pi 1.2.0 原生扩展。
+核对日期：2026-10-13。
 
 ## 范围
 
@@ -9,15 +9,17 @@
 - 不迁移 Slash commands、Skill Hub，以及旧项目 CP proxy。
 - 参考 `priva-cloud/web/user` 的列表 / 详情布局，沿用当前项目的
   shadcn/ui、主题 token、Animate UI / Motion 和 reduced-motion 行为。
-- Pi MCP 使用用户指定的 `pi-mcp-adapter`。
+- Pi MCP 使用原生 MCP、Codemode 和 Tool Search 扩展；旧 adapter 不再加载。
 
 ## 当前版本和运行目录
 
 | 依赖 | 当前核对版本 |
 | --- | --- |
 | Claude Agent SDK | 0.3.250（当前项目安装版本） |
-| Pi coding agent | 0.84.2（当前项目安装版本） |
-| pi-mcp-adapter | 2.32.1（Runner 固定依赖，已验证生产构建加载） |
+| Pi coding agent / AI | 1.2.0 |
+| pi-subagents | 0.21.0 |
+| pi-dynamic-workflows | 3.14.0 |
+| pi-code（只加载 Memory） | 1.5.2 |
 
 Runner 使用各 harness 的原生目录，运行、会话存储与资源管理解析到相同路径。
 未设置原生目录环境变量时：
@@ -34,11 +36,10 @@ Runner 不设置或覆盖 `CLAUDE_CONFIG_DIR`、`PI_CODING_AGENT_DIR`，也不�
 产品根下的 `harness/` 目录。外部已设置的原生变量由各 harness 自身规则解析。
 在相同用户和环境下，普通终端的 `pi install` 与 Runner 使用同一个 Pi 目录。
 更改产品 `RUNTIME_HOME_DIR` 不影响 harness 目录；已有产品根下的 harness 文件不自动迁移。
-Pi SDK 的
-`DefaultPackageManager.installAndPersist('npm:pi-mcp-adapter@2.32.1')`
-是可指定 `agentDir` 的程序化安装入口。当前 Runner 将此插件作为固定 npm 依赖，
-通过 `createMcpAdapter` 托管到每个 SDK 会话，无需用户再次执行安装命令；
-已配置的同名 adapter 扩展在加载前排除，避免重复注册。正常列表请求不触发安装。
+Runner 将 Pi 原生 MCP、Codemode 和 Tool Search 作为 SDK extension factories 显式注册。
+SDK 不会自动加载这些内建扩展。`pi-mcp-adapter` 依赖和它提供的 `mcp-scripting`
+skill 已移除；若用户 Pi settings 仍配置 adapter，启动会给出移除提示，避免它接管
+原生 `/mcp`。Runner 不自动修改用户配置、不继续读取旧 adapter 来源。
 
 ## 发现与执行分开
 
@@ -53,8 +54,8 @@ Pi SDK 的
                           |
               +-----------+-----------+
               v                       v
-         Claude SDK              Pi SDK 扩展
-                            pi-mcp-adapter
+         Claude SDK              Pi SDK 原生扩展
+                         MCP / Codemode / Tool Search
                                       |
                           session_start / shutdown
 ```
@@ -79,83 +80,68 @@ Pi SDK 的
 - 包内 skill 展示为 package 来源。修改能力由来源决定，不能把每条记录都
   当成可直接删除或可独立启停的本地目录。
 
-### Pi MCP：复用公开配置 API
+### Pi MCP：原生配置目录
 
-从 `pi-mcp-adapter/config` 导入已编译的公开入口；不要依赖包的私有文件。
-
-| API | 用途 | 边界 |
-| --- | --- | --- |
-| `getMcpStandardConfigSummary(configPath, cwd)` | 标准来源路径、scope、类型、数量 | 不提供每个服务器的原始定义 |
-| `getMcpDiscoverySummary(configPath, cwd, options)` | 来源、冲突、导入和 Agent Plugin 摘要 | 导入候选不等于实际生效配置 |
-| `loadMcpConfig(configPath, cwd)` | 按插件规则获得合并后的运行配置 | 合并结果丢失被覆盖的原始声明 |
-| `getServerProvenance(configPath, cwd)` | 插件为服务器选择的写入位置 | `path` 可能是 Pi override，不能当作原始来源路径 |
-
-管理列表使用 summary 的真实文件路径读取原始声明；合并行为交给
-`loadMcpConfig()`。不要拿合并结果反推全部来源，也不要复制一套 merge 算法。
-
-2.32.1 发布包的标准来源由低到高如下，同名服务器支持字段级合并：
+只读取 `<Pi agentDir>/mcp.json` 和 `<cwd>/.pi/mcp.json`。原生 JSON 不支持 JSONC。
+项目配置是否生效由 Pi `ProjectTrustStore` 与全局 `defaultProjectTrust` 决定；
+未知项目的 `ask` 不能当作已经信任。目录可展示尚未信任的项目声明，但不会把它
+标记为已启用，也不自动探测它。可信决定变化后要重载会话。
 
 ```text
-~/.config/mcp/mcp.json       shared-global
-           |
-~/.agents/mcp.json           agents-global
-           |
-~/.agents/mcp/mcp.json       agents-nested-global
-           |
-<Pi agentDir>/mcp.json       pi-global
-           |
-<cwd>/.mcp.json             shared-project
-           |
-<cwd>/.pi/mcp.json          pi-project
+<Pi agentDir>/mcp.json -----------+
+                                +--> 原生 MCP 有效配置 --> 会话连接
+<cwd>/.pi/mcp.json -- 信任检查 --+
+       |                         |
+       +--> 原始配置目录 / CRUD --+
 ```
 
-安装的 Pi package 还可以通过 `pi.mcp` 提供服务器；显式 Agent Plugins 和
-host imports 也可能贡献配置。标准六类来源不能被宣称为覆盖所有扩展来源。
-当前公开 API 不提供所有 package 服务器的完整逐项 provenance，需要为
-这些来源补充 manifest 元数据；在不能证明来源时不能伪装成全局可写配置。
+项目完整连接定义替换同名全局定义，不合并 env、headers 或 args。没有 command、url、
+type 的项目声明只能覆盖全局服务器的 enabled、exposure、toolExposure；它必须有全局
+服务器作为基础。服务器名只允许字母、数字、下划线和连字符，不能存在只因 `-` / `_`
+不同的两个名称。`auth.provider` 只允许在全局文件使用。
 
-默认关闭 host 自动发现。来源页面不应为了展示而自动导入 Claude / Cursor
-等配置。Pi 专属设置写入 Pi 配置；共享文件的修改应由用户选择该来源。
+`src/pi-config.ts` 提供共享的配置预览校验、信任查询和旧字段检查。资源目录仅预览
+原生两层语义；真实连接始终由 `createMcpExtension()` 的默认原生加载器解析。
+不深层导入 Pi 包私有 config 模块。目录扫描不运行扩展、不调用模型、不连接 MCP，
+也不执行环境变量值中的凭据命令。
 
-summary 的 `fingerprint` 只包含来源存在性、数量、冲突等摘要。仅更改 URL
-而不改变数量时 fingerprint 不变，不能作为配置内容缓存失效依据。
-缓存需跟踪真实文件变化，写入后主动失效，刷新时重新发现来源。
+原生配置使用 `enabled: false` 停用服务，`exposure` 控制工具默认暴露模式：
+`codemode`（默认）、`deferred`、`direct`、`hidden`。工具级 `toolExposure` 支持
+精确名称和 `*` 模式；精确名称优先，模式按顺序匹配。工具开关写入精确 hidden；
+重新开启后恢复继承，若继承仍为 hidden，则设置为 codemode。
+
+旧 adapter 的 `disabled`、`includeTools`、`excludeTools`、`httpTransport`、socket
+等字段会产生明确诊断，运行会话在扩展加载时拒绝这些字段，防止原生 Pi 忽略旧字段后
+意外启用工具。文件保持原样，用户需要重新配置为原生格式。原来的共享 `.mcp.json`、
+`~/.agents` MCP、host imports、package `pi.mcp` 和 Agent Plugin MCP 来源不再作为
+Pi 运行配置发现；不提供自动迁移、兼容读取或回退到 adapter。
 
 ### Pi MCP 运行时
 
 ```text
-loadMcpConfig(globalConfigPath, session.cwd)
-                    |
-                    v
-     createMcpAdapter({ config: snapshot })
-                    |
-        Pi ResourceLoader（只注册一次）
-                    |
-  bindExtensions -> session_start -> MCP 工具
-                    |
-  abort -> session_shutdown -> dispose
+createPiResourceLoader
+  +--> createProductCodemodeExtension（mode:on，默认启用）
+  +--> createToolSearchExtension（按 deferred MCP 需求启用）
+  +--> createMcpExtension（原生默认配置加载器）
+            |
+       session_start --> 后台连接 / 原生 mcp__server__tool
+            |
+       Codemode --> 子工具 --> parentToolCallId / 原生工具事件
+            |
+       session_shutdown --> 关闭连接与子进程 --> dispose
 ```
 
-使用插件提供的 MCP 工具执行、连接生命周期和缓存。
+资源页和原生 `/mcp` 编辑相同两份文件。外部修改后需要原生 `/reload`；目录刷新
+重新读取文件。配置状态、独立探测结果与实际会话连接状态不能混用。
 
-实现中已处理以下三点：
+原生支持 stdio 和 Streamable HTTP，不支持 legacy SSE、Unix socket 或 WebSocket。
+OAuth 登录、登出、动态凭据及连接状态由原生 `/mcp` 管理，凭据使用 Pi 的
+`mcp-auth.json`。资源页独立短连接探测不复用该凭据存储，返回需原生认证的明确错误。
+Claude 的 SSE 探测保持其自身语义。
 
-1. 插件默认入口的加载期配置使用 `process.cwd()`；Runner 的会话 cwd 可与
-   进程不同。SDK 集成应使用按会话构建的配置快照，避免依赖进程级 chdir。
-2. `CodingAgentSessionFactory` 在创建后调用 `bindExtensions({ mode: 'rpc' })`，
-   触发扩展的 `session_start`。
-3. 释放先终止运行，再等待 `session_shutdown`（reason `quit`），最后销毁会话。
-   会话创建中途失败也完成扩展与临时目录清理。
-
-通过 SDK factory 加载时应避免又自动加载已安装 package 的默认扩展入口。
-包根入口是 TypeScript，需要采用 Pi 的源码加载机制或明确支持 TS 的加载
-工具链；`/config` 是可直接供 Node 生产进程使用的 JavaScript 子入口。
-
-运行状态可以消费 `MCP_STATUS_EVENT` 的机器可读快照。没有会话时，列表展示
-配置状态，不应为了得到 connected 状态创建会话。
-
-`lazy` 不保证第一次启动完全不连接：发布包在元数据缓存不存在时会 bootstrap
-服务器。因而管理目录发现不能实例化运行时扩展。
+原生 MCP 工具默认通过 Codemode 查找和调用；完整工具结果交给脚本处理，模型只看到
+脚本输出。每个子调用仍经过 Pi 的工具校验与权限钩子，并携带 `parentToolCallId`。
+原生资源工具包括 list/read/template；MCP Apps 的 ui:// / HTML 资源不在本轮范围。
 
 ## 已实现接口
 
@@ -330,7 +316,7 @@ SKILL.md 预览。浏览器检查入口见 [前端验证命令](../front-end-des
 2026-09-09 性能修复验证：23 项 Skill 交互检查、9 项预览复用 / 滚动高亮 / 语言与
 Diff 检查、6 项资源 / 上传测试通过；前端 build / lint 通过，修改处无新增 lint 警告。
 
-## 已执行的接入验证
+## 2026-09 历史 adapter 接入验证（已被原生实现替代）
 
 验证在临时目录运行，没有安装到用户或 Runner 的正式 Pi 目录，没有调用模型。
 
@@ -345,7 +331,7 @@ Diff 检查、6 项资源 / 上传测试通过；前端 build / lint 通过，�
 - 第一次工具测试中“lazy 在启动时绝不连接”的断言失败；源码及冷缓存行为
   解释为 bootstrap，修正预期后真实工具调用和关闭验证通过。
 
-## 实施后的验证与边界
+## 2026-09 资源管理实施记录
 
 - 来源、覆盖、CRUD、路径规范化、JSONC 并发写入、外部同数量配置编辑、归档限制、
   文件路径越界、符号链接、Claude 原生 skillOverrides 和 Pi exclusions 均有回归测试。
@@ -395,3 +381,17 @@ Fast Refresh 等 lint 警告及大型依赖分块构建警告。
 复制完整文本、绝对路径、图标尺寸、16px 禁用标签的高度稳定及移动端子检查。
 23 项 Skill 树、52 项文件浏览器树、9 项预览缓存 / 高亮浏览器回归，以及
 9 项文件树测量测试通过。前端 build / lint 通过，仍保留原有 lint 与大包警告。
+
+## 2026-10-13 原生 MCP 切换验证
+
+原生 `tests/fixtures/resources/pi-mcp-probe.ts` 使用隔离 HOME/agentDir、两个项目 cwd 和
+本地 stdio fixture，不调用模型。它验证 Codemode 实际调用 echo、cwd 隔离、hidden 工具
+不可达、带 parentToolCallId 的嵌套事件，以及 session_shutdown 连接清理。生产探针继续
+使用 AGENTS.md 中的命令，在 build 后传入编译后的 pi-resource-loader.js。
+
+资源测试覆盖同名完整替换、三字段 override、信任拒绝、旧 adapter 字段明确诊断、
+原生工具开关与保留配置文件内容。Memory 回归测试使用 pi-code 1.5.2 的 .ts 配置导入，
+确保仍只读取 Pi 配置并保持项目内存隔离。真实 OAuth 与生产网络服务器需部署后验证。
+
+参考：[Pi 1.2 MCP](https://github.com/earendil-works/pi/blob/v1.2.0/packages/coding-agent/docs/mcp.md)、
+[Pi 1.2 SDK](https://github.com/earendil-works/pi/blob/v1.2.0/packages/coding-agent/docs/sdk.md#codemode-mcp)。

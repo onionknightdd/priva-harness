@@ -4,45 +4,16 @@ import { join } from 'node:path'
 import type { FastifyInstance } from 'fastify'
 import type { WebSocket } from 'ws'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { AgentProvider, AgentRuntime, SessionTarget, TurnContext } from '../../../../src/core/contract/agent-provider.js'
-import type { AgentEvent, StreamFrame } from '../../../../src/core/event/agent-event.js'
-import type { InteractionRequest, InteractionResponse } from '../../../../src/core/resource/interaction.js'
-import { emptyContextUsage } from '../../../../src/core/resource/context-usage.js'
-import { InteractionCoordinator } from '../../../../src/core/run/interaction-coordinator.js'
-import type { UserTurn } from '../../../../src/core/run/user-turn.js'
-import { AsyncQueue } from '../../../../src/core/stream/async-queue.js'
+import type { StreamFrame } from '../../../../src/core/event/agent-event.js'
+import type { InteractionRequest } from '../../../../src/core/resource/interaction.js'
 import { AgentHarness } from '../../../../src/harness/agent-harness.js'
 import { LiveRunRegistry } from '../../../../src/harness/run/live-run-registry.js'
 import { NodeUserFileSystem } from '../../../../src/infrastructure/filesystem/node-user-file-system.js'
 import { buildHttpServer } from '../../../../src/transport/http/server.js'
 import { SESSION_WEBSOCKET_PATH } from '../../../../src/transport/websocket/run-route.js'
+import { fakeStructuredTerminal } from '../../../support/fake-structured-terminal.js'
 import { FakeAgentProvider } from '../../../support/fake-agent-provider.js'
-import { FakeSessionStore } from '../../../support/fake-session-store.js'
 import { createTestAgentServices } from '../../../support/model-profile.js'
-
-class WaitingRuntime implements AgentRuntime {
-  readonly session
-  readonly events = new AsyncQueue<AgentEvent>()
-  readonly coordinator = new InteractionCoordinator((event) => this.events.push(event))
-  readonly decisions: string[] = []
-  constructor(target: SessionTarget) {
-    this.session = { provider: 'pi' as const, id: target.kind === 'resume' ? target.session.id : target.sessionId ?? 'waiting' }
-  }
-  async *run(_turn: UserTurn, context: TurnContext): AsyncIterable<AgentEvent> {
-    const waiting = Promise.all(['Bash', 'Write'].map((tool) => this.coordinator.request({ kind: 'tool', tool }, { signal: context.signal })))
-    void waiting.then((results) => {
-      this.decisions.push(...results.map((result) => result.decision))
-      this.events.push({ type: 'run.completed', sessionId: this.session.id, model: 'm', durationMs: 1 })
-      this.events.close()
-    })
-    yield* this.events.iterate()
-  }
-  respondPermission(response: InteractionResponse): void { this.coordinator.respond(response) }
-  applyRunSpec(): Promise<void> { return Promise.resolve() }
-  abort(): Promise<void> { this.coordinator.cancelAll(); return Promise.resolve() }
-  getContextUsage() { return Promise.resolve(emptyContextUsage()) }
-  release(): Promise<void> { this.coordinator.cancelAll(); this.events.close(); return Promise.resolve() }
-}
 
 function inbox(socket: WebSocket) {
   const frames: StreamFrame[] = []
@@ -61,17 +32,19 @@ describe('interaction WebSocket routing', () => {
   let server: FastifyInstance
   let harness: AgentHarness
   let model: string
-  let runtime: WaitingRuntime
+  let native: ReturnType<typeof fakeStructuredTerminal>
+  const ref = { provider: 'pi', id: 'waiting' } as const
+  const decisions = () => native.sessions.get('pi:waiting')?.decisions ?? []
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'priva-interaction-ws-'))
     const services = createTestAgentServices(join(root, 'runtime'))
     const profile = await services.modelProfileService.createProfile({ label: 'Test', baseUrl: 'https://api.example.com/v1', authToken: 'test', defaultModel: 'm' })
     model = `${profile.id}:m`
-    const provider: AgentProvider = {
-      id: 'pi', sessions: new FakeSessionStore(), listSlashCommands: () => Promise.resolve([]),
-      openSession: (target) => { runtime = new WaitingRuntime(target); return Promise.resolve(runtime) },
-    }
-    harness = new AgentHarness({ providers: { claude: new FakeAgentProvider('claude', []), pi: provider }, cwd: root, liveRuns: new LiveRunRegistry() })
+    const claude = new FakeAgentProvider('claude', [])
+    native = fakeStructuredTerminal([{ type: 'run.completed', model: 'm', durationMs: 1 }], claude)
+    native.requirePermissions()
+    harness = new AgentHarness({ providers: { claude, pi: native.provider }, cwd: root, liveRuns: new LiveRunRegistry() })
+    harness.configureTerminalChats(native.terminals, () => 'http://localhost/events')
     server = buildHttpServer({ ...services, userFileSystem: new NodeUserFileSystem({ initialDirectory: root }), agentHarness: harness })
     await server.ready()
   })
@@ -80,21 +53,21 @@ describe('interaction WebSocket routing', () => {
   async function start() {
     const socket = await server.injectWS(SESSION_WEBSOCKET_PATH)
     const client = inbox(socket)
-    client.send({ type: 'run.start', harness: 'pi', model, cwd: root, text: 'ask before acting' })
+    client.send({ type: 'run.start', harness: 'pi', model, cwd: root, sessionId: ref.id, text: 'ask before acting' })
     await expect.poll(() => client.frames.filter((frame) => frame.type === 'permission.requested').length).toBe(2)
     const requests = client.frames.flatMap((frame) => frame.type === 'permission.requested' ? [frame.request] : [])
     const first = requests[0]; const second = requests[1]
     if (!first || !second) throw new Error('Missing requests')
-    const response = (request: InteractionRequest, decision: 'allow' | 'deny') => ({ type: 'permission.respond', harness: 'pi', sessionId: runtime.session.id, requestId: request.requestId, decision })
+    const response = (request: InteractionRequest, decision: 'allow' | 'deny') => ({ type: 'permission.respond', harness: 'pi', sessionId: ref.id, requestId: request.requestId, decision })
     return { ...client, socket, first, second, response }
   }
 
   it('routes responses to the suspended runtime, acknowledges both tabs and restores the queue on reconnect', async () => {
     const client = await start()
-    expect(runtime.decisions).toEqual([])
+    expect(decisions()).toEqual([])
     const observerSocket = await server.injectWS(SESSION_WEBSOCKET_PATH)
     const observer = inbox(observerSocket)
-    observer.send({ type: 'session.subscribe', harness: 'pi', sessionId: runtime.session.id })
+    observer.send({ type: 'session.subscribe', harness: 'pi', sessionId: ref.id })
     expect(await observer.wait((frame) => frame.type === 'session.snapshot')).toMatchObject({ interactions: [client.first, client.second] })
 
     client.send({ ...client.response(client.first, 'allow'), sessionId: 'different-session' })
@@ -107,12 +80,12 @@ describe('interaction WebSocket routing', () => {
     client.socket.close()
 
     const reconnect = inbox(await server.injectWS(SESSION_WEBSOCKET_PATH))
-    reconnect.send({ type: 'session.subscribe', harness: 'pi', sessionId: runtime.session.id })
+    reconnect.send({ type: 'session.subscribe', harness: 'pi', sessionId: ref.id })
     expect(await reconnect.wait((frame) => frame.type === 'session.snapshot')).toMatchObject({ interactions: [client.second] })
     reconnect.send(client.response(client.second, 'allow'))
     await reconnect.wait((frame) => frame.type === 'run.completed')
-    expect(runtime.decisions).toEqual(['deny', 'allow'])
-    expect(harness.sessionStream(runtime.session).snapshot().interactions).toEqual([])
+    expect(decisions()).toEqual(['deny', 'allow'])
+    expect(harness.sessionStream(ref).snapshot().interactions).toEqual([])
   })
 
   it('rejects replies before subscribing and clears all cards when the waiting run is aborted', async () => {
@@ -120,10 +93,10 @@ describe('interaction WebSocket routing', () => {
     const stranger = inbox(await server.injectWS(SESSION_WEBSOCKET_PATH))
     stranger.send(client.response(client.first, 'allow'))
     expect(await stranger.wait((frame) => frame.type === 'error')).toMatchObject({ requestId: client.first.requestId })
-    client.send({ type: 'run.abort', harness: 'pi', sessionId: runtime.session.id })
+    client.send({ type: 'run.abort', harness: 'pi', sessionId: ref.id })
     await client.wait((frame) => frame.type === 'run.aborted')
-    expect(runtime.decisions).toEqual(['deny', 'deny'])
-    expect(harness.sessionStream(runtime.session).snapshot().interactions).toEqual([])
+    expect(decisions()).toEqual(['deny', 'deny'])
+    expect(harness.sessionStream(ref).snapshot().interactions).toEqual([])
     const cancelled = client.frames.filter((frame) => frame.type === 'permission.resolved')
     expect(cancelled).toHaveLength(2)
     expect(cancelled.every((frame) => frame.resolution.decision === 'deny')).toBe(true)

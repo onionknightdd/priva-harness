@@ -37,6 +37,15 @@ check the compiled production loader, run after `npm run build` from
 - `node --import tsx tests/fixtures/resources/pi-mcp-probe.ts dist/provider/pi/pi-resource-loader.js`
 - `node --import tsx tests/fixtures/resources/pi-subagent-model-probe.ts dist/provider/pi/pi-resource-loader.js`
 
+Pi native TUI / Chat integration uses an isolated local model and MCP fixture.
+From `services/agent-runner/ts/`, run:
+
+- `TMPDIR=/tmp node --import tsx tests/fixtures/terminal/pi-native-probe.ts`
+- After building: `TMPDIR=/tmp node --import tsx tests/fixtures/terminal/pi-native-probe.ts dist/provider/pi/pi-terminal-launch.js`
+
+Read [docs/architecture/pi-native-session.md](docs/architecture/pi-native-session.md)
+before changing the Pi terminal host or its structured control bridge.
+
 To verify the compiled Claude native product MCP entry point after building:
 
 - `node --import tsx tests/fixtures/terminal/native-product-probe.ts dist/provider/claude/tools/native-product-server.js`

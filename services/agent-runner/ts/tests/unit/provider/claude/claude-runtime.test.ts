@@ -6,12 +6,19 @@ import { consumeRunEvents } from '../../../../src/harness/run/consume-run-events
 import { emptyContextUsage } from '../../../../src/core/resource/context-usage.js'
 import {
   ClaudeRuntime,
+  resolveClaudeQueryOptions,
   type ClaudeQuery,
 } from '../../../../src/provider/claude/claude-runtime.js'
 import { testRunSpec } from '../../../support/run-spec.js'
 import { userTurnFromText } from '../../../../src/core/run/user-turn.js'
 
 describe('ClaudeRuntime stream input', () => {
+  it('rejects Pi-only effort levels before calling the Claude SDK', () => {
+    for (const effort of ['off', 'minimal'] as const) {
+      expect(() => resolveClaudeQueryOptions(testRunSpec({ effort }))).toThrow('Unsupported Claude effort')
+    }
+  })
+
   it('sets a native title for a new attachment-only session and preserves empty user text', async () => {
     let options: Options | undefined
     let query: FakeClaudeQuery | undefined

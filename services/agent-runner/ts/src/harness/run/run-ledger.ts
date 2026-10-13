@@ -41,6 +41,7 @@ export class RunLedger {
   private closed = false
   private readonly tools = new Map<string, PendingTool>()
   private readonly recordedTools = new Set<string>()
+  private readonly recordedModelCalls = new Set<string>()
   private readonly interactions = new Map<string, { request: InteractionRequest; at: number }>()
   private readonly agents = new Map<string, { name: string | undefined; at: number }>()
   private readonly workflows = new Map<string, { name: string | undefined; at: number }>()
@@ -125,7 +126,11 @@ export class RunLedger {
         return
       }
       case 'tool.completed':
+        this.recordModelCalls(event)
         this.recordTool(event)
+        return
+      case 'tool.progress':
+        this.recordModelCalls(event)
         return
       case 'permission.requested':
         this.interactions.set(event.request.requestId, { request: event.request, at: Date.now() })
@@ -210,6 +215,8 @@ export class RunLedger {
         output: event.output.slice(0, TOOL_OUTPUT_PREVIEW_CHARS),
         outputChars: event.output.length,
         ...(event.status === undefined ? {} : { status: event.status }),
+        ...(event.parentToolCallId === undefined ? {} : { parentToolCallId: event.parentToolCallId }),
+        ...(event.nestedCallsComplete === undefined ? {} : { nestedCallsComplete: event.nestedCallsComplete }),
       },
     })
     if (event.name.toLowerCase() === 'skill') {
@@ -217,6 +224,22 @@ export class RunLedger {
       if (skill !== undefined && skill !== '') {
         this.audit('skill.invoked', skill, { via: 'tool', toolUseId: event.id, input: pending?.input ?? null })
       }
+    }
+  }
+
+  private recordModelCalls(event: Extract<AgentEvent, { type: 'tool.completed' | 'tool.progress' }>): void {
+    for (const call of event.modelCalls ?? []) {
+      if (call.status === 'running' || this.recordedModelCalls.has(call.id)) continue
+      this.recordedModelCalls.add(call.id)
+      this.audit('model.invoked', `${call.provider}/${call.model}`, {
+        invocationId: call.id, parentToolCallId: call.parentToolCallId,
+        operation: call.operation, status: call.status,
+        ...(call.durationMs === undefined ? {} : { durationMs: call.durationMs }),
+        ...(call.usage === undefined ? {} : { usage: call.usage }),
+        ...(call.costUsd === undefined ? {} : { costUsd: call.costUsd }),
+        ...(call.pricingKnown === undefined ? {} : { pricingKnown: call.pricingKnown }),
+        ...(call.error === undefined ? {} : { error: call.error }),
+      })
     }
   }
 

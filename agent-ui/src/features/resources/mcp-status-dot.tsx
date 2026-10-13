@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { StatusDot } from "@/components/kibo-ui/status"
 import type { McpProbeState } from "./use-mcp-probe"
 
-const tones = { disabled: "idle", checking: "warning", online: "success", offline: "error" } as const
+const tones = { disabled: "idle", checking: "warning", online: "success", offline: "error", unverified: "warning" } as const
 
 export function McpStatusDot({ probe }: { probe: McpProbeState }) {
   const { t } = useTranslation()

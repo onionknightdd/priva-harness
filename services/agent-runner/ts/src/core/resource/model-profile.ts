@@ -9,20 +9,36 @@ const MAX_MODEL_ID_LENGTH = 512
 const GENERATED_PROFILE_ID_ENTROPY_BYTES = 4
 const GENERATED_PROFILE_ID_HASH_LENGTH = 7
 
+export const CLASSIFIER_APIS = ['typesafe-system-one', 'cloudflare-workers-ai-system-one', 'llama-cpp-classify', 'openai-decisions'] as const
+export type ClassifierApi = (typeof CLASSIFIER_APIS)[number]
+
+export interface ClassifierRunConfig {
+  readonly provider: string
+  readonly api: ClassifierApi
+  readonly modelId: string
+  readonly baseUrl: string
+  readonly authToken: string
+}
+
+export type ImageCapability = 'image_understanding' | 'image_generation' | 'image_edit'
+
 export type ModelCapability =
   | 'image_understanding'
   | 'image_generation'
   | 'image_edit'
+  | 'classification'
 
 export type ModelCapabilityCatalogKey =
   | 'imageUnderstanding'
   | 'imageGeneration'
   | 'imageEdit'
+  | 'classification'
 
 export interface ModelCapabilityCatalog {
   readonly imageUnderstanding: readonly string[]
   readonly imageGeneration: readonly string[]
   readonly imageEdit: readonly string[]
+  readonly classification: readonly string[]
 }
 
 export interface ModelProfile {
@@ -34,6 +50,9 @@ export interface ModelProfile {
   readonly imageUnderstandingModel: string | null
   readonly imageGenerationModel: string | null
   readonly imageEditModel: string | null
+  readonly classifierApi: ClassifierApi | null
+  readonly classifierModel: string | null
+  readonly classifierProfileId: string | null
   readonly modelCapabilities: ModelCapabilityCatalog
 }
 
@@ -56,6 +75,9 @@ export interface ModelProfileCreateInput {
   readonly imageUnderstandingModel?: string | null
   readonly imageGenerationModel?: string | null
   readonly imageEditModel?: string | null
+  readonly classifierApi?: ClassifierApi | null
+  readonly classifierModel?: string | null
+  readonly classifierProfileId?: string | null
   readonly modelCapabilities?: ModelCapabilityCatalog
 }
 
@@ -67,6 +89,9 @@ export interface ModelProfilePatch {
   readonly imageUnderstandingModel?: string | null
   readonly imageGenerationModel?: string | null
   readonly imageEditModel?: string | null
+  readonly classifierApi?: ClassifierApi | null
+  readonly classifierModel?: string | null
+  readonly classifierProfileId?: string | null
 }
 
 export interface ModelInfo {
@@ -74,6 +99,7 @@ export interface ModelInfo {
 }
 
 export interface ResolvedModelProfile {
+  readonly classifier?: ClassifierRunConfig
   readonly profile: ModelProfile
   readonly model: string
   readonly modelId: string
@@ -177,6 +203,7 @@ export function emptyModelCapabilityCatalog(): ModelCapabilityCatalog {
     imageUnderstanding: [],
     imageGeneration: [],
     imageEdit: [],
+    classification: [],
   }
 }
 
@@ -190,6 +217,8 @@ export function capabilityCatalogKey(
       return 'imageGeneration'
     case 'image_edit':
       return 'imageEdit'
+    case 'classification':
+      return 'classification'
   }
 }
 
@@ -228,7 +257,7 @@ export function resolveCapabilityModel(
     | 'imageEditModel'
     | 'modelCapabilities'
   >,
-  capability: ModelCapability,
+  capability: ImageCapability,
 ): string | null {
   const configured =
     capability === 'image_understanding'
@@ -265,6 +294,9 @@ export function createModelProfile(
     imageUnderstandingModel: normalizeOptionalModel(input.imageUnderstandingModel),
     imageGenerationModel: normalizeOptionalModel(input.imageGenerationModel),
     imageEditModel: normalizeOptionalModel(input.imageEditModel),
+    classifierApi: normalizeClassifierApi(input.classifierApi),
+    classifierModel: normalizeOptionalModel(input.classifierModel),
+    classifierProfileId: normalizeClassifierProfileId(input.classifierProfileId),
     modelCapabilities: input.modelCapabilities === undefined
       ? emptyModelCapabilityCatalog()
       : normalizeCapabilityCatalog(input.modelCapabilities),
@@ -296,6 +328,9 @@ export function patchModelProfile(
     imageEditModel: patch.imageEditModel === undefined
       ? current.imageEditModel
       : normalizeOptionalModel(patch.imageEditModel),
+    classifierApi: patch.classifierApi === undefined ? current.classifierApi : normalizeClassifierApi(patch.classifierApi),
+    classifierModel: patch.classifierModel === undefined ? current.classifierModel : normalizeOptionalModel(patch.classifierModel),
+    classifierProfileId: patch.classifierProfileId === undefined ? current.classifierProfileId : normalizeClassifierProfileId(patch.classifierProfileId),
   }
 }
 
@@ -385,6 +420,7 @@ export function resolveModelProfile(
     model: applyModelContext(modelId, context),
     modelId,
     capabilities: { context },
+    ...(profile.classifierModel === null ? {} : { classifier: resolveClassifierRunConfig(profile, collection) }),
   }
 }
 
@@ -447,6 +483,9 @@ function parseStoredProfile(value: unknown): ModelProfile {
     'imageUnderstandingModel',
     'imageGenerationModel',
     'imageEditModel',
+    'classifierApi',
+    'classifierModel',
+    'classifierProfileId',
     'modelCapabilities',
   ], 'Profile')
   try {
@@ -462,6 +501,9 @@ function parseStoredProfile(value: unknown): ModelProfile {
       ),
       imageGenerationModel: optionalMissingStoredString(value, 'imageGenerationModel'),
       imageEditModel: optionalMissingStoredString(value, 'imageEditModel'),
+      classifierApi: normalizeClassifierApi(optionalMissingStoredString(value, 'classifierApi')),
+      classifierModel: optionalMissingStoredString(value, 'classifierModel'),
+      classifierProfileId: optionalMissingStoredString(value, 'classifierProfileId'),
     })
     return {
       ...profile,
@@ -484,11 +526,13 @@ function parseStoredCapabilities(value: unknown): ModelCapabilityCatalog {
     'imageUnderstanding',
     'imageGeneration',
     'imageEdit',
+    'classification',
   ], 'modelCapabilities')
   return {
     imageUnderstanding: parseStoredModelIdList(value['imageUnderstanding'], 'imageUnderstanding'),
     imageGeneration: parseStoredModelIdList(value['imageGeneration'], 'imageGeneration'),
     imageEdit: parseStoredModelIdList(value['imageEdit'], 'imageEdit'),
+    classification: parseStoredModelIdList(value['classification'], 'classification'),
   }
 }
 
@@ -499,6 +543,7 @@ function normalizeCapabilityCatalog(
     imageUnderstanding: uniqueModelIds(catalog.imageUnderstanding),
     imageGeneration: uniqueModelIds(catalog.imageGeneration),
     imageEdit: uniqueModelIds(catalog.imageEdit),
+    classification: uniqueModelIds(catalog.classification),
   }
 }
 
@@ -628,4 +673,31 @@ function corruptStore(message: string, cause?: unknown): ModelProfileError {
   return cause === undefined
     ? new ModelProfileError('store-corrupt', message)
     : new ModelProfileError('store-corrupt', message, { cause })
+}
+
+function normalizeClassifierApi(value: string | null | undefined): ClassifierApi | null {
+  if (value === null || value === undefined || value === '') return null
+  if (!CLASSIFIER_APIS.includes(value as ClassifierApi)) {
+    throw new ModelProfileError('invalid-model-id', `Unsupported classifier API: ${value}`)
+  }
+  return value as ClassifierApi
+}
+
+function normalizeClassifierProfileId(value: string | null | undefined): string | null {
+  return value === null || value === undefined || value.trim() === '' ? null : normalizeModelProfileId(value)
+}
+
+export function resolveClassifierRunConfig(profile: ModelProfile, collection: ModelProfileCollection): ClassifierRunConfig {
+  if (profile.classifierApi === null || profile.classifierModel === null) {
+    throw new ModelProfileError('profile-not-ready', 'Configure the classifier API and model before using classification')
+  }
+  const connection = profile.classifierProfileId === null || profile.classifierProfileId === profile.id ? profile : collection.profiles.find((candidate) => candidate.id === profile.classifierProfileId)
+  if (connection === undefined) throw new ModelProfileError('profile-not-found', 'Classifier connection profile does not exist')
+  return {
+    provider: `priva-classifier-${connection.id}`,
+    api: profile.classifierApi,
+    modelId: profile.classifierModel,
+    baseUrl: connection.baseUrl,
+    authToken: connection.authToken,
+  }
 }

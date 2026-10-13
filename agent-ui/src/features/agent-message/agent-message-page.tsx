@@ -48,6 +48,7 @@ export function AgentMessagePage() {
     ) : null}
     <AgentMessage
       hidden={terminalView}
+      showContextCategories={runHarnessId !== "pi"}
       interactions={agentMessage.interactions}
       interactionConnected={agentMessage.isConnected}
       onInteractionResponse={agentMessage.respondPermission}
@@ -65,7 +66,9 @@ export function AgentMessagePage() {
       modelReady={agentMessage.modelReady}
       modelReference={agentMessage.modelReference}
       effort={agentMessage.effort}
-        contextWindow={agentMessage.contextWindow}
+      isPi={runHarnessId === "pi"}
+      effortLevels={agentMessage.effortLevels}
+      contextWindow={agentMessage.contextWindow}
       configurationPending={agentMessage.configurationPending}
       slashCommand={agentMessage.slashCommand}
       onDraftChange={agentMessage.setDraft}

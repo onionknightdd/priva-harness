@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { TerminalComposer, TerminalInput, TerminalService, TerminalSessionState, TerminalTelemetry } from '../../../../src/core/contract/terminal-service.js'
-import type { StreamFrame } from '../../../../src/core/event/agent-event.js'
+import type { TerminalComposer, TerminalInput, TerminalService, TerminalSessionState, TerminalStatus, TerminalTelemetry } from '../../../../src/core/contract/terminal-service.js'
+import type { AgentEvent, StreamFrame } from '../../../../src/core/event/agent-event.js'
 import { SessionStream } from '../../../../src/harness/session/session-stream.js'
 import { AgentHarness } from '../../../../src/harness/agent-harness.js'
 import { SessionTerminals } from '../../../../src/harness/terminal/session-terminals.js'
@@ -12,15 +12,16 @@ import { emptyContextUsage } from '../../../../src/core/resource/context-usage.j
 import { FakeAgentProvider } from '../../../support/fake-agent-provider.js'
 import { testRunSpec } from '../../../support/run-spec.js'
 import { claudePromptText } from '../../../../src/provider/claude/claude-prompt-text.js'
+import type { AgentProvider } from '../../../../src/core/contract/agent-provider.js'
 
 const drivers: TerminalChatSessions[] = []
 afterEach(async () => { for (const driver of drivers.splice(0)) await driver.dispose() })
 
-function setup(timeout = 1000, options: Partial<TerminalChatSessionsOptions> = {}) {
-  const ref = { provider: 'claude', id: 'terminal-session' } as const
-  const spec = testRunSpec()
+function setup(timeout = 1000, options: Partial<TerminalChatSessionsOptions> = {}, providerId: 'claude' | 'pi' = 'claude') {
+  const ref = { provider: providerId, id: 'terminal-session' } as const
+  const spec = testRunSpec({ provider: providerId })
   let state: TerminalSessionState | undefined = { sessionId: ref.id, instanceId: 'instance', cwd: spec.cwd, event: 'ready', phase: 'idle', updatedAt: 1 }
-  const provider = Object.assign(new FakeAgentProvider('claude', []), {
+  const provider = Object.assign(new FakeAgentProvider(providerId, []), {
     terminalLaunch: vi.fn(() => Promise.resolve({ command: 'claude', args: [], cwd: spec.cwd, env: {}, cols: 120, rows: 40 })),
     readTerminalSpec: vi.fn(() => Promise.resolve(spec)),
     parseTerminalComposer: vi.fn<(screen: string) => TerminalComposer | undefined>(),
@@ -38,7 +39,7 @@ function setup(timeout = 1000, options: Partial<TerminalChatSessionsOptions> = {
     sendKeys: vi.fn<TerminalService['sendKeys']>().mockResolvedValue(), capture: vi.fn<TerminalService['capture']>(),
     close: vi.fn<TerminalService['close']>(), dispose: vi.fn<TerminalService['dispose']>(),
   } satisfies TerminalService
-  const terminals = new SessionTerminals({ providers: { claude: provider, pi: new FakeAgentProvider('pi', []) }, terminals: service })
+  const terminals = new SessionTerminals({ providers: { claude: new FakeAgentProvider('claude', []), pi: new FakeAgentProvider('pi', []), [providerId]: provider }, terminals: service })
   const stream = new SessionStream(ref)
   const frames: StreamFrame[] = []
   stream.subscribe((frame) => frames.push(frame))
@@ -347,7 +348,7 @@ describe('TerminalChatSessions', () => {
     clearState()
     await expect(submit('hello', 'r')).rejects.toThrow('reopen Terminal once')
     service.isAlive.mockResolvedValue(false)
-    await expect(submit('hello', 'r')).rejects.toThrow('terminal exited')
+    await expect(submit('hello', 'r')).rejects.toThrow('Terminal exited')
     expect(service.paste).not.toHaveBeenCalled()
   })
 
@@ -391,4 +392,188 @@ it('keeps the native rebind visible and blocks a mismatched prompt when tasks pr
   expect(replay.some((frame) => frame.type === 'session.rebound' && frame.nextSessionId === next.id)).toBe(true)
   await expect(driver.event(next, { sessionId: next.id, instanceId: 'instance', cwd: spec.cwd,
     event: 'prompt', phase: 'running', prompt: 'must not execute', updatedAt: 4 })).rejects.toThrow('Session mode mismatch')
+})
+
+
+describe('structured native terminal turns', () => {
+  function structuredSetup(options: Partial<TerminalChatSessionsOptions> = {}, providerId: 'claude' | 'pi' = 'claude') {
+    const fixture = setup(1000, options, providerId)
+    const native = {
+      structuredTerminal: true,
+      submitTerminalTurn: vi.fn<NonNullable<AgentProvider['submitTerminalTurn']>>().mockResolvedValue(undefined),
+      abortTerminal: vi.fn().mockResolvedValue(undefined),
+      respondTerminalInteraction: vi.fn().mockResolvedValue(undefined),
+    }
+    Object.assign(fixture.provider, native)
+    let sequence = 0
+    const pending: TerminalTelemetry['events'][number][] = []
+    fixture.provider.readTerminalTelemetry.mockImplementation(() => Promise.resolve({ offset: sequence, events: pending.splice(0) }))
+    const publish = (runId: string, ...events: AgentEvent[]) => {
+      for (const event of events) pending.push({ sessionId: fixture.ref.id, instanceId: 'instance', runId, event })
+      sequence += events.length
+    }
+    const start = (text: string) => ({ type: 'run.started' as const, model: fixture.spec.model, driver: 'terminal' as const,
+      userMessage: { id: 'native-user', role: 'user' as const, content: text, createdAt: new Date().toISOString(), status: 'complete' as const } })
+    return { ...fixture, native, publish, start }
+  }
+
+  it.each([false, true])('acknowledges Pi native effort and preserves a later TUI selection when Chat sends stale effort (restart=%s)', async (restart) => {
+    const { driver, ref, spec, provider, event, frames, native } = structuredSetup({}, 'pi')
+    let status: TerminalStatus = { sessionId: ref.id, instanceId: 'instance', model: spec.model, cwd: spec.cwd,
+      effort: 'max', effortLevels: ['off', 'low', 'high', 'max'], context: { ...emptyContextUsage(), limit: 200000 } }
+    provider.readTerminalTelemetry.mockImplementation(() => Promise.resolve({ offset: 0, events: [], status }))
+    const configureTerminal = vi.fn<NonNullable<AgentProvider['configureTerminal']>>((_input, _scratch, next) => {
+      status = { ...status, effort: next.effort === 'medium' ? 'high' : next.effort ?? 'off' }
+      return Promise.resolve('applied')
+    })
+    if (restart) configureTerminal.mockResolvedValueOnce('restart')
+    Object.assign(provider, { configureTerminal })
+    await event('ready')
+    await expect.poll(() => frames.some((frame) => frame.type === 'session.config' && frame.config.effort === 'max')).toBe(true)
+    await driver.configure(ref, { ...spec, effort: 'medium' }, 'effort-change')
+    await expect.poll(() => frames.find((frame) => frame.type === 'session.config' && frame.requestId === 'effort-change')).toMatchObject({
+      config: { effort: 'high', effortLevels: ['off', 'low', 'high', 'max'] },
+    })
+    status = { ...status, effort: 'off' }
+    await expect.poll(() => frames.some((frame) => frame.type === 'session.config' && frame.config.effort === 'off')).toBe(true)
+    await driver.submit(ref, { text: 'Keep the TUI choice' }, { ...spec, effort: 'high' }, 'stale-chat')
+    await expect.poll(() => native.submitTerminalTurn.mock.calls.length).toBe(1)
+    expect(configureTerminal.mock.calls.at(-1)?.[2].effort).toBe('off')
+  })
+
+  it('waits for an in-flight telemetry read before rebinding and records final usage once', async () => {
+    const recorder = new MemoryDataRecorder()
+    const { driver, ref, spec, provider, event, publish, start, frames } = structuredSetup({
+      ledger: (session, runId, turn, spec, sessionTarget) => new RunLedger(recorder, { sessionId: session.id, runId, turn, spec, sessionTarget, source: 'web' }),
+    })
+    await event('ready')
+    publish('native-old', start('old reply'))
+    await expect.poll(() => frames.some((frame) => frame.type === 'run.started')).toBe(true)
+    let release!: (batch: TerminalTelemetry) => void
+    const gate = new Promise<TerminalTelemetry>((resolve) => { release = resolve })
+    provider.readTerminalTelemetry.mockImplementationOnce(() => gate)
+    const reads = provider.readTerminalTelemetry.mock.calls.length
+    await expect.poll(() => provider.readTerminalTelemetry.mock.calls.length).toBeGreaterThan(reads)
+    const state: TerminalSessionState = { sessionId: 'native-next', instanceId: 'instance', cwd: spec.cwd,
+      event: 'ready', phase: 'idle', source: 'clear', updatedAt: 5 }
+    provider.readTerminalState.mockResolvedValue(state)
+    const rebound = driver.event(ref, state)
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    try {
+      expect(frames.filter((frame) => frame.type === 'run.completed' || frame.type === 'run.aborted')).toHaveLength(0)
+    } finally {
+      release({ offset: 3, events: [
+        { sessionId: ref.id, instanceId: 'instance', runId: 'native-old', event: { type: 'run.completed', model: spec.model, durationMs: 4, usage: { input: 17, output: 3 }, costUsd: 0.04 } },
+        { sessionId: ref.id, instanceId: 'instance', event: { type: 'session.rebound', nextSessionId: state.sessionId } },
+      ] })
+      await rebound
+    }
+    expect(recorder.ofKind('run.finished')).toEqual([expect.objectContaining({ outcome: 'completed', usage: { input: 17, output: 3 }, costUsd: 0.04 })])
+    expect(frames.filter((frame) => frame.type === 'session.rebound')).toHaveLength(1)
+  })
+
+  it('cancels a Chat submission waiting for native startup without sending a ghost prompt', async () => {
+    const { driver, ref, submit, event, native, frames, stream } = structuredSetup()
+    let startupReady!: () => void
+    const startup = new Promise<void>((resolve) => { startupReady = resolve })
+    const sent = vi.fn()
+    native.submitTerminalTurn.mockImplementation(async (_directory, text, signal) => {
+      await Promise.race([startup, new Promise<void>((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(new Error('Startup cancelled')), { once: true })
+      })])
+      signal.throwIfAborted()
+      sent(text)
+    })
+    await event('ready')
+    await submit('must not be sent', 'waiting-startup')
+    await expect.poll(() => native.submitTerminalTurn.mock.calls.length).toBe(1)
+    await driver.abort(ref, 'waiting-startup')
+    startupReady()
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    expect(sent).not.toHaveBeenCalled()
+    expect(frames.filter((frame) => frame.type === 'run.aborted')).toHaveLength(1)
+    expect(stream.snapshot().activeRunId).toBeUndefined()
+    expect(frames.filter((frame) => frame.type === 'run.failed')).toHaveLength(0)
+  })
+
+  it('drains an accepted native start before deciding how cancellation is settled', async () => {
+    const { driver, ref, submit, event, native, publish, start, frames } = structuredSetup()
+    await event('ready')
+    native.submitTerminalTurn.mockImplementation(() => { publish('accepted', start('accepted input')); return Promise.resolve() })
+    await submit('accepted input', 'accepted')
+    await expect.poll(() => native.submitTerminalTurn.mock.calls.length).toBe(1)
+    await driver.abort(ref, 'accepted')
+    expect(frames.filter((frame) => frame.type === 'run.aborted')).toHaveLength(0)
+    publish('accepted', { type: 'run.aborted', usage: { input: 3, output: 2 }, costUsd: 0.01 })
+    await expect.poll(() => frames.filter((frame) => frame.type === 'run.aborted').length).toBe(1)
+    expect(frames.find((frame) => frame.type === 'run.aborted')).toMatchObject({ usage: { input: 3, output: 2 }, costUsd: 0.01 })
+  })
+
+  it('submits to the new native owner when state changes while Chat is sending', async () => {
+    const { driver, ref, spec, provider, event, submit, native } = structuredSetup()
+    await event('ready')
+    const state: TerminalSessionState = { sessionId: 'next-session', instanceId: 'instance', cwd: spec.cwd,
+      event: 'ready', phase: 'idle', source: 'clear', updatedAt: 5 }
+    provider.readTerminalState.mockResolvedValue(state)
+    await submit('after new', 'new-message')
+    await expect.poll(() => native.submitTerminalTurn.mock.calls.length).toBe(1)
+    expect(driver.list(ref.provider)).toEqual([expect.objectContaining({ ref: { ...ref, id: state.sessionId }, runId: 'new-message' })])
+  })
+
+  it('drains a native outcome on process exit before synthesizing a failure', async () => {
+    const { driver, ref, spec, event, publish, start, frames } = structuredSetup()
+    await event('ready')
+    publish('last-reply', start('last reply'))
+    await expect.poll(() => frames.some((frame) => frame.type === 'run.started')).toBe(true)
+    publish('last-reply', { type: 'run.completed', model: spec.model, durationMs: 1, usage: { input: 11, output: 4 } })
+    await driver.exited(ref, 'Terminal exited')
+    expect(frames.filter((frame) => frame.type === 'run.failed')).toHaveLength(0)
+    expect(frames.filter((frame) => frame.type === 'run.completed')).toEqual([expect.objectContaining({ runId: 'last-reply', usage: { input: 11, output: 4 } })])
+  })
+
+  it('acknowledges Chat by run ID and settles native usage exactly once', async () => {
+    const { submit, event, publish, start, native, frames, stream, spec, service } = structuredSetup()
+    await event('ready')
+    await submit('from Chat', 'chat-run')
+    await expect.poll(() => native.submitTerminalTurn.mock.calls.length).toBe(1)
+    expect(native.submitTerminalTurn.mock.calls[0]?.slice(-1)).toEqual(['chat-run'])
+    await event('prompt', 'from Chat')
+    publish('chat-run', start('from Chat'), { type: 'assistant.delta', messageId: 'answer', blockId: 'text', index: 0, text: 'shared answer' },
+      { type: 'run.completed', model: spec.model, durationMs: 25, costUsd: 0.02, usage: { input: 20, output: 10 } })
+    await expect.poll(() => frames.filter((frame) => frame.type === 'run.completed').length).toBe(1)
+    expect(frames.filter((frame) => frame.type === 'run.started')).toHaveLength(1)
+    expect(frames.find((frame) => frame.type === 'run.completed')).toMatchObject({ runId: 'chat-run', costUsd: 0.02, usage: { input: 20, output: 10 } })
+    expect(stream.snapshot().messages.filter((message) => message.role === 'user')).toHaveLength(1)
+    expect(stream.snapshot().messages.find((message) => message.role === 'assistant')?.content).toBe('shared answer')
+    expect(service.paste).not.toHaveBeenCalled()
+  })
+
+  it('projects consecutive TUI turns from durable events even after the state is already idle', async () => {
+    const { event, publish, start, frames, stream, spec, native } = structuredSetup()
+    await event('ready')
+    publish('native-1', start('first'), { type: 'run.completed', model: spec.model, durationMs: 1 })
+    await expect.poll(() => frames.filter((frame) => frame.type === 'run.completed').length).toBe(1)
+    publish('native-2', start('second'), { type: 'run.completed', model: spec.model, durationMs: 1 })
+    await expect.poll(() => frames.filter((frame) => frame.type === 'run.completed').length).toBe(2)
+    expect(stream.snapshot().messages.filter((message) => message.role === 'user').map((message) => message.content)).toEqual(['first', 'second'])
+    expect(native.submitTerminalTurn).not.toHaveBeenCalled()
+  })
+
+  it('routes answers and cancellation to the native owner and waits for its outcome', async () => {
+    const { event, publish, start, frames, driver, ref, stream, native, service } = structuredSetup()
+    await event('ready')
+    const request = { kind: 'tool' as const, requestId: 'permission-1', tool: 'mcp__test__write', expiresAt: Date.now() + 30000 }
+    publish('native-run', start('native question'), { type: 'permission.requested', request })
+    await expect.poll(() => stream.snapshot().interactions?.length).toBe(1)
+    expect(driver.respondPermission(ref, { requestId: request.requestId, decision: 'allow' })).toBe(true)
+    await expect.poll(() => native.respondTerminalInteraction.mock.calls.length).toBe(1)
+    publish('native-run', { type: 'permission.resolved', resolution: { request, decision: 'allow', reason: 'answered' } })
+    await expect.poll(() => stream.snapshot().interactions?.length).toBe(0)
+    await driver.abort(ref, 'native-run')
+    expect(native.abortTerminal).toHaveBeenCalledTimes(1)
+    expect(frames.filter((frame) => frame.type === 'run.aborted')).toHaveLength(0)
+    publish('native-run', { type: 'run.aborted', message: 'Interrupted', costUsd: 0.01 })
+    await expect.poll(() => frames.filter((frame) => frame.type === 'run.aborted').length).toBe(1)
+    expect(service.sendKeys).not.toHaveBeenCalled()
+  })
 })

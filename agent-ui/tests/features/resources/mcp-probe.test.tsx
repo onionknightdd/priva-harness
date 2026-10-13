@@ -15,7 +15,7 @@ globalThis.fetch = async (input, init) => { requests.push({ url: new URL(String(
 after(() => { globalThis.fetch = originalFetch })
 
 function Monitor({ server = detail }: { server?: McpDetail }) {
-  state = useMcpProbe(server, { harness: "claude", cwd: server.source.cwd ?? undefined })
+  state = useMcpProbe(server, { harness: server.source.harness, cwd: server.source.cwd ?? undefined })
   return <McpStatusDot probe={state} />
 }
 const reset = () => { requests.length = 0; reply = () => Response.json(capabilities); Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" }) }
@@ -123,5 +123,33 @@ test("policy toggles preserve the inventory while stopping probes and ignoring p
     await page.update(<Monitor server={structuredClone(detail)} />)
     assert.equal(requests.length, 3)
     assert.equal(state.capabilities?.toolStates[0].enabled, false)
+  } finally { await page.close() }
+})
+
+
+test("provider-managed authentication stays unverified instead of offline", async () => {
+  reset()
+  reply = () => Response.json({ detail: "Use native /mcp to authenticate and inspect this connection" }, { status: 422 })
+  const page = await render(<Monitor server={{ ...detail, source: { ...detail.source, harness: "pi" }, definition: { url: "https://example.invalid/mcp", oauth: {} } }} />)
+  try {
+    assert.equal(state.status, "unverified")
+    assert.equal(state.errorStatus, 422)
+    assert.match(state.error ?? "", /native \/mcp/u)
+    assert.equal(page.host.querySelector('[role="status"]')!.getAttribute("aria-label"), "Connection not verified")
+  } finally { await page.close() }
+})
+
+test("native Pi enablement and exposure changes retain the tool inventory", async () => {
+  reset()
+  const native = { ...detail, source: { ...detail.source, harness: "pi" as const }, definition: { ...detail.definition, enabled: true, exposure: "codemode" } }
+  const page = await render(<Monitor server={native} />)
+  try {
+    const retained = state.capabilities
+    await page.update(<Monitor server={{ ...native, definition: { ...native.definition, exposure: "direct", toolExposure: { read_file: "hidden" } } }} />)
+    assert.equal(requests.length, 1)
+    assert.equal(state.capabilities, retained)
+    await page.update(<Monitor server={{ ...native, enabled: false, definition: { ...native.definition, enabled: false } }} />)
+    assert.equal(state.status, "disabled")
+    assert.equal(state.capabilities, retained)
   } finally { await page.close() }
 })

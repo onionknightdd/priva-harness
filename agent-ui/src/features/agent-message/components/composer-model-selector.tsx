@@ -1,5 +1,7 @@
 import { ComposerContextWindow } from "./composer-context-window"
 import type { ContextWindow } from "../model-context"
+import { baseModelReference } from "../model-context"
+import type { AgentRunEffort } from "../run-agent-session"
 import * as React from "react"
 import { CheckIcon, ChevronDownIcon, SearchIcon } from "lucide-react"
 import gsap from "gsap"
@@ -28,7 +30,7 @@ import {
 import { cn } from "@/lib/utils"
 import {
   listModelProfiles,
-  listProfileModels,
+  listProfileModelCapabilities,
   setDefaultModelProfile,
   setProfileDefaultModel,
   type ModelProfileCollection,
@@ -56,13 +58,22 @@ import "./composer-model-selector.css"
 const COMPOSER_MENU_WIDTH_CLASS = "composer-model-menu w-56 min-w-56 max-w-56 text-sm"
 const COMPOSER_TEXT_CLASS = "text-sm font-normal"
 export const COMPOSER_MODEL_TRIGGER_MAX_CLASS = "max-w-[calc(8rem*5/3)]"
-const EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const
+const CLAUDE_EFFORT_LEVELS: readonly AgentRunEffort[] = ["low", "medium", "high", "xhigh", "max"]
+const EFFORT_ORDER: readonly AgentRunEffort[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"]
+const NO_EFFORT_LEVELS: readonly AgentRunEffort[] = []
 
-export type ComposerEffort = (typeof EFFORT_LEVELS)[number]
+export type ComposerEffort = AgentRunEffort
+
+function supportedEffort(effort: ComposerEffort, levels: readonly ComposerEffort[]): ComposerEffort {
+  // Match Pi's native clamp: prefer the next supported level above the request.
+  return EFFORT_ORDER.slice(EFFORT_ORDER.indexOf(effort)).find((level) => levels.includes(level))
+    ?? [...EFFORT_ORDER].reverse().find((level) => levels.includes(level)) ?? effort
+}
 
 type ProfileModelsEntry = {
   status: "idle" | "loading" | "ready" | "error"
   models: string[]
+  piEffortLevels: Readonly<Record<string, readonly ComposerEffort[]>>
 }
 
 function isAbortError(error: unknown) {
@@ -417,13 +428,16 @@ function ProfileModelSubmenu({
 
 function EffortSubmenu({
   effort,
+  levels,
   onEffortChange,
 }: {
   effort: ComposerEffort
+  levels: readonly ComposerEffort[]
   onEffortChange: (effort: ComposerEffort) => void
 }) {
   const { t } = useTranslation()
   const [effortMarquee, setEffortMarquee] = React.useState(false)
+  const label = (level: ComposerEffort) => level === "off" ? t("agentMessage.effortOff") : level
 
   return (
     <DropdownMenuSub>
@@ -433,7 +447,8 @@ function EffortSubmenu({
           COMPOSER_TEXT_CLASS
         )}
         closeDelay={120}
-        label={t("agentMessage.effortAria", { level: effort })}
+        label={t("agentMessage.effortAria", { level: label(effort) })}
+        disabled={levels.length === 0}
         openOnHover
         onPointerEnter={() => setEffortMarquee(true)}
         onPointerLeave={() => setEffortMarquee(false)}
@@ -450,7 +465,7 @@ function EffortSubmenu({
           )}
         >
           <span className="invisible col-start-1 row-start-1" aria-hidden="true">medium</span>
-          <TextCascade text={effort} className="col-start-1 row-start-1 text-right" />
+          <TextCascade text={label(effort)} className="col-start-1 row-start-1 text-right" />
         </span>
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent
@@ -465,13 +480,13 @@ function EffortSubmenu({
           onValueChange={(value) => {
             if (
               typeof value === "string" &&
-              EFFORT_LEVELS.includes(value as ComposerEffort)
+              levels.includes(value as ComposerEffort)
             ) {
               onEffortChange(value as ComposerEffort)
             }
           }}
         >
-          {EFFORT_LEVELS.map((level) => (
+          {levels.map((level) => (
             <DropdownMenuRadioItem
               key={level}
               className={cn(
@@ -480,7 +495,7 @@ function EffortSubmenu({
               )}
               value={level}
             >
-              {level}
+              {label(level)}
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
@@ -490,6 +505,8 @@ function EffortSubmenu({
 }
 
 export function ComposerModelSelector({
+  isPi = false,
+  effortLevels,
   modelReference,
   effort,
   contextWindow,
@@ -498,11 +515,13 @@ export function ComposerModelSelector({
   onEffortChange,
   onContextWindowChange,
 }: {
+  isPi?: boolean
+  effortLevels?: readonly ComposerEffort[]
   modelReference: string | null
   effort: ComposerEffort
   contextWindow: ContextWindow
   configurationPending: boolean
-  onModelReferenceChange: (model: string | null, source?: "user") => void
+  onModelReferenceChange: (model: string | null, source?: "user", effort?: ComposerEffort) => void
   onEffortChange: (effort: ComposerEffort) => void
   onContextWindowChange: (window: ContextWindow) => void
 }) {
@@ -539,6 +558,7 @@ export function ComposerModelSelector({
       const loadingEntry: ProfileModelsEntry = {
         status: "loading",
         models: current?.models ?? knownProfileModelIds(profile),
+        piEffortLevels: current?.piEffortLevels ?? {},
       }
       modelsByProfileIdRef.current = {
         ...modelsByProfileIdRef.current,
@@ -547,12 +567,13 @@ export function ComposerModelSelector({
       setModelsByProfileId(modelsByProfileIdRef.current)
 
       try {
-        const models = await listProfileModels(profile.id, signal)
+        const models = await listProfileModelCapabilities(profile.id, signal)
         if (signal?.aborted) {
           return
         }
 
-        const readyEntry: ProfileModelsEntry = { status: "ready", models }
+        const readyEntry: ProfileModelsEntry = { status: "ready", models: models.map((model) => model.id),
+          piEffortLevels: Object.fromEntries(models.map((model) => [model.id, model.piEffortLevels])) }
         modelsByProfileIdRef.current = {
           ...modelsByProfileIdRef.current,
           [profile.id]: readyEntry,
@@ -566,6 +587,7 @@ export function ComposerModelSelector({
         const errorEntry: ProfileModelsEntry = {
           status: "error",
           models: knownProfileModelIds(profile),
+          piEffortLevels: {},
         }
         modelsByProfileIdRef.current = {
           ...modelsByProfileIdRef.current,
@@ -627,6 +649,15 @@ export function ComposerModelSelector({
     return firstModel ? { ...resolved, modelId: firstModel } : resolved
   }, [defaultProfileId, modelReference, modelsByProfileId, profiles, profilesStatus, sessionModel])
 
+  const availableEffortLevels = isPi
+    ? effortLevels ?? (selection ? modelsByProfileId[selection.profileId]?.piEffortLevels[baseModelReference(selection.modelId)] : undefined) ?? NO_EFFORT_LEVELS
+    : CLAUDE_EFFORT_LEVELS
+  React.useEffect(() => {
+    if (!configurationPending && availableEffortLevels.length && !availableEffortLevels.includes(effort)) {
+      onEffortChange(isPi ? supportedEffort(effort, availableEffortLevels) : "medium")
+    }
+  }, [availableEffortLevels, configurationPending, effort, isPi, onEffortChange])
+
   React.useEffect(() => {
     const profile = profiles.find((item) => item.id === selection?.profileId)
     if (profile) {
@@ -654,7 +685,9 @@ export function ComposerModelSelector({
 
       const reference = `${next.profileId}:${next.modelId}`
       setLastModelReference(reference)
-      onModelReferenceChange(reference, "user")
+      const nextLevels = isPi ? modelsByProfileIdRef.current[next.profileId]?.piEffortLevels[baseModelReference(next.modelId)] ?? NO_EFFORT_LEVELS : CLAUDE_EFFORT_LEVELS
+      const nextEffort = isPi ? supportedEffort(effort, nextLevels) : nextLevels.includes(effort) ? effort : "medium"
+      onModelReferenceChange(reference, "user", nextEffort)
       setSaveError(null)
 
       if (sessionModel === "last-used") {
@@ -694,6 +727,8 @@ export function ComposerModelSelector({
     },
     [
       defaultProfileId,
+      effort,
+      isPi,
       onModelReferenceChange,
       profiles,
       selection,
@@ -721,10 +756,10 @@ export function ComposerModelSelector({
       ? t("agentMessage.modelSelectorAria", {
           profile: selection.profileLabel,
           model: contextWindow === 1_000_000 ? `${selection.modelId} 1M` : selection.modelId,
-          effort,
+          effort: effort === "off" ? t("agentMessage.effortOff") : effort,
         })
       : `${selection.profileLabel}, ${t("agentMessage.effortAria", {
-          level: effort,
+          level: effort === "off" ? t("agentMessage.effortOff") : effort,
         })}`
     : t("agentMessage.selectModel")
 
@@ -841,7 +876,7 @@ export function ComposerModelSelector({
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />
-        <EffortSubmenu effort={effort} onEffortChange={onEffortChange} />
+        <EffortSubmenu effort={effort} levels={availableEffortLevels} onEffortChange={onEffortChange} />
         <ComposerContextWindow value={contextWindow} pending={configurationPending} onChange={onContextWindowChange} />
       </DropdownMenuContent>
     </DropdownMenu>

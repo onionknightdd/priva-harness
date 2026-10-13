@@ -1,4 +1,6 @@
 export const resourcesEn = {
+  toolCallMode: "Tool calling mode", toolCallHidden: "Tools hidden by configuration",
+  toolCallModes: { codemode: "Codemode (code calls)", deferred: "Search before calling", direct: "Direct calls" },
   serverEnabled: "Enable MCP server", toolEnabled: "Enable tool: {{name}}",
   mcpGlobalToggle: "Applies to all projects", mcpProjectToggle: "Applies to this project",
   mcpRestricted: "Restricted by configuration: {{reason}}",
@@ -26,7 +28,7 @@ export const resourcesEn = {
   discoveredCategory: "{{category}} ({{count}})", inventorySeparator: ", ",
   testHint: "Test the effective configuration in this project to inspect tools, prompts and resources.", noCapabilities: "This server exposes no items in this category.",
   testTool: "Test tool", runTool: "Run tool", result: "Result", serverVersion: "Server version",
-  serverStatus: { disabled: "Server disabled", checking: "Checking server status", online: "Server online", offline: "Server unavailable" },
+  serverStatus: { disabled: "Server disabled", checking: "Checking server status", online: "Server online", offline: "Server unavailable", unverified: "Connection not verified" },
   selectValue: "Select a value", removeValue: "Remove {{value}}", addListValue: "Type a value and press Enter", commitListValue: "Press Enter to add this value before running the tool.", duplicateListValue: "This list requires unique values.",
   parameterKey: "Parameter key", addParameter: "Add parameter", addArrayItem: "Add item", removeArrayItem: "Remove item {{index}}", moveItemUp: "Move item up", moveItemDown: "Move item down", invalidParameters: "Check the highlighted parameters before running the tool.",
   toolHint: "Running this test calls the real tool and can change data in the connected service.",
@@ -51,6 +53,8 @@ export const resourcesEn = {
 }
 
 export const resourcesZh = {
+  toolCallMode: "工具调用方式", toolCallHidden: "工具已被配置隐藏",
+  toolCallModes: { codemode: "Codemode（代码调用）", deferred: "搜索后调用", direct: "直接调用" },
   serverEnabled: "启用 MCP 服务", toolEnabled: "启用工具：{{name}}",
   mcpGlobalToggle: "对所有项目生效", mcpProjectToggle: "仅对此项目生效",
   mcpRestricted: "受配置限制：{{reason}}",
@@ -78,7 +82,7 @@ export const resourcesZh = {
   discoveredCategory: "{{category}}（{{count}}）", inventorySeparator: "、",
   testHint: "测试当前项目的生效配置，以查看工具、提示词和资源。", noCapabilities: "服务未提供此类能力。",
   testTool: "测试工具", runTool: "执行工具", result: "执行结果", serverVersion: "服务端版本",
-  serverStatus: { disabled: "服务已禁用", checking: "正在检测服务状态", online: "服务在线", offline: "服务不可用" },
+  serverStatus: { disabled: "服务已禁用", checking: "正在检测服务状态", online: "服务在线", offline: "服务不可用", unverified: "连接尚未验证" },
   selectValue: "选择一个值", removeValue: "删除 {{value}}", addListValue: "输入后按 Enter 添加", commitListValue: "请先按 Enter 添加当前值，再执行工具。", duplicateListValue: "此列表中的值不能重复。",
   parameterKey: "参数名称", addParameter: "添加参数", addArrayItem: "添加一项", removeArrayItem: "删除第 {{index}} 项", moveItemUp: "上移", moveItemDown: "下移", invalidParameters: "请检查标出的参数后再执行工具。",
   toolHint: "测试会真实调用工具，可能修改所连接服务中的数据。",

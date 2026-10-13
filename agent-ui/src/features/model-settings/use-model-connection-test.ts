@@ -114,6 +114,9 @@ export function useModelConnectionTest({
                 imageUnderstandingModel: null,
                 imageGenerationModel: null,
                 imageEditModel: null,
+                classifierApi: null,
+                classifierModel: null,
+                classifierProfileId: null,
               })
             : await testSavedModelProfile(request.profileId, {
                 baseUrl: request.baseUrl,

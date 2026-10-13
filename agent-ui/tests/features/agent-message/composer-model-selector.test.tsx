@@ -31,8 +31,8 @@ const hooks = registerHooks({
 const originalFetch = globalThis.fetch
 const profile = { id: "native-profile", label: "Native profile", default_model: "claude-sonnet-4-6",
   base_url: "http://localhost", auth_token_set: true, image_understanding_model: null,
-  image_generation_model: null, image_edit_model: null, model_count: 2,
-  model_capabilities: { image_understanding: [], image_generation: [], image_edit: [] } }
+  image_generation_model: null, image_edit_model: null, classifier_api: null, classifier_model: null, classifier_profile_id: null, model_count: 2,
+  model_capabilities: { image_understanding: [], image_generation: [], image_edit: [], classification: [] } }
 let loadProfiles = async () => Response.json({ profiles: [profile], default_profile_id: profile.id })
 const writes: string[] = []
 globalThis.fetch = async (input, init) => {
@@ -40,7 +40,7 @@ globalThis.fetch = async (input, init) => {
   if (init?.method && init.method !== "GET") writes.push(url)
   if (url === "/api/sandbox/agent/profile") return Response.json({ queue_behavior: "follow-up" })
   if (url === "/api/sandbox/credentials/profiles") return loadProfiles()
-  if (url.endsWith("/models")) return Response.json({ models: [{ id: "claude-sonnet-4-6" }, { id: "claude-opus-4-6" }] })
+  if (url.endsWith("/models")) return Response.json({ models: [{ id: "claude-sonnet-4-6", pi_effort_levels: ["off", "low", "medium", "high"] }, { id: "claude-opus-4-6", pi_effort_levels: ["off", "low", "medium", "high"] }, { id: "deepseek-flash", pi_effort_levels: ["off", "low", "high", "max"] }, { id: "plain-model", pi_effort_levels: ["off"] }] })
   assert.fail(`Unexpected request: ${url}`)
 }
 after(() => { hooks.deregister(); dom.window.close(); globalThis.fetch = originalFetch })
@@ -56,12 +56,12 @@ await i18n.use(initReactI18next).init({ lng: "en", resources: { en: { translatio
 const { AgentPreferencesProvider } = await import("../../../src/features/settings/agent-preferences-context.tsx")
 const { ComposerModelSelector } = await import("../../../src/features/agent-message/components/composer-model-selector.tsx")
 
-async function mount() {
+async function mount(options: { isPi?: boolean; model?: string; effort?: ComposerEffort; effortLevels?: readonly ComposerEffort[] } = {}) {
   dom.window.localStorage.clear()
   writes.splice(0)
   const host = document.body.appendChild(document.createElement("div"))
   const root = createRoot(host)
-  let state: { modelReference: string | null; effort: ComposerEffort; contextWindow: ContextWindow } = { modelReference: null, effort: "medium", contextWindow: 200000 }
+  let state: { modelReference: string | null; effort: ComposerEffort; contextWindow: ContextWindow; effortLevels?: readonly ComposerEffort[] } = { modelReference: options.model ? `${profile.id}:${options.model}` : null, effort: options.effort ?? "medium", contextWindow: 200000, ...(options.effortLevels ? { effortLevels: options.effortLevels } : {}) }
   let setState: React.Dispatch<React.SetStateAction<typeof state>>
   let setVisible: React.Dispatch<React.SetStateAction<boolean>>
   const changes: (string | null)[] = []
@@ -76,7 +76,7 @@ async function mount() {
       update((current) => ({ ...current, modelReference }))
     }, [])
     const onEffortChange = React.useCallback((effort: ComposerEffort) => update((current) => ({ ...current, effort })), [])
-    return visible ? <ComposerModelSelector {...value}
+    return visible ? <ComposerModelSelector {...value} isPi={options.isPi}
       configurationPending={false} onContextWindowChange={(contextWindow) => update((current) => ({ ...current, contextWindow }))}
       onModelReferenceChange={onModelReferenceChange} onEffortChange={onEffortChange} /> : null
   }
@@ -145,5 +145,47 @@ test("context options stay available for any model and selecting 1M opens its wa
     assert.equal(option.getAttribute("aria-checked"), "false")
     assert.equal(view.state().modelReference, `${profile.id}:custom:model`)
     assert.deepEqual(writes, [])
+  } finally { await view.close() }
+})
+
+async function openEffortMenu(view: Awaited<ReturnType<typeof mount>>) {
+  await act(async () => view.trigger().click())
+  const trigger = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((element) => element.textContent?.startsWith("Effort"))
+  assert.ok(trigger)
+  await act(async () => trigger.click())
+  return [...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')]
+}
+
+test("Pi deepseek uses advertised levels before a session exists and clamps unsupported selections", async () => {
+  const view = await mount({ isPi: true, model: "deepseek-flash" })
+  try {
+    assert.equal(view.state().effort, "high", "Pi clamps medium upward to supported high")
+    const levels = await openEffortMenu(view)
+    assert.deepEqual(levels.map((item) => item.textContent), ["Off", "low", "high", "max"])
+    await act(async () => levels.find((item) => item.textContent === "max")!.click())
+    assert.equal(view.state().effort, "max")
+    await view.update("plain-model", "max")
+    assert.equal(view.state().effort, "off", "switching to a non-reasoning model clears unsupported max")
+    assert.deepEqual(writes, [])
+  } finally { await view.close() }
+})
+
+test("Pi native effort levels override catalog metadata and off/max survive composer remounts", async () => {
+  const view = await mount({ isPi: true, model: "deepseek-flash", effort: "off", effortLevels: ["off", "max"] })
+  try {
+    assert.match(view.trigger().getAttribute("aria-label")!, /Off/)
+    assert.equal(view.state().effort, "off")
+    const levels = await openEffortMenu(view)
+    assert.deepEqual(levels.map((item) => item.textContent), ["Off", "max"])
+    assert.equal(levels[0]?.getAttribute("aria-checked"), "true")
+    await view.update("deepseek-flash", "max")
+    await view.visible(false)
+    await view.visible(true)
+    assert.match(view.trigger().getAttribute("aria-label")!, /max/)
+    assert.equal(view.state().effort, "max")
+    await view.update("deepseek-flash", "off")
+    assert.equal(view.state().effort, "off")
+    assert.match(view.trigger().getAttribute("aria-label")!, /Off/)
+    assert.deepEqual(writes, [], "TUI changes must not persist model defaults")
   } finally { await view.close() }
 })

@@ -6,6 +6,16 @@ import { EnvelopeStamper } from '../../../../src/harness/run/envelope-stamper.js
 import { parseClientFrame, parseInitFrame, sessionTargetFromInit } from '../../../../src/transport/websocket/schema/run-frames.js'
 
 describe('run frames', () => {
+  it('accepts native Pi effort levels while keeping Claude off and minimal invalid', () => {
+    const common = { model: 'p:deepseek-flash', cwd: '/work', sessionId: 'sess' }
+    for (const frame of [{ ...common, type: 'run.start', text: 'hi' }, { ...common, type: 'session.configure', requestId: 'effort' }]) {
+      for (const effort of ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']) {
+        expect(parseClientFrame({ ...frame, harness: 'pi', effort })).toMatchObject({ ok: true, frame: { effort } })
+        expect(parseClientFrame({ ...frame, harness: 'claude', effort }).ok).toBe(effort !== 'off' && effort !== 'minimal')
+      }
+    }
+  })
+
   it('accepts init text, model, harness, and cwd', () => {
     expect(parseInitFrame({
       type: 'run.start',

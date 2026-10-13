@@ -3,7 +3,7 @@ import type { BackgroundTask, TaskNotification, TaskReplyTarget } from './backgr
 import type { UserAttachment } from '../run/user-turn.js'
 import type { WorkflowState } from './workflow.js'
 import type { CompactMarker } from './compact-command.js'
-import type { AgentEvent, ContentBlock } from '../event/agent-event.js'
+import type { AgentEvent, ContentBlock, ToolResultMetadata } from '../event/agent-event.js'
 
 export type ThreadToolStatus = 'started' | 'running' | 'completed'
 
@@ -48,7 +48,8 @@ export type ThreadBlock =
       readonly kind: string
     }
 
-export interface ThreadToolCard {
+export interface ThreadToolCard extends ToolResultMetadata {
+  readonly parentToolCallId?: string
   readonly backgroundTask?: BackgroundTask
   readonly tokens?: number
   readonly durationMs?: number

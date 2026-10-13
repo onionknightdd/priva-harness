@@ -37,9 +37,9 @@ const { HarnessProvider } = await import("../../../src/features/sidebar/header/h
 const { SessionViewProvider, useSessionView } = await import("../../../src/features/agent-message/session-view-context.tsx")
 const { SessionViewToggle } = await import("../../../src/features/agent-message/components/session-view-toggle.tsx")
 
-async function mount(initial: SessionViewIdentity = { chatKey: "1", sessionId: null }) {
+async function mount(initial: SessionViewIdentity = { chatKey: "1", sessionId: null }, harness = "claude") {
   dom.window.localStorage.clear()
-  dom.window.localStorage.setItem(AGENT_PREFERENCES_STORAGE_KEY, JSON.stringify({ defaultHarness: "claude" }))
+  dom.window.localStorage.setItem(AGENT_PREFERENCES_STORAGE_KEY, JSON.stringify({ defaultHarness: harness }))
   const host = document.body.appendChild(document.createElement("div"))
   const root = createRoot(host)
   let value!: ReturnType<typeof useSessionView>
@@ -112,5 +112,19 @@ test("native rebinding preserves Terminal, but closing the session resets it eve
     assert.equal(view.value().view, "chat")
     assert.equal(view.value().terminalOpened, false)
     assert.equal(view.terminal().getAttribute("aria-disabled"), "true")
+  } finally { await view.close() }
+})
+
+
+test("Pi exposes the same Chat / Terminal switch after a session is created", async () => {
+  const view = await mount({ chatKey: "pi", sessionId: null }, "pi")
+  try {
+    assert.equal(view.terminal().getAttribute("aria-disabled"), "true")
+    await view.update({ chatKey: "pi", sessionId: "pi-native" })
+    await act(async () => view.terminal().click())
+    assert.equal(view.value().view, "terminal")
+    await act(async () => view.chat().click())
+    assert.equal(view.value().view, "chat")
+    assert.equal(view.value().terminalOpened, true)
   } finally { await view.close() }
 })

@@ -37,11 +37,15 @@ export function resourceUrl(path: string, query: ResourceQuery, extra: Record<st
   return `/api/sandbox/resource/${path}?${params.toString()}`
 }
 
+export class ResourceRequestError extends Error {
+  constructor(readonly status: number, message: string) { super(message) }
+}
+
 export async function resourceRequest<T>(path: string, query: ResourceQuery, init?: RequestInit, extra?: Record<string, string>): Promise<T> {
   const response = await fetch(resourceUrl(path, query, extra), init)
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { detail?: string } | null
-    throw new Error(body?.detail || `Request failed (${response.status})`)
+    throw new ResourceRequestError(response.status, body?.detail || `Request failed (${response.status})`)
   }
   if (response.status === 204) return undefined as T
   return await response.json() as T

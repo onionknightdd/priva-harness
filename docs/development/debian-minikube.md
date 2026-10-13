@@ -570,7 +570,7 @@ GNOME 实验目录独立保留。镜像内固定安装官方 Cua Driver **0.34.1
                          configure-computer.mjs -> 启动 Runner
                             |                     |
                             +-> Claude 原生 MCP <-+-> Claude SDK / TUI
-                            `-> Pi 原生 MCP <-----+-> Pi adapter
+                            `-> Pi 原生 MCP <-----+-> Pi Codemode / TUI
                                                        |
                                               stdio MCP / computer
                                                        |
@@ -602,15 +602,17 @@ Agent UI「电脑」 <- noVNC / WebSocket <- Runner :8001 <- x11vnc :5900
 | 原生配置 | 新增内容 |
 | --- | --- |
 | `$CLAUDE_CONFIG_DIR/.claude.json` | `mcpServers.computer`，stdio，`alwaysLoad: true` |
-| `$PI_CODING_AGENT_DIR/mcp.json` | `mcpServers.computer`，`lifecycle: eager` |
+| `$PI_CODING_AGENT_DIR/mcp.json` | `mcpServers.computer`，`exposure: codemode` |
 | 两个目录各自的 `skills/computer-desktop/SKILL.md` | 工具发现、前台输入、中文限制、结果核对及共享桌面说明 |
 
 命令均为 `/usr/local/bin/cua-driver`，参数 `mcp --direct`；显式传入 DISPLAY、
 XAUTHORITY、DBUS_SESSION_BUS_ADDRESS、XDG_RUNTIME_DIR、XDG_CURRENT_DESKTOP、
 XDG_SESSION_TYPE，以免 provider 的子进程环境过滤遗漏桌面连接信息。
-脚本只补缺失项，保留同名用户 MCP、disabled 策略、其他配置和已有 skill；新文件原子
+脚本只补缺失项，保留同名用户 MCP、原生启停策略、其他配置和已有 skill；新文件原子
 写入且权限为 0600。非法 JSON 或链接配置报错，不会用默认值覆盖。删除 MCP 后重建
-Pod 会重新补入；若需长期停用，请使用 provider 原生禁用策略。
+Pod 会重新补入；若需长期停用，请使用 provider 原生禁用策略。Pi 1.2 使用严格 JSON
+及 `enabled: false`；旧 adapter 的 `lifecycle`、`disabled` 等字段会阻止启动并提示
+重新配置，原文件不自动迁移或覆盖。
 
 在 Agent UI 的 MCP 资源页可查看 `computer`；部署后新建 Claude 或 Pi 聊天即可使用。
 已有会话需要通过现有资源刷新流程重新载入；仅在旧聊天继续发消息不保证已加载新配置。

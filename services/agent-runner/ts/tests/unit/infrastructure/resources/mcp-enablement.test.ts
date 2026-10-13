@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ProjectTrustStore } from '@earendil-works/pi-coding-agent'
 
 import { LocalResourceService } from '../../../../src/infrastructure/resources/local-resource-service.js'
 
@@ -19,6 +20,8 @@ describe('native MCP enablement', () => {
     root = await realpath(await mkdtemp(join(tmpdir(), 'priva-mcp-policy-')))
     cwd = join(root, 'project'); other = join(root, 'other'); claudeDir = join(root, 'claude'); piDir = join(root, 'pi')
     for (const path of [join(cwd, '.git'), join(other, '.git'), claudeDir, piDir]) await mkdir(path, { recursive: true })
+    new ProjectTrustStore(piDir).set(cwd, true)
+    new ProjectTrustStore(piDir).set(other, true)
     vi.stubEnv('CLAUDE_CONFIG_DIR', claudeDir)
     vi.stubEnv('PI_CODING_AGENT_DIR', piDir)
     service = new LocalResourceService({ activeCwd: cwd, claudeDir, claudeConfigFilePath: join(claudeDir, '.claude.json'), piDir, discoverProjects: () => Promise.resolve([other]) })
@@ -101,14 +104,14 @@ describe('native MCP enablement', () => {
     expect(await service.mcp.get(query, stdio.id)).toMatchObject({ enabled: false, canToggle: false })
   })
 
-  it('uses native Pi disabled/excludeTools and retains includes, filters and credentials', async () => {
+  it('uses native Pi enabled/toolExposure and retains exposure rules and credentials', async () => {
     const query = { harness: 'pi' as const, cwd }
-    const detail = await service.mcp.create(query, { scope: 'project', name: 'files', definition: { command: 'node', env: { KEEP: 'yes' }, includeTools: ['read_*', 'write_file'], excludeTools: ['read_secret'] } })
+    const detail = await service.mcp.create(query, { scope: 'project', name: 'files', definition: { command: 'node', env: { KEEP: 'yes' }, exposure: 'hidden', toolExposure: { 'read_*': 'codemode', read_secret: 'hidden', write_file: 'direct' } } })
     expect(await service.mcp.toggleTool(query, detail.id, 'write_file', false)).toMatchObject({ enabled: false, canToggle: true })
     await service.mcp.toggle(query, detail.id, false)
     expect(await service.mcp.toggle(query, detail.id, true)).toMatchObject({ enabled: true })
-    expect(await service.mcp.tools(query, detail.id, ['read_file', 'write_file', 'delete_file'])).toMatchObject([{ enabled: true }, { enabled: false }, { enabled: false, canToggle: false }])
+    expect(await service.mcp.tools(query, detail.id, ['read_file', 'write_file', 'delete_file'])).toMatchObject([{ enabled: true }, { enabled: false }, { enabled: false, canToggle: true }])
     await service.mcp.toggleTool(query, detail.id, 'write_file', true)
-    expect(await read(join(cwd, '.pi/mcp.json'))).toMatchObject({ mcpServers: { files: { env: { KEEP: 'yes' }, includeTools: ['read_*', 'write_file'], excludeTools: ['read_secret'], disabled: false } } })
+    expect(await read(join(cwd, '.pi/mcp.json'))).toMatchObject({ mcpServers: { files: { env: { KEEP: 'yes' }, exposure: 'hidden', toolExposure: { 'read_*': 'codemode', read_secret: 'hidden', write_file: 'codemode' }, enabled: true } } })
   })
 })

@@ -1,14 +1,11 @@
-import { join, resolve } from 'node:path'
-
-import { DefaultPackageManager, SettingsManager } from '@earendil-works/pi-coding-agent'
-import { getMcpDiscoverySummary, loadMcpConfig } from 'pi-mcp-adapter/config'
-import { isToolAllowed, resolveToolPrefix, type ToolPrefix } from 'pi-mcp-adapter/types'
+import { join } from 'node:path'
 
 import { ResourceError, type McpDetail, type McpSummary, type McpToolState, type ResourceList, type ResourceQuery, type ResourceSource, type ResourceScope } from '../../core/resource/resource-catalog.js'
 import { ClaudeMcpPolicy, claudeMcpSettingsPath, claudeMcpToolName } from './claude-mcp-policy.js'
-import { canonicalDirectory, inside, isRecord, record, resourceId, type ResourceFiles, strings } from './resource-files.js'
+import { canonicalDirectory, isRecord, record, resourceId, type ResourceFiles, strings } from './resource-files.js'
 import { type ProjectDirectories } from './project-directories.js'
 import { claudePlugins, pluginComponentPaths, source, type ResourceEnvironment } from './resource-sources.js'
+import { ignoredPiMcpSources, isPiMcpOverride, piMcpToolExposure, piProjectTrusted, readPiMcpFile, validatePiMcpDefinition } from '../../pi-config.js'
 
 interface McpBinding {
   source: ResourceSource
@@ -18,7 +15,7 @@ interface McpBinding {
   container: string[]
   enabled: boolean
   claude?: { policy: ClaudeMcpPolicy; path: string; writable: boolean }
-  toolPrefix?: ToolPrefix
+  invalid?: Map<string, string>
 }
 
 export interface McpWrite {
@@ -29,6 +26,7 @@ export interface McpWrite {
 }
 
 export function validateMcpDefinition(value: unknown, harness: 'claude' | 'pi', allowOverride = false): Record<string, unknown> {
+  if (harness === 'pi') return validatePiMcpDefinition(value, allowOverride)
   if (!isRecord(value)) throw new ResourceError(422, 'MCP definition must be a JSON object')
   const definition = structuredClone(value)
   const transports = ['command', 'url', 'socket'].filter((key) => typeof definition[key] === 'string' && definition[key].trim())
@@ -45,18 +43,10 @@ export function validateMcpDefinition(value: unknown, harness: 'claude' | 'pi', 
     if (field !== undefined && (!isRecord(field) || Object.values(field).some((entry) => typeof entry !== 'string'))) throw new ResourceError(422, `${key} must be a string-to-string object`)
   }
   if (definition['disabled'] !== undefined && typeof definition['disabled'] !== 'boolean') throw new ResourceError(422, 'disabled must be a boolean')
-  if (harness === 'pi' && definition['type'] !== undefined) {
-    const { type, ...native } = definition
-    if (!['stdio', 'http', 'sse', 'streamable-http'].includes(typeof type === 'string' ? type : '')) throw new ResourceError(422, 'Unsupported MCP transport type')
-    if (definition['url'] !== undefined) native['httpTransport'] = type === 'sse' ? 'sse' : 'streamable-http'
-    return native
-  }
-  if (harness === 'claude') {
-    if (definition['socket'] !== undefined) throw new ResourceError(422, 'Claude does not support Pi Unix socket configuration')
-    if (definition['disabled'] !== undefined) throw new ResourceError(422, 'Claude server enablement is managed by its native MCP policy, not a disabled field')
-    if (definition['url'] !== undefined && definition['type'] === undefined) definition['type'] = 'http'
-    if (definition['type'] !== undefined && !['stdio', 'http', 'sse'].includes(typeof definition['type'] === 'string' ? definition['type'] : '')) throw new ResourceError(422, 'Claude supports stdio, HTTP and SSE transport types')
-  }
+  if (definition['socket'] !== undefined) throw new ResourceError(422, 'Claude does not support Pi Unix socket configuration')
+  if (definition['disabled'] !== undefined) throw new ResourceError(422, 'Claude server enablement is managed by its native MCP policy, not a disabled field')
+  if (definition['url'] !== undefined && definition['type'] === undefined) definition['type'] = 'http'
+  if (definition['type'] !== undefined && !['stdio', 'http', 'sse'].includes(typeof definition['type'] === 'string' ? definition['type'] : '')) throw new ResourceError(422, 'Claude supports stdio, HTTP and SSE transport types')
   return definition
 }
 
@@ -92,6 +82,7 @@ export class McpCatalog {
     if (binding === undefined) throw new ResourceError(422, 'Select an available source; project sources require an absolute cwd')
     if (!binding.source.canAdd) throw new ResourceError(403, 'This source is read-only')
     const definition = validateMcpDefinition(input.definition, query.harness, query.harness === 'pi' && binding.effective[input.name] !== undefined)
+    if (query.harness === 'pi') this.validatePiWrite(binding, input.name, definition)
     await this.files.update(binding.source.path, (value) => {
       const holder = this.holder(value, binding.container)
       const servers = record(holder[this.serversKey(holder)])
@@ -105,6 +96,7 @@ export class McpCatalog {
     const { binding, name } = await this.find(query, id)
     if (!binding.source.writable) throw new ResourceError(403, 'This MCP source is read-only')
     const next = validateMcpDefinition(definition, query.harness, query.harness === 'pi')
+    if (query.harness === 'pi') this.validatePiWrite(binding, name, next)
     await this.files.update(binding.source.path, (value) => {
       const holder = this.holder(value, binding.container)
       const key = this.serversKey(holder)
@@ -141,7 +133,7 @@ export class McpCatalog {
         const project = record(record(value['projects'])[binding.source.cwd ?? ''])
         if (Array.isArray(project['disabledMcpServers'])) project['disabledMcpServers'] = strings(project['disabledMcpServers']).filter((entry) => entry !== name)
       })
-    } else await this.editDefinition(binding, name, (value) => { value['disabled'] = !enabled })
+    } else await this.editDefinition(binding, name, (value) => { value['enabled'] = enabled })
     return await this.get(query, id)
   }
 
@@ -165,9 +157,10 @@ export class McpCatalog {
         value['permissions'] = { ...permissions, deny }
       })
     } else await this.editDefinition(binding, name, (value) => {
-      const excluded = strings(value['excludeTools'] ?? binding.effective[name]?.['excludeTools']).filter((entry) => entry !== tool)
-      if (!enabled) excluded.push(tool)
-      value['excludeTools'] = excluded
+      const exposure = Object.fromEntries(Object.entries(record(value['toolExposure'] ?? binding.effective[name]?.['toolExposure'])).filter(([name]) => name !== tool))
+      const effective = { ...(binding.effective[name] ?? value), toolExposure: exposure }
+      if (!enabled || piMcpToolExposure(effective, tool) === 'hidden') exposure[tool] = enabled ? 'codemode' : 'hidden'
+      value['toolExposure'] = exposure
     })
     const current = await this.find(query, id)
     return this.toolState(current.binding, current.name, tool)
@@ -185,12 +178,16 @@ export class McpCatalog {
   private toolState(binding: McpBinding, server: string, name: string): McpToolState {
     if (binding.claude) return binding.claude.policy.tool(server, name, binding.claude.path, binding.claude.writable)
     const definition = binding.effective[server] ?? binding.definitions[server] ?? {}
-    const prefix = resolveToolPrefix(definition, binding.toolPrefix)
-    const allowed = (excluded: unknown) => isToolAllowed(name, server, prefix, definition['includeTools'], excluded)
-    const enabled = allowed(definition['excludeTools'])
-    const own = strings(binding.definitions[server]?.['excludeTools'])
-    const canToggle = binding.source.writable && binding.winners.get(server) === binding.source.id && allowed(strings(definition['excludeTools']).filter((entry) => entry !== name || !own.includes(name)))
-    return { name, enabled, canToggle, disabledReason: !canToggle ? 'Controlled by a read-only source or a broader tool filter' : enabled ? null : 'Excluded in this MCP configuration' }
+    const enabled = piMcpToolExposure(definition, name) !== 'hidden'
+    const canToggle = binding.enabled && !binding.invalid?.has(server) && binding.source.writable && binding.winners.get(server) === binding.source.id
+    return { name, enabled, canToggle, disabledReason: !canToggle ? 'Controlled by an unavailable or read-only configuration' : enabled ? null : 'Hidden by this native MCP configuration' }
+  }
+
+  private validatePiWrite(binding: McpBinding, name: string, definition: Record<string, unknown>): void {
+    validatePiMcpDefinition(definition, binding.source.scope === 'project' && binding.effective[name] !== undefined, name)
+    if (binding.source.scope === 'project' && definition['auth'] !== undefined) throw new ResourceError(422, 'Pi provider credentials may only be configured in global mcp.json')
+    const namespace = name.replaceAll('-', '_')
+    if (Object.keys(binding.effective).some((other) => other !== name && other.replaceAll('-', '_') === namespace)) throw new ResourceError(422, 'Pi MCP server names cannot differ only by hyphens and underscores')
   }
 
   private name(name: string): void {
@@ -213,10 +210,11 @@ export class McpCatalog {
 
   private summary(binding: McpBinding, name: string, definition: Record<string, unknown>, contextual: boolean): McpSummary {
     const effective = binding.effective[name] ?? definition
-    const enabled = binding.enabled && effective['disabled'] !== true
+    const invalid = binding.invalid?.get(name)
+    const enabled = binding.enabled && !invalid && effective['enabled'] !== false
     const state = binding.claude ? binding.claude.policy.server(name, !contextual && binding.source.scope === 'global' ? definition : effective, binding.source, binding.claude.path, binding.enabled, binding.claude.writable)
-      : { enabled, canToggle: binding.source.writable && binding.winners.get(name) === binding.source.id,
-        disabledReason: binding.winners.get(name) !== binding.source.id ? 'Controlled by a higher-precedence MCP configuration' : enabled ? null : 'Disabled in the effective MCP configuration' }
+      : { enabled: !contextual && binding.source.scope === 'global' ? !invalid && definition['enabled'] !== false : enabled, canToggle: binding.enabled && !invalid && binding.source.writable && ((!contextual && binding.source.scope === 'global') || binding.winners.get(name) === binding.source.id),
+        disabledReason: invalid ?? (!binding.enabled ? 'Trust this project in Pi before using its MCP configuration' : binding.winners.get(name) !== binding.source.id ? 'Controlled by a higher-precedence MCP configuration' : enabled ? null : 'Disabled in the effective MCP configuration') }
     return { id: resourceId(binding.source.id, name), sourceId: binding.source.id, name,
       transport: typeof definition['command'] === 'string' ? 'stdio' : typeof definition['url'] === 'string' ? definition['httpTransport'] === 'sse' || definition['type'] === 'sse' ? 'sse' : 'http' : typeof definition['socket'] === 'string' ? 'socket' : 'override',
       target: [definition['url'], definition['command'], definition['socket']].find((value): value is string => typeof value === 'string') ?? '',
@@ -245,7 +243,7 @@ export class McpCatalog {
       const add = async (origin: ResourceSource, container: string[] = [], enabled = true, prefix = '', inline?: Record<string, unknown>) => {
         try {
           const raw = inline ?? this.holder(await this.files.json(origin.path), container)
-          const definitions = Object.fromEntries(Object.entries(record(raw[this.serversKey(raw)])).filter((entry): entry is [string, Record<string, unknown>] => isRecord(entry[1])).map(([name, definition]) => [prefix + (origin.harness === 'pi' && prefix ? normalizeName(name, 'server') : name), definition]))
+          const definitions = Object.fromEntries(Object.entries(record(raw[this.serversKey(raw)])).filter((entry): entry is [string, Record<string, unknown>] => isRecord(entry[1])).map(([name, definition]) => [prefix + name, definition]))
           current.push({ source: origin, container, definitions, effective: {}, winners: new Map(), enabled })
         } catch (error) { result.diagnostics.push({ path: origin.path, message: error instanceof Error ? error.message : 'Cannot read configuration' }) }
       }
@@ -275,69 +273,46 @@ export class McpCatalog {
           binding.claude = { policy: binding.source.scope === 'global' ? globalPolicy : policy, path, writable: binding.source.writable && settingsSource.writable }
         }
       } else {
-        const configPath = join(this.environment.piDir, 'mcp.json')
-        // Read-only public API: no adapter factory, model, package install, or MCP connection.
-        const summary = getMcpDiscoverySummary(configPath, cwd, { includeHostConfigs: true })
-        const config = loadMcpConfig(configPath, cwd)
-        const effective = config.mcpServers as Record<string, Record<string, unknown>>
-        const imports = new Set<string>()
-        let agentPluginScope: 'global' | 'project' = 'global'
-        for (const item of summary.sources) {
-          try {
-            const config = await this.files.json(item.path)
-            for (const kind of strings(config['imports'])) imports.add(kind)
-            if (Array.isArray(record(config['settings'])['agentPluginPaths'])) agentPluginScope = item.scope
-          } catch (error) {
-            result.diagnostics.push({ path: item.path, message: error instanceof Error ? error.message : 'Cannot read configuration' })
-          }
-        }
-        for (const item of summary.imports) {
-          if (summary.hostConfigDiscovery !== 'on' && !imports.has(item.kind)) continue
-          const projectImport = item.path === join(cwd, '.vscode/mcp.json') || item.path === join(cwd, 'opencode.json')
-          await add(await source('pi', projectImport ? 'project' : 'global', 'import', item.path, projectImport ? cwd : null, `Import · ${item.kind}`))
-        }
-        const settingsManager = SettingsManager.create(cwd, this.environment.piDir)
-        const manager = new DefaultPackageManager({ cwd, agentDir: this.environment.piDir, settingsManager })
-        const packages = manager.listConfiguredPackages()
-        for (const item of packages) {
-          if (item.installedPath === undefined) continue
-          const manifest = await this.files.json(join(item.installedPath, 'package.json'))
-          const paths = record(manifest['pi'])['mcp']
-          const name = normalizeName(typeof manifest['name'] === 'string' ? manifest['name'] : '', 'package')
-          for (const path of typeof paths === 'string' ? [paths] : strings(paths)) {
-            const absolute = resolve(item.installedPath, path)
-            if (!inside(item.installedPath, absolute)) continue
-            await add(await source('pi', item.scope === 'user' ? 'global' : 'project', 'package', absolute, item.scope === 'user' ? null : cwd, item.source), [], true, `${name}__`)
-          }
-        }
-        for (const item of summary.agentPlugins) {
-          const plugin = record(item)
-          if (typeof plugin['path'] !== 'string' || typeof plugin['name'] !== 'string') continue
-          await add(await source('pi', agentPluginScope, 'plugin', join(plugin['path'], 'mcp.json'), agentPluginScope === 'global' ? null : cwd, plugin['name']), [], true, `${normalizeName(plugin['name'], 'plugin')}__`)
-        }
-        for (const item of summary.sources) {
-          await add(await source('pi', item.scope, item.kind === 'pi' ? 'settings' : 'shared', item.path, item.scope === 'global' ? null : cwd, item.scope === 'global' ? item.label : `${item.label} · ${cwd}`, true, true))
-        }
+        const trusted = piProjectTrusted(cwd, this.environment.piDir)
+        for (const diagnostic of await ignoredPiMcpSources(cwd)) if (!result.diagnostics.some((item) => item.path === diagnostic.path)) result.diagnostics.push(diagnostic)
+        const effective = Object.create(null) as Record<string, Record<string, unknown>>
         const winners = new Map<string, string>()
-        for (const binding of current) for (const name of Object.keys(binding.definitions)) {
-          if (effective[name] !== undefined) winners.set(name, binding.source.id)
+        const globalDefinitions = new Map<string, Record<string, unknown>>()
+        for (const scope of ['global', 'project'] as const) {
+          const path = scope === 'global' ? join(this.environment.piDir, 'mcp.json') : join(cwd, '.pi/mcp.json')
+          const origin = await source('pi', scope, 'settings', path, scope === 'global' ? null : cwd, scope === 'global' ? 'Global · Pi MCP' : `Project · ${cwd}`, true, true)
+          let raw: Record<string, unknown> = {}
+          try { raw = await readPiMcpFile(path) } catch (error) {
+            result.diagnostics.push({ path, message: error instanceof Error ? error.message : 'Cannot read native MCP configuration' })
+          }
+          await add(origin, [], scope === 'global' || trusted, '', raw)
+          const binding = current.at(-1)
+          if (binding?.source.id !== origin.id) continue
+          const invalid = new Map<string, string>()
+          binding.invalid = invalid
+          for (const [name, value] of Object.entries(binding.definitions)) {
+            try {
+              const definition = validatePiMcpDefinition(value, scope === 'project' && globalDefinitions.has(name), name)
+              if (scope === 'project' && definition['auth'] !== undefined) throw new ResourceError(422, 'Pi provider credentials are only allowed in global mcp.json')
+              if (!binding.enabled) continue
+              const merged = scope === 'project' && isPiMcpOverride(definition) ? { ...globalDefinitions.get(name), ...definition } : definition
+              const clash = Object.keys(effective).find((other) => other !== name && other.replaceAll('-', '_') === name.replaceAll('-', '_'))
+              if (clash) throw new ResourceError(422, `Server ${name} conflicts with ${clash}`)
+              if (scope === 'global') globalDefinitions.set(name, definition)
+              effective[name] = merged
+              winners.set(name, binding.source.id)
+            } catch (error) {
+              const message = error instanceof Error ? error.message : 'Invalid native MCP definition'
+              invalid.set(name, message)
+              result.diagnostics.push({ path, message: `${name}: ${message}` })
+            }
+          }
         }
-        const unresolved = Object.fromEntries(Object.entries(effective).filter(([name]) => !winners.has(name)))
-        if (Object.keys(unresolved).length > 0) {
-          const unresolvedSource = await source('pi', 'project', 'import', '', cwd, 'Adapter-resolved sources')
-          current.push({ source: unresolvedSource, container: [], definitions: unresolved, effective, winners, enabled: true })
-          for (const name of Object.keys(unresolved)) winners.set(name, unresolvedSource.id)
-          result.diagnostics.push({ path: configPath, message: 'Some adapter-resolved entries have no public file provenance and are read-only' })
-        }
-        for (const binding of current) { binding.effective = effective; binding.winners = winners; binding.toolPrefix = config.settings?.toolPrefix ?? 'server' }
+        for (const binding of current) { binding.effective = effective; binding.winners = winners }
+
       }
       bindings.push(...current)
     }
     return { bindings, result }
   }
-}
-
-// Namespacing is part of adapter 2.32.1's public server identity; merge semantics remain in loadMcpConfig.
-function normalizeName(name: string, fallback: string): string {
-  return name.replace(/[^A-Za-z0-9_-]+/gu, '_').replace(/^[_-]+|[_-]+$/gu, '') || fallback
 }

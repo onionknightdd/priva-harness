@@ -25,7 +25,6 @@ describe('resolvePiSessionOptions', () => {
       modelsConfig: buildPiModelsConfig(
         'https://api.deepseek.com/v1',
         'deepseek-v4-flash',
-        'secret',
       ),
     })
   })
@@ -37,19 +36,18 @@ describe('buildPiModelsConfig', () => {
       for (const contextWindow of [200_000, 1_000_000] as const) {
         const options = resolvePiSessionOptions({ model, baseUrl: 'https://example.test/v1', authToken: 't', contextWindow })
         expect(options.modelId).toBe(model)
-        expect(options.modelsConfig.providers.openai.models[0]).toMatchObject({ id: model, contextWindow })
+        expect(options.modelsConfig.providers['priva-chat'].models[0]).toMatchObject({ id: model, contextWindow })
       }
     }
   })
 
   it('maps resolved env onto a stable OpenAI-compatible provider', () => {
     expect(
-      buildPiModelsConfig('https://api.deepseek.com/v1', 'deepseek-v4-flash', 'secret'),
+      buildPiModelsConfig('https://api.deepseek.com/v1', 'deepseek-v4-flash'),
     ).toEqual({
       providers: {
-        openai: {
+        'priva-chat': {
           baseUrl: 'https://api.deepseek.com/v1',
-          apiKey: 'secret',
           api: 'openai-responses',
           authHeader: true,
           compat: {

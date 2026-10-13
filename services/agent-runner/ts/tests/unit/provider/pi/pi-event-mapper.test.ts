@@ -1,8 +1,59 @@
 import { describe, expect, it } from 'vitest'
 
-import { PiEventMapper } from '../../../../src/provider/pi/pi-event-mapper.js'
+import { PiEventMapper, type PiSessionEvent } from '../../../../src/provider/pi/pi-event-mapper.js'
 
 describe('PiEventMapper', () => {
+  it('preserves structured-only native tool progress', () => {
+    const mapper = new PiEventMapper({ sessionId: 's', model: 'm' })
+    mapper.push({ type: 'tool_execution_start', toolCallId: 'child', toolName: 'mcp__a__read', parentToolCallId: 'outer' })
+    expect(mapper.push({ type: 'tool_execution_update', toolCallId: 'child', partialResult: { content: [], structuredContent: { progress: 0.5 } } })).toMatchObject([
+      { type: 'tool.progress', parentToolCallId: 'outer', structuredContent: { progress: 0.5 } },
+    ])
+  })
+
+  it('waits for agent_settled across continuations and preserves usage after abort without duplicates', () => {
+    const mapper = new PiEventMapper({ sessionId: 's', model: 'm' })
+    const first = { role: 'assistant', timestamp: 1, model: 'm', usage: { input: 10, output: 2, cost: { total: 0.2 } }, content: [] }
+    mapper.push({ type: 'agent_start' })
+    mapper.push({ type: 'message_end', message: first })
+    expect(mapper.push({ type: 'agent_end', messages: [first] })).toEqual([])
+    mapper.push({ type: 'agent_start' })
+    const second = { role: 'assistant', timestamp: 2, model: 'm', usage: { input: 3, output: 1, cost: { total: 0.1 } }, content: [], stopReason: 'aborted' }
+    mapper.push({ type: 'agent_end', messages: [second] })
+    expect(mapper.push({ type: 'agent_settled', aborted: true })[0]).toMatchObject({
+      type: 'run.aborted', numTurns: 2, usage: { input: 13, output: 3 }, costUsd: expect.closeTo(0.3) as number,
+    })
+    mapper.push({ type: 'agent_start' })
+    mapper.push({ type: 'agent_end', messages: [first] })
+    expect(mapper.push({ type: 'agent_settled' })[0]).toMatchObject({ numTurns: 1, usage: { input: 10, output: 2 } })
+  })
+
+  it('keeps nested tool identity and structured results separate from subagents', () => {
+    const mapper = new PiEventMapper({ sessionId: 's', model: 'm' })
+    mapper.push({ type: 'tool_execution_start', toolCallId: 'outer', toolName: 'codemode', args: { code: '...' } })
+    const started = mapper.push({ type: 'tool_execution_start', toolCallId: 'outer/1', parentToolCallId: 'outer', toolName: 'mcp__docs__find', args: { query: 'pi' } })
+    expect(started[0]).toMatchObject({ type: 'tool.started', parentToolCallId: 'outer', name: 'mcp__docs__find' })
+    expect(started[0]).not.toHaveProperty('parentToolUseId')
+    const complete = mapper.push({ type: 'tool_execution_end', toolCallId: 'outer/1', toolName: 'mcp__docs__find', isError: true,
+      result: { content: [{ type: 'text', text: 'failed' }], structuredContent: ['details'] } })
+    expect(complete[0]).toMatchObject({ type: 'tool.completed', parentToolCallId: 'outer', ok: false, structuredContent: ['details'] })
+  })
+
+  it('counts outer tool usage once and attributes model invocations without inventing unknown costs', () => {
+    const mapper = new PiEventMapper({ sessionId: 's', model: 'chat' })
+    const result = settle(mapper, { type: 'agent_end', messages: [{ role: 'toolResult', toolCallId: 'outer',
+      usage: { input: 12, output: 8, cacheRead: 0, cacheWrite: 0, cost: { total: 0.2 } },
+      details: { harnessModelCalls: [
+        { id: 'a', parentToolCallId: 'outer', operation: 'classify', provider: 'native', model: 'judge', status: 'completed', usage: { input: 4, output: 1 }, costUsd: 0.2 },
+        { id: 'b', parentToolCallId: 'outer', operation: 'generateImages', provider: 'native', model: 'painter', status: 'completed', usage: { input: 8, output: 7 }, pricingKnown: false },
+      ] },
+    }] })[0]
+    expect(result).toMatchObject({ usage: { input: 12, output: 8 }, costUsd: 0.2,
+      byModel: { 'native/judge': { input: 4, output: 1, costUsd: 0.2 }, 'native/painter': { input: 8, output: 7 } } })
+    if (result?.type !== 'run.completed') throw new Error('Missing completion')
+    expect(result.byModel?.['native/painter']).not.toHaveProperty('costUsd')
+    expect(result.byModel).not.toHaveProperty('Tools/summaries')
+  })
   it('maps text deltas, message end, and agent_end stats', () => {
     const mapper = new PiEventMapper({
       sessionId: 'pi-sess',
@@ -23,7 +74,7 @@ describe('PiEventMapper', () => {
         type: 'message_end',
         message: { role: 'assistant', content: [{ type: 'text', text: 'Hi' }] },
       }),
-      ...mapper.push({
+      ...settle(mapper, {
         type: 'agent_end',
         messages: [{
           role: 'assistant',
@@ -72,7 +123,7 @@ describe('PiEventMapper', () => {
         toolName: 'bash',
         content: [{ type: 'text', text: 'pong' }],
       },
-    })).toEqual([])
+    })).toEqual([expect.objectContaining({ type: 'tool.completed', id: 'tc1', output: 'pong' })])
     expect(mapper.push({
       type: 'message_end',
       message: { role: 'assistant', content: [{ type: 'text', text: 'Hi' }] },
@@ -87,7 +138,7 @@ describe('PiEventMapper', () => {
   it('maps agent_end with an assistant error to run.failed', () => {
     const mapper = new PiEventMapper({ sessionId: 'pi-sess', model: 'm' })
 
-    expect(mapper.push({
+    expect(settle(mapper, {
       type: 'agent_end',
       messages: [
         { role: 'user', content: [{ type: 'text', text: 'hello' }] },
@@ -111,7 +162,7 @@ describe('PiEventMapper', () => {
 
   it('classifies assistant errors from their message text', () => {
     const codeFor = (errorMessage: string): unknown => {
-      const event = new PiEventMapper({ sessionId: 's', model: 'm' }).push({
+      const event = settle(new PiEventMapper({ sessionId: 's', model: 'm' }), {
         type: 'agent_end',
         messages: [{ role: 'assistant', stopReason: 'error', errorMessage, content: [] }],
       })[0]
@@ -129,7 +180,7 @@ describe('PiEventMapper', () => {
     const mapper = new PiEventMapper({ sessionId: 'pi-sess', model: 'main' })
     const usage = (input: number, output: number, cacheRead: number, cacheWrite: number, total: number) =>
       ({ input, output, cacheRead, cacheWrite, cost: { total } })
-    const event = mapper.push({
+    const event = settle(mapper, {
       type: 'agent_end',
       messages: [
         { role: 'user', content: [] },
@@ -155,7 +206,7 @@ describe('PiEventMapper', () => {
   })
 
   it('reports numTurns without usage when assistant messages carry none', () => {
-    const event = new PiEventMapper({ sessionId: 's', model: 'm' }).push({
+    const event = settle(new PiEventMapper({ sessionId: 's', model: 'm' }), {
       type: 'agent_end',
       messages: [{ role: 'assistant', content: [] }],
     })[0]
@@ -411,3 +462,8 @@ describe('PiEventMapper', () => {
     ])
   })
 })
+
+function settle(mapper: PiEventMapper, event: PiSessionEvent) {
+  expect(mapper.push(event)).toEqual([])
+  return mapper.push({ type: 'agent_settled', aborted: false })
+}

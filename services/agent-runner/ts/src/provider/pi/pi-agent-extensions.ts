@@ -44,11 +44,18 @@ function pluginLoader(cwd: string) {
         // before custom agents overlay the registry so their models still win.
         source += '\nfor (const agent of DEFAULT_AGENTS.values()) delete agent.model;\n'
       }
+      if (filename === join(subagentsRoot, 'src/settings.ts')) {
+        // The host owns `workflow`. Use the native switch before registration
+        // so Tintin disables its tool, menu and collision warning together.
+        const load = 'const settings = loadSettings(cwd);'
+        if (!source.includes(load)) throw new Error('Pi subagents settings initialization changed; update the host workflow policy')
+        source = source.replace(load, 'const settings = { ...loadSettings(cwd), workflowsEnabled: false };')
+      }
       if (filename === join(piCodeRoot, 'extensions/memory.ts')) {
         // Only substitute configuration dependencies. Storage, prompt, tools,
         // index limits and lifecycle remain the installed pi-code implementation.
         for (const name of ['config-dir', 'managed-settings', 'project-approval', 'settings-chain']) {
-          source = source.replace(`'./internal/${name}.js'`, JSON.stringify(memorySettings))
+          source = source.replace(`'./internal/${name}.ts'`, JSON.stringify(memorySettings))
         }
       }
       return { code: transform({ ...options, source }) }
@@ -60,10 +67,7 @@ export async function piSubagentFactory(cwd: string): Promise<ExtensionFactory> 
   const factory = await pluginLoader(cwd).import<ExtensionFactory>(join(subagentsRoot, 'src/index.ts'), { default: true })
   return (api) => factory({
     ...api,
-    // The host already owns `workflow` through pi-dynamic-workflows. Tintin's
-    // collision detector only recognizes `Workflow` (capital W), so select its
-    // subagent surface explicitly rather than advertising two orchestrators.
-    registerTool: (tool) => { if (tool.name !== 'SubagentWorkflow') api.registerTool(tool) },
+    // Workflow startup is provided by the host, not the subagent extension.
     registerFlag: (name, options) => { if (name !== 'subagents-workflow-file') api.registerFlag(name, options) },
   })
 }

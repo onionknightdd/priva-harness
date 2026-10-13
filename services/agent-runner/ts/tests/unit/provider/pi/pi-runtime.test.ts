@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { AgentEvent } from '../../../../src/core/event/agent-event.js'
+import type { EffortLevel } from '../../../../src/core/contract/agent-provider.js'
 import { consumeRunEvents } from '../../../../src/harness/run/consume-run-events.js'
 import { PiRuntime, type PiAgentSession } from '../../../../src/provider/pi/pi-runtime.js'
 import type { PiSessionEvent } from '../../../../src/provider/pi/pi-event-mapper.js'
@@ -50,6 +51,7 @@ describe('PiRuntime stream input', () => {
     expect(runtime.hasBackgroundTasks).toBe(true)
     session.emit({ type: 'message_end', message: { role: 'custom', customType: 'workflow-notification', details: { workflowRunId: 'wf', status: 'completed' } } })
     session.emit({ type: 'agent_end', messages: [] })
+    session.emit({ type: 'agent_settled', aborted: false })
     expect(runtime.hasBackgroundTasks).toBe(false)
     await runtime.release('dispose')
   })
@@ -185,6 +187,17 @@ describe('PiRuntime stream input', () => {
     await runtime.release('dispose')
   })
 
+  it('applies effort changes to a warm session, including explicit off and max', async () => {
+    const session = new FakePiAgentSession()
+    const runtime = new PiRuntime(session)
+    for (const effort of ['low', 'off', 'max'] as const) {
+      await runtime.applyRunSpec(testRunSpec({ provider: 'pi', model: session.modelId, effort }))
+    }
+    expect(session.efforts).toEqual(['low', 'off', 'max'])
+    expect(session.models).toEqual([])
+    await runtime.release('dispose')
+  })
+
   it('dispatches /compact to session.compact instead of prompt', async () => {
     const session = new FakePiAgentSession()
     const runtime = new PiRuntime(session)
@@ -283,6 +296,7 @@ class FakePiAgentSession implements PiAgentSession {
       type: 'agent_end',
       messages: [{ role: 'assistant', model: this.modelId, content: [{ type: 'text', text: 'ok' }] }],
     })
+    this.listener?.({ type: 'agent_settled', aborted: false })
     return Promise.resolve()
   }
 
@@ -292,6 +306,7 @@ class FakePiAgentSession implements PiAgentSession {
       type: 'agent_end',
       messages: [{ role: 'assistant', model: this.modelId, content: [{ type: 'text', text: 'ok' }] }],
     })
+    this.listener?.({ type: 'agent_settled', aborted: false })
     return Promise.resolve()
   }
 
@@ -301,6 +316,7 @@ class FakePiAgentSession implements PiAgentSession {
       type: 'agent_end',
       messages: [{ role: 'assistant', model: this.modelId, content: [{ type: 'text', text: 'ok' }] }],
     })
+    this.listener?.({ type: 'agent_settled', aborted: false })
     return Promise.resolve()
   }
 
@@ -330,6 +346,9 @@ class FakePiAgentSession implements PiAgentSession {
     this.modelId = modelId
     return Promise.resolve()
   }
+
+  readonly efforts: EffortLevel[] = []
+  setThinkingLevel(level: EffortLevel): void { this.efforts.push(level) }
 
   dispose(): Promise<void> {
     this.disposed = true

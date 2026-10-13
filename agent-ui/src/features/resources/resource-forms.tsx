@@ -151,7 +151,7 @@ function McpEditorForm({ query, projects, detail, open, onOpenChange, onSaved }:
     <form className="space-y-4" onChange={clearTestResult} onSubmit={(event) => { event.preventDefault(); void submit("save") }}>
       {!detail && <ResourceScopeField target={scopeTarget} customDirectory={customDirectory} projects={projects} disabled={Boolean(busy)} onTargetChange={(value) => { setScopeTarget(value); clearTestResult() }} onDirectoryChange={(value) => { setCustomDirectory(value); clearTestResult() }} />}
       <div className="grid gap-4 sm:grid-cols-2"><FormField label={t("resources.name")}><Input value={name} onChange={(event) => setName(event.target.value)} required disabled={Boolean(detail)} autoComplete="off" /></FormField>
-        <FormField label={t("resources.transport")}><ResourceCombobox value={transport} disabled={advanced || Boolean(busy)} onValueChange={(value) => { setTransport(value); clearTestResult() }} options={MCP_TRANSPORTS} /></FormField></div>
+        <FormField label={t("resources.transport")}><ResourceCombobox value={transport} disabled={advanced || Boolean(busy)} onValueChange={(value) => { setTransport(value); clearTestResult() }} options={query.harness === "pi" ? MCP_TRANSPORTS.filter((item) => item.value !== "sse") : MCP_TRANSPORTS} /></FormField></div>
       {!advanced && (transport === "stdio" ? <>
         <FormField label={t("resources.command")}><Input value={command} onChange={(event) => setCommand(event.target.value)} placeholder="npx" required autoComplete="off" /></FormField>
         <FormField label={t("resources.commandArgs")}><Input className="font-mono text-xs" value={args} onChange={(event) => setArgs(event.target.value)} spellCheck={false} /></FormField>

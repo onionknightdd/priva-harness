@@ -31,7 +31,7 @@ describe('agent resource HTTP endpoints', () => {
     harness = new AgentHarness({ providers: { claude: provider, pi: new FakeAgentProvider('pi', []) }, cwd: root, liveRuns: new LiveRunRegistry() })
     const services = createTestAgentServices(join(root, 'runtime'))
     vi.spyOn(services.modelProfileService, 'resolve').mockResolvedValue({
-      profile: { id: 'fixture', label: 'Fixture', baseUrl: 'https://fixture.invalid', authToken: 'fixture', defaultModel: 'fixture/model', imageUnderstandingModel: null, imageGenerationModel: null, imageEditModel: null, modelCapabilities: { imageUnderstanding: [], imageGeneration: [], imageEdit: [] } },
+      profile: { id: 'fixture', label: 'Fixture', baseUrl: 'https://fixture.invalid', authToken: 'fixture', defaultModel: 'fixture/model', imageUnderstandingModel: null, imageGenerationModel: null, imageEditModel: null, classifierApi: null, classifierModel: null, classifierProfileId: null, modelCapabilities: { imageUnderstanding: [], imageGeneration: [], classification: [], imageEdit: [] } },
       model: 'fixture-model', modelId: 'fixture/model', capabilities: { context: null },
     })
     service = new LocalResourceService({ activeCwd: root, claudeDir, claudeConfigFilePath: join(claudeDir, '.claude.json'), piDir, discoverProjects: () => Promise.resolve([]) })

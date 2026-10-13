@@ -17,9 +17,8 @@ await mkdir(cwd)
 const session = await new CodingAgentSessionFactory(join(root, 'agent')).open({
   cwd, provider: 'pi', model: 'gpt-5.4', baseUrl: 'http://127.0.0.1:1/v1', authToken: 'fixture',
 }, { kind: 'new', provider: 'pi' })
-const usage = () => session.getContextUsage?.()
+const usage = () => session.getContextUsage()
 const select = async (model: string, window: 200000 | 1000000) => {
-  if (!session.setRunModel) throw new Error('Missing model configuration method')
   await session.setRunModel(model, window)
 }
 try {

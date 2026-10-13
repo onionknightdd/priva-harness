@@ -19,6 +19,7 @@ export interface TerminalStatus {
   readonly model: string
   readonly cwd: string
   readonly effort?: EffortLevel
+  readonly effortLevels?: readonly EffortLevel[]
   readonly profileId?: string
   readonly context: ContextUsage
   readonly costUsd?: number
@@ -26,6 +27,7 @@ export interface TerminalStatus {
 }
 
 export interface TerminalActivity {
+  readonly runId?: string
   readonly sessionId: string
   readonly instanceId: string
   readonly event: AgentEvent

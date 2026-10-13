@@ -1,41 +1,28 @@
-import { createRequire } from 'node:module'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
-
-import { DefaultPackageManager, DefaultResourceLoader, type ExtensionFactory, type EventBus, type SettingsManager } from '@earendil-works/pi-coding-agent'
-import { createJiti } from 'jiti'
-import { loadMcpConfig } from 'pi-mcp-adapter/config'
-import type { McpConfig } from 'pi-mcp-adapter/types'
+import { createMcpExtension, createToolSearchExtension, DefaultPackageManager, DefaultResourceLoader, type ExtensionFactory, type EventBus, type InlineExtension, type SettingsManager } from '@earendil-works/pi-coding-agent'
+import { assertNativePiMcpConfiguration } from '../../pi-config.js'
 import { piMemoryModule, piSubagentFactory, piCodeRoot, subagentsRoot } from './pi-agent-extensions.js'
+import { createProductCodemodeExtension } from './pi-codemode-extension.js'
 
-const require = createRequire(import.meta.url)
-const adapterEntry = require.resolve('pi-mcp-adapter')
-const adapterRoot = dirname(adapterEntry)
-// The adapter ships TS for Pi's source loader; the production Node entry must support it too.
-const jiti = createJiti(import.meta.url, {
-  alias: {
-    '@earendil-works/pi-ai/compat': fileURLToPath(import.meta.resolve('@earendil-works/pi-ai/compat')),
-    '@earendil-works/pi-tui': fileURLToPath(import.meta.resolve('@earendil-works/pi-tui')),
-    '@earendil-works/pi-coding-agent': fileURLToPath(import.meta.resolve('@earendil-works/pi-coding-agent')),
-    'typebox/value': require.resolve('typebox/value'),
-    typebox: require.resolve('typebox'),
-  },
-})
-let adapter: Promise<{ createMcpAdapter: (options: { config: McpConfig }) => ExtensionFactory }> | undefined
-
-export async function createPiResourceLoader(cwd: string, agentDir: string, settingsManager: SettingsManager, eventBus?: EventBus): Promise<DefaultResourceLoader> {
-  adapter ??= jiti.import(adapterEntry)
-  const { createMcpAdapter } = await adapter
+export async function createPiResourceLoader(cwd: string, agentDir: string, settingsManager: SettingsManager, eventBus?: EventBus, hostExtensions: InlineExtension[] = []): Promise<DefaultResourceLoader> {
+  const configured = [...settingsManager.getExtensionPaths(), ...settingsManager.getPackages().map((entry) => typeof entry === 'string' ? entry : entry.source)]
+  if (configured.some((entry) => /(?:^|[/\\:]|npm:)pi-mcp-adapter(?:[/\\@]|$)/u.test(entry))) throw new Error('Remove pi-mcp-adapter from Pi settings before starting native MCP; the adapter replaces native /mcp support')
   const manager = new DefaultPackageManager({ cwd, agentDir, settingsManager })
   const resolved = await manager.resolve()
-  // Filter before loading: filtering afterward would already execute a second adapter instance.
-  const extensionPaths = resolved.extensions.filter((item) => item.enabled && !isMcpAdapter(item.path, item.metadata.source)
-    && !isHostAgentExtension(item.path, item.metadata.source)).map((item) => item.path)
+  const extensionPaths = resolved.extensions.filter((item) => item.enabled && !isHostAgentExtension(item.path, item.metadata.source)).map((item) => item.path)
   const memory = await piMemoryModule(cwd)
   const settings = { ...settingsManager.getGlobalSettings(), ...(settingsManager.isProjectTrusted() ? settingsManager.getProjectSettings() : {}) } as Record<string, unknown>
   const memoryEnabled = memory.autoMemoryEnabled(settings['autoMemoryEnabled'], { CLAUDE_CODE_DISABLE_AUTO_MEMORY: process.env['PI_CODE_DISABLE_AUTO_MEMORY'] })
+  const nativeMcp: ExtensionFactory = async (api) => {
+    // Factories run again on /reload, before native MCP can connect these files.
+    await assertNativePiMcpConfiguration(cwd, agentDir, settingsManager.isProjectTrusted())
+    await createMcpExtension()(api)
+  }
+  await assertNativePiMcpConfiguration(cwd, agentDir, settingsManager.isProjectTrusted())
   const extensionFactories = [
-    { name: 'pi-mcp-adapter', factory: createMcpAdapter({ config: loadMcpConfig(join(agentDir, 'mcp.json'), cwd) }) },
+    ...hostExtensions,
+    { name: 'codemode', factory: createProductCodemodeExtension() },
+    { name: 'tool_search', factory: createToolSearchExtension() },
+    { name: 'mcp', factory: nativeMcp },
     { name: '@tintinweb/pi-subagents', factory: await piSubagentFactory(cwd) },
     ...(memoryEnabled ? [{ name: 'pi-code-memory', factory: memory.default }] : []),
   ]
@@ -43,7 +30,6 @@ export async function createPiResourceLoader(cwd: string, agentDir: string, sett
     cwd, agentDir, settingsManager, ...(eventBus ? { eventBus } : {}),
     noExtensions: true,
     additionalExtensionPaths: extensionPaths,
-    additionalSkillPaths: [join(adapterRoot, 'skills')],
     extensionFactories,
   })
   await loader.reload()
@@ -56,8 +42,4 @@ function isHostAgentExtension(path: string, source: string): boolean {
   return path.startsWith(subagentsRoot) || path.startsWith(piCodeRoot)
     || /(?:^|[/\\])(?:pi-code|@tintinweb[/\\]pi-subagents)(?:[/\\]|$)/u.test(path)
     || /^npm:(?:pi-code|@tintinweb\/pi-subagents)(?:@|$)/u.test(source)
-}
-
-function isMcpAdapter(path: string, source: string): boolean {
-  return path === adapterEntry || /(?:^|[/\\])pi-mcp-adapter(?:[/\\]|$)/u.test(path) || /^npm:pi-mcp-adapter(?:@|$)/u.test(source)
 }
