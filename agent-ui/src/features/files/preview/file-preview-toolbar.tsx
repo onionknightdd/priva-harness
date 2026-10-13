@@ -22,13 +22,14 @@ import {
   TabsTrigger,
 } from "@/components/assistant-ui/tabs"
 import { OverflowMarquee } from "@/components/motion/overflow-marquee"
+import {
+  Tabs as PreviewModeTabs,
+  TabsList as PreviewModeTabsList,
+  TabsTrigger as PreviewModeTabsTrigger,
+} from "@/components/motion/tabs"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
-import {
-  ToggleGroup,
-  ToggleGroupItem,
-} from "@/components/ui/toggle-group"
 import {
   TooltipHint,
   Tooltip,
@@ -91,6 +92,7 @@ function animateControl(control: HTMLButtonElement) {
 
 export function FilePreviewToolbar({
   activeFile,
+  agentAssistVisible,
   compact = false,
   expanded,
   files,
@@ -106,6 +108,7 @@ export function FilePreviewToolbar({
   editAvailable,
 }: {
   activeFile: PreviewFile | null
+  agentAssistVisible: boolean
   compact?: boolean
   expanded: boolean
   files: PreviewFile[]
@@ -398,65 +401,76 @@ export function FilePreviewToolbar({
           data-file-preview-controls
           className="file-preview-toolbar__controls flex shrink-0 items-center gap-1"
         >
-          <ToggleGroup
-            aria-label={t("filePreview.modeLabel")}
-            value={mode ? [mode] : []}
-            onValueChange={(values) => {
-              const nextMode = values[0] as
-                | FilePreviewMode
-                | undefined
-
-              if (nextMode) {
+          <PreviewModeTabs
+            variant="segment"
+            value={mode ?? ""}
+            onValueChange={(nextMode) => {
+              if (
+                nextMode === "source" ||
+                nextMode === "render" ||
+                nextMode === "edit"
+              ) {
                 onModeChange(nextMode)
               }
             }}
-            variant="outline"
-            size="sm"
-            spacing={0}
+            className="shrink-0"
           >
-            <TooltipHint content={
-                sourceAvailable
-                  ? t("filePreview.source")
-                  : t("filePreview.sourceUnavailable")
-              }>
-              <ToggleGroupItem
-                value="source"
-                disabled={!sourceAvailable}
-                aria-label={t("filePreview.source")}
-                className="px-2 text-xs font-normal"
+            <PreviewModeTabsList
+              aria-label={t("filePreview.modeLabel")}
+              className="h-8 bg-tabs-background"
+            >
+              <TooltipHint
+                content={
+                  sourceAvailable
+                    ? t("filePreview.source")
+                    : t("filePreview.sourceUnavailable")
+                }
               >
-                {t("filePreview.source")}
-              </ToggleGroupItem>
-            </TooltipHint>
-            <TooltipHint content={
-                renderAvailable
-                  ? t("filePreview.preview")
-                  : t("filePreview.previewUnavailable")
-              }>
-              <ToggleGroupItem
-                value="render"
-                disabled={!renderAvailable}
-                aria-label={t("filePreview.preview")}
-                className="px-2 text-xs font-normal"
+                <PreviewModeTabsTrigger
+                  value="source"
+                  disabled={!sourceAvailable}
+                  aria-label={t("filePreview.source")}
+                  className="h-7 px-2 py-0 text-xs font-normal"
+                >
+                  {t("filePreview.source")}
+                </PreviewModeTabsTrigger>
+              </TooltipHint>
+              <TooltipHint
+                content={
+                  renderAvailable
+                    ? t("filePreview.preview")
+                    : t("filePreview.previewUnavailable")
+                }
               >
-                {t("filePreview.preview")}
-              </ToggleGroupItem>
-            </TooltipHint>
-            <TooltipHint content={
-                editAvailable
-                  ? t("filePreview.edit")
-                  : t("filePreview.editUnavailable")
-              }>
-              <ToggleGroupItem
-                value="edit"
-                disabled={!editAvailable}
-                aria-label={t("filePreview.edit")}
-                className="px-2 text-xs font-normal"
-              >
-                {t("filePreview.edit")}
-              </ToggleGroupItem>
-            </TooltipHint>
-          </ToggleGroup>
+                <PreviewModeTabsTrigger
+                  value="render"
+                  disabled={!renderAvailable}
+                  aria-label={t("filePreview.preview")}
+                  className="h-7 px-2 py-0 text-xs font-normal"
+                >
+                  {t("filePreview.preview")}
+                </PreviewModeTabsTrigger>
+              </TooltipHint>
+              {agentAssistVisible && (
+                <TooltipHint
+                  content={
+                    editAvailable
+                      ? t("filePreview.edit")
+                      : t("filePreview.editUnavailable")
+                  }
+                >
+                  <PreviewModeTabsTrigger
+                    value="edit"
+                    disabled={!editAvailable}
+                    aria-label={t("filePreview.edit")}
+                    className="h-7 px-2 py-0 text-xs font-normal"
+                  >
+                    {t("filePreview.edit")}
+                  </PreviewModeTabsTrigger>
+                </TooltipHint>
+              )}
+            </PreviewModeTabsList>
+          </PreviewModeTabs>
 
           <Tooltip>
             <TooltipTrigger

@@ -31,9 +31,14 @@ export function canRenderFile(file: PreviewFile | null) {
   return Boolean(file?.renderKind)
 }
 
+export function canShowAgentAssist(file: PreviewFile | null) {
+  return Boolean(file && /\.(pptx|docx|html|htm|xhtml|pdf)$/i.test(file.name))
+}
+
 export function canEditHtmlFile(file: PreviewFile | null) {
   return (
     file?.renderKind === "html" &&
+    /\.(html|htm|xhtml)$/i.test(file.name) &&
     typeof file.content === "string" &&
     file.status !== "loading" &&
     file.status !== "error"

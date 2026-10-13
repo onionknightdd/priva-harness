@@ -1,8 +1,9 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
-import { appendQuotedDraft, readMessageSelection, selectionActionsPosition } from "../../../src/features/agent-message/quote-selection.ts"
+import { appendQuotedDraft, readMessageSelection } from "../../../src/features/agent-message/quote-selection.ts"
 import { parseMessageSelections, serializeMessageSelections } from "../../../src/features/agent-message/message-select-action.ts"
+import { selectionActionsPosition } from "../../../src/lib/selection-actions-position.ts"
 
 test("quoting preserves a draft and keeps all selected lines in one Markdown quote", () => {
   assert.equal(appendQuotedDraft("已有草稿  \n", " 第一行\r\n\r\n第二行 "), "已有草稿\n\n> 第一行\n>\n> 第二行\n\n")

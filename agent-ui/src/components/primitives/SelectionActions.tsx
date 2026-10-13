@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils"
 // Adapted from https://www.beautifului.dev/r/selection-actions.json.
 // Compact the pill's padding while retaining 28px controls.
 export default function SelectionActions({ actions, label, instant = false }: {
-  actions: { id: string; label: string; icon: ReactNode; onSelect: () => void }[]
+  actions: { id: string; label: string; icon: ReactNode; onSelect?: () => void }[]
   label: string
   instant?: boolean
 }) {
@@ -20,7 +20,7 @@ export default function SelectionActions({ actions, label, instant = false }: {
       aria-label={label}
       aria-hidden={!present}
       inert={!present}
-      className="flex h-8 w-fit max-w-[calc(100vw-16px)] items-center gap-0.5 rounded-full bg-popover p-0.5 font-sans text-popover-foreground shadow-modal ring-1 ring-foreground/10"
+      className="flex h-8 w-fit max-w-[calc(100vw-16px)] items-center gap-0.5 rounded-full bg-popover p-0.5 font-sans text-popover-foreground shadow-selection-actions ring-1 ring-foreground/10"
       onMouseDown={(event) => event.preventDefault()}
       onKeyDown={(event) => {
         const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button"))

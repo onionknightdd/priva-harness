@@ -71,7 +71,7 @@ primitives/radix/switch.tsx -> Radix UI + Motion
 位移与按压伸展动画。受控开关以调用方的 `checked` 为准，包括等待服务端保存的状态。
 旧 `ui/switch.tsx` 已移除，不建立兼容转发入口。
 
-文件预览的 ToggleGroup 表达多项模式选择，主题、语言和工作区按钮也有各自用途；
+文件预览的 Tabs 表达多项模式选择，主题、语言和工作区按钮也有各自用途；
 它们不属于本次统一的三个布尔开关调用点。新建同类布尔开关使用上述入口。
 
 安装命令（在 `agent-ui/`）：
@@ -1208,6 +1208,81 @@ Tree | Preview -> Tree      | Preview -> Tree fills the pane
 按用户要求不进行浏览器验证，运行下文文件树 / 预览和 Agent message 相关测试、
 `npm run lint` 和 `npm run build`。
 
+### 文件预览模式 Tabs
+
+2026-10-14：按用户指定，“源码 / 预览 / Agent协助”统一使用 `@beui/tabs`，入口为
+`components/motion/tabs.tsx`。共享 `FilePreviewToolbar` 使用独立受控 Tabs，
+以 `source / render / edit` 切换模式；外层文件标签继续按文件 ID 管理。
+Agent UI 文件浏览器与 Agent Workspace 文件浏览器共用此实现。
+“Agent协助”（英文 `Agent Assist`）沿用内部 `edit` 模式及现有 HTML 可视化编辑功能。
+仅活动文件的扩展名为 `.pptx`、`.docx`、`.html`、`.htm`、`.xhtml` 或 `.pdf` 时
+挂载此 Tab，扩展名判断不区分大小写；其他文件和未选文件时不显示。
+HTML 系列加载成功后可以使用现有编辑功能；PPTX / DOCX / PDF 按用户确认暂时禁用，
+提示“此文件的Agent协助暂未开放”，不加载 HTML 编辑器。
+
+```text
+FileBrowserPage (full / compact)
+  -> RichFilePreview
+     -> FilePreviewToolbar
+        +-- file tabs: file ID
+        +-- BeUI mode tabs: source / render / edit
+             edit visibility: selected .pptx/.docx/.html/.htm/.xhtml/.pdf
+             edit enabled: loaded HTML only
+```
+
+模式使用 BeUI `segment` 样式，列表高 32px，标签高 28px，文字使用 12px 正常字重；
+底色读取 `tabs-background`，圆角分段选中指示器读取 `primary`。保留禁用模式及其 Tooltip，
+方向键 / Home / End 切换时跳过禁用项，列表仅保留一个 Tab 焦点入口，焦点框在内部。
+指示器移动使用 BeUI 的 Motion 弹簧，减少动态效果时立即切换。窄栏沿用已有两行工具栏。
+
+XLSX / CSV 底部工作表标签也使用同一 BeUI Tabs，选择 `underline` 样式。
+列表与标签高 32px，文字使用 12px 正常字重；保留受控工作表切换与底部固定位置，
+长标签通过 BeUI 自带的横向滚动与边缘按钮浏览。
+
+```text
+Preview toolbar: [Source | Preview | Agent Assist] -> BeUI segment
+Workbook footer: Sheet1  Sheet2            -> BeUI underline
+                 ------
+```
+
+安装命令（在 `agent-ui/`）：
+
+```sh
+npx shadcn add @beui/tabs
+```
+
+安装时保留现有 `lib/ease.ts` 和 `lib/utils.ts`，避免覆盖项目共享配置；
+本地 Tabs 补充键盘导航、禁用外观和可见焦点，升级时保留这些行为。
+
+### 文件选区操作
+
+2026-10-14：按用户确认的范围与布局，没有“Agent协助”Tab 且能显示源码的文件，
+在源码中选中非空文字后显示“询问Agent”（英文 `Ask Agent`）；CSV 源码不显示。
+XLSX / CSV 在表格中完成用户选区后显示同一操作；文件加载时的默认 A1 不触发。
+HTML / HTM / XHTML 等带“Agent协助”Tab 的文件不显示源码选区操作。
+
+```text
+Source without Agent Assist tab (except CSV)
+  -> native text selection --+
+XLSX / CSV                  |
+  -> user-selected cells ---+-> (MessageCircleCode icon | Ask Agent)
+                                  click -> no action
+```
+
+文件与消息共用 `components/primitives/selection-actions-popover.tsx`、
+`SelectionActions` 和 `lib/selection-actions-position.ts`，使用相同的
+`MessageCircleCode` 图标、32px 胶囊、28px 按钮、视口避让和动效。
+胶囊使用共享 `shadow-selection-actions` token，在下方形成轻柔阴影：
+2px / 4px 的边缘阴影与 6px / 12px 的下方扩散阴影，浅色透明度为 5% / 10%，
+深色为 12% / 24%，保留原有细轮廓。
+文件浮层锚定实际选择的最后一个目标：源码使用文字选区的焦点终点，
+XLSX / CSV 使用最后选择的单元格或行列目标，正向和反向拖选都跟随操作终点。
+操作优先位于该目标下方，底部不足时翻到目标上方；窄屏保持同样布局并限制在视口内。
+文件版按钮不配置操作回调，点击不插入聊天、不发送请求、不修改文件或选区。
+Tab 可进入浮层，Escape、滚动、缩放、切表、切换文件或隐藏预览时关闭。
+XLSX / CSV 使用库的公开 `getCellViewportRect` 获取最后目标的可见框，
+用户拖选期间隐藏浮层，结束后显示；保留原有选区与公式栏逻辑。
+
 ### Office 文件预览
 
 2026-10-13：当前支持的 DOCX / DOTX、XLSX 系列、PPTX 系列和 CSV 预览统一使用
@@ -2102,7 +2177,7 @@ Context Usage               ×
 | Button / Icon button | [ui/button](../agent-ui/src/components/ui/button.tsx)，shadcn 风格 + Base UI | 6 种 variant；default 高 36px、sm 32px、xs 24px；颜色过渡、按压缩放 | 设置、资源页、工具栏、工作区按钮 |
 | 特殊动作按钮 | [motion/action-swap](../agent-ui/src/components/motion/action-swap.tsx)、[action-swap-roll](../agent-ui/src/components/motion/action-swap-roll.tsx)，本地 Motion | 图标/文案交换；另有 `surfaces.tsx` 的圆形 ghost/ink 样式 | 发送/停止、工作状态、复制按钮 |
 | Toggle | [ui/toggle](../agent-ui/src/components/ui/toggle.tsx)，Base UI Toggle | 两态按压按钮；default / outline，选中态 `bg-muted` | 当前仅 `toggleVariants` 被 ToggleGroup 复用，没有独立 `<Toggle>` 业务实例 |
-| ToggleGroup | [ui/toggle-group](../agent-ui/src/components/ui/toggle-group.tsx)，Base UI ToggleGroup + Toggle | 文件工具栏采用 `outline`、`sm`、`spacing={0}` 的连接分段按钮 | 文件源码 / 预览 / 编辑模式 |
+| ToggleGroup | [ui/toggle-group](../agent-ui/src/components/ui/toggle-group.tsx)，Base UI ToggleGroup + Toggle | `outline`、`sm` 的分段按钮 | 图片工具的展示模式与原图选择 |
 | Switch | [animate-ui/components/radix/switch](../agent-ui/src/components/animate-ui/components/radix/switch.tsx)，Radix UI + Motion | 默认轨道 32 × 20px / 滑块 16px；Skill 小号轨道 24 × 15px / 滑块 11px；按压伸展，spring `stiffness: 300 / damping: 25`；支持 reduced motion | Agent 输入建议、模型默认项、Skill 启停，共 3 处 |
 | 主题 / 语言 / 工作区切换 | [ThemeToggle](../agent-ui/src/features/sidebar/footer/theme-toggle.tsx)、[LanguageToggle](../agent-ui/src/features/sidebar/footer/language-toggle.tsx)、[WorkspaceToggle](../agent-ui/src/features/workspace/workspace-toggle.tsx) | 分别是 Animate UI 主题按钮、shadcn Button + GSAP、Button + Motion；名称带 toggle，但并未使用通用 Toggle 或 Switch | 全局模式与面板开关 |
 | Input / Textarea | [ui/input](../agent-ui/src/components/ui/input.tsx)、[ui/textarea](../agent-ui/src/components/ui/textarea.tsx) | Input 基于 Base UI，Textarea 是本地样式的原生 textarea；共享 input / ring / destructive token | 搜索、名称、配置文本 |
@@ -2115,7 +2190,7 @@ Context Usage               ×
 | FileUpload / Dropzone | [ui/file-upload](../agent-ui/src/components/ui/file-upload.tsx)、[FileUploadDropzone1](../agent-ui/src/components/file-upload-dropzone-1.tsx) | Dice UI / shadcnblocks 来源；虚线投放区、文件列表、校验反馈 | Skill 上传；聊天和文件浏览器另用隐藏的原生 file input 接入上传逻辑 |
 
 Toggle 用于保持按压状态的工具按钮，Switch 表达布尔开关；切换内容面板时使用
-Tabs，选择预览操作模式时可使用 ToggleGroup。不要只根据组件名字包含“toggle”
+Tabs，文件的源码 / 预览 / Agent协助模式使用上述 BeUI Tabs。不要只根据组件名字包含“toggle”
 就把这些交互当作同一种组件。语义可参照
 [shadcn Toggle](https://ui.shadcn.com/docs/components/base/toggle) 和
 [Switch](https://ui.shadcn.com/docs/components/base/switch)。
@@ -2158,8 +2233,9 @@ App TooltipProvider -> 首次悬浮 1s -> 连续切换 0ms
 
 | 组件类型 | 当前入口 / 来源 | 当前样式和反馈 | 代表场景 |
 | --- | --- | --- | --- |
-| Tabs | [assistant-ui/tabs](../agent-ui/src/components/assistant-ui/tabs.tsx)，Base UI + Motion | default / line / ghost / pills / outline 共享选中/悬浮滑块；`text` 变体列表无底色、无悬浮滑块，仅选中项带浅色滑块；属于本地通用封装 | 侧栏模式、文件标签、工作表、工作流详情、用量面板与热力图模式切换 |
+| Tabs | [assistant-ui/tabs](../agent-ui/src/components/assistant-ui/tabs.tsx)，Base UI + Motion | default / line / ghost / pills / outline 共享选中/悬浮滑块；`text` 变体列表无底色、无悬浮滑块，仅选中项带浅色滑块；属于本地通用封装 | 侧栏模式、文件标签、工作流详情、用量面板与热力图模式切换 |
 | 资源 Tabs | [animate-ui/components/radix/tabs](../agent-ui/src/components/animate-ui/components/radix/tabs.tsx)，Radix + Motion | 24px 标签栏、共享底色和滑块；键盘及减少动态效果时立即切换 | Skill 文件预览、MCP 工具 / 提示词 / 资源 / 配置 |
+| 文件预览 Tabs | [motion/tabs](../agent-ui/src/components/motion/tabs.tsx)，BeUI + Motion | 32px 列表；模式使用 segment，工作表使用 underline；键盘导航、禁用提示与减少动态效果 | 文件浏览器 / Agent Workspace 的源码、预览、Agent协助模式及 XLSX / CSV 工作表切换 |
 | ExpandableTabs | [motion/expandable-tabs](../agent-ui/src/components/motion/expandable-tabs.tsx)，BE UI 衍生 | 胶囊图标展开标签；固定 26px 外框 / 18px 内容圆角、本地 tab 语义和动画 | Workspace 模块切换 |
 | Sidebar | [ui/sidebar](../agent-ui/src/components/ui/sidebar.tsx)，shadcn 衍生组合 | `sidebar-*` token；Base UI Sheet 处理移动端，GSAP 调整桌面宽度，Motion 处理行高亮 | 主侧栏、工作区侧栏 |
 | Breadcrumb | [ui/breadcrumb](../agent-ui/src/components/ui/breadcrumb.tsx) | shadcn 风格路径层级，Lucide 分隔图标 | 顶栏、设置导航、文件路径 |

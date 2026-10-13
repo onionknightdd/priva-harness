@@ -9,6 +9,7 @@ import {
 import {
   canEditHtmlFile,
   canRenderFile,
+  canShowAgentAssist,
   canShowFileSource,
   type FilePreviewMode,
   type PreviewFile,
@@ -19,6 +20,7 @@ import {
 } from "@/features/files/selection"
 import { cn } from "@/lib/utils"
 
+import { SourceSelectionActions } from "../selection/source-selection-actions"
 import { downloadTextFile } from "./download-text-file"
 import { FilePreviewToolbar } from "./file-preview-toolbar"
 import { PreviewRendererBoundary } from "./preview-renderer-boundary"
@@ -27,6 +29,7 @@ import { HtmlRenderer } from "./renderers/html-renderer"
 import { ImageRenderer } from "./renderers/image-renderer"
 import { JsonRenderer } from "./renderers/json-renderer"
 import { MarkdownRenderer } from "./renderers/markdown-renderer"
+import { isCsvSource } from "./renderers/spreadsheet-source"
 import { SourcePreview } from "./source-preview"
 import { UnsupportedPreview } from "./unsupported-preview"
 
@@ -210,7 +213,13 @@ function FilePreviewPanel({
         ) : file.status === "error" ? (
           <PreviewRequestState error={file.error} reason={file.previewError} />
         ) : !active ? null : mode === "source" && file.content !== undefined ? (
-          <SourcePreview content={file.content} fileName={file.name} />
+          !canShowAgentAssist(file) && !isCsvSource(file.name, file.mediaType) ? (
+            <SourceSelectionActions>
+              <SourcePreview content={file.content} fileName={file.name} />
+            </SourceSelectionActions>
+          ) : (
+            <SourcePreview content={file.content} fileName={file.name} />
+          )
         ) : mode === "edit" && file.content !== undefined ? (
           <PreviewRendererBoundary key={`${file.id}:html-edit`}>
             <React.Suspense fallback={<PreviewRequestState loading />}>
@@ -279,6 +288,7 @@ export function RichFilePreview({
   const activeMode = getAvailableMode(activeFile, preferredMode)
   const sourceAvailable = canShowFileSource(activeFile)
   const renderAvailable = canRenderFile(activeFile)
+  const agentAssistVisible = canShowAgentAssist(activeFile)
   const editAvailable = canEditHtmlFile(activeFile)
 
   const handleModeChange = (nextMode: FilePreviewMode) => {
@@ -361,6 +371,7 @@ export function RichFilePreview({
         >
           <FilePreviewToolbar
             activeFile={activeFile}
+            agentAssistVisible={agentAssistVisible}
             compact={compact}
             editAvailable={editAvailable}
             expanded={expanded}

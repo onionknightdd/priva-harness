@@ -1,15 +1,13 @@
 "use client"
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
-import { createPortal } from "react-dom"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { MessageCircleCodeIcon } from "lucide-react"
-import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react"
+import { useReducedMotionConfig } from "motion/react"
 import { useTranslation } from "react-i18next"
 
-import SelectionActions from "@/components/primitives/SelectionActions"
-import { EASE_OUT } from "@/lib/ease"
+import { SelectionActionsPopover } from "@/components/primitives/selection-actions-popover"
 
-import { readMessageSelection, selectionActionsPosition } from "../quote-selection"
+import { readMessageSelection } from "../quote-selection"
 import type { OnQuoteInChat } from "../selection-actions-context"
 
 export function MessageSelectionActions({ onAction }: { onAction: OnQuoteInChat }) {
@@ -21,10 +19,7 @@ export function MessageSelectionActions({ onAction }: { onAction: OnQuoteInChat 
   const returnFocus = useRef<HTMLElement | null>(null)
   const [selection, setSelection] = useState<ReturnType<typeof readMessageSelection>>(null)
   const [keyboard, setKeyboard] = useState(false)
-  const [mounted, setMounted] = useState(false)
   const instant = reduceMotion || keyboard
-
-  useEffect(() => setMounted(true), [])
 
   const syncSelection = useCallback(() => {
     if (document.querySelector('[data-slot="context-menu-content"]')) {
@@ -37,16 +32,6 @@ export function MessageSelectionActions({ onAction }: { onAction: OnQuoteInChat 
     returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     setSelection(readMessageSelection())
   }, [])
-
-  useLayoutEffect(() => {
-    const menu = menuRef.current
-    if (!selection || !menu) return
-    const position = selectionActionsPosition(selection.rect, { width: menu.offsetWidth, height: menu.offsetHeight },
-      { width: window.innerWidth, height: window.innerHeight })
-    menu.style.left = `${position.left}px`
-    menu.style.top = `${position.top}px`
-    menu.style.transformOrigin = position.placeAbove ? "center bottom" : "center top"
-  }, [selection, t])
 
   useEffect(() => {
     const cancelFrame = () => {
@@ -82,7 +67,7 @@ export function MessageSelectionActions({ onAction }: { onAction: OnQuoteInChat 
     const onKeyDown = (event: KeyboardEvent) => {
       setKeyboard(true)
       const menu = menuRef.current
-      if (!menu) return
+      if (!menu || menu.querySelector('[role="toolbar"][inert]')) return
       if (event.key === "Escape") {
         if (menu.contains(document.activeElement)) returnFocus.current?.focus()
         window.getSelection()?.removeAllRanges()
@@ -122,26 +107,16 @@ export function MessageSelectionActions({ onAction }: { onAction: OnQuoteInChat 
     setSelection(null)
   }
 
-  if (!mounted) return null
-  return createPortal(
-    <AnimatePresence>
-      {selection ? (
-        <motion.div
-          key="message-selection-actions"
-          ref={menuRef}
-          data-message-selection-actions
-          className="fixed z-50"
-          initial={instant ? false : { opacity: 0, transform: "translateY(4px) scale(0.96)" }}
-          animate={{ opacity: 1, transform: "translateY(0px) scale(1)" }}
-          exit={{ opacity: 0, transform: "translateY(2px) scale(0.98)", transition: { duration: instant ? 0 : 0.1, ease: EASE_OUT } }}
-          transition={{ duration: instant ? 0 : 0.16, ease: EASE_OUT }}
-        >
-          <SelectionActions label={t("agentMessage.quoteMenuLabel")} instant={instant} actions={[
-            { id: "quote", label: t("agentMessage.quoteSelection"), icon: <MessageCircleCodeIcon aria-hidden="true" />, onSelect: act },
-          ]} />
-        </motion.div>
-      ) : null}
-    </AnimatePresence>,
-    document.body,
+  return (
+    <SelectionActionsPopover
+      anchorRect={selection?.rect ?? null}
+      instant={instant}
+      menuRef={menuRef}
+      kind="message"
+      label={t("agentMessage.quoteMenuLabel")}
+      actions={[
+        { id: "quote", label: t("agentMessage.quoteSelection"), icon: <MessageCircleCodeIcon aria-hidden="true" />, onSelect: act },
+      ]}
+    />
   )
 }
