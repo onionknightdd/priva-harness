@@ -89,6 +89,7 @@ describe('resolveClaudeQueryOptions', () => {
     expect(options.env?.['CLAUDE_CODE_HARBOR_KITE']).toBe('1')
     expect(options.settings).toEqual(resolveClaudeQuerySettings(spec))
     expect(options.settings).toMatchObject({
+      enableAllProjectMcpServers: true,
       env: {
         ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic',
         ANTHROPIC_API_KEY: 'secret',

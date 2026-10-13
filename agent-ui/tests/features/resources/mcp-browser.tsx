@@ -23,16 +23,19 @@ const source: ResourceSource = { id: "global", harness: "claude", scope: "global
 const projects = ["/fixture/alpha", "/fixture/beta"]
 function server(name: string, origin: ResourceSource, enabled = true): McpDetail {
   const definition = { type: "http", url: `https://example.invalid/${name}/mcp` }
-  return { id: name, name, sourceId: origin.id, source: origin, enabled, transport: "http", target: definition.url, effective: null, override: false, headerCount: 0, definition, effectiveDefinition: definition }
+  return { id: name, name, sourceId: origin.id, source: origin, enabled, canToggle: origin.writable, disabledReason: origin.writable ? null : "Read-only fixture", transport: "http", target: definition.url, effective: null, override: false, headerCount: 0, definition, effectiveDefinition: definition }
 }
 const servers = [
   server("filesystem", source), server("documentation", source), server("disabled-server", { ...source, writable: false }, false),
   ...projects.map((cwd) => server(cwd.split("/").at(-1)! + "-server", { ...source, id: cwd, cwd, scope: "project", path: `${cwd}/.mcp.json` })),
 ]
 const capabilities: McpCapabilities = {
+  toolStates: [],
   tools: Array.from({ length: 16 }, (_, index) => ({ name: index === 0 ? "read_file" : `inspect_resource_${index}`, description: "Read project resources and inspect their contents.\nReturns structured data for the current workspace.", inputSchema: { type: "object", properties: { path: { type: "string" } } } })),
   prompts: [], resources: [{ name: "workspace", uri: "fixture://workspace", description: "Workspace metadata" }], serverVersion: "1.2.3", testedAt: "2026-09-10T00:00:00Z",
 }
+capabilities.toolStates = capabilities.tools.map((tool) => ({ name: String(tool.name), enabled: true, canToggle: true, disabledReason: null }))
+const toolStates = new Map(servers.map((server) => [server.id, structuredClone(capabilities.toolStates)]))
 const wait = (ms = 30) => new Promise((resolve) => setTimeout(resolve, ms))
 async function until(ready: () => unknown, message: string) {
   const start = performance.now()
@@ -45,6 +48,7 @@ const findButton = (label: string, scope: ParentNode = host) => Array.from(scope
 const selectTab = (key: string) => Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => visible(button) && button.textContent?.startsWith(i18n.t(`resources.${key}`)))!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
 const requests: { method: string; path: string; cwd: string | null }[] = []
 let failTest = false
+let failSave = false
 let copiedText = ""
 const originalFetch = window.fetch
 const probeTimers = new Map<number, () => void>()
@@ -70,7 +74,18 @@ window.fetch = async (input, init) => {
   }
   const found = servers.find((item) => item.id === url.pathname.split("/")[5])
   if (!found) return Response.json({ detail: "Unknown fixture request" }, { status: 404 })
-  if (url.pathname.endsWith("/capabilities")) return failTest ? Response.json({ detail: "Fixture connection failed" }, { status: 500 }) : Response.json(capabilities)
+  if (url.pathname.endsWith("/capabilities")) return failTest ? Response.json({ detail: "Fixture connection failed" }, { status: 500 }) : Response.json({ ...capabilities, toolStates: toolStates.get(found.id) })
+  if (method === "PATCH") {
+    if (failSave) return Response.json({ detail: "Fixture save failed" }, { status: 403 })
+    const input = JSON.parse(String(init?.body)) as { name?: string; enabled: boolean }
+    if (url.pathname.endsWith("/tools")) {
+      const state = toolStates.get(found.id)!.find((entry) => entry.name === input.name)!
+      state.enabled = input.enabled
+      return Response.json(state)
+    }
+    found.enabled = input.enabled
+    return Response.json(found)
+  }
   if (method !== "GET") return Response.json({ detail: "Fixture does not write real configuration" }, { status: 403 })
   return Response.json(found)
 }
@@ -85,7 +100,8 @@ document.querySelector<HTMLButtonElement>("#run")!.addEventListener("click", asy
   try {
     root.render(null)
     await until(() => !host.firstChild, "reset")
-    requests.length = 0; failTest = false
+    requests.length = 0; failTest = false; failSave = false
+    for (const server of servers) { server.enabled = server.id !== "disabled-server"; toolStates.set(server.id, structuredClone(capabilities.toolStates)) }
     await i18n.changeLanguage("en")
     root.render(<ResourceBrowser kind="mcp" harness="claude" />)
     await until(() => row("filesystem"), "initial list")
@@ -112,6 +128,11 @@ document.querySelector<HTMLButtonElement>("#run")!.addEventListener("click", asy
     check("details show the service target with the compact name hierarchy", host.querySelector("[data-mcp-metadata]")?.textContent?.includes(servers[0].target) && getComputedStyle(host.querySelector("[data-mcp-header] h2")!).fontSize === "16px")
     if (mobile) {
       check("mobile toolbar fits the viewport and provides all four tabs", !host.querySelector('[data-slot="resizable-panel"]') && host.scrollWidth <= host.clientWidth && host.querySelectorAll('[role="tab"]').length === 4)
+      await until(() => host.querySelector('[data-mcp-tool="read_file"]'), "mobile tool switches")
+      const toggle = findButton(i18n.t("resources.toolEnabled", { name: "read_file" }))
+      toggle.click()
+      await until(() => toggle.getAttribute("aria-checked") === "false" && !toggle.disabled, "mobile tool toggle")
+      check("mobile switches fit and disable tool tests", Math.round(toggle.getBoundingClientRect().width) === 24 && Math.round(toggle.getBoundingClientRect().height) === 15 && findButton(`${i18n.t("resources.testTool")}: read_file`).disabled && host.scrollWidth <= host.clientWidth)
       selectTab("configuration")
       await until(() => activePanel()?.textContent?.includes("example.invalid"), "mobile configuration")
       findButton(i18n.t("resources.back")).click()
@@ -127,6 +148,24 @@ document.querySelector<HTMLButtonElement>("#run")!.addEventListener("click", asy
     const firstTool = pane.querySelector("h3")!
     pane.scrollTop = 180
     const oldScroll = pane.scrollTop
+    const toolToggle = findButton(i18n.t("resources.toolEnabled", { name: "read_file" }))
+    const mutationCount = requests.filter((request) => request.method === "PATCH").length
+    toolToggle.click(); toolToggle.click()
+    await until(() => toolToggle.getAttribute("aria-checked") === "false" && !toolToggle.disabled, "tool save")
+    check("tool toggles save once and retain DOM and scroll", requests.filter((request) => request.method === "PATCH").length === mutationCount + 1 && pane.querySelector("h3") === firstTool && pane.scrollTop === oldScroll && findButton(`${i18n.t("resources.testTool")}: read_file`).disabled)
+    failSave = true; toolToggle.click()
+    await until(() => host.textContent?.includes("Fixture save failed") && !toolToggle.disabled, "failed save")
+    check("failed saves keep the previous tool choice and list", toolToggle.getAttribute("aria-checked") === "false" && pane.querySelector("h3") === firstTool && pane.scrollTop === oldScroll)
+    failSave = false
+    const serverToggle = findButton(i18n.t("resources.serverEnabled"))
+    serverToggle.click()
+    await until(() => serverToggle.getAttribute("aria-checked") === "false" && !serverToggle.disabled, "server off")
+    const stoppedAt = requests.length
+    advanceProbes(); await wait(180)
+    check("server off retains tools and pauses probes", pane.querySelector("h3") === firstTool && pane.scrollTop === oldScroll && toolToggle.disabled && requests.length === stoppedAt)
+    serverToggle.click()
+    await until(() => serverToggle.getAttribute("aria-checked") === "true" && !serverToggle.disabled && !toolToggle.disabled && host.querySelector('[data-mcp-status]')?.getAttribute("aria-busy") !== "true", "server restored")
+    check("server on preserves individual tool choices and group expansion", toolToggle.getAttribute("aria-checked") === "false" && pane.querySelector("h3") === firstTool && pane.scrollTop === oldScroll && Array.from(host.querySelectorAll('h2 [aria-expanded]')).map((item) => item.getAttribute("aria-expanded")).join() === "true,false,false")
     const beforeRetry = requests.length
     const statusDot = host.querySelector<HTMLElement>("[data-mcp-status]")!
     advanceProbes()
@@ -181,7 +220,7 @@ document.querySelector<HTMLButtonElement>("#run")!.addEventListener("click", asy
       await until(() => frame.contentDocument?.querySelector("#run"), "mobile fixture")
       frame.contentDocument!.querySelector<HTMLButtonElement>("#run")!.click()
       await until(() => /checks passed|FAIL/.test(frame.contentDocument!.querySelector("#results")!.textContent ?? ""), "mobile checks")
-      check("390px mobile search, tabs and back navigation pass", frame.contentDocument!.querySelector("#results")!.textContent?.includes("7 checks passed"))
+      check("390px mobile search, switches, tabs and back navigation pass", frame.contentDocument!.querySelector("#results")!.textContent?.includes("8 checks passed"))
     } finally { frame.remove() }
     await i18n.changeLanguage("zh-CN")
     await until(() => header.querySelector("h1")?.textContent === "MCP 服务", "Chinese header")

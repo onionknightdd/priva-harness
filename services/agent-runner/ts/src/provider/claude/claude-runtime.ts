@@ -392,6 +392,7 @@ export function resolveClaudeQuerySettings(
 ): Settings {
   return {
     crossSessionInbound: 'accept',
+    enableAllProjectMcpServers: true,
     skillOverrides: Object.fromEntries(
       CLAUDE_DISABLED_SKILLS.map((name) => [name, 'off' as const]),
     ),

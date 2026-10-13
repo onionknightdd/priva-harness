@@ -8,8 +8,8 @@ import { act, button, click, field, key, React, render, type } from "./resource-
 const hooks = registerHooks({ load: (url, context, nextLoad) => url.endsWith(".css") ? { format: "module", source: "export default {}", shortCircuit: true } : nextLoad(url, context) })
 after(() => hooks.deregister())
 const { ResourceDetailPane } = await import("../../../src/features/resources/resource-detail.tsx")
-const detail: McpDetail = { id: "server", name: "Example server", sourceId: "project", source: { id: "project", harness: "claude", scope: "project", origin: "settings", label: "Project", path: "/workspace/app/.mcp.json", cwd: "/workspace/app", writable: true, canAdd: true }, transport: "http", target: "https://example.invalid/mcp", enabled: true, effective: true, override: false, headerCount: 0, definition: { url: "https://example.invalid/mcp" }, effectiveDefinition: null }
-const capabilities: McpCapabilities = { tools: [{ name: "install", description: "Install packages", inputSchema: { type: "object", required: ["packages"], properties: { packages: { type: "array", items: { type: "string" } }, limit: { type: "integer", default: 3 } } } }], prompts: [], resources: [], serverVersion: "2.4.6", testedAt: new Date(0).toISOString() }
+const detail: McpDetail = { id: "server", name: "Example server", sourceId: "project", source: { id: "project", harness: "claude", scope: "project", origin: "settings", label: "Project", path: "/workspace/app/.mcp.json", cwd: "/workspace/app", writable: true, canAdd: true }, transport: "http", target: "https://example.invalid/mcp", enabled: true, canToggle: true, disabledReason: null, effective: true, override: false, headerCount: 0, definition: { url: "https://example.invalid/mcp" }, effectiveDefinition: null }
+const capabilities: McpCapabilities = { toolStates: [{ name: "install", enabled: true, canToggle: true, disabledReason: null }], tools: [{ name: "install", description: "Install packages", inputSchema: { type: "object", required: ["packages"], properties: { packages: { type: "array", items: { type: "string" } }, limit: { type: "integer", default: 3 } } } }], prompts: [], resources: [], serverVersion: "2.4.6", testedAt: new Date(0).toISOString() }
 const originalFetch = globalThis.fetch
 after(() => { globalThis.fetch = originalFetch })
 
@@ -45,5 +45,64 @@ test("MCP details detect status automatically, show metadata pills and run a typ
     assert.ok(field("packages").disabled)
     await act(async () => finish(Response.json({ content: [{ type: "text", text: "done" }] })))
     assert.equal(button("Run tool").disabled, false)
+  } finally { await page.close() }
+})
+
+test("server and tool switches retain inventory, block duplicate saves, and preserve state on failure", async () => {
+  let finish!: (response: Response) => void
+  const mutations: { url: string; body: { name?: string; enabled: boolean } }[] = []
+  globalThis.fetch = async (input, init) => {
+    if (!init?.method) return Response.json(capabilities)
+    mutations.push({ url: String(input), body: JSON.parse(String(init.body)) })
+    return new Promise((resolve) => { finish = resolve })
+  }
+  function Page() {
+    const [current, setCurrent] = React.useState(detail)
+    return <ResourceDetailPane kind="mcp" detail={current} query={{ harness: "claude", cwd: detail.source.cwd! }} file="SKILL.md" onChanged={() => assert.fail("Toggle must not remount the details")} onResourceUpdated={async (updated) => setCurrent(updated as McpDetail)} />
+  }
+  const page = await render(<Page />)
+  try {
+    const row = page.host.querySelector('[data-mcp-tool="install"]')!
+    const panel = row.closest<HTMLElement>('[role="tabpanel"]')!
+    panel.scrollTop = 120
+    const toggle = button("Enable tool: install")
+    await click(toggle)
+    await click(toggle)
+    assert.equal(mutations.length, 1)
+    assert.deepEqual(mutations[0].body, { name: "install", enabled: false })
+    assert.equal(toggle.disabled, true)
+    assert.equal(toggle.getAttribute("aria-checked"), "true")
+    await act(async () => finish(Response.json({ name: "install", enabled: false, canToggle: true, disabledReason: "Disabled here" })))
+    assert.equal(toggle.getAttribute("aria-checked"), "false")
+    assert.equal(button("Test tool: install").disabled, true)
+    assert.ok(page.host.textContent?.includes("0/1"))
+    assert.equal(page.host.querySelector('[data-mcp-tool="install"]'), row)
+    assert.equal(panel.scrollTop, 120)
+
+    await click(toggle)
+    await act(async () => finish(Response.json({ detail: "Save rejected" }, { status: 403 })))
+    assert.equal(toggle.getAttribute("aria-checked"), "false")
+    assert.ok(page.host.textContent?.includes("Save rejected"))
+    assert.equal(toggle.disabled, false)
+
+    await click(button("Enable MCP server"))
+    await act(async () => finish(Response.json({ ...structuredClone(detail), enabled: false })))
+    assert.equal(toggle.disabled, true)
+    assert.equal(page.host.querySelector('[data-mcp-tool="install"]'), row)
+    assert.equal(panel.scrollTop, 120)
+    assert.equal(page.host.querySelector('[data-mcp-status]')?.getAttribute("data-mcp-status"), "disabled")
+    assert.ok(page.host.textContent?.includes("Saved."))
+    assert.deepEqual(mutations[2].body, { enabled: false })
+  } finally { await page.close() }
+})
+
+test("inherited restrictions expose their reason and disable only the affected control", async () => {
+  globalThis.fetch = async () => Response.json({ ...capabilities, toolStates: [{ name: "install", enabled: false, canToggle: false, disabledReason: "mcp__example__* in user settings" }] })
+  const page = await render(<ResourceDetailPane kind="mcp" detail={detail} query={{ harness: "claude" }} file="SKILL.md" onChanged={() => {}} />)
+  try {
+    assert.equal(button("Enable MCP server").disabled, false)
+    assert.equal(button("Enable tool: install").disabled, true)
+    assert.equal(button("Test tool: install").disabled, true)
+    assert.ok(page.host.textContent?.includes("mcp__example__* in user settings"))
   } finally { await page.close() }
 })

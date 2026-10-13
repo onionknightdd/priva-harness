@@ -62,13 +62,22 @@ export interface SkillDetail extends SkillSummary {
   readonly files: SkillFile[]
 }
 
-export interface McpSummary {
+export interface McpToggleState {
+  readonly enabled: boolean
+  readonly canToggle: boolean
+  readonly disabledReason: string | null
+}
+
+export interface McpToolState extends McpToggleState {
+  readonly name: string
+}
+
+export interface McpSummary extends McpToggleState {
   readonly id: string
   readonly sourceId: string
   readonly name: string
   readonly transport: string
   readonly target: string
-  readonly enabled: boolean
   readonly effective: boolean | null
   readonly override: boolean
   readonly headerCount: number

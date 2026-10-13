@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises'
+import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
@@ -13,8 +13,6 @@ it.skipIf(!nativeClaudeAvailable()).each(['bubble', 'tui-cancel'])('audits a rea
     ? [{ type: 'tool_use', id: 'native-form', name: 'mcp__migrationForm__form', input: {} }]
     : [{ type: 'text', text: 'Form received.' }], `form-${calls}`), recorder)
   try {
-    await mkdir(join(fixture.root, '.claude'))
-    await writeFile(join(fixture.root, '.claude/settings.json'), JSON.stringify({ enableAllProjectMcpServers: true }))
     await writeFile(join(fixture.root, '.mcp.json'), JSON.stringify({ mcpServers: { migrationForm: {
       type: 'stdio', command: process.execPath, alwaysLoad: true, args: ['--import', createRequire(import.meta.url).resolve('tsx'),
         fileURLToPath(new URL('../../../fixtures/terminal/elicitation-server.ts', import.meta.url))],

@@ -1,12 +1,16 @@
-import type { McpDetail, McpSummary, ResourceList, ResourceQuery, ResourceScope, SkillDetail, SkillSummary } from '../resource/resource-catalog.js'
+import type { McpDetail, McpSummary, McpToolState, ResourceList, ResourceQuery, ResourceScope, SkillDetail, SkillSummary } from '../resource/resource-catalog.js'
 import type { AutoMemoryProject, MemoryDetail, MemoryList, SubagentCatalog, SubagentDetail, SubagentDraft, SubagentSummary } from '../resource/agent-resources.js'
 
-export interface McpCapabilities {
+export interface McpInventory {
   readonly tools: Record<string, unknown>[]
   readonly resources: Record<string, unknown>[]
   readonly prompts: Record<string, unknown>[]
   readonly testedAt: string
   readonly serverVersion: string | null
+}
+
+export interface McpCapabilities extends McpInventory {
+  readonly toolStates: McpToolState[]
 }
 
 export interface ResourceService {
@@ -38,6 +42,8 @@ export interface ResourceService {
     get(query: ResourceQuery, id: string): Promise<McpDetail>
     create(query: ResourceQuery, input: { name: string; definition: Record<string, unknown>; sourceId?: string; scope?: ResourceScope }): Promise<McpDetail>
     update(query: ResourceQuery, id: string, definition: Record<string, unknown>): Promise<McpDetail>
+    toggle(query: ResourceQuery, id: string, enabled: boolean): Promise<McpDetail>
+    toggleTool(query: ResourceQuery, id: string, name: string, enabled: boolean): Promise<McpToolState>
     delete(query: ResourceQuery, id: string): Promise<void>
   }
   uploadSkill(query: ResourceQuery, scope: 'global' | 'project', filename: string, data: Buffer): Promise<SkillDetail>

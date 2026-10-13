@@ -195,6 +195,48 @@ tmux 的 `capture-pane -P` 不暴露其未完成的 UTF-8 字符。若快照后�
   （API key 末 20 位指纹）；查看者带 `theme` 时同步写入 Claude Code 的 `theme`
   （`light` / `dark`），只在实际启动时生效，认领已运行的终端不改主题。
 
+共享的 `resolveClaudeQuerySettings` 设置 `enableAllProjectMcpServers: true`，
+SDK 与 TUI 均自动批准项目 `.mcp.json` 中的 MCP 服务，避免首次启动或资源刷新时
+停在原生启用确认框。该配置仅随会话注入，不写入用户或项目 settings；原生
+`disabledMcpjsonServers` 的显式禁用和服务自身的 OAuth 认证仍然生效。
+
+```text
+resolveClaudeQuerySettings -> enableAllProjectMcpServers: true
+  +-> SDK options.settings
+  +-> TUI --settings <scratch>/claude-settings.json
+       -> 自动批准项目 MCP -> 正常接收气泡输入
+```
+
+资源页的服务启停写入原生 `deniedMcpServers`（按 `serverName` 精确匹配），单工具启停
+写入 `permissions.deny` 中的 `mcp__<server>__<tool>` 精确规则。全局项写
+`$CLAUDE_CONFIG_DIR/settings.json`（默认 `~/.claude/settings.json`）；项目项写
+`<cwd>/.claude/settings.json`，local 项写 `<cwd>/.claude/settings.local.json`。
+连接定义仍在原来的全局 `.claude.json`、项目 `.mcp.json` 或 local 配置中。
+启用仅移除当前作用域的精确禁用；更广的规则、其他作用域规则和只读来源显示限制原因。
+项目服务同时识别 `disabledMcpjsonServers`，以及 `.claude.json.projects[cwd]` 的
+`disabledMcpServers`；重新启用时清除该项目可编辑的相应记录，保留其他服务和项目。
+无项目上下文的全局列表表示全局设置，不混入某个项目的局部禁用；实际连接和工具测试
+仍以所选来源目录或 Runner 工作目录重新检查有效策略。
+
+```text
+MCP 服务 / 工具 Switch
+  -> PATCH resource/mcp/:id [ /tools ]
+  -> 原生配置 + 审计（仅名称、enabled）
+  -> invalidateResources
+     +-> TUI：空闲、无草稿 / 对话框 / 后台任务时 --resume 重启
+     +-> SDK：空闲实例回收；忙实例结束后回收
+
+capabilities -> 完整工具清单 + 各工具有效启停状态
+tool test    -> 检查服务与工具状态 -> MCP callTool
+```
+
+服务关闭会停止后续连接探测，工具选择保留；工具关闭不影响服务的其他工具、提示词和
+资源。所有工具关闭不等于关闭服务。运行中的调用不通过开关强行中断。
+Pi 在原生 MCP 定义中写 `disabled` 和 `excludeTools`，过滤判断复用 adapter 的公开 API；
+被其他来源覆盖或被更广过滤规则限制的条目不提供误导性的启用操作。
+原生 TUI 回归 `terminal-mcp-enablement.test.ts` 通过模拟模型请求中的真实工具清单验证
+单工具禁用、服务禁用及恢复后的选择保留，不调用真实模型 API。
+
 模型配置由 `core/resource/provider-run-env.ts` 同时写入进程环境与会话级的
 `settings.env`。Claude 的 Explore、Plan、general-purpose 默认继承当前会话模型，
 自定义子代理未指定模型时也继承，明确指定时保留：
@@ -597,6 +639,7 @@ stash，保留整份多行草稿，避免 Ctrl+A/K 只删除最后一行而拼�
 `terminal-resources.test.ts`、`terminal-interruption-usage.test.ts`、`terminal-permission-audit.test.ts`：
 本地模拟模型验证产品 MCP / JSX、typed 表单、中断结算 / 下一轮去重、TUI 审批审计、用量 / 工具账本、
 草稿保护、MCP 资源刷新、/context 本地完成，以及空会话 /compact 拒绝与短对话 /compact 成功。
+项目 MCP 回归不预写批准配置，直接验证首次启动和资源刷新均自动启用服务。
 压缩回归逐轮校验 compacting、compacted（含摘要）、completed 的顺序，避免前一轮事件掩盖失败。
 构建后验证生产 stdio 入口：
 

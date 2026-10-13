@@ -1,4 +1,8 @@
 export const resourcesEn = {
+  serverEnabled: "Enable MCP server", toolEnabled: "Enable tool: {{name}}",
+  mcpGlobalToggle: "Applies to all projects", mcpProjectToggle: "Applies to this project",
+  mcpRestricted: "Restricted by configuration: {{reason}}",
+  mcpSaved: "Saved. New sessions use this setting; existing sessions reload when idle without drafts or background tasks.",
   skills: "Agent Skills", mcp: "MCP servers", plugins: "Plugins", search: "Search resources…",
   skillsHint: "Skills are instructions that extend an Agent's capabilities.",
   searchSkills: "Search skills",
@@ -47,6 +51,10 @@ export const resourcesEn = {
 }
 
 export const resourcesZh = {
+  serverEnabled: "启用 MCP 服务", toolEnabled: "启用工具：{{name}}",
+  mcpGlobalToggle: "对所有项目生效", mcpProjectToggle: "仅对此项目生效",
+  mcpRestricted: "受配置限制：{{reason}}",
+  mcpSaved: "已保存。新会话使用此设置；已有会话在空闲、无草稿及后台任务时重新加载。",
   skills: "技能", mcp: "MCP 服务", plugins: "插件", search: "搜索资源…",
   skillsHint: "技能是用于扩展 Agent 能力的指令。",
   searchSkills: "搜索技能",

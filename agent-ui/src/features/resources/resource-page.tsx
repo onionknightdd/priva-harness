@@ -21,12 +21,12 @@ import { TooltipHint } from "@/components/ui/tooltip"
 const ResourceDetailPane = React.lazy(async () => ({ default: (await import("./resource-detail")).ResourceDetailPane }))
 const ResourceCreateDialog = React.lazy(async () => ({ default: (await import("./resource-forms")).ResourceCreateDialog }))
 
-const CachedResourceDetailPane = React.memo(function CachedResourceDetailPane({ kind, detail, query, file, onChanged, onSkillUpdated }: {
+const CachedResourceDetailPane = React.memo(function CachedResourceDetailPane({ kind, detail, query, file, onChanged, onResourceUpdated }: {
   kind: ResourceKind; detail: ResourceDetail; query: ResourceQuery; file: string | null
-  onChanged: (id?: string) => void; onSkillUpdated: (detail: SkillDetail) => Promise<void>
+  onChanged: (id?: string) => void; onResourceUpdated: (detail: ResourceDetail) => Promise<void>
 }) {
   const context = React.useMemo(() => kind === "mcp" && detail.source.cwd ? { ...query, cwd: detail.source.cwd } : query, [kind, detail.source.cwd, query])
-  return <ResourceDetailPane kind={kind} detail={detail} query={context} file={file ?? "SKILL.md"} onChanged={onChanged} onSkillUpdated={onSkillUpdated} />
+  return <ResourceDetailPane kind={kind} detail={detail} query={context} file={file ?? "SKILL.md"} onChanged={onChanged} onResourceUpdated={onResourceUpdated} />
 })
 
 export function ResourcePage({ kind }: { kind: ResourceKind }) {
@@ -49,27 +49,27 @@ export function ResourceBrowser({ kind, harness }: { kind: ResourceKind; harness
   const query = React.useMemo<ResourceQuery>(() => ({ harness, ...(cwd ? { cwd } : {}) }), [harness, cwd])
   const detailScope = React.useMemo(() => ({ query, revision, statusVersion: 0, cache: createResourceCache<ResourceDetail>() }), [query, revision])
   const activeScope = React.useRef(detailScope)
-  React.useLayoutEffect(() => { activeScope.current = detailScope }, [detailScope])
+  React.useLayoutEffect(() => { activeScope.current = detailScope }, [detailScope, kind])
   const list = useResource<ResourceList>(kind, query, revision)
   const detail = useResource<ResourceDetail>(selected ? `${kind}/${selected}` : null, detailScope.query, detailScope.revision, detailScope.cache)
-  const [syncedSkills, setSyncedSkills] = React.useState<{ scope: typeof detailScope; list: ResourceList | null } | null>(null)
-  const listData = syncedSkills?.scope === detailScope ? syncedSkills.list ?? list.data : list.data
-  const onSkillUpdated = React.useCallback(async (updated: SkillDetail) => {
+  const [syncedResources, setSyncedResources] = React.useState<{ scope: typeof detailScope; list: ResourceList | null } | null>(null)
+  const listData = syncedResources?.scope === detailScope ? syncedResources.list ?? list.data : list.data
+  const onResourceUpdated = React.useCallback(async (updated: ResourceDetail) => {
     if (activeScope.current !== detailScope) return
     const statusVersion = ++detailScope.statusVersion
-    const entry = detailScope.cache.get(`skills/${updated.id}`)
+    const entry = detailScope.cache.get(`${kind}/${updated.id}`)
     if (entry) entry.state = { data: updated, loading: false, error: null }
-    setSyncedSkills((current) => ({ scope: detailScope, list: current?.scope === detailScope ? current.list : null }))
-    // Native permissions can affect same-name skills in other sources. Refresh
+    setSyncedResources((current) => ({ scope: detailScope, list: current?.scope === detailScope ? current.list : null }))
+    // Native policies can affect same-name resources in other sources. Refresh
     // their statuses in the background without resetting trees or previews.
-    const next = await resourceRequest<ResourceList>("skills", detailScope.query)
+    const next = await resourceRequest<ResourceList>(kind, detailScope.query)
     if (activeScope.current !== detailScope || statusVersion !== detailScope.statusVersion) return
     for (const group of next.groups) for (const item of group.items) {
-      const cached = detailScope.cache.get(`skills/${item.id}`)
+      const cached = detailScope.cache.get(`${kind}/${item.id}`)
       if (cached?.state.data) cached.state = { ...cached.state, data: { ...cached.state.data, ...item } }
     }
-    setSyncedSkills({ scope: detailScope, list: next })
-  }, [detailScope])
+    setSyncedResources({ scope: detailScope, list: next })
+  }, [detailScope, kind])
   const groups = filterResourceGroups(listData?.groups ?? [], search)
   const sections = groupResourcesByProject(groups)
   const selectFile = React.useCallback((id: string, path: string | null) => {
@@ -87,7 +87,7 @@ export function ResourceBrowser({ kind, harness }: { kind: ResourceKind; harness
   const renderItems = (sourceGroups: ResourceGroup[]) => sourceGroups.every((group) => group.items.length === 0)
     ? <p className="px-2 py-2 text-xs text-muted-foreground">{t("resources.empty")}</p>
     : sourceGroups.flatMap((group) => group.items.map((item) => "filePath" in item ? (
-      <SkillResourceTree key={item.id} skill={(detailScope.cache.get(`skills/${item.id}`)?.state.data as SkillDetail | undefined) ?? item} source={group.source} query={detailScope.query} revision={detailScope.revision} cache={detailScope.cache} selected={selected === item.id} file={selected === item.id ? file : null} mobile={mobile} onSelect={selectFile} onRetry={refresh} />
+      <SkillResourceTree key={item.id} skill={(detailScope.cache.get(`${kind}/${item.id}`)?.state.data as SkillDetail | undefined) ?? item} source={group.source} query={detailScope.query} revision={detailScope.revision} cache={detailScope.cache} selected={selected === item.id} file={selected === item.id ? file : null} mobile={mobile} onSelect={selectFile} onRetry={refresh} />
     ) : (
       <div key={item.id}>
         <TooltipHint content={`${item.name}\n${resourceSourceLabel(group.source)}\n${group.source.path}`}>
@@ -125,7 +125,7 @@ export function ResourceBrowser({ kind, harness }: { kind: ResourceKind; harness
         {recentDetails.map((entry) => {
           const cached = detailScope.cache.get(`${kind}/${entry.id}`)?.state.data
           return cached && <React.Activity key={`${entry.id}:${revision}`} mode={selected === entry.id ? "visible" : "hidden"}>
-            <CachedResourceDetailPane kind={kind} detail={cached} query={query} file={entry.file} onChanged={changed} onSkillUpdated={onSkillUpdated} />
+            <CachedResourceDetailPane kind={kind} detail={cached} query={query} file={entry.file} onChanged={changed} onResourceUpdated={onResourceUpdated} />
           </React.Activity>
         })}
       </React.Suspense>

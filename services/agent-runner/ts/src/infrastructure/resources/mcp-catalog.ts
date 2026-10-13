@@ -2,8 +2,10 @@ import { join, resolve } from 'node:path'
 
 import { DefaultPackageManager, SettingsManager } from '@earendil-works/pi-coding-agent'
 import { getMcpDiscoverySummary, loadMcpConfig } from 'pi-mcp-adapter/config'
+import { isToolAllowed, resolveToolPrefix, type ToolPrefix } from 'pi-mcp-adapter/types'
 
-import { ResourceError, type McpDetail, type McpSummary, type ResourceList, type ResourceQuery, type ResourceSource, type ResourceScope } from '../../core/resource/resource-catalog.js'
+import { ResourceError, type McpDetail, type McpSummary, type McpToolState, type ResourceList, type ResourceQuery, type ResourceSource, type ResourceScope } from '../../core/resource/resource-catalog.js'
+import { ClaudeMcpPolicy, claudeMcpSettingsPath, claudeMcpToolName } from './claude-mcp-policy.js'
 import { canonicalDirectory, inside, isRecord, record, resourceId, type ResourceFiles, strings } from './resource-files.js'
 import { type ProjectDirectories } from './project-directories.js'
 import { claudePlugins, pluginComponentPaths, source, type ResourceEnvironment } from './resource-sources.js'
@@ -15,6 +17,8 @@ interface McpBinding {
   winners: Map<string, string>
   container: string[]
   enabled: boolean
+  claude?: { policy: ClaudeMcpPolicy; path: string; writable: boolean }
+  toolPrefix?: ToolPrefix
 }
 
 export interface McpWrite {
@@ -122,6 +126,73 @@ export class McpCatalog {
     })
   }
 
+  async toggle(query: ResourceQuery, id: string, enabled: boolean): Promise<McpDetail> {
+    const { binding, name, definition } = await this.find(query, id)
+    const state = this.summary(binding, name, definition, query.cwd !== undefined)
+    if (!state.canToggle) throw new ResourceError(403, state.disabledReason ?? 'This MCP server cannot be toggled')
+    if (binding.claude) {
+      await this.files.update(binding.claude.path, (value) => {
+        const denied = Array.isArray(value['deniedMcpServers']) ? value['deniedMcpServers'] : []
+        value['deniedMcpServers'] = denied.filter((entry) => record(entry)['serverName'] !== name)
+        if (!enabled) (value['deniedMcpServers'] as unknown[]).push({ serverName: name })
+        if (enabled && binding.source.scope === 'project') value['disabledMcpjsonServers'] = strings(value['disabledMcpjsonServers']).filter((entry) => entry !== name)
+      })
+      if (enabled && binding.source.cwd) await this.files.update(this.environment.claudeConfigFilePath, (value) => {
+        const project = record(record(value['projects'])[binding.source.cwd ?? ''])
+        if (Array.isArray(project['disabledMcpServers'])) project['disabledMcpServers'] = strings(project['disabledMcpServers']).filter((entry) => entry !== name)
+      })
+    } else await this.editDefinition(binding, name, (value) => { value['disabled'] = !enabled })
+    return await this.get(query, id)
+  }
+
+  async tools(query: ResourceQuery, id: string, names: string[]): Promise<McpToolState[]> {
+    const { binding, name } = await this.find(query, id)
+    return names.map((tool) => this.toolState(binding, name, tool))
+  }
+
+  async toggleTool(query: ResourceQuery, id: string, tool: string, enabled: boolean): Promise<McpToolState> {
+    if (!tool || tool.length > 200 || /[\s*()\0]/u.test(tool)) throw new ResourceError(422, 'Expected an exact MCP tool name without permission patterns')
+    const { binding, name, definition } = await this.find(query, id)
+    if (!this.summary(binding, name, definition, query.cwd !== undefined).enabled) throw new ResourceError(409, 'Enable this MCP server before changing its tools')
+    const state = this.toolState(binding, name, tool)
+    if (!state.canToggle) throw new ResourceError(403, state.disabledReason ?? 'This MCP tool cannot be toggled')
+    if (binding.claude) {
+      const rule = claudeMcpToolName(name, tool)
+      await this.files.update(binding.claude.path, (value) => {
+        const permissions = record(value['permissions'])
+        const deny = strings(permissions['deny']).filter((entry) => entry !== rule)
+        if (!enabled) deny.push(rule)
+        value['permissions'] = { ...permissions, deny }
+      })
+    } else await this.editDefinition(binding, name, (value) => {
+      const excluded = strings(value['excludeTools'] ?? binding.effective[name]?.['excludeTools']).filter((entry) => entry !== tool)
+      if (!enabled) excluded.push(tool)
+      value['excludeTools'] = excluded
+    })
+    const current = await this.find(query, id)
+    return this.toolState(current.binding, current.name, tool)
+  }
+
+  private async editDefinition(binding: McpBinding, name: string, edit: (value: Record<string, unknown>) => void): Promise<void> {
+    await this.files.update(binding.source.path, (value) => {
+      const holder = this.holder(value, binding.container)
+      const servers = record(holder[this.serversKey(holder)])
+      if (!isRecord(servers[name])) throw new ResourceError(409, 'MCP entry changed or was removed; refresh before saving')
+      edit(servers[name])
+    })
+  }
+
+  private toolState(binding: McpBinding, server: string, name: string): McpToolState {
+    if (binding.claude) return binding.claude.policy.tool(server, name, binding.claude.path, binding.claude.writable)
+    const definition = binding.effective[server] ?? binding.definitions[server] ?? {}
+    const prefix = resolveToolPrefix(definition, binding.toolPrefix)
+    const allowed = (excluded: unknown) => isToolAllowed(name, server, prefix, definition['includeTools'], excluded)
+    const enabled = allowed(definition['excludeTools'])
+    const own = strings(binding.definitions[server]?.['excludeTools'])
+    const canToggle = binding.source.writable && binding.winners.get(server) === binding.source.id && allowed(strings(definition['excludeTools']).filter((entry) => entry !== name || !own.includes(name)))
+    return { name, enabled, canToggle, disabledReason: !canToggle ? 'Controlled by a read-only source or a broader tool filter' : enabled ? null : 'Excluded in this MCP configuration' }
+  }
+
   private name(name: string): void {
     if (!name.trim() || name.length > 200 || /[\s/\\\0]/u.test(name) || ['__proto__', 'constructor', 'prototype'].includes(name)) throw new ResourceError(422, 'MCP name must be 1–200 characters without whitespace or path separators')
   }
@@ -141,10 +212,15 @@ export class McpCatalog {
   }
 
   private summary(binding: McpBinding, name: string, definition: Record<string, unknown>, contextual: boolean): McpSummary {
+    const effective = binding.effective[name] ?? definition
+    const enabled = binding.enabled && effective['disabled'] !== true
+    const state = binding.claude ? binding.claude.policy.server(name, !contextual && binding.source.scope === 'global' ? definition : effective, binding.source, binding.claude.path, binding.enabled, binding.claude.writable)
+      : { enabled, canToggle: binding.source.writable && binding.winners.get(name) === binding.source.id,
+        disabledReason: binding.winners.get(name) !== binding.source.id ? 'Controlled by a higher-precedence MCP configuration' : enabled ? null : 'Disabled in the effective MCP configuration' }
     return { id: resourceId(binding.source.id, name), sourceId: binding.source.id, name,
       transport: typeof definition['command'] === 'string' ? 'stdio' : typeof definition['url'] === 'string' ? definition['httpTransport'] === 'sse' || definition['type'] === 'sse' ? 'sse' : 'http' : typeof definition['socket'] === 'string' ? 'socket' : 'override',
       target: [definition['url'], definition['command'], definition['socket']].find((value): value is string => typeof value === 'string') ?? '',
-      enabled: binding.enabled && definition['disabled'] !== true,
+      ...state,
       effective: contextual ? binding.enabled && binding.winners.get(name) === binding.source.id : null,
       override: binding.effective[name] !== undefined && JSON.stringify(binding.effective[name]) !== JSON.stringify(definition),
       headerCount: Object.keys(record(definition['headers'])).length }
@@ -191,11 +267,19 @@ export class McpCatalog {
         const winners = new Map<string, string>()
         for (const binding of current) if (binding.enabled) for (const [name, definition] of Object.entries(binding.definitions)) { effective[name] = definition; winners.set(name, binding.source.id) }
         for (const binding of current) { binding.effective = effective; binding.winners = winners }
+        const policy = await ClaudeMcpPolicy.read(this.environment, this.files, cwd, false)
+        const globalPolicy = query.cwd === undefined ? await ClaudeMcpPolicy.read(this.environment, this.files, cwd, true) : policy
+        for (const binding of current) {
+          const path = claudeMcpSettingsPath(this.environment, binding.source)
+          const settingsSource = await source('claude', binding.source.scope, 'settings', path, binding.source.cwd, '', true)
+          binding.claude = { policy: binding.source.scope === 'global' ? globalPolicy : policy, path, writable: binding.source.writable && settingsSource.writable }
+        }
       } else {
         const configPath = join(this.environment.piDir, 'mcp.json')
         // Read-only public API: no adapter factory, model, package install, or MCP connection.
         const summary = getMcpDiscoverySummary(configPath, cwd, { includeHostConfigs: true })
-        const effective = loadMcpConfig(configPath, cwd).mcpServers as Record<string, Record<string, unknown>>
+        const config = loadMcpConfig(configPath, cwd)
+        const effective = config.mcpServers as Record<string, Record<string, unknown>>
         const imports = new Set<string>()
         let agentPluginScope: 'global' | 'project' = 'global'
         for (const item of summary.sources) {
@@ -245,7 +329,7 @@ export class McpCatalog {
           for (const name of Object.keys(unresolved)) winners.set(name, unresolvedSource.id)
           result.diagnostics.push({ path: configPath, message: 'Some adapter-resolved entries have no public file provenance and are read-only' })
         }
-        for (const binding of current) { binding.effective = effective; binding.winners = winners }
+        for (const binding of current) { binding.effective = effective; binding.winners = winners; binding.toolPrefix = config.settings?.toolPrefix ?? 'server' }
       }
       bindings.push(...current)
     }

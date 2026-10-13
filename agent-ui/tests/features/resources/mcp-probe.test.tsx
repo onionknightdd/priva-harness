@@ -5,8 +5,8 @@ import { act, React, render } from "./resource-test-dom.tsx"
 
 const { useMcpProbe } = await import("../../../src/features/resources/use-mcp-probe.ts")
 const { McpStatusDot } = await import("../../../src/features/resources/mcp-status-dot.tsx")
-const capabilities: McpCapabilities = { tools: [{ name: "read_file" }], prompts: [], resources: [], testedAt: new Date(0).toISOString(), serverVersion: "1.2.3" }
-const detail: McpDetail = { id: "test-server", name: "example", sourceId: "project", source: { id: "project", harness: "claude", scope: "project", origin: "settings", label: "Project", path: "/workspace/app/.mcp.json", cwd: "/workspace/app", writable: true, canAdd: true }, transport: "http", target: "https://example.invalid/mcp", enabled: true, effective: true, override: false, headerCount: 0, definition: { url: "https://example.invalid/mcp" }, effectiveDefinition: null }
+const capabilities: McpCapabilities = { toolStates: [{ name: "read_file", enabled: true, canToggle: true, disabledReason: null }], tools: [{ name: "read_file" }], prompts: [], resources: [], testedAt: new Date(0).toISOString(), serverVersion: "1.2.3" }
+const detail: McpDetail = { id: "test-server", name: "example", sourceId: "project", source: { id: "project", harness: "claude", scope: "project", origin: "settings", label: "Project", path: "/workspace/app/.mcp.json", cwd: "/workspace/app", writable: true, canAdd: true }, transport: "http", target: "https://example.invalid/mcp", enabled: true, canToggle: true, disabledReason: null, effective: true, override: false, headerCount: 0, definition: { url: "https://example.invalid/mcp" }, effectiveDefinition: null }
 let state: ReturnType<typeof useMcpProbe>
 const requests: { url: URL; signal?: AbortSignal | null }[] = []
 let reply: () => Response | Promise<Response> = () => Response.json(capabilities)
@@ -100,5 +100,28 @@ test("failed background probes retain the inventory and recover on the next inte
     await act(async () => context.mock.timers.tick(30_000))
     assert.equal(state.status, "online")
     assert.equal(state.error, null)
+  } finally { await page.close() }
+})
+
+test("policy toggles preserve the inventory while stopping probes and ignoring pre-save responses", async (context) => {
+  reset()
+  context.mock.timers.enable({ apis: ["setTimeout"] })
+  const page = await render(<Monitor />)
+  try {
+    let finish!: (response: Response) => void
+    reply = () => new Promise((resolve) => { finish = resolve })
+    await act(async () => context.mock.timers.tick(30_000))
+    await act(async () => state.updateTool({ name: "read_file", enabled: false, canToggle: true, disabledReason: null }))
+    await act(async () => finish(Response.json(capabilities)))
+    assert.equal(state.capabilities?.toolStates[0].enabled, false)
+    const retained = state.capabilities
+    await page.update(<Monitor server={{ ...structuredClone(detail), enabled: false }} />)
+    assert.equal(state.capabilities, retained)
+    await act(async () => context.mock.timers.tick(60_000))
+    assert.equal(requests.length, 2)
+    reply = () => Response.json({ ...capabilities, toolStates: [{ name: "read_file", enabled: false, canToggle: true, disabledReason: null }] })
+    await page.update(<Monitor server={structuredClone(detail)} />)
+    assert.equal(requests.length, 3)
+    assert.equal(state.capabilities?.toolStates[0].enabled, false)
   } finally { await page.close() }
 })

@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
@@ -12,8 +12,6 @@ it.skipIf(!nativeClaudeAvailable())('reloads resources at an empty idle prompt, 
     fixture.send('Before resource refresh', 'before')
     await expect.poll(() => fixture.frames.some((frame) => frame.type === 'run.completed'), { timeout: 15000 }).toBe(true)
     const original = await fixture.terminals.state(fixture.ref)
-    await mkdir(join(fixture.root, '.claude'))
-    await writeFile(join(fixture.root, '.claude/settings.json'), JSON.stringify({ enableAllProjectMcpServers: true }))
     await writeFile(join(fixture.root, '.mcp.json'), JSON.stringify({ mcpServers: { refreshed: {
       type: 'stdio', command: process.execPath, alwaysLoad: true, args: ['--import', createRequire(import.meta.url).resolve('tsx'),
         fileURLToPath(new URL('../../../fixtures/terminal/elicitation-server.ts', import.meta.url))],

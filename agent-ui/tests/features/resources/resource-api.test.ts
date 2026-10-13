@@ -5,8 +5,8 @@ import { buildSkillTree, filterResourceGroups, groupResourcesByProject, resource
 
 const source: ResourceSource = { id: 'global', harness: 'pi', scope: 'global', origin: 'settings', label: 'Global · Pi', path: '/runtime/mcp.json', cwd: null, writable: true, canAdd: true }
 const groups: ResourceGroup[] = [
-  { source, items: [{ id: 'first', sourceId: 'global', name: 'echo', target: 'node', transport: 'stdio', enabled: true, effective: null, override: false, headerCount: 0 }] },
-  { source: { ...source, id: 'project', scope: 'project', label: 'Project · Demo', path: '/repo/.pi/mcp.json', cwd: '/repo' }, items: [{ id: 'second', sourceId: 'project', name: 'echo', target: 'https://example.com/mcp', transport: 'http', enabled: true, effective: true, override: false, headerCount: 1 }] },
+  { source, items: [{ id: 'first', sourceId: 'global', name: 'echo', target: 'node', transport: 'stdio', enabled: true, canToggle: true, disabledReason: null, effective: null, override: false, headerCount: 0 }] },
+  { source: { ...source, id: 'project', scope: 'project', label: 'Project · Demo', path: '/repo/.pi/mcp.json', cwd: '/repo' }, items: [{ id: 'second', sourceId: 'project', name: 'echo', target: 'https://example.com/mcp', transport: 'http', enabled: true, canToggle: true, disabledReason: null, effective: true, override: false, headerCount: 1 }] },
 ]
 
 test('source-aware filtering preserves duplicate names and matches source paths', () => {

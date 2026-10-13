@@ -50,6 +50,7 @@ describe('claudeTerminalLaunch', () => {
     expect(settingsPath?.startsWith(scratchDir)).toBe(true)
     const settings = JSON.parse(await readFile(settingsPath ?? '', 'utf8')) as Record<string, unknown>
     expect(settings).toMatchObject({
+      enableAllProjectMcpServers: true,
       skipDangerousModePermissionPrompt: true,
       env: { ANTHROPIC_AUTH_TOKEN: 'secret', CLAUDE_CODE_SUBAGENT_MODEL: 'inherit',
         CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '0', CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP: '1' },

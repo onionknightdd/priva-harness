@@ -1,20 +1,23 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
-import { errorMessage, resourceRequest, type McpCapabilities, type McpDetail, type ResourceQuery } from "./resource-api"
+import { errorMessage, resourceRequest, type McpCapabilities, type McpDetail, type McpToolState, type ResourceQuery } from "./resource-api"
 
 type ProbeState = { capabilities: McpCapabilities | null; testing: boolean; error: string | null }
-export type McpProbeState = ProbeState & { status: "disabled" | "checking" | "online" | "offline" }
+export type McpProbeState = ProbeState & { status: "disabled" | "checking" | "online" | "offline"; updateTool: (tool: McpToolState) => void }
 const isVisible = () => document.visibilityState !== "hidden"
 
 export function useMcpProbe(detail: McpDetail | null, query: ResourceQuery): McpProbeState {
+  // Policy changes keep the last inventory; a different connection discards it.
+  const connection = JSON.stringify([detail?.definition, detail?.effectiveDefinition], (key, value: unknown) => ["disabled", "includeTools", "excludeTools"].includes(key) ? undefined : value)
   const scope = useMemo(() => ({
-    id: detail?.id, enabled: detail?.enabled, definition: detail?.definition,
-    effectiveDefinition: detail?.effectiveDefinition, harness: query.harness, cwd: query.cwd,
-  }), [detail?.id, detail?.enabled, detail?.definition, detail?.effectiveDefinition, query.harness, query.cwd])
+    id: detail?.id, connection, harness: query.harness, cwd: query.cwd,
+  }), [detail?.id, connection, query.harness, query.cwd])
+  const enabled = detail?.enabled
+  const policyVersion = useRef(0)
   const [result, setResult] = useState<{ scope: typeof scope; state: ProbeState } | null>(null)
 
   useEffect(() => {
-    if (!scope.id || !scope.enabled) return
+    if (!scope.id || !enabled) return
     let disposed = false
     let timer: ReturnType<typeof setTimeout> | undefined
     let request: AbortController | undefined
@@ -22,11 +25,12 @@ export function useMcpProbe(detail: McpDetail | null, query: ResourceQuery): Mcp
     const probe = async () => {
       if (disposed || !isVisible() || request) return
       const controller = new AbortController()
+      const version = policyVersion.current
       request = controller
       setResult((previous) => ({ scope, state: { capabilities: previous?.scope === scope ? previous.state.capabilities : null, error: previous?.scope === scope ? previous.state.error : null, testing: true } }))
       try {
         const capabilities = await resourceRequest<McpCapabilities>(`mcp/${scope.id}/capabilities`, { harness: scope.harness, cwd: scope.cwd }, { signal: controller.signal })
-        if (!disposed && !controller.signal.aborted) setResult({ scope, state: { capabilities, testing: false, error: null } })
+        if (!disposed && !controller.signal.aborted && version === policyVersion.current) setResult({ scope, state: { capabilities, testing: false, error: null } })
       } catch (reason) {
         if (!disposed && !controller.signal.aborted) setResult((previous) => ({ scope, state: { capabilities: previous?.scope === scope ? previous.state.capabilities : null, testing: false, error: errorMessage(reason) } }))
       } finally {
@@ -45,8 +49,13 @@ export function useMcpProbe(detail: McpDetail | null, query: ResourceQuery): Mcp
     document.addEventListener("visibilitychange", visibilityChanged)
     // React Activity cleans up this effect while a cached detail is hidden.
     return () => { disposed = true; clearTimeout(timer); request?.abort(); document.removeEventListener("visibilitychange", visibilityChanged) }
-  }, [scope])
+  }, [scope, enabled])
 
-  const state = result?.scope === scope ? result.state : { capabilities: null, testing: Boolean(scope.enabled), error: null }
-  return { ...state, status: !scope.enabled ? "disabled" : state.error ? "offline" : state.capabilities ? "online" : "checking" }
+  const state = result?.scope === scope ? result.state : { capabilities: null, testing: Boolean(enabled), error: null }
+  const updateTool = (tool: McpToolState) => {
+    policyVersion.current++
+    setResult((previous) => previous?.scope === scope && previous.state.capabilities ? { scope, state: { ...previous.state, testing: false,
+      capabilities: { ...previous.state.capabilities, toolStates: [...previous.state.capabilities.toolStates.filter((entry) => entry.name !== tool.name), tool] } } } : previous)
+  }
+  return { ...state, ...(!enabled ? { testing: false, error: null } : {}), updateTool, status: !enabled ? "disabled" : state.error ? "offline" : state.capabilities ? "online" : "checking" }
 }

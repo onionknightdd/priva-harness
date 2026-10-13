@@ -29,7 +29,7 @@ const { ResourceCreateDialog, McpEditor } = await import("../../../src/features/
 
 const groups: ResourceGroup[] = [{ source: { id: "global", harness: "claude", scope: "global", origin: "settings", label: "Global MCP", path: "/fixture/.claude.json", cwd: null, writable: true, canAdd: true }, items: [] }]
 const projects = ["/workspace/alpha", "/workspace/beta", "/workspace/client/app", "/workspace/team/app"]
-const capabilities: McpCapabilities = { tools: [{ name: "read_file" }, { name: "write_file" }], prompts: [{ name: "review" }], resources: [{ name: "docs", uri: "project://docs" }, { uri: "project://readme" }], serverVersion: "1.2.3", testedAt: new Date(0).toISOString() }
+const capabilities: McpCapabilities = { toolStates: [{ name: "read_file", enabled: true, canToggle: true, disabledReason: null }, { name: "write_file", enabled: true, canToggle: true, disabledReason: null }], tools: [{ name: "read_file" }, { name: "write_file" }], prompts: [{ name: "review" }], resources: [{ name: "docs", uri: "project://docs" }, { uri: "project://readme" }], serverVersion: "1.2.3", testedAt: new Date(0).toISOString() }
 let testReply: () => Response | Promise<Response> = () => Response.json(capabilities)
 const requests: { url: URL; body: Record<string, unknown>; method?: string }[] = []
 const originalFetch = globalThis.fetch
@@ -193,7 +193,7 @@ test("effective scope labels and project groups are localized in both resource d
 })
 
 test("MCP edit preserves headers and provider fields through JSON mode and rejects invalid row conversion", async () => {
-  const detail: McpDetail = { id: "existing", name: "example", sourceId: "global", source: groups[0].source, transport: "http", target: "https://example.invalid/mcp", headerCount: 1, enabled: true, effective: true, override: false,
+  const detail: McpDetail = { id: "existing", name: "example", sourceId: "global", source: groups[0].source, transport: "http", target: "https://example.invalid/mcp", headerCount: 1, enabled: true, canToggle: true, disabledReason: null, effective: true, override: false,
     definition: { url: "https://example.invalid/mcp", headers: { Authorization: "Bearer original" }, timeout: 42 }, effectiveDefinition: null }
   const form = await mount("mcp", detail)
   try {

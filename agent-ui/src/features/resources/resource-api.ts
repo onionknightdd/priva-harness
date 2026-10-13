@@ -12,6 +12,7 @@ export type Skill = {
 export type Mcp = {
   id: string; sourceId: string; name: string; transport: string; target: string
   enabled: boolean; effective: boolean | null; override: boolean; headerCount: number
+  canToggle: boolean; disabledReason: string | null
 }
 export type ResourceItem = Skill | Mcp
 export type ResourceGroup<T = ResourceItem> = { source: ResourceSource; items: T[] }
@@ -26,7 +27,9 @@ export type ResourceDetail = SkillDetail | McpDetail
 export type McpCapabilities = {
   tools: Record<string, unknown>[]; resources: Record<string, unknown>[]; prompts: Record<string, unknown>[]; testedAt: string
   serverVersion: string | null
+  toolStates: McpToolState[]
 }
+export type McpToolState = { name: string; enabled: boolean; canToggle: boolean; disabledReason: string | null }
 
 export function resourceUrl(path: string, query: ResourceQuery, extra: Record<string, string> = {}) {
   const params = new URLSearchParams({ harness: query.harness, ...extra })

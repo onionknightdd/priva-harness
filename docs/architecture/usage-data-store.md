@@ -246,7 +246,8 @@ MCP 表单的 ElicitationResult 按 server / elicitationId 关联，保留 accep
 | `/resource/subagents` | `agents.created` / `updated` / `deleted` | id | harness, cwd, name |
 | `/resource/memory` | `memory.updated` / `deleted` / `auto_toggled` | id / `auto` | harness, cwd, name, contentChars / enabled |
 | `/resource/skills` | `skill.uploaded` / `toggled` / `deleted` | id | harness, cwd, name, scope, filename, bytes / enabled |
-| `/resource/mcp` | `mcp.created` / `updated` / `deleted` | id | harness, cwd, name, scope |
+| `/resource/mcp` | `mcp.created` / `updated` / `deleted` / `toggled` | id | harness, cwd, name, scope / enabled |
+| `/resource/mcp/:id/tools` | `mcp.tool.toggled` | server id | harness, cwd, name（工具名）, enabled |
 
 ## 查询接口
 

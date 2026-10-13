@@ -119,6 +119,33 @@ describe('resource HTTP routes', () => {
     expect((await server.inject({ method: 'GET', url: assetUrl('large.png') })).statusCode).toBe(413)
   })
 
+  it('toggles MCP servers and individual tools, invalidates sessions and enforces disabled tests', async () => {
+    const invalidated = vi.spyOn(harness, 'invalidateResources')
+    const definition = { command: process.execPath, args: ['--import', import.meta.resolve('tsx'), resolve('tests/fixtures/resources/mcp-server.ts')] }
+    const created = await server.inject({ method: 'POST', url: url('mcp'), payload: { name: 'echo', scope: 'project', definition } })
+    const detail = created.json<McpDetail>()
+    const toggle = (enabled: boolean) => server.inject({ method: 'PATCH', url: url(`mcp/${detail.id}`), payload: { enabled } })
+    const tool = (enabled: boolean) => server.inject({ method: 'PATCH', url: url(`mcp/${detail.id}/tools`), payload: { name: 'echo', enabled } })
+    const call = () => server.inject({ method: 'POST', url: url('mcp/validate/tool'), payload: { id: detail.id, name: 'echo', args: {} } })
+    expect((await tool(false)).json()).toMatchObject({ name: 'echo', enabled: false, canToggle: true })
+    expect((await call()).statusCode).toBe(403)
+    const capabilities = (await server.inject({ method: 'GET', url: url(`mcp/${detail.id}/capabilities`) })).json<McpCapabilities>()
+    expect(capabilities.tools.map((entry) => entry['name'])).toEqual(['echo', 'second'])
+    expect(capabilities.toolStates).toMatchObject([{ name: 'echo', enabled: false }, { name: 'second', enabled: true }])
+    expect((await toggle(false)).json<McpDetail>().enabled).toBe(false)
+    expect((await server.inject({ method: 'GET', url: url(`mcp/${detail.id}/capabilities`) })).statusCode).toBe(409)
+    expect((await call()).statusCode).toBe(409)
+    expect((await tool(true)).statusCode).toBe(409)
+    expect((await toggle(true)).json<McpDetail>().enabled).toBe(true)
+    expect((await call()).statusCode).toBe(403)
+    expect((await tool(true)).json()).toMatchObject({ enabled: true })
+    expect((await call()).statusCode).toBe(200)
+    expect(invalidated).toHaveBeenCalledTimes(5)
+    expect(recorder.ofKind('audit').map((entry) => entry.action)).toEqual(['mcp.created', 'mcp.tool.toggled', 'mcp.toggled', 'mcp.toggled', 'mcp.tool.toggled'])
+    expect((await server.inject({ method: 'PATCH', url: url(`mcp/${detail.id}`), payload: { enabled: false, definition } })).statusCode).toBe(422)
+    expect((await server.inject({ method: 'PATCH', url: url(`mcp/${detail.id}/tools`), payload: { name: '*', enabled: false } })).statusCode).toBe(422)
+  })
+
   it('supports skill CRUD and archive routes and invalidates resources after successful mutations', async () => {
     const invalidated = vi.spyOn(harness, 'invalidateResources')
     const archive = zipSync({

@@ -146,10 +146,20 @@ export const resourceRoutes: FastifyPluginCallback<{ service: ResourceService; o
     return await reply.code(201).send(result)
   })
   server.patch(`${prefix}/mcp/:id`, async (request) => {
-    const { definition } = parse(z.object({ definition: definitionSchema }).strict(), request.body)
+    const input = parse(z.union([z.object({ definition: definitionSchema }).strict(), z.object({ enabled: z.boolean() }).strict()]), request.body)
     const context = query(request.query)
-    const result = await service.mcp.update(context, id(request.params), definition)
-    audit('mcp.updated', context, result.id, { name: result.name })
+    const result = 'enabled' in input ? await service.mcp.toggle(context, id(request.params), input.enabled)
+      : await service.mcp.update(context, id(request.params), input.definition)
+    audit('enabled' in input ? 'mcp.toggled' : 'mcp.updated', context, result.id, { name: result.name, ...('enabled' in input ? { enabled: input.enabled } : {}) })
+    await onChanged?.()
+    return result
+  })
+  server.patch(`${prefix}/mcp/:id/tools`, async (request) => {
+    const input = parse(z.object({ name: z.string().min(1).max(200), enabled: z.boolean() }).strict(), request.body)
+    const context = query(request.query)
+    const serverId = id(request.params)
+    const result = await service.mcp.toggleTool(context, serverId, input.name, input.enabled)
+    audit('mcp.tool.toggled', context, serverId, { name: input.name, enabled: input.enabled })
     await onChanged?.()
     return result
   })

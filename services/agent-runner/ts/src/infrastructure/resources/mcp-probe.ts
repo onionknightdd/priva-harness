@@ -5,7 +5,7 @@ import { Client, SSEClientTransport, StreamableHTTPClientTransport, type Transpo
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/client/stdio'
 
 import { ResourceError } from '../../core/resource/resource-catalog.js'
-import type { McpCapabilities } from '../../core/contract/resource-service.js'
+import type { McpInventory } from '../../core/contract/resource-service.js'
 import { record, strings } from './resource-files.js'
 
 function expand(value: string): string {
@@ -26,7 +26,7 @@ function environment(value: unknown): Record<string, string> {
 }
 
 export class McpProbe {
-  async capabilities(definition: Record<string, unknown>, cwd: string): Promise<McpCapabilities> {
+  async capabilities(definition: Record<string, unknown>, cwd: string): Promise<McpInventory> {
     return await this.connected(definition, cwd, async (client) => {
       const capabilities = client.getServerCapabilities()
       const tools = capabilities?.tools ? await this.pages((cursor) => client.listTools(cursor === undefined ? {} : { cursor }), 'tools') : []
