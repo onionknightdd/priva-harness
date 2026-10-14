@@ -1,0 +1,4 @@
+::highlight(file-source-selection) {
+  background-color: var(--source-selection-background, Highlight);
+  color: var(--source-selection-color, HighlightText);
+}

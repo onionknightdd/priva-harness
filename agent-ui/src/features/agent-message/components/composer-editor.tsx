@@ -3,26 +3,29 @@ import { createPortal } from "react-dom"
 import { Slice } from "prosemirror-model"
 import { closeHistory } from "prosemirror-history"
 import { TextSelection } from "prosemirror-state"
-import { EditorView } from "prosemirror-view"
+import { EditorView, type NodeViewConstructor } from "prosemirror-view"
 import { useTranslation } from "react-i18next"
 
 import { cn } from "@/lib/utils"
 
 import { isImageAttachment } from "../composer-attachments"
-import { composerDocument, createComposerState, insertMessageSelection, serializeComposerContent } from "../composer-editor-state"
+import { composerDocument, createComposerState, insertFileAnnotation, insertMessageSelection, serializeComposerContent } from "../composer-editor-state"
+import type { FileAnnotation } from "../file-annotation"
 import { mentionTriggerFromState, mentionTriggersEqual, type MentionTrigger } from "../composer-mention"
-import type { MessageSelection } from "../message-select-action"
+import type { MessageSelection, MessageSelectionPart } from "../message-select-action"
+import { FileAnnotationReference } from "./file-annotation-reference"
 import { MessageSelectionQuote } from "./message-selection-quote"
 
 export type ComposerEditorHandle = {
   focus: (atEnd?: boolean) => void
   insertSelection: (selection: MessageSelection) => void
+  insertFileAnnotation: (annotation: FileAnnotation, question: string) => void
   replaceRange: (from: number, to: number, text: string) => void
 }
 
-type QuotePortal = {
+type ReferencePortal = {
   dom: HTMLElement
-  selection: MessageSelection
+  part: Exclude<MessageSelectionPart, { type: "text" }>
   remove: () => void
   key: number
 }
@@ -44,7 +47,7 @@ export function ComposerEditor({ ref, inputRef, draft, placeholder, onChange, on
   const latest = useRef({ draft, onChange, onImagesPaste, onKeyDown, onMentionChange })
   const serialized = useRef(draft)
   const mentionRef = useRef<MentionTrigger | null>(null)
-  const [portals, setPortals] = useState<QuotePortal[]>([])
+  const [portals, setPortals] = useState<ReferencePortal[]>([])
   useLayoutEffect(() => { latest.current = { draft, onChange, onImagesPaste, onKeyDown, onMentionChange } })
 
   useImperativeHandle(ref, () => ({
@@ -58,6 +61,12 @@ export function ComposerEditor({ ref, inputRef, draft, placeholder, onChange, on
       const view = viewRef.current
       if (!view) return
       insertMessageSelection(selection)(view.state, view.dispatch)
+      view.focus()
+    },
+    insertFileAnnotation(annotation, question) {
+      const view = viewRef.current
+      if (!view) return
+      insertFileAnnotation(annotation, question)(view.state, view.dispatch)
       view.focus()
     },
     replaceRange(from, to, text) {
@@ -74,6 +83,32 @@ export function ComposerEditor({ ref, inputRef, draft, placeholder, onChange, on
     let active = true
     let nextKey = 0
     setPortals([])
+    const referenceNodeView: NodeViewConstructor = (node, view, getPos) => {
+      const dom = document.createElement("span")
+      dom.contentEditable = "false"
+      dom.className = "composer-selection-node"
+      const portal: ReferencePortal = {
+        dom, key: nextKey++,
+        part: node.type.name === "file_annotation"
+          ? { type: "file_annotation", annotation: node.attrs.annotation as FileAnnotation }
+          : { type: "selection", selection: node.attrs as MessageSelection },
+        remove() {
+          const pos = getPos()
+          if (pos === undefined) return
+          view.dispatch(closeHistory(view.state.tr).delete(pos, pos + node.nodeSize).scrollIntoView())
+          view.focus()
+        },
+      }
+      setPortals((current) => [...current, portal])
+      return {
+        dom,
+        ignoreMutation: () => true,
+        stopEvent: (event) => event.target instanceof Element && Boolean(event.target.closest("button, [role='button']")),
+        destroy() {
+          if (active) setPortals((current) => current.filter((entry) => entry !== portal))
+        },
+      }
+    }
     const view = new EditorView({ mount: inputRef.current }, {
       state: createComposerState(latest.current.draft),
       dispatchTransaction(tr) {
@@ -105,29 +140,8 @@ export function ComposerEditor({ ref, inputRef, draft, placeholder, onChange, on
         return true
       },
       nodeViews: {
-        message_selection(node, view, getPos) {
-          const dom = document.createElement("span")
-          dom.contentEditable = "false"
-          dom.className = "composer-selection-node"
-          const portal: QuotePortal = {
-            dom, key: nextKey++, selection: node.attrs as MessageSelection,
-            remove() {
-              const pos = getPos()
-              if (pos === undefined) return
-              view.dispatch(closeHistory(view.state.tr).delete(pos, pos + node.nodeSize).scrollIntoView())
-              view.focus()
-            },
-          }
-          setPortals((current) => [...current, portal])
-          return {
-            dom,
-            ignoreMutation: () => true,
-            stopEvent: (event) => event.target instanceof Element && Boolean(event.target.closest("button")),
-            destroy() {
-              if (active) setPortals((current) => current.filter((entry) => entry !== portal))
-            },
-          }
-        },
+        message_selection: referenceNodeView,
+        file_annotation: referenceNodeView,
       },
     })
     viewRef.current = view
@@ -169,7 +183,9 @@ export function ComposerEditor({ ref, inputRef, draft, placeholder, onChange, on
       data-placeholder={placeholder} data-agent-composer="prompt" data-slot="input-group-control"
       className={cn("composer-editor relative cursor-text resize-none border-0 bg-transparent outline-none", className)} />
     {portals.map((portal) => createPortal(
-      <MessageSelectionQuote selection={portal.selection} onRemove={portal.remove} removeLabel={t("agentMessage.removeSelection")} />,
+      portal.part.type === "file_annotation"
+        ? <FileAnnotationReference annotation={portal.part.annotation} onRemove={portal.remove} removeLabel={t("agentMessage.removeSelection")} />
+        : <MessageSelectionQuote selection={portal.part.selection} onRemove={portal.remove} removeLabel={t("agentMessage.removeSelection")} />,
       portal.dom, String(portal.key),
     ))}
   </>

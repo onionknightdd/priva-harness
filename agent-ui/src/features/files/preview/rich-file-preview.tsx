@@ -214,7 +214,7 @@ function FilePreviewPanel({
           <PreviewRequestState error={file.error} reason={file.previewError} />
         ) : !active ? null : mode === "source" && file.content !== undefined ? (
           !canShowAgentAssist(file) && !isCsvSource(file.name, file.mediaType) ? (
-            <SourceSelectionActions>
+            <SourceSelectionActions filePath={file.path} content={file.content}>
               <SourcePreview content={file.content} fileName={file.name} />
             </SourceSelectionActions>
           ) : (

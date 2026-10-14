@@ -6,13 +6,14 @@ import { useTranslation } from "react-i18next"
 
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs"
 import { SelectionActionsPopover } from "@/components/primitives/selection-actions-popover"
-import { usePreviewSelectionReporter } from "@/features/files/selection"
+import { usePreviewSelection, usePreviewSelectionReporter } from "@/features/files/selection"
+import { useOptionalWorkspaceFiles } from "@/features/workspace/workspace-files-context"
 import { EASE_OUT } from "@/lib/ease"
 
 import { PreviewRequestState } from "../preview-request-state"
 import { createCsvCellReader, type CsvCellReader } from "./csv-cell-values"
 import { SpreadsheetFormulaBar } from "./spreadsheet-formula-bar"
-import { encodeCellAddress, MAX_SELECTION_TEXT_CELLS } from "./spreadsheet-model"
+import { encodeCellAddress, encodeRangeAddress, MAX_SELECTION_TEXT_CELLS } from "./spreadsheet-model"
 import { csvLoadOptions, isCsvSource } from "./spreadsheet-source"
 import { xlsxKeyboardSelection, xlsxPreviewSelection, xlsxSheetExtent } from "./xlsx-selection"
 import { xlsxSelectionActionsRect } from "./xlsx-selection-actions"
@@ -24,6 +25,8 @@ export function XlsxRenderer({ fileId, fileName, mediaType, source }: {
   source: string
 }) {
   const { t } = useTranslation()
+  const workspaceFiles = useOptionalWorkspaceFiles()
+  const previewSelection = usePreviewSelection()
   const reduceMotion = useReducedMotion()
   const containerRef = React.useRef<HTMLDivElement>(null)
   const menuRef = React.useRef<HTMLDivElement>(null)
@@ -126,10 +129,15 @@ export function XlsxRenderer({ fileId, fileName, mediaType, source }: {
       selectingPointer = null
       dismissActions()
     }
+    const handlePointerCancel = (event: PointerEvent) => {
+      if (event.target instanceof Node && menuRef.current?.contains(event.target)) return
+      cancelPointer()
+    }
     const handleActionsKeyDown = (event: KeyboardEvent) => {
-      if (!actionsOpen || !(event.target instanceof Node)) return
+      if (!actionsOpen || event.isComposing || event.keyCode === 229 || !(event.target instanceof Node)) return
       const inMenu = menuRef.current?.contains(event.target)
       if (event.key === "Escape") {
+        if (inMenu && menuRef.current?.querySelector("[data-selection-action-input]")) return
         dismissActions()
         if (inMenu) {
           event.preventDefault()
@@ -143,6 +151,10 @@ export function XlsxRenderer({ fileId, fileName, mediaType, source }: {
       }
     }
     const handleScroll = () => dismissActions(false)
+    const handleDocumentScroll = (event: Event) => {
+      if (event.target instanceof Node && menuRef.current?.contains(event.target)) return
+      handleScroll()
+    }
     const handleDismiss = () => dismissActions()
     const resizeObserver = new ResizeObserver(handleDismiss)
     resizeObserver.observe(container)
@@ -155,9 +167,9 @@ export function XlsxRenderer({ fileId, fileName, mediaType, source }: {
     }
     document.addEventListener("pointerdown", handlePointerDown, true)
     document.addEventListener("pointerup", handlePointerUp, true)
-    document.addEventListener("pointercancel", cancelPointer, true)
+    document.addEventListener("pointercancel", handlePointerCancel, true)
     document.addEventListener("keydown", handleActionsKeyDown, true)
-    document.addEventListener("scroll", handleScroll, true)
+    document.addEventListener("scroll", handleDocumentScroll, true)
     document.addEventListener("contextmenu", handleDismiss, true)
     window.addEventListener("resize", handleDismiss)
     window.addEventListener("blur", cancelPointer)
@@ -296,9 +308,9 @@ export function XlsxRenderer({ fileId, fileName, mediaType, source }: {
       visibilityObserver.disconnect()
       document.removeEventListener("pointerdown", handlePointerDown, true)
       document.removeEventListener("pointerup", handlePointerUp, true)
-      document.removeEventListener("pointercancel", cancelPointer, true)
+      document.removeEventListener("pointercancel", handlePointerCancel, true)
       document.removeEventListener("keydown", handleActionsKeyDown, true)
-      document.removeEventListener("scroll", handleScroll, true)
+      document.removeEventListener("scroll", handleDocumentScroll, true)
       document.removeEventListener("contextmenu", handleDismiss, true)
       window.removeEventListener("resize", handleDismiss)
       window.removeEventListener("blur", cancelPointer)
@@ -320,7 +332,23 @@ export function XlsxRenderer({ fileId, fileName, mediaType, source }: {
         menuRef={menuRef}
         kind="file"
         label={t("filePreview.selectionMenuLabel")}
-        actions={[{ id: "ask-agent", label: t("filePreview.askAgent"), icon: <MessageCircleCodeIcon aria-hidden="true" /> }]}
+        actions={[{
+          id: "ask-agent",
+          label: t("filePreview.askAgent"),
+          icon: <MessageCircleCodeIcon aria-hidden="true" />,
+          input: {
+            placeholder: t("filePreview.askAgentPlaceholder"),
+            confirmLabel: t("filePreview.confirmAgentQuestion"),
+            onConfirm: (question) => {
+              if (!workspaceFiles || previewSelection?.kind !== "spreadsheet" || previewSelection.file.id !== fileId || !previewSelection.ranges.length) return
+              const sheet = !isCsvSource(fileName, mediaType) && previewSelection.sheetName
+                ? `'${previewSelection.sheetName.replaceAll("'", "''")}'!` : ""
+              const cell = previewSelection.ranges.map((range) => sheet + (range.address ?? encodeRangeAddress(range))).join(", ")
+              setAnchorRect(null)
+              workspaceFiles.insertFileAnnotation({ kind: "spreadsheet", filePath: previewSelection.file.path, cell }, question)
+            },
+          },
+        }]}
       />
       <SpreadsheetFormulaBar address={address} value={formula} />
       <div className="relative min-h-0 flex-1 overflow-hidden">

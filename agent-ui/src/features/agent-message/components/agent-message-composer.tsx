@@ -385,7 +385,7 @@ export function AgentMessageComposer({
     rightRef,
     inputRef,
     chipOccupy,
-    draftParts.filter((part) => part.type === "selection").length
+    draftParts.filter((part) => part.type !== "text").length
   )
   // The home composer starts at two lines. A session composer stays one line
   // until the draft or an attachment needs the footer layout.

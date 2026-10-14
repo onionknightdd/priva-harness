@@ -21,6 +21,9 @@ import { appendQuotedDraft } from "../quote-selection"
 import { serializeMessageSelections } from "../message-select-action"
 import type { OnQuoteInChat } from "../selection-actions-context"
 import type { ComposerEditorHandle } from "./composer-editor"
+import type { FileAnnotation } from "../file-annotation"
+import { useSessionView } from "../session-view-context"
+import { useOptionalWorkspaceFiles } from "@/features/workspace/workspace-files-context"
 import {
   AgentMessageComposer,
   composerDockTransition,
@@ -112,6 +115,8 @@ export function AgentMessage({
   const composerEditorRef = useRef<ComposerEditorHandle>(null)
   const { activeSession, forkError, runCwd, runSessionId } = useActiveSession()
   const { setDraftCwd } = useChatSessionActions()
+  const workspaceFiles = useOptionalWorkspaceFiles()
+  const { setView } = useSessionView()
   const shouldReduceMotion = Boolean(useReducedMotion())
   useLayoutEffect(() => {
     if (wasHidden.current && !hidden) {
@@ -151,6 +156,23 @@ export function AgentMessage({
       : draft + serializeMessageSelections([{ type: "selection", selection: quote.selection }]))
     requestAnimationFrame(() => composerEditorRef.current?.focus(true))
   }, [])
+  const insertFileAnnotation = useCallback((annotation: FileAnnotation, question: string) => {
+    setView("chat")
+    if (composerEditorRef.current) {
+      composerEditorRef.current.insertFileAnnotation(annotation, question)
+    } else {
+      const { draft, onDraftChange } = selectionContext.current
+      const next = draft + serializeMessageSelections([
+        { type: "file_annotation", annotation },
+        ...(question ? [{ type: "text" as const, text: `\n${question}` }] : []),
+      ])
+      selectionContext.current.draft = next
+      onDraftChange(next)
+    }
+    requestAnimationFrame(() => composerEditorRef.current?.focus())
+  }, [setView])
+  const registerFileAnnotationComposer = workspaceFiles?.registerFileAnnotationComposer
+  useLayoutEffect(() => registerFileAnnotationComposer?.(insertFileAnnotation), [insertFileAnnotation, registerFileAnnotationComposer])
   const dockRef = useRef<HTMLDivElement>(null)
   const dockSpacerRef = useRef<HTMLDivElement>(null)
   const dockTop = useRef<number | null>(null)

@@ -35,9 +35,11 @@ function getInitialWorkspaceLayout(): WorkspaceLayout {
 export function WorkspaceShell({
   children,
   workspaceEnabled = true,
+  onShowChat,
 }: {
   children: React.ReactNode
   workspaceEnabled?: boolean
+  onShowChat?: () => void
 }) {
   const shellRef = React.useRef<HTMLDivElement>(null)
   const [layout, setLayout] = React.useState(getInitialWorkspaceLayout)
@@ -124,7 +126,7 @@ export function WorkspaceShell({
       widthCookieName="workspace_width"
       stateCookieName="workspace_state"
     >
-      <WorkspaceFilesProvider>
+      <WorkspaceFilesProvider onShowChat={onShowChat}>
         <WorkspaceWorkflowProvider>
         <WorkspaceDensityBridge
           maximized={maximized}

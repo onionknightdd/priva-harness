@@ -1,6 +1,7 @@
 import { looksLikeFilePath, resolveAgainstCwd } from "@/lib/file-path"
 
 import type { AgentThreadMessage } from "./agent-message-data"
+import { parseMessageSelections } from "./message-select-action"
 
 const FENCED_BLOCK = /```[\s\S]*?```/g
 const INLINE_CODE = /`([^`\n]+)`/g
@@ -8,8 +9,8 @@ const TOOL_PATH_KEYS = ["file_path", "path", "notebook_path"] as const
 
 /**
  * Paths the transcript will render as file references: inline code spans
- * that look like paths (see AssistantMarkdownCode) and the file arguments
- * of tool calls (see ToolFileName). Resolving them before the turns mount
+ * that look like paths (see AssistantMarkdownCode), user file annotations,
+ * and the file arguments of tool calls (see ToolFileName). Resolving them before the turns mount
  * lets every reference render in its final form instead of settling later.
  */
 export function collectThreadFilePaths(
@@ -25,6 +26,12 @@ export function collectThreadFilePaths(
   }
 
   for (const message of messages) {
+    if (message.role === "user") {
+      for (const part of parseMessageSelections(message.content)) {
+        if (part.type === "file_annotation") paths.add(resolveAgainstCwd(part.annotation.filePath, cwd))
+      }
+      continue
+    }
     if (message.role !== "assistant") continue
     const texts = message.blocks?.length
       ? message.blocks.flatMap((block) => (block.type === "text" ? [block.text] : []))

@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils"
 import { TooltipHint } from "@/components/ui/tooltip"
 
 import { messageSelectionPreview, parseMessageSelections, type MessageSelection } from "../message-select-action"
+import { FileAnnotationReference } from "./file-annotation-reference"
 
 export function MessageSelectionQuote({ selection, onRemove, removeLabel }: {
   selection: MessageSelection
@@ -37,5 +38,7 @@ export function MessageSelectionQuote({ selection, onRemove, removeLabel }: {
 export function MessageSelectionContent({ content }: { content: string }) {
   return parseMessageSelections(content).map((part, index) => part.type === "text"
     ? part.text
-    : <MessageSelectionQuote key={index} selection={part.selection} />)
+    : part.type === "selection"
+      ? <MessageSelectionQuote key={index} selection={part.selection} />
+      : <FileAnnotationReference key={index} annotation={part.annotation} />)
 }

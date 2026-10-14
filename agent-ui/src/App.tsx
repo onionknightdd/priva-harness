@@ -14,6 +14,7 @@ function AgentHarness() {
   const [activeView, setActiveView] = React.useState<AppView>("agent-message")
   const [agentMessageSessionKey, setAgentMessageSessionKey] = React.useState(0)
   const { startNewChat } = useChatSessionActions()
+  const showChat = React.useCallback(() => setActiveView("agent-message"), [])
   const startNewAgentMessage = React.useCallback(() => {
     startNewChat()
     setActiveView("agent-message")
@@ -40,6 +41,7 @@ function AgentHarness() {
       <AgentLayout
         activeView={activeView}
         agentMessageSessionKey={agentMessageSessionKey}
+        onShowChat={showChat}
       />
     </SidebarProvider>
   )

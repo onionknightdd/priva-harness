@@ -2,6 +2,7 @@ import * as React from "react"
 
 import { useSidebar } from "@/components/ui/sidebar"
 import type { FilePreviewMode } from "@/features/files/model/file.types"
+import type { FileAnnotation } from "@/features/agent-message/file-annotation"
 
 import { type WorkspaceModuleId } from "./workspace-modules"
 
@@ -25,6 +26,8 @@ type WorkspaceFilesContextValue = {
     path: string,
     options?: OpenFileInWorkspaceOptions
   ) => void
+  insertFileAnnotation: (annotation: FileAnnotation, question: string) => void
+  registerFileAnnotationComposer: (handler: (annotation: FileAnnotation, question: string) => void) => () => void
 }
 
 const WorkspaceTabContext =
@@ -36,8 +39,10 @@ const OpenWorkspaceTabContext =
 
 export function WorkspaceFilesProvider({
   children,
+  onShowChat,
 }: {
   children: React.ReactNode
+  onShowChat?: () => void
 }) {
   const { isMobile, setOpen, setOpenMobile } = useSidebar()
   const [activeTabId, setActiveTabId] =
@@ -48,6 +53,19 @@ export function WorkspaceFilesProvider({
   const [pendingPreviewMode, setPendingPreviewMode] =
     React.useState<FilePreviewMode | null>(null)
   const [fileOpenNonce, setFileOpenNonce] = React.useState(0)
+  const composer = React.useRef<((annotation: FileAnnotation, question: string) => void) | null>(null)
+  const pendingAnnotations = React.useRef<{ annotation: FileAnnotation; question: string }[]>([])
+  const registerFileAnnotationComposer = React.useCallback((handler: (annotation: FileAnnotation, question: string) => void) => {
+    composer.current = handler
+    for (const { annotation, question } of pendingAnnotations.current.splice(0)) handler(annotation, question)
+    return () => { if (composer.current === handler) composer.current = null }
+  }, [])
+  const insertFileAnnotation = React.useCallback((annotation: FileAnnotation, question: string) => {
+    onShowChat?.()
+    if (isMobile) setOpenMobile(false)
+    if (composer.current) composer.current(annotation, question)
+    else pendingAnnotations.current.push({ annotation, question })
+  }, [isMobile, onShowChat, setOpenMobile])
 
   const openWorkspaceTab = React.useCallback((id: WorkspaceModuleId) => {
     setActiveTabId(id)
@@ -76,8 +94,10 @@ export function WorkspaceFilesProvider({
       pendingPreviewMode,
       fileOpenNonce,
       openFileInWorkspace,
+      insertFileAnnotation,
+      registerFileAnnotationComposer,
     }),
-    [fileOpenNonce, openFileInWorkspace, pendingFilePath, pendingPreviewMode]
+    [fileOpenNonce, openFileInWorkspace, pendingFilePath, pendingPreviewMode, insertFileAnnotation, registerFileAnnotationComposer]
   )
 
   return (

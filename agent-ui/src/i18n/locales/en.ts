@@ -613,6 +613,8 @@ export const en = {
     preview: "Preview",
     edit: "Agent Assist",
     askAgent: "Ask Agent",
+    askAgentPlaceholder: "Enter your question…",
+    confirmAgentQuestion: "Confirm question",
     selectionMenuLabel: "File selection actions",
     sourceLabel: "{{fileName}} source",
     htmlFrameTitle: "{{fileName}} HTML preview",

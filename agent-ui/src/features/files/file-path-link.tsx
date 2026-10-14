@@ -97,11 +97,13 @@ export function FilePathLink({
       {text}
     </span>
   ) : variant === "code" ? (
-    <code className={cn("rounded bg-muted px-1.5 py-0.5 font-mono text-[1em]", className)}>
-      {label}
+    <code className={cn("rounded bg-muted px-1.5 py-0.5 font-mono text-[1em]", showIcon && linkBox, className)}>
+      {showIcon ? <>{icon}{text}</> : label}
     </code>
   ) : (
-    <span className={cn(marquee && "inline-block max-w-full min-w-0 truncate align-middle", className)}>{label}</span>
+    <span className={cn(showIcon ? linkBox : marquee && "inline-block max-w-full min-w-0 truncate align-middle", className)}>
+      {showIcon ? <>{icon}{text}</> : label}
+    </span>
   )
 
   return (

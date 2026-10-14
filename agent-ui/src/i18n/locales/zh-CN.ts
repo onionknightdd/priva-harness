@@ -611,6 +611,8 @@ export const zhCN = {
     preview: "预览",
     edit: "Agent协助",
     askAgent: "询问Agent",
+    askAgentPlaceholder: "输入你的问题…",
+    confirmAgentQuestion: "确认问题",
     selectionMenuLabel: "文件选区操作",
     sourceLabel: "{{fileName}} 源码",
     htmlFrameTitle: "{{fileName}} HTML 预览",

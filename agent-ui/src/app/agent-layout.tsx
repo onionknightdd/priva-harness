@@ -83,9 +83,11 @@ function AgentLayoutFallback() {
 export function AgentLayout({
   activeView,
   agentMessageSessionKey,
+  onShowChat,
 }: {
   activeView: AppView
   agentMessageSessionKey: number
+  onShowChat?: () => void
 }) {
   const { setOpenMobile } = useSidebar()
   const { t } = useTranslation()
@@ -106,7 +108,7 @@ export function AgentLayout({
 
   return (
     <SessionViewProvider chatKey={String(agentMessageSessionKey)} sessionId={viewedSessionId}>
-    <WorkspaceShell workspaceEnabled={workspaceEnabled}>
+    <WorkspaceShell workspaceEnabled={workspaceEnabled} onShowChat={onShowChat}>
       <header
         data-slot={isChat ? "agent-chat-header" : undefined}
         className={cn(

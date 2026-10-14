@@ -1,5 +1,7 @@
 import { parseMarkdownIntoBlocks } from "streamdown"
 
+import { fileAnnotationLabel, formatFileAnnotation, parseFileAnnotationBlock, type FileAnnotation } from "./file-annotation"
+
 export type MessageSelection = {
   messageRole: "assistant" | "user"
   selectedText: string
@@ -8,6 +10,7 @@ export type MessageSelection = {
 export type MessageSelectionPart =
   | { type: "text"; text: string }
   | { type: "selection"; selection: MessageSelection }
+  | { type: "file_annotation"; annotation: FileAnnotation }
 
 export function formatMessageSelection(selection: MessageSelection) {
   // A selected code example may itself contain Markdown fences.
@@ -18,24 +21,27 @@ export function formatMessageSelection(selection: MessageSelection) {
 }
 
 export function serializeMessageSelections(parts: readonly MessageSelectionPart[]) {
-  return parts.map((part) => part.type === "text" ? part.text : `\n\n${formatMessageSelection(part.selection)}\n\n`).join("")
+  return parts.map((part) => part.type === "text" ? part.text : `\n\n${part.type === "selection"
+    ? formatMessageSelection(part.selection)
+    : formatFileAnnotation(part.annotation)}\n\n`).join("")
 }
 
 export function parseMessageSelections(content: string): MessageSelectionPart[] {
-  if (!content.includes("message_select_action")) return content ? [{ type: "text", text: content }] : []
+  if (!content.includes("message_select_action") && !content.includes("file_annotation")) return content ? [{ type: "text", text: content }] : []
 
   const parts: MessageSelectionPart[] = []
   let pendingText = ""
   let separatorRemaining = 0
   for (const block of parseMarkdownIntoBlocks(content)) {
     const selection = parseSelectionBlock(block)
-    if (selection) {
+    const annotation = selection ? null : parseFileAnnotationBlock(block)
+    if (selection || annotation) {
       // The serializer supplies two newlines on each side solely to delimit
       // the wire format. Extra newlines still belong to the user's text.
       pendingText = pendingText.replace(/\n{1,2}$/, "")
       if (pendingText) parts.push({ type: "text", text: pendingText })
       pendingText = ""
-      parts.push({ type: "selection", selection })
+      parts.push(selection ? { type: "selection", selection } : { type: "file_annotation", annotation: annotation! })
       separatorRemaining = 2
     } else {
       let text = block
@@ -60,7 +66,9 @@ function parseSelectionBlock(block: string): MessageSelection | null {
 }
 
 export function messageSelectionDisplayText(parts: readonly MessageSelectionPart[]) {
-  return parts.map((part) => part.type === "text" ? part.text : `"${messageSelectionPreview(part.selection.selectedText)}"`).join("")
+  return parts.map((part) => part.type === "text" ? part.text : part.type === "selection"
+    ? `"${messageSelectionPreview(part.selection.selectedText)}"`
+    : fileAnnotationLabel(part.annotation)).join("")
 }
 
 const selectionCharacters = new Intl.Segmenter(undefined, { granularity: "grapheme" })

@@ -3,7 +3,8 @@ import { test } from "node:test"
 import { undo, redo, closeHistory } from "prosemirror-history"
 import { NodeSelection, TextSelection, type Command } from "prosemirror-state"
 
-import { composerDocument, createComposerState, deleteMessageSelection, insertMessageSelection, serializeComposerContent } from "../../../src/features/agent-message/composer-editor-state.ts"
+import { composerDocument, createComposerState, deleteComposerReference, insertFileAnnotation, insertMessageSelection, serializeComposerContent } from "../../../src/features/agent-message/composer-editor-state.ts"
+import { formatFileAnnotation, type FileAnnotation } from "../../../src/features/agent-message/file-annotation.ts"
 import { mentionTriggerFromState } from "../../../src/features/agent-message/composer-mention.ts"
 import { formatMessageSelection, parseMessageSelections } from "../../../src/features/agent-message/message-select-action.ts"
 
@@ -25,20 +26,20 @@ test("Backspace deletes one whole reference, then undo and redo restore the same
   const run = (command: Command) => command(state, (tr) => { state = state.apply(tr) })
   run(insertMessageSelection(selection))
   const quoted = serializeComposerContent(state.doc.content)
-  assert.equal(run(deleteMessageSelection(-1)), true)
+  assert.equal(run(deleteComposerReference(-1)), true)
   assert.equal(serializeComposerContent(state.doc.content), "before ")
   assert.equal(run(undo), true)
   assert.equal(serializeComposerContent(state.doc.content), quoted)
   assert.equal(run(redo), true)
   assert.equal(serializeComposerContent(state.doc.content), "before ")
-  assert.equal(run(deleteMessageSelection(-1)), false)
+  assert.equal(run(deleteComposerReference(-1)), false)
 })
 
 test("Delete before a quote and Backspace on a node selection delete atomically", () => {
   for (const nodeSelected of [false, true]) {
     let state = createComposerState(formatMessageSelection(selection))
     state = state.apply(state.tr.setSelection(nodeSelected ? NodeSelection.create(state.doc, 0) : TextSelection.create(state.doc, 0)))
-    assert.equal(deleteMessageSelection(nodeSelected ? -1 : 1)(state, (tr) => { state = state.apply(tr) }), true)
+    assert.equal(deleteComposerReference(nodeSelected ? -1 : 1)(state, (tr) => { state = state.apply(tr) }), true)
     assert.equal(state.doc.content.size, 0)
   }
 })
@@ -61,6 +62,51 @@ test("newlines and adjacent references retain order through copy/paste document 
   const doc = composerDocument(input)
   assert.equal(serializeComposerContent(doc.content), input)
   assert.ok(doc.eq(composerDocument(serializeComposerContent(doc.content))))
+})
+
+const annotations: FileAnnotation[] = [
+  { kind: "text", filePath: "/workspace/source.ts", lineNum: "L2-L4", selectedText: "first\nsecond" },
+  { kind: "spreadsheet", filePath: "/workspace/report.xlsx", cell: "Summary!A1:C4" },
+]
+
+test("file references and the original question insert at the retained caret in one undo step", () => {
+  for (const annotation of annotations) {
+    let state = createComposerState("before after")
+    state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, 7, 12)))
+    const run = (command: Command) => command(state, (tr) => { state = state.apply(tr) })
+    const question = "  explain this\nplease  "
+    run(insertFileAnnotation(annotation, question))
+    assert.deepEqual(parseMessageSelections(serializeComposerContent(state.doc.content)), [
+      { type: "text", text: "before " },
+      { type: "file_annotation", annotation },
+      { type: "text", text: `\n${question}` },
+    ])
+    assert.ok(state.doc.eq(composerDocument(serializeComposerContent(state.doc.content))))
+    assert.equal(state.selection.from, state.doc.content.size)
+    run(undo)
+    assert.equal(serializeComposerContent(state.doc.content), "before after")
+    run(redo)
+    assert.equal(state.doc.child(1).type.name, "file_annotation")
+  }
+})
+
+test("file references without a question remain atomic through deletion and copy/paste", () => {
+  for (const annotation of annotations) {
+    for (const selectionMode of ["before", "after", "node"] as const) {
+      let state = createComposerState("")
+      insertFileAnnotation(annotation, "")(state, (tr) => { state = state.apply(tr) })
+      assert.equal(state.doc.content.size, 1)
+      assert.ok(state.doc.eq(composerDocument(formatFileAnnotation(annotation))))
+      const selection = selectionMode === "node"
+        ? NodeSelection.create(state.doc, 0)
+        : TextSelection.create(state.doc, selectionMode === "before" ? 0 : 1)
+      state = state.apply(state.tr.setSelection(selection))
+      assert.equal(deleteComposerReference(selectionMode === "before" ? 1 : -1)(state, (tr) => { state = state.apply(tr) }), true)
+      assert.equal(state.doc.content.size, 0)
+      undo(state, (tr) => { state = state.apply(tr) })
+      assert.equal(state.doc.firstChild?.type.name, "file_annotation")
+    }
+  }
 })
 
 test("the @ mention token includes text after the caret and ignores emails", () => {

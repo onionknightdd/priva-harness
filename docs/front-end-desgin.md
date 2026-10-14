@@ -1266,7 +1266,13 @@ Source without Agent Assist tab (except CSV)
   -> native text selection --+
 XLSX / CSV                  |
   -> user-selected cells ---+-> (MessageCircleCode icon | Ask Agent)
-                                  click -> no action
+                                  click -> (Enter your question… | Check)
+                                               Escape -> Ask Agent
+                                               Check  -> Composer caret
+                                                         [file icon name range]
+                                                         question text
+                                                              |
+                                                       user sends manually
 ```
 
 文件与消息共用 `components/primitives/selection-actions-popover.tsx`、
@@ -1279,10 +1285,82 @@ XLSX / CSV                  |
 选区文本以换行结尾且换行后没有其他内容时，锚点放在当前行末尾。
 XLSX / CSV 使用最后选择的单元格或行列目标，正向和反向拖选都跟随操作终点。
 操作优先位于该目标下方，底部不足时翻到目标上方；窄屏保持同样布局并限制在视口内。
-文件版按钮不配置操作回调，点击不插入聊天、不发送请求、不修改文件或选区。
-Tab 可进入浮层，Escape、滚动、缩放、切表、切换文件或隐藏预览时关闭。
+点击文件版“询问Agent”后，胶囊原位展开为 288px 宽的单行输入框和右侧勾按钮，
+仍受视口宽度限制；输入框立即获得焦点。保留同一个胶囊节点，以原有形状为起点，
+使用 Motion layout 与共享 easing 在 180ms 内连续拉长，内部内容淡入。
+图标槽保持同一节点与 14px 尺寸，平移到右侧时将询问图标交叉淡化为勾，
+不跟随外框横向缩放，也不重新挂载右侧按钮。
+勾按钮使用黑色圆形背景与白色加粗图标（strokeWidth 3），浅色和深色主题保持一致。
+关闭时保留当前胶囊形状，仅透明度渐出，不位移、缩放或先收回按钮状态。
+输入文字与占位文本沿用共享 Input 的默认内容内边距及 16px 行高，
+光标起点对齐输入框自身的内容线，不为原按钮图标预留缩进。
+布局测量前同步避让位置，防止展开时跳位；键盘操作和减少动态效果时立即切换。
+2026-10-15：点击勾按钮将文件选区引用与问题插入 Chat Composer 当前光标位置，
+保留已有草稿，并把焦点交给 Composer；用户再手动发送。该操作不直接调用 Agent。
+源码选区保存为克隆的 DOM Range，浮层获焦后恢复浏览器原生选区。
+原文选区只在首次进入输入框、聚焦操作按钮时恢复，输入期间不写回全局 Selection，
+避免打断输入框的全选、局部选字或光标移动。仅在输入框内操作导致原生正文选区消失时，
+使用 CSS Highlight 保留原来代码文字范围的高亮。文字范围按文本节点保存，排除
+`user-select: none` 的行号；颜色沿用原 `::selection` 的显式设置，未设置时使用系统
+`Highlight` 与 `HighlightText`，不改变原生选区样式，也不抢回全局 Selection。
+Escape 返回操作按钮时恢复保存的原文选区；关闭浮层、重新选择或卸载时清理范围和高亮。
+
+```text
+input caret / text selection -> native source selection disappears
+  -> CSS Highlight over saved code text (line numbers excluded)
+  -> input keeps its own selection and caret
+```
+
+Tab 可进入浮层；输入状态保留原生文本选择、方向键与 Home / End，Escape 返回
+“询问Agent”并恢复按钮焦点，中文输入法组合期间不退出。输入框内部横向滚动不关闭浮层。
+输入状态可按住胶囊的空白边缘拖动整个浮层，文字区域仍用于原生选字，勾按钮仍只响应点击。
+拖动直接跟随指针、松手即停，位置限制在视口四周 8px 内；没有惯性或拖后回弹。
+拖动位置只用于当前浮层，关闭后重新出现时仍锚定新选区。
+
+```text
+╭──────────────────────────╮
+│  输入文字区域        [✓] │
+╰──────────────────────────╯
+ ↑ 空白边缘：拖动整个浮层
+```
+
+操作按钮状态下 Escape、外部滚动、缩放、切表、切换文件或隐藏预览时关闭。
 XLSX / CSV 使用库的公开 `getCellViewportRect` 获取最后目标的可见框，
 用户拖选期间隐藏浮层，结束后显示；保留原有选区与公式栏逻辑。
+
+文件引用使用 `file_annotation` 围栏。纯文本记录 `file_path`、原文件行号范围
+`line_num`（`Ln-Lm`）和完整 `selected_text`；XLSX / CSV 记录 `file_path` 与
+`cell`。XLSX 单元格范围包含工作表名称，CSV 只保留单元格地址范围。
+选中文本中的空白、换行和代码完整保留；单行字段中的反斜杠、CR、LF 分别转义，
+选区含反引号围栏时自动加长外层围栏。解析与消息选区引用共用顶层 Markdown 分块，
+无效、不完整或代码示例中的标记仍显示为普通正文。
+
+````text
+```file_annotation
+file_path: /workspace/main.ts
+line_num: L2-L4
+selected_text: 选中的完整文本
+```
+解释这段逻辑
+
+```file_annotation
+file_path: /workspace/report.xlsx
+cell: 'Sales 2026'!A1:C4
+```
+解释这组数据
+````
+
+Composer 和 user message 通过共享 `FileAnnotationReference` 显示行内
+「文件类型图标 + 文件名 + 选区范围」，复用 assistant 文件引用的显示与打开逻辑。
+Composer 中的文件引用是不可拆分的 inline 节点，可删除、撤销和重做；发送、复制、
+粘贴及历史恢复保留完整协议字段。用户消息只读，消息存在性预检查包含文件注释中的路径。
+
+```text
+source range / spreadsheet range + question
+  -> Check -> Composer caret: existing draft [file icon | name | range] question
+  -> user sends -> file_annotation + question -> Agent
+  -> user message -> FileAnnotationReference (same inline rendering)
+```
 
 ### Office 文件预览
 
@@ -2748,19 +2826,27 @@ Office 预览的选区坐标、文本边界、CSV 编码与格式路由回归：
 点击 **Run formula bar checks** 可仅检查短文本选字、自适应浮层高度和长文本点击展开。
 样例在内存生成，不访问用户文件。
 
+文件选区输入交互：打开 `/tests/features/files/selection/selection-actions-browser.html`，
+点击 **Run selection input checks**。覆盖原胶囊连续展开、自动焦点、原生输入导航、
+长文字滚动、IME / Escape、外点关闭、输入期间源码选区高亮保持及清理，
+以及 XLSX / CSV 的选区和公式保留。
+可使用 **Select fixture** 手动体验输入，追加 `?zh` 显示中文。
+完整页面中，勾按钮应将文件引用和问题插入 Composer 当前光标、保留已有草稿，
+并等待手动发送；检查源码行号、XLSX 工作表与范围、CSV 地址，以及发送前后的行内引用。
 源码选区在末尾换行处锚定当前行末尾：
 
 ```sh
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/files/selection/source-selection-anchor.test.ts
 ```
 
-选区角色与范围、浮层定位、文件引用、引用协议与截断、编辑器插入 / 删除 / 撤销、
+选区角色与范围、浮层定位、文件引用、`file_annotation` 字段与嵌套围栏、
+引用协议与截断、编辑器插入 / 删除 / 撤销、
 剪贴板（截图 / 多图片 / 图片附带 HTML 与 URL、草稿和选区保留）、IME、发送清空、
 历史只读展示和完整原文 Tooltip 回归。
 DOM 用例使用 jsdom 模拟事件，不承担浏览器布局或视觉验收：
 
 ```sh
-./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/quote-selection.test.ts agent-ui/tests/features/agent-message/message-select-action.test.ts agent-ui/tests/features/agent-message/composer-editor-state.test.ts agent-ui/tests/features/agent-message/composer-editor.test.tsx
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/quote-selection.test.ts agent-ui/tests/features/agent-message/message-select-action.test.ts agent-ui/tests/features/agent-message/file-annotation.test.ts agent-ui/tests/features/agent-message/composer-editor-state.test.ts agent-ui/tests/features/agent-message/composer-editor.test.tsx
 ```
 
 后端文件系统与 HTTP 回归覆盖 1–3 MiB、3 MiB 边界、UTF-8 字节数、无扩展名文本、

@@ -99,7 +99,7 @@ function PlainSourceLines({ content }: { content: string }) {
           {chunk.map((line, index) => (
             <div key={start + index} className={sourceLineClassName}>
               <LineNumber value={start + index + 1} />
-              <code className="break-words whitespace-pre-wrap pl-4">
+              <code data-source-line={start + index + 1} className="break-words whitespace-pre-wrap pl-4">
                 {line || "\u200b"}
               </code>
             </div>
@@ -134,7 +134,7 @@ function HighlightedSourceLines({
           {chunk.map((line, index) => (
             <div key={start + index} className={sourceLineClassName}>
               <LineNumber value={start + index + 1} />
-              <code className="break-words whitespace-pre-wrap pl-4">
+              <code data-source-line={start + index + 1} className="break-words whitespace-pre-wrap pl-4">
                 {line.length > 0
                   ? line.map((token, tokenIndex) => (
                       <span key={tokenIndex} style={getTokenStyle(token)}>

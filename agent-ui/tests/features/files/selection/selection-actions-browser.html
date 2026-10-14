@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Selection input checks</title>
+  </head>
+  <body class="bg-background p-3 text-foreground">
+    <nav class="flex flex-wrap gap-3 text-sm">
+      <button id="run" type="button">Run selection input checks</button>
+      <button id="source" type="button">Source</button>
+      <button id="xlsx" type="button">XLSX</button>
+      <button id="csv" type="button">CSV</button>
+      <button id="select" type="button">Select fixture</button>
+      <button id="outside" type="button">Outside target</button>
+    </nav>
+    <p class="my-3 text-sm text-muted-foreground">Select fixture, then Ask Agent. Try typing, Arrow/Home/End, Escape and an outside click.</p>
+    <pre id="results" role="status" class="mb-3 whitespace-pre-wrap text-xs">Ready</pre>
+    <div id="preview" class="border border-border" style="height:460px;width:min(900px,100%)"></div>
+    <pre id="selection" aria-label="Preview selection" class="mt-3 whitespace-pre-wrap text-xs"></pre>
+    <script type="module" src="./selection-actions-browser.tsx"></script>
+  </body>
+</html>
