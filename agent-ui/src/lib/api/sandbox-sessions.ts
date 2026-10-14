@@ -309,6 +309,7 @@ export function listSessionThread(
       status: "streaming" | "complete" | "error"
       transcript_uuid: string | null
       model_change?: { model?: string; output?: string }
+      effort_change?: { effort?: string; output?: string }
       interactions?: InteractionResolution[]
       blocks?: unknown
       nested_agents?: unknown
@@ -337,6 +338,7 @@ export function listSessionThread(
       status: item.status,
       ...(item.transcript_uuid ? { transcriptUuid: item.transcript_uuid } : {}),
       ...(item.model_change === undefined ? {} : { modelChange: item.model_change }),
+      ...(item.effort_change === undefined ? {} : { effortChange: item.effort_change }),
       ...(item.interactions === undefined ? {} : { interactions: item.interactions }),
       ...(item.blocks === undefined ? {} : { blocks: item.blocks }),
       ...(item.nested_agents === undefined

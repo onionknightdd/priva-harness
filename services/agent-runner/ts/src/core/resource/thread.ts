@@ -88,6 +88,11 @@ export interface ModelChange {
   readonly output?: string
 }
 
+export interface EffortChange {
+  readonly effort?: string
+  readonly output?: string
+}
+
 export interface ThreadMessage {
   readonly interactions?: readonly InteractionResolution[]
   readonly id: string
@@ -104,12 +109,14 @@ export interface ThreadMessage {
   readonly workflows?: readonly ThreadWorkflowCard[]
   readonly compact?: CompactMarker
   readonly modelChange?: ModelChange
+  readonly effortChange?: EffortChange
 }
 
 export type ThreadReplayItem =
   | {
       readonly kind: 'user'
       readonly modelChange?: ModelChange
+      readonly effortChange?: EffortChange
       readonly attachments?: readonly UserAttachment[]
       readonly id: string
       readonly content: string

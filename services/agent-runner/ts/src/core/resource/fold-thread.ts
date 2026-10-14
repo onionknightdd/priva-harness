@@ -71,6 +71,7 @@ export function foldThread(items: readonly ThreadReplayItem[]): ThreadMessage[] 
         transcriptUuid: item.id,
         ...(compact === undefined ? {} : { compact }),
         ...(item.modelChange === undefined ? {} : { modelChange: item.modelChange }),
+        ...(item.effortChange === undefined ? {} : { effortChange: item.effortChange }),
       })
       continue
     }

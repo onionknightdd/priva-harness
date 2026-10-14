@@ -349,6 +349,7 @@ function toThreadMessageResponse(message: ThreadMessage): Record<string, unknown
     role: message.role,
     content: message.content,
     ...(message.modelChange === undefined ? {} : { model_change: message.modelChange }),
+    ...(message.effortChange === undefined ? {} : { effort_change: message.effortChange }),
     ...(message.interactions === undefined ? {} : { interactions: message.interactions }),
     ...(message.attachments === undefined ? {} : { attachments: message.attachments }),
     created_at: message.createdAt,

@@ -16,6 +16,7 @@ type ThreadApiMessage = {
   workflows?: unknown
   compact?: AgentThreadMessage["compact"]
   modelChange?: AgentThreadMessage["modelChange"]
+  effortChange?: AgentThreadMessage["effortChange"]
   interactions?: AgentThreadMessage["interactions"]
 }
 
@@ -33,6 +34,7 @@ export function threadMessagesFromApi(
     ...(item.transcriptUuid ? { transcriptUuid: item.transcriptUuid } : {}),
     ...(item.compact === undefined ? {} : { compact: item.compact }),
     ...(item.modelChange === undefined ? {} : { modelChange: item.modelChange }),
+    ...(item.effortChange === undefined ? {} : { effortChange: item.effortChange }),
     ...(item.interactions === undefined ? {} : { interactions: item.interactions }),
     ...(item.role === "assistant"
       ? {

@@ -2038,6 +2038,19 @@ contextWindow -> run.start / session.configure -> Claude env + [1m] / Pi models.
 Composer 选择 -> session.configure -> TUI /model -> 原生确认 -> 卡片及两端选择器
 TUI 选择 -------------------------------------> 原生确认 -> 卡片及 Composer
 ```
+
+Claude Code 的 `/effort` 沿用同一卡片布局，使用 Brain 图标与 `effortChange` 元数据，
+显示“已切换思考强度为 {effort}”。收到原生结果前显示“正在切换思考强度…”；
+查询、失败、取消或环境覆盖等非成功结果保留可读输出，空结果显示命令已结束。
+TUI 手动命令和 Composer 发起的原生 `/effort` 共用这一显示，HTTP 历史与实时快照一致。
+两种卡片复用 `session-setting-change-card.tsx` 的 Card、换行和减少动态效果处理。
+
+```text
+TUI /effort / Composer 思考强度选择 -> 原生命令与确认 -> effortChange
+  桌面 / 窄屏：[Brain] 正在切换思考强度… -> 已切换思考强度为 high
+  查询 / 失败：[Brain] 原生可读输出（窄屏自然换行）
+```
+
 snapshot.runningToolIds 恢复等待工具结束的状态。TUI 产生的内嵌图片从转录映射到现有附件卡片，
 产品 MCP 的 visualize / canvas / 图片别名继续使用既有工具卡片。
 

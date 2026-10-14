@@ -497,6 +497,7 @@ Composer 手动选择 -> session.configure -> 空闲 / 等当前轮次完成
                     |                                  -> 新实例 ready + statusLine -> 确认
                     +-> effort -> /effort -> statusLine -> session.config(requestId)
 原生 /model -> caveat + command + stdout -> modelChange -> Web UI 卡片
+原生 /effort -> caveat + command + stdout -> effortChange -> Web UI 卡片
 ```
 
 原生终端的家族选项使用默认模型别名，不读取产品的 profile 模型目录；四个别名均映射到
@@ -527,9 +528,10 @@ statusLine 同时回传 model / effort / cwd / context，`session.config` 和重
 收到对应确认才采用原生实际模型名。失败时显示错误并恢复最后已知原生选择。
 上下文频繁刷新不触发配置命令；模型元数据按原生确认结果保存。
 
-转录中的 `/model` 命令通过原生 `isMeta` caveat、promptId 和 parentUuid 链识别，
-命令与 stdout 合并为同 UUID 的 modelChange 卡片；未收到结果时显示切换中，成功后
-展示原生确认的模型名，非成功输出保留为可读文本。用户粘贴的 XML 不赋予命令标记。
+转录中的 `/model` 和 `/effort` 命令通过原生 `isMeta` caveat、promptId 和 parentUuid 链识别，
+命令与 stdout 合并为同 UUID 的 modelChange / effortChange 卡片；未收到结果时显示切换中，
+成功后展示原生确认的模型名或思考强度（含 auto）。不使用命令参数推断成功，查询、失败、
+取消、策略限幅或环境覆盖的输出保留为可读文本。用户粘贴的 XML 不赋予命令标记。
 HTTP 历史和 WebSocket 快照都携带此结构，重新打开会话仍显示同一卡片。
 
 选择器的模型与 effort 直接受 `useAgentMessage` 控制，经页面和 Composer 向下传递；

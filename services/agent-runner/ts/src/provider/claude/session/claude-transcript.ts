@@ -1,6 +1,6 @@
 import { asRecord, isRecord, stringField, type JsonRecord } from '../../../core/event/json-record.js'
 import { claudeTaskNotificationRecord } from './claude-task-notification.js'
-import { ClaudeModelCommands } from './claude-model-command.js'
+import { ClaudeSettingCommands } from './claude-setting-command.js'
 
 export const EMPTY_TOOL_USE_RESULTS: ReadonlyMap<string, unknown> = new Map()
 
@@ -41,7 +41,7 @@ export function toolUseResultsFromTranscriptLines(
 
 export function transcriptThreadRecords(lines: readonly string[]): unknown[] {
   const records: unknown[] = []
-  const commands = new ClaudeModelCommands()
+  const commands = new ClaudeSettingCommands()
   for (const line of lines) {
     if (line.trim() === '') continue
     let parsed: unknown
