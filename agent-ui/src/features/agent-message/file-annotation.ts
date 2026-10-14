@@ -2,7 +2,7 @@ import { fileNameFromPath } from "@/lib/file-path"
 
 export type FileAnnotation =
   | { kind: "text"; filePath: string; lineNum: string; selectedText: string }
-  | { kind: "spreadsheet"; filePath: string; cell: string }
+  | { kind: "spreadsheet"; filePath: string; sheet: string; cell: string }
 
 function encodeField(value: string) {
   return value.replaceAll("\\", "\\\\").replaceAll("\r", "\\r").replaceAll("\n", "\\n")
@@ -15,7 +15,7 @@ function decodeField(value: string) {
 export function formatFileAnnotation(annotation: FileAnnotation) {
   const fields = `file_path: ${encodeField(annotation.filePath)}\n` + (annotation.kind === "text"
     ? `line_num: ${encodeField(annotation.lineNum)}\nselected_text: ${annotation.selectedText}`
-    : `cell: ${encodeField(annotation.cell)}`)
+    : `sheet: ${encodeField(annotation.sheet)}\ncell: ${encodeField(annotation.cell)}`)
   // Source selections can contain fenced code examples themselves.
   let longestFence = 0
   for (const match of fields.matchAll(/`+/g)) longestFence = Math.max(longestFence, match[0].length)
@@ -34,11 +34,12 @@ export function parseFileAnnotationBlock(block: string): FileAnnotation | null {
       ? { kind: "text", filePath, lineNum, selectedText: text[3] }
       : null
   }
-  const spreadsheet = /^file_path: ([^\r\n]+)\r?\ncell: ([^\r\n]+)$/.exec(match[2])
+  const spreadsheet = /^file_path: ([^\r\n]+)\r?\nsheet: ([^\r\n]+)\r?\ncell: ([^\r\n]+)$/.exec(match[2])
   if (!spreadsheet) return null
   const filePath = decodeField(spreadsheet[1])
-  const cell = decodeField(spreadsheet[2])
-  return filePath.trim() && cell.trim() ? { kind: "spreadsheet", filePath, cell } : null
+  const sheet = decodeField(spreadsheet[2])
+  const cell = decodeField(spreadsheet[3])
+  return filePath.trim() && sheet.trim() && cell.trim() ? { kind: "spreadsheet", filePath, sheet, cell } : null
 }
 
 export function fileAnnotationLabel(annotation: FileAnnotation) {

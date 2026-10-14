@@ -7,9 +7,9 @@ import { messageSelectionDisplayText, parseMessageSelections, serializeMessageSe
 test("file annotations retain text and spreadsheet fields in the requested protocol", () => {
   const text: FileAnnotation = { kind: "text", filePath: "/workspace/main.ts", lineNum: "L2-L4", selectedText: "first\n\nlast" }
   assert.equal(formatFileAnnotation(text), "```file_annotation\nfile_path: /workspace/main.ts\nline_num: L2-L4\nselected_text: first\n\nlast\n```")
-  const sheet: FileAnnotation = { kind: "spreadsheet", filePath: "/workspace/report.csv", cell: "A1:C4" }
-  assert.equal(formatFileAnnotation(sheet), "```file_annotation\nfile_path: /workspace/report.csv\ncell: A1:C4\n```")
-  for (const annotation of [text, sheet, { ...text, filePath: "C:\\workspace\\line\nname.ts" }]) {
+  const sheet: FileAnnotation = { kind: "spreadsheet", filePath: "/workspace/report.csv", sheet: "report", cell: "A1:C4" }
+  assert.equal(formatFileAnnotation(sheet), "```file_annotation\nfile_path: /workspace/report.csv\nsheet: report\ncell: A1:C4\n```")
+  for (const annotation of [text, sheet, { ...sheet, sheet: "Sales\n2026" }, { ...text, filePath: "C:\\workspace\\line\nname.ts" }]) {
     assert.deepEqual(parseFileAnnotationBlock(formatFileAnnotation(annotation)), annotation)
   }
   assert.equal(fileAnnotationLabel(text), "main.ts L2-L4")
@@ -21,7 +21,7 @@ test("file annotations roundtrip alongside message references and user text", ()
     { type: "text", text: "先看 " },
     { type: "selection", selection: { messageRole: "assistant", selectedText: "原话" } },
     { type: "text", text: "\n\n" },
-    { type: "file_annotation", annotation: { kind: "spreadsheet", filePath: "/workspace/report.xlsx", cell: "'Sales 2026'!A1:C4" } },
+    { type: "file_annotation", annotation: { kind: "spreadsheet", filePath: "/workspace/report.xlsx", sheet: "Sales 2026", cell: "'Sales 2026'!A1:C4" } },
     { type: "text", text: "\n解释数据" },
   ]
   assert.deepEqual(parseMessageSelections(serializeMessageSelections(parts)), parts)

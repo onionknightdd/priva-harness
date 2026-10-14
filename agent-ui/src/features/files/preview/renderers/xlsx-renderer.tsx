@@ -340,12 +340,12 @@ export function XlsxRenderer({ fileId, fileName, mediaType, source }: {
             placeholder: t("filePreview.askAgentPlaceholder"),
             confirmLabel: t("filePreview.confirmAgentQuestion"),
             onConfirm: (question) => {
-              if (!workspaceFiles || previewSelection?.kind !== "spreadsheet" || previewSelection.file.id !== fileId || !previewSelection.ranges.length) return
-              const sheet = !isCsvSource(fileName, mediaType) && previewSelection.sheetName
+              if (!workspaceFiles || previewSelection?.kind !== "spreadsheet" || previewSelection.file.id !== fileId || !previewSelection.sheetName || !previewSelection.ranges.length) return
+              const sheetPrefix = !isCsvSource(fileName, mediaType)
                 ? `'${previewSelection.sheetName.replaceAll("'", "''")}'!` : ""
-              const cell = previewSelection.ranges.map((range) => sheet + (range.address ?? encodeRangeAddress(range))).join(", ")
+              const cell = previewSelection.ranges.map((range) => sheetPrefix + (range.address ?? encodeRangeAddress(range))).join(", ")
               setAnchorRect(null)
-              workspaceFiles.insertFileAnnotation({ kind: "spreadsheet", filePath: previewSelection.file.path, cell }, question)
+              workspaceFiles.insertFileAnnotation({ kind: "spreadsheet", filePath: previewSelection.file.path, sheet: previewSelection.sheetName, cell }, question)
             },
           },
         }]}

@@ -66,7 +66,7 @@ test("newlines and adjacent references retain order through copy/paste document 
 
 const annotations: FileAnnotation[] = [
   { kind: "text", filePath: "/workspace/source.ts", lineNum: "L2-L4", selectedText: "first\nsecond" },
-  { kind: "spreadsheet", filePath: "/workspace/report.xlsx", cell: "Summary!A1:C4" },
+  { kind: "spreadsheet", filePath: "/workspace/report.xlsx", sheet: "Summary", cell: "Summary!A1:C4" },
 ]
 
 test("file references and the original question insert at the retained caret in one undo step", () => {

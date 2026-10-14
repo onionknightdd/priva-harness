@@ -1329,8 +1329,9 @@ XLSX / CSV 使用库的公开 `getCellViewportRect` 获取最后目标的可见�
 用户拖选期间隐藏浮层，结束后显示；保留原有选区与公式栏逻辑。
 
 文件引用使用 `file_annotation` 围栏。纯文本记录 `file_path`、原文件行号范围
-`line_num`（`Ln-Lm`）和完整 `selected_text`；XLSX / CSV 记录 `file_path` 与
-`cell`。XLSX 单元格范围包含工作表名称，CSV 只保留单元格地址范围。
+`line_num`（`Ln-Lm`）和完整 `selected_text`；XLSX / CSV 记录 `file_path`、
+`sheet`（当前工作表名称）与 `cell`。新增 `sheet` 字段保留现有 `cell` 内容：
+XLSX 单元格范围包含工作表名称，CSV 只保留单元格地址范围。
 选中文本中的空白、换行和代码完整保留；单行字段中的反斜杠、CR、LF 分别转义，
 选区含反引号围栏时自动加长外层围栏。解析与消息选区引用共用顶层 Markdown 分块，
 无效、不完整或代码示例中的标记仍显示为普通正文。
@@ -1345,6 +1346,7 @@ selected_text: 选中的完整文本
 
 ```file_annotation
 file_path: /workspace/report.xlsx
+sheet: Sales 2026
 cell: 'Sales 2026'!A1:C4
 ```
 解释这组数据
@@ -1352,6 +1354,7 @@ cell: 'Sales 2026'!A1:C4
 
 Composer 和 user message 通过共享 `FileAnnotationReference` 显示行内
 「文件类型图标 + 文件名 + 选区范围」，复用 assistant 文件引用的显示与打开逻辑。
+新增 `sheet` 元数据不改变行内显示，文件名与选区范围仍按原有方式渲染。
 Composer 中的文件引用是不可拆分的 inline 节点，可删除、撤销和重做；发送、复制、
 粘贴及历史恢复保留完整协议字段。用户消息只读，消息存在性预检查包含文件注释中的路径。
 
