@@ -863,9 +863,8 @@ describe('ClaudeEventMapper', () => {
       session_id: 'sess-1',
     })).toEqual([
       expect.objectContaining({
-        type: 'run.failed',
+        type: 'session.compaction_failed',
         message: 'summarizer exploded',
-        sessionId: 'sess-1',
       }),
     ])
   })

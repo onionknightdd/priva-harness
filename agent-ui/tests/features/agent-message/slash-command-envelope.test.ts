@@ -182,7 +182,7 @@ describe("foldCommandSurfaces", () => {
     assert.equal(folded[0]?.compact?.phase, "compacting")
   })
 
-  it("keeps an explicit failed compact as a user bubble", () => {
+  it("keeps an explicit failed compact as a settled marker", () => {
     const failed = {
       ...message("c1", "user", "/compact"),
       compact: { phase: "failed" as const },
@@ -191,7 +191,7 @@ describe("foldCommandSurfaces", () => {
     const folded = foldCommandSurfaces([failed, error])
     assert.equal(folded.length, 2)
     assert.equal(folded[0]?.compact?.phase, "failed")
-    assert.equal(userMessageSurface(failed.content, failed.compact), "bubble")
+    assert.equal(userMessageSurface(failed.content, failed.compact), "conversation-compacted")
     assert.equal(folded[1]?.status, "error")
   })
 
@@ -203,7 +203,7 @@ describe("foldCommandSurfaces", () => {
     assert.equal(folded[0]?.compact?.phase, "failed")
     assert.equal(
       userMessageSurface(folded[0]?.content ?? "", folded[0]?.compact),
-      "bubble"
+      "conversation-compacted"
     )
     assert.equal(folded[1]?.status, "error")
   })
@@ -243,7 +243,7 @@ describe("applyThreadCompactFrame", () => {
     })
     assert.equal(compacted[0]?.compact?.phase, "compacted")
     assert.equal(compacted[0]?.compact?.summary, "Kept the probe tokens.")
-    assert.equal(compacted[1]?.status, "complete")
+    assert.equal(compacted[1]?.status, "streaming")
   })
 
   it("marks the active compact user failed without touching an earlier compact", () => {

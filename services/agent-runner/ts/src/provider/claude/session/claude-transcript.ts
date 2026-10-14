@@ -136,9 +136,10 @@ function firstToolResultId(record: JsonRecord): string | undefined {
 
 function isMainThreadRecord(record: JsonRecord): boolean {
   const type = stringField(record, 'type')
-  if (type !== 'user' && type !== 'assistant') return false
   if (isSidechain(record)) return false
-  if (record['isMeta'] === true && stringField(record, 'sourceToolUseID') === undefined) return false
+  if (type === 'system') return stringField(record, 'subtype') === 'compact_boundary'
+  if (type !== 'user' && type !== 'assistant') return false
+  if (record['isMeta'] === true && record['isCompactSummary'] !== true && stringField(record, 'sourceToolUseID') === undefined) return false
   if (isSyntheticNoResponseAssistant(record)) return false
   return true
 }

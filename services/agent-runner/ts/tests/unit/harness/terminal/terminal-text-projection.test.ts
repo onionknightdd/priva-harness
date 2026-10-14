@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { SessionStream } from '../../../../src/harness/session/session-stream.js'
+import { TerminalTextProjection } from '../../../../src/harness/terminal/terminal-text-projection.js'
 import type { ThreadMessage } from '../../../../src/core/resource/thread.js'
 
 // Reconnection snapshots include wall-clock timestamps as well as projected text.
@@ -10,6 +11,53 @@ const user: ThreadMessage = { id: 'native-user', role: 'user', content: 'questio
 const native = (text: string): ThreadMessage => ({ id: 'native-assistant', role: 'assistant', content: text,
   createdAt: user.createdAt, status: 'complete', blocks: [{ type: 'text', blockId: 'native-text', index: 0, text }] })
 const delta = (text: string, index: number, messageId = 'display-1', final = false) => ({ sessionId: 's', turnId: 'turn', messageId, index, text, final })
+
+it.each(['', 'Keep the API decisions'])('reconciles a native compact command envelope with its submitted command (%s)', (instructions) => {
+  const stream = new SessionStream({ provider: 'claude', id: 's' })
+  const submitted = `/compact${instructions ? ` ${instructions}` : ''}`
+  stream.startTerminalTurn('compact-run', 'm', { ...user, id: 'compact-run:user', content: submitted }, false)
+  const nativeCommand = { ...user, id: 'native-command',
+    content: `<command-name>/compact</command-name>\n<command-message>compact</command-message>\n<command-args>${instructions}</command-args>`,
+    compact: { phase: 'compacted' as const, summary: 'Saved context' } }
+  stream.replaceHistory([nativeCommand])
+  stream.publish({ type: 'run.completed', model: 'm', durationMs: 1 }, 'compact-run')
+  stream.replaceHistory([nativeCommand])
+  expect(stream.snapshot().messages.filter((message) => message.role === 'user')).toMatchObject([nativeCommand])
+  expect(stream.snapshot().messages.some((message) => message.id === 'compact-run:user')).toBe(false)
+})
+
+it('does not reconcile compact commands with different instructions', () => {
+  const stream = new SessionStream({ provider: 'claude', id: 's' })
+  stream.startTerminalTurn('compact-run', 'm', { ...user, id: 'compact-run:user', content: '/compact Keep API' }, false)
+  stream.replaceHistory([{ ...user, id: 'other-command',
+    content: '<command-name>/compact</command-name>\n<command-message>compact</command-message>\n<command-args>Keep UI</command-args>',
+    compact: { phase: 'compacted', summary: 'UI context' } }])
+  expect(stream.snapshot().messages.filter((message) => message.role === 'user').map((message) => message.id)).toEqual(['other-command', 'compact-run:user'])
+})
+
+it('keeps display text after automatic compaction below its marker through native reconciliation', () => {
+  const projection = new TerminalTextProjection('r', { ...user, id: 'r:user' }, [])
+  const first = native('Before compaction')
+  const marker: ThreadMessage = { ...user, id: 'compact-boundary', content: '/compact', compact: { phase: 'compacted' } }
+  projection.append(delta('Before compaction', 0, 'before'))
+  projection.append(delta('After compaction', 0, 'after'))
+  const projected = projection.merge([user, first, marker])
+  expect(projected.map((message) => message.content)).toEqual(['question', 'Before compaction', '/compact', 'After compaction'])
+  expect(projected[1]).toEqual(first)
+  expect(projected[3]?.renderId).not.toBe('r')
+
+  const saved = { ...native('After '), id: 'native-continuation' }
+  const partial = projection.merge([user, first, marker, saved])
+  expect(partial[1]).toEqual(first)
+  expect(partial[3]).toMatchObject({ id: 'native-continuation', renderId: projected[3]?.renderId })
+  expect(partial[3]?.blocks?.filter((block) => block.type === 'text').map((block) => block.text).join('')).toBe('After compaction')
+
+  projection.finished = true
+  const completed = projection.merge([user, first, marker, { ...native('After compaction'), id: saved.id }])
+  expect(completed.map((message) => message.content)).toEqual(['question', 'Before compaction', '/compact', 'After compaction'])
+  expect(completed[3]?.blocks).toHaveLength(1)
+  expect(completed[3]?.status).toBe('complete')
+})
 
 it('keeps streamed text through disk snapshots, reordered/duplicate flushes, tool calls, and final reconciliation', () => {
   const stream = new SessionStream({ provider: 'claude', id: 's' })

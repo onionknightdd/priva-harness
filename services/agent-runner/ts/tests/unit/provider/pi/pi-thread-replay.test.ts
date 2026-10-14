@@ -117,6 +117,7 @@ describe('replayPiSessionMessages', () => {
     const thread = foldThread(replayPiSessionMessages(messages))
     expect(thread.map((message) => message.role)).toEqual(['user', 'assistant', 'user'])
     expect(thread[2]).toMatchObject({
+      id: 'e4',
       role: 'user',
       content: '/compact',
       compact: { phase: 'compacted', summary: 'compacted' },

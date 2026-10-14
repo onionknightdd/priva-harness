@@ -1,6 +1,7 @@
 import { syncBackgroundOverview, type BackgroundTask } from "@/features/agent-message/background-task-store"
 import type { MessageAttachment } from "@/features/agent-message/message-attachment"
 import type { InteractionResolution } from "@/features/agent-message/interaction-data"
+import type { CompactMarker } from "@/features/agent-message/slash-command-envelope"
 import { attachmentMessageSummary } from "@/features/agent-message/message-attachment-text"
 const SESSION_API_PREFIX = "/api/sandbox/agent/sessions"
 
@@ -314,10 +315,7 @@ export function listSessionThread(
       blocks?: unknown
       nested_agents?: unknown
       workflows?: unknown
-      compact?: {
-        phase: "compacting" | "compacted" | "failed"
-        summary?: string
-      }
+      compact?: CompactMarker
     }>
     add_dirs: string[]
     run_mode: SessionRunMode

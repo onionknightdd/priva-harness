@@ -30,6 +30,7 @@ async function main(): Promise<void> {
   let mapper: PiEventMapper | undefined
   let activeRunId: string | undefined
   let newSessionRunId: string | undefined
+  let manualCompactionCancelled = false
   let phase: TerminalSessionState['phase'] = 'idle'
   let promptText = ''
   let updatedAt = 0
@@ -93,6 +94,7 @@ async function main(): Promise<void> {
   }
   const receive = (event: PiSessionEvent) => {
     if (!current) return
+    if (event.type === 'compaction_end' && event.reason === 'manual') manualCompactionCancelled = event.aborted === true
     if (event.type === 'agent_start') begin('', undefined, false)
     if (event.type === 'permission.requested' || event.type === 'permission.resolved' || event.type === 'terminal.focus' || event.type === 'error') {
       publish(event as AgentEvent)
@@ -184,9 +186,12 @@ async function main(): Promise<void> {
     if (!session) throw new Error('Pi session is unavailable')
     begin(command.text, command.runId)
     const runId = activeRunId
+    const name = /^\/([\w-]+)/u.exec(command.text.trim())?.[1]
     try {
-      const name = /^\/([\w-]+)/u.exec(command.text.trim())?.[1]
-      if (name === 'compact') await session.compact(command.text.trim().slice('/compact'.length).trim() || undefined)
+      if (name === 'compact') {
+        manualCompactionCancelled = false
+        await session.compact(command.text.trim().slice('/compact'.length).trim() || undefined)
+      }
       else if (name === 'new') {
         newSessionRunId = runId
         const result = await runtime.newSession()
@@ -205,7 +210,10 @@ async function main(): Promise<void> {
       // Extension commands may complete without starting a model turn.
       if (current === session && !session.isStreaming) finish({ type: 'run.completed', model: session.native.model?.id ?? spec.model, durationMs: 0 }, runId)
     } catch (error) {
-      finish({ type: 'run.failed', code: 'provider_error', message: error instanceof Error ? error.message : String(error) }, runId)
+      const message = error instanceof Error ? error.message : String(error)
+      finish(name === 'compact' && manualCompactionCancelled
+        ? { type: 'run.aborted', message }
+        : { type: 'run.failed', code: name === 'compact' ? 'compaction_failed' : 'provider_error', message }, runId)
     } finally { commandPending = false; newSessionRunId = undefined }
   }
   const command = async (input: PiTerminalCommand) => {

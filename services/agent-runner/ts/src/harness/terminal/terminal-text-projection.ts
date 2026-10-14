@@ -1,6 +1,7 @@
 import type { TerminalTextDelta } from '../../core/contract/terminal-service.js'
 import { emptyAssistantMessage } from '../../core/resource/apply-stream-frame.js'
 import { taskNotificationFields } from '../../core/resource/background-task.js'
+import { normalizeCompactCommandContent } from '../../core/resource/compact-command.js'
 import { textFromThreadBlocks, type ThreadBlock, type ThreadMessage } from '../../core/resource/thread.js'
 
 /** Display IDs differ from transcript IDs. Reconcile their ordered text prefixes. */
@@ -37,7 +38,22 @@ export class TerminalTextProjection {
     const userIndex = this.userId ? history.findIndex((message) => message.id === this.userId) : -1
     let nativeIndex = -1
     let replyStart = 0
-    if (userIndex >= 0 && history[userIndex + 1]?.role === 'assistant') nativeIndex = userIndex + 1
+    let compactIndex = -1
+    const turnAssistants: ThreadMessage[] = []
+    if (userIndex >= 0) {
+      for (let index = userIndex + 1; index < history.length; index++) {
+        const message = history[index]
+        if (!message) continue
+        if (message.compact) {
+          compactIndex = index
+          nativeIndex = -1
+        } else if (message.role === 'user') break
+        else {
+          turnAssistants.push(message)
+          nativeIndex = index
+        }
+      }
+    }
     if (this.nativePrompt && userIndex < 0) {
       let deliveredAt = ''
       for (const [index, message] of history.entries()) for (const [blockIndex, block] of (message.blocks ?? []).entries()) {
@@ -60,7 +76,8 @@ export class TerminalTextProjection {
     })
     // Transcript blocks may precede or follow display flushes and include tools
     // between text messages. Consume matching text in order, never by ID.
-    let persisted = (native?.blocks ?? []).slice(replyStart).filter((block) => block.type === 'text').map((block) => block.text).join('')
+    const persistedBlocks = userIndex >= 0 ? turnAssistants.flatMap((message) => message.blocks ?? []) : (native?.blocks ?? []).slice(replyStart)
+    let persisted = persistedBlocks.filter((block) => block.type === 'text').map((block) => block.text).join('')
     const tail: ThreadBlock[] = []
     for (const { id, text } of texts) {
       if (!text) continue
@@ -72,19 +89,22 @@ export class TerminalTextProjection {
       }
       // A native transformation is authoritative; do not duplicate mismatched text.
     }
-    const base = native ?? emptyAssistantMessage(this.runId, this.user.createdAt)
+    // A compaction splits one model turn into separate visible answer segments.
+    // Keep display chunks on the segment after that boundary, even before it is saved.
+    const renderId = compactIndex < 0 ? this.runId : `${this.runId}:compact:${history[compactIndex]?.id ?? ''}`
+    const base = native ?? emptyAssistantMessage(renderId, history[compactIndex]?.createdAt ?? this.user.createdAt)
     const blocks = [...(base.blocks ?? []), ...tail]
-    const message: ThreadMessage = { ...base, renderId: this.runId, blocks, content: textFromThreadBlocks(blocks), status: this.finished ? 'complete' : 'streaming' }
+    const message: ThreadMessage = { ...base, renderId, blocks, content: textFromThreadBlocks(blocks), status: this.finished ? 'complete' : 'streaming' }
     if (userIndex < 0 && !this.nativePrompt) return [...history, this.user, message]
     const result = [...history]
     const nativeUser = result[userIndex]
     if (nativeUser) result[userIndex] = { ...nativeUser, renderId: this.user.renderId ?? this.user.id }
-    result.splice(nativeIndex >= 0 ? nativeIndex : userIndex + 1, native ? 1 : 0, message)
+    result.splice(nativeIndex >= 0 ? nativeIndex : (compactIndex >= 0 ? compactIndex : userIndex) + 1, native ? 1 : 0, message)
     return result
   }
 }
 
 function normalize(text: string): string {
   // [Image #N] is Claude's vision-paste label, not part of the submitted text.
-  return text.replaceAll('\r\n', '\n').replace(/[ \t]*\[Image #\d+\][ \t]*/g, ' ').replace(/ {2,}/g, ' ').trim()
+  return (normalizeCompactCommandContent(text) ?? text).replaceAll('\r\n', '\n').replace(/[ \t]*\[Image #\d+\][ \t]*/g, ' ').replace(/ {2,}/g, ' ').trim()
 }

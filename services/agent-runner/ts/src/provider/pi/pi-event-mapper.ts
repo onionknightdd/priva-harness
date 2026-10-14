@@ -41,6 +41,7 @@ export interface PiSessionEvent {
   readonly isError?: boolean
   readonly reason?: string
   readonly aborted?: boolean
+  readonly willRetry?: boolean
   readonly errorMessage?: string
 }
 
@@ -142,7 +143,7 @@ export class PiEventMapper {
         this.settled = true
         return [this.mapAgentEnd([...this.runMessages.values()], event.aborted)]
       case 'compaction_start':
-        return [{ type: 'session.compacting' }]
+        return [{ type: 'session.compacting', reason: event.reason === 'manual' ? 'manual' : 'auto' }]
       case 'compaction_end':
         return this.mapCompactionEnd(event)
       default:
@@ -419,22 +420,23 @@ export class PiEventMapper {
   }
 
   private mapCompactionEnd(event: PiSessionEvent): AgentEvent[] {
+    const reason = event.reason === 'manual' ? 'manual' : 'auto'
+    if (event.aborted) {
+      return [{ type: 'session.compaction_cancelled', reason }]
+    }
     const record = asRecord(event.result)
     const summary = record === undefined ? undefined : stringField(record, 'summary')
     if (summary !== undefined && summary.trim() !== '') {
-      return [{ type: 'session.compacted', summary }]
+      return [{ type: 'session.compacted', reason, summary }]
     }
-    if (event.result !== undefined && event.result !== null && event.aborted !== true) {
-      return [{ type: 'session.compacted' }]
+    if (event.result !== undefined && event.result !== null) {
+      return [{ type: 'session.compacted', reason }]
     }
-    const sessionId = this.options.sessionId === '' ? undefined : this.options.sessionId
     return [
       {
-        type: 'run.failed',
+        type: 'session.compaction_failed',
+        reason,
         message: event.errorMessage ?? 'Conversation compaction failed',
-        code: 'compaction_failed',
-        ...(sessionId === undefined ? {} : { sessionId }),
-        model: this.model === '' ? this.options.model : this.model,
       },
     ]
   }

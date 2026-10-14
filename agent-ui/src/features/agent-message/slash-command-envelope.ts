@@ -4,15 +4,17 @@ export type UserMessageSurface =
   | "conversation-compacted"
   | "hidden"
 
-export type CompactPhase = "compacting" | "compacted" | "failed"
+export type CompactPhase = "queued" | "compacting" | "compacted" | "failed" | "cancelled"
 
 export type CompactMarker = {
   phase: CompactPhase
   summary?: string
+  message?: string
 }
 
 type FoldableMessage = {
   id: string
+  renderId?: string
   role: "user" | "assistant"
   content: string
   attachments?: readonly unknown[]
@@ -65,8 +67,7 @@ export function userMessageSurface(
     return "hidden"
   }
   if (isClearCommandUserMessage(text)) return "session-reset"
-  if (compact?.phase === "failed") return "bubble"
-  if (isCompactCommandUserMessage(text)) return "conversation-compacted"
+  if (compact || isCompactCommandUserMessage(text)) return "conversation-compacted"
   return "bubble"
 }
 
@@ -156,16 +157,12 @@ function resolveCompactMarker(
   messages: readonly FoldableMessage[],
   compactIndex: number
 ): CompactMarker {
-  if (message.compact?.phase === "failed") {
-    return { phase: "failed" }
-  }
+  if (message.compact && message.compact.phase !== "compacted") return message.compact
   const merged = summary?.trim() || message.compact?.summary?.trim()
   if (merged) {
     return { phase: "compacted", summary: merged }
   }
-  if (message.compact?.phase === "compacting" || message.compact?.phase === "compacted") {
-    return { phase: message.compact.phase }
-  }
+  if (message.compact) return message.compact
   return { phase: compactPhase(messages, compactIndex) }
 }
 
@@ -241,90 +238,76 @@ function isPlaceholderAssistant(message: FoldableMessage): boolean {
 export function applyThreadCompactFrame<T extends FoldableMessage>(
   messages: readonly T[],
   assistantId: string,
-  frame: { type?: string; summary?: string; message?: string }
-): T[] {
-  if (frame.type === "session.compacting") {
-    return patchCompactUser(messages, { phase: "compacting" })
+  frame: {
+    type?: string
+    summary?: string
+    message?: string
+    reason?: "manual" | "auto"
+    compactMessage?: T
+    compactAfterMessageId?: string
   }
-  if (frame.type === "session.compacted") {
-    const summary = frame.summary?.trim()
-    return patchCompactUser(
-      messages.map((message) =>
-        message.id === assistantId && message.status === "streaming"
-          ? { ...message, status: "complete" as const }
-          : message
-      ),
-      summary ? { phase: "compacted", summary } : { phase: "compacted" }
-    )
-  }
-  if (frame.type === "error" || frame.type === "run.failed") {
-    return failActiveCompact(messages, assistantId)
-  }
-  return [...messages]
-}
-
-function patchCompactUser<T extends FoldableMessage>(
-  messages: readonly T[],
-  patch: CompactMarker
 ): T[] {
-  const index = lastCompactUserIndex(messages)
-  if (index === undefined) return [...messages]
-  return messages.map((message, position) =>
-    position === index
-      ? { ...message, compact: mergeCompact(message.compact, patch) }
-      : message
-  )
-}
-
-function failActiveCompact<T extends FoldableMessage>(
-  messages: readonly T[],
-  assistantId: string
-): T[] {
-  const assistantIndex = messages.findIndex((message) => message.id === assistantId)
-  if (assistantIndex < 0) return [...messages]
-  for (let index = assistantIndex - 1; index >= 0; index -= 1) {
-    const message = messages[index]
-    if (message === undefined || message.role !== "user") continue
-    if (message.attachments?.length) return [...messages]
-    if (message.compact?.phase === "compacted") return [...messages]
-    if (
-      message.compact?.phase === "compacting" ||
-      isCompactCommandUserMessage(message.content)
-    ) {
-      return messages.map((item, position) =>
-        position === index ? { ...item, compact: { phase: "failed" } } : item
-      )
+  if (frame.compactMessage) {
+    const marker = frame.compactMessage
+    const existingIndex = messages.findIndex((message) => sameMessage(message, marker))
+    if (existingIndex >= 0) {
+      return messages.map((message, index) => index === existingIndex ? {
+        ...marker,
+        renderId: message.renderId ?? message.id,
+        compact: reconcileCompactMarker(message.compact, marker.compact),
+      } : message)
     }
-    return [...messages]
+    const anchor = frame.compactAfterMessageId
+    const anchorIndex = anchor === undefined ? -1 : messages.findIndex((message) => hasMessageId(message, anchor))
+    const index = anchor !== undefined && anchorIndex < 0 ? messages.length : anchorIndex + 1
+    return [...messages.slice(0, index), marker, ...messages.slice(index)]
   }
-  return [...messages]
+  // A raw event may only address the manual command belonging to this run.
+  // Automatic compaction requires the session's explicit marker identity.
+  if (frame.reason === "auto") return [...messages]
+  const index = manualCompactIndex(messages, assistantId)
+  if (index < 0) return [...messages]
+  const previous = messages[index]?.compact
+  let patch: CompactMarker
+  if (frame.type === "run.started" || frame.type === "session.compacting") patch = { phase: "compacting" }
+  else if (frame.type === "session.compacted") patch = { phase: "compacted", ...(frame.summary?.trim() ? { summary: frame.summary.trim() } : {}) }
+  else if (frame.type === "session.compaction_failed" || frame.type === "error" || frame.type === "run.failed") patch = { phase: "failed", ...(frame.message ? { message: frame.message } : {}) }
+  else if (frame.type === "session.compaction_cancelled" || frame.type === "run.aborted") patch = { phase: "cancelled", ...(frame.message ? { message: frame.message } : {}) }
+  else return [...messages]
+  if (previous && isSettledCompact(previous)) return [...messages]
+  return messages.map((message, position) => position === index ? { ...message, compact: patch } : message)
 }
 
-function lastCompactUserIndex(
-  messages: readonly FoldableMessage[]
-): number | undefined {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index]
-    if (message === undefined || message.role !== "user") continue
-    if (!message.attachments?.length && (message.compact !== undefined || isCompactCommandUserMessage(message.content))) {
-      return index
-    }
-  }
-  return undefined
+function manualCompactIndex(messages: readonly FoldableMessage[], assistantId: string): number {
+  if (!assistantId) return -1
+  const isManual = (message: FoldableMessage) => message.role === "user" && !message.attachments?.length && isCompactCommandUserMessage(message.content)
+  const exact = messages.findIndex((message) => hasMessageId(message, `${assistantId}:user`) && isManual(message))
+  if (exact >= 0) return exact
+  const assistantIndex = messages.findIndex((message) => message.role === "assistant" && hasMessageId(message, assistantId))
+  const preceding = messages[assistantIndex - 1]
+  return preceding && isManual(preceding) ? assistantIndex - 1 : -1
 }
 
-function mergeCompact(
+function hasMessageId(message: FoldableMessage, id: string): boolean {
+  return message.id === id || message.renderId === id
+}
+
+function sameMessage(left: FoldableMessage, right: FoldableMessage): boolean {
+  return hasMessageId(left, right.id) || (right.renderId !== undefined && hasMessageId(left, right.renderId))
+}
+
+function isSettledCompact(marker: CompactMarker): boolean {
+  return marker.phase === "compacted" || marker.phase === "failed" || marker.phase === "cancelled"
+}
+
+/** A snapshot may lag the live event for the same marker, but a new ID is a new compaction. */
+export function reconcileCompactMarker(
   previous: CompactMarker | undefined,
-  patch: CompactMarker
-): CompactMarker {
-  if (patch.phase === "failed" || previous?.phase === "failed") {
-    return { phase: "failed" }
-  }
-  const summary = patch.summary?.trim() || previous?.summary?.trim()
-  if (patch.phase === "compacted" || summary) {
-    return summary ? { phase: "compacted", summary } : { phase: "compacted" }
-  }
-  return summary ? { phase: "compacting", summary } : { phase: "compacting" }
+  incoming: CompactMarker | undefined
+): CompactMarker | undefined {
+  if (previous && isSettledCompact(previous) && (!incoming || !isSettledCompact(incoming))) return previous
+  if (previous?.phase === "compacted" && incoming?.phase === "compacted" && !incoming.summary && previous.summary) return { ...incoming, summary: previous.summary }
+  return incoming
 }
 
 function isSlashCommandUserMessage(content: string, name: string): boolean {

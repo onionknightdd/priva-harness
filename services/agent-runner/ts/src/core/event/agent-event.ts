@@ -27,9 +27,9 @@ export const STREAM_PROTOCOL_VERSION = 2 as const
 // Pi message_end assistant                         → assistant.message
 // Pi agent_end                                     → run.completed | run.failed | run.aborted
 // Claude system.status compacting                  → session.compacting
-// Claude system.status compact_result              → session.compacted | run.failed
+// Claude system.status compact_result              → session.compacted | session.compaction_failed
 // Claude compact continuation user                 → session.compacted { summary }
-// Pi compaction_start / compaction_end             → session.compacting / session.compacted | run.failed
+// Pi compaction_start / compaction_end             → session.compacting / session.compacted / session.compaction_failed / session.compaction_cancelled
 
 
 // Raw provider components for one turn. input excludes cache traffic, so the
@@ -321,8 +321,10 @@ export type AgentEvent = (
   | { readonly type: 'agent.completed'; readonly agentId: string; readonly ok?: boolean; readonly status?: 'completed' | 'failed' | 'cancelled' }
   | { readonly type: 'permission.requested'; readonly request: InteractionRequest }
   | { readonly type: 'permission.resolved'; readonly resolution: InteractionResolution }
-  | { readonly type: 'session.compacting' }
-  | { readonly type: 'session.compacted'; readonly summary?: string }
+  | { readonly type: 'session.compacting'; readonly reason?: 'manual' | 'auto' }
+  | { readonly type: 'session.compacted'; readonly summary?: string; readonly reason?: 'manual' | 'auto' }
+  | { readonly type: 'session.compaction_failed'; readonly message: string; readonly reason?: 'manual' | 'auto' }
+  | { readonly type: 'session.compaction_cancelled'; readonly message?: string; readonly reason?: 'manual' | 'auto' }
   | { readonly type: 'suggestion.prompts'; readonly prompts: readonly string[] }
   | { readonly type: 'run.usage'; readonly usage: TokenUsage }
   | {
@@ -334,6 +336,9 @@ export type AgentEvent = (
 ) & { readonly replyTo?: TaskReplyTarget }
 
 export interface StreamEnvelope {
+  /** The session-owned compaction marker, also included in every following snapshot. */
+  readonly compactMessage?: ThreadMessage
+  readonly compactAfterMessageId?: string
   /** Set only on historical frames delivered by a WebSocket subscription. */
   readonly replay?: true
   readonly messageTargetId?: string

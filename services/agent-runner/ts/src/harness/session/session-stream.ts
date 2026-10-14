@@ -8,6 +8,8 @@ import { BackgroundTasks, taskIsActive, taskNotificationReplyTarget, type Backgr
 import { applyStreamFrame, emptyAssistantMessage } from '../../core/resource/apply-stream-frame.js'
 import { freezeMessageThinking, stampMessageThinkingTimes } from '../../core/resource/thinking-time.js'
 import { taskReplyOwner, type ThreadMessage } from '../../core/resource/thread.js'
+import { isCompactCommandContent } from '../../core/resource/compact-command.js'
+import { SessionCompaction } from './session-compaction.js'
 
 /** A session owns replay, task identity, and the rendered snapshot across response turns. */
 export class SessionStream {
@@ -28,6 +30,9 @@ export class SessionStream {
   private readonly runningTools = new Set<string>()
   private readonly nativeTasks = new Map<string, string>()
   private prompts: readonly string[] = []
+  private compactions = new SessionCompaction()
+  private readonly runUsers = new Map<string, ThreadMessage>()
+  private readonly compactContinuations = new Map<string, { after: string; next: string }>()
 
   constructor(readonly session: SessionRef, history: readonly ThreadMessage[] = [], private readonly limit = 4096,
     private readonly saveTasks?: (tasks: readonly BackgroundTask[]) => Promise<void>, savedTasks: readonly BackgroundTask[] = []) {
@@ -43,6 +48,16 @@ export class SessionStream {
   }
 
   publish(event: AgentEvent, runId = ''): StreamFrame {
+    if (event.type === 'run.started' && event.userMessage) this.runUsers.set(runId, event.userMessage)
+    const continuation = this.compactContinuations.get(runId)
+    if (continuation && (event.type.startsWith('assistant.') || event.type === 'tool.started') &&
+      !('parentToolUseId' in event && event.parentToolUseId)) {
+      this.compactContinuations.delete(runId)
+      this.runTargets.set(runId, continuation.next)
+      this.publishNativeSnapshot([...this.messages.map((message) => message.id === continuation.after
+        ? { ...freezeMessageThinking(message, Date.now()), status: 'complete' as const } : message),
+        emptyAssistantMessage(continuation.next, new Date().toISOString())])
+    }
     if (event.type === 'suggestion.prompts') this.prompts = event.prompts
     if (event.type === 'run.started' || event.type === 'session.rebound') this.prompts = []
     if (event.type === 'session.config') this.config = event.config
@@ -56,7 +71,10 @@ export class SessionStream {
           resolution: { request: pending.request, decision: 'deny', reason: 'cancelled' } }, runId)
       }
     }
-    if (event.type === 'session.rebound') { this.terminalText = undefined; this.messages = this.nativeHistory }
+    if (event.type === 'session.rebound') {
+      this.terminalText = undefined; this.messages = this.nativeHistory
+      this.compactions = new SessionCompaction(); this.runUsers.clear(); this.compactContinuations.clear()
+    }
     if (event.type === 'permission.requested') this.interactions.set(event.request.requestId, { request: event.request, runId })
     if (event.type === 'permission.resolved') this.interactions.delete(event.resolution.request.requestId)
     let normalized = event
@@ -79,7 +97,27 @@ export class SessionStream {
       if (target) this.runTargets.set(runId, target.id)
     }
     const messageTargetId = replyTargetId ?? this.runTargets.get(runId) ?? runId
-    const frame = { ...this.frame(normalized, ++this.seq, runId), ...(messageTargetId ? { messageTargetId } : {}) }
+    const submitted = this.runUsers.get(runId)
+    const command = submitted && (this.messages.find((message) => message.id === submitted.id || message.renderId === submitted.id) ?? submitted)
+    const compact = this.compactions.apply(this.messages, normalized, runId, command,
+      `compact:${this.streamId}:${this.seq + 1}`, new Date().toISOString())
+    if (compact) {
+      this.messages = compact.messages
+      // Display hooks can precede the native boundary write. Let the text
+      // projection see the same boundary and preceding text as the live UI.
+      if (this.terminalText) this.nativeHistory = this.messages
+    }
+    if (['session.compacted', 'session.compaction_failed', 'session.compaction_cancelled'].includes(normalized.type) && compact && runId &&
+      (!command || !isCompactCommandContent(command.content))) {
+      const target = this.messages.find((message) => message.id === messageTargetId)
+      const markerIndex = this.messages.findIndex((message) => message.id === compact.compactMessage.id)
+      if (target && this.messages.indexOf(target) < markerIndex) {
+        this.compactContinuations.set(runId, { after: target.id, next: `${runId}:after:${compact.compactMessage.renderId ?? compact.compactMessage.id}` })
+      }
+    }
+    const frame = { ...this.frame(normalized, ++this.seq, runId), ...(messageTargetId ? { messageTargetId } : {}),
+      ...(compact ? { compactMessage: compact.compactMessage,
+        ...(compact.compactAfterMessageId ? { compactAfterMessageId: compact.compactAfterMessageId } : {}) } : {}) }
     this.reduce(frame)
     this.buffer.push(frame)
     if (this.buffer.length > this.limit) this.buffer.shift()
@@ -133,9 +171,10 @@ export class SessionStream {
   }
 
   private publishNativeSnapshot(messages: readonly ThreadMessage[]): void {
-    if (JSON.stringify(messages) === JSON.stringify(this.messages)) return
-    this.messages = messages
-    this.publish({ type: 'session.snapshot', messages, tasks: this.tasks.list(), runningToolIds: [...this.runningTools], ...(this.config ? { config: this.config } : {}),
+    const reconciled = this.compactions.reconcile(messages)
+    if (JSON.stringify(reconciled) === JSON.stringify(this.messages)) return
+    this.messages = reconciled
+    this.publish({ type: 'session.snapshot', messages: reconciled, tasks: this.tasks.list(), runningToolIds: [...this.runningTools], ...(this.config ? { config: this.config } : {}),
       interactions: [...this.interactions.values()].map(({ request }) => request),
       ...(this.activeRunId ? { activeRunId: this.activeRunId } : {}) })
   }
@@ -144,7 +183,7 @@ export class SessionStream {
   replaceHistory(history: readonly ThreadMessage[]): boolean {
     // An SDK response may be ahead of its on-disk transcript. Never roll it back.
     if (this.activeRunId !== undefined && !this.terminalRun) return false
-    this.nativeHistory = history
+    this.nativeHistory = this.compactions.reconcile(history)
     const tasks = history.flatMap((message) => (message.blocks ?? []).flatMap((block) => {
       const task = block.type === 'tool_use' ? block.tool?.backgroundTask : block.type === 'task_notification' ? block.notification.task : undefined
       return task ? [{ ...task, control: 'terminal' as const, originRunId: task.originRunId ?? message.id }] : []
@@ -157,7 +196,7 @@ export class SessionStream {
       this.nativeTasks.set(task.taskId, signature)
       this.publish({ type: 'task.updated', task: !this.activeRunId && taskIsActive(task) ? { ...task, status: 'unknown' } : task })
     }
-    const projected = this.terminalText?.merge(history) ?? history
+    const projected = this.terminalText?.merge(this.nativeHistory) ?? this.nativeHistory
     const messages = projected.map((message) => this.tasks.list().reduce((next, task) =>
       applyStreamFrame(next, { type: 'task.updated', task }), message))
     this.publishNativeSnapshot(messages)
@@ -240,6 +279,8 @@ export class SessionStream {
       }
       if (this.activeRunId === frame.runId) this.activeRunId = undefined
       this.runTargets.delete(frame.runId)
+      this.runUsers.delete(frame.runId)
+      this.compactContinuations.delete(frame.runId)
     }
   }
 }

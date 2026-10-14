@@ -259,7 +259,7 @@ export function useAgentMessage({ onComputerToolStarted }: { onComputerToolStart
     const assistant = createAgentThreadMessage("assistant", "", "streaming")
     const user = { ...createAgentThreadMessage("user", content), id: `${assistant.id}:user`,
       ...(uploaded.length ? { attachments: uploaded } : {}),
-      ...(!uploaded.length && isCompactCommandUserMessage(content) ? { compact: { phase: "compacting" as const } } : {}) }
+      ...(!uploaded.length && isCompactCommandUserMessage(content) ? { compact: { phase: "queued" as const } } : {}) }
     if (runHarnessId === "claude") setRunModePending(true)
     pendingIdsRef.current.add(assistant.id)
     seedTitleRef.current = content || uploaded.map((file) => file.name).join(", ")
@@ -273,9 +273,9 @@ export function useAgentMessage({ onComputerToolStarted }: { onComputerToolStart
       if (generation !== generationRef.current) return
       pendingIdsRef.current.delete(assistant.id)
       if (pendingIdsRef.current.size === 0) setRunModePending(false)
-      setMessages((current) => current.map((message) => message.id === assistant.id ? {
-        ...message, status: "error", content: error instanceof Error ? error.message : t("agentMessage.sendFailed"),
-      } : message))
+      setMessages((current) => applyThreadStreamFrame(current, assistant.id, {
+        type: "run.failed", message: error instanceof Error ? error.message : t("agentMessage.sendFailed"),
+      }))
     }
     submitChainRef.current = submitChainRef.current.catch(() => undefined).then(async () => {
       if (generation !== generationRef.current) return

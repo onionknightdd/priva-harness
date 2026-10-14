@@ -5,9 +5,25 @@ import { replayClaudeSessionMessages } from '../../../../src/provider/claude/ses
 import type { SessionMessage } from '../../../../src/core/resource/session.js'
 import type { ThreadBlock } from '../../../../src/core/resource/thread.js'
 import { mapClaudeMessage } from '../../../../src/provider/claude/session/claude-session-store.js'
-import { attachTranscriptToolUseResult, toolUseResultsFromTranscriptLines } from '../../../../src/provider/claude/session/claude-transcript.js'
+import { attachTranscriptToolUseResult, toolUseResultsFromTranscriptLines, transcriptThreadRecords } from '../../../../src/provider/claude/session/claude-transcript.js'
 
 describe('replayClaudeSessionMessages', () => {
+  it.each(['summary-first', 'command-first', 'boundary-only'])('restores one completed native compact marker (%s)', (order) => {
+    const summary = { type: 'user', uuid: 'summary', isCompactSummary: true, message: { role: 'user',
+      content: 'This session is being continued from a previous conversation.\n\nSummary:\nKept context.' } }
+    const command = { type: 'user', uuid: 'command', message: { role: 'user',
+      content: '<command-name>/compact</command-name>\n<command-message>compact</command-message>\n<command-args>Keep code</command-args>' } }
+    const boundary = { type: 'system', subtype: 'compact_boundary', uuid: 'boundary', content: 'Conversation compacted' }
+    const stdout = { type: 'user', uuid: 'stdout', message: { role: 'user', content: '<local-command-stdout>Compacted</local-command-stdout>' } }
+    const records = order === 'summary-first' ? [summary, command, stdout]
+      : order === 'command-first' ? [command, boundary, summary, stdout] : [boundary]
+    const messages = transcriptThreadRecords(records.map((record) => JSON.stringify(record))).map((record) => mapClaudeMessage(record, 'session'))
+    const thread = foldThread(replayClaudeSessionMessages(messages))
+    expect(thread).toHaveLength(1)
+    expect(thread[0]?.compact).toEqual(order === 'boundary-only' ? { phase: 'compacted' } : { phase: 'compacted', summary: 'Kept context.' })
+    if (order !== 'boundary-only') expect(thread[0]).toMatchObject({ id: 'command', transcriptUuid: 'command', content: command.message.content })
+  })
+
   it.each(['string', 'blocks'])('displays pasted user text without changing native content (%s)', (format) => {
     const text = '后台启动一个子agent , 每秒echo 1, 执行30s'
     const wrapped = `\n\n<pasted_content id="6985">\n${text}\n</pasted_content id="6985">\n`

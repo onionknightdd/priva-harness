@@ -49,4 +49,28 @@ describe("mergeSnapshotMessages", () => {
     assert.deepEqual(merged.map((item) => item.id), ["new", "a"])
     assert.equal(merged[1], current[0])
   })
+
+  it("does not roll a completed compact back when its native snapshot lags", () => {
+    const marker: AgentThreadMessage = { ...message("compact", "/compact"), role: "user", compact: { phase: "compacted", summary: "Retained context" } }
+    for (const compact of [undefined, { phase: "compacting" as const }, { phase: "queued" as const }]) {
+      const merged = mergeSnapshotMessages([marker], [{ ...marker, compact }])
+      assert.deepEqual(merged[0]?.compact, marker.compact)
+    }
+  })
+
+  it("retains settled compact state across a native identity replacement", () => {
+    const marker: AgentThreadMessage = { ...message("run:user", "/compact"), role: "user", compact: { phase: "cancelled", message: "Stopped" } }
+    const merged = mergeSnapshotMessages([marker], [{ ...marker, id: "native", renderId: marker.id, compact: { phase: "compacting" } }])
+    assert.equal(merged[0]?.id, "native")
+    assert.equal(merged[0]?.renderId, marker.id)
+    assert.deepEqual(merged[0]?.compact, marker.compact)
+  })
+
+  it("accepts a distinct new compaction and enriches the completed marker", () => {
+    const old: AgentThreadMessage = { ...message("old", "/compact"), role: "user", compact: { phase: "compacted", summary: "Earlier" } }
+    const fresh: AgentThreadMessage = { ...message("new", "/compact"), role: "user", compact: { phase: "compacting" } }
+    const merged = mergeSnapshotMessages([old], [{ ...old, compact: { phase: "compacted" } }, fresh])
+    assert.equal(merged[0]?.compact?.summary, "Earlier")
+    assert.equal(merged[1]?.compact?.phase, "compacting")
+  })
 })

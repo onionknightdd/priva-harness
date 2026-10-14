@@ -535,14 +535,10 @@ export class ClaudeEventMapper {
       return [{ type: 'session.compacted' }]
     }
     if (compactResult === 'failed') {
-      const sessionId = omitEmpty(stringField(record, 'session_id') ?? this.sessionId)
       return [
         {
-          type: 'run.failed',
+          type: 'session.compaction_failed',
           message: stringField(record, 'compact_error') ?? 'Conversation compaction failed',
-          code: 'compaction_failed',
-          ...(sessionId === undefined ? {} : { sessionId }),
-          ...(this.model === undefined ? {} : { model: this.model }),
         },
       ]
     }

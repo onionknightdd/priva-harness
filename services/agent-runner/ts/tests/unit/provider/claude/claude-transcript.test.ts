@@ -151,10 +151,19 @@ describe('transcriptThreadRecords', () => {
     expect(mergeSdkAndTranscriptMessages([attachment], records)).toEqual(records)
   })
 
-  it('keeps main-thread user and assistant records and drops compact plumbing', () => {
+  it('keeps compaction boundaries and summaries while dropping unrelated command plumbing', () => {
     const records = transcriptThreadRecords([
       JSON.stringify({ type: 'user', uuid: 'u1', message: { role: 'user', content: 'hello' } }),
       JSON.stringify({ type: 'queue-operation', operation: 'enqueue', content: '/compact' }),
+      JSON.stringify({
+        type: 'user',
+        uuid: 'summary',
+        isMeta: true,
+        isCompactSummary: true,
+        message: { role: 'user', content: 'This session is being continued from a previous conversation.\n\nSummary:\nDone.' },
+      }),
+      JSON.stringify({ type: 'system', subtype: 'compact_boundary', uuid: 'child-boundary', isSidechain: true }),
+      JSON.stringify({ type: 'system', subtype: 'init', uuid: 'init' }),
       JSON.stringify({
         type: 'system',
         subtype: 'compact_boundary',
@@ -176,7 +185,7 @@ describe('transcriptThreadRecords', () => {
         },
       }),
     ])
-    expect(records.map((record) => (record as { uuid: string }).uuid)).toEqual(['u1', 'cmd'])
+    expect(records.map((record) => (record as { uuid: string }).uuid)).toEqual(['u1', 'summary', 'b1', 'cmd'])
   })
 
   it('drops the synthetic No response requested assistant', () => {

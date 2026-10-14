@@ -2118,6 +2118,32 @@ Context Usage               ×
                  Chat <-> Pi 原生会话 <-> TUI
 ```
 
+### 会话压缩 marker 状态与位置（2026-10-14）
+
+压缩事件携带服务端分配的 `compactMessage` 与 `compactAfterMessageId`。前端按
+消息 `id` / `renderId` 更新同一 marker；自动压缩首次显示在触发时最后一条消息
+下方，结束时保留位置。已排队的输入不会改变压缩事件的归属。手动 `/compact`
+发送后先显示“等待压缩”，对应 run 开始才显示“会话压缩中”；失败与停止继续使用
+同一分隔线，原因通过共享 Tooltip 展示。只在实际压缩中显示 spinner / shimmer。
+压缩完成不结束 assistant 回复，回复状态仍由 run 生命周期决定。
+
+```text
+已有消息
+最后一条消息
+---- 会话压缩中 ----  ->  ---- 会话已压缩 / 压缩失败 / 已停止 ----
+后续回复 / 排队消息
+
+手动命令: 等待压缩 -> 压缩中 -> 已压缩 | 失败 | 已停止
+```
+
+相同 marker 的完成状态不会被滞后的快照退回“压缩中”；新压缩具有独立身份。
+沿用 `CompactSessionMarker` 的 200ms 淡入与摘要展开动效、主题 token 和
+减少动态效果设置，不新增页面区域。定向状态和组件回归从仓库根目录运行：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/compact-lifecycle.test.ts agent-ui/tests/features/agent-message/compact-session-stream.test.ts agent-ui/tests/features/agent-message/slash-command-envelope.test.ts agent-ui/tests/features/agent-message/snapshot-messages.test.ts agent-ui/tests/features/agent-message/compact-session-marker.test.tsx
+```
+
 ## Layout approval
 
 以下两条布局要求从 `AGENTS.md` 原样迁入，继续生效。

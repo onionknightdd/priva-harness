@@ -15,7 +15,7 @@ import {
   type ToolResultMetadata,
   type WorkflowCard,
 } from "./agent-message-data"
-import { applyThreadCompactFrame } from "./slash-command-envelope"
+import { applyThreadCompactFrame, reconcileCompactMarker } from "./slash-command-envelope"
 import { frameAtMs, freezeMessageThinking, stampMessageThinkingTimes } from "./thinking-time"
 import { restoreUserMessageAttachments } from "./message-attachment-text"
 
@@ -40,6 +40,9 @@ export type StreamFrame = ToolResultMetadata & {
   tasks?: BackgroundTask[]
   messages?: AgentThreadMessage[]
   userMessage?: AgentThreadMessage
+  compactMessage?: AgentThreadMessage
+  compactAfterMessageId?: string
+  reason?: "manual" | "auto"
   activeRunId?: string
   tokens?: number
   durationMs?: number
@@ -114,11 +117,13 @@ export function mergeSnapshotMessages(
   const byRenderId = new Map(current.map((message) => [message.renderId ?? message.id, message]))
   return snapshot.map((rawMessage) => {
     const message = restoreUserMessageAttachments(rawMessage)
-    const existing = byId.get(message.id) ?? (message.renderId ? byRenderId.get(message.renderId) : undefined)
+    const existing = byId.get(message.id) ?? byRenderId.get(message.renderId ?? message.id) ?? (message.renderId ? byId.get(message.renderId) : undefined)
     if (!existing) return message
-    const next = existing.renderId || message.renderId || existing.id !== message.id
+    let next = existing.renderId || message.renderId || existing.id !== message.id
       ? { ...message, renderId: existing.renderId ?? existing.id }
       : message
+    const compact = reconcileCompactMarker(existing.compact, message.compact)
+    if (compact !== message.compact) next = { ...next, compact }
     return dequal(existing, next) ? existing : next
   })
 }
@@ -144,9 +149,9 @@ export function applyThreadStreamFrame(
   if (frame.type === "run.started") {
     const next = [...messages]
     if (frame.userMessage && !next.some((message) => message.id === frame.userMessage?.id)) next.push(restoreUserMessageAttachments(frame.userMessage))
-    if (!frame.userMessage && !frame.replyTo) return next
+    if (!frame.userMessage && !frame.replyTo) return applyThreadCompactFrame(next, assistantId, frame)
     if (!next.some((message) => message.id === targetId)) next.push(emptyAssistant(targetId, frame))
-    return next.map((message) => message.id === targetId ? { ...message, status: "streaming" } : message)
+    return applyThreadCompactFrame(next.map((message) => message.id === targetId ? { ...message, status: "streaming" } : message), assistantId, frame)
   }
   let current = [...messages]
   if (frame.type === "task.delivered") {
@@ -160,8 +165,7 @@ export function applyThreadStreamFrame(
   if (targetId !== assistantId) current = current.filter((message) => message.id !== assistantId || message.role === "user" || message.content || message.blocks?.length)
   const withAssistant = current.map((message) =>
     message.id === targetId &&
-    frame.type !== "session.compacting" &&
-    frame.type !== "session.compacted"
+    !frame.type?.startsWith("session.compact")
       ? applyStreamFrame(message, frame)
       : message
   )

@@ -385,6 +385,7 @@ function toThreadMessageResponse(message: ThreadMessage): Record<string, unknown
           compact: {
             phase: message.compact.phase,
             ...(message.compact.summary === undefined ? {} : { summary: message.compact.summary }),
+            ...(message.compact.message === undefined ? {} : { message: message.compact.message }),
           },
         }),
   }

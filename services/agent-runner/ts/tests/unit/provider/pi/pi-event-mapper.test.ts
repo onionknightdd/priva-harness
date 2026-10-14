@@ -433,7 +433,7 @@ describe('PiEventMapper', () => {
   it('maps compaction start and a successful compact result', () => {
     const mapper = new PiEventMapper({ sessionId: 'pi-sess', model: 'm' })
     expect(mapper.push({ type: 'compaction_start', reason: 'manual' })).toEqual([
-      { type: 'session.compacting' },
+      { type: 'session.compacting', reason: 'manual' },
     ])
     expect(mapper.push({
       type: 'compaction_end',
@@ -441,11 +441,11 @@ describe('PiEventMapper', () => {
       result: { summary: 'Kept COMPACT-PROBE tokens.', firstKeptEntryId: 'abc' },
       aborted: false,
     })).toEqual([
-      { type: 'session.compacted', summary: 'Kept COMPACT-PROBE tokens.' },
+      { type: 'session.compacted', reason: 'manual', summary: 'Kept COMPACT-PROBE tokens.' },
     ])
   })
 
-  it('maps a failed compact to run.failed', () => {
+  it('reports a failed compact without ending the native run', () => {
     const mapper = new PiEventMapper({ sessionId: 'pi-sess', model: 'm' })
     expect(mapper.push({
       type: 'compaction_end',
@@ -453,12 +453,35 @@ describe('PiEventMapper', () => {
       aborted: false,
       errorMessage: 'Nothing to compact (session too small)',
     })).toEqual([
-      expect.objectContaining({
-        type: 'run.failed',
+      {
+        type: 'session.compaction_failed',
+        reason: 'manual',
         message: 'Nothing to compact (session too small)',
-        sessionId: 'pi-sess',
-        model: 'm',
-      }),
+      },
+    ])
+  })
+
+  it.each(['manual', 'threshold', 'overflow'])('preserves native cancellation for %s compaction', (reason) => {
+    const mapper = new PiEventMapper({ sessionId: 'pi-sess', model: 'm' })
+    expect(mapper.push({ type: 'compaction_end', reason, aborted: true })).toEqual([
+      { type: 'session.compaction_cancelled', reason: reason === 'manual' ? 'manual' : 'auto' },
+    ])
+  })
+
+  it('keeps overflow recovery and its continuation in the same run until agent_settled', () => {
+    const mapper = new PiEventMapper({ sessionId: 'pi-sess', model: 'm' })
+    mapper.push({ type: 'agent_start' })
+    expect(mapper.push({ type: 'compaction_start', reason: 'overflow' })).toEqual([
+      { type: 'session.compacting', reason: 'auto' },
+    ])
+    expect(mapper.push({ type: 'compaction_end', reason: 'overflow', result: { summary: 'Recovered context' }, aborted: false, willRetry: true })).toEqual([
+      { type: 'session.compacted', reason: 'auto', summary: 'Recovered context' },
+    ])
+    mapper.push({ type: 'agent_start' })
+    const message = { role: 'assistant', model: 'm', content: [{ type: 'text', text: 'Recovered answer' }], stopReason: 'stop', usage: { input: 4, output: 2 } }
+    expect(mapper.push({ type: 'agent_end', messages: [message] })).toEqual([])
+    expect(mapper.push({ type: 'agent_settled', aborted: false })).toEqual([
+      expect.objectContaining({ type: 'run.completed', usage: { input: 4, output: 2, cacheRead: 0, cacheWrite: 0 } }),
     ])
   })
 })

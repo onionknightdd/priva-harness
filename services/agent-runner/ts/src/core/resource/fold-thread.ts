@@ -29,7 +29,10 @@ const PASS_THROUGH_TYPES = new Set<AgentEvent['type']>([
 
 export function foldThread(items: readonly ThreadReplayItem[]): ThreadMessage[] {
   const messages: ThreadMessage[] = []
-  const pendingSummaries: string[] = []
+  // Claude can persist a summary before its command. Associate only the current
+  // compaction segment; an ordinary visible turn ends that association.
+  let compactIndex: number | undefined
+  let compactHasCommand = false
   let current: ThreadMessage | undefined
   let lastAtMs: number | undefined
 
@@ -43,9 +46,26 @@ export function foldThread(items: readonly ThreadReplayItem[]): ThreadMessage[] 
       ...frozen,
       status: frozen.status === 'error' ? 'error' : 'complete',
     }
-    if (threadHasVisibleContent(completed)) messages.push(completed)
+    if (threadHasVisibleContent(completed)) {
+      messages.push(completed)
+      compactIndex = undefined
+    }
     current = undefined
     lastAtMs = undefined
+  }
+
+  const updateCompact = (patch: CompactMarker, createdAt = createdAtNow(), sourceId?: string) => {
+    finishAssistant()
+    const index = compactIndex
+    const previous = index === undefined ? undefined : messages[index]
+    if (previous && index !== undefined) {
+      messages[index] = { ...previous, compact: mergeCompactMarker(previous.compact, patch) }
+      return
+    }
+    compactIndex = messages.length
+    compactHasCommand = false
+    messages.push({ id: `compact:${sourceId ?? createdAt}:${String(compactIndex)}`, role: 'user', content: '/compact',
+      createdAt, status: 'complete', compact: patch })
   }
 
   for (const item of items) {
@@ -56,12 +76,14 @@ export function foldThread(items: readonly ThreadReplayItem[]): ThreadMessage[] 
       if (turn.text.trim() === '' && !turn.attachments?.length) continue
       if (!turn.attachments?.length && isHiddenCompactUserContent(turn.text)) {
         if (isCompactContinuationContent(turn.text)) {
-          pendingSummaries.push(compactSummaryBody(turn.text))
+          updateCompact({ phase: 'compacted', summary: compactSummaryBody(turn.text) }, item.createdAt, item.id)
         }
         continue
       }
-      const compact = turn.attachments?.length ? undefined : compactForUser(turn.text, pendingSummaries)
-      messages.push({
+      const isCompact = !turn.attachments?.length && isCompactCommandContent(turn.text)
+      const candidate = isCompact && !compactHasCommand && compactIndex !== undefined ? messages[compactIndex] : undefined
+      const previous = candidate?.compact?.phase === 'failed' || candidate?.compact?.phase === 'cancelled' ? undefined : candidate
+      const message: ThreadMessage = {
         id: item.id,
         role: 'user',
         content: turn.text,
@@ -69,10 +91,16 @@ export function foldThread(items: readonly ThreadReplayItem[]): ThreadMessage[] 
         createdAt: item.createdAt,
         status: 'complete',
         transcriptUuid: item.id,
-        ...(compact === undefined ? {} : { compact }),
+        ...(isCompact ? { compact: previous?.compact ?? { phase: 'queued' } } : {}),
         ...(item.modelChange === undefined ? {} : { modelChange: item.modelChange }),
         ...(item.effortChange === undefined ? {} : { effortChange: item.effortChange }),
-      })
+      }
+      if (previous && compactIndex !== undefined) messages[compactIndex] = message
+      else {
+        compactIndex = isCompact ? messages.length : undefined
+        messages.push(message)
+      }
+      compactHasCommand = isCompact
       continue
     }
 
@@ -80,18 +108,18 @@ export function foldThread(items: readonly ThreadReplayItem[]): ThreadMessage[] 
 
     if (item.event.type === 'session.compacting') {
       finishAssistant()
-      patchLastCompactUser(messages, { phase: 'compacting' })
+      const phase = compactIndex === undefined ? undefined : messages[compactIndex]?.compact?.phase
+      if (phase !== 'queued' && phase !== 'compacting') compactIndex = undefined
+      updateCompact({ phase: 'compacting' }, item.createdAt)
       continue
     }
     if (item.event.type === 'session.compacted') {
-      finishAssistant()
-      const summary = item.event.summary ?? pendingSummaries.shift()
-      patchLastCompactUser(
-        messages,
-        summary === undefined
-          ? { phase: 'compacted' }
-          : { phase: 'compacted', summary },
-      )
+      updateCompact({ phase: 'compacted', ...(item.event.summary === undefined ? {} : { summary: item.event.summary }) }, item.createdAt)
+      continue
+    }
+    if (item.event.type === 'session.compaction_failed' || item.event.type === 'session.compaction_cancelled') {
+      updateCompact({ phase: item.event.type === 'session.compaction_failed' ? 'failed' : 'cancelled',
+        ...(item.event.message === undefined ? {} : { message: item.event.message }) }, item.createdAt)
       continue
     }
 
@@ -161,8 +189,12 @@ export function foldThread(items: readonly ThreadReplayItem[]): ThreadMessage[] 
     if (atMs !== undefined) {
       current = stampMessageThinkingTimes(previous, current, item.event, atMs)
     }
-    if (item.event.type === 'error' || item.event.type === 'run.failed') {
-      failLastCompactUser(messages)
+    if (item.event.type === 'error' || item.event.type === 'run.failed' || item.event.type === 'run.aborted') {
+      const index = compactIndex
+      const compact = index === undefined ? undefined : messages[index]
+      if (compact && index !== undefined && (compact.compact?.phase === 'queued' || compact.compact?.phase === 'compacting')) {
+        messages[index] = { ...compact, compact: { phase: item.event.type === 'run.aborted' ? 'cancelled' : 'failed' } }
+      }
     }
   }
 
@@ -214,46 +246,6 @@ function assistantIdOf(event: AgentEvent): string {
 
 function createdAtNow(): string {
   return new Date(0).toISOString()
-}
-
-function compactForUser(
-  content: string,
-  pendingSummaries: string[],
-): CompactMarker | undefined {
-  if (!isCompactCommandContent(content)) return undefined
-  const summary = pendingSummaries.shift()
-  if (summary === undefined) return { phase: 'compacting' }
-  return { phase: 'compacted', summary }
-}
-
-function patchLastCompactUser(
-  messages: ThreadMessage[],
-  patch: CompactMarker,
-): void {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index]
-    if (message?.role !== 'user') continue
-    if (message.compact === undefined && !isCompactCommandContent(message.content)) {
-      continue
-    }
-    messages[index] = {
-      ...message,
-      compact: mergeCompactMarker(message.compact, patch),
-    }
-    return
-  }
-}
-
-function failLastCompactUser(messages: ThreadMessage[]): void {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index]
-    if (message?.role !== 'user') continue
-    if (message.compact?.phase === 'compacted') return
-    if (message.compact !== undefined || isCompactCommandContent(message.content)) {
-      messages[index] = { ...message, compact: { phase: 'failed' } }
-    }
-    return
-  }
 }
 
 function atMsOf(value: string | undefined): number | undefined {

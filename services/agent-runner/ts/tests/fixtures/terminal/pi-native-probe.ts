@@ -36,6 +36,7 @@ let offset = 0
 let scratchDir = ''
 let modelError: Error | undefined
 let sequence = 0
+let compactionResponse: 'wait' | 'success' | undefined
 
 function respond(response: ServerResponse, item: Record<string, unknown>): void {
   const id = `response-${++sequence}`
@@ -66,6 +67,11 @@ const server = createServer((request, response) => {
       const parsed = JSON.parse(body) as Record<string, unknown>
       requests.push(parsed)
       assert.equal(parsed['model'], 'deepseek-flash')
+      if (compactionResponse) {
+        if (compactionResponse === 'success') respond(response, { type: 'message', id: 'compact-summary', role: 'assistant', status: 'completed',
+          content: [{ type: 'output_text', text: 'COMPACT_DONE', annotations: [] }] })
+        return
+      }
       assert.deepEqual(parsed['reasoning'], requests.length <= 2 ? { effort: 'high', summary: 'auto' }
         : requests.length === 3 ? { effort: 'low', summary: 'auto' }
           : requests.length === 4 ? { effort: 'max', summary: 'auto' } : { effort: 'none' })
@@ -122,7 +128,7 @@ try {
   await mkdir(join(cwd, '.pi'), { recursive: true })
   await mkdir(join(cwd, '.git'))
   await mkdir(agentDir)
-  await writeFile(join(agentDir, 'settings.json'), JSON.stringify({ quietStartup: true, hideThinkingBlock: true }))
+  await writeFile(join(agentDir, 'settings.json'), JSON.stringify({ quietStartup: true, hideThinkingBlock: true, compaction: { keepRecentTokens: 1 } }))
   new ProjectTrustStore(agentDir).set(cwd, true)
   await writeFile(join(cwd, '.pi/mcp.json'), JSON.stringify({ mcpServers: { fixture: {
     command: process.execPath, args: ['--import', import.meta.resolve('tsx'), resolve('tests/fixtures/resources/mcp-server.ts')],
@@ -150,6 +156,14 @@ try {
   await waitUntil(async () => (await readPiTerminalJson<{ ready?: boolean }>(scratchDir, 'control'))?.ready === true, 'native TUI ready')
   assert.deepEqual((await readPiTerminalJson<TerminalStatus>(scratchDir, 'status'))?.effortLevels, ['off', 'low', 'high', 'max'])
   assert.equal((await readPiTerminalJson<TerminalStatus>(scratchDir, 'status'))?.effort, 'high')
+  // Native /compact does not start an agent run. Its failure still has to reach Chat.
+  await terminals.paste(key, '/compact')
+  await terminals.sendKeys(key, ['Enter'])
+  await waitUntil(() => frames.some((frame) => frame.type === 'session.compaction_failed'), 'Terminal-only compact failure in Chat')
+  await collect()
+  assert.deepEqual(events.filter((item) => item.event.type.startsWith('session.compact')).map((item) => item.event.type), ['session.compacting', 'session.compaction_failed'])
+  assert.ok(events.every((item) => item.runId === undefined))
+  assert.equal(requests.length, 0, 'Empty compaction must not call the model')
   await harness.configureTerminal(ref, { ...spec, model: 'unknown-fixture-model' }, 'unknown-model')
   await waitUntil(async () => (await readPiTerminalJson<TerminalStatus>(scratchDir, 'status'))?.model === 'unknown-fixture-model', 'unknown model configured')
   assert.deepEqual((await readPiTerminalJson<TerminalStatus>(scratchDir, 'status'))?.effortLevels, ['off'])
@@ -192,7 +206,7 @@ try {
   assert.ok(frames.some((frame) => frame.type === 'tool.started' && frame.name === 'mcp__fixture__echo' && frame.parentToolCallId))
   const snapshot = harness.sessionStream(ref).snapshot()
   assert.equal(snapshot.activeRunId, undefined)
-  assert.deepEqual(snapshot.messages.filter((message) => message.role === 'user').map((message) => message.content), ['CHAT_FIRST', 'TUI_SECOND', 'CHAT_THIRD'])
+  assert.deepEqual(snapshot.messages.filter((message) => message.role === 'user' && !message.compact).map((message) => message.content), ['CHAT_FIRST', 'TUI_SECOND', 'CHAT_THIRD'])
   assert.equal(recorder.ofKind('run.finished').length, 3)
   await harness.disposePool()
   harness = new AgentHarness({ providers, cwd, recorder })
@@ -226,6 +240,26 @@ try {
   assert.equal(recorder.ofKind('run.finished').length, 5)
   assert.equal(new Set(recorder.ofKind('run.finished').map((record) => record.runId)).size, 5)
   await waitUntil(async () => (await terminals?.capture(key))?.includes('NEW_DONE') ?? false, 'new Chat reply in rebound TUI')
+  const beforeCompaction = requests.length
+  compactionResponse = 'wait'
+  await harness.submitTerminal(nextRef, { text: '/compact' }, spec, 'chat-compact-cancel')
+  await waitUntil(() => requests.length > beforeCompaction, 'manual compaction request before cancellation')
+  assert.equal(await harness.abortTerminal(nextRef, 'chat-compact-cancel'), true)
+  await waitUntil(() => frames.some((frame) => frame.type === 'run.aborted' && frame.runId === 'chat-compact-cancel'), 'manual compact cancellation outcome')
+  assert.ok(frames.some((frame) => frame.type === 'session.compaction_cancelled' && frame.reason === 'manual' && frame.runId === 'chat-compact-cancel'))
+  assert.deepEqual(frames.filter((frame) => frame.runId === 'chat-compact-cancel' && ['run.completed', 'run.failed', 'run.aborted'].includes(frame.type))
+    .map((frame) => frame.type), ['run.aborted'])
+  compactionResponse = 'success'
+  await harness.submitTerminal(nextRef, { text: '/compact' }, spec, 'chat-compact-success')
+  await waitUntil(() => frames.some((frame) => frame.type === 'run.completed' && frame.runId === 'chat-compact-success'), 'manual compact success outcome')
+  assert.ok(frames.some((frame) => frame.type === 'session.compacted' && frame.reason === 'manual' && frame.runId === 'chat-compact-success' && frame.summary?.includes('COMPACT_DONE')))
+  const afterCompaction = requests.length
+  await harness.submitTerminal(nextRef, { text: '/compact' }, spec, 'chat-compact-failed')
+  await waitUntil(() => frames.some((frame) => frame.type === 'run.failed' && frame.runId === 'chat-compact-failed'), 'manual compact rejection outcome')
+  assert.ok(frames.some((frame) => frame.type === 'session.compaction_failed' && frame.reason === 'manual' && frame.runId === 'chat-compact-failed'))
+  assert.equal(requests.length, afterCompaction, 'Already compacted rejection must not call the model')
+  assert.deepEqual(frames.filter((frame) => frame.runId === 'chat-compact-failed' && ['run.completed', 'run.failed', 'run.aborted'].includes(frame.type))
+    .map((frame) => frame.type), ['run.failed'])
   await terminals.paste(key, '/quit')
   await terminals.sendKeys(key, ['Enter'])
   await waitUntil(async () => !await terminals?.isAlive(key), 'native exit')
@@ -234,7 +268,7 @@ try {
   try {
     assert.equal(restored.native.thinkingLevel, 'off', 'A saved native thinking level must win over the Chat default during cold resume')
   } finally { await restored.dispose() }
-  process.stdout.write('Pi native TUI: shared Chat/TUI transcript, native thinking levels with explicit Responses off, MCP via Codemode, nested events, parent restart adoption without duplicate accounting, /new rebind + new Chat and clean exit passed\n')
+  process.stdout.write('Pi native TUI: shared Chat/TUI transcript, native thinking levels with explicit Responses off, MCP via Codemode, nested events, parent restart adoption without duplicate accounting, /new rebind, Terminal compaction failure and Chat compaction cancellation/success/failure, clean exit passed\n')
 } catch (error) {
   if (terminals && await terminals.isAlive(key)) process.stderr.write(`Pi terminal screen:\n${await terminals.capture(key)}\n`)
   process.stderr.write(`Pi terminal event types: ${events.map((item) => item.event.type).join(', ')}\n`)

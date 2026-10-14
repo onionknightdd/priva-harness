@@ -1,5 +1,6 @@
 import type { MessageAttachment } from "./message-attachment"
 import type { WorkflowCard } from "./workflow-data"
+import type { CompactMarker } from "./slash-command-envelope"
 export type { WorkflowCard } from "./workflow-data"
 import { isTaskBoardTool } from "./task-plan"
 
@@ -122,10 +123,7 @@ export type AgentThreadMessage = {
   blocks?: StreamBlock[]
   nestedAgents?: NestedAgent[]
   workflows?: WorkflowCard[]
-  compact?: {
-    phase: "compacting" | "compacted" | "failed"
-    summary?: string
-  }
+  compact?: CompactMarker
 }
 
 export function createAgentThreadMessage(

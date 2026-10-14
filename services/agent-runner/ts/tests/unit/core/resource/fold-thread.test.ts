@@ -176,6 +176,74 @@ describe('foldThread', () => {
     })
   })
 
+  it('keeps automatic compaction below the latest answer without changing an earlier compact marker', () => {
+    const thread = foldThread([
+      user('old', '/compact'),
+      frame({ type: 'session.compacted', summary: 'Old summary' }),
+      user('next', 'Continue'),
+      frame({ type: 'assistant.message', messageId: 'answer', blocks: [textBlock('Latest answer', 'answer:0', 0)] }),
+      frame({ type: 'session.compacting', reason: 'auto' }),
+      frame({ type: 'session.compacted', reason: 'auto', summary: 'New summary' }),
+    ])
+    expect(thread.map((message) => message.content)).toEqual(['/compact', 'Continue', 'Latest answer', '/compact'])
+    expect(thread[0]?.compact).toEqual({ phase: 'compacted', summary: 'Old summary' })
+    expect(thread[3]?.compact).toEqual({ phase: 'compacted', summary: 'New summary' })
+    expect(thread[3]?.id).not.toBe('old')
+    expect(foldThread([
+      user('next', 'Continue'),
+      frame({ type: 'session.compacted' }),
+    ]).at(-1)?.compact).toEqual({ phase: 'compacted' })
+  })
+
+  it('pairs summaries on either side of their command and does not carry one across a normal turn', () => {
+    const summary = (id: string, text: string) => user(id,
+      `This session is being continued from a previous conversation.\n\nSummary:\n${text}`)
+    const thread = foldThread([
+      user('first-command', '/compact first'),
+      frame({ type: 'session.compacted' }),
+      summary('first-summary', 'First'),
+      user('next', 'Continue'),
+      summary('automatic-summary', 'Automatic'),
+      user('another', 'Continue again'),
+      summary('second-summary', 'Second'),
+      user('second-command', '/compact second'),
+      user('stdout', '<local-command-stdout>Compacted</local-command-stdout>'),
+      user('third-command', '/compact third'),
+    ])
+    const compacts = thread.filter((message) => message.compact)
+    expect(compacts.map((message) => message.compact)).toEqual([
+      { phase: 'compacted', summary: 'First' },
+      { phase: 'compacted', summary: 'Automatic' },
+      { phase: 'compacted', summary: 'Second' },
+      { phase: 'queued' },
+    ])
+    expect(compacts.map((message) => message.id)).toEqual(['first-command', expect.stringContaining('automatic-summary'), 'second-command', 'third-command'])
+  })
+
+  it.each(['session.compaction_failed', 'session.compaction_cancelled'] as const)('keeps %s on its current marker and permits subsequent replies', (type) => {
+    const thread = foldThread([
+      user('prompt', 'Continue'),
+      frame({ type: 'session.compacting', reason: 'auto' }),
+      frame({ type, message: 'Compaction stopped', reason: 'auto' }),
+      frame({ type: 'assistant.message', messageId: 'answer', blocks: [textBlock('Still answering', 'answer:0', 0)] }),
+    ])
+    expect(thread.map((message) => message.content)).toEqual(['Continue', '/compact', 'Still answering'])
+    expect(thread[1]?.compact).toEqual({ phase: type === 'session.compaction_failed' ? 'failed' : 'cancelled', message: 'Compaction stopped' })
+    expect(thread[2]?.status).toBe('complete')
+  })
+
+  it('cancels only the active compact marker when a run is aborted', () => {
+    const thread = foldThread([
+      user('done', '/compact'),
+      frame({ type: 'session.compacted', summary: 'Done' }),
+      user('pending', '/compact'),
+      frame({ type: 'session.compacting' }),
+      frame({ type: 'run.aborted' }),
+    ])
+    expect(thread[0]?.compact).toEqual({ phase: 'compacted', summary: 'Done' })
+    expect(thread[1]?.compact).toEqual({ phase: 'cancelled' })
+  })
+
   it('marks the compact user failed when the run fails', () => {
     const thread = foldThread([
       user('c1', '/compact'),

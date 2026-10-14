@@ -55,6 +55,7 @@ export class PiRuntime implements AgentRuntime {
   private readonly idleBacklog: AgentEvent[] = []
   private idleListener: ((events: readonly AgentEvent[]) => void) | undefined
   private turnEnded = false
+  private manualCompaction: { cancelled: boolean } | undefined
   private readonly pendingNotices = new Set<string>()
   private readonly consumedNotices = new Set<string>()
   private readonly deliveredNotices = new Set<string>()
@@ -67,6 +68,7 @@ export class PiRuntime implements AgentRuntime {
     this.sessionHandle = agentSession
     this.mapper = new PiEventMapper({ sessionId: agentSession.sessionId, model: agentSession.modelId })
     this.unsubscribe = agentSession.subscribe((event) => {
+      if (event.type === 'compaction_end' && event.reason === 'manual' && this.manualCompaction) this.manualCompaction.cancelled = event.aborted === true
       const mapped: AgentEvent[] = event.type === 'permission.requested' || event.type === 'permission.resolved'
         ? [event as AgentEvent] : this.mapper?.push(event) ?? []
       for (const frame of mapped) if (frame.type === 'task.updated' || frame.type === 'task.notification') {
@@ -231,13 +233,27 @@ export class PiRuntime implements AgentRuntime {
   }
 
   private async compactSession(text: string): Promise<void> {
-    await this.agentSession.compact?.(compactInstructionsOf(text))
-    this.events?.push({
-      type: 'run.completed',
-      sessionId: this.agentSession.sessionId,
-      model: this.agentSession.modelId,
-      durationMs: 0,
-    })
+    const compaction = { cancelled: false }
+    this.manualCompaction = compaction
+    try {
+      await this.agentSession.compact?.(compactInstructionsOf(text))
+      this.events?.push({
+        type: 'run.completed',
+        sessionId: this.agentSession.sessionId,
+        model: this.agentSession.modelId,
+        durationMs: 0,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      this.events?.push(compaction.cancelled
+        ? { type: 'run.aborted', sessionId: this.agentSession.sessionId, model: this.agentSession.modelId, message }
+        : { type: 'run.failed', sessionId: this.agentSession.sessionId, model: this.agentSession.modelId, code: 'compaction_failed', message })
+    } finally {
+      // Manual compaction has no agent_settled event; its promise owns this run.
+      this.manualCompaction = undefined
+      this.turnEnded = true
+      this.events?.close()
+    }
   }
 
   private async interruptThenPrompt(text: string, images?: readonly PiImageContent[]): Promise<void> {

@@ -143,7 +143,8 @@ mapper 保存上一次 result 的 `modelUsage` 快照，本轮 = 累计 − 快�
 `mapper.resetUsageBaseline()`。`usage` 取各模型增量之和（含子代理与压缩调用），只有 result 不带
 `modelUsage` 时才回退到 `result.usage` 与 `total_cost_usd` 差值。失败码：`error_max_turns` →
 `max_turns`，`error_max_budget_usd` → `max_budget`，`api_error_status` 401/403 → `auth_error`，
-其他状态码 → `api_error`，否则 `provider_error`；压缩失败 → `compaction_failed`。
+其他状态码 → `api_error`，否则 `provider_error`。压缩状态事件本身不结算 run；自动压缩
+失败后仍等待实际的 run 结果。
 
 **Pi**：`agent_end` 可能继续重试、压缩或消费队列；仅 `agent_settled` 结算本轮。mapper 收集
 `message_end` / `agent_end.messages` 并按原生消息身份去重。assistant message 的 `usage` 计入
@@ -155,6 +156,15 @@ mapper 保存上一次 result 的 `modelUsage` 快照，本轮 = 累计 − 快�
 自由文本 `errorMessage`，失败码按文本启发式归类（401/403/unauthorized → `auth_error`，HTTP
 状态码 / rate limit / 网络错误 → `api_error`，其余 `provider_error`）；原文仍在 `message` 里。
 未提供产品价格标记的其他 Pi provider 仍可能把无报价表示成 `cost.total = 0`，无法仅凭原生字段区分零成本与无报价。
+
+Pi 的自动压缩成功、失败或取消只更新会话 marker，继续收集本轮后续消息与用量；手动
+`/compact` 则以自身的执行结果结束本轮，失败使用 `compaction_failed`，取消使用 `run.aborted`。
+
+```text
+自动压缩结果 -> session.compacted / compaction_failed / compaction_cancelled
+             -> 继续回复与用量采集 -> agent_settled -> run.finished
+手动 /compact -> 压缩结果 -> run.completed / failed / aborted -> run.finished
+```
 
 **来源**：`AgentRunOptions.source: RunSource` 为必填，`run-route.ts` 传 `'web'`，
 `subagent-test.ts` 传 `'subagent-test'`；`'channel'`、`'scheduled'` 已预留在类型中。

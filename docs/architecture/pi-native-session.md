@@ -24,6 +24,10 @@ Terminal ── WS /ws/terminal ──> TerminalService ── PTY ──> Inter
   消息携带稳定 runId；TUI 消息由 Host 分配 runId。
 - 原生 `agent_settled` 决定轮次结束。状态文件只用于存活、配置和会话换绑，
   不能把快速完成的回合或暂时空闲误当作新的模型回复。
+- 压缩有独立的开始、成功、失败和取消事件，并标明手动或自动触发。自动压缩
+  的失败或取消不提前结束回合；后续回复与用量仍由 `agent_settled` 结算。
+  Chat 手动 `/compact` 不产生 `agent_settled`，由命令 promise 结算成功、失败
+  或取消。Terminal 直接运行 `/compact` 时即使没有活动 runId，也交付压缩结果。
 - Host 的 localhost HTTP 端点使用每次启动生成的 token。配置、状态、事件文件
   位于终端私有目录，配置权限为 0600；token 和模型凭据不进入命令参数。
 - Runner 重启后重新认领终端；空闲时跳过旧事件，运行时回放当前回合。
@@ -37,6 +41,14 @@ Terminal ── WS /ws/terminal ──> TerminalService ── PTY ──> Inter
   终端编辑器并提示用户继续。扩展命令仍由原生扩展处理。
 - 模型、effort、context window 可在空闲时更新；连接、凭据、图片/分类配置或
   资源改变时重启同一个空闲终端。存在活动后台任务时禁止这类重启。
+
+```text
+原生 compaction_start/end -> 压缩 marker（开始 / 成功 / 失败 / 取消）
+                                |
+           自动压缩 -> 继续原生回合 -> agent_settled -> 轮次结果与用量
+           Chat /compact promise 完成或抛错 --------> 手动命令结果
+           Terminal /compact ---------------------> 只交付压缩事件
+```
 
 ## Thinking effort
 

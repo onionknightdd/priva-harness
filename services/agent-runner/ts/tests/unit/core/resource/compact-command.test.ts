@@ -6,6 +6,7 @@ import {
   isCompactCommandContent,
   isHiddenCompactUserContent,
   mergeCompactMarker,
+  normalizeCompactCommandContent,
 } from '../../../../src/core/resource/compact-command.js'
 
 describe('compact-command', () => {
@@ -17,6 +18,7 @@ describe('compact-command', () => {
     )).toBe(true)
     expect(compactInstructionsOf('/compact keep files')).toBe('keep files')
     expect(compactInstructionsOf('/compact')).toBeUndefined()
+    expect(normalizeCompactCommandContent('<command-name>/compact</command-name><command-message>compact</command-message><command-args> keep files </command-args>')).toBe('/compact keep files')
   })
 
   it('hides continuation, caveat, and stdout', () => {
@@ -34,5 +36,10 @@ describe('compact-command', () => {
       { phase: 'compacted', summary: 'done' },
       { phase: 'compacting' },
     )).toEqual({ phase: 'compacted', summary: 'done' })
+  })
+
+  it.each(['compacted', 'failed', 'cancelled'] as const)('does not reopen %s even without a summary', (phase) => {
+    expect(mergeCompactMarker({ phase }, { phase: 'compacting' })).toEqual({ phase })
+    expect(mergeCompactMarker({ phase }, { phase: 'queued' })).toEqual({ phase })
   })
 })

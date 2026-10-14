@@ -675,6 +675,40 @@ stash，保留整份多行草稿，避免 Ctrl+A/K 只删除最后一行而拼�
 图片独立成条时也保留用户气泡。资源刷新不关闭仍运行的后台任务；卡片的“终端管理”
 打开同一会话 `/tasks`，由用户在原生列表中选择并停止任务。
 
+#### 会话压缩状态与边界
+
+`/compact` 提交后等待服务端执行时显示 `queued`；收到 `run.started` 或
+`session.compacting` 后进入 `compacting`。`session.compacted`、`session.compaction_failed` 和
+`session.compaction_cancelled` 分别结清为 `compacted`、`failed` 和 `cancelled`，
+摘要是可选字段，缺少摘要不阻止完成。自动压缩的失败或取消只结束该次压缩，原轮次仍可
+继续回复；手动命令的轮次失败或中断也会结清尚未完成的 marker。
+
+`SessionCompaction` 为每次压缩保留独立消息身份和发生位置。自动压缩在当时最后一条
+可见消息后建立 marker，后续回复位于 marker 下方；不会回写之前的 `/compact`。
+事件携带 `compactMessage` 与可选 `compactAfterMessageId`，快照保存同一状态。
+原生历史落盘前保留实时边界；原生消息到达后认领其身份并保留 `renderId`，已完成状态
+不会被较旧历史覆盖为等待或压缩中。没有原生压缩记录的失败尝试不能认领后续成功记录。
+
+Claude 的普通 `/compact` 文本与原生 command envelope 按命令及参数匹配，避免产生
+两个 marker。历史保留 `compact_boundary` 和 continuation summary；摘要出现在命令
+之前或之后都归属当前压缩，普通用户消息或可见回复会终止这段关联。
+MessageDisplay 投影先使用包含实时压缩边界的历史，跨边界消费已落盘的文本前缀，
+新增文本只进入边界后的回复片段；该片段有独立的消息和渲染身份。
+
+```text
+manual /compact -> queued -> compacting -> compacted / failed / cancelled
+automatic       -> latest visible message -> compact marker -> continued answer
+
+live event -> SessionCompaction -> marker identity + position -> snapshot
+native history -----------------> reconcile marker ----------> text projection
+                                  preserve terminal state       |
+                                                  before answer | marker | after answer
+```
+
+`session-compaction.test.ts`、`session-compaction-review.test.ts` 与
+`terminal-text-projection.test.ts` 覆盖状态结清、连续压缩、历史延迟、原生 ID 替换及
+压缩后的续答；`fold-thread.test.ts` 与 Claude transcript/replay 单测覆盖历史边界和摘要归属。
+
 真实 CLI 集成回归增加 `terminal-capabilities.test.ts`、`terminal-elicitation.test.ts`、
 `terminal-resources.test.ts`、`terminal-interruption-usage.test.ts`、`terminal-permission-audit.test.ts`：
 本地模拟模型验证产品 MCP / JSX、typed 表单、中断结算 / 下一轮去重、TUI 审批审计、用量 / 工具账本、

@@ -202,19 +202,84 @@ describe('PiRuntime stream input', () => {
     const session = new FakePiAgentSession()
     const runtime = new PiRuntime(session)
     const events: AgentEvent[] = []
-    for await (const event of consumeRunEvents(runtime.run(
+    for await (const event of runtime.run(
       { text: '/compact keep the tokens' },
       { signal: new AbortController().signal },
-    ))) {
+    )) {
       events.push(event)
     }
     expect(session.prompts).toEqual([])
     expect(session.compacts).toEqual(['keep the tokens'])
     expect(events).toEqual([
-      { type: 'session.compacting' },
-      { type: 'session.compacted', summary: 'Kept the tokens.' },
+      { type: 'session.compacting', reason: 'manual' },
+      { type: 'session.compacted', reason: 'manual', summary: 'Kept the tokens.' },
       expect.objectContaining({ type: 'run.completed', sessionId: 'pi-1' }),
     ])
+    await runtime.release('dispose')
+  })
+
+  it.each([false, true])('settles a rejected manual compact once, preserving cancellation (%s)', async (cancelled) => {
+    const session = new FakePiAgentSession()
+    session.compact = () => {
+      session.emit({ type: 'compaction_start', reason: 'manual' })
+      session.emit({ type: 'compaction_end', reason: 'manual', aborted: cancelled,
+        ...(cancelled ? {} : { errorMessage: 'Nothing to compact' }) })
+      return Promise.reject(new Error(cancelled ? 'Compaction cancelled' : 'Nothing to compact'))
+    }
+    const runtime = new PiRuntime(session)
+    const events: AgentEvent[] = []
+    for await (const event of runtime.run({ text: '/compact' }, { signal: new AbortController().signal })) events.push(event)
+    expect(events).toEqual([
+      { type: 'session.compacting', reason: 'manual' },
+      cancelled ? { type: 'session.compaction_cancelled', reason: 'manual' }
+        : { type: 'session.compaction_failed', reason: 'manual', message: 'Nothing to compact' },
+      expect.objectContaining({ type: cancelled ? 'run.aborted' : 'run.failed', message: cancelled ? 'Compaction cancelled' : 'Nothing to compact' }),
+    ])
+    expect(runtime.hasBackgroundTasks).toBe(false)
+    await runtime.release('dispose')
+  })
+
+  it.each([false, true])('keeps replies after failed or cancelled automatic compaction in the foreground (%s)', async (cancelled) => {
+    const session = new FakePiAgentSession()
+    session.prompt = () => {
+      // Native pre-prompt compaction may fail or be cancelled without cancelling the user run.
+      session.emit({ type: 'compaction_start', reason: 'threshold' })
+      session.emit({ type: 'compaction_end', reason: 'threshold', aborted: cancelled,
+        ...(cancelled ? {} : { errorMessage: 'Auto-compaction failed: timeout' }) })
+      session.emit({ type: 'agent_start' })
+      const message = { role: 'assistant', model: 'm', content: [{ type: 'text', text: 'The requested answer' }], stopReason: 'stop', usage: { input: 10, output: 2 } }
+      session.emit({ type: 'message_end', message })
+      session.emit({ type: 'agent_end', messages: [message] })
+      session.emit({ type: 'agent_settled', aborted: false })
+      return Promise.resolve()
+    }
+    const runtime = new PiRuntime(session)
+    const events: AgentEvent[] = []
+    for await (const event of runtime.run({ text: 'Continue' }, { signal: new AbortController().signal })) events.push(event)
+    expect(events.map((event) => event.type)).toEqual([
+      'session.compacting', cancelled ? 'session.compaction_cancelled' : 'session.compaction_failed',
+      'session.state', 'assistant.message', 'run.completed',
+    ])
+    expect(events.at(-1)).toMatchObject({ usage: { input: 10, output: 2 } })
+    expect(runtime.hasBackgroundTasks).toBe(false)
+    await runtime.release('dispose')
+  })
+
+  it('retains the native abort result and usage when a run is stopped during auto-compaction', async () => {
+    const session = new FakePiAgentSession()
+    session.prompt = () => {
+      session.emit({ type: 'agent_start' })
+      session.emit({ type: 'agent_end', messages: [{ role: 'assistant', model: 'm', content: [], stopReason: 'stop', usage: { input: 10, output: 2 } }] })
+      session.emit({ type: 'compaction_start', reason: 'threshold' })
+      session.emit({ type: 'compaction_end', reason: 'threshold', aborted: true })
+      session.emit({ type: 'agent_settled', aborted: true })
+      return Promise.resolve()
+    }
+    const runtime = new PiRuntime(session)
+    const events: AgentEvent[] = []
+    for await (const event of runtime.run({ text: 'Continue' }, { signal: new AbortController().signal })) events.push(event)
+    expect(events.map((event) => event.type)).toEqual(['session.state', 'session.compacting', 'session.compaction_cancelled', 'run.aborted'])
+    expect(events.at(-1)).toMatchObject({ usage: { input: 10, output: 2 } })
     await runtime.release('dispose')
   })
 

@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/collapsible"
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker"
 import { Spinner } from "@/components/ui/spinner"
+import { TooltipHint } from "@/components/ui/tooltip"
 import { focusRing } from "@/lib/surfaces"
 import { cn } from "@/lib/utils"
 
@@ -23,10 +24,18 @@ export function CompactSessionMarker({ compact }: { compact: CompactMarker }) {
   const [open, setOpen] = useState(false)
   const summary = compact.summary?.trim() ?? ""
   const compacting = compact.phase === "compacting"
-  const canExpand = !compacting && summary !== ""
+  const canExpand = compact.phase === "compacted" && summary !== ""
+  const label = {
+    queued: "agentMessage.conversationCompactQueued",
+    compacting: "agentMessage.conversationCompacting",
+    compacted: "agentMessage.conversationCompacted",
+    failed: "agentMessage.conversationCompactFailed",
+    cancelled: "agentMessage.conversationCompactCancelled",
+  } as const
 
   return (
     <motion.div
+      data-compact-phase={compact.phase}
       initial={shouldReduceMotion ? false : { opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}
@@ -70,7 +79,7 @@ export function CompactSessionMarker({ compact }: { compact: CompactMarker }) {
           </AgentDisclosure>
         </Collapsible>
       ) : (
-        <Marker variant="separator" role={compacting ? "status" : undefined}>
+        <Marker variant="separator" role="status">
           {compacting ? (
             <MarkerIcon>
               <Spinner
@@ -79,17 +88,17 @@ export function CompactSessionMarker({ compact }: { compact: CompactMarker }) {
               />
             </MarkerIcon>
           ) : null}
-          <MarkerContent
-            className={cn(
-              compacting && "shimmer motion-reduce:animate-none"
-            )}
-          >
-            {t(
-              compacting
-                ? "agentMessage.conversationCompacting"
-                : "agentMessage.conversationCompacted"
-            )}
-          </MarkerContent>
+          <TooltipHint content={compact.message}>
+            <MarkerContent
+              tabIndex={compact.message ? 0 : undefined}
+              className={cn(
+                compacting && "shimmer motion-reduce:animate-none",
+                compact.message && focusRing
+              )}
+            >
+              {t(label[compact.phase])}
+            </MarkerContent>
+          </TooltipHint>
         </Marker>
       )}
     </motion.div>
