@@ -40,7 +40,7 @@ function useTabs() {
 // Settle without overshoot: a scrollable tab list would turn even a small
 // overshoot into a transient scrollbar and layout shift.
 // Scale stiffness and damping together for a quicker glide with the same feel.
-const transition: Transition = {
+const defaultTransition: Transition = {
   type: "spring",
   stiffness: 245,
   damping: 36,
@@ -52,6 +52,7 @@ export function Tabs({
   value,
   onValueChange,
   variant = "pill",
+  transition = defaultTransition,
   children,
   className,
 }: {
@@ -59,6 +60,7 @@ export function Tabs({
   value?: string;
   onValueChange?: (v: string) => void;
   variant?: Variant;
+  transition?: Transition;
   children: ReactNode;
   className?: string;
 }) {

@@ -1231,9 +1231,13 @@ FileBrowserPage (full / compact)
 ```
 
 模式使用 BeUI `segment` 样式，列表高 32px，标签高 28px，文字使用 12px 正常字重；
+选中背景通过 `indicatorClassName="inset-0.5"` 四周再内缩各 2px，高度为 24px，
+与列表外框的上下左右留白统一为 4px，文字和点击区域保持原尺寸。
 底色读取 `tabs-background`，圆角分段选中指示器读取 `primary`。保留禁用模式及其 Tooltip，
 方向键 / Home / End 切换时跳过禁用项，列表仅保留一个 Tab 焦点入口，焦点框在内部。
-指示器移动使用 BeUI 的 Motion 弹簧，减少动态效果时立即切换。窄栏沿用已有两行工具栏。
+模式指示器移动使用共享 `SPRING_LAYOUT`（stiffness 360、damping 32、mass 0.6），
+比 BeUI 默认弹簧更快收敛；通过 Tabs 的 `transition` 属性仅覆盖此模式列表，
+工作表标签保留原有默认速度。减少动态效果时立即切换。窄栏沿用已有两行工具栏。
 
 XLSX / CSV 底部工作表标签也使用同一 BeUI Tabs，选择 `underline` 样式。
 列表与标签高 32px，文字使用 12px 正常字重；保留受控工作表切换与底部固定位置，

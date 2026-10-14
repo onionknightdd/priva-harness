@@ -41,6 +41,7 @@ import type {
   PreviewFile,
 } from "@/features/files/model/file.types"
 import { writeClipboardText } from "@/lib/clipboard"
+import { SPRING_LAYOUT } from "@/lib/ease"
 import { cn } from "@/lib/utils"
 
 const saveButtonTransition: Transition = {
@@ -403,6 +404,7 @@ export function FilePreviewToolbar({
         >
           <PreviewModeTabs
             variant="segment"
+            transition={SPRING_LAYOUT}
             value={mode ?? ""}
             onValueChange={(nextMode) => {
               if (
@@ -431,6 +433,7 @@ export function FilePreviewToolbar({
                   disabled={!sourceAvailable}
                   aria-label={t("filePreview.source")}
                   className="h-7 px-2 py-0 text-xs font-normal"
+                  indicatorClassName="inset-0.5"
                 >
                   {t("filePreview.source")}
                 </PreviewModeTabsTrigger>
@@ -447,6 +450,7 @@ export function FilePreviewToolbar({
                   disabled={!renderAvailable}
                   aria-label={t("filePreview.preview")}
                   className="h-7 px-2 py-0 text-xs font-normal"
+                  indicatorClassName="inset-0.5"
                 >
                   {t("filePreview.preview")}
                 </PreviewModeTabsTrigger>
@@ -464,6 +468,7 @@ export function FilePreviewToolbar({
                     disabled={!editAvailable}
                     aria-label={t("filePreview.edit")}
                     className="h-7 px-2 py-0 text-xs font-normal"
+                    indicatorClassName="inset-0.5"
                   >
                     {t("filePreview.edit")}
                   </PreviewModeTabsTrigger>
