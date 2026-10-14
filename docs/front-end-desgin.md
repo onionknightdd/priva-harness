@@ -1275,7 +1275,8 @@ XLSX / CSV                  |
 胶囊使用共享 `shadow-selection-actions` token，在下方形成轻柔阴影：
 2px / 4px 的边缘阴影与 6px / 12px 的下方扩散阴影，浅色透明度为 5% / 10%，
 深色为 12% / 24%，保留原有细轮廓。
-文件浮层锚定实际选择的最后一个目标：源码使用文字选区的焦点终点，
+文件浮层锚定实际选择的最后一个目标：源码使用文字选区的焦点终点。
+选区文本以换行结尾且换行后没有其他内容时，锚点放在当前行末尾。
 XLSX / CSV 使用最后选择的单元格或行列目标，正向和反向拖选都跟随操作终点。
 操作优先位于该目标下方，底部不足时翻到目标上方；窄屏保持同样布局并限制在视口内。
 文件版按钮不配置操作回调，点击不插入聊天、不发送请求、不修改文件或选区。
@@ -2746,6 +2747,12 @@ Office 预览的选区坐标、文本边界、CSV 编码与格式路由回归：
 点击 **Run spreadsheet checks** 可仅检查 CSV 超大选区取值、公式栏展开 / 滚动和窄栏工作表标签。
 点击 **Run formula bar checks** 可仅检查短文本选字、自适应浮层高度和长文本点击展开。
 样例在内存生成，不访问用户文件。
+
+源码选区在末尾换行处锚定当前行末尾：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/files/selection/source-selection-anchor.test.ts
+```
 
 选区角色与范围、浮层定位、文件引用、引用协议与截断、编辑器插入 / 删除 / 撤销、
 剪贴板（截图 / 多图片 / 图片附带 HTML 与 URL、草稿和选区保留）、IME、发送清空、

@@ -6,24 +6,20 @@ import { useTranslation } from "react-i18next"
 import { SelectionActionsPopover } from "@/components/primitives/selection-actions-popover"
 import type { SelectionActionsRect } from "@/lib/selection-actions-position"
 
+import { sourceSelectionAnchor } from "./source-selection-anchor"
+
 function readSourceSelection(surface: HTMLElement | null): SelectionActionsRect | null {
   if (!surface || surface.getClientRects().length === 0 ||
       surface.closest('[hidden], [inert], [aria-hidden="true"]')) return null
   const selection = window.getSelection()
   if (!selection || selection.isCollapsed || selection.rangeCount === 0 ||
-      !selection.toString().trim() || !selection.anchorNode || !selection.focusNode ||
+      !selection.anchorNode || !selection.focusNode ||
       !surface.contains(selection.anchorNode) || !surface.contains(selection.focusNode)) return null
+  const text = selection.toString()
+  if (!text.trim()) return null
   const range = selection.getRangeAt(selection.rangeCount - 1)
   const backwards = selection.focusNode === range.startContainer && selection.focusOffset === range.startOffset
-  const endpoint = range.cloneRange()
-  endpoint.collapse(backwards)
-  const caret = endpoint.getBoundingClientRect()
-  if (caret.height > 0) return { left: caret.left, top: caret.top, bottom: caret.bottom, width: 0 }
-
-  // Some browsers do not expose a collapsed range's caret geometry.
-  const rects = Array.from(range.getClientRects()).filter((rect) => rect.height > 0 && rect.width > 0)
-  const rect = backwards ? rects[0] : rects.at(-1)
-  return rect ? { left: backwards ? rect.left : rect.right, top: rect.top, bottom: rect.bottom, width: 0 } : null
+  return sourceSelectionAnchor(text, backwards, range)
 }
 
 export function SourceSelectionActions({ children }: { children: React.ReactNode }) {
