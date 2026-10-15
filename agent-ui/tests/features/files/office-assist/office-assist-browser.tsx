@@ -160,6 +160,20 @@ async function openInput() {
   button(i18n.t("filePreview.askAgent"), menu())!.click()
   await until(() => input() && document.activeElement === input() && candidate()?.dataset.officeAssistDraft === "true", "focused question and fixed frame")
 }
+async function clickElement(point: { x: number; y: number }) {
+  const canvas = Array.from(host().querySelectorAll("canvas")).find((element) => {
+    const bounds = element.getBoundingClientRect()
+    return point.x >= bounds.left && point.x <= bounds.right && point.y >= bounds.top && point.y <= bounds.bottom
+  })!
+  for (const type of ["pointerdown", "pointerup"]) {
+    canvas.dispatchEvent(new PointerEvent(type, {
+      bubbles: true, cancelable: true, pointerType: "mouse", isPrimary: true, pointerId: 1,
+      button: 0, buttons: type === "pointerdown" ? 1 : 0, clientX: point.x, clientY: point.y,
+    }))
+  }
+  canvas.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, clientX: point.x, clientY: point.y }))
+  await until(() => input() && document.activeElement === input() && candidate()?.dataset.officeAssistDraft === "true", "element click opens focused question and fixed frame")
+}
 function enter(value: string) {
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input(), value)
   input()!.dispatchEvent(new Event("input", { bubbles: true }))
@@ -171,7 +185,7 @@ async function confirm(question: string) {
   await until(() => count() === previous + 1 && !input(), "saved selection and count")
 }
 function outsideClick() {
-  document.getElementById("outside")!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 1, pointerType: "mouse" }))
+  document.getElementById("outside")!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 1, pointerType: "mouse", isPrimary: true }))
 }
 
 document.getElementById("select-paragraph")!.addEventListener("click", () => {
@@ -199,17 +213,18 @@ document.getElementById("run")!.addEventListener("click", async () => {
     check("ordinary preview has no element-selection frame", !candidate())
     await mode("edit")
     await hover(wordPoint("Hello"), "paragraph")
-    await openInput()
+    await clickElement(wordPoint("Hello"))
     const locked = candidate()!.getBoundingClientRect()
-    move(word.x + 180, word.y + 100)
+    const otherParagraph = wordPoint("Table")
+    move(otherParagraph.x, otherParagraph.y)
     await sleep(80)
-    check("Ask Agent fixes the paragraph frame during question input", candidate()?.dataset.officeAssistDraft === "true" && Math.abs(candidate()!.getBoundingClientRect().top - locked.top) < 1)
+    check("clicking a DOCX paragraph opens question input and fixes its frame when moving to another element", candidate()?.dataset.officeAssistDraft === "true" && Boolean(input()) && Math.abs(candidate()!.getBoundingClientRect().top - locked.top) < 1 && Math.abs(candidate()!.getBoundingClientRect().left - locked.left) < 1)
     button(i18n.t("filePreview.officeAssist.cancel"), host())!.click()
     await until(() => !input() && !candidate(), "close current draft")
     check("frame close cancels only the unfinished selection", count() === 0)
 
     await hover(wordPoint("Hello"), "paragraph")
-    await openInput()
+    await clickElement(wordPoint("Hello"))
     outsideClick()
     await until(() => !input() && candidate()?.dataset.officeAssistDraft !== "true", "outside click cancels draft")
     check("outside click returns to hover without saving", count() === 0)
@@ -235,9 +250,13 @@ document.getElementById("run")!.addEventListener("click", async () => {
     check("PPTX textboxes use the same hover action", Boolean(button(i18n.t("filePreview.askAgent"), menu())))
     await hover(slidePoint(500, 345), "table-cell")
     await hover(slidePoint(500, 345), "table", true)
-    await openInput()
+    const hoveredTable = candidate()!.getBoundingClientRect()
+    // Releasing Alt for the click must lock the current table candidate instead
+    // of running another hit test that changes the target back into a cell.
+    await clickElement(slidePoint(500, 345))
+    const tableStayedFixed = candidate()?.dataset.officeAssistCandidate === "table" && Math.abs(candidate()!.getBoundingClientRect().width - hoveredTable.width) < 1
     await confirm("Review this slide table")
-    check("empty PPTX cells and Alt whole-table selection are selectable", count() === 1)
+    check("clicking a PPTX Alt-hovered table with Alt released keeps the whole table fixed", count() === 1 && tableStayedFixed)
     host().querySelector<HTMLButtonElement>("[data-office-assist-clear]")!.click()
     await until(() => count() === 0 && saved().length === 0, "clear all saved selections")
     await hover(slidePoint(180, 145), "paragraph")

@@ -115,7 +115,7 @@ export function OfficeAssistOverlay({ fileId, containerRef, surface }: {
       candidateRef.current = target
       setCandidate(target)
     }
-    const hit = async (point: { x: number; y: number; parent: boolean }) => {
+    const hit = async (point: { x: number; y: number; parent: boolean }, lock = false) => {
       const request = ++generation
       const current = live.current.assist
       if (!current?.enabled || current.activeFile?.id !== fileId || current.draft) return
@@ -131,8 +131,9 @@ export function OfficeAssistOverlay({ fileId, containerRef, surface }: {
       try {
         const target = await surface.picker.hitTest(index, { x: (point.x - rect.left) * units, y: (point.y - rect.top) * units }, { parent: point.parent })
         const latest = live.current.assist
-        if (request !== generation || !latest?.enabled || latest.draft || latest.activeFile?.id !== fileId) return
+        if (request !== generation || !latest?.enabled || latest.draft || latest.activeFile?.id !== fileId || latest.clearEpoch !== current.clearEpoch) return
         updateCandidate(target)
+        if (lock && target) latest.lock(target)
       } catch (reason) {
         if (request !== generation) return
         updateCandidate(null)
@@ -169,25 +170,58 @@ export function OfficeAssistOverlay({ fileId, containerRef, surface }: {
       if (inMenuCorridor(event.clientX, event.clientY)) return
       scheduleHit({ x: event.clientX, y: event.clientY, parent: event.altKey })
     }
+    let cancelledOnDown = false
+    let pressedTarget: OfficeElementTarget | null = null
+    const overPage = (event: MouseEvent) => event.target instanceof Node && container.contains(event.target) &&
+      Array.from(container.querySelectorAll("canvas")).some((canvas) => {
+        const rect = canvas.getBoundingClientRect()
+        return event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom
+      })
+    const cancelHit = () => {
+      ++generation
+      cancelAnimationFrame(hitFrame)
+      hitFrame = 0
+    }
     const onDown = (event: PointerEvent) => {
+      if (!event.isPrimary || event.button !== 0) return
+      cancelledOnDown = false
+      pressedTarget = null
       const current = live.current.assist
       if (!current?.enabled || current.activeFile?.id !== fileId) return
       if (event.target instanceof Node && menuRef.current?.contains(event.target)) return
       if (event.target instanceof Element && event.target.closest("[data-office-assist-overlay], [data-office-assist-controls]")) return
       if (current.draft) {
-        ++generation
+        cancelledOnDown = true
+        cancelHit()
         current.cancelDraft()
         updateCandidate(null)
+        return
       }
-      const overPage = Array.from(container.querySelectorAll("canvas")).some((canvas) => {
-        const rect = canvas.getBoundingClientRect()
-        return event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom
-      })
-      if (overPage && event.target instanceof Node && container.contains(event.target)) {
+      if (!overPage(event)) return
+      // Preserve the displayed hover target until click, including Alt parent selection.
+      pressedTarget = candidateRef.current
+      cancelHit()
+      if (event.pointerType !== "touch") {
         event.preventDefault()
+        event.stopPropagation()
         container.focus({ preventScroll: true })
-        scheduleHit({ x: event.clientX, y: event.clientY, parent: event.altKey })
       }
+    }
+    const onClick = (event: MouseEvent) => {
+      const cancelled = cancelledOnDown
+      cancelledOnDown = false
+      const target = pressedTarget ?? candidateRef.current
+      pressedTarget = null
+      const current = live.current.assist
+      if (event.button !== 0 || !current?.enabled || current.activeFile?.id !== fileId || !overPage(event)) return
+      event.preventDefault()
+      event.stopPropagation()
+      if (cancelled || current.draft) return
+      cancelHit()
+      const point = { x: event.clientX, y: event.clientY, parent: event.altKey }
+      pointRef.current = point
+      if (target) current.lock(target)
+      else void hit(point, true)
     }
     const onKey = (event: KeyboardEvent) => {
       if (event.type === "keyup" && event.key !== "Alt") return
@@ -218,6 +252,7 @@ export function OfficeAssistOverlay({ fileId, containerRef, surface }: {
     mutations.observe(container, { childList: true, subtree: true })
     document.addEventListener("pointermove", onMove)
     document.addEventListener("pointerdown", onDown, true)
+    document.addEventListener("click", onClick, true)
     document.addEventListener("keydown", onKey)
     document.addEventListener("keyup", onKey)
     document.addEventListener("scroll", refresh, true)
@@ -232,6 +267,7 @@ export function OfficeAssistOverlay({ fileId, containerRef, surface }: {
       mutations.disconnect()
       document.removeEventListener("pointermove", onMove)
       document.removeEventListener("pointerdown", onDown, true)
+      document.removeEventListener("click", onClick, true)
       document.removeEventListener("keydown", onKey)
       document.removeEventListener("keyup", onKey)
       document.removeEventListener("scroll", refresh, true)
@@ -316,6 +352,7 @@ export function OfficeAssistOverlay({ fileId, containerRef, surface }: {
         </AnimatePresence>
       </div>
       <SelectionActionsPopover anchorRect={anchor} menuRef={menuRef} instant={Boolean(reduceMotion)} kind="file" label={t("filePreview.selectionMenuLabel")}
+        openInputActionId={draft ? "ask-agent" : undefined}
         actions={[{
           id: "ask-agent", label: t("filePreview.askAgent"), icon: <MessageCircleCodeIcon aria-hidden="true" />,
           input: {

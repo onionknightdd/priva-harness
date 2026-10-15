@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils"
 
 // Adapted from https://www.beautifului.dev/r/selection-actions.json.
 // Compact the pill's padding while retaining 28px controls.
-export default function SelectionActions({ actions, label, instant = false, onLayoutChange, onDragStart }: {
+export default function SelectionActions({ actions, label, instant = false, openInputActionId, onLayoutChange, onDragStart }: {
   actions: {
     id: string
     label: string
@@ -21,6 +21,7 @@ export default function SelectionActions({ actions, label, instant = false, onLa
   }[]
   label: string
   instant?: boolean
+  openInputActionId?: string
   onLayoutChange?: () => void
   onDragStart?: PointerEventHandler<HTMLSpanElement>
 }) {
@@ -58,6 +59,11 @@ export default function SelectionActions({ actions, label, instant = false, onLa
     }
     wasPresentRef.current = present
   }, [present])
+
+  useLayoutEffect(() => {
+    // Consume an external open request once; Escape can still return to the action.
+    if (present && openInputActionId) setInputActionId(openInputActionId)
+  }, [openInputActionId, present])
 
   return (
     <motion.div
