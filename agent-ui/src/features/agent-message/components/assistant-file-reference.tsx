@@ -5,18 +5,20 @@ import { useTranslation } from "react-i18next"
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu"
 import { FilePathLink } from "@/features/files/file-path-link"
 import { useFileExists } from "@/features/files/use-file-exists"
-import { useOptionalWorkspaceFiles } from "@/features/workspace/workspace-files-context"
+import { useOptionalWorkspaceFiles, type OpenFileInWorkspaceOptions } from "@/features/workspace/workspace-files-context"
 import { writeClipboardText } from "@/lib/clipboard"
 import { isAbsoluteFilePath } from "@/lib/file-path"
 
 import { PopupsArmedContext } from "@/components/ui/popups-armed-context"
 import { QuoteInChatContext } from "../selection-actions-context"
 
-export function AssistantFileReference({ path, label, className, wrap = false }: {
+export function AssistantFileReference({ path, label, className, wrap = false, tooltip, openOptions }: {
   path: string
   label: string
   className?: string
   wrap?: boolean
+  tooltip?: string
+  openOptions?: OpenFileInWorkspaceOptions
 }) {
   const { t } = useTranslation()
   const workspace = useOptionalWorkspaceFiles()
@@ -32,7 +34,7 @@ export function AssistantFileReference({ path, label, className, wrap = false }:
   // events that open a context menu (right click, long press, Shift+F10).
   const armed = useContext(PopupsArmedContext)
   const restoreFocus = useRef(false)
-  const link = <FilePathLink path={path} label={label} tooltip={path} showIcon variant="code" className={className} wrap={wrap} />
+  const link = <FilePathLink path={path} label={label} tooltip={tooltip ?? path} showIcon variant="code" className={className} wrap={wrap} openOptions={openOptions} />
   const triggerClassName = wrap ? "inline select-text" : "inline-flex max-w-full min-w-0 select-text align-middle"
   const focusable = exists && workspace ? undefined : 0
 
@@ -73,7 +75,7 @@ export function AssistantFileReference({ path, label, className, wrap = false }:
       </ContextMenuTrigger>
       <ContextMenuContent finalFocus={() => quoted.current ? false : triggerRef.current?.querySelector<HTMLElement>('button, [role="button"]') ?? triggerRef.current}>
         <ContextMenuItem className="text-xs" disabled={!absolute || !exists || !workspace}
-          onClick={() => workspace?.openFileInWorkspace(path)}>
+          onClick={() => workspace?.openFileInWorkspace(path, openOptions)}>
           <FolderOpenIcon aria-hidden="true" />
           {t("agentMessage.fileReferenceMenu.open")}
         </ContextMenuItem>

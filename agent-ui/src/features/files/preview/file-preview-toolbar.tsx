@@ -43,6 +43,7 @@ import type {
 import { writeClipboardText } from "@/lib/clipboard"
 import { SPRING_LAYOUT } from "@/lib/ease"
 import { cn } from "@/lib/utils"
+import { OfficeAssistControls } from "../office-assist/office-assist-controls"
 
 const saveButtonTransition: Transition = {
   type: "spring",
@@ -459,7 +460,9 @@ export function FilePreviewToolbar({
                 <TooltipHint
                   content={
                     editAvailable
-                      ? t("filePreview.edit")
+                      ? ["document", "presentation"].includes(activeFile?.renderKind ?? "")
+                        ? t("filePreview.officeAssist.modeHint")
+                        : t("filePreview.edit")
                       : t("filePreview.editUnavailable")
                   }
                 >
@@ -476,6 +479,8 @@ export function FilePreviewToolbar({
               )}
             </PreviewModeTabsList>
           </PreviewModeTabs>
+
+          <OfficeAssistControls />
 
           <Tooltip>
             <TooltipTrigger

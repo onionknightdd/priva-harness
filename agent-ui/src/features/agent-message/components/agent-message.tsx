@@ -21,7 +21,7 @@ import { appendQuotedDraft } from "../quote-selection"
 import { serializeMessageSelections } from "../message-select-action"
 import type { OnQuoteInChat } from "../selection-actions-context"
 import type { ComposerEditorHandle } from "./composer-editor"
-import type { FileAnnotation } from "../file-annotation"
+import type { FileAnnotationInput } from "../file-annotation"
 import { useSessionView } from "../session-view-context"
 import { useOptionalWorkspaceFiles } from "@/features/workspace/workspace-files-context"
 import {
@@ -156,23 +156,25 @@ export function AgentMessage({
       : draft + serializeMessageSelections([{ type: "selection", selection: quote.selection }]))
     requestAnimationFrame(() => composerEditorRef.current?.focus(true))
   }, [])
-  const insertFileAnnotation = useCallback((annotation: FileAnnotation, question: string) => {
+  const insertFileAnnotations = useCallback((items: readonly FileAnnotationInput[]) => {
+    if (!items.length) return false
     setView("chat")
     if (composerEditorRef.current) {
-      composerEditorRef.current.insertFileAnnotation(annotation, question)
+      if (!composerEditorRef.current.insertFileAnnotations(items)) return false
     } else {
       const { draft, onDraftChange } = selectionContext.current
-      const next = draft + serializeMessageSelections([
+      const next = draft + items.map(({ annotation, question }, index) => (index > 0 ? "\n\n" : "") + serializeMessageSelections([
         { type: "file_annotation", annotation },
         ...(question ? [{ type: "text" as const, text: `\n${question}` }] : []),
-      ])
+      ])).join("")
       selectionContext.current.draft = next
       onDraftChange(next)
     }
     requestAnimationFrame(() => composerEditorRef.current?.focus())
+    return true
   }, [setView])
   const registerFileAnnotationComposer = workspaceFiles?.registerFileAnnotationComposer
-  useLayoutEffect(() => registerFileAnnotationComposer?.(insertFileAnnotation), [insertFileAnnotation, registerFileAnnotationComposer])
+  useLayoutEffect(() => registerFileAnnotationComposer?.(insertFileAnnotations), [insertFileAnnotations, registerFileAnnotationComposer])
   const dockRef = useRef<HTMLDivElement>(null)
   const dockSpacerRef = useRef<HTMLDivElement>(null)
   const dockTop = useRef<number | null>(null)

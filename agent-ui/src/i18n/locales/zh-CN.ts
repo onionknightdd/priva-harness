@@ -255,6 +255,10 @@ export const zhCN = {
     },
   },
   agentMessage: {
+    officeAnnotation: {
+      page: "第 {{page}} 页 · 选区 {{index}}",
+      slide: "第 {{page}} 张 · 选区 {{index}}",
+    },
     contentLabel: "Agent Message",
     view: {
       label: "会话视图",
@@ -613,6 +617,18 @@ export const zhCN = {
     askAgent: "询问Agent",
     askAgentPlaceholder: "输入你的问题…",
     confirmAgentQuestion: "确认问题",
+    officeAssist: {
+      surface: "Office 文件预览",
+      modeHint: "悬停选取元素，按住 Alt 可选取整张表格。",
+      count: "已保存 {{count}} 个选区",
+      clear: "清空选区",
+      send: "添加到聊天",
+      cancel: "取消当前选区",
+      remove: "删除选区 {{index}}",
+      sendFailed: "请打开对话后添加，当前选区已保留。",
+      fileChanged: "文件已更新，请重新选择当前内容。",
+      element: { paragraph: "文字", table: "表格", "table-cell": "单元格", image: "图片", chart: "图表", shape: "形状", media: "媒体" },
+    },
     selectionMenuLabel: "文件选区操作",
     sourceLabel: "{{fileName}} 源码",
     htmlFrameTitle: "{{fileName}} HTML 预览",

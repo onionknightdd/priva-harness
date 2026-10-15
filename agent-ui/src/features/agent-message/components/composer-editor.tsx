@@ -9,8 +9,8 @@ import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 
 import { isImageAttachment } from "../composer-attachments"
-import { composerDocument, createComposerState, insertFileAnnotation, insertMessageSelection, serializeComposerContent } from "../composer-editor-state"
-import type { FileAnnotation } from "../file-annotation"
+import { composerDocument, createComposerState, insertFileAnnotations, insertMessageSelection, serializeComposerContent } from "../composer-editor-state"
+import type { FileAnnotation, FileAnnotationInput } from "../file-annotation"
 import { mentionTriggerFromState, mentionTriggersEqual, type MentionTrigger } from "../composer-mention"
 import type { MessageSelection, MessageSelectionPart } from "../message-select-action"
 import { FileAnnotationReference } from "./file-annotation-reference"
@@ -19,7 +19,8 @@ import { MessageSelectionQuote } from "./message-selection-quote"
 export type ComposerEditorHandle = {
   focus: (atEnd?: boolean) => void
   insertSelection: (selection: MessageSelection) => void
-  insertFileAnnotation: (annotation: FileAnnotation, question: string) => void
+  insertFileAnnotation: (annotation: FileAnnotation, question: string) => boolean
+  insertFileAnnotations: (items: readonly FileAnnotationInput[]) => boolean
   replaceRange: (from: number, to: number, text: string) => void
 }
 
@@ -50,33 +51,40 @@ export function ComposerEditor({ ref, inputRef, draft, placeholder, onChange, on
   const [portals, setPortals] = useState<ReferencePortal[]>([])
   useLayoutEffect(() => { latest.current = { draft, onChange, onImagesPaste, onKeyDown, onMentionChange } })
 
-  useImperativeHandle(ref, () => ({
-    focus(atEnd = false) {
+  useImperativeHandle(ref, () => {
+    const insertAnnotations = (items: readonly FileAnnotationInput[]) => {
       const view = viewRef.current
-      if (!view) return
-      if (atEnd) view.dispatch(view.state.tr.setSelection(TextSelection.atEnd(view.state.doc)))
-      view.focus()
-    },
-    insertSelection(selection) {
-      const view = viewRef.current
-      if (!view) return
-      insertMessageSelection(selection)(view.state, view.dispatch)
-      view.focus()
-    },
-    insertFileAnnotation(annotation, question) {
-      const view = viewRef.current
-      if (!view) return
-      insertFileAnnotation(annotation, question)(view.state, view.dispatch)
-      view.focus()
-    },
-    replaceRange(from, to, text) {
-      const view = viewRef.current
-      if (!view) return
-      const tr = view.state.tr.insertText(text, from, to)
-      view.dispatch(tr.setSelection(TextSelection.create(tr.doc, from + text.length)).scrollIntoView())
-      view.focus()
-    },
-  }), [])
+      if (!view) return false
+      const inserted = insertFileAnnotations(items)(view.state, view.dispatch)
+      if (inserted) view.focus()
+      return inserted
+    }
+    return {
+      focus(atEnd = false) {
+        const view = viewRef.current
+        if (!view) return
+        if (atEnd) view.dispatch(view.state.tr.setSelection(TextSelection.atEnd(view.state.doc)))
+        view.focus()
+      },
+      insertSelection(selection) {
+        const view = viewRef.current
+        if (!view) return
+        insertMessageSelection(selection)(view.state, view.dispatch)
+        view.focus()
+      },
+      insertFileAnnotation(annotation, question) {
+        return insertAnnotations([{ annotation, question }])
+      },
+      insertFileAnnotations: insertAnnotations,
+      replaceRange(from, to, text) {
+        const view = viewRef.current
+        if (!view) return
+        const tr = view.state.tr.insertText(text, from, to)
+        view.dispatch(tr.setSelection(TextSelection.create(tr.doc, from + text.length)).scrollIntoView())
+        view.focus()
+      },
+    }
+  }, [])
 
   useLayoutEffect(() => {
     if (!inputRef.current) return

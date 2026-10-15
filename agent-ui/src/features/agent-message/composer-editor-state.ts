@@ -5,7 +5,7 @@ import { keymap } from "prosemirror-keymap"
 import { EditorState, NodeSelection, TextSelection, type Command } from "prosemirror-state"
 
 import { parseMessageSelections, serializeMessageSelections, type MessageSelection, type MessageSelectionPart } from "./message-select-action"
-import { fileAnnotationLabel, type FileAnnotation } from "./file-annotation"
+import { fileAnnotationLabel, type FileAnnotation, type FileAnnotationInput } from "./file-annotation"
 
 export const composerSchema = new Schema({
   nodes: {
@@ -69,15 +69,24 @@ export function insertMessageSelection(selection: MessageSelection): Command {
 }
 
 export function insertFileAnnotation(annotation: FileAnnotation, question: string): Command {
+  return insertFileAnnotations([{ annotation, question }])
+}
+
+export function insertFileAnnotations(items: readonly FileAnnotationInput[]): Command {
   return (state, dispatch) => {
-    const nodes = [composerSchema.nodes.file_annotation.create({ annotation })]
-    if (question) {
-      nodes.push(composerSchema.nodes.hard_break.create())
-      question.split("\n").forEach((line, index) => {
-        if (index > 0) nodes.push(composerSchema.nodes.hard_break.create())
-        if (line) nodes.push(composerSchema.text(line))
-      })
-    }
+    if (items.length === 0) return false
+    const nodes: ProseMirrorNode[] = []
+    items.forEach(({ annotation, question }, index) => {
+      if (index > 0) nodes.push(composerSchema.nodes.hard_break.create(), composerSchema.nodes.hard_break.create())
+      nodes.push(composerSchema.nodes.file_annotation.create({ annotation }))
+      if (question) {
+        nodes.push(composerSchema.nodes.hard_break.create())
+        question.replaceAll("\r\n", "\n").split("\n").forEach((line, index) => {
+          if (index > 0) nodes.push(composerSchema.nodes.hard_break.create())
+          if (line) nodes.push(composerSchema.text(line))
+        })
+      }
+    })
     const tr = closeHistory(state.tr).replaceSelection(new Slice(Fragment.fromArray(nodes), 0, 0))
     dispatch?.(tr.setSelection(TextSelection.create(tr.doc, tr.selection.to)).scrollIntoView())
     return true

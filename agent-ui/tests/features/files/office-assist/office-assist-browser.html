@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Office Agent Assist checks</title>
+  </head>
+  <body class="bg-background p-3 text-foreground">
+    <nav class="mb-3 flex flex-wrap gap-4 text-sm">
+      <button id="run" type="button">Run Office Agent Assist checks</button>
+      <button id="select-paragraph" type="button">Select paragraph</button>
+      <button id="outside" type="button">Outside target</button>
+    </nav>
+    <pre id="results" role="status" class="mb-3 max-h-32 overflow-auto whitespace-pre-wrap text-xs">Ready</pre>
+    <div id="root"></div>
+    <script type="module" src="./office-assist-browser.tsx"></script>
+  </body>
+</html>

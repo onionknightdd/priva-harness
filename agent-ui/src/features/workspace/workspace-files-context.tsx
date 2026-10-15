@@ -2,12 +2,13 @@ import * as React from "react"
 
 import { useSidebar } from "@/components/ui/sidebar"
 import type { FilePreviewMode } from "@/features/files/model/file.types"
-import type { FileAnnotation } from "@/features/agent-message/file-annotation"
+import type { FileAnnotation, FileAnnotationInput, OfficeFileAnnotation } from "@/features/agent-message/file-annotation"
 
 import { type WorkspaceModuleId } from "./workspace-modules"
 
 export type OpenFileInWorkspaceOptions = {
   previewMode?: FilePreviewMode
+  annotation?: OfficeFileAnnotation
 }
 
 // Tab selection lives in its own context so that switching tabs does not
@@ -21,13 +22,16 @@ type WorkspaceTabContextValue = {
 type WorkspaceFilesContextValue = {
   pendingFilePath: string | null
   pendingPreviewMode: FilePreviewMode | null
+  pendingAnnotation: OfficeFileAnnotation | null
   fileOpenNonce: number
   openFileInWorkspace: (
     path: string,
     options?: OpenFileInWorkspaceOptions
   ) => void
-  insertFileAnnotation: (annotation: FileAnnotation, question: string) => void
-  registerFileAnnotationComposer: (handler: (annotation: FileAnnotation, question: string) => void) => () => void
+  clearPendingAnnotation: (selectionId: string) => void
+  insertFileAnnotation: (annotation: FileAnnotation, question: string) => boolean
+  insertFileAnnotations: (items: readonly FileAnnotationInput[]) => boolean
+  registerFileAnnotationComposer: (handler: (items: readonly FileAnnotationInput[]) => boolean) => () => void
 }
 
 const WorkspaceTabContext =
@@ -53,19 +57,32 @@ export function WorkspaceFilesProvider({
   const [pendingPreviewMode, setPendingPreviewMode] =
     React.useState<FilePreviewMode | null>(null)
   const [fileOpenNonce, setFileOpenNonce] = React.useState(0)
-  const composer = React.useRef<((annotation: FileAnnotation, question: string) => void) | null>(null)
-  const pendingAnnotations = React.useRef<{ annotation: FileAnnotation; question: string }[]>([])
-  const registerFileAnnotationComposer = React.useCallback((handler: (annotation: FileAnnotation, question: string) => void) => {
+  const [pendingAnnotation, setPendingAnnotation] = React.useState<OfficeFileAnnotation | null>(null)
+  const composer = React.useRef<((items: readonly FileAnnotationInput[]) => boolean) | null>(null)
+  const pendingAnnotations = React.useRef<FileAnnotationInput[]>([])
+  const registerFileAnnotationComposer = React.useCallback((handler: (items: readonly FileAnnotationInput[]) => boolean) => {
     composer.current = handler
-    for (const { annotation, question } of pendingAnnotations.current.splice(0)) handler(annotation, question)
+    if (pendingAnnotations.current.length && handler(pendingAnnotations.current)) pendingAnnotations.current = []
     return () => { if (composer.current === handler) composer.current = null }
   }, [])
-  const insertFileAnnotation = React.useCallback((annotation: FileAnnotation, question: string) => {
+  const insertAnnotations = React.useCallback((items: readonly FileAnnotationInput[], queueIfUnavailable = false) => {
+    if (!items.length) return false
     onShowChat?.()
+    const inserted = composer.current?.(items) ?? false
+    if (!inserted && !queueIfUnavailable) return false
+    if (!inserted) pendingAnnotations.current.push(...items)
     if (isMobile) setOpenMobile(false)
-    if (composer.current) composer.current(annotation, question)
-    else pendingAnnotations.current.push({ annotation, question })
+    return true
   }, [isMobile, onShowChat, setOpenMobile])
+  const insertFileAnnotations = React.useCallback((items: readonly FileAnnotationInput[]) => (
+    insertAnnotations(items)
+  ), [insertAnnotations])
+  const insertFileAnnotation = React.useCallback((annotation: FileAnnotation, question: string) => (
+    insertAnnotations([{ annotation, question }], true)
+  ), [insertAnnotations])
+  const clearPendingAnnotation = React.useCallback((selectionId: string) => {
+    setPendingAnnotation((current) => current?.selectionId === selectionId ? null : current)
+  }, [])
 
   const openWorkspaceTab = React.useCallback((id: WorkspaceModuleId) => {
     setActiveTabId(id)
@@ -77,6 +94,7 @@ export function WorkspaceFilesProvider({
     (path: string, options?: OpenFileInWorkspaceOptions) => {
       setPendingFilePath(path)
       setPendingPreviewMode(options?.previewMode ?? null)
+      setPendingAnnotation(options?.annotation ?? null)
       setFileOpenNonce((current) => current + 1)
       openWorkspaceTab("files")
     },
@@ -92,12 +110,15 @@ export function WorkspaceFilesProvider({
     () => ({
       pendingFilePath,
       pendingPreviewMode,
+      pendingAnnotation,
       fileOpenNonce,
       openFileInWorkspace,
       insertFileAnnotation,
+      insertFileAnnotations,
       registerFileAnnotationComposer,
+      clearPendingAnnotation,
     }),
-    [fileOpenNonce, openFileInWorkspace, pendingFilePath, pendingPreviewMode, insertFileAnnotation, registerFileAnnotationComposer]
+    [fileOpenNonce, openFileInWorkspace, pendingFilePath, pendingPreviewMode, pendingAnnotation, insertFileAnnotation, insertFileAnnotations, registerFileAnnotationComposer, clearPendingAnnotation]
   )
 
   return (

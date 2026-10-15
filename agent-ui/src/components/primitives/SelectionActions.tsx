@@ -17,7 +17,7 @@ export default function SelectionActions({ actions, label, instant = false, onLa
     label: string
     icon: ReactNode
     onSelect?: () => void
-    input?: { placeholder: string; confirmLabel: string; onConfirm?: (value: string) => void }
+    input?: { placeholder: string; confirmLabel: string; onOpen?: () => void; onConfirm?: (value: string) => void }
   }[]
   label: string
   instant?: boolean
@@ -140,6 +140,7 @@ export default function SelectionActions({ actions, label, instant = false, onLa
                 return
               }
               if (action.input) {
+                action.input.onOpen?.()
                 setKeyboardInteraction(event.detail === 0)
                 setInputActionId(action.id)
               } else {

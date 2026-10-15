@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
-import { fileAnnotationLabel, formatFileAnnotation, parseFileAnnotationBlock, type FileAnnotation } from "../../../src/features/agent-message/file-annotation.ts"
+import { fileAnnotationLabel, formatFileAnnotation, parseFileAnnotationBlock, type FileAnnotation, type OfficeFileAnnotation } from "../../../src/features/agent-message/file-annotation.ts"
 import { messageSelectionDisplayText, parseMessageSelections, serializeMessageSelections, type MessageSelectionPart } from "../../../src/features/agent-message/message-select-action.ts"
 
 test("file annotations retain text and spreadsheet fields in the requested protocol", () => {
@@ -41,4 +41,41 @@ test("nested fences, invalid metadata and protocol examples remain intact", () =
   ]) {
     assert.deepEqual(parseMessageSelections(content), [{ type: "text", text: content }])
   }
+})
+
+const office: OfficeFileAnnotation = {
+  kind: "document", filePath: "/workspace/报告.docx", fileRevision: "a".repeat(64), selectionId: "selection-1", index: 1,
+  elementType: "paragraph", selectedText: "保留完整内容\n```example```", coordinateSpace: "docx-page-points",
+  boxes: [{ surfaceIndex: 1, x: 20, y: 35, width: 120, height: 28 }],
+  locator: { part: "word/document.xml", xpath: "/w:document/w:body/w:p[3]", path: [2], paragraphId: "00112233", story: "body", storyInstance: "" },
+}
+
+test("Office annotations retain native source locators, file revision and document coordinates", () => {
+  const presentation: OfficeFileAnnotation = {
+    ...office, kind: "presentation", filePath: "/workspace/slides.pptx", elementType: "shape", coordinateSpace: "pptx-slide-pixels",
+    boxes: [{ surfaceIndex: 2, x: 60, y: 90, width: 250, height: 70, rotation: 15 }],
+    locator: { part: "ppt/slides/slide3.xml", xpath: "/p:sld/p:cSld/p:spTree/p:sp[p:nvSpPr/p:cNvPr/@id='7']", shapeId: "7", elementIndex: 2, origin: "slide" },
+  }
+  for (const annotation of [office, presentation]) {
+    const formatted = formatFileAnnotation(annotation)
+    assert.deepEqual(parseFileAnnotationBlock(formatted), annotation)
+    const parts: MessageSelectionPart[] = [{ type: "file_annotation", annotation }, { type: "text", text: "\n请解释所选内容" }]
+    assert.deepEqual(parseMessageSelections(serializeMessageSelections(parts)), parts)
+    assert.match(formatted, annotation.kind === "document" ? /"page_num": 2/ : /"slide_num": 3/)
+    assert.ok(formatted.includes('"file_revision": "' + "a".repeat(64) + '"'))
+  }
+  assert.equal(fileAnnotationLabel(office), "报告.docx p.2 · #1")
+  assert.equal(fileAnnotationLabel(presentation), "slides.pptx slide 3 · #1")
+})
+
+test("invalid Office annotations remain plain text instead of creating an incomplete reference", () => {
+  const formatted = formatFileAnnotation(office)
+  for (const invalid of [
+    formatted.replace('"page_num": 2', '"page_num": 0'),
+    formatted.replace('"width": 120', '"width": -1'),
+    formatted.replace('"index": 1', '"index": 0'),
+    formatted.replace('"docx-page-points"', '"pptx-slide-pixels"'),
+    formatted.replace(`"${"a".repeat(64)}"`, '"missing-revision"'),
+    formatted.replace('"part": "word/document.xml"', '"part": ""'),
+  ]) assert.deepEqual(parseMessageSelections(invalid), [{ type: "text", text: invalid }])
 })

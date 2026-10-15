@@ -1,9 +1,11 @@
 import { XIcon } from "lucide-react"
+import { useTranslation } from "react-i18next"
 
+import { fileNameFromPath } from "@/lib/file-path"
 import { focusRing } from "@/lib/surfaces"
 import { cn } from "@/lib/utils"
 
-import { fileAnnotationLabel, type FileAnnotation } from "../file-annotation"
+import { fileAnnotationLabel, isOfficeFileAnnotation, type FileAnnotation } from "../file-annotation"
 import { AssistantFileReference } from "./assistant-file-reference"
 
 export function FileAnnotationReference({ annotation, onRemove, removeLabel }: {
@@ -11,9 +13,18 @@ export function FileAnnotationReference({ annotation, onRemove, removeLabel }: {
   onRemove?: () => void
   removeLabel?: string
 }) {
+  const { t } = useTranslation()
+  const office = isOfficeFileAnnotation(annotation) ? annotation : null
+  const label = office
+    ? `${fileNameFromPath(office.filePath)} · ${t(`agentMessage.officeAnnotation.${office.kind === "document" ? "page" : "slide"}`, {
+      page: office.boxes[0].surfaceIndex + 1, index: office.index,
+    })}`
+    : fileAnnotationLabel(annotation)
+  const tooltip = office ? [label, office.filePath, office.selectedText, [office.locator.part, office.locator.xpath].filter(Boolean).join("\n")].filter(Boolean).join("\n\n") : undefined
   return (
-    <span data-file-annotation className="group/file-annotation inline">
-      <AssistantFileReference path={annotation.filePath} label={fileAnnotationLabel(annotation)} wrap />
+    <span data-file-annotation data-selection-id={office?.selectionId} className="group/file-annotation inline">
+      <AssistantFileReference path={annotation.filePath} label={label} tooltip={tooltip}
+        openOptions={office ? { previewMode: "render", annotation: office } : undefined} wrap />
       {onRemove ? (
         <button
           type="button"

@@ -4,7 +4,7 @@ import { OverflowMarquee } from "@/components/motion/overflow-marquee"
 import { useTranslation } from "react-i18next"
 
 import { FileTypeIcon } from "@/features/file-browser/components/file-type-icon"
-import { useOptionalWorkspaceFiles } from "@/features/workspace/workspace-files-context"
+import { useOptionalWorkspaceFiles, type OpenFileInWorkspaceOptions } from "@/features/workspace/workspace-files-context"
 import { fileNameFromPath } from "@/lib/file-path"
 import { focusRing } from "@/lib/surfaces"
 import { cn } from "@/lib/utils"
@@ -24,6 +24,7 @@ export function FilePathLink({
   marquee = false,
   wrap = false,
   className,
+  openOptions,
 }: {
   path: string
   label: string
@@ -34,6 +35,7 @@ export function FilePathLink({
   marquee?: boolean
   wrap?: boolean
   className?: string
+  openOptions?: OpenFileInWorkspaceOptions
 }) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
@@ -70,7 +72,7 @@ export function FilePathLink({
       onClick={(event) => {
         event.preventDefault()
         event.stopPropagation()
-        workspaceFiles.openFileInWorkspace(path)
+        workspaceFiles.openFileInWorkspace(path, openOptions)
       }}
       whileTap={wrap || shouldReduceMotion ? undefined : { scale: 0.98 }}
       transition={{ duration: shouldReduceMotion ? 0 : 0.16 }}

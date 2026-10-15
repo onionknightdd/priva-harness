@@ -1217,8 +1217,9 @@ Agent UI 文件浏览器与 Agent Workspace 文件浏览器共用此实现。
 “Agent协助”（英文 `Agent Assist`）沿用内部 `edit` 模式及现有 HTML 可视化编辑功能。
 仅活动文件的扩展名为 `.pptx`、`.docx`、`.html`、`.htm`、`.xhtml` 或 `.pdf` 时
 挂载此 Tab，扩展名判断不区分大小写；其他文件和未选文件时不显示。
-HTML 系列加载成功后可以使用现有编辑功能；PPTX / DOCX / PDF 按用户确认暂时禁用，
-提示“此文件的Agent协助暂未开放”，不加载 HTML 编辑器。
+HTML 系列加载成功后可以使用现有编辑功能。2026-10-15：DOCX / PPTX 加载成功后开放
+元素选取式 Agent 协助，继续使用 Office 预览器；PDF 保留禁用状态及
+“此文件的Agent协助暂未开放”提示。
 
 ```text
 FileBrowserPage (full / compact)
@@ -1227,7 +1228,9 @@ FileBrowserPage (full / compact)
         +-- file tabs: file ID
         +-- BeUI mode tabs: source / render / edit
              edit visibility: selected .pptx/.docx/.html/.htm/.xhtml/.pdf
-             edit enabled: loaded HTML only
+             edit enabled: loaded HTML / DOCX / PPTX
+             edit renderer: HTML editor / Office element picker
+             PDF: disabled
 ```
 
 模式使用 BeUI `segment` 样式，列表高 32px，标签高 28px，文字使用 12px 正常字重；
@@ -1299,7 +1302,7 @@ XLSX / CSV 使用最后选择的单元格或行列目标，正向和反向拖选
 输入文字与占位文本沿用共享 Input 的默认内容内边距及 16px 行高，
 光标起点对齐输入框自身的内容线，不为原按钮图标预留缩进。
 布局测量前同步避让位置，防止展开时跳位；键盘操作和减少动态效果时立即切换。
-2026-10-15：点击勾按钮将文件选区引用与问题插入 Chat Composer 当前光标位置，
+2026-10-15：源码、XLSX / CSV 点击勾按钮将文件选区引用与问题插入 Chat Composer 当前光标位置，
 保留已有草稿，并把焦点交给 Composer；用户再手动发送。该操作不直接调用 Agent。
 源码选区保存为克隆的 DOM Range，浮层获焦后恢复浏览器原生选区。
 原文选区只在首次进入输入框、聚焦操作按钮时恢复，输入期间不写回全局 Selection，
@@ -1328,7 +1331,7 @@ Tab 可进入浮层；输入状态保留原生文本选择、方向键与 Home /
  ↑ 空白边缘：拖动整个浮层
 ```
 
-操作按钮状态下 Escape、外部滚动、缩放、切表、切换文件或隐藏预览时关闭。
+源码、XLSX / CSV 的操作按钮状态下，Escape、外部滚动、缩放、切表、切换文件或隐藏预览时关闭。
 XLSX / CSV 使用库的公开 `getCellViewportRect` 获取最后目标的可见框，
 用户拖选期间隐藏浮层，结束后显示；保留原有选区与公式栏逻辑。
 
@@ -1369,6 +1372,99 @@ source range / spreadsheet range + question
   -> user message -> FileAnnotationReference (same inline rendering)
 ```
 
+### DOCX / PPTX 元素选区与批量询问
+
+2026-10-15：DOCX / PPTX 的 `Agent Assist` 在已有预览上叠加元素选取层。
+普通预览保留原生文字拖选；进入 Agent 协助后，鼠标悬停定位当前内容元素，显示
+描边、外圈、高光底色和 `shadow-selection-actions`，区别于文档自身的表格边框。
+复用文件选区的 `SelectionActionsPopover`、询问输入、自动聚焦、胶囊展开、拖动、
+视口避让、IME 和 Escape 行为，不新增另一套询问输入组件。
+
+```text
+[Source | Preview | Agent Assist]  [3] [Clear] [Add to chat]
+                         |
+                   hover an element
+                         v
+               candidate frame + Ask Agent
+                         |
+                  click Ask Agent
+                         v
+                fixed frame + x + question
+                    |                |
+            x / outside click       Check
+                    |                |
+                    |       save selection + question
+                    |       show #1 / #2 / #3 frame
+                    +---------> hover next element
+
+Clear       -> discard current draft + saved batch -> count 0, next #1
+Add to chat -> confirmed batch, in index order -> Composer caret
+                +-- success: clear preview batch, focus Composer
+                +-- failure: retain saved batch and show error
+Composer    -> editable questions + inline references -> user sends manually
+```
+
+候选元素、正在输入的未确认项、已确认列表分别管理。鼠标从元素移入询问浮层时保持
+候选；点击“询问Agent”后固定当前外框并暂停新的悬停命中。外框右上角 ×、点击外部
+或窗口失焦取消当前未确认项；输入内 Escape 只退回询问按钮，继续保持固定目标，
+再按 Escape 可以取消。中文输入法组合期间不退出。空问题可以确认，Enter 不代替勾按钮。
+
+点击勾只把选区与问题保存到当前文件的批次，不立即插入 Composer。已确认外框保留
+从 1 开始的编号及单条删除入口；删除后其他编号不重排，后续编号继续递增。相同元素
+可以保存多个问题，重叠角标错开显示。Tab 旁的数量是实际已确认条数，不包含当前输入。
+没有已确认项时禁用“添加到聊天”；既无已确认项也无未确认项时禁用“清空”。
+
+“清空”只处理当前文件的批次与未确认草稿，清除外框、编号、浮层和错误，下一条编号
+重置为 1，继续处于悬停阶段。已插入 Composer 的引用不受预览清空影响。
+“添加到聊天”只处理已确认项，取消未确认草稿，按编号顺序一次性插入 Composer 当前
+光标位置，保留已有内容并聚焦 Composer，不直接调用 Agent。插入成功后清空批次，
+失败保留已确认项。切换文件或模式保留各文件已确认批次、取消当前输入；关闭文件、
+刷新或文件字节版本变化后清除对应批次。滚动、缩放与虚拟页面卸载不改变保存的文档坐标，
+挂载后的外框重新投影。
+
+DOCX 默认优先命中图片 / 图表 / 形状，其次是段落；单元格内边距和空区域可命中单元格。
+表格外沿可选整表，按住 Alt 悬停可选择最近的父表格。段落、整表和单元格框来自同一个
+真实排版树及其坐标变换、裁切、合并归属和分页结果，包含空单元格及其内边距，
+不使用内部文字矩形的并集代替表格框。跨页表格 / 单元格按同一源元素保存多个页面框，
+纵向合并的后续页归到原始拥有者。PPTX 使用原生对象命中与边框，结合 OOXML 表格网格
+和实际渲染的单元格边界定位单元格，保存旋转 / 翻转信息；Alt 悬停选择整张表格。
+
+Office 继续使用 `file_annotation` 围栏，内部用结构化 JSON 表达 `document` /
+`presentation` 注解；原有源码与表格字段格式保持不变。各条元数据独立携带：
+
+| 字段 | 含义 |
+| --- | --- |
+| `file_path`、`file_revision` | 文件路径和原始文件字节的 SHA-256，定位绑定到该文件版本 |
+| `selection_id`、`index` | 不变的选区身份与界面显示编号，删除不依靠编号匹配 |
+| `element_type`、`selected_text` | 元素类型和内容；图片或空单元格允许空文本 |
+| `coordinate_space`、`boxes` | DOCX 页面点或 PPTX 原始幻灯片像素；每个框含一基 `page_num` / `slide_num`、x、y、宽、高及可选旋转 |
+| `locator.part`、`locator.xpath` | 实际 OOXML ZIP 部件与源 XML 元素位置；源定位负责找对象，几何用于展示和校验 |
+| DOCX locator | `story`、`story_instance`、`path`、实际存在的 `paragraph_id`，以及单元格行列等 |
+| PPTX locator | `shape_id`、`origin`（slide / layout / master）、元素索引及单元格行列等 |
+
+内部页面 / 幻灯片、源路径及行列仍用零基索引；序列化的 `page_num` / `slide_num`
+转换为一基，避免把页面编号与屏幕 CSS 像素混用。DOCX 从原始包解析 source 到实际部件
+与 XPath，PPTX 按原始幻灯片关系、版式 / 母版来源和 shape ID 找到源对象。
+不把屏幕坐标作为唯一定位依据，缺少可定位源元素的合成布局对象不创建精确引用。
+
+Composer 与用户消息继续复用 `FileAnnotationReference` 行内节点，显示文件图标、文件名、
+页码 / 幻灯片编号及选区编号；问题作为可编辑普通文本插入。复制、粘贴、撤销 / 重做、
+发送和历史恢复保留完整协议。点击 Office 引用打开文件并滚动、高亮对应选区；文件版本
+不一致时显示变更提示，不直接套用旧坐标。
+
+```text
+original Office bytes ----> SHA-256 file revision
+         |
+         +-> OOXML source index -> actual part / XPath / native identifiers
+         +-> retained layout   -> page or slide boxes
+                                  |
+                     saved selection + question
+                                  |
+                     file_annotation inline node
+                                  |
+                     Composer -> user message -> Agent
+```
+
 ### Office 文件预览
 
 2026-10-13：当前支持的 DOCX / DOTX、XLSX 系列、PPTX 系列和 CSV 预览统一使用
@@ -1407,6 +1503,39 @@ Excel 全网格范围。CSV 原生加载成功后使用 `d3-dsv` 解析只读文
 PPTX 返回原始幻灯片像素坐标及 shape 标识。DOCX 将 CSS 像素按缩放和 96/72 比例
 转回页面点坐标，返回实际段落 / run / source 定位及截断状态；旧编辑器的语义范围与表格
 内部 ID 字段已移除。所有格式保持只读预览。
+
+DOCX 元素选区依赖本地维护的固定版本公共 API 扩展：
+[`patch-ooxml-docx-regions.mjs`](../agent-ui/scripts/patch-ooxml-docx-regions.mjs)
+为 `DocxDocument` 增加 `getPageElementRegions(pageIndex)`，返回真实排版的段落、
+表格、单元格与非文本区域。补丁在库内部复用既有布局遍历，应用只调用公共 API，
+不探测私有字段，也不从 DOM 文字范围反推表格框。渲染与拾取共用
+`DocxDocument.load(..., { mode: "main" })` 创建的文档，查看器通过
+`DocxScrollViewer.fromDocument()` 借用；销毁时先销毁查看器，再销毁文档。
+
+安装依赖必须保留生命周期脚本：`agent-ui/package.json` 的 `postinstall` 自动执行
+该补丁，`npm ci` / `npm install` 后即可使用。若环境使用 `--ignore-scripts`，必须在
+启动开发、类型检查或构建之前显式运行下列命令，不能跳过补丁继续发布：
+
+```sh
+cd agent-ui
+node scripts/patch-ooxml-docx-regions.mjs
+```
+
+`@silurus/ooxml` 固定为精确版本 `0.88.0`。脚本校验包版本与唯一源码标记，并在
+准备好全部变更后才写入；重复执行不重复打补丁。上游版本或构建 chunk 变化时失败，
+不得放宽断言、静默忽略或改成运行时私有访问。升级必须先检查上游是否已提供同等的
+完整布局区域 API；若已提供则移除补丁和 `postinstall` 并迁移调用，否则重新审阅、
+更新补丁及下面的 DOCX 布局定位回归。
+
+```text
+npm ci / npm install
+        |
+     postinstall
+        v
+exact package version + unique source markers
+        +-- match -> public getPageElementRegions -> application picker
+        +-- mismatch -> fail installation -> review upstream API / patch
+```
 
 表格索引栏的 `--ooxml-xlsx-chrome-surface`、`surface-muted`、`selection-background`
 与文字颜色同步映射到项目主题 token，覆盖普通 / 选中行列及左上角，避免深色白字叠在默认
@@ -2824,6 +2953,26 @@ Office 预览的选区坐标、文本边界、CSV 编码与格式路由回归：
 ```sh
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/files/preview/document-selection.test.ts agent-ui/tests/features/files/preview/office-selection.test.ts agent-ui/tests/features/files/preview/spreadsheet-model.test.ts agent-ui/tests/features/files/preview/csv-cell-values.test.ts
 ```
+
+DOCX / PPTX Agent 协助的真实源定位、单元格与父表格拾取、合并 / 跨页归属，
+以及 Office 注解序列化、版本、坐标系及无效引用回归：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/files/office-assist/docx-element-picker.test.ts agent-ui/tests/features/files/office-assist/pptx-element-picker.test.ts agent-ui/tests/features/agent-message/file-annotation.test.ts
+```
+
+在开发服务器打开 `/tests/features/files/office-assist/office-assist-browser.html`，点击
+**Run Office Agent Assist checks**，使用真实预览与 Composer、内存文件验证悬停、
+空单元格、整表、取消 / 确认、编号、文件 / 模式切换、清空、批量插入与单次撤销。
+**Select paragraph** 可显示候选外框，继续手动体验输入；追加 `?dark&zh` 检查中文深色。
+
+交互验收使用实际文件预览的“Agent协助”模式：悬停段落 / 图片 / 表格及空单元格，
+Alt 悬停选择整表；进入输入后检查外框固定、× / 外点取消、Escape / IME、勾后编号与计数。
+连续确认多条后检查单条删除不重排、重复元素编号、切换文件 / 模式保留，滚动与缩放后
+外框仍对齐。检查清空同时取消输入并归零，下一条重新编号；“添加到聊天”保留现有草稿、
+按编号插入完整引用与问题，且不自动发送；成功清空批次、失败保留批次。
+点击已插入的 Office 引用检查滚动与高亮，文件版本变化时应提示而非套用旧框。
+单元测试中的 DOM 模拟不代替这一真实 Canvas / 排版验收，不需要重复扩大全量测试范围。
 
 在开发服务器打开 `/tests/features/files/preview/office-browser.html`，点击
 **Run Office preview checks**，可检查真实 DOCX / XLSX / PPTX / CSV 渲染、选区 / 公式 /

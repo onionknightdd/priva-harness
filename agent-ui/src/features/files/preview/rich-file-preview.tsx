@@ -11,6 +11,7 @@ import {
   canRenderFile,
   canShowAgentAssist,
   canShowFileSource,
+  canUseAgentAssist,
   type FilePreviewMode,
   type PreviewFile,
 } from "@/features/files/model/file.types"
@@ -21,6 +22,7 @@ import {
 import { cn } from "@/lib/utils"
 
 import { SourceSelectionActions } from "../selection/source-selection-actions"
+import { OfficeAssistProvider, isOfficeAssistFile } from "../office-assist/office-assist-provider"
 import { downloadTextFile } from "./download-text-file"
 import { FilePreviewToolbar } from "./file-preview-toolbar"
 import { PreviewRendererBoundary } from "./preview-renderer-boundary"
@@ -79,7 +81,7 @@ function getAvailableMode(
     return "render"
   }
 
-  if (preferredMode === "edit" && canEditHtmlFile(file)) {
+  if (preferredMode === "edit" && canUseAgentAssist(file)) {
     return "edit"
   }
 
@@ -220,6 +222,12 @@ function FilePreviewPanel({
           ) : (
             <SourcePreview content={file.content} fileName={file.name} />
           )
+        ) : mode === "edit" && isOfficeAssistFile(file) ? (
+          <PreviewRendererBoundary key={`${file.id}:${file.renderSource ?? "office"}`}>
+            <React.Suspense fallback={<PreviewRequestState loading />}>
+              <RenderedFile file={file} />
+            </React.Suspense>
+          </PreviewRendererBoundary>
         ) : mode === "edit" && file.content !== undefined ? (
           <PreviewRendererBoundary key={`${file.id}:html-edit`}>
             <React.Suspense fallback={<PreviewRequestState loading />}>
@@ -289,7 +297,7 @@ export function RichFilePreview({
   const sourceAvailable = canShowFileSource(activeFile)
   const renderAvailable = canRenderFile(activeFile)
   const agentAssistVisible = canShowAgentAssist(activeFile)
-  const editAvailable = canEditHtmlFile(activeFile)
+  const editAvailable = canUseAgentAssist(activeFile)
 
   const handleModeChange = (nextMode: FilePreviewMode) => {
     setInternalMode(nextMode)
@@ -355,6 +363,7 @@ export function RichFilePreview({
         className
       )}
     >
+      <OfficeAssistProvider activeFile={activeFile} files={previewFiles} mode={activeMode}>
       <PreviewSelectionBridgeProvider
         activeFile={activeFile}
         onSelectionChange={onSelectionChange}
@@ -382,7 +391,7 @@ export function RichFilePreview({
             onDownload={handleDownload}
             onExpandedChange={onExpandedChange}
             onModeChange={handleModeChange}
-            onSave={onSaveHtml}
+            onSave={canEditHtmlFile(activeFile) ? onSaveHtml : undefined}
             renderAvailable={renderAvailable}
             sourceAvailable={sourceAvailable}
           />
@@ -404,6 +413,7 @@ export function RichFilePreview({
           )}
         </Tabs>
       </PreviewSelectionBridgeProvider>
+      </OfficeAssistProvider>
     </section>
   )
 }

@@ -256,6 +256,10 @@ export const en = {
     },
   },
   agentMessage: {
+    officeAnnotation: {
+      page: "Page {{page}} · Selection {{index}}",
+      slide: "Slide {{page}} · Selection {{index}}",
+    },
     contentLabel: "Agent Message",
     view: {
       label: "Session view",
@@ -615,6 +619,18 @@ export const en = {
     askAgent: "Ask Agent",
     askAgentPlaceholder: "Enter your question…",
     confirmAgentQuestion: "Confirm question",
+    officeAssist: {
+      surface: "Office file preview",
+      modeHint: "Hover to select an element. Hold Alt to select the whole table.",
+      count: "{{count}} saved selections",
+      clear: "Clear selections",
+      send: "Add to chat",
+      cancel: "Cancel this selection",
+      remove: "Remove selection {{index}}",
+      sendFailed: "Open a chat to add these selections. Your selections have been kept.",
+      fileChanged: "This file has changed. Select its current content again.",
+      element: { paragraph: "Text", table: "Table", "table-cell": "Cell", image: "Image", chart: "Chart", shape: "Shape", media: "Media" },
+    },
     selectionMenuLabel: "File selection actions",
     sourceLabel: "{{fileName}} source",
     htmlFrameTitle: "{{fileName}} HTML preview",

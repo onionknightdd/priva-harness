@@ -44,3 +44,10 @@ export function canEditHtmlFile(file: PreviewFile | null) {
     file.status !== "error"
   )
 }
+
+export function canUseAgentAssist(file: PreviewFile | null) {
+  return canEditHtmlFile(file) || Boolean(
+    file && ["document", "presentation"].includes(file.renderKind ?? "") &&
+    file.renderSource && file.status !== "loading" && file.status !== "error"
+  )
+}

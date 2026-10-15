@@ -3,7 +3,7 @@ import { test } from "node:test"
 import { undo, redo, closeHistory } from "prosemirror-history"
 import { NodeSelection, TextSelection, type Command } from "prosemirror-state"
 
-import { composerDocument, createComposerState, deleteComposerReference, insertFileAnnotation, insertMessageSelection, serializeComposerContent } from "../../../src/features/agent-message/composer-editor-state.ts"
+import { composerDocument, createComposerState, deleteComposerReference, insertFileAnnotation, insertFileAnnotations, insertMessageSelection, serializeComposerContent } from "../../../src/features/agent-message/composer-editor-state.ts"
 import { formatFileAnnotation, type FileAnnotation } from "../../../src/features/agent-message/file-annotation.ts"
 import { mentionTriggerFromState } from "../../../src/features/agent-message/composer-mention.ts"
 import { formatMessageSelection, parseMessageSelections } from "../../../src/features/agent-message/message-select-action.ts"
@@ -107,6 +107,27 @@ test("file references without a question remain atomic through deletion and copy
       assert.equal(state.doc.firstChild?.type.name, "file_annotation")
     }
   }
+})
+
+test("a file annotation batch preserves draft and caret, pairs each question, and undoes atomically", () => {
+  let state = createComposerState("before after")
+  state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, 7)))
+  const items = annotations.map((annotation, index) => ({ annotation, question: `Question ${index + 1}` }))
+  let transactions = 0
+  assert.equal(insertFileAnnotations(items)(state, (tr) => { transactions += 1; state = state.apply(tr) }), true)
+  assert.equal(transactions, 1)
+  assert.deepEqual(parseMessageSelections(serializeComposerContent(state.doc.content)), [
+    { type: "text", text: "before " },
+    { type: "file_annotation", annotation: annotations[0] },
+    { type: "text", text: "\nQuestion 1\n\n" },
+    { type: "file_annotation", annotation: annotations[1] },
+    { type: "text", text: "\nQuestion 2after" },
+  ])
+  assert.ok(state.doc.eq(composerDocument(serializeComposerContent(state.doc.content))))
+  undo(state, (tr) => { state = state.apply(tr) })
+  assert.equal(serializeComposerContent(state.doc.content), "before after")
+  assert.equal(state.selection.from, 7)
+  assert.equal(insertFileAnnotations([])(state, () => { assert.fail("empty batch must not dispatch") }), false)
 })
 
 test("the @ mention token includes text after the caret and ignores emails", () => {
