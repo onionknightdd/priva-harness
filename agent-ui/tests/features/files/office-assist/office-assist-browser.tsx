@@ -58,7 +58,7 @@ window.fetch = (input, init) => {
 const results = document.querySelector<HTMLPreElement>("#results")!
 const root = createRoot(document.getElementById("root")!)
 const initialDraft = "Existing chat draft. "
-let latest = { draft: initialDraft, activeFileId: "docx", mode: "render" as FilePreviewMode }
+let latest = { draft: initialDraft, activeFileId: "docx", mode: "render" as FilePreviewMode, active: true, mounted: true }
 let batches: readonly FileAnnotationInput[][] = []
 let unhandled = ""
 window.addEventListener("unhandledrejection", (event) => { unhandled = String(event.reason) }, { signal: listeners.signal })
@@ -66,6 +66,8 @@ window.addEventListener("unhandledrejection", (event) => { unhandled = String(ev
 export function Fixtures() {
   const [activeFileId, setActiveFileId] = React.useState("docx")
   const [mode, setMode] = React.useState<FilePreviewMode>("render")
+  const [active, setActive] = React.useState(true)
+  const [mounted, setMounted] = React.useState(true)
   const [draft, setDraft] = React.useState(initialDraft)
   const inputRef = React.useRef<HTMLDivElement>(null)
   const editorRef = React.useRef<ComposerEditorHandle>(null)
@@ -77,11 +79,15 @@ export function Fixtures() {
     if (inserted) batches = [...batches, [...items]]
     return inserted
   }), [register])
-  React.useLayoutEffect(() => { latest = { draft, activeFileId, mode } })
+  React.useLayoutEffect(() => { latest = { draft, activeFileId, mode, active, mounted } })
   return <>
-    <div id="preview" className="flex border border-border" style={{ width: "min(1080px,100%)", height: 610 }}>
-      <RichFilePreview files={files} activeFileId={activeFileId} mode={mode}
-        onActiveFileChange={setActiveFileId} onModeChange={setMode} onCloseAll={() => {}} onFileClose={() => {}} />
+    <nav className="mb-2 flex gap-4 text-sm">
+      <button type="button" data-preview-active-toggle onClick={() => setActive((value) => !value)}>{active ? "Hide preview" : "Show preview"}</button>
+      <button type="button" data-preview-mount-toggle onClick={() => setMounted((value) => !value)}>{mounted ? "Unmount preview" : "Remount preview"}</button>
+    </nav>
+    <div id="preview" className="flex border border-border" style={{ width: "min(1080px,100%)", height: 610, display: active ? undefined : "none" }}>
+      {mounted && <RichFilePreview files={files} activeFileId={activeFileId} mode={mode} active={active}
+        onActiveFileChange={setActiveFileId} onModeChange={setMode} onCloseAll={() => {}} onFileClose={() => {}} />}
     </div>
     <div className="mt-3 max-w-5xl rounded-md border border-border p-3" data-composer-fixture>
       <ComposerEditor ref={editorRef} inputRef={inputRef} draft={draft} placeholder="Chat draft"
@@ -243,7 +249,11 @@ document.getElementById("run")!.addEventListener("click", async () => {
     check("Alt hover selects the entire DOCX table and stores number 2", count() === 2 && saved().some((frame) => frame.dataset.officeAssistSaved === "2"))
     await mode("render")
     await mode("edit")
-    check("confirmed DOCX selections survive mode changes", count() === 2 && saved().length >= 2)
+    const modeCleared = count() === 0 && saved().length === 0 && !input()
+    await hover(wordPoint("Hello"), "paragraph")
+    await clickElement(wordPoint("Hello"))
+    await confirm("Temporary selection before changing files")
+    check("mode changes clear selections and reset the next selection number", modeCleared && count() === 1 && saved().some((frame) => frame.dataset.officeAssistSaved === "1"))
 
     await file("pptx")
     await hover(slidePoint(180, 145), "paragraph")
@@ -264,7 +274,38 @@ document.getElementById("run")!.addEventListener("click", async () => {
     await confirm("Explain this slide")
     check("clear resets the next selection number to 1", saved().some((frame) => frame.dataset.officeAssistSaved === "1"))
     await file("docx")
-    check("file switching preserves each file's independent saved batch", count() === 2)
+    check("file switching discards the previous batch instead of restoring stale selections", count() === 0 && saved().length === 0 && !input())
+
+    await hover(wordPoint("Hello"), "paragraph")
+    await clickElement(wordPoint("Hello"))
+    await confirm("Temporary selection before hiding")
+    await hover(wordPoint("Table"), "table", true)
+    await openInput()
+    document.querySelector<HTMLButtonElement>("[data-preview-active-toggle]")!.click()
+    await until(() => !latest.active && !input(), "hidden preview clears input")
+    document.querySelector<HTMLButtonElement>("[data-preview-active-toggle]")!.click()
+    await until(() => latest.active, "preview is visible again")
+    await ready()
+    check("hiding and reopening the preview clears saved selections and the unfinished question", count() === 0 && saved().length === 0 && !input())
+
+    await hover(wordPoint("Hello"), "paragraph")
+    await clickElement(wordPoint("Hello"))
+    await confirm("Temporary selection before unmounting")
+    await hover(wordPoint("Table"), "table", true)
+    await openInput()
+    document.querySelector<HTMLButtonElement>("[data-preview-mount-toggle]")!.click()
+    await until(() => !latest.mounted && !host().querySelector(".rich-file-preview") && !input(), "preview unmount clears floating input")
+    document.querySelector<HTMLButtonElement>("[data-preview-mount-toggle]")!.click()
+    await until(() => latest.mounted, "preview remount")
+    await ready()
+    check("unmounting and reopening the file preview starts without saved or draft selections", count() === 0 && saved().length === 0 && !input())
+
+    await hover(wordPoint("Hello"), "paragraph")
+    await clickElement(wordPoint("Hello"))
+    await confirm("Explain this paragraph")
+    await hover(wordPoint("Table"), "table", true)
+    await clickElement(wordPoint("Table"))
+    await confirm("Review this entire table")
     host().querySelector<HTMLButtonElement>("[data-office-assist-send]")!.click()
     await until(() => batches.length === 1 && count() === 0, "batch inserted and preview reset")
     const annotations = parseMessageSelections(latest.draft).filter((part) => part.type === "file_annotation")

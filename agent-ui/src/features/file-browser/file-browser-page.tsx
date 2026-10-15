@@ -24,10 +24,12 @@ import { useTreePanelVisibility } from "./use-tree-panel-visibility"
 import { useOptionalWorkspaceFiles } from "@/features/workspace"
 
 export function FileBrowserPage({
+  active = true,
   className,
   compact = false,
   onMinimumWidthChange,
 }: {
+  active?: boolean
   className?: string
   compact?: boolean
   onMinimumWidthChange?: (width: number) => void
@@ -293,6 +295,7 @@ export function FileBrowserPage({
 
   const filePreview = (
     <RichFilePreview
+      active={active && (isMobile ? !treeVisible : previewVisible)}
       activeFileId={browser.activeFileId}
       compact={compact}
       expanded={!treeVisible}

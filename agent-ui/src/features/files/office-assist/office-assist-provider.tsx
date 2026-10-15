@@ -33,7 +33,8 @@ export function isOfficeAssistFile(file: PreviewFile | null) {
   return file?.renderKind === "document" || file?.renderKind === "presentation"
 }
 
-export function OfficeAssistProvider({ activeFile, files, mode, children }: {
+export function OfficeAssistProvider({ active = true, activeFile, files, mode, children }: {
+  active?: boolean
   activeFile: PreviewFile | null
   files: PreviewFile[]
   mode: FilePreviewMode | null
@@ -45,7 +46,7 @@ export function OfficeAssistProvider({ activeFile, files, mode, children }: {
   const [draft, setDraft] = React.useState<OfficeElementTarget | null>(null)
   const [clearEpoch, setClearEpoch] = React.useState(0)
   const [error, setError] = React.useState<string | null>(null)
-  const enabled = mode === "edit" && isOfficeAssistFile(activeFile)
+  const enabled = active && mode === "edit" && isOfficeAssistFile(activeFile)
   const activeRef = React.useRef(activeFile)
   const sessionsRef = React.useRef(sessions)
   activeRef.current = activeFile
@@ -57,7 +58,11 @@ export function OfficeAssistProvider({ activeFile, files, mode, children }: {
     setDraft(null)
     setError(null)
     setClearEpoch((epoch) => epoch + 1)
-  }, [activeFile?.id, mode])
+    // Mounted viewers keep their registered revision when a tab or panel closes.
+    setSessions((current) => Object.fromEntries(Object.entries(current).map(([id, session]) => [
+      id, { ...session, nextIndex: 1, items: [] },
+    ])))
+  }, [active, activeFile?.id, mode])
 
   React.useEffect(() => {
     const openIds = new Set(files.map((file) => file.id))
@@ -95,7 +100,7 @@ export function OfficeAssistProvider({ activeFile, files, mode, children }: {
   }, [])
   const confirm = React.useCallback((question: string) => {
     const file = activeRef.current
-    if (!file || !draft) return
+    if (!enabled || !file || !draft) return
     setSessions((current) => {
       const session = current[file.id]
       if (!session) return current
@@ -119,7 +124,7 @@ export function OfficeAssistProvider({ activeFile, files, mode, children }: {
     })
     setDraft(null)
     setClearEpoch((epoch) => epoch + 1)
-  }, [draft])
+  }, [draft, enabled])
   const remove = React.useCallback((selectionId: string) => {
     const fileId = activeRef.current?.id
     if (!fileId) return

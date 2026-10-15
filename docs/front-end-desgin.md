@@ -1398,6 +1398,8 @@ source range / spreadsheet range + question
                     +---------> hover next element
 
 Clear       -> discard current draft + saved batch -> count 0, next #1
+File / mode / workspace tab change / preview hidden / file browser unmount
+            -> discard all drafts + saved batches -> count 0, next #1
 Add to chat -> confirmed batch, in index order -> Composer caret
                 +-- success: clear preview batch, focus Composer
                 +-- failure: retain saved batch and show error
@@ -1421,9 +1423,11 @@ Composer    -> editable questions + inline references -> user sends manually
 重置为 1，继续处于悬停阶段。已插入 Composer 的引用不受预览清空影响。
 “添加到聊天”只处理已确认项，取消未确认草稿，按编号顺序一次性插入 Composer 当前
 光标位置，保留已有内容并聚焦 Composer，不直接调用 Agent。插入成功后清空批次，
-失败保留已确认项。切换文件或模式保留各文件已确认批次、取消当前输入；关闭文件、
-刷新或文件字节版本变化后清除对应批次。滚动、缩放与虚拟页面卸载不改变保存的文档坐标，
-挂载后的外框重新投影。
+失败保留已确认项。切换文件、预览模式或工作区 Tab，隐藏或卸载文件浏览器时，
+清空所有已确认批次及未确认草稿，移除外框、编号和浮层；重新进入后从 1 开始。
+关闭文件、刷新或文件字节版本变化也清除对应选区。工作区文件视图根据当前 Tab 与
+侧栏可见状态传递 `active`，独立文件预览默认处于激活状态；清空交互状态不丢弃已知文件版本。
+滚动、缩放与单个虚拟页面卸载不清空批次，保存的文档坐标不变，页面挂载后重新投影外框。
 
 DOCX 默认优先命中图片 / 图表 / 形状，其次是段落；单元格内边距和空区域可命中单元格。
 表格外沿可选整表，按住 Alt 悬停可选择最近的父表格。段落、整表和单元格框来自同一个
@@ -2969,14 +2973,17 @@ DOCX / PPTX Agent 协助的真实源定位、单元格与父表格拾取、合�
 在开发服务器打开 `/tests/features/files/office-assist/office-assist-browser.html`，点击
 **Run Office Agent Assist checks**，使用真实预览与 Composer、内存文件验证悬停、
 点击元素直接展开输入并固定目标、Alt 选整表后放开 Alt 点击仍保持整表、空单元格、
-取消 / 确认、编号、文件 / 模式切换、清空、批量插入与单次撤销。
+取消 / 确认、编号、文件 / 模式切换后清空、隐藏 / 重开及卸载 / 重挂载无残留、清空、
+批量插入与单次撤销。**Hide preview / Show preview** 与 **Unmount preview / Remount preview**
+可单独复现文件浏览器生命周期。
 **Select paragraph** 可显示候选外框，继续手动体验输入；追加 `?dark&zh` 检查中文深色。
 
 交互验收使用实际文件预览的“Agent协助”模式：悬停段落 / 图片 / 表格及空单元格，
 Alt 悬停选择整表；点击当前元素或询问按钮后检查输入立即展开、原外框固定，放开 Alt
 点击不重选单元格。检查 × / 外点取消且同一点击不新建草稿、Escape / IME、勾后编号与计数。
-连续确认多条后检查单条删除不重排、重复元素编号、切换文件 / 模式保留，滚动与缩放后
-外框仍对齐。检查清空同时取消输入并归零，下一条重新编号；“添加到聊天”保留现有草稿、
+连续确认多条后检查单条删除不重排、重复元素编号，滚动与缩放后外框仍对齐。
+切换文件 / 预览模式 / 工作区 Tab、隐藏或卸载文件浏览器后应清除批次与输入，重开无残留，
+下一条编号为 1。检查清空同时取消输入并归零，下一条重新编号；“添加到聊天”保留现有草稿、
 按编号插入完整引用与问题，且不自动发送；成功清空批次、失败保留批次。
 点击已插入的 Office 引用检查滚动与高亮，文件版本变化时应提示而非套用旧框。
 单元测试中的 DOM 模拟不代替这一真实 Canvas / 排版验收，不需要重复扩大全量测试范围。

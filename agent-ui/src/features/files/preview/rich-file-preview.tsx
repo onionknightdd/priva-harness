@@ -253,6 +253,7 @@ function FilePreviewPanel({
 }
 
 export function RichFilePreview({
+  active = true,
   activeFileId,
   className,
   compact = false,
@@ -268,6 +269,7 @@ export function RichFilePreview({
   onSaveHtml,
   onSelectionChange,
 }: {
+  active?: boolean
   activeFileId: string | null
   className?: string
   compact?: boolean
@@ -363,7 +365,7 @@ export function RichFilePreview({
         className
       )}
     >
-      <OfficeAssistProvider activeFile={activeFile} files={previewFiles} mode={activeMode}>
+      <OfficeAssistProvider active={active} activeFile={activeFile} files={previewFiles} mode={activeMode}>
       <PreviewSelectionBridgeProvider
         activeFile={activeFile}
         onSelectionChange={onSelectionChange}
