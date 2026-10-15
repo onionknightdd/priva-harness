@@ -138,7 +138,7 @@ async function ready() {
   await sleep(100)
 }
 async function file(kind: "docx" | "pptx") {
-  host().querySelector<HTMLButtonElement>('[role="tab"][data-value="' + kind + '"]')!.click()
+  host().querySelector<HTMLButtonElement>('[role="tab"][data-tabs-value="' + kind + '"]')!.click()
   await until(() => latest.activeFileId === kind, kind + " file tab")
   await ready()
 }

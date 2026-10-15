@@ -264,7 +264,7 @@ export function FilePreviewToolbar({
           <TabsList
             aria-label={t("filePreview.openFiles")}
             className={cn(
-              "min-w-full gap-1 border-b-2",
+              "gap-1 border-b-2",
               compact ? "h-8" : "h-10"
             )}
           >

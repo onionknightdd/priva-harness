@@ -10,7 +10,7 @@ import { EASE_IN_OUT, EASE_OUT } from "@/lib/ease"
 import { cn } from "@/lib/utils"
 
 // Adapted from https://www.beautifului.dev/r/selection-actions.json.
-// Compact the pill's padding while retaining 28px controls.
+// Keep the action capsule visible while its question opens in a separate row.
 export default function SelectionActions({ actions, label, instant = false, openInputActionId, onLayoutChange, onDragStart }: {
   actions: {
     id: string
@@ -68,14 +68,13 @@ export default function SelectionActions({ actions, label, instant = false, open
   return (
     <motion.div
       ref={toolbarRef}
-      layout
+      layout="position"
       transition={{ layout: { duration: immediate ? 0 : 0.18, ease: EASE_IN_OUT } }}
-      style={{ borderRadius: 9999 }}
       role="toolbar"
       aria-label={label}
       aria-hidden={!present}
       inert={!present}
-      className={cn("relative flex h-8 max-w-[calc(100vw-16px)] items-center rounded-full bg-popover p-0.5 font-sans text-popover-foreground shadow-selection-actions ring-1 ring-foreground/10", inputAction ? "w-72 focus-within:ring-ring/50" : "w-fit")}
+      className="relative flex w-fit max-w-[calc(100vw-16px)] flex-col items-start gap-1.5 font-sans text-popover-foreground"
       onMouseDown={(event) => {
         if (event.target !== inputRef.current) event.preventDefault()
       }}
@@ -101,51 +100,24 @@ export default function SelectionActions({ actions, label, instant = false, open
         }
       }}
     >
-      {inputAction && onDragStart && ["inset-x-3 top-0 h-0.5", "inset-x-3 bottom-0 h-0.5", "inset-y-3 left-0 w-0.5", "inset-y-3 right-0 w-0.5"].map((edge) => (
-        <span
-          key={edge}
-          aria-hidden="true"
-          data-selection-action-drag-handle
-          className={cn("absolute z-10 touch-none cursor-grab active:cursor-grabbing", edge)}
-          onPointerDown={onDragStart}
-        />
-      ))}
-      {inputAction?.input && (
-        <motion.div
-          key="input"
-          layout="position"
-          className="min-w-0 flex-1"
-          initial={immediate ? false : { opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: immediate ? 0 : 0.16, ease: EASE_OUT }}
-        >
-          <Input
-            ref={inputRef}
-            data-selection-action-input
-            aria-label={inputAction.input.placeholder}
-            placeholder={inputAction.input.placeholder}
-            className="h-7 rounded-full border-0 bg-transparent py-0 text-xs leading-4 shadow-none focus-visible:ring-0 md:text-xs dark:bg-transparent"
-          />
-        </motion.div>
-      )}
-      {actions.filter((action) => !inputAction || action.id === inputAction.id).map((action) => {
-        const editing = action.id === inputAction?.id
-        return (
+      <motion.div
+        layout="position"
+        data-selection-action-bar
+        className="flex h-8 max-w-full shrink-0 items-center rounded-full bg-popover p-0.5 shadow-selection-actions ring-1 ring-foreground/10"
+        transition={{ layout: { duration: immediate ? 0 : 0.18, ease: EASE_IN_OUT } }}
+      >
+        {actions.map((action) => (
           <Button
             key={action.id}
             type="button"
             data-selection-action-id={action.id}
-            render={<motion.button layout="position" transition={{ layout: { duration: immediate ? 0 : 0.18, ease: EASE_IN_OUT } }} />}
-            variant={editing ? "default" : "ghost"}
-            size={editing ? "icon-xs" : "xs"}
-            aria-label={editing ? action.input?.confirmLabel : undefined}
-            className={cn("h-7 cursor-pointer gap-1 rounded-full text-xs leading-4 font-normal [&_svg]:size-3.5", editing ? "size-7 bg-black p-0 text-white hover:bg-black/90" : "px-1.25", immediate && "transition-none active:scale-100")}
+            variant="ghost"
+            size="xs"
+            className={cn("h-7 cursor-pointer gap-1 rounded-full px-1.25 text-xs leading-4 font-normal [&_svg]:size-3.5", immediate && "transition-none active:scale-100")}
             onClick={(event) => {
-              if (editing) {
-                action.input?.onConfirm?.(inputRef.current?.value ?? "")
-                return
-              }
-              if (action.input) {
+              if (action.id === inputAction?.id) {
+                inputRef.current?.focus({ preventScroll: true })
+              } else if (action.input) {
                 action.input.onOpen?.()
                 setKeyboardInteraction(event.detail === 0)
                 setInputActionId(action.id)
@@ -154,36 +126,52 @@ export default function SelectionActions({ actions, label, instant = false, open
               }
             }}
           >
-            <motion.span
-              layout="position"
-              data-selection-action-icon
-              aria-hidden="true"
-              className="grid size-3.5 shrink-0 place-items-center"
-              transition={{ layout: { duration: immediate ? 0 : 0.18, ease: EASE_IN_OUT } }}
-            >
-              <motion.span
-                className="col-start-1 row-start-1"
-                initial={false}
-                animate={{ opacity: editing ? 0 : 1 }}
-                transition={{ duration: immediate ? 0 : 0.12, ease: EASE_OUT }}
-              >
-                {action.icon}
-              </motion.span>
-              {action.input && (
-                <motion.span
-                  className="col-start-1 row-start-1"
-                  initial={false}
-                  animate={{ opacity: editing ? 1 : 0 }}
-                  transition={{ duration: immediate ? 0 : 0.12, ease: EASE_OUT }}
-                >
-                  <Check strokeWidth={3} />
-                </motion.span>
-              )}
-            </motion.span>
-            {!editing && action.label}
+            <span data-selection-action-icon aria-hidden="true" className="grid size-3.5 shrink-0 place-items-center">
+              {action.icon}
+            </span>
+            {action.label}
           </Button>
-        )
-      })}
+        ))}
+      </motion.div>
+      {inputAction?.input && (
+        <motion.div
+          key="input"
+          data-selection-action-question-row
+          className="flex w-72 max-w-full items-center gap-1.5"
+          initial={immediate ? false : { opacity: 0, y: -2 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: immediate ? 0 : 0.16, ease: EASE_OUT }}
+        >
+          <div className="relative min-w-0 flex-1">
+            <Input
+              ref={inputRef}
+              data-selection-action-input
+              aria-label={inputAction.input.placeholder}
+              placeholder={inputAction.input.placeholder}
+              className="h-8 rounded-md bg-popover py-0 text-xs leading-4 shadow-selection-actions focus-visible:ring-1 md:text-xs dark:bg-popover"
+            />
+            {onDragStart && ["inset-x-3 top-0 h-0.5", "inset-x-3 bottom-0 h-0.5", "inset-y-3 left-0 w-0.5", "inset-y-3 right-0 w-0.5"].map((edge) => (
+              <span
+                key={edge}
+                aria-hidden="true"
+                data-selection-action-drag-handle
+                className={cn("absolute z-10 touch-none cursor-grab active:cursor-grabbing", edge)}
+                onPointerDown={onDragStart}
+              />
+            ))}
+          </div>
+          <Button
+            type="button"
+            data-selection-action-confirm
+            size="icon-sm"
+            aria-label={inputAction.input.confirmLabel}
+            className={cn("cursor-pointer rounded-md bg-black p-0 text-white shadow-selection-actions hover:bg-black/90 [&_svg]:size-3.5", immediate && "transition-none active:scale-100")}
+            onClick={() => inputAction.input?.onConfirm?.(inputRef.current?.value ?? "")}
+          >
+            <Check aria-hidden="true" strokeWidth={3} />
+          </Button>
+        </motion.div>
+      )}
     </motion.div>
   )
 }

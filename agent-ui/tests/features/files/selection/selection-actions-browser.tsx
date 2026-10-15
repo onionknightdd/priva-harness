@@ -11,10 +11,6 @@ import { SourceSelectionActions } from "../../../../src/features/files/selection
 import { xlsxFixture } from "../preview/office-fixtures"
 
 type Mode = "source" | "xlsx" | "csv"
-type MotionSample = {
-  ms: number; left: number; top: number; width: number; height: number; sameNode: boolean
-  iconLeft: number; iconTop: number; iconWidth: number; iconHeight: number; sameIcon: boolean
-}
 const host = document.querySelector<HTMLDivElement>("#preview")!
 const results = document.querySelector<HTMLPreElement>("#results")!
 const selectionOutput = document.querySelector<HTMLPreElement>("#selection")!
@@ -149,30 +145,9 @@ async function selectFixture() {
   }
   await until(askButton, mode + " selection actions appear")
 }
-async function openInput(pointer = false, samples?: MotionSample[]) {
-  const toolbar = menu()!.querySelector<HTMLElement>('[role="toolbar"]')!
-  const icon = toolbar.querySelector<HTMLElement>("[data-selection-action-icon]")!
-  const started = performance.now()
+async function openInput(pointer = false) {
   if (pointer) askButton()!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }))
   else askButton()!.click()
-  if (samples) {
-    // Let React commit before sampling the actual painted, transformed capsule.
-    await Promise.resolve()
-    await new Promise<void>((resolve) => {
-      const sample = () => {
-        const bounds = toolbar.getBoundingClientRect()
-        const iconBounds = icon.getBoundingClientRect()
-        const ms = performance.now() - started
-        samples.push({ ms, left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height,
-          sameNode: toolbar.isConnected && menu()?.querySelector('[role="toolbar"]') === toolbar,
-          iconLeft: iconBounds.left, iconTop: iconBounds.top, iconWidth: iconBounds.width, iconHeight: iconBounds.height,
-          sameIcon: icon.isConnected && toolbar.querySelector("[data-selection-action-icon]") === icon })
-        if (ms < 260) requestAnimationFrame(sample)
-        else resolve()
-      }
-      requestAnimationFrame(sample)
-    })
-  }
   await until(() => promptInput() && document.activeElement === promptInput(), "Ask Agent input receives focus")
   await until(() => (menu()?.getBoundingClientRect().width ?? 0) >= Math.min(288, window.innerWidth - 16) - 2, "input width settles")
   return promptInput()!
@@ -195,7 +170,6 @@ document.querySelector<HTMLButtonElement>("#run")!.addEventListener("click", asy
   button.disabled = true
   results.textContent = "Running…"
   const checks: string[] = []
-  const measurements: string[] = []
   const check = (label: string, passed: unknown) => {
     if (!passed) throw new Error(label)
     checks.push("PASS " + label)
@@ -208,41 +182,37 @@ document.querySelector<HTMLButtonElement>("#run")!.addEventListener("click", asy
     const source = host.querySelector<HTMLElement>("#source-text")!
     const sourceText = window.getSelection()!.toString()
     const selectedBeforeInput = sourceSelectionMatches(source, sourceText)
-    // The selection popover's entrance must settle before measuring its morph.
+    // Settle the entrance before comparing the persistent action bar.
     await wait(200)
     const toolbar = menu()!.querySelector<HTMLElement>('[role="toolbar"]')!
-    const before = toolbar.getBoundingClientRect()
-    const iconBefore = toolbar.querySelector<HTMLElement>("[data-selection-action-icon]")!.getBoundingClientRect()
-    const samples: MotionSample[] = []
-    let input = await openInput(true, samples)
+    const bar = toolbar.querySelector<HTMLElement>("[data-selection-action-bar]")!
+    const icon = bar.querySelector<HTMLElement>("[data-selection-action-icon]")!
+    const before = bar.getBoundingClientRect()
+    const iconBefore = icon.getBoundingClientRect()
+    let input = await openInput(true)
     const selectedAfterInputFocus = sourceSelectionMatches(source, sourceText)
-    const first = samples[0]
-    const last = samples.at(-1)!
+    await wait(200)
+    const after = bar.getBoundingClientRect()
+    const iconAfter = icon.getBoundingClientRect()
+    const row = toolbar.querySelector<HTMLElement>("[data-selection-action-question-row]")!
+    const confirmButton = row.querySelector<HTMLButtonElement>("[data-selection-action-confirm]")!
+    const rowBounds = row.getBoundingClientRect()
+    const inputBounds = input.getBoundingClientRect()
+    const confirmBounds = confirmButton.getBoundingClientRect()
+    const confirmRadius = Number.parseFloat(getComputedStyle(confirmButton).borderRadius)
     const targetWidth = Math.min(288, window.innerWidth - 16)
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    const startsAtOriginalBounds = Math.abs(first.width - before.width) <= Math.max(4, (targetWidth - before.width) * 0.1) &&
-      Math.abs(first.left - before.left) <= Math.max(4, Math.abs(last.left - before.left) * 0.1) && Math.abs(first.top - before.top) <= 4
-    const hasIntermediateWidth = samples.some((sample) => sample.width > before.width + 2 && sample.width < targetWidth - 2)
-    const expandsContinuously = samples.every((sample, index) => index === 0 || sample.width >= samples[index - 1].width - 2)
-    const iconDistance = last.iconLeft - iconBefore.left
-    const iconDirection = Math.sign(iconDistance)
-    const iconStartsAtOriginalPosition = Math.abs(first.iconLeft - iconBefore.left) <= Math.max(4, Math.abs(iconDistance) * 0.1) && Math.abs(first.iconTop - iconBefore.top) <= 4
-    const iconMovesContinuously = samples.every((sample, index) => index === 0 || (sample.iconLeft - samples[index - 1].iconLeft) * iconDirection >= -2) &&
-      (Math.abs(iconDistance) <= 8 || samples.some((sample) => (sample.iconLeft - iconBefore.left) * iconDirection > 2 && (last.iconLeft - sample.iconLeft) * iconDirection > 2))
-    const iconKeepsSize = samples.every((sample) => sample.sameIcon && Math.abs(sample.iconWidth - 14) <= 1.5 && Math.abs(sample.iconHeight - 14) <= 1.5)
-    const iconEndsOnRight = last.iconLeft >= last.left + last.width - 36 && last.iconLeft + last.iconWidth <= last.left + last.width - 2
-    measurements.push("Capsule before: left=" + before.left.toFixed(1) + ", width=" + before.width.toFixed(1) +
-      "; rAF samples (ms:left/width): " + samples.map((sample) => Math.round(sample.ms) + ":" + sample.left.toFixed(1) + "/" + sample.width.toFixed(1)).join(" → ") +
-      (reducedMotion ? " [reduced motion]" : ""))
-    measurements.push("Icon left: " + iconBefore.left.toFixed(1) + " → " + samples.map((sample) => sample.iconLeft.toFixed(1)).join(" → ") +
-      "; visual width=" + Math.min(...samples.map((sample) => sample.iconWidth)).toFixed(1) + "–" + Math.max(...samples.map((sample) => sample.iconWidth)).toFixed(1) +
-      ", height=" + Math.min(...samples.map((sample) => sample.iconHeight)).toFixed(1) + "–" + Math.max(...samples.map((sample) => sample.iconHeight)).toFixed(1))
-    check("pointer opening stretches the same capsule to 288px while its 14px icon moves continuously right", samples.every((sample) => sample.sameNode) &&
-      menu()!.querySelector('[role="toolbar"]') === toolbar && Math.abs(last.width - targetWidth) <= 1 && Math.abs(last.height - 32) <= 1 &&
-      iconKeepsSize && iconEndsOnRight &&
-      (reducedMotion || (startsAtOriginalBounds && hasIntermediateWidth && expandsContinuously && iconStartsAtOriginalPosition && iconMovesContinuously)))
+    check("opening keeps the original Ask Agent capsule and its 14px icon above the question", menu()!.querySelector('[role="toolbar"]') === toolbar &&
+      toolbar.querySelector("[data-selection-action-bar]") === bar && bar.querySelector("[data-selection-action-icon]") === icon &&
+      Math.abs(after.width - before.width) <= 1 && Math.abs(after.height - 32) <= 1 &&
+      Math.abs(iconAfter.width - 14) <= 1 && Math.abs(iconAfter.height - 14) <= 1 &&
+      Math.abs((iconAfter.left - after.left) - (iconBefore.left - before.left)) <= 1 &&
+      Math.abs((iconAfter.top - after.top) - (iconBefore.top - before.top)) <= 1 && Boolean(askButton()))
     allInputsInViewport &&= inViewport()
-    check("source Ask Agent changes into the focused 32px input", input.hasAttribute("data-selection-action-input") && Math.abs(menu()!.getBoundingClientRect().height - 32) <= 1)
+    check("a focused second-row input has a separate rounded-square confirm button", document.activeElement === input &&
+      rowBounds.top >= after.bottom + 4 && Math.abs(rowBounds.width - targetWidth) <= 1 &&
+      Math.abs(inputBounds.height - 32) <= 1 && Math.abs(confirmBounds.width - 32) <= 1 && Math.abs(confirmBounds.height - 32) <= 1 &&
+      Math.abs(confirmBounds.left - inputBounds.right - 6) <= 1 && Math.abs(confirmBounds.top - inputBounds.top) <= 1 &&
+      confirmRadius > 0 && confirmRadius < confirmBounds.width / 2 && confirmButton.parentElement === row)
 
     enterText(input, "A long question about this selected source. ".repeat(24))
     const text = input.value
@@ -287,7 +257,7 @@ document.querySelector<HTMLButtonElement>("#run")!.addEventListener("click", asy
       input = await openInput()
       allInputsInViewport &&= inViewport()
       enterText(input, "Explain this selected range")
-      const confirm = menu()!.querySelector<HTMLButtonElement>("button")!
+      const confirm = menu()!.querySelector<HTMLButtonElement>("[data-selection-action-confirm]")!
       confirm.click()
       await wait(80)
       check(nextMode.toUpperCase() + " keeps its cell range and formula; Check has no submit action", snapshot() === before && confirm.type === "button" && submissions === 0 && location.href === initialUrl && promptInput()?.value === "Explain this selected range")
@@ -297,10 +267,10 @@ document.querySelector<HTMLButtonElement>("#run")!.addEventListener("click", asy
       await until(() => !menu(), nextMode + " outside dismissal")
     }
     check("all expanded inputs stay in the viewport without submissions or async errors", allInputsInViewport && submissions === 0 && !unhandled)
-    results.textContent = checks.join("\n") + "\n" + checks.length + " checks passed\n" + measurements.join("\n")
+    results.textContent = checks.join("\n") + "\n" + checks.length + " checks passed\n"
     show("source")
   } catch (error) {
-    results.textContent = checks.join("\n") + "\nFAIL " + (error instanceof Error ? error.stack : String(error)) + "\n" + measurements.join("\n")
+    results.textContent = checks.join("\n") + "\nFAIL " + (error instanceof Error ? error.stack : String(error))
   } finally {
     button.disabled = false
   }
