@@ -53,7 +53,7 @@ function paragraphText(node: Element) {
     if (child.localName === "p" && child !== node) return
     if (child.localName === "t" || child.localName === "delText") output.push(child.textContent ?? "")
     else if (child.localName === "tab") output.push("\t")
-    else if (child.localName === "br") output.push("\n")
+    else if (child.localName === "br" || child.localName === "cr") output.push("\n")
     else Array.from(child.children).forEach(visit)
   }
   visit(node)
@@ -134,7 +134,11 @@ export function createDocxSourceIndex(data: ArrayBuffer, model: DocxDocumentMode
       if (item.type !== "paragraph" && item.type !== "table") return
       const desiredName = item.type === "paragraph" ? "p" : "tbl"
       const plainText = item.type === "paragraph"
-        ? item.runs.map((run) => "text" in run && typeof run.text === "string" ? run.text : "").join("")
+        ? item.runs.map((run) => {
+          // Breaks are separate native runs, but still belong to the source paragraph.
+          if (run.type === "break") return "\n"
+          return "text" in run && typeof run.text === "string" ? run.text : ""
+        }).join("")
         : ""
       const matchingIndex = xmlBlocks.findIndex((candidate, candidateIndex) => {
         if (candidateIndex < xmlIndex || candidate.localName !== desiredName) return false

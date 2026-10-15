@@ -3,6 +3,7 @@ import { test } from "node:test"
 import { JSDOM } from "jsdom"
 import { strToU8, zipSync } from "fflate"
 import type { DocxDocument, DocxDocumentModel, DocxPageElementRegion } from "@silurus/ooxml/docx"
+import { materializeDocxDocument } from "@silurus/ooxml/node"
 
 import { createDocxElementPicker } from "../../../../src/features/files/office-assist/docx-element-picker.ts"
 import { createDocxSourceIndex } from "../../../../src/features/files/office-assist/docx-source.ts"
@@ -40,6 +41,19 @@ function withDomParser<T>(run: () => T) {
     throw error
   }
 }
+
+test("DOCX source locators preserve native line breaks and tabs without matching a later paragraph", () => withDomParser(async () => {
+  const data = packageData(p("Before") +
+    '<w:p><w:r><w:t>First line</w:t><w:br/><w:t>Second</w:t><w:tab/><w:t>column</w:t><w:cr/><w:t>Third line</w:t></w:r></w:p>' +
+    p("First lineSecond\tcolumnThird line") + p("After") + '<w:sectPr/>')
+  const model = await materializeDocxDocument(data)
+  const index = createDocxSourceIndex(data, model)
+  const source = index.resolve({ story: "body", storyInstance: "body", path: [1] }, "paragraph")!
+  assert.equal(source.text, "First line\nSecond\tcolumn\nThird line")
+  assert.match(source.locator.xpath!, /local-name\(\)='p'\]\[2\]$/)
+  assert.equal(index.resolve({ story: "body", storyInstance: "body", path: [2] }, "paragraph")!.text, "First lineSecond\tcolumnThird line")
+  assert.equal(index.resolve({ story: "body", storyInstance: "body", path: [3] }, "paragraph")!.text, "After")
+}))
 
 test("DOCX source locators retain original XML paragraphs across explicit breaks and actual header parts", () => withDomParser(() => {
   const data = packageData(

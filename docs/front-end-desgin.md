@@ -1445,6 +1445,8 @@ Office 继续使用 `file_annotation` 围栏，内部用结构化 JSON 表达 `d
 内部页面 / 幻灯片、源路径及行列仍用零基索引；序列化的 `page_num` / `slide_num`
 转换为一基，避免把页面编号与屏幕 CSS 像素混用。DOCX 从原始包解析 source 到实际部件
 与 XPath，PPTX 按原始幻灯片关系、版式 / 母版来源和 shape ID 找到源对象。
+DOCX 段落匹配保留原生独立换行 run、XML `w:br` / `w:cr` 和制表符，
+避免多行段落匹配失败或被误映射到后续文字相近的段落。
 不把屏幕坐标作为唯一定位依据，缺少可定位源元素的合成布局对象不创建精确引用。
 
 Composer 与用户消息继续复用 `FileAnnotationReference` 行内节点，显示文件图标、文件名、
