@@ -17,12 +17,10 @@ import {
 } from "motion/react"
 import { useTranslation } from "react-i18next"
 
+import { OverflowMarquee } from "@/components/motion/overflow-marquee"
 import {
   TabsList,
   TabsTrigger,
-} from "@/components/assistant-ui/tabs"
-import { OverflowMarquee } from "@/components/motion/overflow-marquee"
-import {
   Tabs as PreviewModeTabs,
   TabsList as PreviewModeTabsList,
   TabsTrigger as PreviewModeTabsTrigger,
@@ -36,6 +34,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { FileTypeIcon } from "@/features/file-browser/components/file-type-icon"
 import type {
   FilePreviewMode,
   PreviewFile,
@@ -50,27 +49,6 @@ const saveButtonTransition: Transition = {
   stiffness: 420,
   damping: 34,
   mass: 0.75,
-}
-
-function scrollTabIntoView(
-  viewport: HTMLElement,
-  tab: HTMLElement,
-  reduceMotion: boolean
-) {
-  const viewportRect = viewport.getBoundingClientRect()
-  const tabRect = tab.getBoundingClientRect()
-  const startOverflow = tabRect.left - viewportRect.left
-  const endOverflow = tabRect.right - viewportRect.right
-  const behavior = reduceMotion ? "auto" : "smooth"
-
-  if (startOverflow < 0) {
-    viewport.scrollBy({ left: startOverflow - 8, behavior })
-    return
-  }
-
-  if (endOverflow > 0) {
-    viewport.scrollBy({ left: endOverflow + 8, behavior })
-  }
 }
 
 function animateControl(control: HTMLButtonElement) {
@@ -97,6 +75,7 @@ export function FilePreviewToolbar({
   agentAssistVisible,
   compact = false,
   expanded,
+  fileTabsId,
   files,
   mode,
   onCloseAll,
@@ -113,6 +92,7 @@ export function FilePreviewToolbar({
   agentAssistVisible: boolean
   compact?: boolean
   expanded: boolean
+  fileTabsId: string
   files: PreviewFile[]
   mode: FilePreviewMode | null
   onCloseAll: () => void
@@ -134,7 +114,6 @@ export function FilePreviewToolbar({
   const closeTweensRef = React.useRef(
     new Map<string, gsap.core.Tween>()
   )
-  const tabsViewportRef = React.useRef<HTMLDivElement>(null)
   const [announcement, setAnnouncement] = React.useState("")
   const [marqueeFileId, setMarqueeFileId] = React.useState<
     string | null
@@ -165,25 +144,6 @@ export function FilePreviewToolbar({
     },
     []
   )
-
-  React.useEffect(() => {
-    const viewport = tabsViewportRef.current
-    const activeFileId = activeFile?.id
-
-    if (!viewport || !activeFileId) {
-      return
-    }
-
-    const tab = viewport.querySelector<HTMLElement>(
-      `[data-file-preview-tab]:has([data-value="${CSS.escape(activeFileId)}"])`
-    )
-
-    if (!tab) {
-      return
-    }
-
-    scrollTabIntoView(viewport, tab, shouldReduceMotion)
-  }, [activeFile?.id, shouldReduceMotion])
 
   const announce = React.useCallback((message: string) => {
     setAnnouncement(message)
@@ -298,16 +258,13 @@ export function FilePreviewToolbar({
       )}
     >
       <div
-        ref={tabsViewportRef}
-        className="file-preview-toolbar__tabs min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="file-preview-toolbar__tabs min-w-0 flex-1"
       >
         {files.length > 0 ? (
           <TabsList
             aria-label={t("filePreview.openFiles")}
-            variant="line"
-            size="sm"
             className={cn(
-              "min-w-max border-0 pb-0",
+              "min-w-full gap-1 border-b-2",
               compact ? "h-8" : "h-10"
             )}
           >
@@ -315,7 +272,7 @@ export function FilePreviewToolbar({
               <div
                 key={file.id}
                 data-file-preview-tab
-                className="relative inline-flex w-[100px] min-w-[100px] max-w-[100px] shrink-0 items-center"
+                className="relative inline-flex h-full w-[100px] min-w-[100px] max-w-[100px] shrink-0 items-center"
                 onPointerEnter={() => setMarqueeFileId(file.id)}
                 onPointerLeave={() => setMarqueeFileId(null)}
                 onFocusCapture={() => setMarqueeFileId(file.id)}
@@ -327,9 +284,13 @@ export function FilePreviewToolbar({
               >
                 <TooltipHint content={file.path}>
                   <TabsTrigger
+                    id={`${fileTabsId}-tab-${encodeURIComponent(file.id)}`}
+                    aria-controls={`${fileTabsId}-panel-${encodeURIComponent(file.id)}`}
                     value={file.id}
-                    className="w-full min-w-0 flex-none justify-start overflow-hidden pr-7! font-normal dark:data-active:text-foreground"
+                    className="mb-0 h-full min-h-0 w-full min-w-0 flex-none justify-start gap-1.5 px-2 py-0 pr-7 text-xs font-normal"
+                    indicatorClassName="-bottom-0.5 h-0.5"
                   >
+                    <FileTypeIcon name={file.name} path={file.path} />
                     <OverflowMarquee
                       active={marqueeFileId === file.id}
                       className="flex-1"

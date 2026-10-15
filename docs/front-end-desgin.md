@@ -1214,6 +1214,12 @@ Tree | Preview -> Tree      | Preview -> Tree fills the pane
 `components/motion/tabs.tsx`。共享 `FilePreviewToolbar` 使用独立受控 Tabs，
 以 `source / render / edit` 切换模式；外层文件标签继续按文件 ID 管理。
 Agent UI 文件浏览器与 Agent Workspace 文件浏览器共用此实现。
+文件标签在文件名前复用 `FileTypeIcon`，按文件名、扩展名与路径匹配文件树同款图标，
+并跟随浅色 / 深色主题。16px 图标固定不收缩，100px 标签宽度、名称滚动与关闭按钮保持原样；
+图标作为装饰从可访问性树隐藏。
+文件标签也使用 BeUI `underline`，底部轨道与选中下划线均为 2px。
+使用 BeUI 内置横向滚动、选中项定位与键盘操作；文件 Tab 和内容面板通过独立实例 ID
+关联 `aria-controls` / `aria-labelledby`，内容保留现有挂载、选区及切换动效。
 “Agent协助”（英文 `Agent Assist`）沿用内部 `edit` 模式及现有 HTML 可视化编辑功能。
 仅活动文件的扩展名为 `.pptx`、`.docx`、`.html`、`.htm`、`.xhtml` 或 `.pdf` 时
 挂载此 Tab，扩展名判断不区分大小写；其他文件和未选文件时不显示。
@@ -1225,7 +1231,7 @@ HTML 系列加载成功后可以使用现有编辑功能。2026-10-15：DOCX / P
 FileBrowserPage (full / compact)
   -> RichFilePreview
      -> FilePreviewToolbar
-        +-- file tabs: file ID
+        +-- BeUI file tabs: file ID / underline / 2px track
         +-- BeUI mode tabs: source / render / edit
              edit visibility: selected .pptx/.docx/.html/.htm/.xhtml/.pdf
              edit enabled: loaded HTML / DOCX / PPTX
@@ -2496,9 +2502,9 @@ App TooltipProvider -> 首次悬浮 1s -> 连续切换 0ms
 
 | 组件类型 | 当前入口 / 来源 | 当前样式和反馈 | 代表场景 |
 | --- | --- | --- | --- |
-| Tabs | [assistant-ui/tabs](../agent-ui/src/components/assistant-ui/tabs.tsx)，Base UI + Motion | default / line / ghost / pills / outline 共享选中/悬浮滑块；`text` 变体列表无底色、无悬浮滑块，仅选中项带浅色滑块；属于本地通用封装 | 侧栏模式、文件标签、工作流详情、用量面板与热力图模式切换 |
+| Tabs | [assistant-ui/tabs](../agent-ui/src/components/assistant-ui/tabs.tsx)，Base UI + Motion | default / line / ghost / pills / outline 共享选中/悬浮滑块；`text` 变体列表无底色、无悬浮滑块，仅选中项带浅色滑块；属于本地通用封装 | 侧栏模式、工作流详情、用量面板与热力图模式切换 |
 | 资源 Tabs | [animate-ui/components/radix/tabs](../agent-ui/src/components/animate-ui/components/radix/tabs.tsx)，Radix + Motion | 24px 标签栏、共享底色和滑块；键盘及减少动态效果时立即切换 | Skill 文件预览、MCP 工具 / 提示词 / 资源 / 配置 |
-| 文件预览 Tabs | [motion/tabs](../agent-ui/src/components/motion/tabs.tsx)，BeUI + Motion | 32px 列表；模式使用 segment，工作表使用 underline；键盘导航、禁用提示与减少动态效果 | 文件浏览器 / Agent Workspace 的源码、预览、Agent协助模式及 XLSX / CSV 工作表切换 |
+| 文件预览 Tabs | [motion/tabs](../agent-ui/src/components/motion/tabs.tsx)，BeUI + Motion | 文件标签使用 underline，轨道与选中下划线均为 2px；模式使用 32px segment，工作表使用 underline；键盘导航、禁用提示与减少动态效果 | 文件浏览器 / Agent Workspace 的文件、源码、预览、Agent协助模式及 XLSX / CSV 工作表切换 |
 | ExpandableTabs | [motion/expandable-tabs](../agent-ui/src/components/motion/expandable-tabs.tsx)，BE UI 衍生 | 胶囊图标展开标签；固定 26px 外框 / 18px 内容圆角、本地 tab 语义和动画 | Workspace 模块切换 |
 | Sidebar | [ui/sidebar](../agent-ui/src/components/ui/sidebar.tsx)，shadcn 衍生组合 | `sidebar-*` token；Base UI Sheet 处理移动端，GSAP 调整桌面宽度，Motion 处理行高亮 | 主侧栏、工作区侧栏 |
 | Breadcrumb | [ui/breadcrumb](../agent-ui/src/components/ui/breadcrumb.tsx) | shadcn 风格路径层级，Lucide 分隔图标 | 顶栏、设置导航、文件路径 |

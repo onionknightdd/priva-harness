@@ -2,10 +2,7 @@ import * as React from "react"
 import gsap from "gsap"
 import { useTranslation } from "react-i18next"
 
-import {
-  Tabs,
-  TabsContent,
-} from "@/components/assistant-ui/tabs"
+import { Tabs } from "@/components/motion/tabs"
 import {
   canEditHtmlFile,
   canRenderFile,
@@ -144,11 +141,13 @@ function RenderedFile({ file }: { file: PreviewFile }) {
 function FilePreviewPanel({
   active,
   file,
+  fileTabsId,
   mode,
   onHtmlChange,
 }: {
   active: boolean
   file: PreviewFile
+  fileTabsId: string
   mode: FilePreviewMode | null
   onHtmlChange: (content: string) => void
 }) {
@@ -195,10 +194,14 @@ function FilePreviewPanel({
   }, [active, file.id, mode])
 
   return (
-    <TabsContent
-      value={file.id}
+    <div
+      id={`${fileTabsId}-panel-${encodeURIComponent(file.id)}`}
+      role="tabpanel"
+      aria-labelledby={`${fileTabsId}-tab-${encodeURIComponent(file.id)}`}
+      hidden={!active}
+      tabIndex={active ? 0 : -1}
       className={cn(
-        "min-h-0 flex-1 overscroll-contain data-hidden:hidden",
+        "min-h-0 flex-1 overscroll-contain outline-none",
         !active && "hidden",
         usesInternalScroller ? "overflow-hidden" : "overflow-auto"
       )}
@@ -248,7 +251,7 @@ function FilePreviewPanel({
           </PreviewRendererBoundary>
         )}
       </div>
-    </TabsContent>
+    </div>
   )
 }
 
@@ -286,6 +289,7 @@ export function RichFilePreview({
   onSelectionChange?: (selection: PreviewSelection | null) => void
 }) {
   const { t } = useTranslation()
+  const fileTabsId = React.useId()
   const [internalMode, setInternalMode] =
     React.useState<FilePreviewMode>("source")
   const [drafts, setDrafts] = React.useState<Record<string, string>>(
@@ -372,13 +376,14 @@ export function RichFilePreview({
         scopeKey={`${activeFile?.id ?? "none"}:${activeMode ?? "none"}`}
       >
         <Tabs
+          variant="underline"
           value={activeFileId ?? ""}
           onValueChange={(fileId) => {
             if (files.some((file) => file.id === fileId)) {
               onActiveFileChange(fileId)
             }
           }}
-          className="min-h-0 flex-1 gap-0"
+          className="flex min-h-0 flex-1 flex-col gap-0"
         >
           <FilePreviewToolbar
             activeFile={activeFile}
@@ -386,6 +391,7 @@ export function RichFilePreview({
             compact={compact}
             editAvailable={editAvailable}
             expanded={expanded}
+            fileTabsId={fileTabsId}
             files={previewFiles}
             mode={activeMode}
             onCloseAll={handleCloseAll}
@@ -404,6 +410,7 @@ export function RichFilePreview({
                 key={file.id}
                 active={file.id === activeFileId}
                 file={file}
+                fileTabsId={fileTabsId}
                 mode={getAvailableMode(file, preferredMode)}
                 onHtmlChange={(content) => handleHtmlChange(file.id, content)}
               />
