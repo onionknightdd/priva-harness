@@ -15,6 +15,7 @@ import {
   WrenchIcon,
 } from "lucide-react"
 import { motion, useReducedMotion } from "motion/react"
+import { QiRectangleTerminalAi } from "qingicon-react"
 import { useTranslation } from "react-i18next"
 
 import { AgentDisclosure } from "@/components/agents/agent-disclosure"
@@ -497,6 +498,13 @@ function BashToolItem({
         tool={toolItemStatusLabel(block.name, status === "running", t)}
         title={description ?? (inputStreaming ? "" : command) ?? ""}
         kind="terminal"
+        icon={
+          <QiRectangleTerminalAi
+            aria-hidden
+            size="1.25em"
+            className="block size-[1.25em] shrink-0 -my-[0.125em]"
+          />
+        }
         status={status}
         copyText={copyText || undefined}
         onCopy={
@@ -795,7 +803,7 @@ function ProcessRow({
   const header = (
     <>
       {icon ? (
-        <ItemMedia variant="icon" aria-hidden="true">
+        <ItemMedia variant="icon" aria-hidden="true" className="me-[0.25em]">
           {icon}
         </ItemMedia>
       ) : null}

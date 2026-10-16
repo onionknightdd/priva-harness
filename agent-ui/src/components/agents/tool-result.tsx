@@ -344,7 +344,7 @@ export function ToolResult({
       >
         <span
           aria-hidden="true"
-          className="grid size-[1em] shrink-0 place-items-center text-muted-foreground/70"
+          className="me-[0.25em] grid size-[1em] shrink-0 place-items-center text-muted-foreground/70"
         >
           {icon ?? <KindIcon kind={kind} />}
         </span>

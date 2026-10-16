@@ -240,12 +240,14 @@ export function FileDiff({
           </span>
         </button>
         <div className="pointer-events-none relative z-10 flex min-w-0 items-center gap-1 py-0.5">
-          {icon ?? (
-            <FileCode2
-              aria-hidden="true"
-              className="block size-[1em] shrink-0 text-muted-foreground/70"
-            />
-          )}
+          <span className="me-[0.25em] inline-flex shrink-0">
+            {icon ?? (
+              <FileCode2
+                aria-hidden="true"
+                className="block size-[1em] shrink-0 text-muted-foreground/70"
+              />
+            )}
+          </span>
           <span className="flex min-w-0 flex-1 items-center gap-1 font-normal leading-none text-muted-foreground/70">
             {tool ? (
               typeof tool === "string" || typeof tool === "number" ? (

@@ -152,7 +152,7 @@ export function FileRead({
         <div className="pointer-events-none relative z-10 flex min-w-0 items-center gap-1 py-0.5">
           <Icon
             aria-hidden="true"
-            className="block size-[1em] shrink-0 text-muted-foreground/70"
+            className="me-[0.25em] block size-[1em] shrink-0 text-muted-foreground/70"
           />
           <span className="flex min-w-0 flex-1 items-center gap-2 leading-none">
             {tool ? (

@@ -69,7 +69,7 @@ export function CanvasToolItem({
             !canOpen && "cursor-default"
           )}
         >
-          <AppWindowIcon className="size-4 shrink-0" aria-hidden="true" />
+          <AppWindowIcon className="me-[0.25em] size-4 shrink-0" aria-hidden="true" />
           <span className={cn("min-w-0", running && "shimmer")}>
             {toolItemStatusLabel(block.name, running, t)}
           </span>
