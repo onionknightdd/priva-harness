@@ -172,6 +172,12 @@ export function applyThreadStreamFrame(
   return applyThreadCompactFrame(withAssistant, assistantId, frame)
 }
 
+function visibleFailureText(visible: string, failure: string): string {
+  const shown = visible.trim()
+  if (shown !== "" && /^[A-Za-z][A-Za-z0-9_]*$/u.test(failure)) return shown
+  return failure.trim() || shown
+}
+
 function emptyAssistant(id: string, frame: StreamFrame): AgentThreadMessage {
   return { id, role: "assistant", content: "", blocks: [], status: "streaming", createdAt: new Date(frame.ts ?? Date.now()).toISOString() }
 }
@@ -200,7 +206,7 @@ function applyStreamContent(
       { type: "task_notification", blockId: `notification:${frame.notification.id}`, index: blocks.length ? Math.max(...blocks.map((block) => block.index)) + 1 : 0, notification: frame.notification }] }
   }
   if (frame.type === "error" || frame.type === "run.failed") {
-    const errorText = frame.message?.trim() || message.content
+    const errorText = visibleFailureText(textFromBlocks(message.blocks ?? []), frame.message?.trim() || message.content)
     return { ...message, content: errorText, status: "error", workflows: settleForegroundWorkflows(message, "failed") }
   }
   if (frame.type === "run.aborted") {
@@ -236,7 +242,7 @@ function applyStreamContent(
   const blocks = applyMainBlocks(withUuid.blocks ?? [], frame)
   return {
     ...withUuid,
-    ...(frame.type?.startsWith("assistant.") ? { status: "streaming" as const } : {}),
+    ...(frame.type?.startsWith("assistant.") && withUuid.status !== "error" ? { status: "streaming" as const } : {}),
     blocks,
     nestedAgents: applyNested(withUuid.nestedAgents ?? [], frame),
     content: textFromBlocks(blocks),

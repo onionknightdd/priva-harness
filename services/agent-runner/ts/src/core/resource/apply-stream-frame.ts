@@ -37,7 +37,7 @@ export function applyStreamFrame(message: ThreadMessage, event: AgentEvent): Thr
       }) }
   }
   if (event.type === 'error' || event.type === 'run.failed') {
-    const errorText = event.message.trim() === '' ? message.content : event.message.trim()
+    const errorText = visibleFailureText(textFromThreadBlocks(message.blocks ?? []), event.message.trim() || message.content)
     return { ...message, content: errorText, status: 'error',
       ...(message.workflows === undefined ? {} : { workflows: settleForegroundWorkflows(message, 'failed') }) }
   }
@@ -74,6 +74,18 @@ export function applyStreamFrame(message: ThreadMessage, event: AgentEvent): Thr
     nestedAgents: applyNested(withUuid.nestedAgents ?? [], event),
     content: textFromThreadBlocks(blocks),
   }
+}
+
+// A bare provider code such as model_not_found is not the sentence the terminal
+// already rendered. Keep that sentence when the transcript has it.
+function visibleFailureText(visible: string, failure: string): string {
+  const shown = visible.trim()
+  if (shown !== '' && isBareErrorCode(failure)) return shown
+  return failure.trim() || shown
+}
+
+function isBareErrorCode(value: string): boolean {
+  return /^[A-Za-z][A-Za-z0-9_]*$/u.test(value)
 }
 
 function settleForegroundWorkflows(message: ThreadMessage, status: 'failed' | 'cancelled'): readonly ThreadWorkflowCard[] {

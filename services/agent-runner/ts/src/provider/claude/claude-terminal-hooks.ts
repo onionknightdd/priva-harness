@@ -119,11 +119,17 @@ async function main() {
     ...(typeof hook.source === 'string' ? { source: hook.source } : {}),
     ...(typeof hook.reason === 'string' ? { reason: hook.reason } : {}),
     ...(typeof hook.prompt === 'string' ? { prompt: hook.prompt } : {}),
-    ...(event === 'failure' ? { message: hook.error_details || hook.error || 'Claude stopped with an API error' } : {})
+    ...(event === 'failure' ? { message: visibleFailure(hook) } : {})
   };
   const path = process.argv[3], temp = path + '.' + process.pid + '.tmp';
   await fs.writeFile(temp, JSON.stringify(state), { mode: 0o600 });
   await fs.rename(temp, path);
+  function visibleFailure(hook) {
+    for (const value of [hook.last_assistant_message, hook.error_details, hook.error]) {
+      if (typeof value === 'string' && value.trim() !== '') return value.trim();
+    }
+    return 'Claude stopped with an API error';
+  }
   const response = await fetch(process.argv[2], {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ ...state, terminalId: process.argv[6] }), signal: AbortSignal.timeout(5000)

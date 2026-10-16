@@ -402,6 +402,29 @@ describe('applyStreamFrame', () => {
     expect(texts(message.blocks)).toEqual(['Hi! What can I help you with today?'])
     expect(message.content).toBe('Hi! What can I help you with today?')
   })
+
+  it('keeps the terminal error sentence when a later failure is only an error code', () => {
+    const sentence = 'There\'s an issue with the selected model (deepseek-flash). It may not exist or you may not have access to it.'
+    let message = emptyAssistantMessage('a1', '2024-01-01T00:00:00.000Z')
+    message = applyStreamFrame(message, {
+      type: 'assistant.message',
+      messageId: 'a1',
+      blocks: [{ type: 'text', blockId: 'a1:0', index: 0, text: sentence }],
+    })
+    message = applyStreamFrame(message, { type: 'run.failed', message: 'model_not_found' })
+
+    expect(message.status).toBe('error')
+    expect(message.content).toBe(sentence)
+    expect(texts(message.blocks)).toEqual([sentence])
+  })
+
+  it('uses a written failure sentence when the transcript has no error text', () => {
+    const message = applyStreamFrame(
+      emptyAssistantMessage('a1', '2024-01-01T00:00:00.000Z'),
+      { type: 'run.failed', message: 'Terminal did not acknowledge the message.' },
+    )
+    expect(message).toMatchObject({ status: 'error', content: 'Terminal did not acknowledge the message.' })
+  })
 })
 
 function toolIds(blocks: readonly ThreadBlock[] | undefined): string[] {

@@ -394,7 +394,10 @@ runner 的本机 HTTP 路由；[官方 hooks 参考](https://code.claude.com/doc
 
 气泡请求使用客户端 runId；原生 TUI 输入由服务端生成 runId。`UserPromptSubmit`
 确认注入被 Claude 接收；提交后 15 秒内没有确认时报告失败且不自动重发。Stop / StopFailure
-先补读历史再发送完成 / 错误事件。Claude 在用户中断时不发送 Stop，因此气泡停止键和
+先补读历史再发送完成 / 错误事件。StopFailure 的气泡正文优先用 Claude 交给 hook 的
+`last_assistant_message`（终端里看到的那句），没有时再用 `error_details` 和错误码。
+转录里已经有这句说明时，后续的纯错误码不会把它盖掉。带 `isApiErrorMessage` 的助手记录在
+实时快照和历史重读里都折成异常气泡，正文仍是这句说明。Claude 在用户中断时不发送 Stop，因此气泡停止键和
 终端单独的 Escape / Ctrl+C 同步持久化 idle 并结束轮次；方向键不视为中断。
 排队消息和活动消息在终端退出时分别收到请求错误和轮次失败。
 

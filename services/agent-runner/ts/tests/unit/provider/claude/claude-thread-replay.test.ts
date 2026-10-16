@@ -33,6 +33,31 @@ describe('replayClaudeSessionMessages', () => {
     expect(message).toEqual(before)
   })
 
+  it('folds an API error transcript row into an error bubble with the terminal sentence', () => {
+    const sentence = 'There\'s an issue with the selected model (deepseek-flash). It may not exist or you may not have access to it.'
+    const messages = [
+      { type: 'user', uuid: 'user-1', message: { role: 'user', content: 'hi' } },
+      {
+        type: 'assistant',
+        uuid: 'assistant-row',
+        isApiErrorMessage: true,
+        error: 'model_not_found',
+        apiErrorStatus: 404,
+        message: {
+          id: 'synthetic-1',
+          role: 'assistant',
+          model: '<synthetic>',
+          content: [{ type: 'text', text: sentence }],
+        },
+      },
+    ].map((record) => mapClaudeMessage(record, 'session'))
+    const thread = foldThread(replayClaudeSessionMessages(messages))
+    expect(thread.map((message) => ({ role: message.role, status: message.status, content: message.content }))).toEqual([
+      { role: 'user', status: 'complete', content: 'hi' },
+      { role: 'assistant', status: 'error', content: sentence },
+    ])
+  })
+
   it('keeps paste-tag examples in assistant responses and tool output', () => {
     const text = '<pasted_content id="6985">\nexample\n</pasted_content id="6985">'
     const thread = foldThread(replayClaudeSessionMessages([

@@ -37,6 +37,11 @@ export class SessionError extends Error {
   }
 }
 
+export interface SessionApiError {
+  readonly code?: string
+  readonly status?: number
+}
+
 export interface SessionMessage {
   readonly origin?: Readonly<Record<string, unknown>>
   readonly type: SessionMessageType
@@ -46,6 +51,7 @@ export interface SessionMessage {
   readonly parentToolUseId: string | null
   readonly metadata: Readonly<Record<string, unknown>> | null
   readonly timestamp: number | null
+  readonly apiError?: SessionApiError
 }
 
 export function parseMessageTimestamp(value: unknown): number | null {
