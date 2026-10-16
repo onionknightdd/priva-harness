@@ -5,7 +5,7 @@ import { replayClaudeSessionMessages } from '../../../../src/provider/claude/ses
 import type { SessionMessage } from '../../../../src/core/resource/session.js'
 import type { ThreadBlock } from '../../../../src/core/resource/thread.js'
 import { mapClaudeMessage } from '../../../../src/provider/claude/session/claude-session-store.js'
-import { attachTranscriptToolUseResult, toolUseResultsFromTranscriptLines, transcriptThreadRecords } from '../../../../src/provider/claude/session/claude-transcript.js'
+import { attachTranscriptToolUseResult, mergeSdkAndTranscriptMessages, toolUseResultsFromTranscriptLines, transcriptThreadRecords } from '../../../../src/provider/claude/session/claude-transcript.js'
 
 describe('replayClaudeSessionMessages', () => {
   it.each(['summary-first', 'command-first', 'boundary-only'])('restores one completed native compact marker (%s)', (order) => {
@@ -56,6 +56,21 @@ describe('replayClaudeSessionMessages', () => {
       { role: 'user', status: 'complete', content: 'hi' },
       { role: 'assistant', status: 'error', content: sentence },
     ])
+  })
+
+  it('still folds an error bubble when the SDK history row omitted isApiErrorMessage', () => {
+    const sentence = 'There\'s an issue with the selected model (deepseek-flash). It may not exist or you may not have access to it.'
+    const sdk = {
+      type: 'assistant',
+      uuid: 'assistant-row',
+      message: { id: 'synthetic-1', role: 'assistant', model: '<synthetic>', content: [{ type: 'text', text: sentence }] },
+    }
+    const transcript = { ...sdk, isApiErrorMessage: true, error: 'model_not_found', apiErrorStatus: 404 }
+    const user = { type: 'user', uuid: 'user-1', message: { role: 'user', content: 'hi' } }
+    const thread = foldThread(replayClaudeSessionMessages(
+      mergeSdkAndTranscriptMessages([user, sdk], [user, transcript]).map((record) => mapClaudeMessage(record, 'session')),
+    ))
+    expect(thread.at(-1)).toMatchObject({ role: 'assistant', status: 'error', content: sentence })
   })
 
   it('keeps paste-tag examples in assistant responses and tool output', () => {

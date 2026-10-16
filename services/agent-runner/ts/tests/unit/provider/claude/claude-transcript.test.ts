@@ -243,6 +243,23 @@ describe('mergeSdkAndTranscriptMessages', () => {
     expect(merged[2]).toBe(sdkTail)
   })
 
+  it('keeps isApiErrorMessage when the SDK row replaces the transcript row', () => {
+    const sentence = 'There\'s an issue with the selected model (deepseek-flash).'
+    const sdk = {
+      type: 'assistant',
+      uuid: 'a1',
+      message: { id: 'synthetic-1', role: 'assistant', model: '<synthetic>', content: [{ type: 'text', text: sentence }] },
+    }
+    const transcript = {
+      ...sdk,
+      isApiErrorMessage: true,
+      error: 'model_not_found',
+      apiErrorStatus: 404,
+    }
+    const merged = mergeSdkAndTranscriptMessages([sdk], [transcript])
+    expect(merged).toEqual([{ ...sdk, isApiErrorMessage: true, error: 'model_not_found', apiErrorStatus: 404 }])
+  })
+
   it('does not append a synthetic No response requested leftover from the SDK', () => {
     const user = { type: 'user', uuid: 'u1', message: { role: 'user', content: '写完了吗' } }
     const answer = {

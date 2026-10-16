@@ -80,14 +80,14 @@ export function mergeSdkAndTranscriptMessages(
       const sourceToolUseID = stringField(asRecord(record) ?? {}, 'sourceToolUseID')
       const origin = asRecord(record)?.['origin']
       if (asRecord(origin)?.['delivery'] === 'absorbed_mid_turn') {
-        merged.push({ ...asRecord(sdk), ...asRecord(record) })
+        merged.push(withApiErrorMessage({ ...asRecord(sdk), ...asRecord(record) }, record))
         used.add(uuid)
         continue
       }
-      merged.push(isRecord(sdk) && (sourceToolUseID !== undefined || origin !== undefined) ? { ...sdk,
+      merged.push(withApiErrorMessage(isRecord(sdk) && (sourceToolUseID !== undefined || origin !== undefined) ? { ...sdk,
         ...(sourceToolUseID === undefined ? {} : { sourceToolUseID }),
         ...(origin === undefined ? {} : { origin }),
-      } : sdk)
+      } : sdk, record))
       used.add(uuid)
       continue
     }
@@ -101,6 +101,20 @@ export function mergeSdkAndTranscriptMessages(
     merged.push(raw)
   }
   return merged
+}
+
+// getSessionMessages drops the JSONL error marker. The bubble follows that marker, so put it back onto the SDK row.
+function withApiErrorMessage(sdk: unknown, record: unknown): unknown {
+  const transcript = asRecord(record)
+  if (transcript?.['isApiErrorMessage'] !== true || !isRecord(sdk)) return sdk
+  const code = stringField(transcript, 'error')
+  const status = transcript['apiErrorStatus']
+  return {
+    ...sdk,
+    isApiErrorMessage: true,
+    ...(code === undefined ? {} : { error: code }),
+    ...(typeof status === 'number' && Number.isFinite(status) ? { apiErrorStatus: status } : {}),
+  }
 }
 
 export function attachTranscriptToolUseResult(

@@ -393,10 +393,10 @@ export function mapClaudeMessage(raw: unknown, sessionId: string): SessionMessag
 }
 
 function claudeApiError(record: Record<string, unknown>): SessionApiError | undefined {
+  if (record['isApiErrorMessage'] !== true) return undefined
   const code = stringField(record, 'error')
   const statusValue = record['apiErrorStatus']
   const status = typeof statusValue === 'number' && Number.isFinite(statusValue) ? statusValue : undefined
-  if (record['isApiErrorMessage'] !== true && code === undefined && status === undefined) return undefined
   return {
     ...(code === undefined ? {} : { code }),
     ...(status === undefined ? {} : { status }),
