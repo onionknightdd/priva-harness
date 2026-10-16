@@ -2,7 +2,7 @@ import { useMemo } from "react"
 import { ariaDescribedByIds, getInputProps, type BaseInputTemplateProps, type WidgetProps } from "@rjsf/utils"
 import { useTranslation } from "react-i18next"
 
-import { Switch } from "@/components/animate-ui/components/radix/switch"
+import { Switch } from "@/components/motion/switch"
 import { Combobox, ComboboxChip, ComboboxChips, ComboboxChipsInput, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList, useComboboxAnchor } from "@/components/ui/combobox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -24,7 +24,7 @@ export function ToolTextarea({ id, value, required, disabled, readonly, placehol
 export function ToolBoolean({ id, label, schema, value, required, disabled, readonly, onChange, onBlur, onFocus, rawErrors }: WidgetProps) {
   return <div className="space-y-2">
     <div className="flex items-center justify-between gap-3"><Label htmlFor={id}>{label}{required && <span aria-hidden="true"> *</span>}</Label>
-      <Switch id={id} checked={Boolean(value)} disabled={disabled || readonly} onCheckedChange={onChange} aria-invalid={Boolean(rawErrors?.length)} aria-describedby={ariaDescribedByIds(id)} onBlur={() => onBlur(id, value)} onFocus={() => onFocus(id, value)} />
+      <Switch id={id} size="sm" checked={Boolean(value)} disabled={disabled || readonly} onCheckedChange={onChange} aria-invalid={Boolean(rawErrors?.length)} aria-describedby={ariaDescribedByIds(id)} onBlur={() => onBlur(id, value)} onFocus={() => onFocus(id, value)} />
     </div>
     {schema.description && <p id={`${id}__description`} className="text-xs text-muted-foreground">{schema.description}</p>}
   </div>

@@ -189,7 +189,7 @@ document.querySelector<HTMLButtonElement>("#run")!.addEventListener("click", asy
     const pane = activePanel(); pane.scrollTop = 350
     const oldScroll = pane.scrollTop
     const switchButton = () => host.querySelector<HTMLButtonElement>('[role="switch"]')!
-    check("skill toggle is 15px tall with a matching 11px thumb", switchButton().getBoundingClientRect().height === 15 && switchButton().getBoundingClientRect().width === 24 && switchButton().querySelector('[data-slot="switch-thumb"]')!.getBoundingClientRect().height === 11)
+    check("skill toggle matches the 20px icon button with a 14px thumb", switchButton().getBoundingClientRect().height === 20 && switchButton().getBoundingClientRect().width === 34 && (switchButton().firstElementChild as HTMLElement).getBoundingClientRect().height === 14)
     const stableActions = [switchButton(), ...actionButtons.slice(1)]
     const actionIcons = stableActions.flatMap((button) => Array.from(button.querySelectorAll("svg")))
     const watchActionOpacity = () => {
@@ -209,7 +209,7 @@ document.querySelector<HTMLButtonElement>("#run")!.addEventListener("click", asy
     let actionsStayedStable = watchActionOpacity()
     switchButton().click()
     await until(() => switchButton().disabled, "pending disable")
-    check("saving exposes busy state and blocks duplicate actions", switchButton().parentElement!.getAttribute("aria-busy") === "true" && (stableActions[2] as HTMLButtonElement).disabled)
+    check("saving exposes busy state and blocks duplicate actions", switchButton().closest("[aria-busy]")!.getAttribute("aria-busy") === "true" && (stableActions[2] as HTMLButtonElement).disabled)
     switchButton().click()
     await until(() => switchButton().getAttribute("aria-checked") === "false" && !switchButton().disabled, "disable skill")
     observer.disconnect()

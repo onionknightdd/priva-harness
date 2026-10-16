@@ -134,7 +134,7 @@ document.querySelector<HTMLButtonElement>("#run")!.addEventListener("click", asy
       const toggle = findButton(i18n.t("resources.toolEnabled", { name: "read_file" }))
       toggle.click()
       await until(() => toggle.getAttribute("aria-checked") === "false" && !toggle.disabled, "mobile tool toggle")
-      check("mobile switches fit and disable tool tests", Math.round(toggle.getBoundingClientRect().width) === 24 && Math.round(toggle.getBoundingClientRect().height) === 15 && findButton(`${i18n.t("resources.testTool")}: read_file`).disabled && host.scrollWidth <= host.clientWidth)
+      check("mobile switches fit and disable tool tests", Math.round(toggle.getBoundingClientRect().width) === 34 && Math.round(toggle.getBoundingClientRect().height) === 20 && findButton(`${i18n.t("resources.testTool")}: read_file`).disabled && host.scrollWidth <= host.clientWidth)
       selectTab("configuration")
       await until(() => activePanel()?.textContent?.includes("example.invalid"), "mobile configuration")
       findButton(i18n.t("resources.back")).click()

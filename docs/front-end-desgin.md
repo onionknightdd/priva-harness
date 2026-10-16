@@ -49,41 +49,49 @@ Resources / 上传相关实现。结论来自组件源码、业务调用点、�
 
 ### 已实施的组件选型
 
-2026-09-08：按用户指定，所有现有布尔开关统一为
-`@animate-ui/components-radix-switch`。默认入口是
-[Animate UI Switch](../agent-ui/src/components/animate-ui/components/radix/switch.tsx)，
-使用 Radix UI + Motion；这是通用 Base UI 基线之外的明确选型。
+2026-10-16：按用户指定，所有现有布尔开关改为
+[BeUI Switch](../agent-ui/src/components/motion/switch.tsx)。单独使用时轨道 48 × 28px、
+滑块 20px。和 20px 图标按钮或 `text-sm` 并排时用 `size="sm"`（34 × 20px 轨道、
+14px 滑块）。开启轨道使用 BeUI 原色 `#0285f7`，浅色和深色相同，不读取项目
+`primary`。关闭轨道读取 `muted-foreground/60`，滑块读取 `background`。拇指使用重弹簧（stiffness 800、damping 80、mass 4），按下时缩放到
+0.9；减少动态效果时动画时长为 0，并关闭按压缩放和禁用抖动。组件始终受控，画面以
+调用方的 `checked` 为准，服务端保存完成前不提前翻转。
 
 ```text
-Agent 输入建议 / 模型默认项 / Skill 启停
+输入建议 / Skill / MCP 服务 / MCP 工具 / 工具表单布尔项
                     |
                     v
-components/animate-ui/components/radix/switch.tsx
-                    |
-                    v
-primitives/radix/switch.tsx -> Radix UI + Motion
+components/motion/switch.tsx -> BeUI + Motion
 ```
 
-默认使用 32 × 20px 轨道、16px 滑块与按压伸展；Skill 启停使用 `size="sm"` 的
-24 × 15px 轨道和 11px 滑块。激活轨道读取共享
-`toggle-active` token，浅色 / 深色均为 `rgb(78, 130, 239)`（`#4E82EF`）；其余颜色
-继续读取项目 `input`、`background` 等 token。减少动态效果时立即切换状态，并关闭滑块
-位移与按压伸展动画。受控开关以调用方的 `checked` 为准，包括等待服务端保存的状态。
-旧 `ui/switch.tsx` 已移除，不建立兼容转发入口。
+本地在上游之外保留可选 `id`、`aria-invalid`、`aria-describedby`、`onBlur` 和
+`onFocus`，让设置项标签和 MCP 工具表单继续关联到同一个按钮。`className` 仍加在外层，
+资源页保存中的开关通过它保持按钮不淡化、指针不变。旧 Animate UI Switch 和
+`toggle-active` token 已移除，不建立兼容转发入口。
+
+模型设置里的默认 profile 不使用 Switch。左侧 profile 列表用
+[BeUI Radio](../agent-ui/src/components/motion/radio.tsx) 的无描述样式选择默认项：
+圆点与名称同一行，圆点为 14px，与 `text-sm` 字号一致，不传 `description`。点圆点只更新默认项，不重载编辑区；点名称只打开编辑。
+选中圆点和边框使用 BeUI 原色 `#0285f7`。
+
+```text
+Profiles
+( ) icon  Profile A     <- 点名称：编辑
+(•) icon  Profile B     <- 点圆点：设为默认
+```
 
 文件预览的 Tabs 表达多项模式选择，主题、语言和工作区按钮也有各自用途；
-它们不属于本次统一的三个布尔开关调用点。新建同类布尔开关使用上述入口。
+它们不属于布尔开关。新建同类布尔开关使用上述入口。
 
 安装命令（在 `agent-ui/`）：
 
 ```sh
-npx shadcn@latest add @animate-ui/components-radix-switch
+npx shadcn add @beui/switch
 ```
 
-上游说明见 [Animate UI Radix Switch](https://animate-ui.com/docs/components/radix/switch)。
-当前 shadcn CLI 在 `base-vega` 项目中会将上游 `asChild` 自动转换为 `render`，
-但该 Radix 组件需要 `asChild`。本地原语已恢复 Radix 组合 API，并补充 reduced-motion
-及受控状态处理；再次安装或升级时须审阅差异并运行下面的 Switch 浏览器检查。
+上游说明见 [BeUI Switch](https://beui.dev/components/motion/switch)。安装时保留现有
+`lib/utils.ts`。再次安装或升级时须审阅差异，保留上述本地字段，并运行下面的 Switch
+浏览器检查。
 
 ### Tab 与侧栏底色
 
@@ -495,9 +503,9 @@ Skill 搜索立即切换。分组折叠图标位于标题文字右侧、分割�
 嵌套吸顶步长 26px；`compact` 属性仍只控制元数据列。Skill 条目之间另加 2px 间距，
 不影响条目内部的文件树间距。Markdown 源文件保留原始内容、frontmatter 和行号，
 并启用共享 Shiki 的 Markdown 语法高亮；其他源文件仍使用带行号的纯文本。
-Skill 启停开关采用 `size="sm"`（24 × 15px 轨道、11px 滑块），保存期间保持透明度，
+Skill 启停开关使用 BeUI Switch 的 `size="sm"`（34 × 20px 轨道、14px 滑块），与旁边 20px 图标按钮等高、与 14px 图标同大。保存期间保持透明度，
 并沿用普通指针，避免临时 `disabled` 状态触发禁止指针的闪烁；仍阻止重复操作。
-真正不可切换的 Skill 保留禁止指针和禁用透明度，其他开关保留默认尺寸和动效。
+真正不可切换的 Skill 保留禁止指针和禁用透明度。
 
 ```text
 技能标题 | 搜索图标 / 展开的输入框 | 刷新 | 上传
@@ -1595,7 +1603,7 @@ Skills 与 MCP 共用 [ResourceListHeader](../agent-ui/src/features/resources/re
 详情移除大图标与来源元信息，16px 服务名旁显示 10px 脉冲状态点。
 标题下依次显示连接类型、服务端版本和地址 / 启动命令 pill，统一为 20px 高、12px 文本；
 版本来自 MCP 握手，服务未返回版本时不显示版本 pill。地址单行显示，溢出时仅悬停跑马灯。
-保留只读与禁用状态、编辑和删除动作。服务名称右侧增加与 Skill 相同的 `size="sm"`
+保留只读与禁用状态、编辑和删除动作。服务名称右侧增加与 Skill 相同的 BeUI
 Switch，工具列表每行在测试按钮前增加同款 Switch；工具 Tab 显示“已启用 / 总数”。
 
 ```text
@@ -2404,7 +2412,7 @@ Context Usage               ×
 | 维度 | 当前配置 / 实现 | 依据 |
 | --- | --- | --- |
 | 技术栈 | React 19、TypeScript、Vite 8、Tailwind CSS 4 | [package.json](../agent-ui/package.json) |
-| 基础组件风格 | shadcn/ui `base-vega`；通用组件以 Base UI 为主，Switch 使用 Animate UI + Radix UI | [components.json](../agent-ui/components.json)、[Button](../agent-ui/src/components/ui/button.tsx)、[Switch](../agent-ui/src/components/animate-ui/components/radix/switch.tsx) |
+| 基础组件风格 | shadcn/ui `base-vega`；通用组件以 Base UI 为主，Switch 使用 BeUI + Motion | [components.json](../agent-ui/components.json)、[Button](../agent-ui/src/components/ui/button.tsx)、[Switch](../agent-ui/src/components/motion/switch.tsx) |
 | 颜色 | `neutral`，CSS variables；菜单 `menuColor: default`、`menuAccent: subtle` | [components.json](../agent-ui/components.json) |
 | 主题 | 浅色 / 深色语义 token；`next-themes` 管理主题 | [index.css](../agent-ui/src/index.css)、[main.tsx](../agent-ui/src/main.tsx) |
 | 字体 | `font-sans` 为 Inter Variable，`font-code` 为 JetBrains Mono Variable；仍有代码组件使用 `font-mono` | [index.css](../agent-ui/src/index.css)、[AgentCode](../agent-ui/src/components/agents/agent-code.tsx) |
@@ -2425,9 +2433,9 @@ Context Usage               ×
 | 来源 | 当前落地入口 | 实际用途与风格 |
 | --- | --- | --- |
 | shadcn/ui + Base UI | [components/ui](../agent-ui/src/components/ui) | 通用按钮、表单、弹层、导航等；Neutral + Vega 风格，使用项目主题 token。`file-upload` 等外部来源也放在此目录，不能仅按目录判断上游。 |
-| Animate UI | [components/animate-ui](../agent-ui/src/components/animate-ui) | 全部布尔开关使用 Radix Switch + Motion；附件菜单使用 Base UI Menu + Motion 滑动高亮；主题按钮使用另一份按钮 variants 和 View Transition。 |
+| Animate UI | [components/animate-ui](../agent-ui/src/components/animate-ui) | 附件菜单使用 Base UI Menu + Motion 滑动高亮；主题按钮使用另一份按钮 variants 和 View Transition。布尔开关已改到 BeUI。 |
 | assistant-ui 命名空间下的本地组件 | [tabs.tsx](../agent-ui/src/components/assistant-ui/tabs.tsx)、[file.tsx](../agent-ui/src/components/assistant-ui/file.tsx) | Tabs 已采用 Base UI + Motion，有 default / line / ghost / pills / outline；File 提供上传队列文件卡片。没有直接依赖 `@assistant-ui/react` 运行时。 |
-| BE UI 衍生组件 | [expandable-tabs.tsx](../agent-ui/src/components/motion/expandable-tabs.tsx) | 文件注释指向 BE UI；工作区使用收起为图标、选中后展开文字的胶囊 Tabs，交互由本地代码 + Motion 实现。 |
+| BE UI | [switch.tsx](../agent-ui/src/components/motion/switch.tsx)、[expandable-tabs.tsx](../agent-ui/src/components/motion/expandable-tabs.tsx) | Switch 是全部布尔开关；工作区胶囊 Tabs 收起为图标、选中后展开文字，交互由本地代码 + Motion 实现。 |
 | ReUI + Headless Tree | [tree.tsx](../agent-ui/src/components/reui/tree.tsx) | 文件树外观；Headless Tree 提供树状态与交互，业务层叠加选中高亮、展开动画和溢出文字滚动；文件浏览器与 Skill 资源树共享业务树组件。 |
 | Dice UI + shadcnblocks | [file-upload.tsx](../agent-ui/src/components/ui/file-upload.tsx)、[file-upload-dropzone-1.tsx](../agent-ui/src/components/file-upload-dropzone-1.tsx) | Skill 压缩包上传；Dice UI 的 Base UI 适配实现 + shadcnblocks 上传布局 + Motion。来源有源码注释和[迁移记录](architecture/skills-mcp-migration.md)支持。 |
 | AI Elements + Streamdown | [ai-elements/message.tsx](../agent-ui/src/components/ai-elements/message.tsx) | 消息容器、操作区、流式 Markdown、代码/数学/Mermaid；复用本地 Button、Tooltip，另有内容样式。 |
@@ -2438,7 +2446,7 @@ Context Usage               ×
 [components.json](../agent-ui/components.json) 配置了 9 个扩展 registry：
 `@loading-ui`、`@heatmap`、`@reui`、`@assistant-ui`、`@animate-ui`、`@ai-elements`、
 `@beui`、`@diceui`、`@shadcnblocks`。上表能找到对应的本地使用或来源记录。Kibo 命名空间存在于源码中，
-但不在当前 registry 配置中。`radix-ui` 是 Switch 的直接运行时依赖；其他通用组件
+但不在当前 registry 配置中。`radix-ui` 仍被 Animate UI Tabs 使用；其他通用组件
 仍以 Base UI 为主，不能因为某个 registry 同时支持多个原语就将它们全记为实际使用。
 
 ## Component catalog
@@ -2454,7 +2462,7 @@ Context Usage               ×
 | 特殊动作按钮 | [motion/action-swap](../agent-ui/src/components/motion/action-swap.tsx)、[action-swap-roll](../agent-ui/src/components/motion/action-swap-roll.tsx)，本地 Motion | 图标/文案交换；另有 `surfaces.tsx` 的圆形 ghost/ink 样式 | 发送/停止、工作状态、复制按钮 |
 | Toggle | [ui/toggle](../agent-ui/src/components/ui/toggle.tsx)，Base UI Toggle | 两态按压按钮；default / outline，选中态 `bg-muted` | 当前仅 `toggleVariants` 被 ToggleGroup 复用，没有独立 `<Toggle>` 业务实例 |
 | ToggleGroup | [ui/toggle-group](../agent-ui/src/components/ui/toggle-group.tsx)，Base UI ToggleGroup + Toggle | `outline`、`sm` 的分段按钮 | 图片工具的展示模式与原图选择 |
-| Switch | [animate-ui/components/radix/switch](../agent-ui/src/components/animate-ui/components/radix/switch.tsx)，Radix UI + Motion | 默认轨道 32 × 20px / 滑块 16px；Skill 小号轨道 24 × 15px / 滑块 11px；按压伸展，spring `stiffness: 300 / damping: 25`；支持 reduced motion | Agent 输入建议、模型默认项、Skill 启停，共 3 处 |
+| Switch | [motion/switch](../agent-ui/src/components/motion/switch.tsx)，BeUI + Motion | 默认 48 × 28px / 滑块 20px；`sm` 34 × 20 / 14px，对齐图标按钮和 text-sm；按下缩放，spring `stiffness: 800 / damping: 80 / mass: 4` | 输入建议、Skill / MCP 启停、MCP 工具布尔参数 |
 | 主题 / 语言 / 工作区切换 | [ThemeToggle](../agent-ui/src/features/sidebar/footer/theme-toggle.tsx)、[LanguageToggle](../agent-ui/src/features/sidebar/footer/language-toggle.tsx)、[WorkspaceToggle](../agent-ui/src/features/workspace/workspace-toggle.tsx) | 分别是 Animate UI 主题按钮、shadcn Button + GSAP、Button + Motion；名称带 toggle，但并未使用通用 Toggle 或 Switch | 全局模式与面板开关 |
 | Input / Textarea | [ui/input](../agent-ui/src/components/ui/input.tsx)、[ui/textarea](../agent-ui/src/components/ui/textarea.tsx) | Input 基于 Base UI，Textarea 是本地样式的原生 textarea；共享 input / ring / destructive token | 搜索、名称、配置文本 |
 | Field / Label | [ui/field](../agent-ui/src/components/ui/field.tsx)、[ui/label](../agent-ui/src/components/ui/label.tsx) | 本地 shadcn 风格的标签、说明、错误与分组结构 | 设置和表单；资源表单还存在本地 FormField 组合 |
@@ -2587,7 +2595,7 @@ Chat composer 上下留白缩小三分之一：单行上下内边距各为 14/3p
 
 建议继续使用当前 `base-vega + neutral + CSS variables + Lucide` 作为唯一的
 通用视觉基线。理由是 Button、Switch、ToggleGroup、Tooltip、Dialog、Select 等
-大多采用这套基础；Switch 已按用户选择统一到 Animate UI Radix 版本。选型成本
+大多采用这套基础；Switch 已按用户选择统一到 BeUI 版本。选型成本
 主要来自多个本地入口及业务覆盖样式。统一入口和
 变体能直接减少重复选择，也能保留已有功能。
 
@@ -2600,7 +2608,7 @@ Feature / Page
   |      +--> Base UI             [通用交互原语]
   |      +--> shared tokens       [颜色、字号、圆角、focus、弹层反馈]
   |
-  +--> Animate UI Radix Switch    [已确定的布尔开关入口]
+  +--> BeUI Switch                [已确定的布尔开关入口]
   |
   +--> 本地领域组件               [消息、树、上传、代码、预览]
          +--> 复用通用组件与 tokens
@@ -2614,7 +2622,7 @@ Feature / Page
 
 | 选择对象 | 建议 | 原因 / 使用边界 |
 | --- | --- | --- |
-| 通用组件 | 选择本地固定入口；Switch 使用已确定的 Animate UI Radix 版本，其他以 shadcn 风格 + Base UI 为主 | 已覆盖绝大多数常用类型；新增调用先查本表，缺失才查上游 |
+| 通用组件 | 选择本地固定入口；Switch 使用已确定的 BeUI 版本，其他以 shadcn 风格 + Base UI 为主 | 已覆盖绝大多数常用类型；新增调用先查本表，缺失才查上游 |
 | Animate UI | 作为满足既定样式与行为的动画补充 | 已有组件能满足需求时直接复用；同类型普通组件已有标准入口时，优先增强该入口，避免再引入第二份视觉实现。其 Base UI Menu 的上游明确以 shadcn 风格为基础，见[官方说明](https://animate-ui.com/docs/components/base/menu) |
 | ReUI / Dice UI / shadcnblocks | 保留树、上传等已落地的专业用途 | 固定到具体组件类型，使用本地实现；Button、Switch、Tooltip 等继续走本表各自的固定入口 |
 | assistant-ui / BE UI / Kibo 命名空间 | 保留已有能力，按组件类型收敛公共入口 | 这些实现多已本地化且共用 token；继续按“来自哪个网站”组织通用组件会增加查找成本 |
@@ -3140,9 +3148,9 @@ Subagent 测试流客户端：
 Pi MCP 生命周期探针仍由根 `AGENTS.md` 维护。
 
 Switch 浏览器回归：在 `agent-ui/` 运行 `npm run dev`，打开
-`/tests/components/animate-ui/radix/switch-browser.html`，点击 **Run switch checks**。
+`/tests/components/motion/switch-browser.html`，点击 **Run switch checks**。
 再分别带 `?reduced-motion=1`、`?dark=1` 验证减少动态效果和深色样式。检查覆盖
-受控/非受控状态、label 激活、禁用、表单值、服务端等待、快速切换、按压和释放。
+受控状态、外部标签和内置标签激活、禁用、服务端等待、快速切换、按压缩放和释放。
 运行后可用 Tab 聚焦 **Controlled switch**，按 Space 验证真实键盘激活。
 
 

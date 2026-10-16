@@ -32,7 +32,6 @@ import {
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
-import { Switch } from "@/components/animate-ui/components/radix/switch"
 import { cn } from "@/lib/utils"
 
 import type {
@@ -66,7 +65,6 @@ export function ModelProfileEditor({
   feedback,
   isCreating,
   isConnectionVerified,
-  isDefault,
   modelIds,
   profile,
   profilesExist,
@@ -78,7 +76,6 @@ export function ModelProfileEditor({
   onCatalogChange,
   onDraftChange,
   onSave,
-  onSetDefault,
   onTest,
 }: {
   busyAction: ModelSettingsBusyAction
@@ -87,7 +84,6 @@ export function ModelProfileEditor({
   feedback: ModelSettingsFeedback | null
   isCreating: boolean
   isConnectionVerified: boolean
-  isDefault: boolean
   modelIds: string[]
   profile: ModelProfileSummary | null
   profilesExist: boolean
@@ -102,7 +98,6 @@ export function ModelProfileEditor({
     value: ProfileDraft[Key]
   ) => void
   onSave: () => void
-  onSetDefault: () => void
   onTest: () => void
 }) {
   const { t } = useTranslation()
@@ -113,12 +108,6 @@ export function ModelProfileEditor({
     draft.label.trim() &&
       draft.baseUrl.trim() &&
       (!isCreating || draft.authToken.trim())
-  )
-  const canSetDefault = Boolean(
-    profile?.defaultModel &&
-      profile.defaultModel === draft.defaultModel &&
-      profile.baseUrl === draft.baseUrl.trim() &&
-      !draft.authToken.trim()
   )
   const formTitle = isCreating
     ? t("settings.models.newProfile")
@@ -136,35 +125,7 @@ export function ModelProfileEditor({
     >
       <div className="mb-3 flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="flex min-w-0 items-center gap-2">
-            <h2 className="truncate text-base font-medium">{formTitle}</h2>
-            {!isCreating && (
-              <div className="flex shrink-0 items-center gap-1.5">
-                <span className="text-xs text-muted-foreground">
-                  {t("settings.models.defaultBadge")}
-                </span>
-                <Switch
-                  checked={isDefault}
-                  disabled={
-                    isDefault ||
-                    !isConnectionVerified ||
-                    !canSetDefault ||
-                    busyAction !== null ||
-                    isTesting
-                  }
-                  aria-label={t("settings.models.setDefault")}
-                  onCheckedChange={(checked) => {
-                    if (checked) {
-                      onSetDefault()
-                    }
-                  }}
-                />
-                {busyAction === "default" && (
-                  <Spinner className="size-3" aria-hidden="true" />
-                )}
-              </div>
-            )}
-          </div>
+          <h2 className="truncate text-base font-medium">{formTitle}</h2>
           {!isCreating && profile?.authTokenSet && (
             <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
               <KeyRoundIcon className="size-3" aria-hidden="true" />

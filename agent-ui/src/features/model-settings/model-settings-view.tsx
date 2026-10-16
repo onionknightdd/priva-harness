@@ -4,15 +4,8 @@ import * as React from "react"
 import { BotIcon, PlusIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
+import { RadioGroup, RadioGroupItem } from "@/components/motion/radio"
 import { Button } from "@/components/ui/button"
-import {
-  Item,
-  ItemContent,
-  ItemDescription,
-  ItemGroup,
-  ItemMedia,
-  ItemTitle,
-} from "@/components/ui/item"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
@@ -70,6 +63,18 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
 }
 
+function profileIsReady(profile: ModelProfileSummary) {
+  return Boolean(profile.baseUrl && profile.authTokenSet && profile.defaultModel)
+}
+
+function savedProfileMatchesDraft(profile: ModelProfileSummary, draft: ProfileDraft) {
+  return (
+    profile.defaultModel === draft.defaultModel &&
+    profile.baseUrl === draft.baseUrl.trim() &&
+    !draft.authToken.trim()
+  )
+}
+
 function ProfileRailSkeleton() {
   return (
     <div className="flex flex-col gap-2" aria-hidden="true">
@@ -118,6 +123,7 @@ export function ModelSettingsView() {
   const [loadError, setLoadError] = React.useState<string | null>(null)
   const [busyAction, setBusyAction] =
     React.useState<ModelSettingsBusyAction>(null)
+  const [settingDefault, setSettingDefault] = React.useState(false)
   const [feedback, setFeedback] =
     React.useState<ModelSettingsFeedback | null>(null)
   const selectedProfile =
@@ -294,30 +300,28 @@ export function ModelSettingsView() {
     }
   }, [createInput, draft, isCreating, loadProfiles, selectedProfileId, t])
 
-  const handleSetDefault = React.useCallback(async () => {
-    if (!selectedProfileId) {
+  const handleSetDefault = React.useCallback(async (profileId: string) => {
+    if (!profileId || profileId === defaultProfileId || settingDefault) {
       return
     }
 
-    setBusyAction("default")
-    setFeedback(null)
+    const previousDefaultId = defaultProfileId
+    setSettingDefault(true)
+    setDefaultProfileId(profileId)
 
     try {
-      const result = await setDefaultModelProfile(selectedProfileId)
+      const result = await setDefaultModelProfile(profileId)
       setDefaultProfileId(result.default_profile_id)
-      setFeedback({
-        tone: "success",
-        message: t("settings.models.defaultUpdated"),
-      })
     } catch (error) {
+      setDefaultProfileId(previousDefaultId)
       setFeedback({
         tone: "error",
         message: getErrorMessage(error, t("settings.models.requestFailed")),
       })
     } finally {
-      setBusyAction(null)
+      setSettingDefault(false)
     }
-  }, [selectedProfileId, t])
+  }, [defaultProfileId, settingDefault, t])
 
   const handleDelete = React.useCallback(async () => {
     if (!selectedProfileId) {
@@ -392,55 +396,52 @@ export function ModelSettingsView() {
               {t("settings.models.noProfiles")}
             </p>
           ) : (
-            <ItemGroup className="min-w-0 gap-1 overflow-x-hidden" role="listbox">
+            <RadioGroup
+              className="min-w-0 gap-1"
+              aria-label={t("settings.models.setDefault")}
+              value={defaultProfileId ?? ""}
+              onValueChange={(profileId) => {
+                void handleSetDefault(profileId)
+              }}
+            >
               {profiles.map((profile) => {
                 const isSelected =
                   !isCreating && profile.id === selectedProfileId
-                const isDefault = profile.id === defaultProfileId
+                const draftBlocksDefault =
+                  isSelected &&
+                  !savedProfileMatchesDraft(profile, draft)
+                const radioDisabled =
+                  profile.id !== defaultProfileId &&
+                  (!profileIsReady(profile) || draftBlocksDefault)
 
                 return (
-                  <Item
+                  <div
                     key={profile.id}
-                    render={
-                      <button
-                        type="button"
-                        role="option"
-                        aria-selected={isSelected}
-                        onClick={() => selectProfile(profile)}
-                      />
-                    }
-                    variant={isSelected ? "muted" : "default"}
-                    size="xs"
                     className={cn(
-                      "flex-nowrap text-left hover:bg-muted/60",
-                      isSelected && "bg-muted"
+                      "flex min-w-0 items-center gap-1 rounded-md py-1 pr-1.5 pl-1",
+                      isSelected ? "bg-muted" : "hover:bg-muted/60"
                     )}
                   >
-                    <ItemMedia variant="icon">
-                      <BotIcon />
-                    </ItemMedia>
-                    <ItemContent className="min-w-0">
-                      <ItemTitle className="max-w-full">
-                        <span className="truncate">{profile.label}</span>
-                        {isDefault && (
-                          <span
-                            className="size-1.5 shrink-0 rounded-full bg-primary"
-                            aria-label={t("settings.models.defaultBadge")}
-                          />
-                        )}
-                      </ItemTitle>
-                      <ItemDescription className="truncate">
-                        {profile.modelCount === null
-                          ? t("settings.models.modelCountUnknown")
-                          : t("settings.models.modelCount", {
-                              count: profile.modelCount,
-                            })}
-                      </ItemDescription>
-                    </ItemContent>
-                  </Item>
+                    <RadioGroupItem
+                      value={profile.id}
+                      size="sm"
+                      label={`${t("settings.models.setDefault")}: ${profile.label}`}
+                      disabled={radioDisabled}
+                      className="shrink-0 gap-0 [&>span]:sr-only"
+                    />
+                    <button
+                      type="button"
+                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                      aria-pressed={isSelected}
+                      onClick={() => selectProfile(profile)}
+                    >
+                      <BotIcon className="size-4 shrink-0 text-muted-foreground" />
+                      <span className="truncate text-sm">{profile.label}</span>
+                    </button>
+                  </div>
                 )
               })}
-            </ItemGroup>
+            </RadioGroup>
           )}
         </div>
       </aside>
@@ -462,10 +463,6 @@ export function ModelSettingsView() {
             feedback={feedback}
             isCreating={isCreating}
             isConnectionVerified={isConnectionVerified}
-            isDefault={
-              selectedProfileId !== null &&
-              selectedProfileId === defaultProfileId
-            }
             modelIds={modelIds}
             profile={selectedProfile}
             profilesExist={profiles.length > 0}
@@ -477,7 +474,6 @@ export function ModelSettingsView() {
             onCatalogChange={updateCatalog}
             onDraftChange={updateDraft}
             onSave={() => void handleSave()}
-            onSetDefault={() => void handleSetDefault()}
             onTest={handleTest}
           />
         )}

@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Switch } from "@/components/animate-ui/components/radix/switch"
+import { Switch } from "@/components/motion/switch"
 
 import {
   DEFAULT_HARNESS_PREFERENCES,
@@ -237,6 +237,7 @@ export function AgentSettingsView() {
             </FieldContent>
             <Switch
               id="agent-input-suggestions"
+              size="sm"
               checked={inputSuggestions}
               onCheckedChange={setInputSuggestions}
             />

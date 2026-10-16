@@ -38,9 +38,9 @@ if (params.has("mobile") && !params.has("embed")) {
   function Fixture() {
     const [value, setValue] = React.useState(draft)
     draft = value
-    return <ModelProfileEditor busyAction={null} canTest isCreating={false} isConnectionVerified isDefault={false} modelIds={["chat-model"]}
+    return <ModelProfileEditor busyAction={null} canTest isCreating={false} isConnectionVerified modelIds={["chat-model"]}
       draft={value} profile={profile} profiles={[profile, classifier]} profilesExist feedback={null} testFeedback={null} testStatus="idle"
-      onCancel={() => {}} onDelete={() => {}} onSave={() => { saved = value }} onSetDefault={() => {}} onTest={() => {}}
+      onCancel={() => {}} onDelete={() => {}} onSave={() => { saved = value }} onTest={() => {}}
       onCatalogChange={(modelCapabilities) => setValue((before) => ({ ...before, modelCapabilities }))}
       onDraftChange={(key, next) => setValue((before) => ({ ...before, [key]: next }))} />
   }

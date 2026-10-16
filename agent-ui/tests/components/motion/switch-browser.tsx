@@ -2,8 +2,8 @@ import * as React from "react"
 import { act } from "react"
 import { createRoot } from "react-dom/client"
 
-import { Switch } from "../../../../src/components/animate-ui/components/radix/switch"
-import "../../../../src/index.css"
+import { Switch } from "../../../src/components/motion/switch"
+import "../../../src/index.css"
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 
@@ -13,7 +13,6 @@ document.documentElement.classList.toggle("dark", query.has("dark"))
 
 if (reducedMotion) {
   const matchMedia = window.matchMedia.bind(window)
-  // Only the fixture overrides the media query; production reads user settings.
   window.matchMedia = (media) => media === "(prefers-reduced-motion)"
     ? Object.assign(new EventTarget(), {
         matches: true, media, onchange: null,
@@ -26,25 +25,23 @@ const events: string[] = []
 
 export function Fixtures() {
   const [checked, setChecked] = React.useState(false)
-  return <form id="switch-form" className="space-y-4">
+  const [labeled, setLabeled] = React.useState(true)
+  return <div id="switch-fixtures" className="space-y-4">
     <div className="flex items-center justify-between gap-3">
       <label htmlFor="controlled">Controlled switch</label>
-      <Switch id="controlled" name="controlled" checked={checked} onCheckedChange={(next) => { events.push(`controlled:${next}`); setChecked(next) }} />
-    </div>
-    <div className="flex items-center justify-between gap-3">
-      <label htmlFor="uncontrolled">Uncontrolled switch</label>
-      <Switch id="uncontrolled" name="uncontrolled" defaultChecked onCheckedChange={(next) => events.push(`uncontrolled:${next}`)} />
+      <Switch id="controlled" checked={checked} onCheckedChange={(next) => { events.push(`controlled:${next}`); setChecked(next) }} />
     </div>
     <div className="flex items-center justify-between gap-3">
       <label htmlFor="disabled">Disabled switch</label>
-      <Switch id="disabled" checked disabled onCheckedChange={() => events.push("disabled")} />
+      <Switch id="disabled" checked disabled ariaLabel="Disabled switch" onCheckedChange={() => events.push("disabled")} />
     </div>
     <div className="flex items-center justify-between gap-3">
       <label htmlFor="pending">Pending server switch</label>
-      <Switch id="pending" checked={false} onCheckedChange={(next) => events.push(`pending:${next}`)} startIcon={<span>+</span>} />
+      <Switch id="pending" checked={false} onCheckedChange={(next) => events.push(`pending:${next}`)} />
     </div>
+    <Switch id="labeled" checked={labeled} onCheckedChange={(next) => { events.push(`labeled:${next}`); setLabeled(next) }} label="Labeled switch" />
     <output id="value">Controlled: {String(checked)}</output>
-  </form>
+  </div>
 }
 
 const host = document.querySelector<HTMLDivElement>("#fixtures")!
@@ -58,9 +55,7 @@ async function runChecks() {
     if (!condition) throw new Error(name)
     passed.push(name)
   }
-  const wait = async (ms = 400) => {
-    // Motion schedules gesture callbacks after rendering; commit their React
-    // updates before waiting for the resulting animation to settle.
+  const wait = async (ms = 700) => {
     await act(async () => { await new Promise(requestAnimationFrame) })
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, ms)) })
   }
@@ -76,44 +71,41 @@ async function runChecks() {
     results.textContent = "Running…"
     await reset()
     check("all controls expose switch semantics", host.querySelectorAll('[role="switch"]').length === 4)
-    check("controlled and uncontrolled initial values", !isChecked("controlled") && isChecked("uncontrolled"))
+    check("controlled starts off and labeled starts on", !isChecked("controlled") && isChecked("labeled"))
     const bounds = getSwitch("controlled").getBoundingClientRect()
-    check("standard 32 × 20 size fits compact rows", bounds.width === 32 && bounds.height === 20 && host.scrollWidth === host.clientWidth)
+    const thumb = getSwitch("controlled").firstElementChild as HTMLElement
+    check("standard 48 × 28 size fits compact rows", bounds.width === 48 && bounds.height === 28 && thumb.getBoundingClientRect().height === 20 && host.scrollWidth === host.clientWidth)
 
     await click("controlled")
     check("controlled click changes value once", isChecked("controlled") && events.join() === "controlled:true")
-    check("native form value tracks checked state", new FormData(host.querySelector<HTMLFormElement>("form")!).get("controlled") === "on")
     await act(async () => { host.querySelector<HTMLLabelElement>('label[for="controlled"]')!.click() })
-    check("label activation toggles the control", !isChecked("controlled") && events.at(-1) === "controlled:false")
-    check("unchecked value is absent from form", !new FormData(host.querySelector<HTMLFormElement>("form")!).has("controlled"))
+    check("external label activation toggles the control", !isChecked("controlled") && events.at(-1) === "controlled:false")
+    await act(async () => { host.querySelector<HTMLLabelElement>('label[for="labeled"]')!.click() })
+    check("built-in label activation toggles the control", !isChecked("labeled") && events.at(-1) === "labeled:false")
 
-    await click("uncontrolled")
-    check("uncontrolled defaultChecked remains interactive", !isChecked("uncontrolled") && events.at(-1) === "uncontrolled:false")
     await click("disabled")
     check("disabled switch ignores activation", getSwitch("disabled").disabled && isChecked("disabled") && !events.includes("disabled"))
 
     await click("pending")
-    await wait()
+    await wait(50)
     check("pending server value stays controlled", !isChecked("pending") && events.filter((event) => event === "pending:true").length === 1)
-    const pendingIcon = getSwitch("pending").querySelector<HTMLElement>('[data-slot="switch-left-icon"]')!
-    check("pending switch icon agrees with supplied value", getComputedStyle(pendingIcon).opacity === "0")
 
     for (let index = 0; index < 3; index += 1) await click("controlled")
     await wait()
     check("rapid toggles settle at the last state", isChecked("controlled") && events.filter((event) => event.startsWith("controlled:")).length === 5)
-    const thumb = getSwitch("controlled").querySelector<HTMLElement>('[data-slot="switch-thumb"]')!
-    check("checked thumb settles on the right", thumb.getBoundingClientRect().right > getSwitch("controlled").getBoundingClientRect().right - 4)
+    const settledThumb = getSwitch("controlled").firstElementChild as HTMLElement
+    check("checked thumb settles on the right", settledThumb.getBoundingClientRect().right > getSwitch("controlled").getBoundingClientRect().right - 8)
 
     const pointer = (type: string) => new PointerEvent(type, { bubbles: true, button: 0, isPrimary: true, pointerType: "mouse", pointerId: 1 })
     await act(async () => { getSwitch("controlled").dispatchEvent(pointer("pointerdown")) })
     await wait()
-    const pressedWidth = thumb.getBoundingClientRect().width
-    check(reducedMotion ? "reduced motion disables press stretching" : "press stretches the thumb", reducedMotion ? pressedWidth === 16 : pressedWidth > 18)
+    const pressedWidth = settledThumb.getBoundingClientRect().width
+    check(reducedMotion ? "reduced motion disables press squish" : "press squashes the thumb", reducedMotion ? Math.abs(pressedWidth - 20) < 0.1 : pressedWidth < 19)
     await act(async () => { getSwitch("controlled").dispatchEvent(pointer("pointerup")) })
     await wait()
-    check("release restores thumb width", Math.abs(thumb.getBoundingClientRect().width - 16) < 0.1)
+    check("release restores thumb width", Math.abs(settledThumb.getBoundingClientRect().width - 20) < 0.1)
 
-    results.textContent = `PASS (${passed.length}, ${reducedMotion ? "reduced motion" : "normal motion"})\n${passed.join("\n")}`
+    results.textContent = `PASS (${passed.length}, ${reducedMotion ? "reduced motion" : "normal motion"}${query.has("dark") ? ", dark" : ""})\n${passed.join("\n")}`
   } catch (error) {
     results.textContent = `FAIL after ${passed.length} checks\n${error instanceof Error ? error.stack : String(error)}`
   } finally {

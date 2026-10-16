@@ -8,7 +8,7 @@ import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFoo
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Switch } from "@/components/animate-ui/components/radix/switch"
+import { Switch } from "@/components/motion/switch"
 import { OverflowMarquee } from "@/components/motion/overflow-marquee"
 import { ResourceIconButton } from "./resource-icon-button"
 import { ResourceCopyButton } from "./resource-copy-button"
@@ -18,6 +18,9 @@ import { McpEditor } from "./resource-forms"
 import { McpStatusDot } from "./mcp-status-dot"
 import { useMcpProbe, type McpProbeState } from "./use-mcp-probe"
 import { ResourceEmpty, ResourceErrorState, ResourceLoading } from "./resource-shared"
+
+// BeUI puts className on the wrapper. Saving stays disabled without dimming the thumb button.
+const savingSwitchClass = "[&>button]:disabled:cursor-auto [&>button]:disabled:opacity-100"
 import { TooltipHint } from "@/components/ui/tooltip"
 
 const ToolTestSheet = React.lazy(async () => ({ default: (await import("./mcp-tool-test-sheet")).ToolTestSheet }))
@@ -71,11 +74,11 @@ export function ResourceDetailPane({ kind, query, detail, file, onChanged, onRes
         <div className="flex shrink-0 items-center gap-2.5" aria-busy={busy || undefined}>
           {skill ? <>
             {/* Saving blocks duplicate actions without changing the cursor or dimming the toolbar. */}
-            <Switch size="sm" className={skill.canToggle ? "disabled:cursor-auto disabled:opacity-100" : undefined} checked={detail.enabled} onCheckedChange={(enabled) => void mutate("PATCH", { enabled })} disabled={!skill.canToggle || busy} aria-label={t("resources.enabled")} />
+            <Switch size="sm" className={skill.canToggle ? savingSwitchClass : undefined} checked={detail.enabled} onCheckedChange={(enabled) => void mutate("PATCH", { enabled })} disabled={!skill.canToggle || busy} ariaLabel={t("resources.enabled")} />
             <TooltipHint content={t("resources.download")}><ResourceIconButton render={<a href={resourceUrl(`skills/${detail.id}/download`, query)} />} aria-label={t("resources.download")}><DownloadIcon /></ResourceIconButton></TooltipHint>
             <TooltipHint content={t("resources.delete")}><ResourceIconButton className={canDelete ? "disabled:opacity-100" : undefined} disabled={!canDelete || busy} onClick={() => setDeleting(true)} aria-label={t("resources.delete")}><Trash2Icon /></ResourceIconButton></TooltipHint>
           </> : <>
-            <TooltipHint content={!detail.canToggle ? (detail as McpDetail).disabledReason : t(detail.source.scope === "global" ? "resources.mcpGlobalToggle" : "resources.mcpProjectToggle")}><span className="inline-flex"><Switch size="sm" className={detail.canToggle ? "disabled:cursor-auto disabled:opacity-100" : undefined} checked={detail.enabled} onCheckedChange={(enabled) => void mutate("PATCH", { enabled })} disabled={!detail.canToggle || busy} aria-label={t("resources.serverEnabled")} /></span></TooltipHint>
+            <TooltipHint content={!detail.canToggle ? (detail as McpDetail).disabledReason : t(detail.source.scope === "global" ? "resources.mcpGlobalToggle" : "resources.mcpProjectToggle")}><span className="inline-flex"><Switch size="sm" className={detail.canToggle ? savingSwitchClass : undefined} checked={detail.enabled} onCheckedChange={(enabled) => void mutate("PATCH", { enabled })} disabled={!detail.canToggle || busy} ariaLabel={t("resources.serverEnabled")} /></span></TooltipHint>
             <TooltipHint content={t("resources.edit")}><ResourceIconButton className={detail.source.writable ? "disabled:opacity-100" : undefined} disabled={!detail.source.writable || busy} onClick={() => setEditing(true)} aria-label={t("resources.edit")}><PencilIcon /></ResourceIconButton></TooltipHint>
             <TooltipHint content={t("resources.delete")}><ResourceIconButton className={canDelete ? "disabled:opacity-100" : undefined} disabled={!canDelete || busy} onClick={() => setDeleting(true)} aria-label={t("resources.delete")}><Trash2Icon /></ResourceIconButton></TooltipHint>
           </>}
@@ -146,7 +149,7 @@ function McpContent({ detail, query, probe, busy, onToggleTool }: { detail: McpD
             <div className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 flex-wrap items-center gap-2"><h3 className="min-w-0 break-all text-sm font-medium">{name}</h3>{key === "tools" && !enabled && <Badge variant="secondary" className="h-4 px-1.5 py-0 text-[10px] leading-none">{t("resources.disabled")}</Badge>}</div>
               {key === "tools" && <div className="flex shrink-0 items-center gap-2.5" aria-busy={busy || undefined}>
-                <TooltipHint content={!detail.enabled ? t("resources.serverStatus.disabled") : state?.disabledReason ?? t("resources.toolEnabled", { name })}><span className="inline-flex"><Switch size="sm" checked={state?.enabled ?? false} className={canToggle ? "disabled:cursor-auto disabled:opacity-100" : undefined} disabled={!canToggle || busy} onCheckedChange={(next) => void onToggleTool(name, next)} aria-label={t("resources.toolEnabled", { name })} /></span></TooltipHint>
+                <TooltipHint content={!detail.enabled ? t("resources.serverStatus.disabled") : state?.disabledReason ?? t("resources.toolEnabled", { name })}><span className="inline-flex"><Switch size="sm" checked={state?.enabled ?? false} className={canToggle ? savingSwitchClass : undefined} disabled={!canToggle || busy} onCheckedChange={(next) => void onToggleTool(name, next)} ariaLabel={t("resources.toolEnabled", { name })} /></span></TooltipHint>
                 <TooltipHint content={t("resources.testTool")}><ResourceIconButton disabled={!enabled || busy} aria-label={`${t("resources.testTool")}: ${name}`} onClick={() => setTool(entry)}><PlayIcon /></ResourceIconButton></TooltipHint>
               </div>}
             </div>
