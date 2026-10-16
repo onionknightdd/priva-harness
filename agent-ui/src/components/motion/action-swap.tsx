@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, motion, useReducedMotion, type HTMLMotionProps, type Variants } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion, useReducedMotionConfig, type HTMLMotionProps, type Variants } from "motion/react";
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { EASE_OUT, SPRING_PRESS, SPRING_SWAP } from "@/lib/ease";
@@ -39,6 +39,7 @@ export interface ActionSwapTextProps {
   value: string;
   children: ReactNode;
   animation?: ActionSwapAnimation;
+  animateOnMount?: boolean;
   className?: string;
   /** Applied to each cascade glyph, and to the whole label when cascade falls back. */
   glyphClassName?: string;
@@ -163,13 +164,14 @@ export function ActionSwapText({
   value,
   children,
   animation = "blur",
+  animateOnMount = false,
   className,
   glyphClassName,
 }: ActionSwapTextProps) {
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionConfig();
 
   // Cascade needs a plain string to split into letters; non-string content
-  // and reduced motion fall back to the closest single-element animation.
+  // falls back to the closest single-element animation.
   const label = typeof children === "string" ? children : null;
   const cascade = animation === "cascade" && label !== null && !reduce;
   const coreAnimation: CoreAnimation =
@@ -202,11 +204,15 @@ export function ActionSwapText({
             ))
           : children}
       </span>
-      {cascade ? (
+      {reduce ? (
+        <span className={cn("absolute inset-0 inline-block max-w-full truncate", glyphClassName)}>
+          {children}
+        </span>
+      ) : cascade ? (
         <>
           {/* Letters are decorative fragments; readers get the whole label. */}
           <span className="sr-only">{label}</span>
-          <AnimatePresence initial={false}>
+          <AnimatePresence initial={animateOnMount}>
             <motion.span
               key={`cascade-${value}`}
               aria-hidden
@@ -233,13 +239,13 @@ export function ActionSwapText({
           </AnimatePresence>
         </>
       ) : (
-        <AnimatePresence initial={false}>
+        <AnimatePresence initial={animateOnMount}>
           <motion.span
             key={`${animation}-${value}`}
             variants={TEXT_VARIANTS[coreAnimation]}
-            initial={reduce ? false : "initial"}
-            animate={reduce ? { opacity: 1, filter: "blur(0px)", scale: 1, y: 0 } : "animate"}
-            exit={reduce ? undefined : "exit"}
+            initial="initial"
+            animate="animate"
+            exit="exit"
             // Truncation lives on the layer that holds the text — the layer
             // moves as a whole, so clipping it never eats the roll.
             className={cn(

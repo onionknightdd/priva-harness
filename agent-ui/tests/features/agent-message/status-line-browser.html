@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Status line transition checks</title>
+  </head>
+  <body>
+    <main class="mx-auto max-w-3xl space-y-5 p-5">
+      <h1 class="text-lg font-medium">Status line transition checks</h1>
+      <div class="flex flex-wrap gap-3">
+        <button id="run" class="rounded border px-3 py-1.5">Run status line checks</button>
+        <button id="step" class="rounded border px-3 py-1.5">Next tool state</button>
+        <button id="width" class="rounded border px-3 py-1.5">Toggle 240px container</button>
+      </div>
+      <div id="fixtures"></div>
+      <pre id="results" role="status" class="whitespace-pre-wrap text-xs">Ready. Add ?zh&amp;dark&amp;reduced-motion or ?narrow to inspect variants.</pre>
+      <p class="text-xs text-muted-foreground">Visibility samples use glyph opacity and clipping geometry. Inspect the shimmer visually as well; this metric does not sample rendered pixel colors.</p>
+    </main>
+    <script type="module" src="./status-line-browser.tsx"></script>
+  </body>
+</html>

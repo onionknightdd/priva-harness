@@ -9,8 +9,6 @@ import {
   useState,
   type ReactNode,
 } from "react"
-import { flushSync } from "react-dom"
-import { ArrowDownIcon } from "lucide-react"
 import {
   LayoutGroup,
   MotionConfig,
@@ -21,12 +19,10 @@ import { useTranslation } from "react-i18next"
 
 import {
   MessageScroller,
-  MessageScrollerButton,
   MessageScrollerContent,
   MessageScrollerItem,
   MessageScrollerProvider,
   MessageScrollerViewport,
-  useMessageScroller,
 } from "@/components/ui/message-scroller"
 import { useActiveSession, useChatSessionActions } from "@/features/chat-session"
 import { checkFileExists } from "@/features/files/file-existence"
@@ -38,7 +34,6 @@ import { cn } from "@/lib/utils"
 import type { AgentThreadMessage } from "../agent-message-data"
 import { AGENT_CHAT_HEADER_HEIGHT } from "../agent-chat-layout"
 import {
-  EXPAND_LOCK_MS,
   captureExpandTrigger,
   isExpandScrollLocked,
   keepExpandTriggerInPlace,
@@ -60,6 +55,7 @@ import {
   type ThreadTurn,
 } from "../thread-turns"
 import { AgentMessageItem } from "./agent-message-item"
+import { FollowLatestMessage } from "./follow-latest-message"
 import { MessageSelectionActions } from "./message-selection-actions"
 import { StickyFreeze } from "./sticky-freeze"
 import { ThreadGlass } from "./thread-glass"
@@ -85,7 +81,6 @@ export function AgentMessageThread({
   const { activeSession, canFork, forking, runCwd, runSessionId } = useActiveSession()
   const { forkFrom } = useChatSessionActions()
   const now = useTickingNow()
-  const [followPaused, setFollowPaused] = useState(false)
   const reduceMotion = Boolean(useReducedMotionConfig())
   const [layoutTransition, setLayoutTransition] = useState(() => questionSummaryTransition(true, false))
   // MotionConfig re-renders every motion element and useReducedMotion caller
@@ -210,7 +205,8 @@ export function AgentMessageThread({
     <QuoteInChatContext.Provider value={onSelectionAction ?? null}>
     <ForkContext.Provider value={forkAvailability}>
     <TickingNowProvider value={now}>
-    <MessageScrollerProvider autoScroll={!followPaused} scrollMargin={AGENT_CHAT_HEADER_HEIGHT}>
+    {/* FollowLatestMessage owns streaming and explicit follow animations. */}
+    <MessageScrollerProvider autoScroll={false} scrollMargin={AGENT_CHAT_HEADER_HEIGHT}>
       <MessageScroller>
         <MotionConfig transition={motionTransition}>
           <LayoutGroup inherit={false}>
@@ -246,15 +242,11 @@ export function AgentMessageThread({
             </MotionScrollerViewport>
           </LayoutGroup>
         </MotionConfig>
-        <KeepExpandAnchor onFollowPausedChange={setFollowPaused} />
-        <FollowLatestMessage messages={messages} mounted={!preparing} />
+        <KeepExpandAnchor />
         <div className="pointer-events-none absolute inset-x-0 bottom-2 z-20 flex justify-center">
           <div className="pointer-events-auto flex items-center gap-2">
             <TaskPlanPopover messages={messages} />
-            <MessageScrollerButton className="relative inset-s-auto translate-x-0 rtl:translate-x-0 data-[direction=end]:bottom-auto data-[direction=end]:data-[active=false]:translate-y-0 data-[active=false]:hidden">
-              <ArrowDownIcon />
-              <span className="sr-only">{t("agentMessage.scrollToLatest")}</span>
-            </MessageScrollerButton>
+            <FollowLatestMessage messages={messages} mounted={!preparing} />
           </div>
         </div>
       </MessageScroller>
@@ -322,7 +314,6 @@ const ThreadTurnItem = memo(function ThreadTurnItem({
       layout="position"
       layoutDependency={false}
       messageId={turn.id}
-      scrollAnchor={freezeTurn}
       className={cn(
         "flex flex-col overflow-visible",
         working ? "gap-2" : "gap-6",
@@ -391,11 +382,7 @@ function ThreadEndSpacer() {
   )
 }
 
-function KeepExpandAnchor({
-  onFollowPausedChange,
-}: {
-  onFollowPausedChange: (paused: boolean) => void
-}) {
+function KeepExpandAnchor() {
   useLayoutEffect(() => {
     const viewport = document.querySelector<HTMLElement>(
       '[data-slot="message-scroller-viewport"]'
@@ -404,21 +391,12 @@ function KeepExpandAnchor({
       return
     }
 
-    let resumeTimer = 0
     const start = (target: EventTarget | null) => {
       captureExpandTrigger(target)
       if (!isExpandScrollLocked()) {
         return
       }
-      flushSync(() => {
-        onFollowPausedChange(true)
-      })
-      captureExpandTrigger(target)
       releaseThreadFollow(viewport)
-      window.clearTimeout(resumeTimer)
-      resumeTimer = window.setTimeout(() => {
-        onFollowPausedChange(false)
-      }, EXPAND_LOCK_MS)
     }
     const restore = () => {
       if (!keepExpandTriggerInPlace(viewport)) {
@@ -450,219 +428,11 @@ function KeepExpandAnchor({
     }
 
     return () => {
-      window.clearTimeout(resumeTimer)
       viewport.removeEventListener("pointerdown", onPointerDown, true)
       viewport.removeEventListener("keydown", onKeyDown, true)
       observer.disconnect()
     }
-  }, [onFollowPausedChange])
-
-  return null
-}
-
-const END_EDGE_PX = 8
-const FOLLOW_MIN_MS = 480
-const FOLLOW_MAX_MS = 860
-
-function followDuration(distance: number) {
-  return Math.min(FOLLOW_MAX_MS, Math.max(FOLLOW_MIN_MS, Math.abs(distance) * 0.9))
-}
-
-/** Sine in-out. Starts and settles slowly, so the glide doesn't kick off. */
-function easeInOutSine(t: number) {
-  return (1 - Math.cos(Math.PI * t)) / 2
-}
-
-function isScrolledToEnd(viewport: HTMLElement) {
-  return (
-    viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <=
-    END_EDGE_PX
-  )
-}
-
-function FollowLatestMessage({
-  messages,
-  mounted,
-}: {
-  messages: AgentThreadMessage[]
-  /** Turns mount one commit after the messages arrive; re-pin on that commit. */
-  mounted: boolean
-}) {
-  const { scrollToEnd } = useMessageScroller()
-  const pinnedRef = useRef(true)
-  const programmaticRef = useRef(false)
-  const previousIdsRef = useRef<string[] | null>(null)
-  const followFrameRef = useRef(0)
-  const instantFollowRef = useRef(true)
-  const threadKey = messages[0]?.renderId ?? messages[0]?.id ?? "empty"
-
-  const followLatest = useCallback(() => {
-    if (!pinnedRef.current || isExpandScrollLocked()) {
-      return
-    }
-    const viewport = document.querySelector<HTMLElement>(
-      '[data-slot="message-scroller-viewport"]'
-    )
-    if (!viewport) {
-      scrollToEnd({ behavior: "auto" })
-      return
-    }
-    // A glide already in flight reads the live end, so streaming growth does
-    // not restart the ease on every resize.
-    if (followFrameRef.current) return
-
-    const destination = () => Math.max(0, viewport.scrollHeight - viewport.clientHeight)
-    const from = viewport.scrollTop
-    const distance = destination() - from
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    const instant = instantFollowRef.current
-    instantFollowRef.current = false
-    if (reduce || Math.abs(distance) < 1 || instant) {
-      programmaticRef.current = true
-      viewport.scrollTop = destination()
-      requestAnimationFrame(() => {
-        programmaticRef.current = false
-      })
-      return
-    }
-
-    const duration = followDuration(distance)
-    const start = performance.now()
-    programmaticRef.current = true
-    const step = (now: number) => {
-      if (!pinnedRef.current) {
-        followFrameRef.current = 0
-        programmaticRef.current = false
-        return
-      }
-      const t = Math.min(1, (now - start) / duration)
-      const dest = destination()
-      viewport.scrollTop = from + (dest - from) * easeInOutSine(t)
-      if (t < 1) {
-        followFrameRef.current = requestAnimationFrame(step)
-        return
-      }
-      viewport.scrollTop = destination()
-      followFrameRef.current = 0
-      programmaticRef.current = false
-    }
-    followFrameRef.current = requestAnimationFrame(step)
-  }, [scrollToEnd])
-
-  useLayoutEffect(() => {
-    pinnedRef.current = true
-    previousIdsRef.current = null
-    instantFollowRef.current = true
-    if (followFrameRef.current) {
-      cancelAnimationFrame(followFrameRef.current)
-      followFrameRef.current = 0
-      programmaticRef.current = false
-    }
-  }, [threadKey])
-
-  useLayoutEffect(() => {
-    const ids = messages.map((message) => message.renderId ?? message.id)
-    const previous = previousIdsRef.current
-    previousIdsRef.current = ids
-    // A composer send appends a user message. Re-pin even if reading earlier
-    // history had paused follow.
-    if (
-      previous &&
-      ids.length > previous.length &&
-      previous.every((id, index) => ids[index] === id) &&
-      messages.slice(previous.length).some((message) => message.role === "user")
-    ) {
-      pinnedRef.current = true
-      if (followFrameRef.current) {
-        cancelAnimationFrame(followFrameRef.current)
-        followFrameRef.current = 0
-      }
-    }
-    followLatest()
-  }, [followLatest, messages, mounted])
-
-  useLayoutEffect(() => {
-    const viewport = document.querySelector<HTMLElement>(
-      '[data-slot="message-scroller-viewport"]'
-    )
-    if (!viewport) {
-      return
-    }
-
-    const onScroll = () => {
-      if (programmaticRef.current) {
-        return
-      }
-
-      pinnedRef.current = isScrolledToEnd(viewport)
-    }
-
-    const stopGlide = () => {
-      if (!followFrameRef.current) return
-      cancelAnimationFrame(followFrameRef.current)
-      followFrameRef.current = 0
-      programmaticRef.current = false
-      pinnedRef.current = isScrolledToEnd(viewport)
-    }
-
-    viewport.addEventListener("scroll", onScroll, { passive: true })
-    viewport.addEventListener("wheel", stopGlide, { passive: true })
-    viewport.addEventListener("touchmove", stopGlide, { passive: true })
-
-    const content = viewport.querySelector(
-      '[data-slot="message-scroller-content"]'
-    )
-    const observed = new Set<Element>()
-    const observer = new ResizeObserver(followLatest)
-
-    const syncObserved = () => {
-      const next = new Set<Element>()
-      if (content) {
-        next.add(content)
-      }
-
-      const items = content?.querySelectorAll(
-        '[data-slot="message-scroller-item"]'
-      )
-      const last = items?.[items.length - 1]
-      if (last) {
-        next.add(last)
-      }
-
-      for (const element of observed) {
-        if (!next.has(element)) {
-          observer.unobserve(element)
-          observed.delete(element)
-        }
-      }
-
-      for (const element of next) {
-        if (!observed.has(element)) {
-          observer.observe(element)
-          observed.add(element)
-        }
-      }
-    }
-
-    syncObserved()
-    const mutations = new MutationObserver(syncObserved)
-    if (content) {
-      mutations.observe(content, { childList: true })
-    }
-
-    return () => {
-      if (followFrameRef.current) {
-        cancelAnimationFrame(followFrameRef.current)
-        followFrameRef.current = 0
-        programmaticRef.current = false
-      }
-      viewport.removeEventListener("scroll", onScroll)
-      viewport.removeEventListener("wheel", stopGlide)
-      viewport.removeEventListener("touchmove", stopGlide)
-      observer.disconnect()
-      mutations.disconnect()
-    }
-  }, [followLatest])
+  }, [])
 
   return null
 }

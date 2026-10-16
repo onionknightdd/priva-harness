@@ -1,8 +1,10 @@
 "use client"
 
-import { useContext, useEffect, useLayoutEffect, useRef, useState, createContext, type ReactNode } from "react"
+import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react"
+import { useContext, useEffect, useRef, useState, createContext, type ReactNode } from "react"
 
 import { TextCascade } from "@/components/motion/text-cascade"
+import { SPRING_SWAP } from "@/lib/ease"
 import { cn } from "@/lib/utils"
 
 export type StablePiece = {
@@ -36,83 +38,48 @@ export function StableText({
   shimmer?: boolean
   className?: string
 }) {
-  const live = useContext(LiveTextContext)
-  const seen = useRef<Set<string> | null>(null)
-  const entered = useRef<Set<string>>(new Set())
-  const current = new Set(pieces.map((piece) => piece.id))
-
-  if (seen.current === null) {
-    seen.current = new Set()
-    if (live) {
-      for (const id of current) entered.current.add(id)
-    }
-  } else {
-    for (const id of current) {
-      if (!seen.current.has(id) && live) entered.current.add(id)
-    }
-    for (const id of entered.current) {
-      if (!current.has(id)) entered.current.delete(id)
-    }
-  }
-  seen.current = current
+  const reduce = useReducedMotionConfig()
+  const content = pieces.map((piece) => (
+    <motion.span
+      key={piece.id}
+      aria-hidden="true"
+      className="inline-block whitespace-pre align-baseline"
+      initial={false}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={SPRING_SWAP}
+    >
+      <StablePieceView piece={piece} />
+    </motion.span>
+  ))
 
   return (
-    <span className={cn("inline min-w-0", shimmer && "status-line-shimmer", className)}>
-      {pieces.map((piece) => (
-        <StablePieceView
-          key={piece.id}
-          piece={piece}
-          enter={entered.current.has(piece.id)}
-        />
-      ))}
+    <span className={cn("relative inline min-w-0", shimmer && "status-line-shimmer", className)}>
+      <span className="sr-only">{pieces.map((piece) => piece.text).join("")}</span>
+      {/* Keep removed phrases visible while their replacements enter. Popped
+          layers don't stretch the new sentence or duplicate accessible text. */}
+      {reduce ? content : (
+        <AnimatePresence mode="popLayout" initial={false}>
+          {content}
+        </AnimatePresence>
+      )}
     </span>
   )
 }
 
 function StablePieceView({
   piece,
-  enter,
 }: {
   piece: StablePiece
-  enter: boolean
 }) {
+  const live = useContext(LiveTextContext)
+  const enter = useRef(live).current
   if (piece.steady) return <span className="whitespace-pre">{piece.text}</span>
-  if (enter) {
-    return (
-      <CascadeIn
-        text={piece.text}
-        className={piece.count ? "tabular-nums" : undefined}
-      />
-    )
-  }
-  if (piece.count) {
-    return (
-      <TextCascade
-        text={piece.text}
-        className="tabular-nums"
-      />
-    )
-  }
-  return <HeldLiteral text={piece.text} />
-}
-
-function HeldLiteral({ text }: { text: string }) {
-  const initial = useRef(text)
-  if (text !== initial.current) return <CascadeIn text={text} />
-  return <span className="whitespace-pre">{text}</span>
-}
-
-/** Plays the cascade once on mount, then again whenever `text` changes. */
-function CascadeIn({
-  text,
-  className,
-}: {
-  text: string
-  className?: string
-}) {
-  const [value, setValue] = useState("")
-  useLayoutEffect(() => {
-    setValue(text)
-  }, [text])
-  return <TextCascade text={value} className={className} />
+  return (
+    <TextCascade
+      text={piece.text}
+      animateOnMount={enter}
+      className={piece.count ? "tabular-nums" : undefined}
+    />
+  )
 }

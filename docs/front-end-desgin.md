@@ -95,6 +95,21 @@ npx shadcn add @beui/switch
 
 2026-10-16：过程状态里的计数按片段更新。状态行、diff 的 `+N` / `−N`、workflow 和 Agent 卡片上的阶段、Agent、百分比、token、工具次数和尝试次数，只让变化的数字或新出现的文字走 [TextCascade](../agent-ui/src/components/motion/text-cascade.tsx)。同一句里没变的字保持不动。思考耗时和 workflow 耗时仍是普通文本，不级联。第一次画出来的数字不播放进入动画；所在区域已经显示之后新出现的片段才级联进入。状态行的 shimmer 加在整句上。执行中前缀是「已运行 Xm Ys」，结束后和重放是「用时 Xm Ys」；运行时钟本身不级联。
 
+2026-10-17：状态短语替换时，`StableText` 通过 `AnimatePresence` 保留退出片段，
+以共享 `SPRING_SWAP` 淡出，与新文字的级联进入重叠，避免「正在读取 → 已读取」
+中间闪空。退出片段脱离布局；同一片段的改词始终复用 `TextCascade`，不再先渲染
+空字符串。未变化的片段和计时保持原位。辅助技术只读取一份当前完整文案，
+减少动态效果时立即更新，不保留旧文案。
+
+```text
+旧短语可见 -> 旧短语淡出 + 新短语级联进入 -> 仅新短语
+```
+
+在开发服务器打开 `/tests/features/agent-message/status-line-browser.html`，点击
+**Run status line checks**，逐帧检查运行到完成、数字变化、新增类别、混合工具、
+连续更新、旧文字清理及可访问文案。追加 `?zh&dark&reduced-motion` 检查中文深色和
+减少动态效果；页面包含窄容器样例，不连接实际模型或修改用户会话。
+
 ```sh
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/process-status.test.ts agent-ui/tests/features/agent-message/stable-text.test.tsx
 ```
@@ -245,6 +260,33 @@ Dark popup menus -> popover -> #353535
 ChatComposer 发出一条用户消息时重新跟随，并定位到这次发送后的最新消息。跟随用
 sine in-out 滑过去，大约 480–860ms，起止都放慢；滚动中的内容长高会纳入同一次滑动。
 减少动态效果、打开会话和用户滚轮或触摸时立即停止。
+
+2026-10-17：自动跟随与「回到底部」按钮统一由
+[`FollowLatestMessage`](../agent-ui/src/features/agent-message/components/follow-latest-message.tsx)
+控制，继续使用上述平滑曲线。消息列表关闭组件库的 `autoScroll`，turn 不再设置
+`scrollAnchor`，避免组件库先跳到底或重定位新 turn，下一帧又被动画拉回。
+首次会话定位等到正文真正挂载再执行；展开内容仍保留触发位置，上滚后暂停跟随，
+发出新的用户消息重新跟随。StickyFreeze 的吸附布局不依赖组件库的滚动锚点。
+
+```text
+内容增长 / 新用户消息 / 回到底部按钮
+                  |
+                  v
+       FollowLatestMessage -> 同一次平滑滚动
+                  ^
+            用户上滚：暂停
+```
+
+滚动回归（仓库根目录）：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/follow-latest-message.test.tsx agent-ui/tests/features/agent-message/expand-down-anchor.test.ts
+```
+
+在开发服务器打开 `/tests/features/agent-message/scroll-follow-browser.html`，点击
+**Run scroll follow checks**，逐帧检查内容增长、连续增长、新用户消息和回到底部按钮
+不会反向跳动，并检查手动上滚暂停跟随及首次定位。追加 `?reduced-motion&dark`
+检查减少动态效果和深色；使用隔离消息，不请求模型或修改用户会话。
 
 过程里的工具卡片默认收起，包括正在运行的读取、编辑、命令和其它工具。思考过程在
 流式期间仍可展开。

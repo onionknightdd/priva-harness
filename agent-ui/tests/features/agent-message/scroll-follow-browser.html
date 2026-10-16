@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Scroll follow checks</title>
+  </head>
+  <body>
+    <main class="mx-auto max-w-3xl space-y-4 p-5">
+      <h1 class="text-lg font-medium">Scroll follow checks</h1>
+      <div class="flex flex-wrap gap-3">
+        <button id="run" class="rounded border px-3 py-1.5">Run scroll follow checks</button>
+        <button id="grow" class="rounded border px-3 py-1.5">Grow latest message</button>
+        <button id="send" class="rounded border px-3 py-1.5">Append user turn</button>
+      </div>
+      <div id="fixtures"></div>
+      <pre id="results" role="status" class="whitespace-pre-wrap text-xs">Ready. Add ?reduced-motion or ?dark to inspect variants.</pre>
+      <p class="text-xs text-muted-foreground">Real scrolling components and browser geometry, isolated messages. Automated user-scroll checks dispatch wheel intent and set scrollTop; manual wheel scrolling is also available.</p>
+    </main>
+    <script type="module" src="./scroll-follow-browser.tsx"></script>
+  </body>
+</html>
