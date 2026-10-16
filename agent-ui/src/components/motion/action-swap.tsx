@@ -40,6 +40,8 @@ export interface ActionSwapTextProps {
   children: ReactNode;
   animation?: ActionSwapAnimation;
   className?: string;
+  /** Applied to each cascade glyph, and to the whole label when cascade falls back. */
+  glyphClassName?: string;
 }
 
 export interface ActionSwapIconProps {
@@ -162,6 +164,7 @@ export function ActionSwapText({
   children,
   animation = "blur",
   className,
+  glyphClassName,
 }: ActionSwapTextProps) {
   const reduce = useReducedMotion();
 
@@ -218,7 +221,10 @@ export function ActionSwapText({
                   key={i}
                   custom={i * CASCADE_STAGGER}
                   variants={CASCADE_LETTER_VARIANTS}
-                  className="inline-block whitespace-pre will-change-[opacity,filter,transform]"
+                  className={cn(
+                    "inline-block whitespace-pre will-change-[opacity,filter,transform]",
+                    glyphClassName,
+                  )}
                 >
                   {char}
                 </motion.span>
@@ -236,7 +242,10 @@ export function ActionSwapText({
             exit={reduce ? undefined : "exit"}
             // Truncation lives on the layer that holds the text — the layer
             // moves as a whole, so clipping it never eats the roll.
-            className="absolute inset-0 inline-block max-w-full truncate will-change-[opacity,filter,transform]"
+            className={cn(
+              "absolute inset-0 inline-block max-w-full truncate will-change-[opacity,filter,transform]",
+              glyphClassName,
+            )}
           >
             {children}
           </motion.span>

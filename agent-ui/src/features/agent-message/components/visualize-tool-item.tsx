@@ -33,7 +33,7 @@ export function VisualizeToolItem({
       kind="custom"
       status={status}
       icon={<PresentationIcon className="size-[1em]" />}
-      defaultOpen
+      defaultOpen={false}
       collapseOnComplete={false}
       framed={false}
       maxHeight={560}

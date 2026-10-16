@@ -8,9 +8,11 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Collapsible, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { LiveTextScope, StableText } from "@/components/motion/stable-text"
 import { EASE_OUT } from "@/lib/ease"
 import { focusRing } from "@/lib/surfaces"
 import { cn } from "@/lib/utils"
+import { countPhrasePieces, ratioPieces, slottedPieces, tokenPieces } from "../status-pieces"
 import { workflowDuration, workflowIsActive, workflowPhaseStatus, type WorkflowAgent, type WorkflowCard, type WorkflowPhase } from "../workflow-data"
 import { WorkflowAgentDetailPanel, type LoadWorkflowAgent } from "./workflow-agent-detail"
 import { WorkflowStatusMark } from "./workflow-status"
@@ -63,7 +65,10 @@ export function WorkflowPipeline({ workflow, loadDetail, initialAgentIndex }: { 
   const animate = everMounted && !reduce && !keyboard
   const transition = { duration: animate ? 0.18 : 0, ease: EASE_OUT }
 
+  const summary = slottedPieces(t, "agentMessage.workflowUI.stats", { phases: workflow.phases.length, agents: total })
+  if (total) summary.push({ id: "percent-gap", text: " · " }, { id: "percent", text: String(percentage), count: true }, { id: "percent-suffix", text: "%" })
   return (
+    <LiveTextScope>
     <Collapsible open={open} onOpenChange={setOpen} className={cn("@container my-2 w-full min-w-0", reduce && "[&_*]:transition-none [&_*]:animate-none [&_*]:scale-100")}
       onPointerDownCapture={() => setKeyboard(false)} onKeyDownCapture={() => setKeyboard(true)}>
       <Card data-testid="workflow-pipeline" className="gap-0 rounded-lg border border-border bg-background py-0 text-foreground shadow-none ring-0">
@@ -75,18 +80,18 @@ export function WorkflowPipeline({ workflow, loadDetail, initialAgentIndex }: { 
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
               <span className={workflowStatusColor[workflow.status]}>{t(`agentMessage.workflowUI.status.${workflow.status}`)}</span>
-              <span>{workflow.detailsUnavailable && !total ? t("agentMessage.workflowUI.noMetrics") : t("agentMessage.workflowUI.stats", { phases: workflow.phases.length, agents: total })}{total ? ` · ${percentage}%` : ""}</span>
+              <span>{workflow.detailsUnavailable && !total ? t("agentMessage.workflowUI.noMetrics") : <StableText pieces={summary} />}</span>
               {workflow.durationMs !== undefined ? <span>{workflowDuration(workflow.durationMs)}</span> : null}
-              {workflow.totalTokens !== undefined ? <span>{workflow.totalTokens.toLocaleString()} tokens</span> : null}
-              {workflow.totalToolCalls !== undefined ? <span>{t("agentMessage.workflowUI.toolCalls", { count: workflow.totalToolCalls })}</span> : null}
+              {workflow.totalTokens !== undefined ? <span><StableText pieces={tokenPieces(workflow.totalTokens)} /></span> : null}
+              {workflow.totalToolCalls !== undefined ? <span><StableText pieces={countPhrasePieces(t, "agentMessage.workflowUI.toolCalls", workflow.totalToolCalls, "tools")} /></span> : null}
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2.5 text-xs text-muted-foreground tabular-nums">
             {open && total > 0 ? <>
-              <span className="hidden items-center gap-1 @min-[480px]:inline-flex"><WorkflowStatusMark status="completed" />{completed}</span>
-              {running ? <span className="hidden items-center gap-1 @min-[480px]:inline-flex"><WorkflowStatusMark status="running" />{running}</span> : null}
+              <span className="hidden items-center gap-1 @min-[480px]:inline-flex"><WorkflowStatusMark status="completed" /><StableText pieces={[{ id: "completed", text: String(completed), count: true }]} /></span>
+              {running ? <span className="hidden items-center gap-1 @min-[480px]:inline-flex"><WorkflowStatusMark status="running" /><StableText pieces={[{ id: "running", text: String(running), count: true }]} /></span> : null}
             </> : <WorkflowStatusMark status={workflow.status} />}
-            {total ? <span className="hidden @min-[480px]:inline">{completed}/{total}</span> : null}
+            {total ? <span className="hidden @min-[480px]:inline"><StableText pieces={ratioPieces(completed, total)} /></span> : null}
             <ChevronDownIcon aria-hidden="true" className={cn("size-3.5 transition-transform duration-200 ease-out motion-reduce:transition-none", open && "rotate-180", (reduce || keyboard) && "transition-none")} />
           </div>
         </CollapsibleTrigger>
@@ -114,7 +119,7 @@ export function WorkflowPipeline({ workflow, loadDetail, initialAgentIndex }: { 
                             <span className="block truncate text-xs font-medium">{phase.title}</span>
                             {phase.detail ? <span className="mt-0.5 block line-clamp-2 text-xs text-muted-foreground">{phase.detail}</span> : null}
                           </span>
-                          <span className="text-xs text-muted-foreground tabular-nums">{agents.length}</span>
+                          <span className="text-xs text-muted-foreground tabular-nums"><StableText pieces={[{ id: "agents", text: String(agents.length), count: true }]} /></span>
                           <WorkflowStatusMark status={status} />
                           <ChevronDownIcon aria-hidden="true" className={cn("size-3 transition-transform duration-150 ease-out", !expanded && "-rotate-90", (reduce || keyboard) && "transition-none")} />
                         </CollapsibleTrigger>
@@ -168,6 +173,7 @@ export function WorkflowPipeline({ workflow, loadDetail, initialAgentIndex }: { 
         </AgentDisclosure>
       </Card>
     </Collapsible>
+    </LiveTextScope>
   )
 }
 

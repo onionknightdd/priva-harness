@@ -85,6 +85,20 @@ describe('foldThread thinking duration', () => {
       durationMs: 0,
     })
   })
+
+  it('keeps the run duration from the result, and otherwise the span of replay timestamps', () => {
+    const reported = foldThread([
+      frame({ type: 'assistant.delta', messageId: 'a1', blockId: 'text', index: 0, text: 'hi' }, '2024-01-01T00:00:01.000Z'),
+      frame({ type: 'run.completed', model: 'test', durationMs: 12_500 }, '2024-01-01T00:00:20.000Z'),
+    ])
+    expect(reported[0]?.durationMs).toBe(12_500)
+
+    const spanned = foldThread([
+      frame({ type: 'assistant.delta', messageId: 'a1', blockId: 'text', index: 0, text: 'hi' }, '2024-01-01T00:00:01.000Z'),
+      frame({ type: 'assistant.delta', messageId: 'a1', blockId: 'text', index: 0, text: ' there' }, '2024-01-01T00:00:06.000Z'),
+    ])
+    expect(spanned[0]?.durationMs).toBe(5_000)
+  })
 })
 
 function user(id: string, content: string): ThreadReplayItem {

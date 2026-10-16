@@ -43,7 +43,7 @@ export function McpToolItem({
         />
       )}
       status={status}
-      defaultOpen={status === "running"}
+      defaultOpen={false}
       copyText={copyText || undefined}
     >
       {input !== undefined || output || tool?.structuredContent !== undefined ? (

@@ -461,6 +461,17 @@ function KeepExpandAnchor({
 }
 
 const END_EDGE_PX = 8
+const FOLLOW_MIN_MS = 480
+const FOLLOW_MAX_MS = 860
+
+function followDuration(distance: number) {
+  return Math.min(FOLLOW_MAX_MS, Math.max(FOLLOW_MIN_MS, Math.abs(distance) * 0.9))
+}
+
+/** Sine in-out. Starts and settles slowly, so the glide doesn't kick off. */
+function easeInOutSine(t: number) {
+  return (1 - Math.cos(Math.PI * t)) / 2
+}
 
 function isScrolledToEnd(viewport: HTMLElement) {
   return (
@@ -480,25 +491,93 @@ function FollowLatestMessage({
   const { scrollToEnd } = useMessageScroller()
   const pinnedRef = useRef(true)
   const programmaticRef = useRef(false)
+  const previousIdsRef = useRef<string[] | null>(null)
+  const followFrameRef = useRef(0)
+  const instantFollowRef = useRef(true)
   const threadKey = messages[0]?.renderId ?? messages[0]?.id ?? "empty"
 
   const followLatest = useCallback(() => {
     if (!pinnedRef.current || isExpandScrollLocked()) {
       return
     }
+    const viewport = document.querySelector<HTMLElement>(
+      '[data-slot="message-scroller-viewport"]'
+    )
+    if (!viewport) {
+      scrollToEnd({ behavior: "auto" })
+      return
+    }
+    // A glide already in flight reads the live end, so streaming growth does
+    // not restart the ease on every resize.
+    if (followFrameRef.current) return
 
+    const destination = () => Math.max(0, viewport.scrollHeight - viewport.clientHeight)
+    const from = viewport.scrollTop
+    const distance = destination() - from
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    const instant = instantFollowRef.current
+    instantFollowRef.current = false
+    if (reduce || Math.abs(distance) < 1 || instant) {
+      programmaticRef.current = true
+      viewport.scrollTop = destination()
+      requestAnimationFrame(() => {
+        programmaticRef.current = false
+      })
+      return
+    }
+
+    const duration = followDuration(distance)
+    const start = performance.now()
     programmaticRef.current = true
-    scrollToEnd({ behavior: "auto" })
-    requestAnimationFrame(() => {
+    const step = (now: number) => {
+      if (!pinnedRef.current) {
+        followFrameRef.current = 0
+        programmaticRef.current = false
+        return
+      }
+      const t = Math.min(1, (now - start) / duration)
+      const dest = destination()
+      viewport.scrollTop = from + (dest - from) * easeInOutSine(t)
+      if (t < 1) {
+        followFrameRef.current = requestAnimationFrame(step)
+        return
+      }
+      viewport.scrollTop = destination()
+      followFrameRef.current = 0
       programmaticRef.current = false
-    })
+    }
+    followFrameRef.current = requestAnimationFrame(step)
   }, [scrollToEnd])
 
   useLayoutEffect(() => {
     pinnedRef.current = true
+    previousIdsRef.current = null
+    instantFollowRef.current = true
+    if (followFrameRef.current) {
+      cancelAnimationFrame(followFrameRef.current)
+      followFrameRef.current = 0
+      programmaticRef.current = false
+    }
   }, [threadKey])
 
   useLayoutEffect(() => {
+    const ids = messages.map((message) => message.renderId ?? message.id)
+    const previous = previousIdsRef.current
+    previousIdsRef.current = ids
+    // A composer send appends a user message. Re-pin even if reading earlier
+    // history had paused follow.
+    if (
+      previous &&
+      ids.length > previous.length &&
+      previous.every((id, index) => ids[index] === id) &&
+      messages.slice(previous.length).some((message) => message.role === "user")
+    ) {
+      pinnedRef.current = true
+      if (followFrameRef.current) {
+        cancelAnimationFrame(followFrameRef.current)
+        followFrameRef.current = 0
+      }
+    }
     followLatest()
   }, [followLatest, messages, mounted])
 
@@ -518,7 +597,17 @@ function FollowLatestMessage({
       pinnedRef.current = isScrolledToEnd(viewport)
     }
 
+    const stopGlide = () => {
+      if (!followFrameRef.current) return
+      cancelAnimationFrame(followFrameRef.current)
+      followFrameRef.current = 0
+      programmaticRef.current = false
+      pinnedRef.current = isScrolledToEnd(viewport)
+    }
+
     viewport.addEventListener("scroll", onScroll, { passive: true })
+    viewport.addEventListener("wheel", stopGlide, { passive: true })
+    viewport.addEventListener("touchmove", stopGlide, { passive: true })
 
     const content = viewport.querySelector(
       '[data-slot="message-scroller-content"]'
@@ -562,7 +651,14 @@ function FollowLatestMessage({
     }
 
     return () => {
+      if (followFrameRef.current) {
+        cancelAnimationFrame(followFrameRef.current)
+        followFrameRef.current = 0
+        programmaticRef.current = false
+      }
       viewport.removeEventListener("scroll", onScroll)
+      viewport.removeEventListener("wheel", stopGlide)
+      viewport.removeEventListener("touchmove", stopGlide)
       observer.disconnect()
       mutations.disconnect()
     }

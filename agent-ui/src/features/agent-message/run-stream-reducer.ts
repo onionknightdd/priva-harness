@@ -16,6 +16,7 @@ import {
   type WorkflowCard,
 } from "./agent-message-data"
 import { applyThreadCompactFrame, reconcileCompactMarker } from "./slash-command-envelope"
+import { settledRunDuration } from "./process-elapsed"
 import { frameAtMs, freezeMessageThinking, stampMessageThinkingTimes } from "./thinking-time"
 import { restoreUserMessageAttachments } from "./message-attachment-text"
 
@@ -172,6 +173,11 @@ export function applyThreadStreamFrame(
   return applyThreadCompactFrame(withAssistant, assistantId, frame)
 }
 
+function withSettledDuration(message: AgentThreadMessage, frame: StreamFrame): AgentThreadMessage {
+  const durationMs = settledRunDuration(message.createdAt, frame.ts, frame.durationMs)
+  return durationMs === undefined ? message : { ...message, durationMs }
+}
+
 function visibleFailureText(visible: string, failure: string): string {
   const shown = visible.trim()
   if (shown !== "" && /^[A-Za-z][A-Za-z0-9_]*$/u.test(failure)) return shown
@@ -207,13 +213,13 @@ function applyStreamContent(
   }
   if (frame.type === "error" || frame.type === "run.failed") {
     const errorText = visibleFailureText(textFromBlocks(message.blocks ?? []), frame.message?.trim() || message.content)
-    return { ...message, content: errorText, status: "error", workflows: settleForegroundWorkflows(message, "failed") }
+    return { ...withSettledDuration(message, frame), content: errorText, status: "error", workflows: settleForegroundWorkflows(message, "failed") }
   }
   if (frame.type === "run.aborted") {
-    return { ...message, status: "complete", workflows: settleForegroundWorkflows(message, "cancelled") }
+    return { ...withSettledDuration(message, frame), status: "complete", workflows: settleForegroundWorkflows(message, "cancelled") }
   }
   if (frame.type === "run.completed") {
-    return { ...message, status: "complete" }
+    return { ...withSettledDuration(message, frame), status: "complete" }
   }
 
   if (frame.type?.startsWith("workflow.")) {

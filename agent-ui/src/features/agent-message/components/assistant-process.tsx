@@ -26,6 +26,7 @@ import {
   type ToolResultStatus,
 } from "@/components/agents/tool-result"
 import { MessageResponse } from "@/components/ai-elements/message"
+import { LiveTextScope, StableText } from "@/components/motion/stable-text"
 import { Badge } from "@/components/ui/badge"
 import { writeClipboardText } from "@/lib/clipboard"
 import { FilePathLink } from "@/features/files/file-path-link"
@@ -60,7 +61,8 @@ import {
   fileDiffLinesFromUnified,
 } from "../file-diff-lines"
 import { parseFileReadOutput, isImageFilePath } from "../file-read-view"
-import { formatProcessStatusText } from "../process-status"
+import { useProcessElapsedLabel } from "../process-elapsed"
+import { processStatusPieces } from "../process-status"
 import {
   isStructuredOutputTool,
   isBashTool,
@@ -96,6 +98,7 @@ export function AssistantProcess({
 }) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
+  const elapsedLabel = useProcessElapsedLabel(message, isStreaming, t)
   const hasBackgroundTasks = message.blocks?.some((block) => block.type === "tool_use" && block.tool?.backgroundTask &&
     ["pending", "running", "paused"].includes(block.tool.backgroundTask.status)) ?? false
   const [open, setOpen] = React.useState(isStreaming || hasBackgroundTasks)
@@ -196,7 +199,7 @@ export function AssistantProcess({
     )
   }
 
-  const statusText = formatProcessStatusText(message, isStreaming, t)
+  const statusPieces = processStatusPieces(message, isStreaming, t, elapsedLabel)
 
   return (
     <motion.div
@@ -219,14 +222,13 @@ export function AssistantProcess({
             focusRing
           )}
         >
-          <span
-            className={cn(
-              "min-w-0 whitespace-normal",
-              isStreaming && "shimmer"
-            )}
-          >
-            {statusText}
-          </span>
+          <LiveTextScope>
+            <StableText
+              pieces={statusPieces}
+              shimmer={isStreaming}
+              className="whitespace-normal"
+            />
+          </LiveTextScope>
           <ChevronDownIcon
             className="size-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-200 group-hover/process-trigger:opacity-100 group-focus-visible/process-trigger:opacity-100 group-data-open/process:rotate-180 motion-reduce:transition-none"
           />
@@ -402,7 +404,7 @@ function SkillToolItem({ block }: { block: Extract<StreamBlock, { type: "tool_us
       title={stringInput(input, "skill") ?? ""}
       icon={<ScrollTextIcon className="size-[1em]" />}
       status={status}
-      defaultOpen={status === "running"}
+      defaultOpen={false}
       maxHeight={280}
       copyText={output || undefined}
       contentClassName="min-w-0"
@@ -429,7 +431,7 @@ function GenericToolItem({
       title={toolItemStatusLabel(block.name, running, t)}
       badge={label}
       badgeVariant={variant}
-      defaultOpen={running}
+      defaultOpen={false}
     >
       {output ? (
         <QuoteSelectable>
@@ -504,7 +506,7 @@ function BashToolItem({
               }
             : undefined
         }
-        defaultOpen={status === "running"}
+        defaultOpen={false}
         collapseOnComplete
       >
         {body}
@@ -663,7 +665,7 @@ function WriteToolItem({
             }
           : undefined
       }
-      defaultOpen={running}
+      defaultOpen={false}
       collapseOnComplete
     />
   )
@@ -707,7 +709,7 @@ function EditToolItem({
             }
           : undefined
       }
-      defaultOpen={running}
+      defaultOpen={false}
       collapseOnComplete
     />
   )
@@ -736,7 +738,7 @@ function ReadToolItem({
       view={view}
       status={running ? "streaming" : "complete"}
       language={languageFromPath(filePath)}
-      defaultOpen={running}
+      defaultOpen={false}
       collapseOnComplete
     />
   )

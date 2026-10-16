@@ -3,10 +3,12 @@ import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "re
 import { BotIcon, BrainIcon, CheckIcon, CopyIcon, LoaderCircleIcon, TerminalIcon, TriangleAlertIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/assistant-ui/tabs"
+import { LiveTextScope, StableText } from "@/components/motion/stable-text"
 import { Button } from "@/components/ui/button"
 import { EASE_OUT } from "@/lib/ease"
 import { writeClipboardText } from "@/lib/clipboard"
 import { cn } from "@/lib/utils"
+import { countPhrasePieces, tokenPieces } from "../status-pieces"
 import { workflowDuration, type WorkflowAgent, type WorkflowAgentDetail } from "../workflow-data"
 import { WorkflowStatusPill } from "./workflow-status"
 
@@ -82,6 +84,7 @@ export function WorkflowAgentDetailPanel({ agent, now, loadDetail, enabled }: {
   const duration = workflowDuration(agent.durationMs ?? (agent.state === "running" && agent.startedAt ? Math.max(0, now - agent.startedAt) : undefined))
 
   return (
+    <LiveTextScope>
     <section aria-label={t("agentMessage.workflowUI.agentDetails")} className={cn("min-w-0 text-foreground", reduce && "[&_*]:transition-none [&_*]:animate-none")}>
       <div className="px-3 py-2">
         <div className="flex items-start gap-2">
@@ -94,9 +97,9 @@ export function WorkflowAgentDetailPanel({ agent, now, loadDetail, enabled }: {
         {duration ? <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">{duration}</span> : null}
         {agent.lastToolName && agent.lastToolName.toLowerCase() !== "structuredoutput" ? <span className="inline-flex items-center gap-1.5"><TerminalIcon aria-hidden="true" className="size-3" />{agent.lastToolName}</span> : null}
         {agent.model ? <span>{agent.model}</span> : null}
-        {agent.tokens !== undefined ? <span>{agent.tokens.toLocaleString()} tokens</span> : null}
-        {agent.toolCalls !== undefined ? <span>{t("agentMessage.workflowUI.toolCalls", { count: agent.toolCalls })}</span> : null}
-        {agent.attempt !== undefined && agent.attempt > 1 ? <span>{t("agentMessage.workflowUI.attempt", { count: agent.attempt })}</span> : null}
+        {agent.tokens !== undefined ? <span><StableText pieces={tokenPieces(agent.tokens)} /></span> : null}
+        {agent.toolCalls !== undefined ? <span><StableText pieces={countPhrasePieces(t, "agentMessage.workflowUI.toolCalls", agent.toolCalls, "calls")} /></span> : null}
+        {agent.attempt !== undefined && agent.attempt > 1 ? <span><StableText pieces={countPhrasePieces(t, "agentMessage.workflowUI.attempt", agent.attempt, "attempt")} /></span> : null}
       </div>
       <Tabs value={tab} onValueChange={(value) => setTab(String(value))} className="gap-0 border-t border-border">
         <div className="flex items-center justify-between gap-2 px-3 pt-1.5">
@@ -155,5 +158,6 @@ export function WorkflowAgentDetailPanel({ agent, now, loadDetail, enabled }: {
       </Tabs>
 
     </section>
+    </LiveTextScope>
   )
 }

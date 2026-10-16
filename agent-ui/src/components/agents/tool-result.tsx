@@ -226,7 +226,7 @@ export function ToolResult({
   meta,
   icon,
   open,
-  defaultOpen = true,
+  defaultOpen = false,
   onOpenChange,
   collapseOnComplete = true,
   collapseDelayMs = 720,
@@ -269,9 +269,6 @@ export function ToolResult({
   );
 
   useEffect(() => {
-    if (previousStatus.current !== "running" && status === "running") {
-      setOpen(true);
-    }
     let closeTimer: number | undefined;
     if (
       previousStatus.current === "running" &&

@@ -7,6 +7,8 @@ export interface TextCascadeProps {
   /** Current text. Changing it cascades the letters to the new value. */
   text: string;
   className?: string;
+  /** Applied to each letter so a shimmer can paint the glyphs themselves. */
+  glyphClassName?: string;
 }
 
 /**
@@ -14,9 +16,14 @@ export interface TextCascadeProps {
  * as the new ones land, left to right. Same motion as the action-swap
  * cascade variant, with a text-first API.
  */
-export function TextCascade({ text, className }: TextCascadeProps) {
+export function TextCascade({ text, className, glyphClassName }: TextCascadeProps) {
   return (
-    <ActionSwapText value={text} animation="cascade" className={className}>
+    <ActionSwapText
+      value={text}
+      animation="cascade"
+      className={className}
+      glyphClassName={glyphClassName}
+    >
       {text}
     </ActionSwapText>
   );

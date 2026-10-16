@@ -66,6 +66,8 @@
     --color-workspace-tab-active: var(--workspace-tab-active);
     --color-tabs-background: var(--tabs-background);
     --color-user-message: var(--user-message);
+    --color-message-error: var(--message-error);
+    --color-message-error-foreground: var(--message-error-foreground);
     --color-status-idle: var(--status-idle);
     --color-status-running: var(--status-running);
     --color-status-warm: var(--status-warm);
@@ -140,6 +142,8 @@
     --workspace-tab-active: oklch(0.9 0 0);
     --tabs-background: rgb(229 229 229);
     --user-message: rgb(234 243 253);
+    --message-error: oklch(0.94 0.045 25);
+    --message-error-foreground: oklch(0.42 0.16 25);
     --status-idle: var(--muted-foreground);
     --status-running: oklch(0.541 0.217 293.01);
     --status-warm: oklch(0.75 0.1 232);
@@ -205,6 +209,8 @@
     --workspace-tab-active: oklch(0.32 0 0);
     --tabs-background: var(--muted);
     --user-message: rgb(34 61 114);
+    --message-error: oklch(0.32 0.09 25);
+    --message-error-foreground: oklch(0.88 0.1 25);
     --status-idle: var(--muted-foreground);
     --status-running: oklch(0.702 0.161 293.54);
     --status-warm: oklch(0.78 0.1 232);
@@ -244,6 +250,13 @@
 #root {
   height: 100svh;
   overflow: hidden;
+}
+
+/* Beats the assistant/user group text color, which otherwise keeps error copy in the normal foreground. */
+.group.is-assistant .message-error,
+.group.is-user .message-error {
+  background-color: var(--message-error);
+  color: var(--message-error-foreground);
 }
 
 .rich-file-preview {
@@ -445,6 +458,43 @@
   }
   18%, 42% {
     opacity: 1;
+  }
+}
+
+/* One sweep across the whole status line. The text-clip shimmer utility
+   paints only in-flow glyphs and hides the cascade layers. */
+.status-line-shimmer {
+  -webkit-mask-image: linear-gradient(
+    105deg,
+    #000 0%,
+    #000 40%,
+    rgb(0 0 0 / 0.4) 50%,
+    #000 60%,
+    #000 100%
+  );
+  mask-image: linear-gradient(
+    105deg,
+    #000 0%,
+    #000 40%,
+    rgb(0 0 0 / 0.4) 50%,
+    #000 60%,
+    #000 100%
+  );
+  -webkit-mask-size: 200% 100%;
+  mask-size: 200% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  animation: status-line-shimmer 2.4s linear infinite;
+}
+
+@keyframes status-line-shimmer {
+  from {
+    -webkit-mask-position: 100% 0;
+    mask-position: 100% 0;
+  }
+  to {
+    -webkit-mask-position: 0% 0;
+    mask-position: 0% 0;
   }
 }
 

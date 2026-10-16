@@ -10,6 +10,7 @@ import {
   mergeCompactMarker,
   type CompactMarker,
 } from './compact-command.js'
+import { settledRunDuration } from './run-duration.js'
 import { freezeMessageThinking, stampMessageThinkingTimes } from './thinking-time.js'
 import {
   threadHasVisibleContent,
@@ -42,9 +43,11 @@ export function foldThread(items: readonly ThreadReplayItem[]): ThreadMessage[] 
       current,
       lastAtMs ?? Date.parse(current.createdAt),
     )
+    const durationMs = current.durationMs ?? settledRunDuration(current.createdAt, lastAtMs)
     const completed: ThreadMessage = {
       ...frozen,
       status: frozen.status === 'error' ? 'error' : 'complete',
+      ...(durationMs === undefined ? {} : { durationMs }),
     }
     if (threadHasVisibleContent(completed)) {
       messages.push(completed)
@@ -121,6 +124,16 @@ export function foldThread(items: readonly ThreadReplayItem[]): ThreadMessage[] 
       updateCompact({ phase: item.event.type === 'session.compaction_failed' ? 'failed' : 'cancelled',
         ...(item.event.message === undefined ? {} : { message: item.event.message }) }, item.createdAt)
       continue
+    }
+
+    if (item.event.type === 'run.completed' || item.event.type === 'run.failed' || item.event.type === 'run.aborted') {
+      const atMs = atMsOf(item.createdAt)
+      if (atMs !== undefined) lastAtMs = atMs
+      if (current) {
+        const durationMs = settledRunDuration(current.createdAt, atMs, item.event.durationMs)
+        if (durationMs !== undefined) current = { ...current, durationMs }
+      }
+      if (item.event.type === 'run.completed') continue
     }
 
     if (PASS_THROUGH_TYPES.has(item.event.type)) continue

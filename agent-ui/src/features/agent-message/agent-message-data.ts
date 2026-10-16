@@ -116,6 +116,8 @@ export type AgentThreadMessage = {
   content: string
   attachments?: MessageAttachment[]
   createdAt: string
+  /** Wall-clock length of the finished run. Absent while the run is still streaming. */
+  durationMs?: number
   status: AgentMessageStatus
   transcriptUuid?: string
   modelChange?: { model?: string; output?: string }

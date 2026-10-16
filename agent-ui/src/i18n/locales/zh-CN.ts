@@ -350,6 +350,8 @@ export const zhCN = {
     sendFailed: "发送失败",
     scrollToLatest: "跳到最新消息",
     thinking: "工作中……",
+    runningFor: "已运行 {{time}}",
+    elapsedFor: "用时 {{time}}",
     thoughtRunning: "思考中……",
     thoughtDone: "已思考",
     nestedAgent: "嵌套 Agent",

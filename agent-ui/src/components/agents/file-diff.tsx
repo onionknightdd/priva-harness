@@ -33,6 +33,7 @@ import {
   TOOL_OUTPUT_INSET_CLASS,
 } from "@/components/agents/tool-output-frame";
 import { ActionSwapRollText } from "@/components/motion/action-swap-roll";
+import { LiveTextScope, StableText } from "@/components/motion/stable-text";
 import { OverflowMarquee } from "@/components/motion/overflow-marquee";
 import { writeClipboardText } from "@/lib/clipboard";
 import { SPRING_PRESS, SPRING_SWAP } from "@/lib/ease";
@@ -103,7 +104,7 @@ export function FileDiff({
   tool,
   status = "streaming",
   open,
-  defaultOpen = true,
+  defaultOpen = false,
   onOpenChange,
   collapseOnComplete = true,
   collapseDelayMs = 720,
@@ -156,9 +157,6 @@ export function FileDiff({
   );
 
   useEffect(() => {
-    if (previousStatus.current !== "streaming" && status === "streaming") {
-      setOpen(true);
-    }
     let closeTimer: number | undefined;
     if (
       previousStatus.current === "streaming" &&
@@ -217,6 +215,7 @@ export function FileDiff({
   }, [copyText, onCopy]);
 
   return (
+    <LiveTextScope>
     <div
       data-state={status}
       aria-busy={streaming}
@@ -262,12 +261,22 @@ export function FileDiff({
             </span>
             {additions > 0 ? (
               <span className="shrink-0 font-normal text-status-success tabular-nums lining-nums">
-                {`+${String(additions)}`}
+                <StableText
+                  pieces={[
+                    { id: "sign", text: "+" },
+                    { id: "n", text: String(additions), count: true },
+                  ]}
+                />
               </span>
             ) : null}
             {deletions > 0 ? (
               <span className="shrink-0 font-normal text-status-error tabular-nums lining-nums">
-                {`−${String(deletions)}`}
+                <StableText
+                  pieces={[
+                    { id: "sign", text: "−" },
+                    { id: "n", text: String(deletions), count: true },
+                  ]}
+                />
               </span>
             ) : null}
           </span>
@@ -395,5 +404,6 @@ export function FileDiff({
         </div>
       </AgentDisclosure>
     </div>
+    </LiveTextScope>
   );
 }

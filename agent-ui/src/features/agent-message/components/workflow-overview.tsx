@@ -7,9 +7,11 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Collapsible, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { TooltipHint, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { LiveTextScope, StableText } from "@/components/motion/stable-text"
 import { EASE_OUT } from "@/lib/ease"
 import { focusRing } from "@/lib/surfaces"
 import { cn } from "@/lib/utils"
+import { countPhrasePieces, slottedPieces, tokenPieces } from "../status-pieces"
 import { workflowDuration, workflowIsActive, workflowPhaseStatus, workflowStatusColor, type WorkflowCard } from "../workflow-data"
 import { WorkflowStatusMark, WorkflowStatusPill } from "./workflow-status"
 
@@ -31,7 +33,9 @@ export function WorkflowOverview({ workflow, onOpenAgent }: { workflow: Workflow
   const agentsFor = (index: number) => index === -1 ? unassigned : workflow.agents.filter((agent) => agent.phaseIndex === index)
   const completed = workflow.agents.filter((agent) => agent.state === "completed").length
   const animate = !reduce && !keyboard
+  const percentage = workflow.agents.length ? Math.round(completed / workflow.agents.length * 100) : 0
   return (
+    <LiveTextScope>
     <Collapsible open={open} onOpenChange={setOpen} className={cn("@container my-2 min-w-0", reduce && "[&_*]:transition-none [&_*]:animate-none")}
       onPointerDownCapture={() => setKeyboard(false)} onKeyDownCapture={() => setKeyboard(true)}>
       <Card data-testid="workflow-overview" className="gap-0 rounded-lg border border-border bg-background py-0 shadow-none ring-0">
@@ -43,11 +47,11 @@ export function WorkflowOverview({ workflow, onOpenAgent }: { workflow: Workflow
             </div>
             <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
               <span className={workflowStatusColor[workflow.status]}>{t(`agentMessage.workflowUI.status.${workflow.status}`)}</span>
-              <span>{workflow.detailsUnavailable && !workflow.agents.length ? t("agentMessage.workflowUI.noMetrics") : t("agentMessage.workflowUI.stats", { phases: workflow.phases.length, agents: workflow.agents.length })}</span>
-              {workflow.agents.length ? <span>{Math.round(completed / workflow.agents.length * 100)}%</span> : null}
+              <span>{workflow.detailsUnavailable && !workflow.agents.length ? t("agentMessage.workflowUI.noMetrics") : <StableText pieces={slottedPieces(t, "agentMessage.workflowUI.stats", { phases: workflow.phases.length, agents: workflow.agents.length })} />}</span>
+              {workflow.agents.length ? <span><StableText pieces={[{ id: "value", text: String(percentage), count: true }, { id: "suffix", text: "%" }]} /></span> : null}
               {workflow.durationMs !== undefined ? <span>{workflowDuration(workflow.durationMs)}</span> : null}
-              {workflow.totalTokens !== undefined ? <span>{workflow.totalTokens.toLocaleString()} tokens</span> : null}
-              {workflow.totalToolCalls !== undefined ? <span>{t("agentMessage.workflowUI.toolCalls", { count: workflow.totalToolCalls })}</span> : null}
+              {workflow.totalTokens !== undefined ? <span><StableText pieces={tokenPieces(workflow.totalTokens)} /></span> : null}
+              {workflow.totalToolCalls !== undefined ? <span><StableText pieces={countPhrasePieces(t, "agentMessage.workflowUI.toolCalls", workflow.totalToolCalls, "tools")} /></span> : null}
             </div>
           </div>
           <ChevronDownIcon aria-hidden="true" className={cn("size-3.5 shrink-0 transition-transform duration-150 ease-out", open && "rotate-180", !animate && "transition-none")} />
@@ -64,7 +68,7 @@ export function WorkflowOverview({ workflow, onOpenAgent }: { workflow: Workflow
                 }}>
                 <LayersIcon aria-hidden="true" className="size-3 shrink-0 text-muted-foreground" />
                 <span className="min-w-0 flex-1 break-words">{item.title}</span>
-                <span className="text-muted-foreground tabular-nums">{agentsFor(item.index).length}</span>
+                <span className="text-muted-foreground tabular-nums"><StableText pieces={[{ id: "agents", text: String(agentsFor(item.index).length), count: true }]} /></span>
                 <WorkflowStatusMark status={workflowPhaseStatus(agentsFor(item.index), workflow.status)} />
               </Button>)}
             </nav>
@@ -84,8 +88,8 @@ export function WorkflowOverview({ workflow, onOpenAgent }: { workflow: Workflow
                     <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 font-mono text-xs text-muted-foreground">
                       {agent.model ? <span>{agent.model}</span> : null}
                       {agent.durationMs !== undefined ? <span>{workflowDuration(agent.durationMs)}</span> : null}
-                      {agent.tokens !== undefined ? <span>{agent.tokens.toLocaleString()} tokens</span> : null}
-                      {agent.toolCalls !== undefined ? <span>{t("agentMessage.workflowUI.toolCalls", { count: agent.toolCalls })}</span> : null}
+                      {agent.tokens !== undefined ? <span><StableText pieces={tokenPieces(agent.tokens)} /></span> : null}
+                      {agent.toolCalls !== undefined ? <span><StableText pieces={countPhrasePieces(t, "agentMessage.workflowUI.toolCalls", agent.toolCalls, "calls")} /></span> : null}
                       {agent.lastToolName && agent.lastToolName.toLowerCase() !== "structuredoutput" ? <span>{agent.lastToolName}</span> : null}
                     </div>
                   </div>
@@ -100,5 +104,6 @@ export function WorkflowOverview({ workflow, onOpenAgent }: { workflow: Workflow
         </AgentDisclosure>
       </Card>
     </Collapsible>
+    </LiveTextScope>
   )
 }

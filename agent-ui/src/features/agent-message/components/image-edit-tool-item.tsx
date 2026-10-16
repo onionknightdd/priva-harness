@@ -52,7 +52,7 @@ export function ImageEditToolItem({ block, cwd }: { block: ImageToolBlock; cwd: 
       title=""
       icon={<ImagesIcon className="size-[1em]" />}
       status={status}
-      defaultOpen={running}
+      defaultOpen={false}
       collapseOnComplete={false}
       framed={false}
       maxHeight={640}

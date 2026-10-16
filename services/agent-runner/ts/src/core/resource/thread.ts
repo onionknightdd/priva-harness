@@ -102,6 +102,8 @@ export interface ThreadMessage {
   readonly content: string
   readonly attachments?: readonly UserAttachment[]
   readonly createdAt: string
+  /** Wall-clock length of the finished run. Absent while the run is still streaming. */
+  readonly durationMs?: number
   readonly status: 'streaming' | 'complete' | 'error'
   readonly transcriptUuid?: string
   readonly blocks?: readonly ThreadBlock[]

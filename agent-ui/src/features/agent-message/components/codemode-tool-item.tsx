@@ -22,7 +22,7 @@ export function CodemodeToolItem({ block, children }: { block: ToolBlock; childr
   const outputImages = tool?.artifacts?.filter((artifact) => !modelPaths.has(artifact.path)) ?? []
   return (
     <ToolResult tool={null} title="Codemode" icon={<Code2 className="size-[1em]" />} status={status}
-      defaultOpen collapseOnComplete={false} maxHeight={640} contentClassName="min-w-0 space-y-3" copyText={tool?.output}>
+      defaultOpen={false} collapseOnComplete={false} maxHeight={640} contentClassName="min-w-0 space-y-3" copyText={tool?.output}>
       {code ? <ToolResult tool={null} title="JavaScript" icon={<Code2 className="size-[1em]" />} status={status} defaultOpen={false} copyText={code}>
         <StructuredResult value={code} raw />
       </ToolResult> : null}
@@ -43,7 +43,7 @@ function ModelCallItem({ call }: { call: ModelInvocation }) {
   return (
     <ToolResult tool={t(image ? "toolCard.imageModel" : "toolCard.classifierModel")} title={`${call.provider}/${call.model}`}
       icon={image ? <ImageIcon className="size-[1em]" /> : <Braces className="size-[1em]" />}
-      status={status} defaultOpen collapseOnComplete={false} maxHeight={560} contentClassName="min-w-0 space-y-2"
+      status={status} defaultOpen={false} collapseOnComplete={false} maxHeight={560} contentClassName="min-w-0 space-y-2"
       meta={call.durationMs !== undefined ? `${(call.durationMs / 1000).toFixed(1)}s` : undefined}>
       {status === "running" ? <Skeleton className="h-5 w-2/3 motion-reduce:animate-none" role="status"><span className="sr-only">{t("toolCard.running")}</span></Skeleton> : null}
       {call.error ? <p role="alert" className="whitespace-pre-wrap break-words text-sm text-destructive [overflow-wrap:anywhere]">{call.error}</p> : null}

@@ -93,6 +93,12 @@ npx shadcn add @beui/switch
 `lib/utils.ts`。再次安装或升级时须审阅差异，保留上述本地字段，并运行下面的 Switch
 浏览器检查。
 
+2026-10-16：过程状态里的计数按片段更新。状态行、diff 的 `+N` / `−N`、workflow 和 Agent 卡片上的阶段、Agent、百分比、token、工具次数和尝试次数，只让变化的数字或新出现的文字走 [TextCascade](../agent-ui/src/components/motion/text-cascade.tsx)。同一句里没变的字保持不动。思考耗时和 workflow 耗时仍是普通文本，不级联。第一次画出来的数字不播放进入动画；所在区域已经显示之后新出现的片段才级联进入。状态行的 shimmer 加在整句上。执行中前缀是「已运行 Xm Ys」，结束后和重放是「用时 Xm Ys」；运行时钟本身不级联。
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/process-status.test.ts agent-ui/tests/features/agent-message/stable-text.test.tsx
+```
+
 ### Tab 与侧栏底色
 
 2026-09-09：按用户确认，以下背景色仅用于浅色主题。Tab 修改整组标签栏的底色；
@@ -235,7 +241,13 @@ Dark popup menus -> popover -> #353535
 消息底部使用 `FollowLatestMessage` 和 `ThreadEndSpacer`：自动跟随滚动至末尾，末尾
 留白为消息滚动区域高度的 30%。内容足够高时，最新消息容器底边位于该区域约 70% 高度处；
 内容较短时仍从顶部排列，底边可能更靠上。该区域位于页头下、输入框上，输入框高度
-变化也会改变落点。用户上滚后暂停跟随，回到滚动底部或点击向下按钮恢复。
+变化也会改变落点。用户上滚后暂停跟随，回到滚动底部或点击向下按钮恢复。从
+ChatComposer 发出一条用户消息时重新跟随，并定位到这次发送后的最新消息。跟随用
+sine in-out 滑过去，大约 480–860ms，起止都放慢；滚动中的内容长高会纳入同一次滑动。
+减少动态效果、打开会话和用户滚轮或触摸时立即停止。
+
+过程里的工具卡片默认收起，包括正在运行的读取、编辑、命令和其它工具。思考过程在
+流式期间仍可展开。
 
 ```text
 Header  [短名称] [复制] [更多]

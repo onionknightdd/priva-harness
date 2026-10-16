@@ -351,6 +351,8 @@ export const en = {
     sendFailed: "Failed to send",
     scrollToLatest: "Scroll to latest",
     thinking: "Working…",
+    runningFor: "Running for {{time}}",
+    elapsedFor: "Took {{time}}",
     thoughtRunning: "Thinking…",
     thoughtDone: "Thought",
     nestedAgent: "Nested agent",

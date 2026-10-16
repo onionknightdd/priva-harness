@@ -1,10 +1,11 @@
 import { useTranslation } from "react-i18next"
 
-import { ActionSwapRollText } from "@/components/motion/action-swap-roll"
+import { LiveTextScope, StableText } from "@/components/motion/stable-text"
 import { LoadingState } from "@/components/ui/loading-state"
 
 import type { AgentThreadMessage } from "../agent-message-data"
-import { formatProcessStatusText } from "../process-status"
+import { useProcessElapsedLabel } from "../process-elapsed"
+import { processStatusPieces } from "../process-status"
 
 export function WorkingStatusLine({
   message,
@@ -12,7 +13,8 @@ export function WorkingStatusLine({
   message: AgentThreadMessage
 }) {
   const { t } = useTranslation()
-  const statusText = formatProcessStatusText(message, true, t)
+  const elapsedLabel = useProcessElapsedLabel(message, true, t)
+  const pieces = processStatusPieces(message, true, t, elapsedLabel)
 
   return (
     <div
@@ -21,12 +23,9 @@ export function WorkingStatusLine({
     >
       <div className="flex max-w-full min-w-0 items-center gap-2 py-0.5 text-left text-ui leading-snug font-medium text-muted-foreground/70">
         <LoadingState />
-        {/* Same roll as tool-card titles, so "Running…" → "Reading 2 files"
-            reads as one status updating rather than text being replaced. The
-            shimmer sits inside the rolling layer so its text clip survives. */}
-        <ActionSwapRollText value={statusText} className="max-w-full">
-          <span className="shimmer">{statusText}</span>
-        </ActionSwapRollText>
+        <LiveTextScope>
+          <StableText pieces={pieces} shimmer className="whitespace-normal" />
+        </LiveTextScope>
       </div>
     </div>
   )

@@ -27,7 +27,7 @@ export function ImageGenToolItem({ block }: { block: ImageToolBlock }) {
       title=""
       icon={<ImageIcon className="size-[1em]" />}
       status={status}
-      defaultOpen
+      defaultOpen={false}
       collapseOnComplete={false}
       framed={false}
       maxHeight={560}
@@ -76,7 +76,7 @@ export function ImageReadToolItem({ block, cwd }: { block: ImageToolBlock; cwd: 
       title=""
       icon={<AnalyzingImage active={running} className="size-[1em]" />}
       status={status}
-      defaultOpen={running}
+      defaultOpen={false}
       collapseOnComplete={false}
       framed={false}
       maxHeight={560}

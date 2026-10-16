@@ -65,7 +65,7 @@ export function FileRead({
   status = "streaming",
   language = "text",
   open,
-  defaultOpen = true,
+  defaultOpen = false,
   onOpenChange,
   collapseOnComplete = true,
   collapseDelayMs = 720,
@@ -103,9 +103,6 @@ export function FileRead({
   )
 
   useEffect(() => {
-    if (previousStatus.current !== "streaming" && status === "streaming") {
-      setOpen(true)
-    }
     let closeTimer: number | undefined
     if (
       previousStatus.current === "streaming" &&

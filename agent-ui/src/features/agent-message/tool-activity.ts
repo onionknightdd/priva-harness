@@ -183,25 +183,41 @@ export function countToolActivity(
   return counts
 }
 
-export function formatToolActivitySummary(
-  blocks: readonly StreamBlock[],
-  t: TFunction
-): string {
+export function toolActivityClauses(
+  blocks: readonly StreamBlock[]
+): { id: string; labelKey: string; count: number }[] {
   const counts = countToolActivity(blocks)
-  const parts: string[] = []
+  const clauses: { id: string; labelKey: string; count: number }[] = []
   for (const kind of KIND_ORDER) {
     const running = counts[kind].running
     if (running > 0) {
-      parts.push(t(countKey(RUNNING_KEYS[kind], running), { count: running }))
+      clauses.push({
+        id: `${kind}:running`,
+        labelKey: countKey(RUNNING_KEYS[kind], running),
+        count: running,
+      })
     }
   }
   for (const kind of KIND_ORDER) {
     const completed = counts[kind].completed
     if (completed > 0) {
-      parts.push(t(countKey(DONE_KEYS[kind], completed), { count: completed }))
+      clauses.push({
+        id: `${kind}:done`,
+        labelKey: countKey(DONE_KEYS[kind], completed),
+        count: completed,
+      })
     }
   }
-  return parts.join(t("agentMessage.toolSummary.separator"))
+  return clauses
+}
+
+export function formatToolActivitySummary(
+  blocks: readonly StreamBlock[],
+  t: TFunction
+): string {
+  return toolActivityClauses(blocks)
+    .map((clause) => t(clause.labelKey, { count: clause.count }))
+    .join(t("agentMessage.toolSummary.separator"))
 }
 
 function countKey(

@@ -6,6 +6,7 @@ import type { SessionRef } from '../../core/contract/agent-provider.js'
 import { STREAM_PROTOCOL_VERSION, isRunResultEvent, type AgentEvent, type StreamFrame, type SessionConfiguration } from '../../core/event/agent-event.js'
 import { BackgroundTasks, taskIsActive, taskNotificationReplyTarget, type BackgroundTask } from '../../core/resource/background-task.js'
 import { applyStreamFrame, emptyAssistantMessage } from '../../core/resource/apply-stream-frame.js'
+import { settledRunDuration } from '../../core/resource/run-duration.js'
 import { freezeMessageThinking, stampMessageThinkingTimes } from '../../core/resource/thinking-time.js'
 import { taskReplyOwner, type ThreadMessage } from '../../core/resource/thread.js'
 import { isCompactCommandContent } from '../../core/resource/compact-command.js'
@@ -270,7 +271,14 @@ export class SessionStream {
       if (!owns) return message
       let next = stampMessageThinkingTimes(message, applyStreamFrame(message, frame), frame, frame.ts)
       if (frame.type.startsWith('assistant.') && !parent) next = { ...next, status: 'streaming' }
-      if (isRunResultEvent(frame)) next = { ...freezeMessageThinking(next, frame.ts), status: next.status === 'error' ? 'error' : 'complete' }
+      if (isRunResultEvent(frame)) {
+        const durationMs = settledRunDuration(message.createdAt, frame.ts, frame.durationMs)
+        next = {
+          ...freezeMessageThinking(next, frame.ts),
+          status: next.status === 'error' ? 'error' : 'complete',
+          ...(durationMs === undefined ? {} : { durationMs }),
+        }
+      }
       return this.tasks.list().reduce((message, task) => applyStreamFrame(message, { type: 'task.updated', task }), next)
     })
     if (isRunResultEvent(frame)) {
