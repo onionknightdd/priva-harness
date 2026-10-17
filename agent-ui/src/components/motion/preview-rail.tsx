@@ -6,15 +6,11 @@ import {
   type MouseEvent,
   type PointerEvent,
   type ReactNode,
-  useCallback,
-  useId,
+  useEffect,
   useRef,
   useState,
 } from "react";
 import { EASE_OUT, SPRING_LAYOUT } from "@/lib/ease";
-import { useDismiss } from "@/lib/hooks/use-dismiss";
-import { useHoverGesture } from "@/lib/hooks/use-hover-gesture";
-import { useTapGesture } from "@/lib/hooks/use-tap-gesture";
 import { cn } from "@/lib/utils";
 
 export interface PreviewRailItem {
@@ -46,6 +42,9 @@ export interface PreviewRailProps {
   previewContainerClassName?: string;
   previewClassName?: string;
 }
+
+type Preview = { id: string; source: "hover" | "focus" | "tap" };
+type Press = { id: string; pointerType: string; previewed: boolean };
 
 function DefaultPreview({ item }: { item: PreviewRailItem }) {
   return (
@@ -90,40 +89,50 @@ export function PreviewRail({
   previewContainerClassName,
   previewClassName,
 }: PreviewRailProps) {
-  const uid = useId();
   const reduce = useReducedMotion();
   const rootRef = useRef<HTMLDivElement>(null);
   const [internalActiveId, setInternalActiveId] = useState(
     defaultActiveId ?? items[0]?.id ?? "",
   );
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
-  // A finger cannot hover, so a tap lights the tick instead. Kept apart from
-  // the hovered one: they end in different ways, and a stray mouse move must
-  // not clear a tick the keyboard or a tap chose.
-  const [pinnedId, setPinnedId] = useState<string | null>(null);
-  const [focusedId, setFocusedId] = useState<string | null>(null);
-  // A click carries no pointerType, so the pointerdown before it is what says
-  // whether the activation was a tap. Keyboard activation has none at all.
-  const tap = useTapGesture<boolean>();
-  const hover = useHoverGesture();
+  // The latest interaction owns the card; leaving it must not restore an
+  // older hover, focus, or tap behind the currently displayed preview.
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const pressRef = useRef<Press | null>(null);
 
-  const clearPinned = useCallback(() => setPinnedId(null), []);
-
-  // The next tap outside the rail stands in for the pointer leaving it. The
-  // card is a preview, so that tap passes through to whatever it landed on.
-  useDismiss(pinnedId !== null, clearPinned, rootRef);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      pressRef.current = null;
+      if (event.key === "Escape") setPreview(null);
+    };
+    const onPointerDown = (event: globalThis.PointerEvent) => {
+      if (event.target instanceof Node && rootRef.current?.contains(event.target)) return;
+      pressRef.current = null;
+      setPreview(null);
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("pointerdown", onPointerDown, true);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("pointerdown", onPointerDown, true);
+    };
+  }, []);
 
   const requestedActiveId = activeId ?? internalActiveId;
   const selectedId = items.some((item) => item.id === requestedActiveId)
     ? requestedActiveId
     : (items[0]?.id ?? "");
-  const displayedId = hoveredId ?? pinnedId ?? focusedId ?? "";
+  const displayedId = preview?.id ?? "";
   const highlightedId = displayedId || (highlightActive ? selectedId : "");
   const displayedIndex = items.findIndex((item) => item.id === highlightedId);
   const rowTemplate = items.length
     ? `repeat(${items.length}, ${itemSize}px)`
     : undefined;
   const isHorizontal = orientation === "horizontal";
+  const previewItem = items.find((item) => item.id === displayedId);
+  const previewOffset = (displayedIndex - (items.length - 1) / 2) * itemSize;
+  const previewTransform = isHorizontal
+    ? `translateX(${previewOffset}px)`
+    : `translateY(${previewOffset}px)`;
 
   const selectItem = (id: string) => {
     if (activeId === undefined) setInternalActiveId(id);
@@ -131,17 +140,15 @@ export function PreviewRail({
   };
 
   return (
-    <motion.div
-      layoutRoot
+    <div
       ref={rootRef}
       onBlur={(event) => {
-        // Both tick sources leave with the focus: a tap does not always land
-        // focus, but when it does, tabbing away must not strand the card.
         if (!event.currentTarget.contains(event.relatedTarget)) {
-          setFocusedId(null);
-          setPinnedId(null);
+          pressRef.current = null;
+          setPreview((current) => current?.source === "hover" ? current : null);
         }
       }}
+      onPointerCancel={() => { pressRef.current = null; }}
       className={cn(
         "isolate relative flex w-full overflow-visible",
         isHorizontal
@@ -153,9 +160,11 @@ export function PreviewRail({
       <nav
         aria-label={label}
         onPointerLeave={(event) => {
-          // A touch pointer leaves on lift, which would clear the tick the tap
-          // just chose — that one is cleared by the outside tap instead.
-          if (hover.leave(event)) setHoveredId(null);
+          // Touch leaves on lift. Only a hover owns this boundary, including
+          // a mouse that was pressed and dragged through other ticks.
+          if (event.pointerType !== "touch") {
+            setPreview((current) => current?.source === "hover" ? null : current);
+          }
         }}
         style={
           isHorizontal
@@ -188,7 +197,7 @@ export function PreviewRail({
               <motion.span
                 data-slot="preview-rail-tick"
                 aria-hidden="true"
-                animate={isHorizontal ? { scaleY: scale } : { scaleX: scale }}
+                animate={{ transform: isHorizontal ? `scaleY(${scale})` : `scaleX(${scale})` }}
                 transition={reduce ? { duration: 0 } : SPRING_LAYOUT}
                 className={cn(
                   "block bg-current",
@@ -211,36 +220,47 @@ export function PreviewRail({
             ? { width: itemSize }
             : { height: itemSize };
           const handlePointerEnter = (event: PointerEvent<HTMLElement>) => {
-            if (hover.enter(event)) setHoveredId(item.id);
+            if (event.pointerType !== "touch" && event.buttons === 0) {
+              setPreview({ id: item.id, source: "hover" });
+            }
           };
           const handlePointerDown = (event: PointerEvent<HTMLElement>) => {
-            tap.start(event, pinnedId === item.id);
-            setFocusedId(null);
+            if (event.button !== 0) {
+              pressRef.current = null;
+              return;
+            }
+            pressRef.current = {
+              id: item.id,
+              pointerType: event.pointerType,
+              previewed: preview?.source === "tap" && preview.id === item.id,
+            };
+            if (event.pointerType === "mouse") {
+              setPreview({ id: item.id, source: "hover" });
+            } else {
+              setPreview((current) => current?.source === "focus" ? null : current);
+            }
           };
-          // A gesture the platform takes away sends no click, and a key press
-          // starts an activation that never had a pointer behind it: either
-          // one leaves a record the next click would read as a tap of its own.
-          const dropGesture = () => tap.drop();
           const handleFocus = (currentTarget: HTMLElement) => {
-            if (currentTarget.matches(":focus-visible")) {
-              setFocusedId(item.id);
+            if (!pressRef.current && currentTarget.matches(":focus-visible")) {
+              setPreview({ id: item.id, source: "focus" });
             }
           };
           const handleSelect = (event: MouseEvent<HTMLElement>) => {
-            const gesture = tap.take();
-            const tapped =
-              gesture !== null && gesture.pointerType !== "mouse";
+            const press = pressRef.current;
+            pressRef.current = null;
+            // Keyboard and programmatic clicks have detail 0. They must not
+            // inherit an unfinished touch, even on the same tick.
+            const tapped = event.detail > 0 && press?.id === item.id && press.pointerType !== "mouse";
 
             if (tapped) {
               // A link would otherwise show its preview and leave the page in
               // the same tap, so the card is never read: the first tap lights
               // the tick, the second follows the link.
-              if (item.href && !gesture.state) {
+              setPreview({ id: item.id, source: "tap" });
+              if (showPreview && item.href && !press.previewed) {
                 event.preventDefault();
-                setPinnedId(item.id);
                 return;
               }
-              setPinnedId(item.id);
             }
 
             selectItem(item.id);
@@ -261,8 +281,6 @@ export function PreviewRail({
               aria-current={selected ? "page" : undefined}
               onPointerEnter={handlePointerEnter}
               onPointerDown={handlePointerDown}
-              onPointerCancel={dropGesture}
-              onKeyDown={dropGesture}
               onFocus={(event) => handleFocus(event.currentTarget)}
               onClick={handleSelect}
               style={sharedStyle}
@@ -279,8 +297,6 @@ export function PreviewRail({
               aria-current={selected ? "location" : undefined}
               onPointerEnter={handlePointerEnter}
               onPointerDown={handlePointerDown}
-              onPointerCancel={dropGesture}
-              onKeyDown={dropGesture}
               onFocus={(event) => handleFocus(event.currentTarget)}
               onClick={handleSelect}
               style={sharedStyle}
@@ -295,99 +311,53 @@ export function PreviewRail({
       {showPreview ? (
         <div
           aria-hidden="true"
-          style={
-            isHorizontal
-              ? { gridTemplateColumns: rowTemplate }
-              : { gridTemplateRows: rowTemplate }
-          }
           className={cn(
-            "pointer-events-none absolute z-50 grid",
-            // Vertical rail uses physical top/bottom so a caller can inset the
-            // band. `inset-y-*` does not lose to a later `top-*` / `bottom-*`.
+            "pointer-events-none absolute z-50 [contain:layout]",
             isHorizontal
-              ? "top-1/2 left-1/2 h-5 w-fit max-w-full -translate-x-1/2 -translate-y-1/2 justify-center"
+              ? "top-1/2 left-1/2 h-5 w-full max-w-full -translate-x-1/2 -translate-y-1/2"
               : previewSide === "before"
-                ? "top-0 bottom-0 right-16 left-4 content-center"
-                : "top-0 bottom-0 right-4 left-16 content-center",
+                ? "top-0 bottom-0 right-16 left-4"
+                : "top-0 bottom-0 right-4 left-16",
             previewContainerClassName,
           )}
         >
-          {items.map((item) => (
-            <div
-              key={item.id}
-              style={
-                isHorizontal ? { width: itemSize } : { height: itemSize }
-              }
-              className={cn(
-                "relative flex items-center",
-                isHorizontal ? "justify-center" : undefined,
-              )}
-            >
-              {item.id === displayedId ? (
+          {/* One card retargets from its current position. Switching ticks must
+              not remount the content or restart an enter/exit sequence. */}
+          <AnimatePresence>
+            {previewItem ? (
+              <motion.div
+                key="preview"
+                data-slot="preview-rail-position"
+                initial={{ opacity: 0, transform: previewTransform }}
+                animate={{ opacity: 1, transform: previewTransform }}
+                exit={{ opacity: 0 }}
+                transition={reduce ? { duration: 0 } : {
+                  transform: SPRING_LAYOUT,
+                  opacity: { duration: 0.12, ease: EASE_OUT },
+                }}
+                className={isHorizontal
+                  ? "absolute left-1/2 h-full"
+                  : "absolute top-1/2 w-full"}
+              >
                 <div
                   className={cn(
                     isHorizontal
-                      ? "absolute bottom-12 left-1/2 w-72 -translate-x-1/2"
-                      : cn(
-                          "w-full max-w-sm",
-                          previewSide === "before" && "ml-auto",
-                        ),
+                      ? "absolute bottom-12 left-0 w-72 -translate-x-1/2"
+                      : cn("w-full max-w-sm -translate-y-1/2", previewSide === "before" && "ml-auto"),
                     previewClassName,
                   )}
                 >
-                  <motion.div
-                    layoutId={`preview-rail-card-${uid}`}
-                    transition={reduce ? { duration: 0 } : SPRING_LAYOUT}
-                  >
-                    <AnimatePresence mode="wait" initial={false}>
-                      <motion.div
-                        key={item.id}
-                        initial={
-                          reduce
-                            ? { opacity: 0 }
-                            : { opacity: 0, y: 4, filter: "blur(6px)" }
-                        }
-                        animate={
-                          reduce
-                            ? { opacity: 1 }
-                            : { opacity: 1, y: 0, filter: "blur(0px)" }
-                        }
-                        exit={
-                          reduce
-                            ? { opacity: 0 }
-                            : {
-                                opacity: 0,
-                                y: -2,
-                                filter: "blur(4px)",
-                                transition: {
-                                  duration: 0.12,
-                                  ease: EASE_OUT,
-                                },
-                              }
-                        }
-                        transition={{
-                          duration: reduce ? 0 : 0.18,
-                          ease: EASE_OUT,
-                        }}
-                      >
-                        {renderPreview ? (
-                          renderPreview(item)
-                        ) : (
-                          <DefaultPreview item={item} />
-                        )}
-                      </motion.div>
-                    </AnimatePresence>
-                  </motion.div>
+                  {renderPreview ? renderPreview(previewItem) : <DefaultPreview item={previewItem} />}
                 </div>
-              ) : null}
-            </div>
-          ))}
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
         </div>
       ) : null}
 
       {children ? (
         <div className="min-h-0 min-w-0 flex-1">{children}</div>
       ) : null}
-    </motion.div>
+    </div>
   );
 }

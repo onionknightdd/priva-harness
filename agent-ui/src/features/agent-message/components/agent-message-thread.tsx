@@ -39,6 +39,7 @@ import {
   isExpandScrollLocked,
   keepExpandTriggerInPlace,
   releaseThreadFollow,
+  resetExpandAnchor,
 } from "../expand-down-anchor"
 import { ForkContext, type ForkAvailability } from "../fork-context"
 import { foldCommandSurfaces } from "../slash-command-envelope"
@@ -55,7 +56,7 @@ import {
   turnStickyParts,
   type ThreadTurn,
 } from "../thread-turns"
-import { scrollUserMessageTurnIntoView, userMessageRailEntries, type UserMessageRailEntry } from "../user-message-rail"
+import { isUserMessageBubble, scrollUserMessageTurnIntoView, userMessageRailEntries, type UserMessageRailEntry } from "../user-message-rail"
 import { AgentMessageItem } from "./agent-message-item"
 import { FollowLatestMessage } from "./follow-latest-message"
 import { UserMessageRail } from "./user-message-rail"
@@ -120,8 +121,8 @@ export function AgentMessageThread({
     return next
   }, [visibleMessages])
   const railEntries = useMemo(
-    () => userMessageRailEntries(visibleMessages),
-    [visibleMessages]
+    () => userMessageRailEntries(turns),
+    [turns]
   )
   const releaseFollowRef = useRef<(() => void) | null>(null)
   const threadRowRef = useRef<HTMLDivElement>(null)
@@ -211,6 +212,7 @@ export function AgentMessageThread({
   )
 
   const jumpToUserMessage = useCallback((entry: UserMessageRailEntry) => {
+    resetExpandAnchor()
     releaseFollowRef.current?.()
     // Mount the destination before scrolling. The scroller's prepend restore
     // runs as a microtask, so the jump itself waits until after that.
@@ -223,7 +225,7 @@ export function AgentMessageThread({
         }))
       })
     }
-    const viewport = document.querySelector<HTMLElement>('[data-slot="message-scroller-viewport"]')
+    const viewport = threadRowRef.current?.querySelector<HTMLElement>('[data-slot="message-scroller-viewport"]')
     if (!viewport) return
     queueMicrotask(() => {
       if (!scrollUserMessageTurnIntoView(viewport, entry.id)) {
@@ -350,6 +352,7 @@ const ThreadTurnItem = memo(function ThreadTurnItem({
       layout="position"
       layoutDependency={false}
       messageId={turn.id}
+      data-user-message-turn={user && isUserMessageBubble(user) ? turn.id : undefined}
       className={cn(
         "flex flex-col overflow-visible",
         working ? "gap-2" : "gap-6",

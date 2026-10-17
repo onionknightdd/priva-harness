@@ -24,11 +24,10 @@ type ContentSize = {
   overflows: boolean
 }
 
-export function UserMessageContent({ content, attachments, isError = false, turnId }: {
+export function UserMessageContent({ content, attachments, isError = false }: {
   content: string
   attachments?: MessageAttachment[]
   isError?: boolean
-  turnId?: string
 }) {
   const { t } = useTranslation()
   const id = useId()
@@ -86,7 +85,6 @@ export function UserMessageContent({ content, attachments, isError = false, turn
   return (
     <MessageContent
       data-user-message-bubble
-      data-user-message-turn={turnId}
       data-layout-scroll-anchor
       data-expanded={open}
       role={isError ? "alert" : undefined}

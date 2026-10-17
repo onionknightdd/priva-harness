@@ -459,17 +459,52 @@ streaming +1 turn ──► 窗口不变（无分片）
 卡片使用原组件的 `bg-card`，不再单独铺用户气泡底色。点击把该轮滚到顶栏下方。
 
 ```text
-foldCommandSurfaces -> groupThreadTurns -> 用户气泡
+foldCommandSurfaces -> groupThreadTurns（消息区只分组一次）-> 用户气泡
   -> 左侧刻度（线长 24px，行高为铺满时的一半，左边距与顶栏标题文字一致）
   -> 悬停：摘要卡在刻度右侧
   -> 点击：解除跟随最新，必要时先挂载目标轮，再滚到顶栏下
-滚动停下后 -> 顶栏下沿那条用户气泡点亮当前刻度
+滚动停下后 -> 按轮次静态锚点点亮当前刻度
 ```
 
 压缩标记、会话重置、模型或力度变更不进入刻度。行高在 24px 到 4px 之间按可用高度
 压缩，使刻度落在顶栏下沿和「跳到最新消息」按钮上沿之间。容器宽度小于 640px 时隐藏
 刻度，composer 左侧的 48px 占位一起隐藏，阅读列与输入框保持对齐。安装入口是
 `npx shadcn add @beui/preview-rail`；本地 `src/lib/ease.ts` 保留现有弹簧参数。
+
+悬停切换复用一张卡片，正文立即更新，位置与刻度通过共享弹簧追随；切换不重挂载，
+也不重新播放模糊进入动画。位置由刻度索引和行高直接计算，不使用共享布局测量。
+回复使用 CSS 两行裁切，尾部遮盖在内容未溢出时隐藏六点后缀，避免在悬停期间
+反复写入文字并读取高度。浮层独立限制布局影响，减少动态效果时立即更新位置。
+
+```text
+刻度索引 -> 同一卡片更新内容 + transform 追随
+回复文本 -> CSS 两行裁切 -> 溢出时显示 ......
+```
+
+刻度索引直接复用消息区的已分组轮次，只存用户标签、回复引用及完整轮次下标；
+仅当前打开的预览提取回复文本。未变化的轮次沿用 replies 引用，其他回复流式更新
+不会重算当前历史预览。composer 是否留出刻度空间只检查前两条有效用户气泡。
+
+跳转与当前刻度使用同一个静态锚点：轮次容器的布局偏移加用户条现有上边距，
+不读取吸顶气泡或 Motion 位移动画的视觉位置。跳转前解除自动跟随和展开位置锁，
+目标未挂载时先同步挂载，再在 prepend 恢复之后定位；查询限定在当前消息区。
+
+鼠标悬停、键盘焦点、触摸预览共用一个带来源的状态，最新操作取得控制权，不恢复
+旧预览。Escape 和外点关闭所有来源；移出轨道只关闭当前 hover，包括按住鼠标拖出。
+触摸按钮首次点击即选择，带预览的链接保留首次预览、再次打开；取消或键盘操作清除
+未完成的按压记录。交互留在 PreviewRail 内部，不保留未使用的通用手势工具。
+
+```text
+已分组 turns ─┬─ 轻量索引 → 当前项摘要 → 同一张卡片
+              └─ 静态锚点 → 当前刻度 / 历史跳转
+hover / focus / tap → 当前预览来源 → Escape / 对应离开 / 外点关闭
+```
+
+在开发服务器打开 `/tests/features/agent-message/user-message-rail-browser.html`，点击
+**Run rail checks**，验证 48 次连续切换复用同一卡片且不读取回复高度，以及短文、
+两行全文、英文长文、中文/emoji 和连续字符的裁切、横纵定位、选择及移出关闭，
+以及历史吸顶气泡、不同用户条间距和布局动画中跳转的最终落点。
+追加 `?dark&reduced-motion` 验证深色和减少动态效果。页面只使用固定数据，不连接模型。
 
 ### Shiki 改用 Oniguruma 引擎
 
@@ -2952,7 +2987,7 @@ Tab / Enter / Space 验证按钮和滚动区域焦点，用滚轮检查气泡内
 用户消息刻度的成员、行高、当前气泡和跳转位移使用 Node 测试，不启动浏览器：
 
 ```sh
-./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/user-message-rail.test.ts
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/user-message-rail.test.ts agent-ui/tests/components/motion/preview-rail.test.tsx
 ```
 
 Mermaid 浏览器回归：打开 `/tests/components/ai-elements/mermaid-browser.html` 并点击

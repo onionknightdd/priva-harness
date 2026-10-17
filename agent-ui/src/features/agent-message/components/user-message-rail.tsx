@@ -3,7 +3,6 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
-  useRef,
   useState,
   type CSSProperties,
   type RefObject,
@@ -17,7 +16,9 @@ import {
   USER_MESSAGE_RAIL_BOTTOM_CLEARANCE,
   USER_MESSAGE_RAIL_ITEM_MAX,
   USER_MESSAGE_RAIL_ITEM_MIN,
+  activeUserMessageTurnId,
   userMessageRailItemSize,
+  userMessageRailReply,
   userMessageRailVisible,
   type UserMessageRailEntry,
 } from "../user-message-rail"
@@ -65,17 +66,7 @@ export function UserMessageRail({
     // scroll forces layout on every frame, and sticky bubbles make an
     // IntersectionObserver fire continuously.
     const update = () => {
-      const headerLine = viewport.getBoundingClientRect().top + AGENT_CHAT_HEADER_HEIGHT
-      let active = ""
-      for (const node of viewport.querySelectorAll<HTMLElement>("[data-user-message-turn]")) {
-        const id = node.dataset.userMessageTurn
-        if (!id) continue
-        if (node.getBoundingClientRect().top <= headerLine + 1) active = id
-        else {
-          if (!active) active = id
-          break
-        }
-      }
+      const active = activeUserMessageTurnId(viewport)
       if (active) setActiveId((current) => current === active ? current : active)
     }
 
@@ -137,8 +128,6 @@ export function UserMessageRail({
   )
 }
 
-const REPLY_SUFFIX = "......"
-
 function UserMessageRailPreview({
   entry,
   fallback,
@@ -146,6 +135,7 @@ function UserMessageRailPreview({
   entry: UserMessageRailEntry
   fallback: string
 }) {
+  const reply = useMemo(() => userMessageRailReply(entry.replies), [entry.replies])
   return (
     <div
       data-slot="preview-rail-card"
@@ -154,51 +144,21 @@ function UserMessageRailPreview({
       <p data-slot="preview-rail-title" className="truncate text-xs text-foreground">
         {entry.label || fallback}
       </p>
-      {entry.reply ? <RailReply text={entry.reply} /> : null}
+      {reply ? <RailReply text={reply} /> : null}
     </div>
   )
 }
 
 function RailReply({ text }: { text: string }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const [shown, setShown] = useState(text)
-
-  useLayoutEffect(() => {
-    const node = ref.current
-    if (!node || node.clientWidth === 0) return
-    const next = clampToBox(node, text, REPLY_SUFFIX)
-    setShown((current) => current === next ? current : next)
-  }, [text])
-
+  // The end-of-text cover hides the suffix when the reply fits. On overflow
+  // it falls below the clipped box, revealing the suffix on the second line.
+  // No DOM write/measure loop is needed when the pointer changes previews.
   return (
     <div
-      ref={ref}
       data-slot="preview-rail-description"
-      className="mt-[calc(0.25rem+1px)] max-h-[2lh] overflow-hidden text-xs leading-5 font-medium text-muted-foreground/60 [overflow-wrap:anywhere]"
+      className="relative mt-[calc(0.25rem+1px)] max-h-[2lh] overflow-hidden pr-[2em] text-xs leading-5 font-medium text-muted-foreground/60 [overflow-wrap:anywhere] before:absolute before:right-0 before:bottom-0 before:content-['......'] after:absolute after:right-0 after:h-[1lh] after:w-[2em] after:bg-card after:content-['']"
     >
-      {shown}
+      {text}
     </div>
   )
-}
-
-function clampToBox(node: HTMLElement, text: string, suffix: string): string {
-  const fits = (value: string) => {
-    node.textContent = value
-    return node.scrollHeight <= node.clientHeight + 1
-  }
-  if (fits(text)) return text
-  let low = 0
-  let high = text.length
-  let best = suffix
-  while (low <= high) {
-    const mid = Math.floor((low + high) / 2)
-    const candidate = `${text.slice(0, mid).trimEnd()}${suffix}`
-    if (fits(candidate)) {
-      best = candidate
-      low = mid + 1
-    } else {
-      high = mid - 1
-    }
-  }
-  return best
 }

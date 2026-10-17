@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
-import { describe, it } from "node:test"
+import { after, describe, it } from "node:test"
+import { JSDOM } from "jsdom"
 
 import type { AgentThreadMessage } from "../../../src/features/agent-message/agent-message-data.ts"
 import {
@@ -8,10 +9,13 @@ import {
   activeUserMessageTurnId,
   userMessageRailEntries,
   userMessageRailItemSize,
-  userMessageRailScrollTop,
+  scrollUserMessageTurnIntoView,
+  hasUserMessageRail,
+  userMessageRailReply,
   userMessageRailVisible,
 } from "../../../src/features/agent-message/user-message-rail.ts"
 import { foldCommandSurfaces } from "../../../src/features/agent-message/slash-command-envelope.ts"
+import { groupThreadTurns } from "../../../src/features/agent-message/thread-turns.ts"
 
 const CLEAR_ENVELOPE =
   "<command-name>/clear</command-name>\n<command-message>clear</command-message>\n<command-args></command-args>"
@@ -34,6 +38,10 @@ function message(
   }
 }
 
+function entriesFor(messages: AgentThreadMessage[]) {
+  return userMessageRailEntries(groupThreadTurns(foldCommandSurfaces(messages)))
+}
+
 describe("userMessageRailEntries", () => {
   it("indexes user bubbles and keeps their turn index", () => {
     const leading = message("a0", "assistant", "earlier")
@@ -41,17 +49,17 @@ describe("userMessageRailEntries", () => {
     const reply = message("a1", "assistant", "reply")
     const second = message("u2", "user", "two", { renderId: "render-2" })
 
-    assert.deepEqual(userMessageRailEntries([leading, first, reply, second]), [
+    assert.deepEqual(entriesFor([leading, first, reply, second]), [
       {
         id: "u1",
         label: "one",
-        reply: "reply",
+        replies: [reply],
         turnIndex: 1,
       },
       {
         id: "render-2",
         label: "two",
-        reply: "",
+        replies: [],
         turnIndex: 2,
       },
     ])
@@ -67,11 +75,11 @@ describe("userMessageRailEntries", () => {
       message("real", "user", "keep me"),
     ]
 
-    const entries = userMessageRailEntries(messages)
+    const entries = entriesFor(messages)
     assert.deepEqual(entries.map((entry) => entry.id), ["real"])
     assert.equal(entries[0]?.turnIndex, 4)
     assert.deepEqual(
-      userMessageRailEntries(foldCommandSurfaces(messages)).map((entry) => [entry.id, entry.turnIndex]),
+      entriesFor(foldCommandSurfaces(messages)).map((entry) => [entry.id, entry.turnIndex]),
       entries.map((entry) => [entry.id, entry.turnIndex])
     )
   })
@@ -81,9 +89,9 @@ describe("userMessageRailEntries", () => {
       status: "error",
       attachments: [{ name: "shot.png", path: "/tmp/shot.png", mimeType: "image/png", size: 12 }],
     })
-    const [entry] = userMessageRailEntries([image])
+    const [entry] = entriesFor([image])
     assert.equal(entry?.label, "shot.png")
-    assert.equal(entry?.reply, "")
+    assert.equal(userMessageRailReply(entry!.replies), "")
   })
 
   it("collapses the user line and keeps the assistant answer from text blocks", () => {
@@ -93,9 +101,9 @@ describe("userMessageRailEntries", () => {
         { type: "text", text: "line one\n\nline two", index: 0, blockId: "b1" },
       ],
     })
-    const [entry] = userMessageRailEntries([user, assistant])
+    const [entry] = entriesFor([user, assistant])
     assert.equal(entry?.label, "first line second")
-    assert.equal(entry?.reply, "line one line two")
+    assert.equal(userMessageRailReply(entry!.replies), "line one line two")
   })
 })
 
@@ -109,31 +117,59 @@ describe("userMessageRailItemSize", () => {
   })
 })
 
-describe("activeUserMessageTurnId", () => {
-  it("selects the last bubble that has reached the header", () => {
-    assert.equal(activeUserMessageTurnId([
-      { id: "a", top: 20 },
-      { id: "b", top: 36 },
-      { id: "c", top: 400 },
-    ], 35), "b")
+const dom = new JSDOM("<!doctype html><body></body>")
+Object.assign(globalThis, { getComputedStyle: dom.window.getComputedStyle.bind(dom.window), CSS: { escape: (id: string) => id } })
+after(() => dom.window.close())
+function viewport(top = 100, scrollTop = 2000) {
+  const node = dom.window.document.createElement("div")
+  node.scrollTop = scrollTop
+  Object.defineProperty(node, "offsetTop", { value: top })
+  return node
+}
+function turn(host: HTMLElement, id: string, top: number, margin = 24) {
+  const node = host.appendChild(dom.window.document.createElement("div"))
+  node.dataset.userMessageTurn = id
+  Object.defineProperty(node, "offsetTop", { configurable: true, value: top + host.scrollTop })
+  Object.defineProperty(node, "offsetParent", { value: host })
+  node.getBoundingClientRect = () => { throw new Error("must not read layout animation transform") }
+  const sticky = node.appendChild(dom.window.document.createElement("div"))
+  sticky.style.marginTop = `${margin}px`
+  sticky.getBoundingClientRect = () => { throw new Error("must not read sticky visual position") }
+  return node
+}
+
+describe("static user turn positions", () => {
+  it("jumps to the natural start even when the bubble is pinned or pushed offscreen", () => {
+    for (const margin of [8, 24]) {
+      const host = viewport()
+      turn(host, "history", -1600, margin)
+      assert.equal(scrollUserMessageTurnIntoView(host, "history"), true)
+      assert.equal(host.scrollTop, 400 + margin - 35)
+    }
   })
 
-  it("selects the first bubble still below the header", () => {
-    assert.equal(activeUserMessageTurnId([
-      { id: "a", top: 80 },
-      { id: "b", top: 200 },
-    ], 35), "a")
+  it("handles missing targets without moving or escaping its viewport", () => {
+    const host = viewport()
+    turn(viewport(), "other-thread", 300)
+    assert.equal(scrollUserMessageTurnIntoView(host, "other-thread"), false)
+    assert.equal(host.scrollTop, 2000)
   })
-})
 
-describe("userMessageRailScrollTop", () => {
-  it("places the bubble under the header", () => {
-    assert.equal(userMessageRailScrollTop({
-      viewportTop: 10,
-      viewportScrollTop: 400,
-      targetTop: 210,
-      headerHeight: 35,
-    }), 565)
+  it("highlights the last natural start that reached the header and stops reading below it", () => {
+    const host = viewport()
+    turn(host, "a", -300)
+    turn(host, "b", 11)
+    turn(host, "c", 400)
+    const unused = turn(host, "d", 800)
+    Object.defineProperty(unused, "offsetTop", { get() { throw new Error("must stop after first future turn") } })
+    assert.equal(activeUserMessageTurnId(host), "b")
+  })
+
+  it("selects the first future turn and returns null before any turns mount", () => {
+    const host = viewport()
+    assert.equal(activeUserMessageTurnId(host), null)
+    turn(host, "first", 200)
+    assert.equal(activeUserMessageTurnId(host), "first")
   })
 })
 
@@ -141,5 +177,52 @@ describe("userMessageRailVisible", () => {
   it("starts at the second user bubble", () => {
     assert.equal(userMessageRailVisible(1), false)
     assert.equal(userMessageRailVisible(2), true)
+  })
+})
+
+describe("lazy preview text", () => {
+  it("builds the index and visibility without reading assistant bodies", () => {
+    let reads = 0
+    const reply = message("a", "assistant", "")
+    Object.defineProperty(reply, "content", { get() { reads++; return "one\n two" } })
+    const first = message("first", "user", "hello")
+    const second = message("second", "user", "again")
+    const turns = groupThreadTurns([first, reply, second])
+    const entries = userMessageRailEntries(turns)
+    assert.equal(hasUserMessageRail([first, reply, second]), true)
+    assert.equal(reads, 0)
+    assert.equal(entries[0]!.replies, turns[0]!.replies)
+    assert.equal(userMessageRailReply(entries[0]!.replies), "one two")
+    assert.equal(reads, 1)
+  })
+
+  it("stops visibility checks after the second bubble and agrees with the filtered index", () => {
+    const hidden = [
+      message("exit", "user", "/exit"), message("config", "user", "/config"),
+      message("clear", "user", CLEAR_ENVELOPE), message("compact", "user", COMPACT_ENVELOPE),
+      message("model", "user", "", { modelChange: { model: "opus" } }),
+      message("effort", "user", "", { effortChange: { effort: "high" } }),
+      message("summary", "user", "[request interrupted by user]", { compact: { phase: "compacted" } }),
+    ]
+    const visible = [message("one", "user", "hello"), message("two", "user", "/config", {
+      attachments: [{ name: "shot.png", path: "/tmp/shot.png", mimeType: "image/png", size: 12 }],
+    })]
+    for (let count = 0; count <= 2; count++) {
+      const messages = [...hidden, ...visible.slice(0, count)]
+      assert.equal(hasUserMessageRail(messages), userMessageRailVisible(entriesFor(messages).length))
+    }
+    const unused = message("unused", "user", "")
+    Object.defineProperty(unused, "content", { get() { throw new Error("visibility should stop at two bubbles") } })
+    assert.equal(hasUserMessageRail([...visible, unused]), true)
+  })
+
+  it("keeps replies within their folded turn and omits placeholder text", () => {
+    const messages = [
+      message("u1", "user", "first"), message("a1", "assistant", "first answer"),
+      message("u2", "user", "second"), message("a2", "assistant", "No response requested."),
+      message("a3", "assistant", "second answer"),
+    ]
+    const entries = entriesFor(messages)
+    assert.deepEqual(entries.map((entry) => userMessageRailReply(entry.replies)), ["first answer", "second answer"])
   })
 })

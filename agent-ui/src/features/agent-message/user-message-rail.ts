@@ -1,8 +1,8 @@
 import { textFromBlocks, type AgentThreadMessage } from "./agent-message-data"
 import { AGENT_CHAT_HEADER_HEIGHT } from "./agent-chat-layout"
 import type { MessageAttachment } from "./message-attachment"
-import { foldCommandSurfaces, userMessageSurface } from "./slash-command-envelope"
-import { groupThreadTurns } from "./thread-turns"
+import { userMessageSurface } from "./slash-command-envelope"
+import type { ThreadTurn } from "./thread-turns"
 
 export const USER_MESSAGE_RAIL_MIN_COUNT = 2
 export const USER_MESSAGE_RAIL_ITEM_MAX = 24
@@ -15,16 +15,15 @@ export type UserMessageRailEntry = {
   id: string
   /** User text collapsed to one line. The card truncates it to the card width. */
   label: string
-  /** Assistant answer for this turn, collapsed to a single wrapping paragraph. */
-  reply: string
+  /** Keep message references; only the open preview needs their text. */
+  replies: readonly AgentThreadMessage[]
   /** Index in the folded turn list. Jumping mounts from here. */
   turnIndex: number
 }
 
 export function userMessageRailEntries(
-  messages: readonly AgentThreadMessage[]
+  turns: readonly ThreadTurn[]
 ): UserMessageRailEntry[] {
-  const turns = groupThreadTurns(foldCommandSurfaces(messages))
   const entries: UserMessageRailEntry[] = []
 
   turns.forEach((turn, turnIndex) => {
@@ -33,12 +32,25 @@ export function userMessageRailEntries(
     entries.push({
       id: turn.id,
       label: userRailLabel(user.content, user.attachments),
-      reply: turn.replies.map(assistantPreviewText).filter((text) => text !== "").join(" "),
+      replies: turn.replies,
       turnIndex,
     })
   })
 
   return entries
+}
+
+/** Visibility never needs assistant text or another folded/grouped transcript. */
+export function hasUserMessageRail(messages: readonly AgentThreadMessage[]): boolean {
+  let count = 0
+  for (const message of messages) {
+    if (isUserMessageBubble(message) && ++count >= USER_MESSAGE_RAIL_MIN_COUNT) return true
+  }
+  return false
+}
+
+export function userMessageRailReply(replies: readonly AgentThreadMessage[]): string {
+  return replies.map(assistantPreviewText).filter((text) => text !== "").join(" ")
 }
 
 export function userMessageRailVisible(count: number): boolean {
@@ -59,48 +71,50 @@ export function userMessageRailItemSize(availableHeight: number, count: number):
 }
 
 /**
- * The user bubble stuck to the header, or the first bubble still below it.
- * `headerLine` is the viewport top plus the chat header height.
+ * Use each user's natural position for both highlighting and jumping. A
+ * sticky bubble's visual position moves with the viewport and its turn's end.
  */
-export function activeUserMessageTurnId(
-  bubbles: readonly { id: string; top: number }[],
-  headerLine: number
-): string | null {
+export function activeUserMessageTurnId(viewport: HTMLElement): string | null {
+  const viewportTop = layoutTop(viewport)
+  const headerLine = viewport.scrollTop + AGENT_CHAT_HEADER_HEIGHT
   let crossed: string | null = null
-  for (const bubble of bubbles) {
-    if (!bubble.id) continue
-    if (bubble.top <= headerLine + 1) {
-      crossed = bubble.id
+  for (const turn of viewport.querySelectorAll<HTMLElement>("[data-user-message-turn]")) {
+    const id = turn.dataset.userMessageTurn
+    if (!id) continue
+    if (userMessageTurnTop(turn) - viewportTop <= headerLine + 1) {
+      crossed = id
       continue
     }
-    return crossed ?? bubble.id
+    return crossed ?? id
   }
   return crossed
 }
 
-export function userMessageRailScrollTop(input: {
-  viewportTop: number
-  viewportScrollTop: number
-  targetTop: number
-  headerHeight: number
-}): number {
-  return input.viewportScrollTop + (input.targetTop - input.viewportTop) - input.headerHeight
+function userMessageTurnTop(turn: HTMLElement): number {
+  // The first child is the user StickyFreeze. Its margin remains in normal
+  // flow even when its rendered box sticks to the header or leaves the turn.
+  const userBar = turn.firstElementChild as HTMLElement
+  return layoutTop(turn) + Number.parseFloat(getComputedStyle(userBar).marginTop)
+}
+
+function layoutTop(element: HTMLElement): number {
+  let top = 0
+  // offsetTop ignores Motion's temporary layout transform. Sum to the same
+  // layout origin for the turn and viewport, even if their offset parents differ.
+  for (let node: HTMLElement | null = element; node; node = node.offsetParent as HTMLElement | null) {
+    top += node.offsetTop
+  }
+  return top
 }
 
 export function scrollUserMessageTurnIntoView(viewport: HTMLElement, turnId: string): boolean {
   const target = viewport.querySelector<HTMLElement>(`[data-user-message-turn="${CSS.escape(turnId)}"]`)
   if (!target) return false
-  const viewportTop = viewport.getBoundingClientRect().top
-  viewport.scrollTop = userMessageRailScrollTop({
-    viewportTop,
-    viewportScrollTop: viewport.scrollTop,
-    targetTop: target.getBoundingClientRect().top,
-    headerHeight: AGENT_CHAT_HEADER_HEIGHT,
-  })
+  viewport.scrollTop = userMessageTurnTop(target) - layoutTop(viewport) - AGENT_CHAT_HEADER_HEIGHT
   return true
 }
 
-function isUserMessageBubble(message: AgentThreadMessage): boolean {
+export function isUserMessageBubble(message: AgentThreadMessage): boolean {
   if (message.role !== "user") return false
   if (message.attachments?.length) return true
   if (message.modelChange || message.effortChange) return false

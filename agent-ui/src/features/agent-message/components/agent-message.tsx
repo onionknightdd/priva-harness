@@ -18,7 +18,7 @@ import type { AgentThreadMessage } from "../agent-message-data"
 import { AGENT_CHAT_HEADER_HEIGHT } from "../agent-chat-layout"
 import type { ContextUsage } from "../context-usage"
 import { appendQuotedDraft } from "../quote-selection"
-import { userMessageRailEntries, userMessageRailVisible } from "../user-message-rail"
+import { hasUserMessageRail } from "../user-message-rail"
 import { serializeMessageSelections } from "../message-select-action"
 import type { OnQuoteInChat } from "../selection-actions-context"
 import type { ComposerEditorHandle } from "./composer-editor"
@@ -141,7 +141,7 @@ export function AgentMessage({
   }, [pending])
   const isEmpty = messages.length === 0 && activeSession === null
   const showUserMessageRail = useMemo(
-    () => userMessageRailVisible(userMessageRailEntries(messages).length),
+    () => hasUserMessageRail(messages),
     [messages]
   )
   // Every inline file reference subscribes to the selection action, so keep
