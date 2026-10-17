@@ -25,7 +25,7 @@ Subagent test --> AgentHarness.run --> selected provider --> SSE AgentEvent fram
 
 ## Packages and runtime
 
-- Claude Agent SDK: installed `0.3.278` (Claude CLI `2.1.278`). Runs explicitly
+- Claude Agent SDK: installed `0.3.301` (Claude CLI `2.1.301`). Runs explicitly
   enable the `user`, `project`, and `local` settings sources.
 - Pi SDK: pinned `1.2.0`; the native TUI / Chat integration is described in
   [Pi native sessions](pi-native-session.md).

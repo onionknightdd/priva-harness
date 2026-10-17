@@ -1,7 +1,7 @@
 # Skills / MCP 迁移方案
 
 状态：Skills / MCP 资源管理已实施；2026-10-13 将 Pi MCP 切换为 Pi 1.2.0 原生扩展。
-核对日期：2026-10-13。
+核对日期：2026-10-17。
 
 ## 范围
 
@@ -15,7 +15,7 @@
 
 | 依赖 | 当前核对版本 |
 | --- | --- |
-| Claude Agent SDK | 0.3.250（当前项目安装版本） |
+| Claude Agent SDK | 0.3.301（当前项目安装版本，Claude CLI 2.1.301） |
 | Pi coding agent / AI | 1.2.0 |
 | pi-subagents | 0.21.0 |
 | pi-dynamic-workflows | 3.14.0 |

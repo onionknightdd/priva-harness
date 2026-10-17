@@ -269,7 +269,7 @@ Claude 的 Explore、Plan、general-purpose 默认继承当前会话模型，
 自定义子代理未指定模型时也继承，明确指定时保留：
 `CLAUDE_CODE_SUBAGENT_MODEL=inherit`、`CLAUDE_CODE_SUBAGENT_MODEL_FORCE=0`，并设置
 `CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP=1`。最后一项是当前捆绑 CLI 的原生开关，
-用于关闭内置 Explore 对模型继承的 Opus 上限；2.1.278 中不含 haiku / sonnet / opus
+用于关闭内置 Explore 对模型继承的 Opus 上限；2.1.301 中不含 haiku / sonnet / opus
 的自定义模型 ID 也会触发该上限。原生 SDK / TUI 集成测试覆盖这项行为，升级依赖时必须通过。
 显式关闭强制继承，避免 runner 环境或用户设置中的同名变量覆盖自定义 agent 的
 `model`。Agent 调用明确传入的模型仍遵循 Claude 原生优先级。
@@ -407,8 +407,9 @@ runner 的本机 HTTP 路由；[官方 hooks 参考](https://code.claude.com/doc
 `run.started` 的请求可由权威 idle 快照结清，不要求原生消息 UUID 等于客户端 runId；
 尚未获确认的请求不会自动重发。
 
-Claude 可按运行时开关为粘贴内容加入 `<pasted_content id="四位十六进制">` 包装。
-provider 的 `terminalPromptText` 与历史回放共用同一解包函数，只处理完整且 id 匹配的原生
+Claude Code 2.1.301 把终端括号粘贴作为普通提示文本交给模型，不再用
+`<pasted_content id="四位十六进制">` 包装，`tengu_virtual_pancake` 也不再打开这层包装。
+provider 的 `terminalPromptText` 与历史回放仍共用同一解包函数，只处理完整且 id 匹配的旧转录
 格式；保留正文、多段粘贴之间的手输文字及普通 XML，不递归解析粘贴正文。原生转录文件
 和模型收到的内容保持不变。发送确认与原生文本投影忽略两端空白和 CRLF / LF 差别，避免
 CLI 去掉粘贴尾部换行后无法关联同一轮次。重复发送相同正文仍按时间与转录 id 保留独立消息。

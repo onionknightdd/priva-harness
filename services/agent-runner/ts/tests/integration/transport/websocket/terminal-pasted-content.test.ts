@@ -1,13 +1,10 @@
-import { writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
 import { WebSocket } from 'ws'
-import { expect, it, vi } from 'vitest'
+import { expect, it } from 'vitest'
 
 import type { StreamFrame } from '../../../../src/core/event/agent-event.js'
 import { modelMessage, nativeClaudeAvailable, nativeClaudeFixture } from '../../../fixtures/terminal/claude-tui-fixture.js'
 
-it.skipIf(!nativeClaudeAvailable())('reconciles real native paste envelopes during generation, on completion, and after reconnect', async () => {
-  vi.stubEnv('CLAUDE_CODE_GB_DISK_CACHE_WHEN_TELEMETRY_OFF', '1')
+it.skipIf(!nativeClaudeAvailable())('reconciles a real native paste during generation, on completion, and after reconnect', async () => {
   let release: () => void = () => undefined
   let calls = 0
   const answer = new Promise<void>((resolve) => { release = resolve })
@@ -17,18 +14,16 @@ it.skipIf(!nativeClaudeAvailable())('reconciles real native paste envelopes duri
   })
   let reconnected: WebSocket | undefined
   try {
-    // Production accounts can enable this native feature independently of the
-    // binary version. Exercise it explicitly instead of relying on defaults.
-    await writeFile(join(fixture.configDir, '.claude.json'), JSON.stringify({
-      cachedGrowthBookFeatures: { tengu_virtual_pancake: true },
-    }), { mode: 0o600 })
+    // Claude Code 2.1.301 sends bracketed terminal pastes as plain prompt text.
+    // Older transcripts may still contain <pasted_content> envelopes; the decoder
+    // covers those without this live path emitting one.
     const text = '后台启动一个子agent , 每秒echo 1, 执行30s'
     fixture.send(text, 'pasted')
     await expect.poll(() => fixture.requests.length, { timeout: 15000 }).toBe(1)
     const content = fixture.requests[0]?.messages.at(-1)?.content
     const modelText = typeof content === 'string' ? content : content?.map((block) => typeof block['text'] === 'string' ? block['text'] : '').join('')
-    expect(/<pasted_content id="[0-9a-f]{4}">/u.test(modelText ?? '')).toBe(true)
     expect(modelText).toContain(text)
+    expect(modelText).not.toContain('<pasted_content')
     const snapshot = () => fixture.harness.sessionStream(fixture.ref).snapshot()
     await expect.poll(() => snapshot().messages.find((message) => message.role === 'user')?.id).not.toBe('pasted:user')
     expect(snapshot().messages.filter((message) => message.role === 'user').map((message) => message.content)).toEqual([text])
