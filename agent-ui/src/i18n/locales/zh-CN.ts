@@ -348,6 +348,8 @@ export const zhCN = {
     modelRequired: "请先选择模型",
     sendFailed: "发送失败",
     scrollToLatest: "跳到最新消息",
+    userMessageRail: "用户消息",
+    userMessageRailEmpty: "用户消息",
     thinking: "工作中……",
     runningFor: "已运行 {{time}}",
     elapsedFor: "用时 {{time}}",

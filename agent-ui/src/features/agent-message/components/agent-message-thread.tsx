@@ -15,6 +15,7 @@ import {
   motion,
   useReducedMotionConfig,
 } from "motion/react"
+import { flushSync } from "react-dom"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -54,8 +55,10 @@ import {
   turnStickyParts,
   type ThreadTurn,
 } from "../thread-turns"
+import { scrollUserMessageTurnIntoView, userMessageRailEntries, type UserMessageRailEntry } from "../user-message-rail"
 import { AgentMessageItem } from "./agent-message-item"
 import { FollowLatestMessage } from "./follow-latest-message"
+import { UserMessageRail } from "./user-message-rail"
 import { MessageSelectionActions } from "./message-selection-actions"
 import { StickyFreeze } from "./sticky-freeze"
 import { ThreadGlass } from "./thread-glass"
@@ -116,6 +119,12 @@ export function AgentMessageThread({
     previousTurns.current = next
     return next
   }, [visibleMessages])
+  const railEntries = useMemo(
+    () => userMessageRailEntries(visibleMessages),
+    [visibleMessages]
+  )
+  const releaseFollowRef = useRef<(() => void) | null>(null)
+  const threadRowRef = useRef<HTMLDivElement>(null)
 
   // Long transcripts mount in slices; see thread-turns.ts. The window is
   // derived during render so a bulk arrival and its first slice commit together.
@@ -201,12 +210,37 @@ export function AgentMessageThread({
     []
   )
 
+  const jumpToUserMessage = useCallback((entry: UserMessageRailEntry) => {
+    releaseFollowRef.current?.()
+    // Mount the destination before scrolling. The scroller's prepend restore
+    // runs as a microtask, so the jump itself waits until after that.
+    if (preparing || entry.turnIndex < revealFrom) {
+      flushSync(() => {
+        setReveal((current) => ({
+          ...current,
+          from: Math.min(current.from, entry.turnIndex),
+          preparing: false,
+        }))
+      })
+    }
+    const viewport = document.querySelector<HTMLElement>('[data-slot="message-scroller-viewport"]')
+    if (!viewport) return
+    queueMicrotask(() => {
+      if (!scrollUserMessageTurnIntoView(viewport, entry.id)) {
+        requestAnimationFrame(() => scrollUserMessageTurnIntoView(viewport, entry.id))
+      }
+    })
+  }, [preparing, revealFrom])
+
   return (
     <QuoteInChatContext.Provider value={onSelectionAction ?? null}>
     <ForkContext.Provider value={forkAvailability}>
     <TickingNowProvider value={now}>
     {/* FollowLatestMessage owns streaming and explicit follow animations. */}
     <MessageScrollerProvider autoScroll={false} scrollMargin={AGENT_CHAT_HEADER_HEIGHT}>
+      <div ref={threadRowRef} className="flex h-full min-h-0">
+        <UserMessageRail entries={railEntries} onJump={jumpToUserMessage} scrollRootRef={threadRowRef} />
+        <div className="min-h-0 min-w-0 flex-1">
       <MessageScroller>
         <MotionConfig transition={motionTransition}>
           <LayoutGroup inherit={false}>
@@ -246,10 +280,12 @@ export function AgentMessageThread({
         <div className="pointer-events-none absolute inset-x-0 bottom-2 z-20 flex justify-center">
           <div className="pointer-events-auto flex items-center gap-2">
             <TaskPlanPopover messages={messages} />
-            <FollowLatestMessage messages={messages} mounted={!preparing} />
+            <FollowLatestMessage messages={messages} mounted={!preparing} releaseRef={releaseFollowRef} />
           </div>
         </div>
       </MessageScroller>
+        </div>
+      </div>
       {onSelectionAction ? <MessageSelectionActions onAction={onSelectionAction} /> : null}
     </MessageScrollerProvider>
     </TickingNowProvider>

@@ -450,6 +450,27 @@ streaming +1 turn ──► 窗口不变（无分片）
 共 5 片（约 600ms 内全部挂完），切换慢帧合计 444–462ms → 252–284ms；打开后视口
 仍在底部，最终 DOM 节点数不变。冷态剩下的一帧仍是 Shiki（~236ms）。
 
+### 用户消息刻度
+
+2026-10-17：从第二条用户气泡起，消息区左侧使用
+[BeUI Preview Rail](https://beui.dev/components/motion/preview-rail)。一条刻度对应一条
+画成用户气泡的消息。悬停卡片沿用 Preview Rail 原卡片：用户文本单行，助手回复为
+`text-xs`、`text-muted-foreground/60` 的三级文本，最多两行，超出以 `......` 结尾，
+卡片使用原组件的 `bg-card`，不再单独铺用户气泡底色。点击把该轮滚到顶栏下方。
+
+```text
+foldCommandSurfaces -> groupThreadTurns -> 用户气泡
+  -> 左侧刻度（线长 24px，行高为铺满时的一半，左边距与顶栏标题文字一致）
+  -> 悬停：摘要卡在刻度右侧
+  -> 点击：解除跟随最新，必要时先挂载目标轮，再滚到顶栏下
+滚动停下后 -> 顶栏下沿那条用户气泡点亮当前刻度
+```
+
+压缩标记、会话重置、模型或力度变更不进入刻度。行高在 24px 到 4px 之间按可用高度
+压缩，使刻度落在顶栏下沿和「跳到最新消息」按钮上沿之间。容器宽度小于 640px 时隐藏
+刻度，composer 左侧的 48px 占位一起隐藏，阅读列与输入框保持对齐。安装入口是
+`npx shadcn add @beui/preview-rail`；本地 `src/lib/ease.ts` 保留现有弹簧参数。
+
 ### Shiki 改用 Oniguruma 引擎
 
 2026-09-13：两处高亮器（消息里的 `agent-shiki.tsx`、文件预览的
@@ -2596,6 +2617,7 @@ App TooltipProvider -> 首次悬浮 1s -> 连续切换 0ms
 | CalendarHeatmap | [heatmap/calendar-heatmap](../agent-ui/src/components/heatmap/calendar-heatmap.tsx)，`@heatmap` registry（SVG + date-fns）+ 本地 `ring-inset` / `monthLabelPosition` / `splitYears` | 网格热力图；基础默认读 chart token，用量页读取共享 `heatmap` token，Profile 调用点仍传固定蓝色 | 用量页 Token 活动、Profile Token 日历 |
 | Table / 数据网格 | [spreadsheet-renderer](../agent-ui/src/features/files/preview/renderers/spreadsheet-renderer.tsx)，XLSX / CSV 共用 @silurus/ooxml | 工作簿 / CSV 解析、按视口渲染、选区与公式栏 | 表格文件预览；尚无通用 `ui/table` 或 DataTable 入口 |
 | ScrollArea / 消息滚动 | [agents/code-block](../agent-ui/src/components/agents/code-block.tsx) 直接使用 Base UI ScrollArea；[ui/message-scroller](../agent-ui/src/components/ui/message-scroller.tsx) 包装 `@shadcn/react/message-scroller` | 代码滚动区与聊天跟随滚动；其余区域多用原生 overflow | 代码块、聊天历史 |
+| Preview Rail | [motion/preview-rail](../agent-ui/src/components/motion/preview-rail.tsx)，BeUI + Motion | 左侧刻度，悬停金字塔和右侧摘要；当前刻度高亮；减少动态效果时无位移动画 | 消息区的用户气泡索引 |
 | Direction | [ui/direction](../agent-ui/src/components/ui/direction.tsx)，Base UI DirectionProvider | 无独立视觉，仅方向上下文 | FileUpload 的内部依赖 |
 
 ### Agent 内容与文件预览
@@ -2926,6 +2948,12 @@ display / white-space，并验证 Enter / Space 激活；不将 jsdom 当作像�
 内部滚动与末行可达、滚动条留白、宽度变化、连续长字符串、附件、引用和错误消息。
 追加 `?zh&dark&narrow&reduced-motion` 检查中文、深色、窄栏与减少动态效果；用真实
 Tab / Enter / Space 验证按钮和滚动区域焦点，用滚轮检查气泡内部滚动。
+
+用户消息刻度的成员、行高、当前气泡和跳转位移使用 Node 测试，不启动浏览器：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/user-message-rail.test.ts
+```
 
 Mermaid 浏览器回归：打开 `/tests/components/ai-elements/mermaid-browser.html` 并点击
 **Run Mermaid checks**。覆盖真实图表加载、异步模块拒绝、局部源代码回退、复制入口、

@@ -349,6 +349,8 @@ export const en = {
     modelRequired: "Select a model first",
     sendFailed: "Failed to send",
     scrollToLatest: "Scroll to latest",
+    userMessageRail: "User messages",
+    userMessageRailEmpty: "User message",
     thinking: "Working…",
     runningFor: "Running for {{time}}",
     elapsedFor: "Took {{time}}",

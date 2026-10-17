@@ -1,5 +1,5 @@
 import type { ContextWindow } from "../model-context"
-import { useCallback, useEffect, useLayoutEffect, useRef } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react"
 import type { InteractionRequest, InteractionResponse } from '../interaction-data'
 import { InteractionCard } from './interaction-card'
 import type { ComposerAttachment } from "../composer-attachments"
@@ -18,6 +18,7 @@ import type { AgentThreadMessage } from "../agent-message-data"
 import { AGENT_CHAT_HEADER_HEIGHT } from "../agent-chat-layout"
 import type { ContextUsage } from "../context-usage"
 import { appendQuotedDraft } from "../quote-selection"
+import { userMessageRailEntries, userMessageRailVisible } from "../user-message-rail"
 import { serializeMessageSelections } from "../message-select-action"
 import type { OnQuoteInChat } from "../selection-actions-context"
 import type { ComposerEditorHandle } from "./composer-editor"
@@ -139,6 +140,10 @@ export function AgentMessage({
     hadInteraction.current = Boolean(pending)
   }, [pending])
   const isEmpty = messages.length === 0 && activeSession === null
+  const showUserMessageRail = useMemo(
+    () => userMessageRailVisible(userMessageRailEntries(messages).length),
+    [messages]
+  )
   // Every inline file reference subscribes to the selection action, so keep
   // its identity stable while the draft and connection state change.
   const selectionContext = useRef({ draft, onDraftChange })
@@ -267,12 +272,12 @@ export function AgentMessage({
 
       <div
         ref={dockRef}
-        className={cn(
-          "shrink-0",
-          agentColumnClassName,
-          !isEmpty && "pt-1.5"
-        )}
+        className={cn("flex shrink-0", !isEmpty && "pt-1.5")}
       >
+        {showUserMessageRail ? (
+          <div aria-hidden className="ml-4 hidden w-12 shrink-0 @min-[640px]/agent-message:block" />
+        ) : null}
+        <div className={cn("min-w-0 flex-1", agentColumnClassName)}>
         {pending && onInteractionResponse ? (
           <motion.div key={pending.requestId} ref={composerShellRef}
             initial={shouldReduceMotion ? false : { opacity: 0, transform: 'translateY(4px)' }}
@@ -347,6 +352,7 @@ export function AgentMessage({
                 : forkError}
           </p>
         ) : null}
+        </div>
       </div>
 
       <div

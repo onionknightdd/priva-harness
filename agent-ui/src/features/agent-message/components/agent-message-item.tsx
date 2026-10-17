@@ -279,7 +279,7 @@ export const AgentMessageItem = React.memo(function AgentMessageItem({
             {t("agentMessage.errorLabel")}
           </div>
           {message.role === "user" ? (
-            <UserMessageContent key={message.renderId ?? message.id} content={message.content} attachments={message.attachments} isError />
+            <UserMessageContent key={message.renderId ?? message.id} turnId={message.renderId ?? message.id} content={message.content} attachments={message.attachments} isError />
           ) : <MessageContent
             className="message-error rounded-xl px-4 py-3"
             role="alert"
@@ -290,7 +290,7 @@ export const AgentMessageItem = React.memo(function AgentMessageItem({
       ) : (
         <>
           {message.role === "user" ? (
-            <UserMessageContent key={message.renderId ?? message.id} content={message.content} attachments={message.attachments} />
+            <UserMessageContent key={message.renderId ?? message.id} turnId={message.renderId ?? message.id} content={message.content} attachments={message.attachments} />
           ) : <MessageContent
             aria-live="polite"
             aria-busy={isStreaming || undefined}

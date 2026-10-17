@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState } from "react"
+import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from "react"
 import { ArrowDownIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
@@ -30,10 +30,13 @@ function isScrolledToEnd(viewport: HTMLElement) {
 export function FollowLatestMessage({
   messages,
   mounted,
+  releaseRef,
 }: {
   messages: AgentThreadMessage[]
   /** Turns mount one commit after the messages arrive; re-pin on that commit. */
   mounted: boolean
+  /** A rail jump calls this so a glide in flight does not pull the viewport back. */
+  releaseRef?: RefObject<(() => void) | null>
 }) {
   const { t } = useTranslation()
   const [following, setFollowing] = useState(true)
@@ -48,6 +51,23 @@ export function FollowLatestMessage({
     pinnedRef.current = pinned
     setFollowing(pinned)
   }, [])
+
+  const releaseFollow = useCallback(() => {
+    if (followFrameRef.current) {
+      cancelAnimationFrame(followFrameRef.current)
+      followFrameRef.current = 0
+    }
+    programmaticRef.current = false
+    setPinned(false)
+  }, [setPinned])
+
+  useLayoutEffect(() => {
+    if (!releaseRef) return
+    releaseRef.current = releaseFollow
+    return () => {
+      releaseRef.current = null
+    }
+  }, [releaseFollow, releaseRef])
 
   const followLatest = useCallback(() => {
     if (!mounted || !pinnedRef.current || isExpandScrollLocked()) {
