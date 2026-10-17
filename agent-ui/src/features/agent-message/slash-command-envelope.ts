@@ -60,6 +60,7 @@ export function userMessageSurface(
   const text = content.trim()
   if (
     isSlashCommandUserMessage(text, "exit") ||
+    isSlashCommandUserMessage(text, "config") ||
     LOCAL_COMMAND_STDOUT.test(text) ||
     LOCAL_COMMAND_CAVEAT.test(text) ||
     isCompactContinuationSummary(text)
