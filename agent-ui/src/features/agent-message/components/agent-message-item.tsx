@@ -270,7 +270,7 @@ export const AgentMessageItem = React.memo(function AgentMessageItem({
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}
         >
-          <div className="flex items-center gap-1.5 text-xs font-medium text-destructive">
+          <div className="flex items-center gap-1.5 text-xs font-medium text-message-error-foreground">
             <TriangleAlertIcon
               aria-hidden="true"
               className="size-3.5"
@@ -281,7 +281,7 @@ export const AgentMessageItem = React.memo(function AgentMessageItem({
           {message.role === "user" ? (
             <UserMessageContent key={message.renderId ?? message.id} content={message.content} attachments={message.attachments} isError />
           ) : <MessageContent
-            className="rounded-xl bg-destructive/10 px-4 py-3 text-destructive"
+            className="message-error rounded-xl px-4 py-3"
             role="alert"
           >
             <QuoteSelectable messageRole={message.role}>{message.content}</QuoteSelectable>

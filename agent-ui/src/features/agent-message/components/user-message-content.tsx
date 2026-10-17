@@ -80,9 +80,7 @@ export function UserMessageContent({ content, attachments, isError = false }: {
   const open = canExpand && expanded
   const scrollable = open && size !== null && size.full > size.expanded - size.line + OVERFLOW_TOLERANCE
   const duration = reduceMotion || instant ? 0 : open ? 0.18 : 0.12
-  const surface = isError
-    ? "color-mix(in oklab, var(--destructive) 10%, var(--background))"
-    : "var(--user-message)"
+  const surface = isError ? "var(--message-error)" : "var(--user-message)"
 
   return (
     <MessageContent
@@ -91,7 +89,7 @@ export function UserMessageContent({ content, attachments, isError = false }: {
       data-expanded={open}
       role={isError ? "alert" : undefined}
       className={cn("relative gap-0 whitespace-pre-wrap", open && "max-h-[50dvh]",
-        isError && "rounded-xl text-destructive group-[.is-user]:text-destructive")}
+        isError && "message-error rounded-xl")}
       style={{ backgroundColor: surface }}
     >
       <motion.div
