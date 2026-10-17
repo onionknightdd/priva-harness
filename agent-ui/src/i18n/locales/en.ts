@@ -335,7 +335,6 @@ export const en = {
     contextWindowLabel: "Context window",
     contextWindowAria: "Context window {{size}}",
     contextWindowWarning: "If the model does not support a 1M context window, this setting may cause requests to fail.",
-    configurationApplying: "Applying configuration",
     effortOff: "Off",
     effortMenuLabel: "Effort",
     effortAria: "Effort {{level}}",

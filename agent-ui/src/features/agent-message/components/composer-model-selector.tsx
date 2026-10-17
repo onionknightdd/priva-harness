@@ -807,15 +807,21 @@ export function ComposerModelSelector({
               )}
               {selection?.modelId ? (
                 <CollapsingInline open={!iconOnly}>
-                  <OverflowFadeText className={COMPOSER_TEXT_CLASS}>
-                    {displayModelName(selection.modelId)}
-                  </OverflowFadeText>
-                  <span
-                    className="composer-model-fade shrink-0 text-muted-foreground/60"
-                    data-visible={contextWindow === 1_000_000}
-                    aria-hidden={contextWindow !== 1_000_000}
-                  >
-                    1M
+                  <span className="flex min-w-0 items-center">
+                    <OverflowFadeText className={COMPOSER_TEXT_CLASS}>
+                      {displayModelName(selection.modelId)}
+                    </OverflowFadeText>
+                    <span
+                      className="composer-model-context inline-grid min-w-0 shrink-0 overflow-hidden"
+                      data-visible={contextWindow === 1_000_000}
+                      aria-hidden={contextWindow !== 1_000_000}
+                    >
+                      <span className="flex min-w-0 overflow-hidden">
+                        <span className="w-max pl-1 whitespace-nowrap text-muted-foreground/60">
+                          1M
+                        </span>
+                      </span>
+                    </span>
                   </span>
                   <ChevronDownIcon
                     className={cn(
@@ -877,7 +883,7 @@ export function ComposerModelSelector({
         )}
         <DropdownMenuSeparator />
         <EffortSubmenu effort={effort} levels={availableEffortLevels} onEffortChange={onEffortChange} />
-        <ComposerContextWindow value={contextWindow} pending={configurationPending} onChange={onContextWindowChange} />
+        <ComposerContextWindow value={contextWindow} onChange={onContextWindowChange} />
       </DropdownMenuContent>
     </DropdownMenu>
   )

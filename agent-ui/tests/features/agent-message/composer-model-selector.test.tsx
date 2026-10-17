@@ -127,6 +127,10 @@ test("context options stay available for any model and selecting 1M opens its wa
   const view = await mount()
   try {
     await view.update("custom:model", "medium")
+    const contextBadge = () => view.trigger().querySelector<HTMLElement>(".composer-model-context")
+    assert.equal(contextBadge()?.getAttribute("data-visible"), "false")
+    assert.equal(contextBadge()?.getAttribute("aria-hidden"), "true")
+    assert.equal(contextBadge()?.textContent?.trim(), "1M")
     await act(async () => view.trigger().click())
     const trigger = document.querySelector<HTMLElement>('[role="menuitem"][aria-label="Context window 200K"]')
       ?? [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((el) => el.textContent?.includes("Context window"))!
@@ -136,12 +140,16 @@ test("context options stay available for any model and selecting 1M opens its wa
     assert.ok(option)
     await act(async () => option.click())
     assert.equal(view.state().contextWindow, 1000000)
+    assert.equal(contextBadge()?.getAttribute("data-visible"), "true")
+    assert.equal(contextBadge()?.getAttribute("aria-hidden"), "false")
     const warning = document.querySelector('[data-slot="tooltip-content"]')
     assert.match(warning?.textContent ?? "", /does not support a 1M context window/)
     assert.equal(warning?.getAttribute("data-side"), "bottom")
     const small = [...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find((el) => el.textContent === "200K")!
     await act(async () => small.click())
     assert.equal(view.state().contextWindow, 200000)
+    assert.equal(contextBadge()?.getAttribute("data-visible"), "false")
+    assert.equal(contextBadge()?.getAttribute("aria-hidden"), "true")
     assert.equal(option.getAttribute("aria-checked"), "false")
     assert.equal(view.state().modelReference, `${profile.id}:custom:model`)
     assert.deepEqual(writes, [])

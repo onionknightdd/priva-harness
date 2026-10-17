@@ -5,13 +5,11 @@ import {
   DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSub,
   DropdownMenuSubContent, DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Spinner } from "@/components/ui/spinner"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import type { ContextWindow } from "../model-context"
 
-export function ComposerContextWindow({ value, pending, onChange }: {
+export function ComposerContextWindow({ value, onChange }: {
   value: ContextWindow
-  pending: boolean
   onChange: (value: ContextWindow) => void
 }) {
   const { t } = useTranslation()
@@ -23,14 +21,10 @@ export function ComposerContextWindow({ value, pending, onChange }: {
       <DropdownMenuSubTrigger
         className="min-w-0 gap-2 text-sm font-normal [&_svg:not([class*='size-'])]:size-3.5"
         label={t("agentMessage.contextWindowAria", { size: label })}
-        aria-busy={pending}
         closeDelay={120}
         openOnHover
       >
         <span className="min-w-0 flex-1">{t("agentMessage.contextWindowLabel")}</span>
-        <span className="composer-model-fade size-3.5 shrink-0" data-visible={pending} aria-hidden={!pending}>
-          <Spinner className="size-3.5 motion-reduce:animate-none" aria-label={t("agentMessage.configurationApplying")} />
-        </span>
         <span className="grid shrink-0 text-muted-foreground">
           <span className="invisible col-start-1 row-start-1" aria-hidden="true">200K</span>
           <TextCascade text={label} className="col-start-1 row-start-1 text-right" />

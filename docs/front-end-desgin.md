@@ -2297,20 +2297,23 @@ optimistic message ID -> snapshot.renderId -> same mounted bubble / reply / scro
 「思考强度」右侧的 low / medium / high / xhigh / max，以及「上下文窗口」右侧的 200K / 1M 使用
 [BeUI Text Cascade](https://beui.dev/components/motion/text-animation) 逐字滚动切换；
 采用官方 `text-cascade` 入口，复用现有 `ActionSwapText` 的 cascade 模式和共享弹簧，
-保持固定占位、右对齐及完整的可访问文本。加载状态和选中勾继续使用 160ms 淡入淡出，
-加载图标保持占位，避免切换时内容跳动。过渡可中途反向，键盘焦点即时反馈，
-减少动态效果时立即切换。
+保持固定占位、右对齐及完整的可访问文本。选中勾继续使用 160ms 淡入淡出。
+过渡可中途反向，键盘焦点即时反馈，减少动态效果时立即切换。
 上下文窗口独立于模型 ID；`useAgentMessage` 持有状态，`run.start`、`session.configure`
-与终端连接参数携带数值 `contextWindow`（200000 / 1000000）。等待配置确认期间显示
-加载状态并暂停发送新消息，停止当前回复仍可用。配置确认同时更新上下文环。
+与终端连接参数携带数值 `contextWindow`（200000 / 1000000）。切换时界面不显示加载，
+`session.configure` 仍立即发送，帧内容可在开发者工具的网络面板查看；失败时的连接错误
+同样留在界面上。等待配置确认期间暂停发送新消息，停止当前回复仍可用。配置确认同时更新上下文环。
 设置页的默认模型与多模态模型选择器不增加该选项。
-启用 1M 时，输入框模型名称右侧、下拉箭头左侧显示 `1M`，使用
-`text-muted-foreground/60` 三级文本色及 160ms 淡入 / 淡出；200K 时透明隐藏并保留占位，
-避免触发器宽度变化带动菜单或 Tooltip 跳动。
-减少动态效果时立即显示，图标模式随模型名称收起，Tooltip 和可访问名称保留 `1M`。
+200K 时触发器不为 `1M` 预留宽度。选中 1M 后，模型名称向左让出这段宽度，
+在名称与下拉箭头之间显示 `1M`，使用 `text-muted-foreground/60` 三级文本色。
+宽度与透明度一起用 160ms / `--ease-out` 过渡，可中途反向；名称已达到触发器
+最大宽度时，由名称继续收缩并沿用右侧淡出，箭头保持在名称组右侧。
+减少动态效果时立即切换，图标模式随模型名称收起，Tooltip 和可访问名称保留 `1M`。
 
 ```text
-触发器：[模型图标] 模型名称  1M  ▾
+200K：[模型图标] 模型名称 ▾
+1M： [模型图标] 模型名称左移 1M ▾
+已达最大宽度时，名称右侧继续淡出，把空出的宽度交给 1M
 会话输入框 Model selector
   模型配置          >
   思考强度 medium   >
@@ -2318,7 +2321,10 @@ optimistic message ID -> snapshot.renderId -> same mounted bubble / reply / scro
                         ( ) 1M
                              +-> 选择后在下方显示不支持窗口的风险提示
 
-contextWindow -> run.start / session.configure -> Claude env + [1m] / Pi models.json
+contextWindow -> 菜单不显示加载
+              -> WebSocket session.configure（开发者工具网络面板可见）
+              -> run.start / 终端连接参数
+              -> Claude env + [1m] / Pi models.json
               <- session.config(requestId)    <- 实际运行时确认
               -> 会话保存 / 恢复；失败恢复已确认的选择
 ```

@@ -334,7 +334,6 @@ export const zhCN = {
     contextWindowLabel: "上下文窗口",
     contextWindowAria: "上下文窗口 {{size}}",
     contextWindowWarning: "若当前模型不支持 1M 上下文窗口，使用该配置可能导致请求报错。",
-    configurationApplying: "正在应用配置",
     effortOff: "关闭",
     effortMenuLabel: "思考强度",
     effortAria: "思考强度 {{level}}",

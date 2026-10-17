@@ -16,20 +16,28 @@
   transition: none;
 }
 
-/* Keep these slots mounted so anchors stay put and rapid reversals crossfade. */
-.composer-model-fade,
+/* Keep the check mounted so the anchor stays put and rapid reversals crossfade. */
 .composer-model-menu [data-slot="dropdown-menu-radio-item-indicator"] > span {
   opacity: 1;
   transition: opacity 160ms var(--ease-out);
 }
 
-.composer-model-fade[data-visible="false"],
-.composer-model-menu [data-slot="dropdown-menu-radio-item-indicator"] > span:is([data-starting-style], [data-ending-style]) {
+/* 1M takes no width until selected; opening it yields that width from the name. */
+.composer-model-context {
+  grid-template-columns: 0fr;
   opacity: 0;
+  transition:
+    grid-template-columns 160ms var(--ease-out),
+    opacity 160ms var(--ease-out);
 }
 
-.composer-model-fade[data-visible="false"] [data-slot="spinner"] {
-  animation-play-state: paused;
+.composer-model-context[data-visible="true"] {
+  grid-template-columns: 1fr;
+  opacity: 1;
+}
+
+.composer-model-menu [data-slot="dropdown-menu-radio-item-indicator"] > span:is([data-starting-style], [data-ending-style]) {
+  opacity: 0;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -47,7 +55,7 @@
   .composer-model-menu [data-slot],
   .composer-model-menu [data-slot="dropdown-menu-radio-item-indicator"] > span,
   .composer-model-tooltip,
-  .composer-model-fade {
+  .composer-model-context {
     transition: none;
   }
 }
