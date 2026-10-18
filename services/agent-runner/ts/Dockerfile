@@ -44,6 +44,8 @@ WORKDIR /opt/agent-runner
 COPY --chown=node:node package.json package-lock.json ./
 ARG NPM_REGISTRY=https://registry.npmjs.org
 USER node
+# @openuidev/lang-core posts an install id to PostHog unless this is set.
+ENV OPENUI_TELEMETRY_DISABLED=1
 RUN --mount=type=cache,target=/home/node/.npm,uid=1000,gid=1000,sharing=locked \
     npm ci --registry="$NPM_REGISTRY" --no-audit --no-fund
 COPY --chown=node:node tsconfig.json tsconfig.build.json eslint.config.js ./

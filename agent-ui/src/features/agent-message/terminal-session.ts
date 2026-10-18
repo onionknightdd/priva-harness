@@ -19,6 +19,7 @@ export type TerminalSessionOptions = {
   rows: number
   /** Viewer colour scheme; the runner aligns the TUI's own theme with it on launch. */
   theme?: "light" | "dark"
+  visualizeMode?: boolean
 }
 
 export type TerminalSessionStatus =
@@ -54,6 +55,7 @@ export function terminalSocketUrl(options: TerminalSessionOptions): string {
   if (options.contextWindow) params.set("contextWindow", String(options.contextWindow))
   if (options.effort) params.set("effort", options.effort)
   if (options.theme) params.set("theme", options.theme)
+  if (options.visualizeMode !== undefined) params.set("visualizeMode", options.visualizeMode ? "true" : "false")
   return `${protocol}//${window.location.host}/api/sandbox/agent/ws/terminal?${params.toString()}`
 }
 

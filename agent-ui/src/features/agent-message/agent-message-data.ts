@@ -2,6 +2,7 @@ import type { MessageAttachment } from "./message-attachment"
 import type { WorkflowCard } from "./workflow-data"
 import type { CompactMarker } from "./slash-command-envelope"
 export type { WorkflowCard } from "./workflow-data"
+import { isGeneratedVisualTool } from "./render-ui/lang"
 import { isTaskBoardTool } from "./task-plan"
 
 export type AgentMessageRole = "user" | "assistant"
@@ -200,7 +201,7 @@ export function isProcessBlock(
     return true
   }
   if (block.type === "tool_use") {
-    return !isTaskBoardTool(block.name) && block.name.toLowerCase() !== "structuredoutput"
+    return !isGeneratedVisualTool(block.name) && !isTaskBoardTool(block.name) && block.name.toLowerCase() !== "structuredoutput"
   }
   if (block.type !== "text" || block.text.trim() === "") {
     return false

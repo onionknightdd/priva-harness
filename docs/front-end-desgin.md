@@ -2416,6 +2416,7 @@ TUI /effort / Composer 思考强度选择 -> 原生命令与确认 -> effortChan
 
 snapshot.runningToolIds 恢复等待工具结束的状态。TUI 产生的内嵌图片从转录映射到现有附件卡片，
 产品 MCP 的 visualize / canvas / 图片别名继续使用既有工具卡片。
+打开可视化回答后，`static_visualize` 和 `interactive_visualize` 替换 `visualize`，并画在随后正文的上方，不进入进度折叠。
 
 ```text
 native statusLine -> session.config -> model / effort / cwd / context UI
@@ -2669,6 +2670,7 @@ App TooltipProvider -> 首次悬浮 1s -> 连续切换 0ms
 | DOCX / PPTX | [document-renderer](../agent-ui/src/features/files/preview/renderers/document-renderer.tsx)、[presentation-renderer](../agent-ui/src/features/files/preview/renderers/presentation-renderer.tsx) | @silurus/ooxml 渲染文档内容，应用外框使用项目 token |
 | HTML 编辑器 | [html-visual-editor](../agent-ui/src/features/files/preview/renderers/html-visual-editor.tsx)，GrapesJS | 编辑器自带 UI；全局 CSS 当前明确保留默认粉/紫色点缀，形成应用内可见的独立风格 |
 | HTML / JSX 生成内容 | [html-renderer](../agent-ui/src/features/files/preview/renderers/html-renderer.tsx)、[visualize-sandbox](../agent-ui/src/features/agent-message/visualize-sandbox) | iframe 中的内容；JSX 沙箱另有 Button、Badge、Card、Progress、Separator 简化实现，传入主题颜色但不共享主应用全部字号、圆角与交互 |
+| 可视化回答 | [render-ui/library](../agent-ui/src/features/agent-message/render-ui/library.tsx)、[generated-visual](../agent-ui/src/features/agent-message/render-ui/generated-visual.tsx) | 开关打开后，`static_visualize` / `interactive_visualize` 的 OpenUI Lang 画在随后正文上方，限高且不带动跟随滚动。按钮发下一轮 |
 
 消息共用的 `MessageResponse` 通过 `createMathPlugin({ singleDollarTextMath: true })`
 启用单美元符号行内公式（如 `$E = mc^2$`），同时保留 `$$...$$` 行内及独立公式。
@@ -2866,11 +2868,25 @@ Shift+Tab、Esc、已有草稿、重复快照、断线重连和原生会话重�
 
 在 `agent-ui/` 目录运行：
 
-- 安装依赖：`npm ci`
+- 安装依赖：`OPENUI_TELEMETRY_DISABLED=1 npm ci`（`@openuidev/react-lang` 依赖的 `@openuidev/lang-core` 默认在 postinstall 向 PostHog 上报安装信息）
 - 启动开发：`npm run dev`
 - 静态分析：`npm run lint`
 - 生产构建：`npm run build`
 - 预览生产构建：`npm run preview`
+
+`render_ui` 库变更后，在 `agent-ui/` 重新生成后端 spec：
+
+```sh
+../services/agent-runner/ts/node_modules/.bin/tsx --tsconfig tsconfig.app.json scripts/generate-render-ui-spec.ts
+```
+
+回归（仓库根目录）：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/render-ui-lang.test.ts agent-ui/tests/features/agent-message/render-ui-spec.test.ts agent-ui/tests/features/agent-message/render-ui-tool-item.test.tsx
+```
+
+浏览器打开 `/tests/features/agent-message/render-ui-browser.html`，点击 **Stream next line**，确认半截程序先出现标题，写完后三张卡并排、图表在下一行。追加 `?dark` 看深色。把窗口收到 390px，三张卡仍在同一行里收缩。
 
 Workspace 电脑连接与视图生命周期回归（仓库根目录）：
 

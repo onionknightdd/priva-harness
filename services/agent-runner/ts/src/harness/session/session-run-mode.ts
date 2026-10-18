@@ -2,6 +2,7 @@ import type { ProviderRunSpec, SessionRef, SessionTarget } from '../../core/cont
 import type { SessionMetadataRepository } from '../../core/contract/session-metadata-repository.js'
 import { assertRunMode, SessionError, sessionRefKey, type RunMode } from '../../core/resource/session.js'
 import { PLATFORM_INSTRUCTIONS } from '../prompt/platform-instructions.js'
+import { VISUALIZE_MODE_REMINDER, withVisualizeInstructions } from '../../core/tool/visualize-mode.js'
 
 /** Session policy is persisted when the harness owns a session repository. */
 export class SessionRunModes {
@@ -30,7 +31,8 @@ export class SessionRunModes {
     if (provider !== spec.provider) throw new SessionError('invalid-request', 'Session and requested provider differ')
     if (spec.provider !== 'claude') {
       if (spec.runMode !== undefined) throw new SessionError('invalid-request', 'Agent / Code modes are only available for Claude')
-      return spec
+      if (spec.visualizeMode !== true) return spec
+      return { ...spec, systemInstructions: VISUALIZE_MODE_REMINDER }
     }
     const mode = target.kind === 'new' ? spec.runMode ?? 'agent'
       : await this.get(target.kind === 'resume' ? target.session : target.source)
@@ -39,6 +41,6 @@ export class SessionRunModes {
     if (!ref.id) throw new SessionError('invalid-request', 'Choose the Claude session ID before binding its mode')
     if (target.kind === 'fork') await this.bind(target.source, mode)
     await this.bind(ref, mode)
-    return { ...spec, runMode: mode, systemInstructions: PLATFORM_INSTRUCTIONS }
+    return { ...spec, runMode: mode, systemInstructions: withVisualizeInstructions(PLATFORM_INSTRUCTIONS, spec.visualizeMode === true) }
   }
 }

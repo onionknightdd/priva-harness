@@ -23,6 +23,7 @@ export interface RunSpecRequest {
   readonly effort?: EffortLevel
   readonly contextWindow?: ContextWindow
   readonly promptSuggestions?: boolean
+  readonly visualizeMode?: boolean
 }
 
 /**
@@ -54,6 +55,7 @@ export async function buildRunSpec(services: RunSpecServices, request: RunSpecRe
     ...(request.promptSuggestions === undefined
       ? {}
       : { promptSuggestions: request.promptSuggestions }),
+    ...(request.visualizeMode === undefined ? {} : { visualizeMode: request.visualizeMode }),
     ...(resolved.classifier === undefined ? {} : { classifier: resolved.classifier }),
     imageTools: {
       baseUrl,

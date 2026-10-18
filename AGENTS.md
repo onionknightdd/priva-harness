@@ -15,7 +15,7 @@ frontend-specific guidance there instead of duplicating it in this file.
 The TypeScript Agent Runner lives in `services/agent-runner/ts/`. Use npm and
 run the following commands from that directory:
 
-- Install dependencies: `npm ci`
+- Install dependencies: `OPENUI_TELEMETRY_DISABLED=1 npm ci`
 - Start development: `npm run dev`
 - Run static analysis: `npm run lint`
 - Run strict type checking: `npm run typecheck`

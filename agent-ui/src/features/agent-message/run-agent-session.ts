@@ -10,6 +10,7 @@ export type AgentRunInit = {
   text: string; attachments?: MessageAttachment[]; imagePaths?: string[]; model: string; harness: AgentRunHarness
   cwd: string; contextWindow?: ContextWindow; effort?: AgentRunEffort; sessionId?: string; fork?: boolean; promptSuggestions?: boolean
   runMode?: "agent" | "code"
+  visualizeMode?: boolean
   theme?: "light" | "dark"
 }
 
@@ -172,7 +173,7 @@ export function connectAgentSession(target: { harness: AgentRunHarness; sessionI
   }
   connect()
   return {
-    configure(init: Pick<AgentRunInit, "model" | "cwd" | "effort" | "contextWindow" | "promptSuggestions">, requestId: string): Promise<void> {
+    configure(init: Pick<AgentRunInit, "model" | "cwd" | "effort" | "contextWindow" | "promptSuggestions" | "visualizeMode">, requestId: string): Promise<void> {
       if (!sessionId) return Promise.reject(new Error("Model synchronization requires an existing session"))
       return new Promise((resolve, reject) => {
         replies.set(requestId, { resolve, reject })

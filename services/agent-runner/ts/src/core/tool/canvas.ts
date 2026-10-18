@@ -18,6 +18,7 @@ export const canvasTool = defineTool({
     'Use this for multi-section pages, documents, dashboards, or any HTML that needs a full preview surface.',
     'Inline script and click handlers run in the workspace preview sandbox.',
     'Do not use this for compact inline React snippets; use visualize for those.',
+    'Use static_visualize for a chat card, table, or chart.',
     'Do not wrap markup in markdown fences.',
     'The chat UI does not show the HTML. It opens the workspace preview when the user clicks the canvas card.',
   ].join(' '),

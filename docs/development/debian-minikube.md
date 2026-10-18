@@ -116,7 +116,7 @@ Runner 没有独立 `/health` 路由，Kubernetes 使用现有的
 
 - 基础镜像为按 digest 固定的官方 `node:24-trixie-slim`（Debian 13）。构建平台取自
   minikube 节点的实际架构；Dockerfile 更新 digest 后应重新验证。
-- 在 Linux 内执行 `npm ci`，保留开发依赖，编译 `dist/`；不复制 Mac 的
+- 在 Linux 内执行 `npm ci`，保留开发依赖，编译 `dist/`。镜像构建时 Dockerfile 设置 `OPENUI_TELEMETRY_DISABLED=1`，避免 `@openuidev/lang-core` 的安装遥测。不复制 Mac 的
   `node_modules`、私人配置、`.env` 或仓库中的其他目录。
 - Claude 命令指向锁文件中的 Agent SDK 所带原生二进制，与程序化 SDK/TUI 完全同版；
   Pi 命令来自同一份已安装的 `@earendil-works/pi-coding-agent`。

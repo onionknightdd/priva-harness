@@ -27,7 +27,6 @@ import { EASE_OUT } from "@/lib/ease"
 import { formatSessionRelativeTime, useSharedNow } from "@/lib/relative-time"
 
 import {
-  assistantHasProcess,
   type AgentThreadMessage,
 } from "../agent-message-data"
 import { PopupsArmedContext } from "@/components/ui/popups-armed-context"
@@ -38,6 +37,8 @@ import { AssistantProcess } from "./assistant-process"
 import { assistantTimeline } from "../assistant-timeline"
 import { TaskNotificationCard } from "./task-notification-card"
 import { CompactSessionMarker } from "./compact-session-marker"
+import { GeneratedVisual } from "../render-ui/generated-visual"
+import { assistantPieces } from "../assistant-pieces"
 import { AssistantMarkdown } from "./assistant-markdown"
 import { QuoteSelectable } from "./quote-selectable"
 import { UserMessageContent } from "./user-message-content"
@@ -361,33 +362,54 @@ function AssistantSegment({
   hideProcessHeader: boolean
 }) {
   const shouldReduceMotion = Boolean(useReducedMotion())
-  const text = message.content
-  const hasProcess = assistantHasProcess(message)
-  const showProcess = hasProcess || (isStreaming && !hideProcessHeader)
+  const pieces = assistantPieces(message)
+  const hasProcess = pieces.some((piece) => piece.kind === "process")
+  const showIdleHeader = isStreaming && !hideProcessHeader && !hasProcess && pieces.length === 0
+  let processIndex = 0
 
   return (
     <div className="flex flex-col gap-3">
-      {showProcess ? (
-        <AssistantProcess
-          message={message}
-          isStreaming={isStreaming}
-          hideHeader={hideProcessHeader}
-        />
+      {showIdleHeader ? (
+        <AssistantProcess message={message} isStreaming={isStreaming} hideHeader={hideProcessHeader} />
       ) : null}
-      {text.trim() !== "" ? (
-        <motion.div layout="position" layoutDependency={false} className="min-w-0">
-          <QuoteSelectable>
-            <AssistantMarkdown
-              className="[&_p]:[line-height:1.5em] [&_p+p]:mt-[2px]"
-              animated={isStreaming && !shouldReduceMotion}
-              isAnimating={isStreaming}
-              mode={isStreaming ? "streaming" : "static"}
-            >
-              {text}
-            </AssistantMarkdown>
-          </QuoteSelectable>
-        </motion.div>
-      ) : null}
+      {pieces.map((piece, index) => {
+        if (piece.kind === "process") {
+          const header = processIndex === 0 ? hideProcessHeader : true
+          processIndex += 1
+          return (
+            <AssistantProcess
+              key={`process-${index}`}
+              message={{
+                ...message,
+                blocks: piece.blocks,
+                interactions: processIndex === 1 ? message.interactions : [],
+                nestedAgents: processIndex === 1 ? message.nestedAgents : [],
+                workflows: processIndex === 1 ? message.workflows : [],
+              }}
+              isStreaming={isStreaming}
+              hideHeader={header}
+            />
+          )
+        }
+        if (piece.kind === "visual") {
+          return <GeneratedVisual key={piece.block.id} block={piece.block} />
+        }
+        if (piece.text.trim() === "") return null
+        return (
+          <motion.div key={`answer-${index}`} layout="position" layoutDependency={false} className="min-w-0">
+            <QuoteSelectable>
+              <AssistantMarkdown
+                className="[&_p]:[line-height:1.5em] [&_p+p]:mt-[2px]"
+                animated={isStreaming && !shouldReduceMotion}
+                isAnimating={isStreaming}
+                mode={isStreaming ? "streaming" : "static"}
+              >
+                {piece.text}
+              </AssistantMarkdown>
+            </QuoteSelectable>
+          </motion.div>
+        )
+      })}
     </div>
   )
 }

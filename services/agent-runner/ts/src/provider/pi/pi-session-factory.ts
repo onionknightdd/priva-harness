@@ -26,6 +26,7 @@ import type { PiSessionFactory } from './pi-provider.js'
 import type { PiAgentSession, PiImageContent } from './pi-runtime.js'
 import type { PiSessionEvent } from './pi-event-mapper.js'
 import { compilePiCustomTools } from './tools/compile-custom-tools.js'
+import { toolsForVisualizeMode } from '../../core/tool/visualize-mode.js'
 import { PiWorkflows } from './pi-workflows.js'
 import { createPiResourceLoader } from './pi-resource-loader.js'
 import { piProjectTrusted } from '../../pi-config.js'
@@ -83,7 +84,7 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
         sessionId: sessionManager.getSessionId(), modelRuntime,
         providerId: options.providerId, modelId: options.modelId })
       const eventBus = createEventBus()
-      const resourceLoader = await createPiResourceLoader(spec.cwd, this.agentDir, settingsManager, eventBus, host.extensions)
+      const resourceLoader = await createPiResourceLoader(spec.cwd, this.agentDir, settingsManager, eventBus, host.extensions, spec.systemInstructions ? [spec.systemInstructions] : [])
       const { session } = await createAgentSession({
         cwd: spec.cwd,
         agentDir: this.agentDir,
@@ -94,7 +95,7 @@ export class CodingAgentSessionFactory implements PiSessionFactory {
         resourceLoader,
         ...(host.sessionStartEvent ? { sessionStartEvent: host.sessionStartEvent } : {}),
         ...(thinkingLevel === undefined ? {} : { thinkingLevel }),
-        customTools: [workflows.tool, interactions.tool, ...compilePiCustomTools(this.tools, {
+        customTools: [workflows.tool, interactions.tool, ...compilePiCustomTools(toolsForVisualizeMode(this.tools, spec.visualizeMode), {
           cwd: spec.cwd, session: { provider: 'pi', id: sessionManager.getSessionId() },
           signal: new AbortController().signal, profile: imageToolsFromSpec(spec),
           emitProgress: (chunk) => progressSink.emit?.(chunk),

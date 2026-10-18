@@ -45,6 +45,7 @@ const querySchema = z.object({
   cols: z.coerce.number().int().min(20).max(500).default(120),
   rows: z.coerce.number().int().min(5).max(300).default(40),
   theme: z.enum(['light', 'dark']).optional(),
+  visualizeMode: z.enum(['true', 'false']).optional(),
 })
 
 const clientMessageSchema = z.object({
@@ -66,7 +67,7 @@ async function handleTerminalSocket(socket: WebSocket, rawQuery: unknown, option
     fail(socket, 'invalid-request', query.error.issues.map((issue) => issue.message).join('; '))
     return
   }
-  const { harness, sessionId, cwd, model, effort, contextWindow, cols, rows, theme, runMode } = query.data
+  const { harness, sessionId, cwd, model, effort, contextWindow, cols, rows, theme, runMode, visualizeMode } = query.data
   const provider = providerIdForHarness(harness)
   const target: SessionTarget = sessionId === undefined
     ? { kind: 'new', provider }
@@ -79,6 +80,7 @@ async function handleTerminalSocket(socket: WebSocket, rawQuery: unknown, option
     const spec = await buildRunSpec(options, {
       harness, model, cwd, ...(runMode ? { runMode } : {}), ...(effort === undefined ? {} : { effort }),
       ...(contextWindow === undefined ? {} : { contextWindow }),
+      ...(visualizeMode === undefined ? {} : { visualizeMode: visualizeMode === 'true' }),
     })
     const opened = await options.harness.openTerminal(target, spec, { cols, rows, ...(theme === undefined ? {} : { colorScheme: theme }) })
     let currentSession = opened.session

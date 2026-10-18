@@ -21,6 +21,8 @@
     "@headless-tree/react": "^1.7.0",
     "@lobehub/icons-static-svg": "^1.94.0",
     "@novnc/novnc": "^1.7.0",
+    "@openuidev/react-lang": "^1.0.1",
+    "@openuidev/react-ui": "^0.18.1",
     "@rjsf/core": "^6.10.0",
     "@rjsf/utils": "^6.10.0",
     "@rjsf/validator-ajv8": "^6.10.0",
@@ -72,7 +74,8 @@
     "sucrase": "^3.35.1",
     "tailwind-merge": "^3.6.0",
     "tw-shimmer": "^0.4.12",
-    "unist-util-visit": "^5.1.0"
+    "unist-util-visit": "^5.1.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

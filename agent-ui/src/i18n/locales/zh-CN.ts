@@ -413,6 +413,8 @@ export const zhCN = {
       bashDone: "已运行",
       visualizeRunning: "正在可视化",
       visualizeDone: "可视化",
+      renderUiRunning: "正在生成界面",
+      renderUiDone: "界面",
       canvasRunning: "正在写入画布",
       canvasDone: "画布",
       imageGenRunning: "创建图片",
@@ -425,6 +427,8 @@ export const zhCN = {
       otherDone: "{{name}}",
     },
     visualizeFrameTitle: "可视化交互预览",
+    visualizeModeOn: "可视化回答已打开",
+    visualizeModeOff: "可视化回答已关闭",
     canvasOpenPreview: "打开预览",
     imageTools: {
       inputPending: "等待输入……",

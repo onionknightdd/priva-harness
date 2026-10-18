@@ -27,6 +27,7 @@ type AgentPreferencesContextValue = AgentPreferences & {
   setLastModelReference: (value: string | null) => void
   setQueueBehavior: (value: QueueBehavior) => void
   setInputSuggestions: (value: boolean) => void
+  setVisualizeMode: (value: boolean) => void
 }
 
 const [AgentPreferencesContextProvider, useAgentPreferencesContext] =
@@ -130,6 +131,7 @@ export function AgentPreferencesProvider({
         update({ lastModelReference }),
       setQueueBehavior,
       setInputSuggestions: (inputSuggestions) => update({ inputSuggestions }),
+      setVisualizeMode: (visualizeMode) => update({ visualizeMode }),
     }),
     [preferences, queueBehaviorBusy, queueBehaviorError, setQueueBehavior, update]
   )

@@ -116,5 +116,6 @@ export class PiProvider implements AgentProvider {
 function terminalRuntimeConfig(spec: ProviderRunSpec) {
   return { cwd: spec.cwd, provider: spec.provider, profileId: spec.profileId, baseUrl: spec.baseUrl, authToken: spec.authToken,
     imageTools: spec.imageTools, classifier: spec.classifier, systemInstructions: spec.systemInstructions,
+    visualizeMode: spec.visualizeMode,
     queueBehavior: spec.queueBehavior, runMode: spec.runMode, promptSuggestions: spec.promptSuggestions }
 }

@@ -35,7 +35,7 @@ export function useAgentMessage({ onComputerToolStarted }: { onComputerToolStart
   const { resolvedTheme } = useTheme()
   const { preserveViewForSession, setView } = useSessionView()
   const { runHarnessId } = useHarness()
-  const { queueBehavior, inputSuggestions, setLastModelReference } = useAgentPreferences()
+  const { queueBehavior, inputSuggestions, visualizeMode, setVisualizeMode, setLastModelReference } = useAgentPreferences()
   const { threadMessages, messagesStatus, transcriptEpoch } = useChatThread()
   const { runCwd, runSessionId, runMode } = useActiveSession()
   const { bindRunSession, setRunModePending } = useChatSessionActions()
@@ -287,10 +287,10 @@ export function useAgentMessage({ onComputerToolStarted }: { onComputerToolStart
       if (generation !== generationRef.current) return
       void connection.start({ text: content, attachments: files ?? [], ...(imagePaths.length ? { imagePaths } : {}), model: modelReference, harness: runHarnessId,
         ...(runHarnessId === "claude" ? { runMode } : {}),
-        cwd: runCwd.trim(), effort, contextWindow, promptSuggestions: inputSuggestions,
+        cwd: runCwd.trim(), effort, contextWindow, promptSuggestions: inputSuggestions, visualizeMode,
         theme: resolvedTheme === "dark" ? "dark" : "light" }, assistant.id).catch(failed)
     }).catch(failed)
-  }, [interactions.length, attachments, imageInputModels, slashCommand, draft, modelReference, runHarnessId, runCwd, ensureConnection, setLastModelReference, clearAttachments, queueBehavior, effort, contextWindow, inputSuggestions, resolvedTheme, runMode, setRunModePending, t])
+  }, [interactions.length, attachments, imageInputModels, slashCommand, draft, modelReference, runHarnessId, runCwd, ensureConnection, setLastModelReference, clearAttachments, queueBehavior, effort, contextWindow, inputSuggestions, visualizeMode, resolvedTheme, runMode, setRunModePending, t])
 
   const respondPermission = React.useCallback((response: InteractionResponse) => {
     const connection = connectionRef.current
@@ -302,7 +302,7 @@ export function useAgentMessage({ onComputerToolStarted }: { onComputerToolStart
     configurationRequestRef.current = requestId
     setConfigurationPending(true)
     setConnectionError(null)
-    void ensureConnection().configure({ model, cwd: runCwd, effort: nextEffort, contextWindow: nextWindow, promptSuggestions: inputSuggestions }, requestId).catch((error: unknown) => {
+    void ensureConnection().configure({ model, cwd: runCwd, effort: nextEffort, contextWindow: nextWindow, promptSuggestions: inputSuggestions, visualizeMode }, requestId).catch((error: unknown) => {
       if (generation !== generationRef.current || configurationRequestRef.current !== requestId) return
       configurationRequestRef.current = undefined
       setConfigurationPending(false)
@@ -313,7 +313,17 @@ export function useAgentMessage({ onComputerToolStarted }: { onComputerToolStart
       setContextWindow(native?.contextWindow ?? DEFAULT_CONTEXT_WINDOW)
       setConnectionError(error instanceof Error ? error.message : String(error))
     })
-  }, [runHarnessId, runSessionId, runCwd, inputSuggestions, ensureConnection])
+  }, [runHarnessId, runSessionId, runCwd, inputSuggestions, visualizeMode, ensureConnection])
+  const visualizeModeMounted = React.useRef(false)
+  React.useEffect(() => {
+    if (!visualizeModeMounted.current) {
+      visualizeModeMounted.current = true
+      return
+    }
+    synchronizeSelection(modelReference, effort, contextWindow)
+    // The switch is the only reason to reconfigure here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visualizeMode])
   const changeModelReference = React.useCallback((model: string | null, source?: "user", nextEffort = effort) => {
     const reference = model === null ? null : baseModelReference(model)
     setModelReference(reference)
@@ -332,6 +342,36 @@ export function useAgentMessage({ onComputerToolStarted }: { onComputerToolStart
     synchronizeSelection(modelReference, effort, next)
   }, [modelReference, effort, synchronizeSelection])
   const stop = React.useCallback(() => connectionRef.current?.abort(), [])
+  const sendFollowUp = React.useCallback((text: string) => {
+    const content = text.trim()
+    if (configurationRequestRef.current || !content || !modelReference || !runHarnessId || !runCwd.trim()) return
+    const connection = ensureConnection()
+    const assistant = createAgentThreadMessage("assistant", "", "streaming")
+    const user = { ...createAgentThreadMessage("user", content), id: `${assistant.id}:user` }
+    if (runHarnessId === "claude") setRunModePending(true)
+    pendingIdsRef.current.add(assistant.id)
+    setMessages((current) => [...current, user, assistant])
+    const generation = generationRef.current
+    const failed = (error: unknown) => {
+      if (generation !== generationRef.current) return
+      pendingIdsRef.current.delete(assistant.id)
+      if (pendingIdsRef.current.size === 0) setRunModePending(false)
+      setMessages((current) => applyThreadStreamFrame(current, assistant.id, {
+        type: "run.failed", message: error instanceof Error ? error.message : t("agentMessage.sendFailed"),
+      }))
+    }
+    submitChainRef.current = submitChainRef.current.catch(() => undefined).then(async () => {
+      if (generation !== generationRef.current) return
+      await connection.waitForIdle()
+      if (generation !== generationRef.current) return
+      void connection.start({
+        text: content, model: modelReference, harness: runHarnessId,
+        ...(runHarnessId === "claude" ? { runMode } : {}),
+        cwd: runCwd.trim(), effort, contextWindow, promptSuggestions: inputSuggestions, visualizeMode,
+        theme: resolvedTheme === "dark" ? "dark" : "light",
+      }, assistant.id).catch(failed)
+    }).catch(failed)
+  }, [modelReference, runHarnessId, runCwd, ensureConnection, effort, contextWindow, inputSuggestions, visualizeMode, resolvedTheme, runMode, setRunModePending, t])
   const dismissPromptSuggestion = React.useCallback(() => setSuggestion((current) =>
     current && !current.dismissed ? { ...current, dismissed: true } : current), [])
   const updateDraft = React.useCallback((value: string) => {
@@ -350,6 +390,7 @@ export function useAgentMessage({ onComputerToolStarted }: { onComputerToolStart
     dismissPromptSuggestion,
     canSubmit: Boolean(!configurationPending && !interactions.length && (draft.trim() || slashCommand || attachments.length) && readyComposerAttachments(attachments) !== null && modelReference && runHarnessId && runCwd.trim()),
     modelReady: Boolean(modelReference && runHarnessId), slashCommand, setDraft: updateDraft, setSlashCommand,
-    setModelReference: changeModelReference, setEffort: changeEffort, setContextWindow: changeContextWindow, submit, stop,
+    setModelReference: changeModelReference, setEffort: changeEffort, setContextWindow: changeContextWindow,
+    visualizeMode, setVisualizeMode, sendFollowUp, submit, stop,
   }
 }

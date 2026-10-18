@@ -37,4 +37,17 @@ describe('Claude session run modes', () => {
     expect(await modes.resolve({ kind: 'new', provider: 'pi' }, pi)).toBe(pi)
     await expect(modes.resolve({ kind: 'new', provider: 'pi' }, { ...pi, runMode: 'agent' })).rejects.toMatchObject({ kind: 'invalid-request' })
   })
+
+  it('appends the visualize reminder without replacing the platform prompt', async () => {
+    const modes = new SessionRunModes()
+    const spec = await modes.resolve(
+      { kind: 'new', provider: 'claude', sessionId: 'visual' },
+      { ...request, visualizeMode: true },
+    )
+    expect(spec.systemInstructions?.startsWith(PLATFORM_INSTRUCTIONS)).toBe(true)
+    expect(spec.systemInstructions).toContain('</system-reminder>')
+    const pi = await modes.resolve({ kind: 'new', provider: 'pi' }, { ...testRunSpec({ provider: 'pi' }), visualizeMode: true })
+    expect(pi.systemInstructions).toContain('<system-reminder>')
+    expect(pi.systemInstructions).toContain('</system-reminder>')
+  })
 })

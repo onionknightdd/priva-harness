@@ -29,6 +29,7 @@ import { userTurnText, type UserTurn } from '../../core/run/user-turn.js'
 import { AsyncQueue } from '../../core/stream/async-queue.js'
 import { PushableStream } from '../../core/stream/pushable-stream.js'
 import type { ToolDefinition } from '../../core/tool/define-tool.js'
+import { toolsForVisualizeMode } from '../../core/tool/visualize-mode.js'
 import { imageToolsFromSpec } from '../../core/tool/image-tool-shared.js'
 import { ClaudeEventMapper } from './claude-event-mapper.js'
 import { claudeUserMessage } from './claude-user-message.js'
@@ -185,7 +186,7 @@ export class ClaudeRuntime implements AgentRuntime {
           this.spec,
           this.target,
           abortController,
-          this.tools,
+          toolsForVisualizeMode(this.tools, this.spec.visualizeMode),
           {
             emitProgress: (chunk) => this.emitToolProgress(chunk),
           },

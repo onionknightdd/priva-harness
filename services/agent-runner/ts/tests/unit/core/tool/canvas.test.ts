@@ -170,6 +170,8 @@ describe('canvas tool', () => {
     expect(productTools.map((tool) => tool.name)).toEqual([
       VISUALIZE_TOOL_NAME,
       CANVAS_TOOL_NAME,
+      'static_visualize',
+      'interactive_visualize',
       'image_gen',
       'image_read',
       'image_edit',

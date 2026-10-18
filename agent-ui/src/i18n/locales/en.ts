@@ -414,6 +414,8 @@ export const en = {
       bashDone: "Ran",
       visualizeRunning: "Visualizing",
       visualizeDone: "Visualize",
+      renderUiRunning: "Rendering",
+      renderUiDone: "Interface",
       canvasRunning: "Writing canvas",
       canvasDone: "Canvas",
       imageGenRunning: "Generating image",
@@ -426,6 +428,8 @@ export const en = {
       otherDone: "{{name}}",
     },
     visualizeFrameTitle: "Interactive visualize preview",
+    visualizeModeOn: "Visual answers on",
+    visualizeModeOff: "Visual answers off",
     canvasOpenPreview: "Open preview",
     imageTools: {
       inputPending: "Waiting for input…",
