@@ -209,12 +209,12 @@ export class AgentHarness {
     })
   }
 
-  async openTerminal(target: SessionTarget, spec: ProviderRunSpec, size: TerminalSize) {
+  async openTerminal(target: SessionTarget, spec: ProviderRunSpec, size: TerminalSize, intent: 'run' | 'view' = 'run') {
     if (!this.terminalChats) throw new SessionError('invalid-request', 'Terminal driver is unavailable')
     const resolved = target.kind === 'resume' ? target : { ...target, sessionId: target.sessionId ?? randomUUID() }
     const key = sessionRefKey(resolved.kind === 'resume' ? resolved.session : { provider: spec.provider, id: resolved.sessionId })
     this.openingTerminals.set(key, (this.openingTerminals.get(key) ?? 0) + 1)
-    try { return await this.terminalChats.open(resolved, await this.runModes.resolve(resolved, spec), size) }
+    try { return await this.terminalChats.open(resolved, await this.runModes.resolve(resolved, spec), size, intent) }
     finally {
       const remaining = (this.openingTerminals.get(key) ?? 1) - 1
       if (remaining) this.openingTerminals.set(key, remaining)

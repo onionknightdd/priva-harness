@@ -82,7 +82,7 @@ async function handleTerminalSocket(socket: WebSocket, rawQuery: unknown, option
       ...(contextWindow === undefined ? {} : { contextWindow }),
       ...(visualizeMode === undefined ? {} : { visualizeMode: visualizeMode === 'true' }),
     })
-    const opened = await options.harness.openTerminal(target, spec, { cols, rows, ...(theme === undefined ? {} : { colorScheme: theme }) })
+    const opened = await options.harness.openTerminal(target, spec, { cols, rows, ...(theme === undefined ? {} : { colorScheme: theme }) }, 'view')
     let currentSession = opened.session
     if (!socketOpen(socket)) return
     stopHistory = await options.harness.observeTerminalHistory(opened.session, cwd)

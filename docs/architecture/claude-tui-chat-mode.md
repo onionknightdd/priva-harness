@@ -179,6 +179,17 @@ tmux 的 `capture-pane -P` 不暴露其未完成的 UTF-8 字符。若快照后�
 
 未带 `sessionId` 时创建新会话终端并在 `ready` 中返回 id；带 `sessionId` 时
 `--resume`。同一会话第二个查看者收到 `adopted: true`，不会重复启动。
+终端 WebSocket 使用 `view` 打开意图，认领已有进程时保留实际提示词和工具配置；
+客户端待确认的 `visualizeMode` 不触发重启，也不因当前回答运行中而拒绝查看者。
+不可变的 Agent / Code 模式仍进行冲突校验。`run.start` 和明确的 `session.configure`
+继续负责应用配置，后者等待当前回答结束；前端切换 visualize 不重建查看者连接。
+
+```text
+/ws/terminal -> open(view) -> 认领实际配置 -> attach
+run.start    -> open(run)  -> 检查 / 应用配置
+session.configure         -> 排队 -> 当前回答结束 -> 应用 / 确认
+```
+
 首次启动尚未完成时，并发查看者等待同一个预检 / 启动任务；启动失败会通知所有
 等待者并释放任务，后续重连可重新启动。
 

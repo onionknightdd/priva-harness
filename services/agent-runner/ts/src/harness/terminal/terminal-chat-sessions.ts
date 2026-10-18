@@ -107,7 +107,7 @@ export class TerminalChatSessions {
     this.textMonitor.unref()
   }
 
-  async open(target: SessionTarget, spec: ProviderRunSpec, size: TerminalSize): Promise<OpenedSessionTerminal> {
+  async open(target: SessionTarget, spec: ProviderRunSpec, size: TerminalSize, intent: 'run' | 'view' = 'run'): Promise<OpenedSessionTerminal> {
     const ref: SessionRef = target.kind === 'resume' ? target.session : { provider: spec.provider, id: target.sessionId ?? randomUUID() }
     const key = sessionRefKey(ref)
     const pending = this.opening.get(key)
@@ -121,8 +121,9 @@ export class TerminalChatSessions {
       chat.opened = true
       if (spec.runMode) chat.runMode = spec.runMode
       chat.spec = opened.adopted ? await this.options.terminals.spec(ref) ?? spec : spec
-      // Adopted processes must use this session's immutable prompt/tool policy.
-      if (chat.spec.runMode !== spec.runMode || chat.spec.systemInstructions !== spec.systemInstructions) {
+      // Viewer connections retain the live configuration, including while a
+      // visualize change is queued. The immutable session mode still applies.
+      if (chat.spec.runMode !== spec.runMode || (intent === 'run' && chat.spec.systemInstructions !== spec.systemInstructions)) {
         if (chat.active || (await this.options.terminals.state(ref))?.phase === 'running') {
           throw new SessionError('session-busy', 'Wait for the terminal reply before applying the session mode')
         }

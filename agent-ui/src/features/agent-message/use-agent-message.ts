@@ -35,7 +35,7 @@ export function useAgentMessage({ onComputerToolStarted }: { onComputerToolStart
   const { resolvedTheme } = useTheme()
   const { preserveViewForSession, setView } = useSessionView()
   const { runHarnessId } = useHarness()
-  const { queueBehavior, inputSuggestions, visualizeMode, setVisualizeMode, setLastModelReference } = useAgentPreferences()
+  const { queueBehavior, inputSuggestions, visualizeMode, setVisualizeMode: storeVisualizeMode, setLastModelReference } = useAgentPreferences()
   const { threadMessages, messagesStatus, transcriptEpoch } = useChatThread()
   const { runCwd, runSessionId, runMode } = useActiveSession()
   const { bindRunSession, setRunModePending } = useChatSessionActions()
@@ -70,6 +70,7 @@ export function useAgentMessage({ onComputerToolStarted }: { onComputerToolStart
   const nativeConfigRef = React.useRef<string | undefined>(undefined)
   const latestConfigRef = React.useRef<StreamFrame["config"]>(undefined)
   const configurationRequestRef = React.useRef<string | undefined>(undefined)
+  const confirmedVisualizeModeRef = React.useRef<{ connection: AgentSessionConnection | null; value: boolean }>({ connection: null, value: visualizeMode })
 
   const refreshContext = React.useCallback((sessionId: string) => {
     if (!runHarnessId) return
@@ -232,6 +233,7 @@ export function useAgentMessage({ onComputerToolStarted }: { onComputerToolStart
   React.useEffect(() => () => {
     generationRef.current++
     connectionRef.current?.disconnect()
+    connectionRef.current = null
     unbindStopRef.current?.()
   }, [])
 
@@ -296,13 +298,20 @@ export function useAgentMessage({ onComputerToolStarted }: { onComputerToolStart
     const connection = connectionRef.current
     return connection ? connection.respondPermission(response) : Promise.reject(new Error("Connection unavailable"))
   }, [])
-  const synchronizeSelection = React.useCallback((model: string | null, nextEffort: AgentRunEffort, nextWindow: ContextWindow) => {
+  const synchronizeSelection = React.useCallback((model: string | null, nextEffort: AgentRunEffort, nextWindow: ContextWindow, nextVisualizeMode = visualizeMode) => {
     if (!model || !runHarnessId || !runSessionId) return
+    const connection = ensureConnection()
+    // A native /clear rebind keeps this connection and its last confirmed choice.
+    if (confirmedVisualizeModeRef.current.connection !== connection) {
+      confirmedVisualizeModeRef.current = { connection, value: visualizeMode }
+    }
     const requestId = crypto.randomUUID(), generation = generationRef.current
     configurationRequestRef.current = requestId
     setConfigurationPending(true)
     setConnectionError(null)
-    void ensureConnection().configure({ model, cwd: runCwd, effort: nextEffort, contextWindow: nextWindow, promptSuggestions: inputSuggestions, visualizeMode }, requestId).catch((error: unknown) => {
+    void connection.configure({ model, cwd: runCwd, effort: nextEffort, contextWindow: nextWindow, promptSuggestions: inputSuggestions, visualizeMode: nextVisualizeMode }, requestId).then(() => {
+      if (generation === generationRef.current) confirmedVisualizeModeRef.current = { connection, value: nextVisualizeMode }
+    }).catch((error: unknown) => {
       if (generation !== generationRef.current || configurationRequestRef.current !== requestId) return
       configurationRequestRef.current = undefined
       setConfigurationPending(false)
@@ -311,19 +320,19 @@ export function useAgentMessage({ onComputerToolStarted }: { onComputerToolStart
       if (native?.effort !== undefined) setEffort(native.effort)
       setEffortLevels(native?.effortLevels)
       setContextWindow(native?.contextWindow ?? DEFAULT_CONTEXT_WINDOW)
+      storeVisualizeMode(confirmedVisualizeModeRef.current.value)
       setConnectionError(error instanceof Error ? error.message : String(error))
     })
-  }, [runHarnessId, runSessionId, runCwd, inputSuggestions, visualizeMode, ensureConnection])
-  const visualizeModeMounted = React.useRef(false)
-  React.useEffect(() => {
-    if (!visualizeModeMounted.current) {
-      visualizeModeMounted.current = true
+  }, [runHarnessId, runSessionId, runCwd, inputSuggestions, visualizeMode, ensureConnection, storeVisualizeMode])
+  const changeVisualizeMode = React.useCallback((next: boolean) => {
+    storeVisualizeMode(next)
+    if (!modelReference || !runHarnessId || !runSessionId) {
+      confirmedVisualizeModeRef.current = { connection: null, value: next }
       return
     }
-    synchronizeSelection(modelReference, effort, contextWindow)
-    // The switch is the only reason to reconfigure here.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visualizeMode])
+    // Only a user change sends a command; restoring a failed choice must not retry it.
+    synchronizeSelection(modelReference, effort, contextWindow, next)
+  }, [storeVisualizeMode, modelReference, runHarnessId, runSessionId, synchronizeSelection, effort, contextWindow])
   const changeModelReference = React.useCallback((model: string | null, source?: "user", nextEffort = effort) => {
     const reference = model === null ? null : baseModelReference(model)
     setModelReference(reference)
@@ -391,6 +400,6 @@ export function useAgentMessage({ onComputerToolStarted }: { onComputerToolStart
     canSubmit: Boolean(!configurationPending && !interactions.length && (draft.trim() || slashCommand || attachments.length) && readyComposerAttachments(attachments) !== null && modelReference && runHarnessId && runCwd.trim()),
     modelReady: Boolean(modelReference && runHarnessId), slashCommand, setDraft: updateDraft, setSlashCommand,
     setModelReference: changeModelReference, setEffort: changeEffort, setContextWindow: changeContextWindow,
-    visualizeMode, setVisualizeMode, sendFollowUp, submit, stop,
+    visualizeMode, setVisualizeMode: changeVisualizeMode, sendFollowUp, submit, stop,
   }
 }

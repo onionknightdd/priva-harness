@@ -2418,6 +2418,20 @@ snapshot.runningToolIds 恢复等待工具结束的状态。TUI 产生的内嵌�
 产品 MCP 的 visualize / canvas / 图片别名继续使用既有工具卡片。
 打开可视化回答后，`static_visualize` 和 `interactive_visualize` 替换 `visualize`，并画在随后正文的上方，不进入进度折叠。校验失败的调用不显示。
 
+可视化回答开关通过 `session.configure` 应用；开关变化不重建已挂载的终端连接，也不清屏。
+首次查看或手动重连已有终端时沿用运行进程的实际配置，不把尚未确认的开关值当作启动配置。
+当前回答结束后再应用排队的配置；失败则恢复最近一次成功的开关值和本地偏好，保留错误提示，
+不因恢复状态再次发出配置请求。连续切换按请求确认处理，旧请求失败不覆盖新选择；
+原生 `/clear` 重绑定保留确认基线，切换到另一聊天时隔离旧请求的结果。
+
+```text
+visualize 开关 -> session.configure -> 等当前回答结束 -> 应用 / 确认
+                       |                                  |
+                       +-> 失败 -> 恢复开关与本地偏好      +-> 更新确认值
+终端预览 ----------------------------------------------------> 保持连接
+首次查看 / 手动重连 -> 认领已有进程的实际配置 -> 附加预览
+```
+
 ```text
 native statusLine -> session.config -> model / effort / cwd / context UI
                                       -> controlled selector / run.start (same state)
@@ -2887,6 +2901,16 @@ Shift+Tab、Esc、已有草稿、重复快照、断线重连和原生会话重�
 ```
 
 浏览器打开 `/tests/features/agent-message/render-ui-browser.html`，点击 **Stream next line**，确认半截程序先出现标题，写完后三张卡并排、图表在下一行。追加 `?dark` 看深色。把窗口收到 390px，三张卡仍在同一行里收缩。
+
+可视化开关与终端连接回归（仓库根目录）：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/visualize-mode-configuration.test.tsx agent-ui/tests/features/agent-message/session-terminal-view.test.tsx agent-ui/tests/features/agent-message/session-connection.test.ts agent-ui/tests/features/agent-message/terminal-session.test.ts agent-ui/tests/features/agent-message/session-view-context.test.tsx
+```
+
+使用隔离 DOM / WebSocket 检查 Claude、Pi 开关失败回滚、连续请求确认、断线失败、
+原生重绑定及跨会话隔离；检查已挂载终端切换时不断连、不清屏、继续接收输出，
+以及显式重连采用最新开关值。测试不连接真实模型或桌面，不替代原生会话集成验证。
 
 Workspace 电脑连接与视图生命周期回归（仓库根目录）：
 

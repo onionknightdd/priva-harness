@@ -144,6 +144,30 @@ describe.skipIf(!tmuxAvailable())('terminal WebSocket route', () => {
     await expect.poll(() => bad.socket.readyState, { timeout: 5000 }).toBe(WebSocket.CLOSED)
   })
 
+  it.each([false, true])('reconnects to a running terminal without applying the viewer visualize preference (%s)', async (visualizeMode) => {
+    const first = connect(url({ harness: 'claude', cwd: root, model, visualizeMode: String(!visualizeMode) }))
+    const ready = await first.waitJson('ready')
+    const sessionId = ready['sessionId'] as string
+    const liveSpec = launches[0]?.spec
+    Object.assign(provider, {
+      readTerminalSpec: () => Promise.resolve(liveSpec),
+      readTerminalState: () => Promise.resolve({ sessionId, instanceId: 'running-instance', cwd: root,
+        event: 'ready', phase: 'running', updatedAt: 1 }),
+    })
+    first.socket.close()
+    await expect.poll(() => first.socket.readyState).toBe(WebSocket.CLOSED)
+
+    const reconnected = connect(url({ harness: 'claude', sessionId, cwd: root, model, visualizeMode: String(visualizeMode) }))
+    expect(await reconnected.waitJson('ready')).toMatchObject({ sessionId, adopted: true })
+    expect(reconnected.json.some((frame) => frame.type === 'error')).toBe(false)
+    expect(launches).toHaveLength(1)
+    expect(await terminals.spec({ provider: 'claude', id: sessionId })).toBe(liveSpec)
+
+    const conflicting = connect(url({ harness: 'claude', sessionId, cwd: root, model, runMode: 'code' }))
+    expect(await conflicting.waitJson('error')).toMatchObject({ kind: 'run-mode-conflict' })
+    reconnected.socket.close()
+  })
+
   it('delivers TUI transcript changes over the bubble subscription without reopening the session', async () => {
     let changed: () => void = () => undefined
     const unwatch = vi.fn()

@@ -238,9 +238,11 @@ export function SessionTerminalView({
       if (sessionRef.current === session) sessionRef.current = null
     }
     // `hidden` only affects focus and is read at ready time; `resolvedTheme`
-    // is read at launch only, a running TUI keeps its theme.
+    // is read at launch only, a running TUI keeps its theme. `visualizeMode`
+    // is also a connection snapshot: session.configure applies later changes
+    // without dropping the viewer socket or clearing its screen.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [harness, cwd, model, effort, contextWindow, generation, visualizeMode])
+  }, [harness, cwd, model, effort, contextWindow, generation])
 
   // Coming back from the chat view: the surface may have been resized while collapsed.
   React.useEffect(() => {
