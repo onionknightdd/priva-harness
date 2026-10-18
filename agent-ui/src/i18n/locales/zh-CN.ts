@@ -429,6 +429,7 @@ export const zhCN = {
     visualizeFrameTitle: "可视化交互预览",
     visualizeModeOn: "可视化回答已打开",
     visualizeModeOff: "可视化回答已关闭",
+    visualizeModeDetail: "相比于普通模式，使用更多可视化组件呈现更丰富的内容和交互来替代大段的纯文本内容",
     canvasOpenPreview: "打开预览",
     imageTools: {
       inputPending: "等待输入……",

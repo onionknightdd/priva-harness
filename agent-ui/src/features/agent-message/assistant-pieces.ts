@@ -1,5 +1,5 @@
 import { isProcessBlock, textFromBlocks, type AgentThreadMessage, type StreamBlock } from "./agent-message-data"
-import { isGeneratedVisualTool } from "./render-ui/lang"
+import { isGeneratedVisualTool, isHiddenGeneratedVisual } from "./render-ui/lang"
 
 export type AssistantPiece =
   | { kind: "process"; blocks: StreamBlock[] }
@@ -19,6 +19,7 @@ export function assistantPieces(message: AgentThreadMessage): AssistantPiece[] {
   }
   for (const block of blocks) {
     if (block.type === "tool_use" && isGeneratedVisualTool(block.name)) {
+      if (isHiddenGeneratedVisual(block)) continue
       flush()
       pieces.push({ kind: "visual", block })
       continue

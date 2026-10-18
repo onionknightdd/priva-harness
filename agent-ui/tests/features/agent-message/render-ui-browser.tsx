@@ -3,7 +3,7 @@ import { useState } from "react"
 import { createRoot } from "react-dom/client"
 import { I18nextProvider, initReactI18next } from "react-i18next"
 
-import { RenderUiToolItem } from "../../../src/features/agent-message/components/render-ui-tool-item"
+import { GeneratedVisual } from "../../../src/features/agent-message/render-ui/generated-visual"
 import type { StreamBlock } from "../../../src/features/agent-message/agent-message-data"
 import { en } from "../../../src/i18n/locales/en"
 import "../../../src/index.css"
@@ -12,7 +12,7 @@ const lines = [
   "root = Stack([header, row, chart])",
   'header = CardHeader("Revenue", "Q3")',
   'row = Stack([a, b, c], "row", "m", "stretch")',
-  'a = Card([Text("Events", "small"), Text("1280", "large")])',
+  'a = Card([Text("Events", "small"), Text("1280", "large"), Badge("Live", "success")])',
   'b = Card([Text("Users", "small"), Text("86", "large")])',
   'c = Card([Text("Avg", "small"), Text("183", "large")])',
   'labels = ["Jul", "Aug", "Sep"]',
@@ -21,6 +21,11 @@ const lines = [
 ]
 
 const finished = lines.join("\n")
+const choice = [
+  "root = Stack([title, action])",
+  'title = Text("Raise the budget?", "body")',
+  'action = Button("Use 350", @ToAssistant("Make it under $350 a night"))',
+].join("\n")
 
 function toolBlock(lang: string, running: boolean): Extract<StreamBlock, { type: "tool_use" }> {
   return {
@@ -57,10 +62,28 @@ function Fixture() {
       </button>
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 42rem) 390px", gap: 32, alignItems: "start" }}>
         <section data-slot="render-ui-wide">
-          <RenderUiToolItem block={toolBlock(lang, running)} />
+          <GeneratedVisual block={toolBlock(lang, running)} />
         </section>
         <section data-slot="render-ui-narrow" style={{ width: 390 }}>
-          <RenderUiToolItem block={toolBlock(finished, false)} />
+          <GeneratedVisual block={toolBlock(finished, false)} />
+        </section>
+        <section data-slot="render-ui-choice">
+          <GeneratedVisual block={{ ...toolBlock(choice, false), name: "interactive_visualize" }} />
+        </section>
+        <section data-slot="render-ui-failed">
+          <GeneratedVisual block={{
+            ...toolBlock('root = Stack([title])\ntitle = Text("Hidden")', false),
+            id: "failed",
+            blockId: "failed",
+            tool: {
+              id: "failed",
+              name: "static_visualize",
+              status: "completed",
+              ok: false,
+              output: "type-mismatch: field \"/series/0\" expects Series but got number",
+              input: { lang: 'root = Stack([title])\ntitle = Text("Hidden")' },
+            },
+          }} />
         </section>
       </div>
     </main>

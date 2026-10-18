@@ -11,6 +11,11 @@ import {
   useTriggerAction,
   type ComponentGroup,
 } from "@openuidev/react-lang"
+import { Button as OpenUiButton } from "@openuidev/react-ui/Button"
+import { Card as OpenUiCard } from "@openuidev/react-ui/Card"
+import { CardHeader as OpenUiCardHeader } from "@openuidev/react-ui/CardHeader"
+import { Tag } from "@openuidev/react-ui/Tag"
+import { useTheme, type Theme } from "@openuidev/react-ui/ThemeProvider"
 
 export { Renderer }
 import { useReducedMotion } from "motion/react"
@@ -18,9 +23,6 @@ import type { ReactNode } from "react"
 import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis } from "recharts"
 import { z } from "zod/v4"
 
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Card, CardDescription, CardTitle } from "@/components/ui/card"
 import {
   ChartContainer,
   ChartTooltip,
@@ -57,32 +59,49 @@ const justifyClass = {
 } as const
 
 const textClass = {
-  small: "text-xs text-muted-foreground",
+  small: "text-xs",
   body: "text-sm",
   large: "text-base font-medium",
 } as const
 
-const badgeVariant = {
-  neutral: "outline",
-  info: "default",
-  success: "secondary",
-  warning: "outline",
-  danger: "destructive",
+const textColor = {
+  small: "var(--openui-text-neutral-secondary)",
+  body: "var(--openui-text-neutral-primary)",
+  large: "var(--openui-text-neutral-primary)",
+} as const
+
+const badgeTone = {
+  neutral: "neutral",
+  info: "info",
+  success: "success",
+  warning: "warning",
+  danger: "danger",
 } as const
 
 type Gap = keyof typeof gapClass
 type Align = keyof typeof alignClass
 type Justify = keyof typeof justifyClass
 type TextSize = keyof typeof textClass
-type BadgeTone = keyof typeof badgeVariant
+type BadgeTone = keyof typeof badgeTone
 
-const chartColors = [
-  "var(--chart-1)",
-  "var(--chart-2)",
-  "var(--chart-3)",
-  "var(--chart-4)",
-  "var(--chart-5)",
-]
+// OpenUI's chart floor (`OCEAN_DEFAULT` in react-ui). Used when the active
+// theme does not set `barChartPalette`, `lineChartPalette`, or `defaultChartPalette`.
+const openUiChartFloor = [
+  "#0D47A1",
+  "#1565C0",
+  "#1976D2",
+  "#1E88E5",
+  "#2196F3",
+  "#42A5F5",
+  "#64B5F6",
+  "#90CAF9",
+  "#BBDEFB",
+  "#E3F2FD",
+  "#EFF8FF",
+] as const
+
+const axisStyle = { color: "var(--openui-text-neutral-secondary)" }
+const ruleStyle = { borderColor: "var(--openui-border-default)" }
 
 interface ElementNode {
   typeName: string
@@ -128,7 +147,12 @@ const Text = defineComponent({
   component: ({ props }) => {
     const size = namedChoice<TextSize>(props.size, textClass, "body")
     return (
-      <p data-slot="render-ui-text" data-size={size} className={textClass[size]}>
+      <p
+        data-slot="render-ui-text"
+        data-size={size}
+        className={textClass[size]}
+        style={{ color: textColor[size] }}
+      >
         {props.text}
       </p>
     )
@@ -143,8 +167,8 @@ const BadgeBlock = defineComponent({
     variant: z.enum(["neutral", "info", "success", "warning", "danger"]).optional(),
   }),
   component: ({ props }) => {
-    const tone = namedChoice<BadgeTone>(props.variant, badgeVariant, "neutral")
-    return <Badge variant={badgeVariant[tone]}>{props.text}</Badge>
+    const tone = namedChoice<BadgeTone>(props.variant, badgeTone, "neutral")
+    return <Tag size="sm" text={props.text} variant={tone} />
   },
 })
 
@@ -156,10 +180,7 @@ const CardHeaderBlock = defineComponent({
     description: z.string().optional(),
   }),
   component: ({ props }) => (
-    <div data-slot="render-ui-header">
-      <CardTitle>{props.title}</CardTitle>
-      {props.description ? <CardDescription>{props.description}</CardDescription> : null}
-    </div>
+    <OpenUiCardHeader data-slot="render-ui-header" subtitle={props.description} title={props.title} />
   ),
 })
 
@@ -194,7 +215,7 @@ const Table = defineComponent({
       <div className="overflow-x-auto" data-slot="render-ui-table">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-border text-left text-muted-foreground">
+            <tr className="border-b text-left" style={{ ...ruleStyle, ...axisStyle }}>
               {columns.map((column, index) => (
                 <th
                   key={`${column.label}-${index}`}
@@ -207,7 +228,7 @@ const Table = defineComponent({
           </thead>
           <tbody>
             {Array.from({ length: rowCount }, (_, row) => (
-              <tr key={row} className="border-b border-border/60 last:border-0">
+              <tr key={row} className="border-b last:border-0" style={ruleStyle}>
                 {columns.map((column, index) => (
                   <td
                     key={`${column.label}-${index}`}
@@ -235,14 +256,36 @@ const Series = defineComponent({
   component: () => null,
 })
 
-function chartModel(labels: unknown, series: unknown) {
+function distributeColors(colors: readonly string[], count: number): string[] {
+  const length = colors.length
+  if (length === 0 || count <= 0) return []
+  const mid = Math.floor(length / 2)
+  const at = (index: number) => colors[((index % length) + length) % length] ?? colors[0] ?? ""
+  if (count === 1) return [at(mid)]
+  if (count === 2) return [at(Math.max(mid - 1, 0)), at(Math.min(mid + 1, length - 1))]
+  const offset = Math.floor((count - 1) / 2)
+  return Array.from({ length: count }, (_, index) => at(mid + (index - offset)))
+}
+
+function chartColors(theme: Theme, kind: "bar" | "line", count: number): string[] {
+  const specific = kind === "bar" ? theme.barChartPalette : theme.lineChartPalette
+  const source =
+    specific && specific.length > 0
+      ? specific
+      : theme.defaultChartPalette && theme.defaultChartPalette.length > 0
+        ? theme.defaultChartPalette
+        : openUiChartFloor
+  return distributeColors(source, count)
+}
+
+function chartModel(labels: unknown, series: unknown, colors: readonly string[]) {
   const names = stringList(labels)
   const items = elements(series)
   const config: ChartConfig = {}
   items.forEach((item, index) => {
     config[`s${index}`] = {
       label: textOf(item.props.name) || `Series ${index + 1}`,
-      color: chartColors[index % chartColors.length],
+      color: colors[index] ?? colors[0],
     }
   })
   const rows = names.map((label, index) => {
@@ -262,6 +305,7 @@ function ChartFrame({
   xLabel,
   yLabel,
   slot,
+  kind,
   children,
 }: {
   labels: unknown
@@ -269,22 +313,28 @@ function ChartFrame({
   xLabel: unknown
   yLabel: unknown
   slot: string
+  kind: "bar" | "line"
   children: (model: ReturnType<typeof chartModel>, animate: boolean) => ReactNode
 }) {
+  const { theme } = useTheme()
   const streaming = useIsStreaming()
   const reduce = Boolean(useReducedMotion())
-  const model = chartModel(labels, series)
+  const seriesCount = elements(series).length
+  const model = chartModel(labels, series, chartColors(theme, kind, seriesCount))
   if (model.rows.length === 0 || model.count === 0) return null
   return (
     <div data-slot={slot} className="flex min-w-0 flex-col gap-1">
       {textOf(yLabel) !== "" ? (
-        <p className="text-xs text-muted-foreground">{textOf(yLabel)}</p>
+        <p className="text-xs" style={axisStyle}>{textOf(yLabel)}</p>
       ) : null}
-      <ChartContainer config={model.config} className="aspect-auto h-48 w-full">
+      <ChartContainer
+        config={model.config}
+        className="aspect-auto h-48 w-full [&_.recharts-cartesian-axis-tick_text]:![fill:var(--openui-text-neutral-secondary)]"
+      >
         {children(model, !streaming && !reduce)}
       </ChartContainer>
       {textOf(xLabel) !== "" ? (
-        <p className="text-xs text-muted-foreground">{textOf(xLabel)}</p>
+        <p className="text-xs" style={axisStyle}>{textOf(xLabel)}</p>
       ) : null}
     </div>
   )
@@ -306,10 +356,11 @@ const BarChartBlock = defineComponent({
       xLabel={props.xLabel}
       yLabel={props.yLabel}
       slot="render-ui-bar-chart"
+      kind="bar"
     >
       {(model, animate) => (
         <BarChart data={model.rows}>
-          <CartesianGrid vertical={false} />
+          <CartesianGrid stroke="var(--openui-border-default)" vertical={false} />
           <XAxis dataKey="label" tickLine={false} axisLine={false} />
           <ChartTooltip content={<ChartTooltipContent />} />
           {Array.from({ length: model.count }, (_, index) => (
@@ -344,10 +395,11 @@ const LineChartBlock = defineComponent({
       xLabel={props.xLabel}
       yLabel={props.yLabel}
       slot="render-ui-line-chart"
+      kind="line"
     >
       {(model, animate) => (
         <LineChart data={model.rows}>
-          <CartesianGrid vertical={false} />
+          <CartesianGrid stroke="var(--openui-border-default)" vertical={false} />
           <XAxis dataKey="label" tickLine={false} axisLine={false} />
           <ChartTooltip content={<ChartTooltipContent />} />
           {Array.from({ length: model.count }, (_, index) => (
@@ -392,6 +444,7 @@ const Stack = defineComponent({
       <div
         data-slot="render-ui-stack"
         data-direction={direction}
+        style={{ color: "var(--openui-text-neutral-primary)" }}
         className={cn(
           "flex min-w-0",
           direction === "row" ? "flex-row" : "flex-col",
@@ -415,9 +468,9 @@ const CardBlock = defineComponent({
     children: z.array(z.lazy(() => layoutChild)),
   }),
   component: ({ props, renderNode }) => (
-    <Card size="sm" data-slot="render-ui-card" className="min-w-0">
-      <div className="flex flex-col gap-3 px-(--card-spacing)">{renderNode(props.children)}</div>
-    </Card>
+    <OpenUiCard className="min-w-0" data-slot="render-ui-card" variant="sunk" width="full">
+      {renderNode(props.children)}
+    </OpenUiCard>
   ),
 })
 
@@ -431,15 +484,16 @@ const FollowButton = defineComponent({
   component: function FollowButtonView({ props }) {
     const trigger = useTriggerAction()
     return (
-      <Button
+      <OpenUiButton
+        size="small"
         type="button"
-        size="sm"
+        variant="primary"
         onClick={() => {
           void trigger(props.label, undefined, props.action)
         }}
       >
         {props.label}
-      </Button>
+      </OpenUiButton>
     )
   },
 })

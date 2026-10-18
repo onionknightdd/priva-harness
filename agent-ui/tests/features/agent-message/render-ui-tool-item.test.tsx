@@ -116,7 +116,7 @@ test("renders a horizontal stack from a finished program", async () => {
   }
 })
 
-test("keeps a partial program on screen and shows the validation error", async () => {
+test("hides a finished visual when validation failed", async () => {
   const view = await mount(block(
     'root = Stack([title])\ntitle = Text("Hello")',
     "completed",
@@ -124,8 +124,27 @@ test("keeps a partial program on screen and shows the validation error", async (
     "unknown-component: Widget",
   ))
   try {
-    assert.match(view.host.textContent ?? "", /Hello/)
-    assert.match(view.host.querySelector("[role='alert']")?.textContent ?? "", /unknown-component/)
+    assert.equal(view.host.textContent ?? "", "")
+    assert.equal(view.host.querySelector("[data-slot='generated-visual']"), null)
+    assert.equal(view.host.querySelector("[role='alert']"), null)
+  } finally {
+    await view.close()
+  }
+})
+
+test("paints a status label with OpenUI's info color", async () => {
+  const view = await mount(block(
+    ['root = Stack([badge])', 'badge = Badge("Live", "info")'].join("\n"),
+    "completed",
+    true,
+  ))
+  try {
+    const tag = view.host.querySelector(".openui-tag-info")
+    assert.equal(tag?.textContent, "Live")
+    const theme = document.querySelector("style[data-openui-theme]")?.textContent ?? ""
+    assert.match(theme, /\[data-slot='generated-visual'\]/)
+    assert.match(theme, /--openui-info-background:/)
+    assert.equal(document.body.getAttribute("style") ?? "", "")
   } finally {
     await view.close()
   }

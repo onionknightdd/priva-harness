@@ -430,6 +430,7 @@ export const en = {
     visualizeFrameTitle: "Interactive visualize preview",
     visualizeModeOn: "Visual answers on",
     visualizeModeOff: "Visual answers off",
+    visualizeModeDetail: "Compared with normal mode, more visual components present richer content and interaction instead of long plain text.",
     canvasOpenPreview: "Open preview",
     imageTools: {
       inputPending: "Waiting for input…",

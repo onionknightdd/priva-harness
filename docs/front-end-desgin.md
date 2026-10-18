@@ -2416,7 +2416,7 @@ TUI /effort / Composer 思考强度选择 -> 原生命令与确认 -> effortChan
 
 snapshot.runningToolIds 恢复等待工具结束的状态。TUI 产生的内嵌图片从转录映射到现有附件卡片，
 产品 MCP 的 visualize / canvas / 图片别名继续使用既有工具卡片。
-打开可视化回答后，`static_visualize` 和 `interactive_visualize` 替换 `visualize`，并画在随后正文的上方，不进入进度折叠。
+打开可视化回答后，`static_visualize` 和 `interactive_visualize` 替换 `visualize`，并画在随后正文的上方，不进入进度折叠。校验失败的调用不显示。
 
 ```text
 native statusLine -> session.config -> model / effort / cwd / context UI
@@ -2670,7 +2670,7 @@ App TooltipProvider -> 首次悬浮 1s -> 连续切换 0ms
 | DOCX / PPTX | [document-renderer](../agent-ui/src/features/files/preview/renderers/document-renderer.tsx)、[presentation-renderer](../agent-ui/src/features/files/preview/renderers/presentation-renderer.tsx) | @silurus/ooxml 渲染文档内容，应用外框使用项目 token |
 | HTML 编辑器 | [html-visual-editor](../agent-ui/src/features/files/preview/renderers/html-visual-editor.tsx)，GrapesJS | 编辑器自带 UI；全局 CSS 当前明确保留默认粉/紫色点缀，形成应用内可见的独立风格 |
 | HTML / JSX 生成内容 | [html-renderer](../agent-ui/src/features/files/preview/renderers/html-renderer.tsx)、[visualize-sandbox](../agent-ui/src/features/agent-message/visualize-sandbox) | iframe 中的内容；JSX 沙箱另有 Button、Badge、Card、Progress、Separator 简化实现，传入主题颜色但不共享主应用全部字号、圆角与交互 |
-| 可视化回答 | [render-ui/library](../agent-ui/src/features/agent-message/render-ui/library.tsx)、[generated-visual](../agent-ui/src/features/agent-message/render-ui/generated-visual.tsx) | 开关打开后，`static_visualize` / `interactive_visualize` 的 OpenUI Lang 画在随后正文上方，限高且不带动跟随滚动。按钮发下一轮 |
+| 可视化回答 | [render-ui/library](../agent-ui/src/features/agent-message/render-ui/library.tsx)、[generated-visual](../agent-ui/src/features/agent-message/render-ui/generated-visual.tsx) | 开关打开后，`static_visualize` / `interactive_visualize` 的 OpenUI Lang 画在随后正文上方。校验失败的调用不显示。这一块使用 OpenUI 自带色彩主题，主题变量只注入到生成结果上。按钮发下一轮 |
 
 消息共用的 `MessageResponse` 通过 `createMathPlugin({ singleDollarTextMath: true })`
 启用单美元符号行内公式（如 `$E = mc^2$`），同时保留 `$$...$$` 行内及独立公式。
