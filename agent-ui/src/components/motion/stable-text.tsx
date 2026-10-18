@@ -1,7 +1,7 @@
 "use client"
 
 import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react"
-import { useContext, useEffect, useRef, useState, createContext, type ReactNode } from "react"
+import { useContext, useEffect, useLayoutEffect, useRef, useState, createContext, memo, type ReactNode } from "react"
 
 import { TextCascade } from "@/components/motion/text-cascade"
 import { SPRING_SWAP } from "@/lib/ease"
@@ -39,6 +39,8 @@ export function StableText({
   className?: string
 }) {
   const reduce = useReducedMotionConfig()
+  const previousReduce = useRef(reduce)
+  useLayoutEffect(() => { previousReduce.current = reduce }, [reduce])
   const content = pieces.map((piece) => (
     <motion.span
       key={piece.id}
@@ -49,7 +51,12 @@ export function StableText({
       exit={{ opacity: 0 }}
       transition={SPRING_SWAP}
     >
-      <StablePieceView piece={piece} />
+      <StablePieceView
+        text={piece.text}
+        count={piece.count}
+        steady={piece.steady}
+        suppressEnter={Boolean(previousReduce.current)}
+      />
     </motion.span>
   ))
 
@@ -67,19 +74,18 @@ export function StableText({
   )
 }
 
-function StablePieceView({
-  piece,
-}: {
-  piece: StablePiece
-}) {
+const StablePieceView = memo(function StablePieceView({
+  text, count, steady, suppressEnter,
+}: Omit<StablePiece, "id"> & { suppressEnter: boolean }) {
   const live = useContext(LiveTextContext)
-  const enter = useRef(live).current
-  if (piece.steady) return <span className="whitespace-pre">{piece.text}</span>
+  // Restoring motion remounts the presence subtree, but is not a text change.
+  const enter = useRef(live && !suppressEnter).current
+  if (steady) return <span className="whitespace-pre">{text}</span>
   return (
     <TextCascade
-      text={piece.text}
+      text={text}
       animateOnMount={enter}
-      className={piece.count ? "tabular-nums" : undefined}
+      className={count ? "tabular-nums" : undefined}
     />
   )
-}
+})

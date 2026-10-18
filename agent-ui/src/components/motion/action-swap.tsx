@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 import { EASE_OUT, SPRING_PRESS, SPRING_SWAP } from "@/lib/ease";
 import { cn } from "@/lib/utils";
+import { CascadeText } from "./cascade-text";
 
 export type ActionSwapItem = {
   id: string;
@@ -57,28 +58,6 @@ const ROLL_TRANSITION = SPRING_SWAP;
 const ROLL_EXIT_TRANSITION = { duration: 0.14, ease: EASE_OUT } as const;
 const SWAP_BLUR = "blur(8px)";
 const ROLL_BLUR = "blur(3px)";
-
-// Cascade rolls the label one letter at a time, left to right. The leaving
-// and landing strings overlap as independent layers (no shared cells), so
-// proportional glyph widths never jitter. Exits cascade at half the enter
-// stagger so the tail of the old label lingers briefly.
-const CASCADE_STAGGER = 0.025;
-
-const CASCADE_LETTER_VARIANTS: Variants = {
-  initial: { opacity: 0, y: "105%", filter: ROLL_BLUR },
-  animate: (delay: number = 0) => ({
-    opacity: 1,
-    y: "0%",
-    filter: "blur(0px)",
-    transition: { ...SPRING_SWAP, delay },
-  }),
-  exit: (delay: number = 0) => ({
-    opacity: 0,
-    y: "-105%",
-    filter: ROLL_BLUR,
-    transition: { duration: 0.16, ease: EASE_OUT, delay: delay * 0.5 },
-  }),
-};
 
 const TEXT_VARIANTS: Record<CoreAnimation, Variants> = {
   blur: {
@@ -173,9 +152,12 @@ export function ActionSwapText({
   // Cascade needs a plain string to split into letters; non-string content
   // falls back to the closest single-element animation.
   const label = typeof children === "string" ? children : null;
-  const cascade = animation === "cascade" && label !== null && !reduce;
   const coreAnimation: CoreAnimation =
     animation === "cascade" ? "roll" : animation;
+
+  if (animation === "cascade" && label !== null) {
+    return <CascadeText value={value} text={label} animateOnMount={animateOnMount} reduce={Boolean(reduce)} className={className} glyphClassName={glyphClassName} />;
+  }
 
   return (
     <span
@@ -192,52 +174,12 @@ export function ActionSwapText({
         aria-hidden
         className="invisible whitespace-nowrap"
       >
-        {cascade
-          ? label.split("").map((char, index) => (
-              <span
-                // biome-ignore lint/suspicious/noArrayIndexKey: position is the slot identity.
-                key={index}
-                className="inline-block whitespace-pre"
-              >
-                {char}
-              </span>
-            ))
-          : children}
+        {children}
       </span>
       {reduce ? (
         <span className={cn("absolute inset-0 inline-block max-w-full truncate", glyphClassName)}>
           {children}
         </span>
-      ) : cascade ? (
-        <>
-          {/* Letters are decorative fragments; readers get the whole label. */}
-          <span className="sr-only">{label}</span>
-          <AnimatePresence initial={animateOnMount}>
-            <motion.span
-              key={`cascade-${value}`}
-              aria-hidden
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              className="absolute inset-0 inline-block whitespace-pre"
-            >
-              {label.split("").map((char, i) => (
-                <motion.span
-                  // biome-ignore lint/suspicious/noArrayIndexKey: position is the slot identity — the letter at a position is exactly what rolls.
-                  key={i}
-                  custom={i * CASCADE_STAGGER}
-                  variants={CASCADE_LETTER_VARIANTS}
-                  className={cn(
-                    "inline-block whitespace-pre will-change-[opacity,filter,transform]",
-                    glyphClassName,
-                  )}
-                >
-                  {char}
-                </motion.span>
-              ))}
-            </motion.span>
-          </AnimatePresence>
-        </>
       ) : (
         <AnimatePresence initial={animateOnMount}>
           <motion.span

@@ -105,13 +105,27 @@ npx shadcn add @beui/switch
 旧短语可见 -> 旧短语淡出 + 新短语级联进入 -> 仅新短语
 ```
 
+2026-10-18：Agent progress 的时钟由 `ProcessElapsedText` 独立更新，隐藏过程标题时
+不创建计时器。统计仅在工具名称、状态或后台任务状态变化时重算；正文和工具输出
+流式更新不触发统计渲染，统计计数不再排序。`TextCascade` 静止时保留普通文本，
+切换时临时拆成字符，由浏览器执行位移、透明度和模糊动画，结束后释放字符节点。
+保持原有弹簧、错峰时间和新旧文字重叠；连续更新不重启已退出中的文字，恢复动态
+效果也不重新隐藏当前文字。
+
+```text
+时钟变化 -> 仅更新计时文字
+工具状态变化 -> 更新统计 -> 变化片段播放 Text Cascade
+静止文字 -> 普通文本节点
+切换结束 -> 清理临时动画节点
+```
+
 在开发服务器打开 `/tests/features/agent-message/status-line-browser.html`，点击
 **Run status line checks**，逐帧检查运行到完成、数字变化、新增类别、混合工具、
 连续更新、旧文字清理及可访问文案。追加 `?zh&dark&reduced-motion` 检查中文深色和
 减少动态效果；页面包含窄容器样例，不连接实际模型或修改用户会话。
 
 ```sh
-./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/process-status.test.ts agent-ui/tests/features/agent-message/stable-text.test.tsx
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/process-status.test.ts agent-ui/tests/features/agent-message/process-status-text.test.tsx agent-ui/tests/features/agent-message/stable-text.test.tsx
 ```
 
 ### Tab 与侧栏底色

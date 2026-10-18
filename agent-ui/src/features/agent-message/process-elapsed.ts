@@ -3,6 +3,8 @@ import type { TFunction } from "i18next"
 
 import type { AgentThreadMessage } from "./agent-message-data"
 
+export type ProcessElapsedMessage = Pick<AgentThreadMessage, "id" | "createdAt" | "status" | "durationMs">
+
 export function formatRunClock(ms: number): string {
   const totalSeconds = Math.max(0, Math.round(ms / 1000))
   const minutes = Math.floor(totalSeconds / 60)
@@ -24,7 +26,7 @@ export function settledRunDuration(
 }
 
 export function useProcessElapsedLabel(
-  message: AgentThreadMessage,
+  message: ProcessElapsedMessage,
   isStreaming: boolean,
   t: TFunction
 ): string {

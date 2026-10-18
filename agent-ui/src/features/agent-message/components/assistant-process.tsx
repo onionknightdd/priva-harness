@@ -27,7 +27,6 @@ import {
   type ToolResultStatus,
 } from "@/components/agents/tool-result"
 import { MessageResponse } from "@/components/ai-elements/message"
-import { LiveTextScope, StableText } from "@/components/motion/stable-text"
 import { Badge } from "@/components/ui/badge"
 import { writeClipboardText } from "@/lib/clipboard"
 import { FilePathLink } from "@/features/files/file-path-link"
@@ -62,8 +61,7 @@ import {
   fileDiffLinesFromUnified,
 } from "../file-diff-lines"
 import { parseFileReadOutput, isImageFilePath } from "../file-read-view"
-import { useProcessElapsedLabel } from "../process-elapsed"
-import { processStatusPieces } from "../process-status"
+import { ProcessStatusText } from "./process-status-text"
 import {
   isStructuredOutputTool,
   isBashTool,
@@ -97,9 +95,7 @@ export function AssistantProcess({
   isStreaming: boolean
   hideHeader?: boolean
 }) {
-  const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
-  const elapsedLabel = useProcessElapsedLabel(message, isStreaming, t)
   const hasBackgroundTasks = message.blocks?.some((block) => block.type === "tool_use" && block.tool?.backgroundTask &&
     ["pending", "running", "paused"].includes(block.tool.backgroundTask.status)) ?? false
   const [open, setOpen] = React.useState(isStreaming || hasBackgroundTasks)
@@ -200,8 +196,6 @@ export function AssistantProcess({
     )
   }
 
-  const statusPieces = processStatusPieces(message, isStreaming, t, elapsedLabel)
-
   return (
     <motion.div
       initial={shouldReduceMotion ? false : { opacity: 0, y: 4 }}
@@ -223,13 +217,7 @@ export function AssistantProcess({
             focusRing
           )}
         >
-          <LiveTextScope>
-            <StableText
-              pieces={statusPieces}
-              shimmer={isStreaming}
-              className="whitespace-normal"
-            />
-          </LiveTextScope>
+          <ProcessStatusText message={message} isStreaming={isStreaming} />
           <ChevronDownIcon
             className="size-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-200 group-hover/process-trigger:opacity-100 group-focus-visible/process-trigger:opacity-100 group-data-open/process:rotate-180 motion-reduce:transition-none"
           />

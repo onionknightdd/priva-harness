@@ -7,7 +7,8 @@ import { I18nextProvider, initReactI18next } from "react-i18next"
 import { LiveTextScope, StableText } from "../../../src/components/motion/stable-text"
 import type { AgentThreadMessage, StreamBlock } from "../../../src/features/agent-message/agent-message-data"
 import { WorkingStatusLine } from "../../../src/features/agent-message/components/working-status-line"
-import { formatProcessStatusText, processStatusPieces } from "../../../src/features/agent-message/process-status"
+import { processActivityPieces } from "../../../src/features/agent-message/process-status"
+import { joinStatusText } from "../../../src/features/agent-message/status-pieces"
 import { en } from "../../../src/i18n/locales/en"
 import { zhCN } from "../../../src/i18n/locales/zh-CN"
 import "../../../src/index.css"
@@ -173,7 +174,7 @@ async function runChecks() {
       check(`${name}: no sampled blank text frame (${min.toFixed(4)})`, min > 0.01 && frames >= 3)
     }
 
-    const initialPieces = processStatusPieces(message, true, t, "")
+    const initialPieces = processActivityPieces(message.blocks ?? [], true, t)
     const before = literalNode(workingHost(), initialPieces.find((piece) => piece.id === "read:running:before")!.text)
     const after = literalNode(workingHost(), initialPieces.find((piece) => piece.id === "read:running:after")!.text)
     check("surrounding words can be located", Boolean(before && after))
@@ -192,14 +193,14 @@ async function runChecks() {
     narrow = true
     await sample("240px container", () => updateState(3))
     await sample("narrow simultaneous completion", () => updateState(5), workingHost(), 1_200)
-    const expected = formatProcessStatusText(message, true, t, clock.textContent ?? "")
+    const expected = (clock.textContent ?? "") + joinStatusText(processActivityPieces(message.blocks ?? [], true, t))
     check("exiting tool text is removed after settling", visibleText(workingHost()).replace(/\s/g, "") === expected.replace(/\s/g, ""))
     check("accessible status contains exactly the current sentence", accessibleText(workingHost()) === expected)
     check("accessible literal contains exactly its current value", accessibleText(literalHost()) === literal)
     check("narrow container does not overflow", workingHost().scrollWidth <= workingHost().clientWidth + 1)
     if (reducedMotion) {
       updateState(2)
-      const immediate = formatProcessStatusText(message, true, t, clock.textContent ?? "")
+      const immediate = (clock.textContent ?? "") + joinStatusText(processActivityPieces(message.blocks ?? [], true, t))
       check("reduced motion paints the current text immediately", visibleText(workingHost()).replace(/\s/g, "") === immediate.replace(/\s/g, ""))
     }
     results.textContent = `PASS (${passed.length} assertions; ${reducedMotion ? "reduced" : "normal"} motion)\n${samples.join("\n")}\nDOM identity, unchanged words, exit cleanup, current accessible text and narrow layout passed.`

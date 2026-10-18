@@ -15,6 +15,26 @@ Object.assign(globalThis, {
 })
 dom.window.matchMedia = (query) => ({ matches: false, media: query, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => true, onchange: null })
 dom.window.HTMLElement.prototype.getAnimations = () => []
+// jsdom has no WAAPI. Keep completion under test control; pixel visibility is
+// checked by status-line-browser with the real browser animation engine.
+const animations: { element: HTMLElement; cancelled: boolean; finish: () => void }[] = []
+dom.window.HTMLElement.prototype.animate = function (keyframes) {
+  const frames = keyframes as Keyframe[]
+  Object.assign(this.style, frames[0])
+  const animation = {
+    element: this,
+    cancelled: false,
+    onfinish: null as (() => void) | null,
+    cancel() { this.cancelled = true },
+    finish: () => {
+      if (animation.cancelled) return
+      Object.assign(this.style, frames.at(-1))
+      animation.onfinish?.()
+    },
+  }
+  animations.push(animation)
+  return animation as unknown as Animation
+}
 const hooks = registerHooks({
   load: (url, context, nextLoad) => {
     if (url.endsWith(".css")) return { format: "module", source: "export default {}", shortCircuit: true }
@@ -123,6 +143,34 @@ test("reduced motion swaps to visible current text without retaining outgoing ph
   assert.equal(host.querySelectorAll(".absolute").length, 1)
   assert.equal(visible.isConnected, true)
   assert.equal(visible.textContent, "Read 2")
+  const animationCount = animations.length
+  await act(async () => { root.render(sentence([{ id: "done", text: "Read 2" }])) })
+  assert.equal(animations.length, animationCount, "restoring motion must keep existing text visible")
+  assert.equal(host.querySelector(".absolute")!.textContent, "Read 2")
+  assert.equal(host.querySelector(".absolute")!.childElementCount, 0)
   await act(async () => { root.unmount() })
+  host.remove()
+})
+
+test("cascade only splits during a change, then releases its glyphs and animations", async () => {
+  const host = document.body.appendChild(document.createElement("div"))
+  const root = createRoot(host)
+  await act(async () => { root.render(sentence([{ id: "value", text: "123" }])) })
+  const layer = host.querySelector(".absolute")!
+  assert.equal(layer.childElementCount, 0)
+  const start = animations.length
+  await act(async () => { root.render(sentence([{ id: "value", text: "456" }])) })
+  assert.equal(host.querySelectorAll(".absolute").length, 2)
+  assert.equal(animations.length - start, 6)
+  const exiting = animations.slice(start).filter((animation) => layer.contains(animation.element))
+  await act(async () => { root.render(sentence([{ id: "value", text: "789" }])) })
+  assert.equal(exiting.length, 3)
+  assert.ok(exiting.every((animation) => !animation.cancelled), "later updates must not restart an earlier exit")
+  await act(async () => { for (const animation of animations.slice(start)) animation.finish() })
+  assert.equal(host.querySelectorAll(".absolute").length, 1)
+  assert.equal(host.querySelector(".absolute")!.textContent, "789")
+  assert.equal(host.querySelector(".absolute")!.childElementCount, 0)
+  await act(async () => { root.unmount() })
+  assert.ok(animations.slice(start).every((animation) => animation.cancelled))
   host.remove()
 })
