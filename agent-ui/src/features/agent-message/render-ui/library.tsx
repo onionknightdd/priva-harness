@@ -20,7 +20,7 @@ import { useTheme, type Theme } from "@openuidev/react-ui/ThemeProvider"
 export { Renderer }
 import { useReducedMotion } from "motion/react"
 import type { ReactNode } from "react"
-import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis } from "recharts"
+import { Bar, BarChart, CartesianGrid, LabelList, Line, LineChart, XAxis } from "recharts"
 import { z } from "zod/v4"
 
 import {
@@ -100,7 +100,23 @@ const openUiChartFloor = [
   "#EFF8FF",
 ] as const
 
-const axisStyle = { color: "var(--openui-text-neutral-secondary)" }
+const chartInk = "var(--openui-text-neutral-secondary)"
+const axisStyle = { color: chartInk }
+const axisTick = { fill: chartInk, fontSize: 12 }
+const chartMargin = { top: 20, right: 12, left: 12, bottom: 0 }
+
+function chartValueLabel(dataKey: string) {
+  return (
+    <LabelList
+      dataKey={dataKey}
+      position="top"
+      offset={6}
+      fontSize={11}
+      fill={chartInk}
+      className="tabular-nums"
+    />
+  )
+}
 const ruleStyle = { borderColor: "var(--openui-border-default)" }
 
 interface ElementNode {
@@ -329,7 +345,7 @@ function ChartFrame({
       ) : null}
       <ChartContainer
         config={model.config}
-        className="aspect-auto h-48 w-full [&_.recharts-cartesian-axis-tick_text]:![fill:var(--openui-text-neutral-secondary)]"
+        className="aspect-auto h-48 w-full [&_.recharts-cartesian-axis-tick-value]:![fill:var(--openui-text-neutral-secondary)]"
       >
         {children(model, !streaming && !reduce)}
       </ChartContainer>
@@ -359,9 +375,9 @@ const BarChartBlock = defineComponent({
       kind="bar"
     >
       {(model, animate) => (
-        <BarChart data={model.rows}>
+        <BarChart data={model.rows} margin={chartMargin}>
           <CartesianGrid stroke="var(--openui-border-default)" vertical={false} />
-          <XAxis dataKey="label" tickLine={false} axisLine={false} />
+          <XAxis dataKey="label" tick={axisTick} tickLine={false} axisLine={false} />
           <ChartTooltip content={<ChartTooltipContent />} />
           {Array.from({ length: model.count }, (_, index) => (
             <Bar
@@ -371,7 +387,9 @@ const BarChartBlock = defineComponent({
               radius={4}
               isAnimationActive={animate}
               animationDuration={320}
-            />
+            >
+              {chartValueLabel(`s${index}`)}
+            </Bar>
           ))}
         </BarChart>
       )}
@@ -398,22 +416,28 @@ const LineChartBlock = defineComponent({
       kind="line"
     >
       {(model, animate) => (
-        <LineChart data={model.rows}>
+        <LineChart data={model.rows} margin={chartMargin}>
           <CartesianGrid stroke="var(--openui-border-default)" vertical={false} />
-          <XAxis dataKey="label" tickLine={false} axisLine={false} />
+          <XAxis dataKey="label" tick={axisTick} tickLine={false} axisLine={false} />
           <ChartTooltip content={<ChartTooltipContent />} />
-          {Array.from({ length: model.count }, (_, index) => (
-            <Line
-              key={index}
-              type="monotone"
-              dataKey={`s${index}`}
-              stroke={`var(--color-s${index})`}
-              strokeWidth={2}
-              dot={false}
-              isAnimationActive={animate}
-              animationDuration={320}
-            />
-          ))}
+          {Array.from({ length: model.count }, (_, index) => {
+            const seriesColor = `var(--color-s${index})`
+            return (
+              <Line
+                key={index}
+                type="monotone"
+                dataKey={`s${index}`}
+                stroke={seriesColor}
+                strokeWidth={2}
+                dot={{ r: 3, fill: seriesColor, stroke: seriesColor, strokeWidth: 0 }}
+                activeDot={{ r: 4, fill: seriesColor, stroke: seriesColor, strokeWidth: 0 }}
+                isAnimationActive={animate}
+                animationDuration={320}
+              >
+                {chartValueLabel(`s${index}`)}
+              </Line>
+            )
+          })}
         </LineChart>
       )}
     </ChartFrame>
