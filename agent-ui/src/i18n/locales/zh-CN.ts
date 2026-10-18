@@ -505,6 +505,11 @@ export const zhCN = {
     forkNeedsTranscript: "该轮回复尚未写入会话记录，暂时无法从中间分支",
     forkFailed: "无法创建对话分支",
     forking: "正在创建分支…",
+    download: "下载",
+    downloadPdf: "下载为PDF",
+    downloadMarkdown: "下载为Markdown",
+    downloadPng: "下载为PNG",
+    downloadFailed: "无法下载",
     openFile: "打开 {{name}}",
     justNow: "刚刚",
     mockAssistantReply:

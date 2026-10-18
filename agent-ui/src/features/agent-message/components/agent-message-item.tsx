@@ -40,6 +40,7 @@ import { CompactSessionMarker } from "./compact-session-marker"
 import { GeneratedVisual } from "../render-ui/generated-visual"
 import { assistantPieces } from "../assistant-pieces"
 import { AssistantMarkdown } from "./assistant-markdown"
+import { AgentMessageDownloadAction } from "./assistant-download-action"
 import { QuoteSelectable } from "./quote-selectable"
 import { UserMessageContent } from "./user-message-content"
 
@@ -263,7 +264,12 @@ export const AgentMessageItem = React.memo(function AgentMessageItem({
 
   const body = (
     <PopupsArmedContext.Provider value={popupsArmed}>
-    <Message from={message.role} onPointerEnter={armPopups} onFocusCapture={armPopups}>
+    <Message
+      from={message.role}
+      data-reply-scope={message.role === "assistant" ? "" : undefined}
+      onPointerEnter={armPopups}
+      onFocusCapture={armPopups}
+    >
       {isError ? (
         <motion.div
           className="flex w-fit max-w-full flex-col items-start gap-1"
@@ -307,6 +313,7 @@ export const AgentMessageItem = React.memo(function AgentMessageItem({
             <MotionMessageActions layout="position" layoutDependency={false}>
               <AgentMessageCopyAction text={message.role === "assistant" ? assistantTimeline(message).map((section) => section.message.content).filter(Boolean).join("\n\n") : message.content} />
               <AgentMessageSplitAction message={message} />
+              <AgentMessageDownloadAction message={message} />
               <AgentMessageRelativeTime createdAt={message.createdAt} />
             </MotionMessageActions>
           ) : null}
@@ -392,11 +399,15 @@ function AssistantSegment({
           )
         }
         if (piece.kind === "visual") {
-          return <GeneratedVisual key={piece.block.id} block={piece.block} />
+          return (
+            <div key={piece.block.id} data-reply="" className="min-w-0">
+              <GeneratedVisual block={piece.block} />
+            </div>
+          )
         }
         if (piece.text.trim() === "") return null
         return (
-          <motion.div key={`answer-${index}`} layout="position" layoutDependency={false} className="min-w-0">
+          <motion.div key={`answer-${index}`} data-reply="" layout="position" layoutDependency={false} className="min-w-0">
             <QuoteSelectable>
               <AssistantMarkdown
                 className="[&_p]:[line-height:1.5em] [&_p+p]:mt-[2px]"

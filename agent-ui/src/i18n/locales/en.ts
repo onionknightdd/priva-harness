@@ -507,6 +507,11 @@ export const en = {
       "This turn is not saved yet, so it cannot be forked from the middle.",
     forkFailed: "Unable to fork this chat",
     forking: "Forking…",
+    download: "Download",
+    downloadPdf: "Download as PDF",
+    downloadMarkdown: "Download as Markdown",
+    downloadPng: "Download as PNG",
+    downloadFailed: "Unable to download",
     openFile: "Open {{name}}",
     justNow: "just now",
     mockAssistantReply:
