@@ -185,11 +185,11 @@ export function PreviewRail({
           const distance =
             displayedIndex < 0 ? Number.POSITIVE_INFINITY : Math.abs(index - displayedIndex);
           const scale = highlighted
-            ? 1
+            ? 16 / 27
             : distance === 1
-              ? 0.68
+              ? 4 / 9
               : distance === 2
-                ? 0.44
+                ? 1 / 3
                 : 0.25;
 
           const itemContent = (
