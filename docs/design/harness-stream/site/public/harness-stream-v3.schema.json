@@ -1,0 +1,2083 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Harness shared session stream v3 (design draft)",
+  "description": "Shared Chat WS and full HTTP SSE frames. A2A task streaming uses a separate standard projection. All examples are synthetic.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/EventFrame"
+    },
+    {
+      "$ref": "#/$defs/SnapshotFrame"
+    },
+    {
+      "$ref": "#/$defs/ReplyFrame"
+    },
+    {
+      "$ref": "#/$defs/ControlFrame"
+    }
+  ],
+  "$defs": {
+    "Id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "Sequence": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "JsonValue": {},
+    "StreamError": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "$ref": "#/$defs/JsonValue"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "details"
+      ],
+      "additionalProperties": false
+    },
+    "Timing": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "startedAt": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "endedAt": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "durationMs": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "basis": {
+              "const": "native_reported"
+            }
+          },
+          "required": [
+            "startedAt",
+            "endedAt",
+            "durationMs",
+            "basis"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "startedAt": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "endedAt": {
+              "type": "null"
+            },
+            "durationMs": {
+              "type": "null"
+            },
+            "basis": {
+              "const": "host_observed"
+            }
+          },
+          "required": [
+            "startedAt",
+            "endedAt",
+            "durationMs",
+            "basis"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "startedAt": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "endedAt": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "durationMs": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "basis": {
+              "const": "host_observed"
+            }
+          },
+          "required": [
+            "startedAt",
+            "endedAt",
+            "durationMs",
+            "basis"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "startedAt": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "endedAt": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "durationMs": {
+              "type": "null"
+            },
+            "basis": {
+              "const": "unknown"
+            }
+          },
+          "required": [
+            "startedAt",
+            "endedAt",
+            "durationMs",
+            "basis"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "NativeSource": {
+      "type": "object",
+      "properties": {
+        "harness": {
+          "enum": [
+            "codex",
+            "claude",
+            "pi"
+          ]
+        },
+        "interface": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "instanceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "channel": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "harness",
+        "interface",
+        "version",
+        "instanceId",
+        "channel"
+      ],
+      "additionalProperties": false
+    },
+    "NativeRecord": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "source": {
+              "$ref": "#/$defs/NativeSource"
+            },
+            "format": {
+              "const": "json"
+            },
+            "value": {
+              "$ref": "#/$defs/JsonValue"
+            }
+          },
+          "required": [
+            "source",
+            "format",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "source": {
+              "$ref": "#/$defs/NativeSource"
+            },
+            "format": {
+              "const": "bytes"
+            },
+            "encoding": {
+              "const": "base64"
+            },
+            "value": {
+              "type": "string",
+              "contentEncoding": "base64",
+              "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+            }
+          },
+          "required": [
+            "source",
+            "format",
+            "encoding",
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "IntegrityIssue": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "enum": [
+            "capture_lost",
+            "encoding_failed",
+            "storage_failed",
+            "source_unavailable"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "atSeq": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NativeSource"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "atSeq",
+        "source"
+      ],
+      "additionalProperties": false
+    },
+    "IncompleteIntegrity": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "const": "incomplete"
+        },
+        "issues": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/IntegrityIssue"
+          }
+        }
+      },
+      "required": [
+        "status",
+        "issues"
+      ],
+      "additionalProperties": false
+    },
+    "Integrity": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "const": "complete"
+            },
+            "issues": {
+              "type": "array",
+              "maxItems": 0
+            }
+          },
+          "required": [
+            "status",
+            "issues"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "$ref": "#/$defs/IncompleteIntegrity"
+        }
+      ]
+    },
+    "BinaryData": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "inline"
+            },
+            "encoding": {
+              "const": "base64"
+            },
+            "data": {
+              "type": "string",
+              "contentEncoding": "base64"
+            }
+          },
+          "required": [
+            "kind",
+            "encoding",
+            "data"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "reference"
+            },
+            "uri": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "sizeBytes": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "kind",
+            "uri",
+            "sha256",
+            "sizeBytes"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Content": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "text"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "json"
+            },
+            "value": {
+              "$ref": "#/$defs/JsonValue"
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "enum": [
+                "image",
+                "file",
+                "audio",
+                "video"
+              ]
+            },
+            "mediaType": {
+              "type": "string",
+              "minLength": 1
+            },
+            "name": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "blob": {
+              "$ref": "#/$defs/BinaryData"
+            }
+          },
+          "required": [
+            "kind",
+            "mediaType",
+            "name",
+            "blob"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ToolInput": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "enum": [
+                "streaming",
+                "invalid"
+              ]
+            },
+            "text": {
+              "type": "string"
+            },
+            "value": {
+              "type": "null"
+            }
+          },
+          "required": [
+            "status",
+            "text",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "const": "complete"
+            },
+            "text": {
+              "type": "string"
+            },
+            "value": {
+              "$ref": "#/$defs/JsonValue"
+            }
+          },
+          "required": [
+            "status",
+            "text",
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "MessageItem": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "const": "message"
+        },
+        "role": {
+          "enum": [
+            "user",
+            "assistant",
+            "system"
+          ]
+        },
+        "phase": {
+          "enum": [
+            "input",
+            "commentary",
+            "final",
+            "notification"
+          ]
+        },
+        "status": {
+          "enum": [
+            "streaming",
+            "complete",
+            "failed",
+            "cancelled"
+          ]
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Content"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "runId",
+        "kind",
+        "role",
+        "phase",
+        "status",
+        "content"
+      ],
+      "additionalProperties": false
+    },
+    "ThinkingItem": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "const": "thinking"
+        },
+        "status": {
+          "enum": [
+            "running",
+            "complete",
+            "failed",
+            "cancelled"
+          ]
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "timing": {
+          "$ref": "#/$defs/Timing"
+        }
+      },
+      "required": [
+        "id",
+        "runId",
+        "kind",
+        "status",
+        "summary",
+        "timing"
+      ],
+      "additionalProperties": false
+    },
+    "ToolItem": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "const": "tool"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "running",
+            "complete",
+            "failed",
+            "cancelled"
+          ]
+        },
+        "input": {
+          "$ref": "#/$defs/ToolInput"
+        },
+        "output": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Content"
+          }
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/OutputItem"
+          }
+        },
+        "timing": {
+          "$ref": "#/$defs/Timing"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StreamError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "runId",
+        "kind",
+        "name",
+        "status",
+        "input",
+        "output",
+        "children",
+        "timing",
+        "error"
+      ],
+      "additionalProperties": false
+    },
+    "AgentItem": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "const": "agent"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "originRunId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "completionPolicy": {
+          "enum": [
+            "joined",
+            "detached"
+          ]
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "running",
+            "waiting",
+            "complete",
+            "failed",
+            "cancelled",
+            "unknown"
+          ]
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/OutputItem"
+          }
+        },
+        "timing": {
+          "$ref": "#/$defs/Timing"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StreamError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "runId",
+        "kind",
+        "name",
+        "originRunId",
+        "completionPolicy",
+        "status",
+        "children",
+        "timing",
+        "error"
+      ],
+      "additionalProperties": false
+    },
+    "TaskItem": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "const": "task"
+        },
+        "title": {
+          "type": "string"
+        },
+        "taskKind": {
+          "enum": [
+            "command",
+            "agent",
+            "workflow",
+            "monitor",
+            "other"
+          ]
+        },
+        "originRunId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "completionPolicy": {
+          "enum": [
+            "joined",
+            "detached"
+          ]
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "running",
+            "paused",
+            "complete",
+            "failed",
+            "cancelled",
+            "unknown"
+          ]
+        },
+        "control": {
+          "enum": [
+            "api",
+            "terminal",
+            "none"
+          ]
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/OutputItem"
+          }
+        },
+        "timing": {
+          "$ref": "#/$defs/Timing"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StreamError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "runId",
+        "kind",
+        "title",
+        "taskKind",
+        "originRunId",
+        "completionPolicy",
+        "status",
+        "control",
+        "children",
+        "timing",
+        "error"
+      ],
+      "additionalProperties": false
+    },
+    "PlanStep": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "running",
+            "complete",
+            "skipped",
+            "failed"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "text",
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "PlanItem": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "const": "plan"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PlanStep"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "runId",
+        "kind",
+        "steps"
+      ],
+      "additionalProperties": false
+    },
+    "InteractionChoice": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "label": {
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/$defs/JsonValue"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "InteractionItem": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "const": "interaction"
+        },
+        "requestId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requestKind": {
+          "enum": [
+            "approval",
+            "question",
+            "form",
+            "authentication"
+          ]
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "resolved",
+            "cancelled"
+          ]
+        },
+        "prompt": {
+          "type": "string"
+        },
+        "inputSchema": {
+          "type": "object"
+        },
+        "choices": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/InteractionChoice"
+          }
+        },
+        "response": {
+          "$ref": "#/$defs/JsonValue"
+        }
+      },
+      "required": [
+        "id",
+        "runId",
+        "kind",
+        "requestId",
+        "requestKind",
+        "status",
+        "prompt",
+        "inputSchema",
+        "choices",
+        "response"
+      ],
+      "additionalProperties": false
+    },
+    "NoticeItem": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "const": "notice"
+        },
+        "severity": {
+          "enum": [
+            "info",
+            "warning",
+            "error"
+          ]
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        },
+        "details": {
+          "$ref": "#/$defs/JsonValue"
+        }
+      },
+      "required": [
+        "id",
+        "runId",
+        "kind",
+        "severity",
+        "code",
+        "text",
+        "details"
+      ],
+      "additionalProperties": false
+    },
+    "UsageValues": {
+      "type": "object",
+      "properties": {
+        "inputTokens": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outputTokens": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "thinkingTokens": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cacheReadTokens": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cacheWriteTokens": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "totalTokens": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cost": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "amount": {
+                  "type": "string",
+                  "pattern": "^[0-9]+(?:\\.[0-9]+)?$"
+                },
+                "currency": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "amount",
+                "currency"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "inputTokens",
+        "outputTokens",
+        "thinkingTokens",
+        "cacheReadTokens",
+        "cacheWriteTokens",
+        "totalTokens",
+        "cost"
+      ],
+      "additionalProperties": false
+    },
+    "UsageItem": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "const": "usage"
+        },
+        "scope": {
+          "enum": [
+            "call",
+            "run",
+            "session"
+          ]
+        },
+        "mode": {
+          "enum": [
+            "delta",
+            "cumulative"
+          ]
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "values": {
+          "$ref": "#/$defs/UsageValues"
+        }
+      },
+      "required": [
+        "id",
+        "runId",
+        "kind",
+        "scope",
+        "mode",
+        "model",
+        "values"
+      ],
+      "additionalProperties": false
+    },
+    "RunItem": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "const": "run"
+        },
+        "status": {
+          "enum": [
+            "queued",
+            "running",
+            "input_required",
+            "auth_required",
+            "complete",
+            "failed",
+            "cancelled",
+            "rejected"
+          ]
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "timing": {
+          "$ref": "#/$defs/Timing"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StreamError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "runId",
+        "kind",
+        "status",
+        "model",
+        "timing",
+        "error"
+      ],
+      "additionalProperties": false
+    },
+    "OutputItem": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/MessageItem"
+        },
+        {
+          "$ref": "#/$defs/ThinkingItem"
+        },
+        {
+          "$ref": "#/$defs/ToolItem"
+        },
+        {
+          "$ref": "#/$defs/AgentItem"
+        },
+        {
+          "$ref": "#/$defs/TaskItem"
+        },
+        {
+          "$ref": "#/$defs/PlanItem"
+        },
+        {
+          "$ref": "#/$defs/InteractionItem"
+        },
+        {
+          "$ref": "#/$defs/NoticeItem"
+        },
+        {
+          "$ref": "#/$defs/UsageItem"
+        },
+        {
+          "$ref": "#/$defs/RunItem"
+        }
+      ]
+    },
+    "OutputEdit": {
+      "type": "object",
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "deleteCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/OutputItem"
+          }
+        }
+      },
+      "required": [
+        "index",
+        "deleteCount",
+        "items"
+      ],
+      "additionalProperties": false
+    },
+    "Projection": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "const": "applied"
+            },
+            "edits": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/OutputEdit"
+              }
+            }
+          },
+          "required": [
+            "status",
+            "edits"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "const": "unmapped"
+            },
+            "edits": {
+              "type": "array",
+              "maxItems": 0
+            }
+          },
+          "required": [
+            "status",
+            "edits"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "const": "failed"
+            },
+            "edits": {
+              "type": "array",
+              "maxItems": 0
+            },
+            "error": {
+              "$ref": "#/$defs/StreamError"
+            }
+          },
+          "required": [
+            "status",
+            "edits",
+            "error"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Context": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "sessionId",
+        "runId"
+      ],
+      "additionalProperties": false
+    },
+    "EventFrame": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "const": 3
+        },
+        "kind": {
+          "const": "event"
+        },
+        "streamId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "ts": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "context": {
+          "$ref": "#/$defs/Context"
+        },
+        "native": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NativeRecord"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "output": {
+          "$ref": "#/$defs/Projection"
+        }
+      },
+      "required": [
+        "v",
+        "kind",
+        "streamId",
+        "seq",
+        "ts",
+        "context",
+        "native",
+        "integrity",
+        "output"
+      ],
+      "additionalProperties": false
+    },
+    "SnapshotFrame": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "const": 3
+        },
+        "kind": {
+          "const": "snapshot"
+        },
+        "streamId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "atSeq": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "ts": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "sessionId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NativeSource"
+          }
+        },
+        "integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/OutputItem"
+          }
+        }
+      },
+      "required": [
+        "v",
+        "kind",
+        "streamId",
+        "atSeq",
+        "ts",
+        "sessionId",
+        "sources",
+        "integrity",
+        "items"
+      ],
+      "additionalProperties": false
+    },
+    "ReplyFrame": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "const": 3
+            },
+            "kind": {
+              "const": "reply"
+            },
+            "requestId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "command": {
+              "const": "submit"
+            },
+            "ok": {
+              "const": true
+            },
+            "result": {
+              "type": "object",
+              "properties": {
+                "sessionId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "runId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "streamId": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "sessionId",
+                "runId",
+                "streamId"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "v",
+            "kind",
+            "requestId",
+            "command",
+            "ok",
+            "result"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "const": 3
+            },
+            "kind": {
+              "const": "reply"
+            },
+            "requestId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "command": {
+              "const": "subscribe"
+            },
+            "ok": {
+              "const": true
+            },
+            "result": {
+              "type": "object",
+              "properties": {
+                "streamId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "atSeq": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "streamId",
+                "atSeq"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "v",
+            "kind",
+            "requestId",
+            "command",
+            "ok",
+            "result"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "const": 3
+            },
+            "kind": {
+              "const": "reply"
+            },
+            "requestId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "command": {
+              "const": "cancel"
+            },
+            "ok": {
+              "const": true
+            },
+            "result": {
+              "type": "object",
+              "properties": {
+                "runId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "accepted": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "runId",
+                "accepted"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "v",
+            "kind",
+            "requestId",
+            "command",
+            "ok",
+            "result"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "const": 3
+            },
+            "kind": {
+              "const": "reply"
+            },
+            "requestId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "command": {
+              "const": "respond"
+            },
+            "ok": {
+              "const": true
+            },
+            "result": {
+              "type": "object",
+              "properties": {
+                "interactionId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "accepted": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "interactionId",
+                "accepted"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "v",
+            "kind",
+            "requestId",
+            "command",
+            "ok",
+            "result"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "const": 3
+            },
+            "kind": {
+              "const": "reply"
+            },
+            "requestId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "command": {
+              "enum": [
+                "submit",
+                "subscribe",
+                "cancel",
+                "respond"
+              ]
+            },
+            "ok": {
+              "const": false
+            },
+            "error": {
+              "$ref": "#/$defs/StreamError"
+            }
+          },
+          "required": [
+            "v",
+            "kind",
+            "requestId",
+            "command",
+            "ok",
+            "error"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ControlFrame": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "const": 3
+            },
+            "kind": {
+              "const": "control"
+            },
+            "streamId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "code": {
+              "const": "replay.unavailable"
+            },
+            "details": {
+              "type": "object",
+              "properties": {
+                "requestedAfterSeq": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "availableFromSeq": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "latestSeq": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "reason": {
+                  "enum": [
+                    "expired",
+                    "unknown_stream",
+                    "invalid_cursor"
+                  ]
+                }
+              },
+              "required": [
+                "requestedAfterSeq",
+                "availableFromSeq",
+                "latestSeq",
+                "reason"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "v",
+            "kind",
+            "streamId",
+            "code",
+            "details"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "const": 3
+            },
+            "kind": {
+              "const": "control"
+            },
+            "streamId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "code": {
+              "const": "stream.incomplete"
+            },
+            "details": {
+              "type": "object",
+              "properties": {
+                "integrity": {
+                  "$ref": "#/$defs/IncompleteIntegrity"
+                }
+              },
+              "required": [
+                "integrity"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "v",
+            "kind",
+            "streamId",
+            "code",
+            "details"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "const": 3
+            },
+            "kind": {
+              "const": "control"
+            },
+            "streamId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "code": {
+              "const": "stream.closed"
+            },
+            "details": {
+              "type": "object",
+              "properties": {
+                "atSeq": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "reason": {
+                  "enum": [
+                    "export_complete",
+                    "session_closed",
+                    "server_shutdown"
+                  ]
+                }
+              },
+              "required": [
+                "atSeq",
+                "reason"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "v",
+            "kind",
+            "streamId",
+            "code",
+            "details"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "const": 3
+            },
+            "kind": {
+              "const": "control"
+            },
+            "streamId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "code": {
+              "const": "stream.replaced"
+            },
+            "details": {
+              "type": "object",
+              "properties": {
+                "nextStreamId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "nextStreamId",
+                "reason"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "v",
+            "kind",
+            "streamId",
+            "code",
+            "details"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

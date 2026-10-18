@@ -1,0 +1,14 @@
+data: {"task":{"id":"run-1","contextId":"session-1","status":{"state":"TASK_STATE_WORKING"}}}
+
+data: {"statusUpdate":{"taskId":"run-1","contextId":"session-1","status":{"state":"TASK_STATE_WORKING","message":{"messageId":"status-1","contextId":"session-1","taskId":"run-1","role":"ROLE_AGENT","parts":[{"text":"正在思考。"}]}}}}
+
+data: {"statusUpdate":{"taskId":"run-1","contextId":"session-1","status":{"state":"TASK_STATE_WORKING","message":{"messageId":"status-2","contextId":"session-1","taskId":"run-1","role":"ROLE_AGENT","parts":[{"text":"思考阶段用时 1.2 秒（宿主观察）；正在读取 README.md。"}]}}}}
+
+data: {"statusUpdate":{"taskId":"run-1","contextId":"session-1","status":{"state":"TASK_STATE_WORKING","message":{"messageId":"status-3","contextId":"session-1","taskId":"run-1","role":"ROLE_AGENT","parts":[{"text":"README 已读取；子 agent 正在检查目录，后台测试已启动。"}]}}}}
+
+data: {"artifactUpdate":{"taskId":"run-1","contextId":"session-1","artifact":{"artifactId":"answer-1","parts":[{"text":"项目包含 src/ 和 docs/。"}]},"append":false,"lastChunk":false}}
+
+data: {"artifactUpdate":{"taskId":"run-1","contextId":"session-1","artifact":{"artifactId":"answer-1","parts":[{"text":"项目包含 src/ 和 docs/。已读取 README，后台测试仍在运行。"}]},"append":false,"lastChunk":true}}
+
+data: {"statusUpdate":{"taskId":"run-1","contextId":"session-1","status":{"state":"TASK_STATE_COMPLETED"}}}
+

@@ -1,0 +1,166 @@
+from pathlib import Path
+import copy, json, datetime
+root=Path('/Users/derekdeng/Workspace/project/priva-harness')
+api=root/'docs/api'
+examples=api/'examples/harness-stream-v3'
+examples.mkdir(parents=True,exist_ok=True)
+D={}
+def ref(n): return {'$ref':'#/$defs/'+n}
+def obj(p, optional=()): return {'type':'object','properties':p,'required':[k for k in p if k not in optional],'additionalProperties':False}
+def arr(x): return {'type':'array','items':x}
+def enum(*v): return {'enum':list(v)}
+def nullable(x): return {'anyOf':[x,{'type':'null'}]}
+def const(v): return {'const':v}
+S={'type':'string'}; ID={'type':'string','minLength':1}; N={'type':'integer','minimum':0,'maximum':9007199254740991}; B={'type':'boolean'}
+D['Id']=ID; D['Sequence']=N; D['JsonValue']={}
+D['StreamError']=obj({'code':ID,'message':S,'details':ref('JsonValue')})
+D['Timing']={'oneOf':[
+ obj({'startedAt':nullable(N),'endedAt':nullable(N),'durationMs':nullable(N),'basis':const('native_reported')}),
+ obj({'startedAt':N,'endedAt':{'type':'null'},'durationMs':{'type':'null'},'basis':const('host_observed')}),
+ obj({'startedAt':N,'endedAt':N,'durationMs':N,'basis':const('host_observed')}),
+ obj({'startedAt':nullable(N),'endedAt':nullable(N),'durationMs':{'type':'null'},'basis':const('unknown')})]}
+D['NativeSource']=obj({'harness':enum('codex','claude','pi'),'interface':ID,'version':nullable(ID),'instanceId':ID,'channel':ID})
+D['NativeRecord']={'oneOf':[
+ obj({'source':ref('NativeSource'),'format':const('json'),'value':ref('JsonValue')}),
+ obj({'source':ref('NativeSource'),'format':const('bytes'),'encoding':const('base64'),'value':{'type':'string','contentEncoding':'base64','pattern':'^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$'}})]}
+D['IntegrityIssue']=obj({'code':enum('capture_lost','encoding_failed','storage_failed','source_unavailable'),'message':S,'atSeq':nullable(N),'source':nullable(ref('NativeSource'))})
+D['IncompleteIntegrity']=obj({'status':const('incomplete'),'issues':{'type':'array','minItems':1,'items':ref('IntegrityIssue')}})
+D['Integrity']={'oneOf':[
+ obj({'status':const('complete'),'issues':{'type':'array','maxItems':0}}),
+ ref('IncompleteIntegrity')]}
+D['BinaryData']={'oneOf':[
+ obj({'kind':const('inline'),'encoding':const('base64'),'data':{'type':'string','contentEncoding':'base64'}}),
+ obj({'kind':const('reference'),'uri':ID,'sha256':{'type':'string','pattern':'^[a-f0-9]{64}$'},'sizeBytes':N})]}
+D['Content']={'oneOf':[
+ obj({'kind':const('text'),'text':S}),obj({'kind':const('json'),'value':ref('JsonValue')}),
+ obj({'kind':enum('image','file','audio','video'),'mediaType':ID,'name':nullable(S),'blob':ref('BinaryData')})]}
+D['ToolInput']={'oneOf':[
+ obj({'status':enum('streaming','invalid'),'text':S,'value':{'type':'null'}}),
+ obj({'status':const('complete'),'text':S,'value':ref('JsonValue')})]}
+base={'id':ID,'runId':nullable(ID)}
+def item(kind,p): return obj({**base,'kind':const(kind),**p})
+work=enum('pending','running','waiting','complete','failed','cancelled','unknown')
+D['MessageItem']=item('message',{'role':enum('user','assistant','system'),'phase':enum('input','commentary','final','notification'),'status':enum('streaming','complete','failed','cancelled'),'content':arr(ref('Content'))})
+D['ThinkingItem']=item('thinking',{'status':enum('running','complete','failed','cancelled'),'summary':nullable(S),'timing':ref('Timing')})
+D['ToolItem']=item('tool',{'name':ID,'status':enum('pending','running','complete','failed','cancelled'),'input':ref('ToolInput'),'output':arr(ref('Content')),'children':arr(ref('OutputItem')),'timing':ref('Timing'),'error':nullable(ref('StreamError'))})
+D['AgentItem']=item('agent',{'name':ID,'originRunId':nullable(ID),'completionPolicy':enum('joined','detached'),'status':work,'children':arr(ref('OutputItem')),'timing':ref('Timing'),'error':nullable(ref('StreamError'))})
+D['TaskItem']=item('task',{'title':S,'taskKind':enum('command','agent','workflow','monitor','other'),'originRunId':nullable(ID),'completionPolicy':enum('joined','detached'),'status':enum('pending','running','paused','complete','failed','cancelled','unknown'),'control':enum('api','terminal','none'),'children':arr(ref('OutputItem')),'timing':ref('Timing'),'error':nullable(ref('StreamError'))})
+D['PlanStep']=obj({'id':ID,'text':S,'status':enum('pending','running','complete','skipped','failed')})
+D['PlanItem']=item('plan',{'steps':arr(ref('PlanStep'))})
+D['InteractionChoice']=obj({'id':ID,'label':S,'value':ref('JsonValue')})
+D['InteractionItem']=item('interaction',{'requestId':ID,'requestKind':enum('approval','question','form','authentication'),'status':enum('pending','resolved','cancelled'),'prompt':S,'inputSchema':{'type':'object'},'choices':arr(ref('InteractionChoice')),'response':ref('JsonValue')})
+D['NoticeItem']=item('notice',{'severity':enum('info','warning','error'),'code':ID,'text':S,'details':ref('JsonValue')})
+D['UsageValues']=obj({**{k:nullable(N) for k in ['inputTokens','outputTokens','thinkingTokens','cacheReadTokens','cacheWriteTokens','totalTokens']},'cost':nullable(obj({'amount':{'type':'string','pattern':'^[0-9]+(?:\\.[0-9]+)?$'},'currency':ID}))})
+D['UsageItem']=item('usage',{'scope':enum('call','run','session'),'mode':enum('delta','cumulative'),'model':nullable(S),'values':ref('UsageValues')})
+D['RunItem']=item('run',{'status':enum('queued','running','input_required','auth_required','complete','failed','cancelled','rejected'),'model':nullable(S),'timing':ref('Timing'),'error':nullable(ref('StreamError'))})
+D['RunItem']['properties']['runId']=ID
+D['OutputItem']={'oneOf':[ref(n+'Item') for n in ['Message','Thinking','Tool','Agent','Task','Plan','Interaction','Notice','Usage','Run']]}
+D['OutputEdit']=obj({'index':N,'deleteCount':N,'items':arr(ref('OutputItem'))})
+D['Projection']={'oneOf':[
+ obj({'status':const('applied'),'edits':arr(ref('OutputEdit'))}),
+ obj({'status':const('unmapped'),'edits':{'type':'array','maxItems':0}}),
+ obj({'status':const('failed'),'edits':{'type':'array','maxItems':0},'error':ref('StreamError')})]}
+D['Context']=obj({'sessionId':ID,'runId':nullable(ID)})
+D['EventFrame']=obj({'v':const(3),'kind':const('event'),'streamId':ID,'seq':{**N,'minimum':1},'ts':N,'context':ref('Context'),'native':nullable(ref('NativeRecord')),'integrity':ref('Integrity'),'output':ref('Projection')})
+D['SnapshotFrame']=obj({'v':const(3),'kind':const('snapshot'),'streamId':ID,'atSeq':N,'ts':N,'sessionId':ID,'sources':arr(ref('NativeSource')),'integrity':ref('Integrity'),'items':arr(ref('OutputItem'))})
+replies=[]
+for command,result in [
+ ('submit',obj({'sessionId':ID,'runId':ID,'streamId':ID})),
+ ('subscribe',obj({'streamId':ID,'atSeq':N})),
+ ('cancel',obj({'runId':ID,'accepted':B})),
+ ('respond',obj({'interactionId':ID,'accepted':B}))]:
+ replies.append(obj({'v':const(3),'kind':const('reply'),'requestId':ID,'command':const(command),'ok':const(True),'result':result}))
+replies.append(obj({'v':const(3),'kind':const('reply'),'requestId':ID,'command':enum('submit','subscribe','cancel','respond'),'ok':const(False),'error':ref('StreamError')}))
+D['ReplyFrame']={'oneOf':replies}
+controls=[]
+for code,details in [
+ ('replay.unavailable',obj({'requestedAfterSeq':N,'availableFromSeq':nullable(N),'latestSeq':nullable(N),'reason':enum('expired','unknown_stream','invalid_cursor')})),
+ ('stream.incomplete',obj({'integrity':ref('IncompleteIntegrity')})),
+ ('stream.closed',obj({'atSeq':N,'reason':enum('export_complete','session_closed','server_shutdown')})),
+ ('stream.replaced',obj({'nextStreamId':ID,'reason':S}))]:
+ controls.append(obj({'v':const(3),'kind':const('control'),'streamId':ID,'code':const(code),'details':details}))
+D['ControlFrame']={'oneOf':controls}
+schema={'$schema':'https://json-schema.org/draft/2020-12/schema','title':'Harness shared session stream v3 (design draft)','description':'Shared Chat WS and full HTTP SSE frames. A2A task streaming uses a separate standard projection. All examples are synthetic.','oneOf':[ref(x) for x in ['EventFrame','SnapshotFrame','ReplyFrame','ControlFrame']],'$defs':D}
+(api/'harness-stream-v3.schema.json').write_text(json.dumps(schema,ensure_ascii=False,indent=2)+'\n')
+T=int(datetime.datetime(2026,10,17,2,0,tzinfo=datetime.timezone.utc).timestamp()*1000)
+source={'harness':'pi','interface':'example.synthetic','version':'fixture-1','instanceId':'example-process','channel':'fixture'}
+integrity={'status':'complete','issues':[]}
+def timing(start,end=None): return {'startedAt':T+start,'endedAt':None if end is None else T+end,'durationMs':None if end is None else end-start,'basis':'host_observed'}
+def text(s): return {'kind':'text','text':s}
+def message(id,content,phase='final',status='complete',run='run-1'):
+ return {'id':id,'kind':'message','runId':run,'role':'assistant','phase':phase,'status':status,'content':[text(content)]}
+def tool(id,name,args,start,run='run-1'):
+ return {'id':id,'kind':'tool','runId':run,'name':name,'status':'running','input':{'status':'complete','text':json.dumps(args,ensure_ascii=False,separators=(',',':')),'value':args},'output':[],'children':[],'timing':timing(start),'error':None}
+def edit(index,delete,*items): return {'index':index,'deleteCount':delete,'items':list(items)}
+frames=[]; states=[[]]
+def emit(at,raw,edits=None,run='run-1'):
+ seq=len(frames)+1
+ f={'v':3,'kind':'event','streamId':'stream-1','seq':seq,'ts':T+at,'context':{'sessionId':'session-1','runId':run},'native':{'source':source,'format':'json','value':raw},'integrity':integrity,'output':{'status':'unmapped' if edits is None else 'applied','edits':edits or []}}
+ frames.append(copy.deepcopy(f));items=copy.deepcopy(states[-1])
+ for e in edits or []:items[e['index']:e['index']+e['deleteCount']]=copy.deepcopy(e['items'])
+ states.append(items)
+run={'id':'run-1','kind':'run','runId':'run-1','status':'running','model':'example-model','timing':timing(0),'error':None}
+emit(0,{'type':'run_start','model':'example-model'},[edit(0,0,run)])
+thought={'id':'thinking-1','kind':'thinking','runId':'run-1','status':'running','summary':None,'timing':timing(0)}
+emit(0,{'type':'thinking_start'},[edit(1,0,thought)])
+thought.update(status='complete',summary='先读取项目说明，再核对目录。',timing=timing(0,1200))
+emit(1200,{'type':'thinking_end','publicSummary':thought['summary']},[edit(1,1,thought)])
+read=tool('tool-1','read_file',{'path':'README.md'},1200)
+emit(1200,{'type':'tool_start','toolCallId':'native-tool-1','name':'read_file','args':{'path':'README.md'}},[edit(2,0,read)])
+read.update(status='complete',output=[text('# Example project\nSource: src/\nDocs: docs/'),{'kind':'json','value':{'path':'README.md','encoding':'utf-8'}}],timing=timing(1200,1500))
+emit(1500,{'type':'tool_end','toolCallId':'native-tool-1','result':read['output'],'extra':{'preserved':True}},[edit(2,1,read)])
+agent={'id':'agent-1','kind':'agent','runId':'run-1','name':'检查目录','originRunId':'run-1','completionPolicy':'joined','status':'running','children':[],'timing':timing(1500),'error':None}
+emit(1500,{'type':'agent_start','agentId':'native-agent-7','name':'检查目录'},[edit(3,0,agent)])
+ls=tool('tool-child-1','list_directory',{'path':'.'},1600)
+agent['children']=[ls]
+emit(1600,{'type':'tool_start','agentId':'native-agent-7','toolCallId':'native-child-tool-1','name':'list_directory','args':{'path':'.'}},[edit(3,1,agent)])
+bg={'id':'background-1','kind':'task','runId':None,'title':'运行后台测试','taskKind':'command','originRunId':'run-1','completionPolicy':'detached','status':'running','control':'api','children':[],'timing':timing(1600),'error':None}
+emit(1600,{'type':'background_start','taskId':'native-background-8','command':'npm test'},[edit(4,0,bg)],run=None)
+ls.update(status='complete',output=[{'kind':'json','value':['src/','docs/','README.md']}],timing=timing(1600,2600))
+agent.update(status='complete',children=[ls,message('child-answer-1','已确认源码和文档目录。')],timing=timing(1500,2700))
+emit(2700,{'type':'agent_end','agentId':'native-agent-7','result':'已确认源码和文档目录。','childToolResult':{'toolCallId':'native-child-tool-1','output':ls['output'],'timing':ls['timing']}},[edit(3,1,agent)])
+answer=message('answer-1','项目包含 src/ 和 docs/。',status='streaming')
+emit(2900,{'type':'answer_delta','delta':'项目包含 src/ 和 docs/。'},[edit(5,0,answer)])
+answer=message('answer-1','项目包含 src/ 和 docs/。已读取 README，后台测试仍在运行。')
+emit(3200,{'type':'answer_end','text':answer['content'][0]['text']},[edit(5,1,answer)])
+run.update(status='complete',timing=timing(0,3300))
+emit(3300,{'type':'run_end'},[edit(0,1,run)])
+bash=tool('background-tool-1','bash',{'command':'npm test'},1600,run=None)
+bash['output']=[text('8/12 tests passed')];bg['children']=[bash]
+emit(4000,{'type':'background_progress','taskId':'native-background-8','stdout':'8/12 tests passed'},[edit(4,1,bg)],run=None)
+bash.update(status='complete',output=[text('12 tests passed'),{'kind':'json','value':{'exitCode':0}}],timing=timing(1600,5600))
+bg.update(status='complete',children=[bash],timing=timing(1600,5600))
+emit(5600,{'type':'background_end','taskId':'native-background-8','exitCode':0,'passed':12},[edit(4,1,bg)],run=None)
+emit(5700,{'type':'background_notification','taskId':'native-background-8','text':'12 tests passed'},[edit(6,0,message('background-notice-1','后台测试完成：12 项通过。',phase='notification',run=None))],run=None)
+emit(5800,{'type':'future_event','unknownFields':{'nested':[1,{'keep':True}]}},None,run=None)
+def snapshot(n):
+ return {'v':3,'kind':'snapshot','streamId':'stream-1','atSeq':n,'ts':T if n==0 else frames[n-1]['ts'],'sessionId':'session-1','sources':[source],'integrity':integrity,'items':states[n]}
+def dump_lines(path,objects): path.write_text(''.join(json.dumps(x,ensure_ascii=False,separators=(',',':'))+'\n' for x in objects))
+def sse(objects):
+ lines=[]
+ for f in objects:
+  if f['kind']=='event': lines.append(f"id: {f['streamId']}:{f['seq']}\n")
+  lines.append('event: '+f['kind']+'\n'+'data: '+json.dumps(f,ensure_ascii=False,separators=(',',':'))+'\n\n')
+ return ''.join(lines)
+dump_lines(examples/'session.jsonl',[snapshot(0),*frames])
+(examples/'session.sse').write_text(sse([snapshot(0),*frames]))
+# Connection one applied through 8; connection two restores exactly 8 and replays tail.
+(examples/'reconnect.sse').write_text(sse([snapshot(8),*frames[8:]]))
+(examples/'final-snapshot.json').write_text(json.dumps(snapshot(16),ensure_ascii=False,indent=2)+'\n')
+# Synthetic host integrity warning demonstrates durable evidence, not just transient control.
+issue={'code':'capture_lost','message':'Example source pipe reported lost bytes.','atSeq':17,'source':source}
+bad=copy.deepcopy(frames[-1]);bad.update(seq=17,ts=T+6000,native=None,integrity={'status':'incomplete','issues':[issue]},output={'status':'applied','edits':[edit(7,0,{'id':'integrity-notice-1','runId':None,'kind':'notice','severity':'error','code':'stream.incomplete','text':issue['message'],'details':issue})]})
+expired={'v':3,'kind':'control','streamId':'stream-1','code':'replay.unavailable','details':{'requestedAfterSeq':4,'availableFromSeq':10,'latestSeq':17,'reason':'expired'}}
+dump_lines(examples/'integrity-and-gap.jsonl',[bad,{'v':3,'kind':'control','streamId':'stream-1','code':'stream.incomplete','details':{'integrity':bad['integrity']}},expired])
+# Same foreground run projected onto standard A2A 1.0 frames; detached work is session-only.
+def status(message,state='TASK_STATE_WORKING'):
+ return {'statusUpdate':{'taskId':'run-1','contextId':'session-1','status':{'state':state,'message':{'messageId':'status-'+str(len(a2a)),'contextId':'session-1','taskId':'run-1','role':'ROLE_AGENT','parts':[{'text':message}]}}}}
+a2a=[{'task':{'id':'run-1','contextId':'session-1','status':{'state':'TASK_STATE_WORKING'}}}]
+a2a.append(status('正在思考。'))
+a2a.append(status('思考阶段用时 1.2 秒（宿主观察）；正在读取 README.md。'))
+a2a.append(status('README 已读取；子 agent 正在检查目录，后台测试已启动。'))
+a2a.append({'artifactUpdate':{'taskId':'run-1','contextId':'session-1','artifact':{'artifactId':'answer-1','parts':[{'text':'项目包含 src/ 和 docs/。'}]},'append':False,'lastChunk':False}})
+a2a.append({'artifactUpdate':{'taskId':'run-1','contextId':'session-1','artifact':{'artifactId':'answer-1','parts':[{'text':answer['content'][0]['text']}]},'append':False,'lastChunk':True}})
+a2a.append({'statusUpdate':{'taskId':'run-1','contextId':'session-1','status':{'state':'TASK_STATE_COMPLETED'}}})
+(examples/'a2a.sse').write_text(''.join('data: '+json.dumps(f,ensure_ascii=False,separators=(',',':'))+'\n\n' for f in a2a))
+print(json.dumps({'definitions':len(D),'session_events':len(frames),'files':[p.name for p in examples.iterdir()]},ensure_ascii=False))

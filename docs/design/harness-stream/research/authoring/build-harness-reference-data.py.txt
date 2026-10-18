@@ -1,0 +1,221 @@
+import json,re,copy
+from pathlib import Path
+root=Path('/Users/derekdeng/Workspace/project/priva-harness')
+source=(root/'docs/api/harness-http-api-reference.md').read_text()
+lines=source.splitlines()
+heads=[]
+for i,l in enumerate(lines):
+ m=re.match(r'^(#{1,6}) (.+)$',l)
+ if m: heads.append((i,len(m[1]),m[2]))
+def block(title, occurrence=0):
+ found=[h for h in heads if h[2]==title][occurrence]
+ stop=next((h[0] for h in heads if h[0]>found[0] and h[1]<=found[1]),len(lines))
+ return '\n'.join(lines[found[0]+1:stop]).strip()
+def subblock(title,start_title,end_title=None):
+ s=block(title)
+ start=s.index(start_title)
+ return s[start:s.index(end_title,start) if end_title else None]
+def clean(s):return s.replace('`','').strip()
+def field(path,typ,desc,required=False,default=None,children=None):
+ name=re.sub(r'^.*\.(?![^\[]*\])','',path)
+ o=dict(path=path,name=name,type=typ,required=required,description=desc)
+ if default is not None:o['default']=str(default)
+ if children:o['children']=children
+ return o
+def table_fields(text):
+ out=[]
+ for l in text.splitlines():
+  if not l.startswith('|'):continue
+  cells=[c.strip() for c in l.strip('|').split('|')]
+  if len(cells)<3 or re.fullmatch(r'[- :]+',cells[0]) or not cells[0].startswith('`'):continue
+  path=clean(cells[0]); typ=clean(cells[1])
+  if not re.match(r'^(request|response|frame|state)\.',path): continue
+  cond=clean(cells[2]) if len(cells)==4 else ''
+  desc=cells[3] if len(cells)==4 else cells[2]
+  required=cond in ['是','必填','必有','本产品必有','本产品成功执行请求必有']
+  if cond and not required:desc+=' 出现条件：'+cond+'。'
+  o=field(path,typ,desc,required)
+  m=re.search(r'默认\s*`?([^`，；。 ]+)',cond)
+  if m:o['default']=m[1]
+  out.append(o)
+ return out
+def nested(fs):
+ out=[]
+ for f in fs:
+  f=copy.deepcopy(f)
+  parents=[x for x in fs if x is not f and f['path']!=x['path'] and (f['path'].startswith(x['path']+'.') or f['path'].startswith(x['path']+'['))]
+  parent=max(parents,key=lambda x:len(x['path'])) if parents else None
+  f['_parent']=parent['path'] if parent else None
+  out.append(f)
+ lookup={f['path']:f for f in out}; roots=[]
+ for f in out:
+  p=f.pop('_parent')
+  if p in lookup: lookup[p].setdefault('children',[]).append(f)
+  else:roots.append(f)
+ return roots
+def prose(text):
+ # Field tables are represented by the structured field list; preserve prose and code diagrams.
+ result=[]; in_table=False; field_table=False
+ for l in text.splitlines():
+  if l.startswith('|'):
+   if not in_table:
+    field_table=any(k in l for k in ['完整字段路径','返回路径','请求头','位置与名称','参数 |','Query 参数'])
+   in_table=True
+   if not field_table:result.append(l)
+  else:
+   in_table=False
+   result.append(l)
+ return '\n'.join(result).strip()
+def sec(id,title,text,fields=None):
+ fs=table_fields(text) if fields is None else fields
+ body=prose(text)
+ o={'id':id,'title':title}
+ if fs:o['fields']=nested(fs)
+ if body:o['body']=body
+ return o
+def example(label,lang,code):return {'label':label,'language':lang,'code':code.strip()}
+def codes(text):return re.findall(r'```([^\n]*)\n(.*?)```',text,re.S)
+def pretty(x):return json.dumps(x,ensure_ascii=False,indent=2)
+EXT='https://agent.example.com/extensions/harness-stream/v1'
+BASE='https://agent.example.com/a2a'
+frames=[json.loads(l) for l in (root/'docs/api/examples/harness-stream-v3-delta-proposal/session.jsonl').read_text().splitlines()]
+headers=[field('request.headers["A2A-Version"]','string','标准 A2A 方法的协议版本，固定为 1.0。',True),field('request.headers["Content-Type"]','string','JSON 请求体的媒体类型：application/a2a+json。',True),field('request.headers["Accept"]','string','普通返回使用 application/a2a+json；SSE 使用 text/event-stream。',True),field('request.headers["A2A-Extensions"]','string',f'请求完整输出时包含 {EXT}；响应必须确认扩展激活。扩展 URI 当前为占位符。')]
+req=table_fields(block('请求体参数'))+table_fields(block('Part 输入字段'))
+# Expand nested Task response with standard Message and Artifact fields.
+ret=table_fields(block('返回',0))+table_fields(block('标准 Message 与 Artifact 返回字段'))
+taskret=[{**f,'path':f['path'].replace('response.task','response',1)} for f in ret if f['path']!='response.task']
+for f in taskret:f['name']=f['path'].split('.')[-1]
+sendcodes=codes(block('方法一 发送消息并创建或继续任务'))
+pages=[]
+def page(id,group,title,subtitle,description,sections,examples,method=None,endpoint=None):
+ p=dict(id=id,group=group,title=title,subtitle=subtitle,description=description,sections=sections,examples=examples)
+ if method:p['method']=method
+ if endpoint:p['endpoint']=endpoint
+ pages.append(p)
+page('send-message','HTTP API','发送消息','Send a message',[
+ '发送用户消息，创建新的逻辑运行，或继续指定的未终态任务。HTTP 与 Chat UI 复用同一会话服务、运行驱动和持久事件日志。',
+ '本页面是尚未实现的设计草案。请求采用 A2A 1.0，字段依据 v1.0.1 发布版；示例使用占位域名，不会调用真实模型。',
+ '完整输出调用先提交一次 A2A 请求，再连接 Task metadata 中的 eventsUrl。SDK 可将它包装为一个异步迭代器。'
+],[sec('flow','调用流程',block('调用流程')),
+ sec('headers','请求头','认证方式遵循 AgentCard 和部署要求；不预设唯一的认证方案。选择 Agent 接口及其运行配置确定执行环境。',headers),
+ sec('request','请求体参数',block('请求体参数')+'\n\n'+block('Part 输入字段'),req),
+ sec('response','返回 Task',block('返回',0),ret),
+ sec('continue','继续会话与回答交互',block('继续会话与回答交互')),
+ sec('errors','错误返回',block('错误返回'))],
+ [example('请求 · cURL',sendcodes[0][0],sendcodes[0][1]),example('响应 · Task',sendcodes[1][0],sendcodes[1][1]),example('继续会话','json',sendcodes[2][1]),example('回答审批','json',sendcodes[3][1])], 'POST','/message:send')
+streamreq=[field('request.path.streamId','string','从返回的 eventsUrl 取得，必须与日志身份一致。',True),field('request.query.afterSeq','integer','非负安全整数，排他起点。必须提供 afterSeq 或 Last-Event-ID；0 从日志起点读取，startAfterSeq 从当前任务起点读取。'),field('request.headers["Last-Event-ID"]','string','格式 streamId:seq，例如 stream-1:8。可代替 afterSeq；同时提供时两者必须一致。'),field('request.query.throughSeq','integer','有界导出的包含上界；示例使用已提交且不小于 afterSeq 的序号。到达后发 stream.closed，并关闭连接。',False,'不设上界'),field('request.headers["Accept"]','string','必须为 text/event-stream。',True),field('request.headers["A2A-Extensions"]','string','包含已协商的扩展 URI，并要求响应确认。',True)]
+streamcodes=codes(block('方法二 读取完整共享事件流'))
+page('stream-events','HTTP API','读取共享事件流','Read the shared event stream',[
+ '返回请求游标处的精确显示快照，然后依次返回其后的全部已提交事件，并持续等待新事件。',
+ 'SSE 与 Chat WS 共用同一日志。关闭连接只取消订阅；主 run 结束也不会自动关闭会话流，detached 后台任务仍可继续上报。'
+],[sec('request','请求参数',block('请求参数'),streamreq),sec('response','返回帧',block('返回',1),table_fields(block('返回帧类型'))),sec('recovery','生命周期与恢复',block('生命周期与恢复')),sec('integrity-boundary','完整性边界','快照恢复显示，但不补交游标之前的 native 历史。读取完整原始历史需要从仍可用的日志起点开始。\n\n游标无效、保留期过期和握手错误不可静默降级为“从最新开始”；具体 HTTP 错误映射仍待实施时固定。')],[example('首次连接','bash',streamcodes[0][1]),example('断线续传','bash',streamcodes[1][1]),example('SSE · 首帧','text','event: snapshot\ndata: '+json.dumps(frames[0],ensure_ascii=False,separators=(',',':'))+'\n\n'),example('文本增量 · 第 11 帧','json',pretty(frames[11]))],'GET','{eventsUrl}?afterSeq=N')
+getreq=[field('request.path.id','string','Task ID。',True),field('request.query.historyLength','integer','非负 int32，0～2147483647。0 不返回历史；省略不施加客户端数量限制，服务端仍可返回更少。'),field('request.tenant','string','按所选 AgentInterface 的路由声明提供，不透明标识必须匹配。')]
+completed={'id':'run-1','contextId':'session-1','status':{'state':'TASK_STATE_COMPLETED'},'artifacts':[{'artifactId':'answer-1','parts':[{'text':'项目包含 src/ 和 docs/。已读取 README，后台测试仍在运行。'}]}],'metadata':{EXT:{'streamId':'stream-1','startAfterSeq':0,'eventsUrl':'https://agent.example.com/harness/streams/stream-1/events'}}}
+page('get-task','HTTP API','查询任务','Retrieve a task',['查询指定任务的当前标准状态和结果。返回 Task 本体，不额外包裹 task 字段。','Task history 不是完整原始事件日志。完整扩展激活时，metadata 中提供同一共享流指针，startAfterSeq 不重置。'],[sec('request','请求参数','',getreq),sec('response','返回 Task','返回字段从 response.id、response.contextId、response.status 开始。',taskret)],[example('请求 · cURL','bash',f"curl '{BASE}/tasks/run-1?historyLength=0' \\\n  -H 'A2A-Version: 1.0' \\\n  -H 'Accept: application/a2a+json'"),example('响应 · Task','json',pretty(completed))],'GET','/tasks/{id}')
+listreq=[field('request.query.contextId','string','按会话过滤。'),field('request.query.status','TaskState','按任务当前状态过滤。'),field('request.query.pageSize','integer','单页最大条数，范围 1～100；服务端可返回更少。',False,'50'),field('request.query.pageToken','string','上次返回的 nextPageToken。'),field('request.query.historyLength','integer','每个任务附带的最近历史消息数量上限；非负 int32。'),field('request.query.statusTimestampAfter','string','RFC 3339 时间，包含状态时间大于等于此值的任务。'),field('request.query.includeArtifacts','boolean','是否返回产物。',False,'false'),field('request.tenant','string','按所选接口的路由声明提供。')]
+listret=table_fields(block('列出任务'))
+listret.extend([{**f,'path':f['path'].replace('response.task','response.tasks[i]',1)} for f in ret if f['path']!='response.task'])
+page('list-tasks','HTTP API','列出任务','List tasks',['分页列出当前调用方有权访问的任务，支持按会话和状态过滤。','结果反映查询时的任务状态。此方法不取代共享日志中的有序历史。'],[sec('request','查询参数','',listreq),sec('response','返回分页结果','nextPageToken 为空表示没有下一页。',listret)],[example('请求 · cURL','bash',f"curl '{BASE}/tasks?contextId=session-1&pageSize=20&includeArtifacts=true' \\\n  -H 'A2A-Version: 1.0' \\\n  -H 'Accept: application/a2a+json'"),example('响应 · 分页结果','json',pretty({'tasks':[completed],'nextPageToken':'','pageSize':20,'totalSize':1}))],'GET','/tasks')
+page('cancel-task','HTTP API','取消任务','Cancel a task',['请求取消指定 Task，返回 Task 本体。不可取消时返回标准 TASK_NOT_CANCELABLE 错误。','取消 Task 不等于关闭订阅，也不自动取消会话内所有 detached 后台任务。'],[sec('request','请求参数','',[field('request.path.id','string','待取消的 Task ID。',True),field('request.metadata','object','可选请求元数据。'),field('request.tenant','string','按所选 AgentInterface 的路由声明提供。')]),sec('response','返回 Task','取消结果由返回状态表示。请求取消不意味着所有任务都支持立即取消。',taskret),sec('errors','错误返回',block('错误返回'))],[example('请求 · cURL','bash',f"curl -X POST '{BASE}/tasks/run-1:cancel' \\\n  -H 'A2A-Version: 1.0' \\\n  -H 'Content-Type: application/a2a+json' \\\n  -H 'Accept: application/a2a+json' \\\n  --data '{{}}'"),example('响应 · 已取消','json',pretty({'id':'run-1','contextId':'session-1','status':{'state':'TASK_STATE_CANCELED'}}))],'POST','/tasks/{id}:cancel')
+a2aret=table_fields(block('标准流式发送与订阅'))
+a2aret.extend([field('response.statusUpdate.taskId','string','更新所属 Task。',True),field('response.statusUpdate.contextId','string','所属会话。',True),field('response.statusUpdate.status','TaskStatus','当前任务状态。',True),field('response.statusUpdate.metadata','object','可选扩展元数据。'),field('response.artifactUpdate.taskId','string','产物所属 Task。',True),field('response.artifactUpdate.contextId','string','所属会话。',True),field('response.artifactUpdate.artifact','Artifact','产物或产物块。',True),field('response.artifactUpdate.append','boolean','true 表示按标准产物规则追加 Part；不是追加到某个 Part 的文本字符串。'),field('response.artifactUpdate.lastChunk','boolean','标记此产物的最后一块，不是整个会话流完成。'),field('response.artifactUpdate.metadata','object','可选扩展元数据。')])
+a2asample=(root/'docs/api/examples/harness-stream-v3/a2a.sse').read_text()
+page('send-streaming','HTTP API','标准流式发送','Send a streaming message',['以标准 A2A SSE 返回 Task、Message、状态更新或产物更新，适合普通 A2A 客户端。','使用 SendMessage 的请求体。configuration.returnImmediately 在该流式方法中不生效；完整 native 输出和精确断线重放由共享流扩展提供。'],[sec('request','请求体参数','Part 必须在 text、data、raw、url 中选择一种内容字段。',req),sec('response','标准 SSE 返回','每个 SSE data 对象只包含四个顶层分支之一。statusUpdate 没有旧版 final 字段。',a2aret),sec('lifecycle','生命周期','标准流在 Task 终态结束。中断态可能结束当前连接，但允许之后通过新 Message 继续同一 Task。\n\nartifactUpdate.append=true 追加的是 Part；不能直接解释为共享树中的 text.append。示例使用 append=false 发送产物替换。')],[example('请求 · cURL','bash',sendcodes[0][1].replace('/message:send','/message:stream').replace("curl '","curl -N '").replace("'Accept: application/a2a+json'","'Accept: text/event-stream'")),example('响应 · 标准 A2A SSE','text',a2asample)],'POST','/message:stream')
+page('subscribe-task','HTTP API','订阅任务','Subscribe to a task',['订阅已有未终态 Task 的标准更新。终态 Task 应使用查询接口，订阅不会复活任务。','GET / POST 双入口对应固定版本规范与官方 JS SDK 的同版本差异；设计要求两者共用处理器。普通标准订阅不保证重放每个瞬时更新。'],[sec('request','请求参数','GET 和 POST 两个入口具有相同任务订阅语义。',[field('request.path.id','string','未终态 Task 的 ID。',True),field('request.tenant','string','按所选接口的路由声明提供。')]),sec('response','标准 SSE 返回','返回标准 A2A 对象。精确恢复 native 历史需要共享事件流。',a2aret),sec('lifecycle','订阅边界','终态任务返回 UNSUPPORTED_OPERATION。标准流在终态结束；lastChunk 仅代表单个产物最后一块，不代表共享会话流结束。')],[example('请求 · GET','bash',f"curl -N '{BASE}/tasks/run-1:subscribe' \\\n  -H 'A2A-Version: 1.0' \\\n  -H 'Accept: text/event-stream'"),example('请求 · POST','bash',f"curl -N -X POST '{BASE}/tasks/run-1:subscribe' \\\n  -H 'A2A-Version: 1.0' \\\n  -H 'Accept: text/event-stream'"),example('响应 · 标准 A2A SSE','text',a2asample)],'GET','/tasks/{id}:subscribe')
+eventsections=[sec('reading','阅读约定',block('阅读约定')),sec('event','EventFrame',block('事件外壳')),sec('native','NativeRecord · 原始事件',block('原始记录：NativeRecord')),sec('integrity','Integrity · 完整性',block('完整性：Integrity')),sec('projection','Projection · 显示投影',block('显示投影：Projection')),sec('splice','splice · 修改数组',block('插入、删除或替换数组元素：splice')),sec('set','set · 更新字段',block('更新字段：set')),sec('append','text.append · 追加文本',block('追加文本：text.append')),sec('paths','路径与原子提交',block('路径与执行限制')),sec('snapshot','SnapshotFrame',block('SnapshotFrame')),sec('control','ControlFrame',block('公共字段',1)),sec('replay-unavailable','replay.unavailable',block('replay.unavailable：无法完整续传')),sec('incomplete','stream.incomplete',block('stream.incomplete：采集不完整')),sec('closed','stream.closed',block('stream.closed：连接流结束')),sec('replaced','stream.replaced',block('stream.replaced：日志身份改变'))]
+# Exact ControlFrame public section is the final same-named heading.
+eventsections[10]=sec('control','ControlFrame',block('公共字段',1))
+page('event-frame','共享协议','事件与增量操作','Frames and incremental edits',['共享帧版本为 3：snapshot 提供显示基线，event 保存原始来源记录与显示增量，control 描述连接和恢复状态。','增量操作是受控的产品协议，包含 splice、set、text.append。前端只需校验连续序号并顺序应用，无需维护 provider 专用事件索引。','已定义对象不接受任意额外字段。只有明确标为 JSON 的位置容纳原始值或结构化扩展。'],eventsections,[example('EventFrame · 文本增量','json',pretty(frames[11])),example('SnapshotFrame · 初始状态','json',pretty(frames[0])),example('未知事件 · 原样保留','json',pretty(frames[16])),example('ControlFrame · 导出完成','json',pretty({'v':3,'kind':'control','streamId':'stream-1','code':'stream.closed','details':{'atSeq':16,'reason':'export_complete'}}))])
+variants=[('message','MessageItem：消息'),('thinking','ThinkingItem：公开思考摘要与计时'),('tool','ToolItem：工具执行'),('agent','AgentItem：子 agent'),('task','TaskItem：后台任务'),('plan','PlanItem：计划'),('interaction','InteractionItem：等待输入或授权'),('notice','NoticeItem：提示'),('usage','UsageItem：用量'),('run','RunItem：逻辑运行')]
+outputsecs=[sec('common','公共字段',block('公共字段',0))]+[sec(id,title,block(title)) for id,title in variants]+[sec('content','Content · 内容块',block('内容块：Content')),sec('timing','Timing · 阶段计时',block('计时：Timing')),sec('error','StreamError · 组件错误',block('组件错误：StreamError'))]
+page('output-items','共享协议','输出组件','Output items',['显示树由有序 items 数组与嵌套 children 构成。组件首次出现时完整插入，后续只传新增文本、子组件或变化字段。','以下字段统一使用应用增量后的完整路径 state.items[i]。嵌套组件沿用相同结构，例如 state.items[i].children[j].content[k].text。','原始记录独立保留在 native 中；最终显示树不能反向恢复完整事件历史。'],outputsecs,[example('思考阶段 · 1.2 秒','json',pretty({'id':'thinking-1','kind':'thinking','runId':'run-1','status':'complete','summary':'先读取项目说明，再核对目录。','timing':{'startedAt':1792202400000,'endedAt':1792202401200,'durationMs':1200,'basis':'host_observed'}})),example('子 agent · 增量插入工具','json',pretty(frames[7]['output'])),example('后台任务 · detached','json',pretty(frames[8]['output']['edits'][0]['items'][0]))])
+page('reconnect','指南','断线重连与顺序累加','Replay and recovery',['持久记录最后成功提交的 streamId 与 seq；断线后从该游标继续。收到但尚未成功应用的序号不能作为恢复游标。','恢复返回 snapshot(N)，再返回 event(N+1)。快照还原显示状态，后续 native 按原顺序继续交付。'],[sec('flow','重连流程',block('生命周期与恢复')),sec('atomic','逐帧处理规则','1. 首先校验 streamId。日志身份改变时建立新基线。\n2. 同一日志的重复 seq 不重复应用；新序号必须等于已提交游标 + 1。\n3. 在暂存树中按 edits 数组顺序应用，路径以每一步操作前的树为基准。\n4. 全部验证和应用成功后，原子提交显示状态与游标。\n5. 原始日志若使用独立事务保存，保存自己的成功游标，不能与显示游标混用。\n6. 遇到序号缺口暂停应用并补齐，不能跳帧。'),sec('unavailable','历史不可用',block('replay.unavailable：无法完整续传')),sec('background','子任务与后台工作','joined 子工作未完成时，父任务不能先成功结束。detached 从创建起 runId 为 null，originRunId 保留发起运行。\n\n主 run 在第 12 条事件完成后，第 13～15 条仍继续报告后台测试进度和通知；它们不会复活已结束的主 run。'),sec('walkthrough','示例帧顺序',block('流式返回示例').split('第 11 条事件的完整')[0])],[example('恢复请求','bash',streamcodes[1][1]),example('恢复 · SSE', 'text',(root/'docs/api/examples/harness-stream-v3-delta-proposal/reconnect.sse').read_text()),example('无法完整续传','json',pretty({'v':3,'kind':'control','streamId':'stream-1','code':'replay.unavailable','details':{'requestedAfterSeq':8,'availableFromSeq':12,'latestSeq':16,'reason':'expired'}}))])
+page('a2a','指南','兼容 A2A 1.0','A2A compatibility',['标准 A2A 接口负责消息、Task、状态和 Artifact；共享流扩展负责完整 harness 来源记录、嵌套组件增量和精确重放。','采用 A2A 1.0 协议，字段依据规范发布版 v1.0.1。A2A-Version 请求头值仍为 1.0。扩展帧版本 3 与扩展 URI 版本分别管理。'],[sec('flow','同一执行，两种读取方式','```text\nClaude / Pi / Codex runtime\n            |\n      Shared session journal\n            |\n            +---- A2A Task / Message / Artifact\n            |        普通 A2A 客户端\n            |\n            +---- native + incremental edits\n                     Chat UI / HTTP / WS\n```\n\n这两种读取方式复用同一执行。完整客户端提交一次消息后读取 eventsUrl，无需再同时用标准 Task SSE 驱动同一显示状态。'),sec('headers','地址、版本与扩展协商',block('地址与请求头'),headers),sec('pointer','Task metadata 中的共享流指针','扩展 URI 当前使用示例占位地址。完整输出调用必须确认响应激活了同一扩展；协商扩展不授予会话访问权限。',[f for f in ret if f['path'].startswith('response.task.metadata')]),sec('part','标准 Message 与 Artifact',block('标准 Message 与 Artifact 返回字段')),sec('differences','标准 SSE 与共享流的语义','标准 SSE data 使用 task、message、statusUpdate、artifactUpdate 四选一；不能直接将共享 EventFrame 当作 A2A 标准对象。\n\nA2A 的 Artifact append 追加 Part，共享协议的 text.append 追加目标字段文本，两者不是相同操作。\n\n标准 Task SSE 在任务终态结束；共享会话流继续接收 detached 后台工作与晚到事件。\n\n本产品提交去重基于“授权主体 + messageId”，不是 A2A 自动提供的通用幂等保证。'),sec('errors','标准 HTTP 错误',block('错误返回')),sec('boundaries','尚未固定的边界',block('实施前仍需固定的请求边界')),sec('sources','依据与验证',block('文档与示例验证')+'\n\n'+block('资料来源'))],[example('A2A 提交请求','bash',sendcodes[0][1]),example('扩展流指针','json',sendcodes[1][1]),example('标准 A2A SSE','text',a2asample),example('HTTP 错误','json',codes(block('错误返回'))[0][1])])
+# Normalize field display names after rebasing and check expected page IDs.
+def normalize(fs):
+ for f in fs:
+  f['name']=re.split(r'\.(?![^\[]*\])',f['path'])[-1]
+  normalize(f.get('children',[]))
+for p in pages:
+ for s in p['sections']:normalize(s.get('fields',[]))
+assert len(pages)==11
+out=root/'sites/harness-api-reference/src/data/reference.json'
+out.parent.mkdir(parents=True,exist_ok=True)
+out.write_text(pretty({'pages':pages})+'\n')
+public=root/'sites/harness-api-reference/public/reference.md'
+public.parent.mkdir(parents=True,exist_ok=True)
+public.write_text(source)
+def count(fs):return sum(1+count(f.get('children',[])) for f in fs)
+print(json.dumps({'pages':len(pages),'sections':sum(len(p['sections']) for p in pages),'fields':sum(count(s.get('fields',[])) for p in pages for s in p['sections']),'examples':sum(len(p['examples']) for p in pages),'bytes':out.stat().st_size},ensure_ascii=False))
+# Runnable submission examples: authentication follows the AgentCard and deployment.
+data=json.loads(out.read_text())
+send=data['pages'][0]
+send['examples'].insert(1,example('请求 · JavaScript','javascript',r'''const baseUrl = "https://agent.example.com/a2a";
+const extension = "https://agent.example.com/extensions/harness-stream/v1";
+const response = await fetch(`${baseUrl}/message:send`, {
+  method: "POST",
+  headers: {
+    "A2A-Version": "1.0",
+    "A2A-Extensions": extension,
+    "Content-Type": "application/a2a+json",
+    Accept: "application/a2a+json",
+    // 按 AgentCard 和实际部署补充认证请求头。
+  },
+  body: JSON.stringify({
+    message: {
+      messageId: crypto.randomUUID(),
+      role: "ROLE_USER",
+      parts: [{ text: "读取 README，检查项目目录，并在后台运行测试。" }],
+    },
+    configuration: { returnImmediately: true, historyLength: 0 },
+  }),
+});
+if (!response.ok) throw new Error(await response.text());
+const activated = response.headers.get("A2A-Extensions") ?? "";
+if (!activated.split(",").map(value => value.trim()).includes(extension)) {
+  throw new Error("服务端未确认完整输出扩展。");
+}
+const { task } = await response.json();
+const { eventsUrl, startAfterSeq } = task.metadata[extension];
+const streamUrl = new URL(eventsUrl);
+streamUrl.searchParams.set("afterSeq", String(startAfterSeq));
+console.log({ taskId: task.id, streamUrl: streamUrl.href });
+// 使用支持自定义请求头的 SSE 客户端订阅 streamUrl。
+// 顺序应用 snapshot / event；持久化成功提交的 seq。'''))
+send['examples'].insert(2,example('请求 · Python','python',r'''import json
+import urllib.request
+import uuid
+
+base_url = "https://agent.example.com/a2a"
+extension = "https://agent.example.com/extensions/harness-stream/v1"
+body = {
+    "message": {
+        "messageId": str(uuid.uuid4()),
+        "role": "ROLE_USER",
+        "parts": [{"text": "读取 README，检查项目目录，并在后台运行测试。"}],
+    },
+    "configuration": {"returnImmediately": True, "historyLength": 0},
+}
+request = urllib.request.Request(
+    f"{base_url}/message:send",
+    data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
+    headers={
+        "A2A-Version": "1.0",
+        "A2A-Extensions": extension,
+        "Content-Type": "application/a2a+json",
+        "Accept": "application/a2a+json",
+        # 按 AgentCard 和实际部署补充认证请求头。
+    },
+    method="POST",
+)
+with urllib.request.urlopen(request) as response:
+    activated = response.headers.get("A2A-Extensions", "")
+    if extension not in [value.strip() for value in activated.split(",")]:
+        raise RuntimeError("服务端未确认完整输出扩展。")
+    task = json.load(response)["task"]
+
+pointer = task["metadata"][extension]
+print({"taskId": task["id"], **pointer})
+# 使用支持自定义请求头的 SSE 客户端读取 pointer["eventsUrl"]。
+# afterSeq 使用 pointer["startAfterSeq"]，续传使用最后成功提交的 seq。'''))
+out.write_text(pretty(data)+'\n')
