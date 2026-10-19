@@ -116,6 +116,62 @@ test("renders a horizontal stack from a finished program", async () => {
   }
 })
 
+test("hides a failed interactive visual before its status is completed", async () => {
+  const failed = block(
+    'root = Stack([title])\ntitle = Text("Hidden")',
+    "started",
+    false,
+    "unknown-component: Widget",
+  )
+  failed.name = "interactive_visualize"
+  failed.tool = { ...failed.tool!, name: "interactive_visualize" }
+  const view = await mount(failed)
+  try {
+    assert.equal(view.host.textContent ?? "", "")
+    assert.equal(view.host.querySelector("[data-slot='generated-visual']"), null)
+  } finally {
+    await view.close()
+  }
+})
+
+test("hides a finished interactive program that uses a static chart", async () => {
+  const lang = [
+    "root = Stack([title, chart])",
+    'title = Text("Pick a city")',
+    'labels = ["A"]',
+    'series = Series("S", [1])',
+    "chart = BarChart(labels, [series])",
+  ].join("\n")
+  const failed = block(lang, "completed", true, lang)
+  failed.name = "interactive_visualize"
+  failed.tool = { ...failed.tool!, name: "interactive_visualize" }
+  const view = await mount(failed)
+  try {
+    assert.equal(view.host.querySelector("[data-slot='generated-visual']"), null)
+    assert.equal(view.host.textContent ?? "", "")
+  } finally {
+    await view.close()
+  }
+})
+
+test("renders a finished interactive button", async () => {
+  const lang = [
+    "root = Stack([title, action])",
+    'title = Text("Raise the budget?", "body")',
+    'action = Button("Use 350", @ToAssistant("Make it under $350 a night"))',
+  ].join("\n")
+  const choice = block(lang, "completed", true, lang)
+  choice.name = "interactive_visualize"
+  choice.tool = { ...choice.tool!, name: "interactive_visualize" }
+  const view = await mount(choice)
+  try {
+    assert.match(view.host.textContent ?? "", /Use 350/)
+    assert.match(view.host.textContent ?? "", /Raise the budget\?/)
+  } finally {
+    await view.close()
+  }
+})
+
 test("hides a finished visual when validation failed", async () => {
   const view = await mount(block(
     'root = Stack([title])\ntitle = Text("Hello")',

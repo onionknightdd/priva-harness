@@ -299,6 +299,75 @@ export const interactiveVisualizeSpec = {
             "additionalProperties": false
           },
           {
+            "type": "object",
+            "properties": {
+              "labels": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "series": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "values": {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "values"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "xLabel": {
+                "type": "string"
+              },
+              "yLabel": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "labels",
+              "series"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "labels": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "values": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              },
+              "centerLabel": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "labels",
+              "values"
+            ],
+            "additionalProperties": false
+          },
+          {
             "$ref": "#/$defs/Button"
           }
         ]

@@ -20,11 +20,19 @@ import { useTheme, type Theme } from "@openuidev/react-ui/ThemeProvider"
 export { Renderer }
 import { useReducedMotion } from "motion/react"
 import type { ReactNode } from "react"
-import { Bar, BarChart, CartesianGrid, LabelList, Line, LineChart, XAxis } from "recharts"
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, LabelList, Line, LineChart, XAxis, YAxis } from "recharts"
 import { z } from "zod/v4"
 
 import {
+  DonutChart as BeuiDonutChart,
+  DonutChartCenter,
+  DonutChartLegend,
+  DonutChartPlot,
+} from "@/components/charts/donut-chart"
+import {
   ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
   type ChartConfig,
@@ -100,10 +108,35 @@ const openUiChartFloor = [
   "#EFF8FF",
 ] as const
 
+// Colors painted on the BeUI donut chart example, in legend order.
+const beuiDonutPalette = ["#2563eb", "#38bdf8", "#0d9488", "#fbbf24"] as const
+
+// shadcn's chart docs color series with --chart-1 through --chart-5. This app's
+// tokens are gray, so the area chart uses the multi-hue palette from those docs.
+const shadcnAreaPalette = [
+  "oklch(0.646 0.222 41.116)",
+  "oklch(0.6 0.118 184.704)",
+  "oklch(0.398 0.07 227.392)",
+  "oklch(0.828 0.189 84.429)",
+  "oklch(0.769 0.188 70.08)",
+] as const
+
 const chartInk = "var(--openui-text-neutral-secondary)"
 const axisStyle = { color: chartInk }
 const axisTick = { fill: chartInk, fontSize: 12 }
 const chartMargin = { top: 20, right: 12, left: 12, bottom: 0 }
+
+function endLabelGutter(rows: readonly Record<string, string | number>[], count: number): number {
+  let longest = 1
+  for (const row of rows) {
+    for (let index = 0; index < count; index += 1) {
+      const value = row[`s${index}`]
+      if (typeof value === "number") longest = Math.max(longest, String(value).length)
+    }
+  }
+  // End points keep a centered label inside the chart. A crowded label can also sit beside the point, so the gutter fits a whole label.
+  return Math.max(28, longest * 8 + 8)
+}
 
 function chartValueLabel(dataKey: string) {
   return (
@@ -114,6 +147,69 @@ function chartValueLabel(dataKey: string) {
       fontSize={11}
       fill={chartInk}
       className="tabular-nums"
+    />
+  )
+}
+
+type LabelBox = { left: number; right: number; top: number; bottom: number }
+
+const lineLabelHeight = 14
+const lineChartHeight = 192
+const lineAxisTop = lineChartHeight - 28
+
+function labelBoxesOverlap(a: LabelBox, b: LabelBox): boolean {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && b.top < a.bottom
+}
+
+function lineValueLabels(dataKey: string, occupied: Map<string, LabelBox>) {
+  return (
+    <LabelList
+      dataKey={dataKey}
+      content={(props) => {
+        const viewBox = props.viewBox
+        if (viewBox == null || !("x" in viewBox) || !("y" in viewBox)) return <g />
+        const { x, y } = viewBox
+        const value = props.value
+        const text = typeof value === "number" || typeof value === "string" ? String(value) : ""
+        if (text === "") return <g />
+        const width = text.length * 8
+        const id = `${dataKey}:${props.index ?? x}`
+        const places = [
+          { x, baseline: y - 8 },
+          { x: x - width / 2 - 10, baseline: y - 3 },
+          { x: x + width / 2 + 10, baseline: y - 3 },
+          { x, baseline: y + lineLabelHeight + 2 },
+        ]
+        occupied.delete(id)
+        const taken = [...occupied.values()]
+        const boxAt = (center: number, baseline: number): LabelBox => ({
+          left: center - width / 2 - 2,
+          right: center + width / 2 + 2,
+          top: baseline - lineLabelHeight,
+          bottom: baseline + 1,
+        })
+        const fits = (box: LabelBox) =>
+          box.top >= 0 &&
+          box.left >= 1 &&
+          box.bottom <= lineAxisTop &&
+          !taken.some((item) => labelBoxesOverlap(item, box))
+        const side = places[1] ?? places[0]
+        const chosen = places.map((place) => ({ place, box: boxAt(place.x, place.baseline) })).find((item) => fits(item.box))
+          ?? { place: side, box: boxAt(side.x, side.baseline) }
+        occupied.set(id, chosen.box)
+        return (
+          <text
+            x={chosen.place.x}
+            y={chosen.place.baseline}
+            textAnchor="middle"
+            fontSize={11}
+            fill={chartInk}
+            className="tabular-nums"
+          >
+            {text}
+          </text>
+        )
+      }}
     />
   )
 }
@@ -283,7 +379,13 @@ function distributeColors(colors: readonly string[], count: number): string[] {
   return Array.from({ length: count }, (_, index) => at(mid + (index - offset)))
 }
 
-function chartColors(theme: Theme, kind: "bar" | "line", count: number): string[] {
+function chartColors(theme: Theme, kind: "bar" | "line" | "area", count: number): string[] {
+  if (kind === "area") {
+    return Array.from(
+      { length: count },
+      (_, index) => shadcnAreaPalette[index % shadcnAreaPalette.length] ?? shadcnAreaPalette[0],
+    )
+  }
   const specific = kind === "bar" ? theme.barChartPalette : theme.lineChartPalette
   const source =
     specific && specific.length > 0
@@ -322,6 +424,7 @@ function ChartFrame({
   yLabel,
   slot,
   kind,
+  className,
   children,
 }: {
   labels: unknown
@@ -329,7 +432,8 @@ function ChartFrame({
   xLabel: unknown
   yLabel: unknown
   slot: string
-  kind: "bar" | "line"
+  kind: "bar" | "line" | "area"
+  className?: string
   children: (model: ReturnType<typeof chartModel>, animate: boolean) => ReactNode
 }) {
   const { theme } = useTheme()
@@ -345,7 +449,10 @@ function ChartFrame({
       ) : null}
       <ChartContainer
         config={model.config}
-        className="aspect-auto h-48 w-full [&_.recharts-cartesian-axis-tick-value]:![fill:var(--openui-text-neutral-secondary)]"
+        className={cn(
+          "aspect-auto h-48 w-full [&_.recharts-cartesian-axis-tick-value]:![fill:var(--openui-text-neutral-secondary)]",
+          className,
+        )}
       >
         {children(model, !streaming && !reduce)}
       </ChartContainer>
@@ -375,7 +482,10 @@ const BarChartBlock = defineComponent({
       kind="bar"
     >
       {(model, animate) => (
-        <BarChart data={model.rows} margin={chartMargin}>
+        <BarChart
+          data={model.rows}
+          margin={{ ...chartMargin, left: endLabelGutter(model.rows, model.count), right: endLabelGutter(model.rows, model.count) }}
+        >
           <CartesianGrid stroke="var(--openui-border-default)" vertical={false} />
           <XAxis dataKey="label" tick={axisTick} tickLine={false} axisLine={false} />
           <ChartTooltip content={<ChartTooltipContent />} />
@@ -415,8 +525,13 @@ const LineChartBlock = defineComponent({
       slot="render-ui-line-chart"
       kind="line"
     >
-      {(model, animate) => (
-        <LineChart data={model.rows} margin={chartMargin}>
+      {(model, animate) => {
+        const occupied = new Map<string, LabelBox>()
+        return (
+        <LineChart
+          data={model.rows}
+          margin={{ ...chartMargin, left: endLabelGutter(model.rows, model.count), right: endLabelGutter(model.rows, model.count) }}
+        >
           <CartesianGrid stroke="var(--openui-border-default)" vertical={false} />
           <XAxis dataKey="label" tick={axisTick} tickLine={false} axisLine={false} />
           <ChartTooltip content={<ChartTooltipContent />} />
@@ -434,14 +549,108 @@ const LineChartBlock = defineComponent({
                 isAnimationActive={animate}
                 animationDuration={320}
               >
-                {chartValueLabel(`s${index}`)}
+                {lineValueLabels(`s${index}`, occupied)}
               </Line>
             )
           })}
         </LineChart>
+        )
+      }}
+    </ChartFrame>
+  ),
+})
+
+const AreaChartBlock = defineComponent({
+  name: "AreaChart",
+  description:
+    "Stacked area chart with axes and a legend. labels and each Series values array share an index.",
+  props: z.object({
+    labels: z.array(z.string()),
+    series: z.array(Series.ref),
+    xLabel: z.string().optional(),
+    yLabel: z.string().optional(),
+  }),
+  component: ({ props }) => (
+    <ChartFrame
+      labels={props.labels}
+      series={props.series}
+      xLabel={props.xLabel}
+      yLabel={props.yLabel}
+      slot="render-ui-area-chart"
+      kind="area"
+      className="h-56"
+    >
+      {(model, animate) => (
+        <AreaChart data={model.rows} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
+          <CartesianGrid stroke="var(--openui-border-default)" vertical={false} />
+          <XAxis dataKey="label" tick={axisTick} tickLine={false} axisLine={false} tickMargin={8} />
+          <YAxis tick={axisTick} tickLine={false} axisLine={false} tickMargin={8} tickCount={3} width="auto" />
+          <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="line" />} />
+          {Array.from({ length: model.count }, (_, index) => {
+            const seriesColor = `var(--color-s${index})`
+            return (
+              <Area
+                key={index}
+                type="natural"
+                dataKey={`s${index}`}
+                fill={seriesColor}
+                fillOpacity={0.4}
+                stroke={seriesColor}
+                stackId="a"
+                isAnimationActive={animate}
+                animationDuration={320}
+              />
+            )
+          })}
+          <ChartLegend content={<ChartLegendContent />} />
+        </AreaChart>
       )}
     </ChartFrame>
   ),
+})
+
+const DonutChartBlock = defineComponent({
+  name: "DonutChart",
+  description:
+    "Donut chart. labels and values share an index. centerLabel is the caption under the total.",
+  props: z.object({
+    labels: z.array(z.string()),
+    values: z.array(z.number()),
+    centerLabel: z.string().optional(),
+  }),
+  component: function DonutChartView({ props }) {
+    const names = stringList(props.labels)
+    const numbers = numberList(props.values)
+    const count = Math.min(names.length, numbers.length)
+    const colors = Array.from(
+      { length: count },
+      (_, index) => beuiDonutPalette[index % beuiDonutPalette.length] ?? beuiDonutPalette[0],
+    )
+    const segments = Array.from({ length: count }, (_, index) => ({
+      id: `s${index}`,
+      name: names[index] ?? "",
+      value: numbers[index] ?? 0,
+      color: colors[index] ?? colors[0] ?? "",
+    })).filter((segment) => segment.name !== "" && segment.value > 0)
+    if (segments.length === 0) return null
+    const caption = textOf(props.centerLabel)
+    return (
+      <div data-slot="render-ui-donut-chart" className="min-w-0">
+        <BeuiDonutChart
+          segments={segments}
+          formatValue={(value) => String(value)}
+          label={caption || "Donut chart"}
+        >
+          <div className="grid items-center gap-4 sm:grid-cols-[minmax(0,12rem)_minmax(0,1fr)]">
+            <DonutChartPlot>
+              <DonutChartCenter totalLabel={caption || "Total"} />
+            </DonutChartPlot>
+            <DonutChartLegend />
+          </div>
+        </BeuiDonutChart>
+      </div>
+    )
+  },
 })
 
 // The child union is assigned after Stack and Card exist so each can contain the other.
@@ -531,6 +740,8 @@ layoutChild = z.union([
   Table.ref,
   BarChartBlock.ref,
   LineChartBlock.ref,
+  AreaChartBlock.ref,
+  DonutChartBlock.ref,
   FollowButton.ref,
 ])
 
@@ -548,9 +759,9 @@ const componentGroups: ComponentGroup[] = [
   },
   {
     name: "Data",
-    components: ["Table", "Col", "BarChart", "LineChart", "Series"],
+    components: ["Table", "Col", "BarChart", "LineChart", "AreaChart", "DonutChart", "Series"],
     notes: [
-      "Define each label array, column array, and Series on its own line, then reference it.",
+      "Define each label array, column array, Series, and donut values array on its own line, then reference it.",
     ],
   },
 ]
@@ -565,6 +776,8 @@ const staticComponents = [
   Col,
   BarChartBlock,
   LineChartBlock,
+  AreaChartBlock,
+  DonutChartBlock,
   Series,
 ]
 

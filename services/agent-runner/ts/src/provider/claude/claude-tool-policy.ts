@@ -3,7 +3,7 @@ import type { RunMode } from '../../core/resource/session.js'
 export const CLAUDE_DISALLOWED_TOOLS = [
   'NotebookEdit', 'WebFetch', 'WebSearch', 'ScheduleWakeup', 'RemoteTrigger',
   'PushNotification', 'Artifact', 'Projects', 'DesignSync', 'ReadMcpResourceDirTool',
-  'RefreshMcpTools', 'ShowOnboardingRolePicker',
+  'RefreshMcpTools', 'ShowOnboardingRolePicker', 'SendFeedback',
 ] as const
 
 export const CLAUDE_AGENT_DISALLOWED_TOOLS = [

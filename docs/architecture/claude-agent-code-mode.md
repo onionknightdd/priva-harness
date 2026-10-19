@@ -157,9 +157,9 @@ MCP、插件与额外配置不在这份基线中。
 执行仍需要对应的图片模型配置。TUI 在 MCP 尚未连接完成时可能临时暴露
 `WaitForMcpServers`，产品工具在连接完成后出现。
 
-当前代码已配置的 12 个禁用项：NotebookEdit、WebFetch、WebSearch、ScheduleWakeup、
+当前代码已配置的 13 个禁用项：NotebookEdit、WebFetch、WebSearch、ScheduleWakeup、
 RemoteTrigger、PushNotification、Artifact、Projects、DesignSync、ReadMcpResourceDirTool、
-RefreshMcpTools、ShowOnboardingRolePicker。其中部分名称是版本相关的禁用规则，
+RefreshMcpTools、ShowOnboardingRolePicker、SendFeedback。其中部分名称是版本相关的禁用规则，
 并不表示当前 CLI 一定提供该工具；当前 TUI 会提示 RefreshMcpTools 无匹配工具。
 
 ## Agent 工具精简清单（已确认）

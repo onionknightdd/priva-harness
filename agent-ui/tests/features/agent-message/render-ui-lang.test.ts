@@ -4,6 +4,7 @@ import { test } from "node:test"
 import { assistantPieces } from "../../../src/features/agent-message/assistant-pieces.ts"
 import type { AgentThreadMessage, StreamBlock } from "../../../src/features/agent-message/agent-message-data.ts"
 import { isGeneratedVisualTool, isHiddenGeneratedVisual } from "../../../src/features/agent-message/render-ui/lang.ts"
+import { finishedProgramRejected } from "../../../src/features/agent-message/render-ui/visual-program.ts"
 import { countToolActivity } from "../../../src/features/agent-message/tool-activity.ts"
 
 const text = (id: string, value: string, index: number): StreamBlock => ({
@@ -61,9 +62,53 @@ test("drops a failed visual and keeps the successful one", () => {
   }
   assert.equal(isHiddenGeneratedVisual(failed), true)
   assert.equal(isHiddenGeneratedVisual(interactive), true)
-  const blocks = [failed, interactive, visual("ok", 2), text("answer", "Done", 3)]
+  const stillRunning: StreamBlock = {
+    ...interactive,
+    id: "live",
+    blockId: "live",
+    tool: { ...interactive.tool!, status: "started" },
+  }
+  assert.equal(isHiddenGeneratedVisual(stillRunning), true)
+  const blocks = [failed, interactive, stillRunning, visual("ok", 2), text("answer", "Done", 4)]
   const message = { id: "m", role: "assistant", content: "Done", createdAt: "", status: "complete", blocks } as AgentThreadMessage
   const pieces = assistantPieces(message)
   assert.deepEqual(pieces.map((piece) => piece.kind), ["visual", "answer"])
   assert.equal(pieces[0]?.kind === "visual" ? pieces[0].block.id : "", "ok")
+})
+
+test("drops a finished interactive program the library rejects", () => {
+  const rejected: StreamBlock = {
+    type: "tool_use",
+    id: "chart",
+    blockId: "chart",
+    index: 0,
+    name: "interactive_visualize",
+    input: { lang: 'root = Stack([chart])\nlabels = ["A"]\ns = Series("S", [1])\nchart = BarChart(labels, [s])' },
+    tool: {
+      id: "chart",
+      name: "interactive_visualize",
+      status: "completed",
+      ok: true,
+      output: 'root = Stack([chart])\nlabels = ["A"]\ns = Series("S", [1])\nchart = BarChart(labels, [s])',
+      input: { lang: 'root = Stack([chart])\nlabels = ["A"]\ns = Series("S", [1])\nchart = BarChart(labels, [s])' },
+    },
+  }
+  const streaming: StreamBlock = {
+    ...rejected,
+    id: "partial",
+    blockId: "partial",
+    index: 1,
+    tool: { ...rejected.tool!, status: "started", ok: undefined, output: undefined },
+  }
+  assert.equal(finishedProgramRejected(rejected), true)
+  assert.equal(finishedProgramRejected(streaming), false)
+  const message = {
+    id: "m",
+    role: "assistant",
+    content: "Done",
+    createdAt: "",
+    status: "complete",
+    blocks: [rejected, text("answer", "Done", 2)],
+  } as AgentThreadMessage
+  assert.deepEqual(assistantPieces(message).map((piece) => piece.kind), ["answer"])
 })

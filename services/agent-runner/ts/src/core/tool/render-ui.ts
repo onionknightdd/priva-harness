@@ -7,7 +7,7 @@ import { staticVisualizeSpec } from './static-visualize.spec.js'
 
 export function formatVisualizeDescription(spec: LibrarySpec, intro: readonly string[]): string {
   const childSignature = spec.components['Button'] === undefined
-    ? '(Stack | Card | CardHeader | Text | Badge | Table | BarChart | LineChart)[]'
+    ? '(Stack | Card | CardHeader | Text | Badge | Table | BarChart | LineChart | AreaChart | DonutChart)[]'
     : '(Stack | Card | CardHeader | Text | Button)[]'
   const signatures = Object.values(spec.components).map((component) => {
     const signature = component.signature.replaceAll('children: any[]', `children: ${childSignature}`)

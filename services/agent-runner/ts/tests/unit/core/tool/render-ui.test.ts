@@ -39,6 +39,25 @@ describe('visualize mode tools', () => {
     ].join('\n')
     await expect(staticVisualizeTool.execute({ lang: chart }, context)).resolves.toMatchObject({ ok: true })
 
+    const donut = [
+      'root = Stack([chart])',
+      'labels = ["Direct", "Search"]',
+      'values = [62, 38]',
+      'chart = DonutChart(labels, values, "Visits")',
+    ].join('\n')
+    await expect(staticVisualizeTool.execute({ lang: donut }, context)).resolves.toMatchObject({ ok: true })
+    expect(staticVisualizeTool.description).toContain('DonutChart(labels: string[], values: number[], centerLabel?: string)')
+
+    const area = [
+      'root = Stack([chart])',
+      'labels = ["January", "February"]',
+      'desktop = Series("Desktop", [186, 305])',
+      'mobile = Series("Mobile", [80, 200])',
+      'chart = AreaChart(labels, [desktop, mobile])',
+    ].join('\n')
+    await expect(staticVisualizeTool.execute({ lang: area }, context)).resolves.toMatchObject({ ok: true })
+    expect(staticVisualizeTool.description).toContain('AreaChart(labels: string[], series: Series[], xLabel?: string, yLabel?: string)')
+
     const choice = [
       'root = Stack([title, action])',
       'title = Text("Raise the budget?", "body")',

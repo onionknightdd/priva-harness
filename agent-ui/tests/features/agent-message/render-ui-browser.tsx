@@ -21,6 +21,31 @@ const lines = [
 ]
 
 const finished = lines.join("\n")
+const line = [
+  "root = Stack([chart])",
+  'labels = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"]',
+  'pv = Series("页面浏览", [1200, 1450, 1380, 1720, 1960, 2140, 2050, 2380, 2510, 2760, 3020, 3350])',
+  'uv = Series("独立访客", [420, 510, 480, 620, 700, 760, 720, 830, 890, 970, 1080, 1220])',
+  'signup = Series("注册用户", [80, 95, 88, 120, 145, 160, 150, 180, 205, 230, 260, 300])',
+  'chart = LineChart(labels, [pv, uv, signup], "月份", "数量")',
+].join("\n")
+
+const area = [
+  "root = Stack([chart])",
+  'labels = ["1月", "2月", "3月", "4月", "5月", "6月"]',
+  'views = Series("页面浏览", [400, 420, 450, 480, 500, 520])',
+  'visitors = Series("独立访客", [160, 180, 200, 220, 240, 280])',
+  'signups = Series("注册用户", [60, 70, 80, 90, 100, 200])',
+  'chart = AreaChart(labels, [views, visitors, signups], "月份", "数量")',
+].join("\n")
+
+const donut = [
+  "root = Stack([chart])",
+  'labels = ["Team", "Business", "Enterprise", "Starter"]',
+  "values = [42900, 31250, 22600, 18400]",
+  'chart = DonutChart(labels, values, "Monthly revenue")',
+].join("\n")
+
 const choice = [
   "root = Stack([title, action])",
   'title = Text("Raise the budget?", "body")',
@@ -67,8 +92,61 @@ function Fixture() {
         <section data-slot="render-ui-narrow" style={{ width: 390 }}>
           <GeneratedVisual block={toolBlock(finished, false)} />
         </section>
+        <section data-slot="render-ui-line" style={{ width: 720 }}>
+          <GeneratedVisual block={toolBlock(line, false)} />
+        </section>
+        <section data-slot="render-ui-area">
+          <GeneratedVisual block={toolBlock(area, false)} />
+        </section>
+        <section data-slot="render-ui-donut">
+          <GeneratedVisual block={toolBlock(donut, false)} />
+        </section>
         <section data-slot="render-ui-choice">
           <GeneratedVisual block={{ ...toolBlock(choice, false), name: "interactive_visualize" }} />
+        </section>
+        <section data-slot="render-ui-failed-interactive">
+          <GeneratedVisual block={{
+            ...toolBlock('root = Stack([title])\ntitle = Text("Still visible")', true),
+            id: "failed-interactive",
+            blockId: "failed-interactive",
+            name: "interactive_visualize",
+            tool: {
+              id: "failed-interactive",
+              name: "interactive_visualize",
+              status: "started",
+              ok: false,
+              output: "unknown-component: Widget",
+              input: { lang: 'root = Stack([title])\ntitle = Text("Still visible")' },
+            },
+          }} />
+        </section>
+        <section data-slot="render-ui-rejected-interactive">
+          <GeneratedVisual block={{
+            ...toolBlock([
+              "root = Stack([title, chart])",
+              'title = Text("Pick a city")',
+              'labels = ["A"]',
+              'series = Series("S", [1])',
+              "chart = BarChart(labels, [series])",
+            ].join("\n"), false),
+            id: "rejected-interactive",
+            blockId: "rejected-interactive",
+            name: "interactive_visualize",
+            tool: {
+              id: "rejected-interactive",
+              name: "interactive_visualize",
+              status: "completed",
+              ok: true,
+              output: [
+                "root = Stack([title, chart])",
+                'title = Text("Pick a city")',
+                'labels = ["A"]',
+                'series = Series("S", [1])',
+                "chart = BarChart(labels, [series])",
+              ].join("\n"),
+              input: { lang: "" },
+            },
+          }} />
         </section>
         <section data-slot="render-ui-failed">
           <GeneratedVisual block={{

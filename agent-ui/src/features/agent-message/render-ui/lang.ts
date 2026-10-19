@@ -18,8 +18,7 @@ export function isHiddenGeneratedVisual(block: {
 }): boolean {
   return block.type === "tool_use"
     && isGeneratedVisualTool(block.name)
-    && block.tool?.status === "completed"
-    && block.tool.ok === false
+    && block.tool?.ok === false
 }
 
 export function renderUiLangFromTool(

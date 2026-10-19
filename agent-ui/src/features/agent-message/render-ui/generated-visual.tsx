@@ -14,6 +14,7 @@ import type { StreamBlock } from "../agent-message-data"
 import { isToolRunning } from "../tool-activity"
 import { interactiveVisualizeLibrary, staticVisualizeLibrary } from "./library"
 import { generatedVisualKind, isHiddenGeneratedVisual, renderUiLangFromTool } from "./lang"
+import { finishedProgramRejected } from "./visual-program"
 import { useVisualizeContinue } from "./visualize-continue"
 
 const openUiScope = "[data-slot='generated-visual']"
@@ -42,7 +43,7 @@ export function GeneratedVisual({
     const message = event.humanFriendlyMessage.trim()
     if (message !== "") continueTurn(message)
   }
-  if (isHiddenGeneratedVisual(block)) return null
+  if (isHiddenGeneratedVisual(block) || finishedProgramRejected(block)) return null
 
   return (
     <div data-slot="generated-visual" className="min-w-0 px-1">

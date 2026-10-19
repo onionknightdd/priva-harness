@@ -40,6 +40,14 @@ export const staticVisualizeSpec = {
       "signature": "LineChart(labels: string[], series: Series[], xLabel?: string, yLabel?: string)",
       "description": "Line chart. labels and each Series values array share an index."
     },
+    "AreaChart": {
+      "signature": "AreaChart(labels: string[], series: Series[], xLabel?: string, yLabel?: string)",
+      "description": "Stacked area chart with axes and a legend. labels and each Series values array share an index."
+    },
+    "DonutChart": {
+      "signature": "DonutChart(labels: string[], values: number[], centerLabel?: string)",
+      "description": "Donut chart. labels and values share an index. centerLabel is the caption under the total."
+    },
     "Series": {
       "signature": "Series(name: string, values: number[])",
       "description": "Named numeric series. values align by index with the chart labels."
@@ -70,10 +78,12 @@ export const staticVisualizeSpec = {
         "Col",
         "BarChart",
         "LineChart",
+        "AreaChart",
+        "DonutChart",
         "Series"
       ],
       "notes": [
-        "Define each label array, column array, and Series on its own line, then reference it."
+        "Define each label array, column array, Series, and donut values array on its own line, then reference it."
       ]
     }
   ],
@@ -108,6 +118,12 @@ export const staticVisualizeSpec = {
       "LineChart": {
         "$ref": "#/$defs/LineChart"
       },
+      "AreaChart": {
+        "$ref": "#/$defs/AreaChart"
+      },
+      "DonutChart": {
+        "$ref": "#/$defs/DonutChart"
+      },
       "Series": {
         "$ref": "#/$defs/Series"
       }
@@ -122,6 +138,8 @@ export const staticVisualizeSpec = {
       "Col",
       "BarChart",
       "LineChart",
+      "AreaChart",
+      "DonutChart",
       "Series"
     ],
     "additionalProperties": false,
@@ -210,6 +228,12 @@ export const staticVisualizeSpec = {
           },
           {
             "$ref": "#/$defs/LineChart"
+          },
+          {
+            "$ref": "#/$defs/AreaChart"
+          },
+          {
+            "$ref": "#/$defs/DonutChart"
           },
           {
             "type": "object",
@@ -431,6 +455,61 @@ export const staticVisualizeSpec = {
         ],
         "additionalProperties": false,
         "description": "Line chart. labels and each Series values array share an index."
+      },
+      "AreaChart": {
+        "type": "object",
+        "properties": {
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Series"
+            }
+          },
+          "xLabel": {
+            "type": "string"
+          },
+          "yLabel": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "labels",
+          "series"
+        ],
+        "additionalProperties": false,
+        "description": "Stacked area chart with axes and a legend. labels and each Series values array share an index."
+      },
+      "DonutChart": {
+        "type": "object",
+        "properties": {
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "centerLabel": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "labels",
+          "values"
+        ],
+        "additionalProperties": false,
+        "description": "Donut chart. labels and values share an index. centerLabel is the caption under the total."
       },
       "ActionExpression": {
         "anyOf": [

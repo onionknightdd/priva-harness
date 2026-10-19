@@ -70,6 +70,7 @@ describe('resolveClaudeQueryOptions', () => {
     expect(options.allowDangerouslySkipPermissions).toBe(true)
     expect(options.disallowedTools).toEqual([...CLAUDE_DISALLOWED_TOOLS])
     expect(options.disallowedTools).toContain('DesignSync')
+    expect(options.disallowedTools).toContain('SendFeedback')
     expect(options.disallowedTools).not.toContain('CronCreate')
     expect(options.disallowedTools).not.toContain('CronDelete')
     expect(options.disallowedTools).not.toContain('CronList')

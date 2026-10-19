@@ -2431,7 +2431,7 @@ TUI /effort / Composer 思考强度选择 -> 原生命令与确认 -> effortChan
 
 snapshot.runningToolIds 恢复等待工具结束的状态。TUI 产生的内嵌图片从转录映射到现有附件卡片，
 产品 MCP 的 visualize / canvas / 图片别名继续使用既有工具卡片。
-打开可视化回答后，`static_visualize` 和 `interactive_visualize` 替换 `visualize`，并画在随后正文的上方，不进入进度折叠。校验失败的调用不显示。
+打开可视化回答后，`static_visualize` 和 `interactive_visualize` 替换 `visualize`，并画在随后正文的上方，不进入进度折叠。工具结果为失败，或调用已经结束但程序仍有校验错误时，不显示。
 
 可视化回答开关通过 `session.configure` 应用；开关变化不重建已挂载的终端连接，也不清屏。
 首次查看或手动重连已有终端时沿用运行进程的实际配置，不把尚未确认的开关值当作启动配置。
@@ -2699,7 +2699,7 @@ App TooltipProvider -> 首次悬浮 1s -> 连续切换 0ms
 | DOCX / PPTX | [document-renderer](../agent-ui/src/features/files/preview/renderers/document-renderer.tsx)、[presentation-renderer](../agent-ui/src/features/files/preview/renderers/presentation-renderer.tsx) | @silurus/ooxml 渲染文档内容，应用外框使用项目 token |
 | HTML 编辑器 | [html-visual-editor](../agent-ui/src/features/files/preview/renderers/html-visual-editor.tsx)，GrapesJS | 编辑器自带 UI；全局 CSS 当前明确保留默认粉/紫色点缀，形成应用内可见的独立风格 |
 | HTML / JSX 生成内容 | [html-renderer](../agent-ui/src/features/files/preview/renderers/html-renderer.tsx)、[visualize-sandbox](../agent-ui/src/features/agent-message/visualize-sandbox) | iframe 中的内容；JSX 沙箱另有 Button、Badge、Card、Progress、Separator 简化实现，传入主题颜色但不共享主应用全部字号、圆角与交互 |
-| 可视化回答 | [render-ui/library](../agent-ui/src/features/agent-message/render-ui/library.tsx)、[generated-visual](../agent-ui/src/features/agent-message/render-ui/generated-visual.tsx) | 开关打开后，`static_visualize` / `interactive_visualize` 的 OpenUI Lang 画在随后正文上方。校验失败的调用不显示。这一块使用 OpenUI 自带色彩主题，主题变量只注入到生成结果上。柱状图和折线图默认在柱顶和数据点上方标出数值，数值和刻度文字跟随 OpenUI 主题在深色和浅色之间切换。按钮发下一轮 |
+| 可视化回答 | [render-ui/library](../agent-ui/src/features/agent-message/render-ui/library.tsx)、[generated-visual](../agent-ui/src/features/agent-message/render-ui/generated-visual.tsx) | 开关打开后，`static_visualize` / `interactive_visualize` 的 OpenUI Lang 画在随后正文上方。工具结果为失败，或调用已经结束但程序仍有校验错误时，不显示。这一块使用 OpenUI 自带色彩主题，主题变量只注入到生成结果上。柱状图和折线图默认在柱顶和数据点上方标出数值，首尾数值留在图内。折线上相距过近的数值会挪到点的旁边，仍然显示。数值和刻度文字跟随 OpenUI 主题在深色和浅色之间切换。环形图使用 BeUI Donut Chart，分段按示例色循环：蓝、青、绿、黄。面积图是带坐标轴和图例的堆叠面积图，系列颜色使用 shadcn 图表文档的多色色板。按钮发下一轮 |
 
 消息共用的 `MessageResponse` 通过 `createMathPlugin({ singleDollarTextMath: true })`
 启用单美元符号行内公式（如 `$E = mc^2$`），同时保留 `$$...$$` 行内及独立公式。
