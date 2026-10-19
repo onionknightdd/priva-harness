@@ -463,6 +463,10 @@ export function ModelSettingsView() {
             feedback={feedback}
             isCreating={isCreating}
             isConnectionVerified={isConnectionVerified}
+            isDefault={
+              selectedProfileId !== null &&
+              selectedProfileId === defaultProfileId
+            }
             modelIds={modelIds}
             profile={selectedProfile}
             profilesExist={profiles.length > 0}

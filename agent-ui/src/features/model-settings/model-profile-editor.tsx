@@ -21,6 +21,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Field,
@@ -65,6 +66,7 @@ export function ModelProfileEditor({
   feedback,
   isCreating,
   isConnectionVerified,
+  isDefault,
   modelIds,
   profile,
   profilesExist,
@@ -84,6 +86,7 @@ export function ModelProfileEditor({
   feedback: ModelSettingsFeedback | null
   isCreating: boolean
   isConnectionVerified: boolean
+  isDefault: boolean
   modelIds: string[]
   profile: ModelProfileSummary | null
   profilesExist: boolean
@@ -125,7 +128,12 @@ export function ModelProfileEditor({
     >
       <div className="mb-3 flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="truncate text-base font-medium">{formTitle}</h2>
+          <div className="flex min-w-0 items-center gap-2">
+            <h2 className="truncate text-base font-medium">{formTitle}</h2>
+            {!isCreating && isDefault ? (
+              <Badge variant="secondary">{t("settings.models.defaultBadge")}</Badge>
+            ) : null}
+          </div>
           {!isCreating && profile?.authTokenSet && (
             <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
               <KeyRoundIcon className="size-3" aria-hidden="true" />

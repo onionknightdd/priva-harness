@@ -72,12 +72,12 @@ components/motion/switch.tsx -> BeUI + Motion
 模型设置里的默认 profile 不使用 Switch。左侧 profile 列表用
 [BeUI Radio](../agent-ui/src/components/motion/radio.tsx) 的无描述样式选择默认项：
 圆点与名称同一行，圆点为 14px，与 `text-sm` 字号一致，不传 `description`。点圆点只更新默认项，不重载编辑区；点名称只打开编辑。
-选中圆点和边框使用 BeUI 原色 `#0285f7`。
+选中圆点和边框使用 BeUI 原色 `#0285f7`。正在编辑的 profile 若是默认项，详情标题右侧显示「默认」Badge。
 
 ```text
-Profiles
-( ) icon  Profile A     <- 点名称：编辑
-(•) icon  Profile B     <- 点圆点：设为默认
+Profiles                         |  Profile B  [默认]
+( ) icon  Profile A              |
+(•) icon  Profile B              |
 ```
 
 文件预览的 Tabs 表达多项模式选择，主题、语言和工作区按钮也有各自用途；
