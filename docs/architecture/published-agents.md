@@ -2,6 +2,11 @@
 
 状态：设计草案，尚未实现。日期：2026-09-28。
 
+> 2026-10-22 更新：调用接口（`/api/v1`、`runs + input.text/fileIds`、按 run 的公开事件流）和
+> 逐项挑选资源的发布模型已被 [Agent API v1](agent-api-v1.md) 取代：调用路径改为
+> `/api/agent/v1/published/{agt}/…`，发布单元改为整个隔离目录，实现移到 agent-workshop 的 agent-studio。
+> 本文的隔离、凭证、网络与沙箱分析仍可作为 agent-studio 的参考。
+
 本文基于当前前后端代码，配套契约见 [OpenAPI 3.1](../api/published-agents.openapi.yaml)。路径、类型和错误码均为拟新增接口，不能当作当前已经可用的能力。
 
 ## 1. 产品边界与待确认决策

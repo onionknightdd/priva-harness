@@ -1,4 +1,7 @@
 # Proposed contract. Not implemented. See ../architecture/published-agents.md
+# Superseded 2026-10-22: the /api/v1 invocation routes and public events are replaced by
+# ../architecture/agent-api-v1.md (/api/agent/v1/published/{agt}/...). Owner-side publishing
+# routes remain a reference only; publishing is now implemented in agent-workshop agent-studio.
 openapi: 3.1.1
 info:
   title: Priva Published Agents API — proposed V1
