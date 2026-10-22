@@ -1,7 +1,7 @@
 # Agent API v1：第三方会话、消息与事件接口
 
 状态：设计已确认，尚未实现。日期：2026-10-22。
-完整输入输出示例见 [Agent API v1 示例](../api/agent-api-v1-examples.md)。
+完整输入输出示例见 [Agent API v1 示例](../api/agent-api-v1-examples.md)。同一组示例的可筛选画布见 [agent-runner-api-io-examples.canvas.tsx](../api/agent-runner-api-io-examples.canvas.tsx)（Cursor Canvas）。
 
 本文定义 Agent Runner 面向第三方客户端的 HTTP / SSE / WebSocket 接口。它服务两个场景：
 

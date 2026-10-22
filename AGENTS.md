@@ -75,8 +75,10 @@ This performs visible desktop actions and preserves its proof file and editor wi
 The third-party Agent API (`/api/agent/v1/...`, HTTP / SSE / WebSocket) follows
 [docs/architecture/agent-api-v1.md](docs/architecture/agent-api-v1.md), with
 request and event examples in
-[docs/api/agent-api-v1-examples.md](docs/api/agent-api-v1-examples.md); read both
-before implementing or changing it.
+[docs/api/agent-api-v1-examples.md](docs/api/agent-api-v1-examples.md) and the
+companion Cursor canvas
+[docs/api/agent-runner-api-io-examples.canvas.tsx](docs/api/agent-runner-api-io-examples.canvas.tsx);
+read them before implementing or changing it.
 
 Usage statistics and audit records are stored in SQLite; before touching
 recording, retention, or the `dataRetention` setting, read

@@ -1,6 +1,7 @@
 # Agent API v1 示例
 
 状态：与 [Agent API v1 设计](../architecture/agent-api-v1.md) 同步的示例，尚未实现。日期：2026-10-22。
+同一组示例的可筛选画布：[agent-runner-api-io-examples.canvas.tsx](agent-runner-api-io-examples.canvas.tsx)（Cursor Canvas）。
 
 本文沿一个完整会话推进：创建会话，带截图和日志发消息，Agent 查问题、提问、改文件、启动后台测试、
 用子 Agent 搜索代码、生成示意图、后台结果回送，最后是设置变化、上下文压缩、错误、打断和重连。
