@@ -8,8 +8,10 @@ import { Button } from "@/components/ui/button"
 import { TooltipHint } from "@/components/ui/tooltip"
 import type { OfficeFileAnnotation } from "@/features/agent-message/file-annotation"
 import { useOptionalWorkspaceFiles } from "@/features/workspace/workspace-files-context"
+import { EASE_OUT } from "@/lib/ease"
 import { cn } from "@/lib/utils"
 
+import { PreviewCursor } from "../preview/preview-cursor"
 import { useOfficeAssist } from "./office-assist-provider"
 import type { OfficeAssistSurface, OfficeElementBox, OfficeElementTarget } from "./office-assist.types"
 
@@ -64,6 +66,7 @@ export function OfficeAssistOverlay({ fileId, containerRef, surface }: {
   const pointRef = React.useRef<{ x: number; y: number; parent: boolean } | null>(null)
   const candidateRef = React.useRef<OfficeElementTarget | null>(null)
   const [candidate, setCandidate] = React.useState<OfficeElementTarget | null>(null)
+  const [animateCandidate, setAnimateCandidate] = React.useState(false)
   const [revealed, setRevealed] = React.useState<OfficeFileAnnotation | null>(null)
   const [projection, setProjection] = React.useState(0)
   const live = React.useRef({ assist, surface })
@@ -83,6 +86,7 @@ export function OfficeAssistOverlay({ fileId, containerRef, surface }: {
   React.useEffect(() => {
     candidateRef.current = null
     setCandidate(null)
+    setAnimateCandidate(false)
   }, [assist?.clearEpoch, enabled])
 
   React.useEffect(() => {
@@ -106,6 +110,7 @@ export function OfficeAssistOverlay({ fileId, containerRef, surface }: {
       if (frame) return
       frame = requestAnimationFrame(() => {
         frame = 0
+        setAnimateCandidate(false)
         setProjection((value) => value + 1)
         if (pointRef.current && !live.current.assist?.draft) void hit(pointRef.current)
       })
@@ -168,6 +173,7 @@ export function OfficeAssistOverlay({ fileId, containerRef, surface }: {
       if (event.target instanceof Node && menuRef.current?.contains(event.target)) return
       if (event.target instanceof Element && event.target.closest("[data-office-assist-overlay]")) return
       if (inMenuCorridor(event.clientX, event.clientY)) return
+      setAnimateCandidate(true)
       scheduleHit({ x: event.clientX, y: event.clientY, parent: event.altKey })
     }
     let cancelledOnDown = false
@@ -198,6 +204,7 @@ export function OfficeAssistOverlay({ fileId, containerRef, surface }: {
         return
       }
       if (!overPage(event)) return
+      setAnimateCandidate(false)
       // Preserve the displayed hover target until click, including Alt parent selection.
       pressedTarget = candidateRef.current
       cancelHit()
@@ -227,6 +234,7 @@ export function OfficeAssistOverlay({ fileId, containerRef, surface }: {
       if (event.type === "keyup" && event.key !== "Alt") return
       const current = live.current.assist
       if (!current?.enabled || current.activeFile?.id !== fileId || event.isComposing || event.keyCode === 229) return
+      setAnimateCandidate(false)
       if (event.key === "Alt" && pointRef.current && !current.draft) {
         scheduleHit({ ...pointRef.current, parent: event.altKey })
       } else if (event.key === "Escape" && !(event.target instanceof Element && event.target.closest("[data-selection-action-input]"))) {
@@ -278,13 +286,18 @@ export function OfficeAssistOverlay({ fileId, containerRef, surface }: {
 
   if (!assist || !surface || !active) return null
   const host = hostRef.current?.getBoundingClientRect() ?? containerRef.current?.getBoundingClientRect()
-  const visible = (target: { boxes: OfficeElementBox[] }) => target.boxes.flatMap((box, index) => {
-    const projected = project(box, surface)
-    if (!projected || !host) return []
-    const axis = axisBounds(projected)
-    if (axis.right <= host.left || axis.left >= host.right || axis.bottom <= host.top || axis.top >= host.bottom) return []
-    return [{ box: projected, index }]
-  })
+  const visible = (target: { boxes: OfficeElementBox[] }) => {
+    const perSurface = new Map<number, number>()
+    return target.boxes.flatMap((box, index) => {
+      const ordinal = perSurface.get(box.surfaceIndex) ?? 0
+      perSurface.set(box.surfaceIndex, ordinal + 1)
+      const projected = project(box, surface)
+      if (!projected || !host) return []
+      const axis = axisBounds(projected)
+      if (axis.right <= host.left || axis.left >= host.right || axis.bottom <= host.top || axis.top >= host.bottom) return []
+      return [{ box: projected, index, surfaceKey: `${box.surfaceIndex}:${ordinal}` }]
+    })
+  }
   const targetBoxes = selected ? visible(selected) : []
   const pointer = pointRef.current
   const anchorBox = targetBoxes.find(({ box }) => {
@@ -298,9 +311,11 @@ export function OfficeAssistOverlay({ fileId, containerRef, surface }: {
   })
   const closeDraft = () => { assist.cancelDraft(); candidateRef.current = null; setCandidate(null) }
   const saved = enabled ? assist.items : []
+  const animateHover = animateCandidate && !draft && !reduceMotion
 
   return (
     <>
+      <PreviewCursor targetRef={containerRef} enabled={enabled} />
       <div ref={hostRef} className="pointer-events-none absolute inset-0 overflow-hidden" data-office-assist-overlay data-projection={projection}>
         <AnimatePresence>
           {saved.flatMap(({ annotation }, itemIndex) => {
@@ -323,24 +338,35 @@ export function OfficeAssistOverlay({ fileId, containerRef, surface }: {
               </motion.div>
             ))
           })}
-          {enabled && targetBoxes.map(({ box, index }) => (
-            <motion.div key={"candidate:" + targetKey(selected) + ":" + index} style={style(box)}
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduceMotion ? 0 : 0.1 }}
-              className={cn("absolute rounded-xs border-2 border-primary shadow-selection-actions ring-2 ring-background", draft ? "bg-primary/6" : "bg-primary/3")}
-              data-office-assist-candidate={selected?.elementType} data-office-assist-draft={draft ? "true" : undefined}>
-              {draft ? (
-                <Button variant="secondary" size="icon-xs" className="pointer-events-auto absolute -right-2.5 -top-2.5 size-6 rounded-full border border-border shadow-sm"
-                  aria-label={t("filePreview.officeAssist.cancel")} onClick={closeDraft} style={{ transform: box.rotation ? `rotate(${-box.rotation}deg)` : undefined }}>
-                  <XIcon aria-hidden="true" className="size-3.5" />
-                </Button>
-              ) : (
-                <span className="absolute -top-5 left-0 rounded-sm bg-primary px-1 py-0.5 text-[10px] leading-3 text-primary-foreground"
-                  style={{ transform: box.rotation ? `rotate(${-box.rotation}deg)` : undefined }}>
-                  {t("filePreview.officeAssist.element." + selected?.elementType)}
-                </span>
-              )}
+        </AnimatePresence>
+        <AnimatePresence key={draft ? "draft" : "hover"}>
+          {enabled && targetBoxes.map(({ box, surfaceKey }) => (
+            <motion.div key={surfaceKey}
+              layout={animateHover} layoutDependency={targetKey(selected)}
+              style={{ ...style(box), transform: undefined }} className="absolute"
+              initial={draft ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              transition={{ duration: reduceMotion ? 0 : 0.12, ease: EASE_OUT,
+                layout: { duration: animateHover ? 0.12 : 0, ease: EASE_OUT } }}>
+              <motion.div initial={false} animate={{ transform: `rotate(${box.rotation}deg)` }}
+                transition={{ duration: animateHover ? 0.12 : 0, ease: EASE_OUT }}
+                className={cn("absolute inset-0 rounded-xs border-2 border-primary shadow-selection-actions ring-2 ring-background", draft ? "bg-primary/6" : "bg-primary/3")}
+                data-office-assist-candidate={selected?.elementType} data-office-assist-draft={draft ? "true" : undefined}>
+                {draft ? (
+                  <Button variant="secondary" size="icon-xs" className="pointer-events-auto absolute -right-2.5 -top-2.5 size-6 rounded-full border border-border shadow-sm"
+                    aria-label={t("filePreview.officeAssist.cancel")} onClick={closeDraft} style={{ transform: box.rotation ? `rotate(${-box.rotation}deg)` : undefined }}>
+                    <XIcon aria-hidden="true" className="size-3.5" />
+                  </Button>
+                ) : (
+                  <span className="absolute -top-5 left-0 rounded-sm bg-primary px-1 py-0.5 text-[10px] leading-3 text-primary-foreground"
+                    style={{ transform: box.rotation ? `rotate(${-box.rotation}deg)` : undefined }}>
+                    {t("filePreview.officeAssist.element." + selected?.elementType)}
+                  </span>
+                )}
+              </motion.div>
             </motion.div>
           ))}
+        </AnimatePresence>
+        <AnimatePresence>
           {revealed && !enabled && visible(revealed).map(({ box, index }) => (
             <motion.div key={"revealed:" + index} style={style(box)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="absolute rounded-xs border-2 border-primary bg-primary/5 shadow-selection-actions ring-2 ring-background" data-office-assist-revealed>

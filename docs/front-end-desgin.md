@@ -1620,6 +1620,48 @@ original Office bytes ----> SHA-256 file revision
                      Composer -> user message -> Agent
 ```
 
+### 预览光标与表格悬浮外框
+
+2026-10-24：DOCX / PPTX 的 Agent 协助内容区，以及 XLSX / CSV 的表格视口，
+使用 `@animate-ui/react/primitives/cursor` 的局部 Cursor；依赖为
+`@animate-ui/react@2` 与 `motion@14`，入口为 `features/files/preview/preview-cursor.tsx`。
+光标使用带对比描边的主题色箭头，不显示跟随文字；直接跟随指针，仅以 100ms 透明度
+进入和退出，减少动态效果时立即显示。普通 DOCX / PPTX 预览、工具栏、公式输入框、
+询问浮层、按钮、链接、行列 resize handle 与滚动条继续使用原生指针；触摸设备不挂载。
+CursorContainer 放在非滚动视口中，卸载 Cursor 时由库恢复原生指针。
+
+DOCX / PPTX Agent 协助的悬浮框在同一页内复用 Motion 节点，以 120ms 平滑平移、伸缩，
+旋转在内层独立过渡，避免和布局变换相互覆盖。多框按页面与页内序号配对，跨页只淡入淡出。
+滚动、缩放、键盘操作和减少动态效果时立即对齐；点击锁定时切换至独立草稿框，
+立即贴合真实目标，保持输入、确认、编号和发送交互。
+
+XLSX / CSV 悬浮框采用 1px 淡主色描边、极浅高光和背景色隔离线；空单元格同样命中，
+合并单元格框住整个合并区域。已选范围沿用库的 SVG 几何与 2px 主色边框，
+在原生 SVG 内增加 1px 背景隔离线及约 4px 柔和外晕。宽高都达到 48px 时，
+只在真实边缘交点添加 6px 短角线，冻结分界和裁剪边缘不生成假角。
+询问输入打开后略微增强外晕。悬浮框复用同一 Motion 节点，以 120ms transform 平移和伸缩；
+鼠标点击改变已选范围时，原生描边、隔离线、外晕和短角线同步以 WAAPI transform 过渡，
+连续切换从当前显示位置接续。拖选、滚动、缩放、换表、键盘选取和减少动态效果时立即对齐；
+冻结分片拓扑变化时立即更新，以保持真实边缘。外晕强度以 120ms 透明度切换。
+同一目标的悬浮框与选中框合并显示；移至其他格时保留已选框并显示较淡的悬浮框。
+使用库的 `getCellAt`、`getCellViewportRect` 与
+`getViewportOffset` 定位，冻结窗格按行列分片裁剪，并支持 RTL。
+外框不接收指针事件，不调用 `setSelection`，不改变公式栏或选区元数据。
+拖选期间隐藏悬浮框，松开后恢复；选中后及询问浮层打开时仍可悬浮其他单元格，
+但不改变已选范围、公式栏或询问对象，浮层继续锚定已选目标。按键选取、滚动、缩放、
+换表、隐藏和卸载时清除，下一次指针移动重新定位。
+行号 / 列标继续使用原有选行列逻辑，不新增表头悬浮框。
+
+```text
+DOCX / PPTX Agent Assist --+-> PreviewCursor -> local Animate UI Cursor
+XLSX / CSV grid -----------+
+        |
+        +-> pointermove -> cell / merged range -> visible pane rectangles
+                                                |
+                                      pointer-events-none frame
+        +-> click / drag -> existing selection -> Ask Agent -> Composer
+```
+
 ### Office 文件预览
 
 2026-10-13：当前支持的 DOCX / DOTX、XLSX 系列、PPTX 系列和 CSV 预览统一使用
@@ -3164,6 +3206,12 @@ Office 预览的选区坐标、文本边界、CSV 编码与格式路由回归：
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/files/preview/document-selection.test.ts agent-ui/tests/features/files/preview/office-selection.test.ts agent-ui/tests/features/files/preview/spreadsheet-model.test.ts agent-ui/tests/features/files/preview/csv-cell-values.test.ts
 ```
 
+表格悬浮框的空单元格、合并单元格、冻结窗格裁剪与 RTL 几何回归：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/files/preview/xlsx-hover.test.ts
+```
+
 DOCX / PPTX Agent 协助的真实源定位、单元格与父表格拾取、合并 / 跨页归属，
 以及 Office 注解序列化、版本、坐标系及无效引用回归：
 
@@ -3191,17 +3239,19 @@ Alt 悬停选择整表；点击当前元素或询问按钮后检查输入立即�
 
 在开发服务器打开 `/tests/features/files/preview/office-browser.html`，点击
 **Run Office preview checks**，可检查真实 DOCX / XLSX / PPTX / CSV 渲染、选区 / 公式 /
-复制、工作表切换、损坏文件提示及卸载时的 Worker 释放。CSV 样例包含引号内逗号 / 换行
+复制、悬浮单元格 / 合并区域不改变选区和公式栏、工作表切换、损坏文件提示及卸载时的 Worker 释放。CSV 样例包含引号内逗号 / 换行
 和中文；DOCX 样例包含文本、表格和分页。追加 `?dark` 可检查深色主题的行号 / 列标对比度。
 点击 **Run spreadsheet checks** 可仅检查 CSV 超大选区取值、公式栏展开 / 滚动和窄栏工作表标签。
 点击 **Run formula bar checks** 可仅检查短文本选字、自适应浮层高度和长文本点击展开。
 样例在内存生成，不访问用户文件。
+使用鼠标在 DOCX / PPTX Agent 协助与 XLSX / CSV 内容区检查自定义光标，移至询问输入、
+公式栏、工具栏及行列 resize handle 时应恢复原生指针；普通 DOCX / PPTX 预览不替换光标。
 
 文件选区输入交互：打开 `/tests/features/files/selection/selection-actions-browser.html`，
 点击 **Run selection input checks**。覆盖第一行胶囊与图标保持、第二行输入与独立方形确认按钮、
 自动焦点、整体视口避让、原生输入导航、
 长文字滚动、IME / Escape、外点关闭、输入期间源码选区高亮保持及清理，
-以及 XLSX / CSV 的选区和公式保留。
+以及 XLSX / CSV 的选区和公式保留；点击选中后继续悬浮其他格，输入内容、焦点和浮层锚点不变。
 可使用 **Select fixture** 手动体验输入，追加 `?zh` 显示中文。
 完整页面中，勾按钮应将文件引用和问题插入 Composer 当前光标、保留已有草稿，
 并等待手动发送；检查源码行号、XLSX 工作表与范围、CSV 地址，以及发送前后的行内引用。

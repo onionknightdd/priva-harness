@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils"
 
 // Adapted from https://www.beautifului.dev/r/selection-actions.json.
 // Keep the action capsule visible while its question opens in a separate row.
-export default function SelectionActions({ actions, label, instant = false, openInputActionId, onLayoutChange, onDragStart }: {
+export default function SelectionActions({ actions, label, instant = false, openInputActionId, onInputOpenChange, onLayoutChange, onDragStart }: {
   actions: {
     id: string
     label: string
@@ -22,6 +22,7 @@ export default function SelectionActions({ actions, label, instant = false, open
   label: string
   instant?: boolean
   openInputActionId?: string
+  onInputOpenChange?: (open: boolean) => void
   onLayoutChange?: () => void
   onDragStart?: PointerEventHandler<HTMLSpanElement>
 }) {
@@ -34,6 +35,12 @@ export default function SelectionActions({ actions, label, instant = false, open
   const [keyboardInteraction, setKeyboardInteraction] = useState(false)
   const inputAction = actions.find((action) => action.id === inputActionId && action.input)
   const immediate = instant || keyboardInteraction
+  const inputOpen = present && Boolean(inputAction)
+
+  useLayoutEffect(() => {
+    onInputOpenChange?.(inputOpen)
+    return () => onInputOpenChange?.(false)
+  }, [inputOpen, onInputOpenChange])
 
   useLayoutEffect(() => {
     // Update the anchor position before Motion measures the new capsule bounds.

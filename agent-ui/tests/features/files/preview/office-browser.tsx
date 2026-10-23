@@ -84,6 +84,10 @@ function clickAt(target: HTMLElement, x: number, y: number, shiftKey = false) {
   pointer(target, x, y, "pointerdown", shiftKey)
   pointer(target, x, y, "pointerup", shiftKey)
 }
+function hoverAt(target: HTMLElement, x: number, y: number) {
+  target.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 1, isPrimary: true,
+    pointerType: "mouse", button: 0, buttons: 0, clientX: x, clientY: y }))
+}
 function key(value: string, options: KeyboardEventInit = {}) {
   viewport().dispatchEvent(new KeyboardEvent("keydown", { key: value, bubbles: true, cancelable: true, ...options }))
 }
@@ -231,6 +235,14 @@ document.querySelector<HTMLButtonElement>("#run")!.addEventListener("click", asy
     const inputRect = input.getBoundingClientRect()
     // The fixture has a 22px header, a 30pt first row, and 20px ordinary rows.
     const alpha = { left: inputRect.left + 60, top: inputRect.top + 62, height: 20 }
+    hoverAt(input, alpha.left + 8, alpha.top + alpha.height / 2)
+    await until(() => host.querySelector('[data-xlsx-hover-cell="A2"]'), "XLSX cell hover")
+    hoverAt(input, alpha.left + 8, alpha.top + 50)
+    await until(() => host.querySelector('[data-xlsx-hover-cell="A4:C4"]'), "XLSX merged cell hover")
+    const mergeHover = host.querySelector<HTMLElement>('[data-xlsx-hover-cell="A4:C4"]')!
+    check("XLSX hover outlines the whole merged cell without changing selection or formula", selectedAddress() === "A1" && formula() === "Name" && mergeHover.getBoundingClientRect().width > 300 && getComputedStyle(mergeHover).pointerEvents === "none")
+    hoverAt(input, inputRect.left + 15, alpha.top + alpha.height / 2)
+    await until(() => !host.querySelector("[data-xlsx-hover-cell]"), "row header clears hover")
     clickAt(input, alpha.left + 8, alpha.top + alpha.height / 2)
     await until(() => selectedAddress() === "A2", "cell click")
     key("ArrowRight")
@@ -286,8 +298,13 @@ document.querySelector<HTMLButtonElement>("#run")!.addEventListener("click", asy
     show("csv")
     await until(() => selectedAddress() === "A1" && viewport(), "CSV load")
     check("CSV uses the same canvas viewer and formula bar as XLSX", host.querySelector("canvas") && !host.querySelector("table") && formula() === "Name")
+    const csvBounds = viewport().getBoundingClientRect()
+    hoverAt(viewport(), csvBounds.left + 65, csvBounds.top + 52)
+    await until(() => host.querySelector('[data-xlsx-hover-cell="A2"]'), "CSV cell hover")
+    check("CSV hover does not change the selected range or formula", selectedAddress() === "A1" && formula() === "Name")
     key("ArrowDown")
     await until(() => selectedAddress() === "A2", "CSV select")
+    await until(() => !host.querySelector("[data-xlsx-hover-cell]"), "keyboard selection clears hover")
     key("ArrowRight", { shiftKey: true })
     await until(() => selectedAddress() === "A2:B2", "CSV Shift select")
     key("c", { ctrlKey: true })

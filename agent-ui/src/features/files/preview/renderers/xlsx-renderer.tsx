@@ -1,7 +1,7 @@
 import * as React from "react"
 import { XlsxSheetViewer, XlsxWorkbook, type Worksheet } from "@silurus/ooxml/xlsx"
 import { MessageCircleCodeIcon } from "lucide-react"
-import { motion, useReducedMotion } from "motion/react"
+import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs"
@@ -11,12 +11,17 @@ import { useOptionalWorkspaceFiles } from "@/features/workspace/workspace-files-
 import { EASE_OUT } from "@/lib/ease"
 
 import { PreviewRequestState } from "../preview-request-state"
+import { PreviewCursor } from "../preview-cursor"
 import { createCsvCellReader, type CsvCellReader } from "./csv-cell-values"
 import { SpreadsheetFormulaBar } from "./spreadsheet-formula-bar"
 import { encodeCellAddress, encodeRangeAddress, MAX_SELECTION_TEXT_CELLS } from "./spreadsheet-model"
 import { csvLoadOptions, isCsvSource } from "./spreadsheet-source"
+import { xlsxHoverTarget, type XlsxHoverTarget } from "./xlsx-hover"
 import { xlsxKeyboardSelection, xlsxPreviewSelection, xlsxSheetExtent } from "./xlsx-selection"
 import { xlsxSelectionActionsRect } from "./xlsx-selection-actions"
+import { decorateXlsxSelection } from "./xlsx-selection-decoration"
+
+import "./xlsx-selection.css"
 
 export function XlsxRenderer({ fileId, fileName, mediaType, source }: {
   fileId: string
@@ -29,10 +34,14 @@ export function XlsxRenderer({ fileId, fileName, mediaType, source }: {
   const previewSelection = usePreviewSelection()
   const reduceMotion = useReducedMotion()
   const containerRef = React.useRef<HTMLDivElement>(null)
+  const hoverHostRef = React.useRef<HTMLDivElement>(null)
   const menuRef = React.useRef<HTMLDivElement>(null)
   const switchSheetRef = React.useRef<(index: number) => void>(() => {})
+  const dismissActionsRef = React.useRef<() => void>(() => {})
+  const [hoverTarget, setHoverTarget] = React.useState<XlsxHoverTarget | null>(null)
   const [anchorRect, setAnchorRect] = React.useState<ReturnType<typeof xlsxSelectionActionsRect>>(null)
   const [keyboardSelection, setKeyboardSelection] = React.useState(false)
+  const [questionOpen, setQuestionOpen] = React.useState(false)
   const [sheetNames, setSheetNames] = React.useState<string[]>([])
   const [sheetIndex, setSheetIndex] = React.useState(0)
   const [formula, setFormula] = React.useState("")
@@ -59,16 +68,34 @@ export function XlsxRenderer({ fileId, fileName, mediaType, source }: {
     let extent = { rows: 1, columns: 1 }
     let selectionFrame: number | null = null
     let selectionRequest = 0
-    let selectingPointer: { id: number; x: number; y: number } | null = null
+    let selectingPointer: { id: number; x: number; y: number; dragged: boolean } | null = null
+    let selectionInstant = true
+    let motionEpoch = 0
     let actionsOpen = false
+    let hoverFrame: number | null = null
+    let hoverKey = ""
+    const removeSelectionDecoration = decorateXlsxSelection(container, {
+      animate: () => !selectionInstant && !selectingPointer?.dragged &&
+        !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+      context: () => motionEpoch,
+    })
+
+    const clearHover = () => {
+      if (hoverFrame !== null) cancelAnimationFrame(hoverFrame)
+      hoverFrame = null
+      hoverKey = ""
+      setHoverTarget((current) => current ? null : current)
+    }
 
     const dismissActions = (invalidate = true) => {
+      clearHover()
       if (selectionFrame !== null) cancelAnimationFrame(selectionFrame)
       selectionFrame = null
       if (invalidate) selectionRequest++
       actionsOpen = false
       setAnchorRect(null)
     }
+    dismissActionsRef.current = dismissActions
     const visible = () => {
       const bounds = canvas.getBoundingClientRect()
       return bounds.width > 0 && bounds.height > 0 &&
@@ -103,6 +130,44 @@ export function XlsxRenderer({ fileId, fileName, mediaType, source }: {
       })
     }
     const viewportInput = () => container.querySelector<HTMLElement>("[data-xlsx-viewport-input]")
+    const handlePointerMove = (event: PointerEvent) => {
+      if (selectingPointer?.id === event.pointerId &&
+          (event.clientX - selectingPointer.x) ** 2 + (event.clientY - selectingPointer.y) ** 2 > 9) {
+        selectingPointer.dragged = true
+      }
+      const input = viewportInput()
+      if (!active || !viewer || !worksheetName || !input || !visible() || selectingPointer ||
+          event.buttons || event.pointerType === "touch" || !(event.target instanceof Node) || !input.contains(event.target) ||
+          ["col-resize", "row-resize"].includes(input.style.cursor)) {
+        clearHover()
+        return
+      }
+      const bounds = input.getBoundingClientRect()
+      if (event.clientX < bounds.left + input.clientLeft || event.clientY < bounds.top + input.clientTop ||
+          event.clientX >= bounds.left + input.clientLeft + input.clientWidth ||
+          event.clientY >= bounds.top + input.clientTop + input.clientHeight) {
+        clearHover()
+        return
+      }
+      if (hoverFrame !== null) cancelAnimationFrame(hoverFrame)
+      hoverFrame = requestAnimationFrame(() => {
+        hoverFrame = null
+        if (!active || !viewer || !worksheetName || selectingPointer) return
+        const cell = viewer.getCellAt(event.clientX, event.clientY)
+        const canvasBounds = canvas.getBoundingClientRect()
+        const hostBounds = hoverHostRef.current?.getBoundingClientRect()
+        const target = cell && hostBounds && xlsxHoverTarget(cell, worksheet, canvasBounds, viewer.getViewportOffset(),
+          (address) => viewer?.getCellViewportRect(address) ?? null)
+        if (!target || !hostBounds) { clearHover(); return }
+        const projected = { ...target, rects: target.rects.map((rect) => ({
+          ...rect, x: rect.x + canvasBounds.left - hostBounds.left, y: rect.y + canvasBounds.top - hostBounds.top,
+        })) }
+        const key = JSON.stringify(projected)
+        if (key === hoverKey) return
+        hoverKey = key
+        setHoverTarget(projected)
+      })
+    }
     const handlePointerDown = (event: PointerEvent) => {
       if (event.target instanceof Node && menuRef.current?.contains(event.target)) return
       selectingPointer = null
@@ -115,15 +180,19 @@ export function XlsxRenderer({ fileId, fileName, mediaType, source }: {
           event.clientY - bounds.top - input.clientTop >= input.clientHeight ||
           ["col-resize", "row-resize"].includes(input.style.cursor)) return
       window.getSelection()?.removeAllRanges()
-      selectingPointer = { id: event.pointerId, x: event.clientX, y: event.clientY }
+      setKeyboardSelection(false)
+      selectionInstant = event.pointerType !== "mouse"
+      selectingPointer = { id: event.pointerId, x: event.clientX, y: event.clientY, dragged: false }
     }
     const handlePointerUp = (event: PointerEvent) => {
       if (selectingPointer?.id !== event.pointerId) return
       const movement = (event.clientX - selectingPointer.x) ** 2 + (event.clientY - selectingPointer.y) ** 2
+      selectionInstant ||= selectingPointer.dragged
       selectingPointer = null
       // The native viewer treats touch/pen drags as scrolling rather than selection.
       if (event.pointerType !== "mouse" && movement > 64) return
       showActions(false, { x: event.clientX, y: event.clientY })
+      handlePointerMove(event)
     }
     const cancelPointer = () => {
       selectingPointer = null
@@ -150,12 +219,18 @@ export function XlsxRenderer({ fileId, fileName, mediaType, source }: {
         menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus()
       }
     }
-    const handleScroll = () => dismissActions(false)
+    const handleScroll = () => {
+      motionEpoch++
+      dismissActions(false)
+    }
     const handleDocumentScroll = (event: Event) => {
       if (event.target instanceof Node && menuRef.current?.contains(event.target)) return
       handleScroll()
     }
-    const handleDismiss = () => dismissActions()
+    const handleDismiss = () => {
+      motionEpoch++
+      dismissActions()
+    }
     const resizeObserver = new ResizeObserver(handleDismiss)
     resizeObserver.observe(container)
     const visibilityObserver = new MutationObserver(() => {
@@ -166,6 +241,7 @@ export function XlsxRenderer({ fileId, fileName, mediaType, source }: {
         attributeFilter: ["class", "style", "hidden", "inert", "aria-hidden"] })
     }
     document.addEventListener("pointerdown", handlePointerDown, true)
+    document.addEventListener("pointermove", handlePointerMove)
     document.addEventListener("pointerup", handlePointerUp, true)
     document.addEventListener("pointercancel", handlePointerCancel, true)
     document.addEventListener("keydown", handleActionsKeyDown, true)
@@ -173,8 +249,11 @@ export function XlsxRenderer({ fileId, fileName, mediaType, source }: {
     document.addEventListener("contextmenu", handleDismiss, true)
     window.addEventListener("resize", handleDismiss)
     window.addEventListener("blur", cancelPointer)
+    container.addEventListener("pointerleave", clearHover)
 
     const resetSelection = () => {
+      motionEpoch++
+      selectionInstant = true
       selectingPointer = null
       dismissActions()
       clearSelection()
@@ -239,6 +318,8 @@ export function XlsxRenderer({ fileId, fileName, mediaType, source }: {
       // Preserve the application's range extension and focus-cell navigation.
       event.preventDefault()
       event.stopPropagation()
+      setKeyboardSelection(true)
+      selectionInstant = true
       dismissActions()
       const request = selectionRequest
       const sheetGeneration = generation
@@ -304,9 +385,11 @@ export function XlsxRenderer({ fileId, fileName, mediaType, source }: {
       active = false
       controller.abort()
       dismissActions()
+      removeSelectionDecoration()
       resizeObserver.disconnect()
       visibilityObserver.disconnect()
       document.removeEventListener("pointerdown", handlePointerDown, true)
+      document.removeEventListener("pointermove", handlePointerMove)
       document.removeEventListener("pointerup", handlePointerUp, true)
       document.removeEventListener("pointercancel", handlePointerCancel, true)
       document.removeEventListener("keydown", handleActionsKeyDown, true)
@@ -315,7 +398,9 @@ export function XlsxRenderer({ fileId, fileName, mediaType, source }: {
       window.removeEventListener("resize", handleDismiss)
       window.removeEventListener("blur", cancelPointer)
       container.removeEventListener("keydown", handleKeyDown, true)
+      container.removeEventListener("pointerleave", clearHover)
       switchSheetRef.current = () => {}
+      dismissActionsRef.current = () => {}
       // A borrowed viewer must release its rendering work before its workbook.
       viewer?.destroy()
       workbook?.destroy()
@@ -325,13 +410,16 @@ export function XlsxRenderer({ fileId, fileName, mediaType, source }: {
   }, [clearSelection, fileId, fileName, mediaType, reportSelection, source, t])
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden bg-background">
+    <div className="xlsx-preview flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden bg-background"
+      data-xlsx-question-open={questionOpen && anchorRect ? "" : undefined}
+      data-xlsx-selection-instant={keyboardSelection ? "" : undefined}>
       <SelectionActionsPopover
         anchorRect={loading || error ? null : anchorRect}
         instant={Boolean(reduceMotion) || keyboardSelection}
         menuRef={menuRef}
         kind="file"
         label={t("filePreview.selectionMenuLabel")}
+        onInputOpenChange={setQuestionOpen}
         actions={[{
           id: "ask-agent",
           label: t("filePreview.askAgent"),
@@ -344,14 +432,15 @@ export function XlsxRenderer({ fileId, fileName, mediaType, source }: {
               const sheetPrefix = !isCsvSource(fileName, mediaType)
                 ? `'${previewSelection.sheetName.replaceAll("'", "''")}'!` : ""
               const cell = previewSelection.ranges.map((range) => sheetPrefix + (range.address ?? encodeRangeAddress(range))).join(", ")
-              setAnchorRect(null)
+              dismissActionsRef.current()
               workspaceFiles.insertFileAnnotation({ kind: "spreadsheet", filePath: previewSelection.file.path, sheet: previewSelection.sheetName, cell }, question)
             },
           },
         }]}
       />
       <SpreadsheetFormulaBar address={address} value={formula} />
-      <div className="relative min-h-0 flex-1 overflow-hidden">
+      <div ref={hoverHostRef} className="relative min-h-0 flex-1 overflow-hidden">
+        <PreviewCursor targetRef={containerRef} enabled={!loading && !error} />
         <motion.div
           ref={containerRef}
           className="h-full min-h-0"
@@ -369,6 +458,20 @@ export function XlsxRenderer({ fileId, fileName, mediaType, source }: {
           animate={{ opacity: loading || error ? 0 : 1 }}
           transition={{ duration: reduceMotion ? 0 : 0.2, ease: EASE_OUT }}
         />
+        <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+          <AnimatePresence>
+            {!loading && !error && hoverTarget && !address.split(", ").includes(hoverTarget.address) && hoverTarget.rects.map((rect, index) => (
+              <motion.div key={index}
+                layout={!reduceMotion}
+                data-xlsx-hover-cell={hoverTarget.address}
+                className="xlsx-hover-frame absolute rounded-xs"
+                style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height }}
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                transition={{ duration: reduceMotion ? 0 : 0.12, ease: EASE_OUT,
+                  layout: { duration: reduceMotion ? 0 : 0.12, ease: EASE_OUT } }} />
+            ))}
+          </AnimatePresence>
+        </div>
         {(loading || error) && (
           <div className="absolute inset-0 bg-background">
             <PreviewRequestState loading={loading} error={error ?? undefined} />
