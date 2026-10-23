@@ -59,7 +59,7 @@ export class InteractionCoordinator {
     } else if (response.decision === 'allow' && response.answers !== undefined) throw new Error('Tool approval cannot change the tool input')
     pending.validate?.(response)
     const resolution: InteractionResolution = {
-      request, decision: response.decision, reason: response.decision === 'allow' ? 'answered' : 'skipped',
+      request, decision: response.decision, reason: response.decision === 'allow' ? 'answered' : response.reason ?? 'skipped',
       ...(response.decision === 'allow' && response.answers ? { answers: response.answers } : {}),
     }
     pending.finish(resolution)

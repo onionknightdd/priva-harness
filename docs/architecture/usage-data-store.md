@@ -54,7 +54,7 @@ SQLite 数据库。本文记录已确认的设计决策和当前实现范围；�
 `run.finished` / `run.session` 找不到对应的 `running` 行时（例如 `run.started`
 被满队列丢弃），审计行照常写入，事实表不动，worker 记 warn。
 
-## Schema（`PRAGMA user_version = 2`）
+## Schema（`PRAGMA user_version = 3`）
 
 ```
 audit_event      id, ts_utc, action, session_id, run_id, target, details(JSON)
@@ -68,7 +68,7 @@ tool_fact        id, audit_id, run_id, ts_utc, tool_use_id, tool_name, mcp_serve
 meta             key, value          (last_prune_utc)
 ```
 
-- `source ∈ {web, subagent-test, channel, scheduled}`，`outcome ∈ {running, completed, failed, aborted}`，
+- `source ∈ {web, api, subagent-test, channel, scheduled}`，`outcome ∈ {running, completed, failed, aborted}`，
   `failure_code ∈ {max_turns, max_budget, api_error, auth_error, compaction_failed, provider_error,
   transport_error, runtime_crash, unknown}`，均有 `CHECK` 约束。
 - 事实表指向 `audit_event` 的外键是 `ON DELETE SET NULL`：审计 90 天先于事实 365 天过期，
@@ -167,7 +167,9 @@ Pi 的自动压缩成功、失败或取消只更新会话 marker，继续收集�
 ```
 
 **来源**：`AgentRunOptions.source: RunSource` 为必填，`run-route.ts` 传 `'web'`，
-`subagent-test.ts` 传 `'subagent-test'`；`'channel'`、`'scheduled'` 已预留在类型中。
+`subagent-test.ts` 传 `'subagent-test'`，Agent API（`harness/agent-api`）传 `'api'`；
+`'channel'`、`'scheduled'` 已预留在类型中。第 3 次迁移为 `'api'` 重建了 `run_fact`
+（SQLite 不能修改 CHECK），重建前先暂存 `run_model_usage`，避免删除旧表时被级联删除。
 
 ## harness 采集：`RunLedger`
 

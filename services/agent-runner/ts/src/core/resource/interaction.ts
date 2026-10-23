@@ -30,14 +30,20 @@ export type InteractionRequest = RequestBase & (
 
 export const interactionResponseSchema = z.discriminatedUnion('decision', [
   z.object({ requestId: z.string().min(1), decision: z.literal('allow'), answers: z.record(z.string(), z.object({ selected: z.array(z.string()), text: z.string() })).optional() }),
-  z.object({ requestId: z.string().min(1), decision: z.literal('deny') }),
+  // `unattended`: nobody is there to answer, as opposed to a person skipping the request.
+  z.object({ requestId: z.string().min(1), decision: z.literal('deny'), reason: z.literal('unattended').optional() }),
 ])
 export type InteractionResponse = z.infer<typeof interactionResponseSchema>
 export interface InteractionResolution {
   readonly request: InteractionRequest
   readonly decision: 'allow' | 'deny'
-  readonly reason: 'answered' | 'skipped' | 'timeout' | 'cancelled'
+  readonly reason: 'answered' | 'skipped' | 'timeout' | 'cancelled' | 'unattended'
   readonly answers?: Readonly<Record<string, QuestionAnswer>>
+}
+
+/** What the model is told when its request is denied. */
+export function interactionDenialText(reason: InteractionResolution['reason']): string {
+  return reason === 'unattended' ? 'No user is available to answer' : `User interaction ${reason}`
 }
 
 export function normalizeQuestions(raw: unknown): InteractionQuestion[] {

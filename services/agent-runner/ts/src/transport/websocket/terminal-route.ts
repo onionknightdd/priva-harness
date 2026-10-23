@@ -11,7 +11,7 @@ import type { AgentProfileService } from '../../harness/config/agent-profile-ser
 import type { AgentHarness } from '../../harness/agent-harness.js'
 import type { ModelProfileService } from '../../harness/config/model-profile-service.js'
 import type { SessionTerminals } from '../../harness/terminal/session-terminals.js'
-import { buildRunSpec } from './run-spec.js'
+import { buildRunSpec } from '../../harness/config/run-spec.js'
 
 export const TERMINAL_WEBSOCKET_PATH = '/api/sandbox/agent/ws/terminal'
 

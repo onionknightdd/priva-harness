@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url'
 
 import { readComputerConfig } from './computer-config.js'
 
+import { AgentApiService } from './harness/agent-api/agent-api-service.js'
 import { AgentHarness } from './harness/agent-harness.js'
 import { AgentProfileService } from './harness/config/agent-profile-service.js'
 import { ConfigDistributor } from './harness/config/config-distributor.js'
@@ -11,6 +12,9 @@ import { ModelProfileService } from './harness/config/model-profile-service.js'
 import { LiveRunRegistry } from './harness/run/live-run-registry.js'
 import { SessionService } from './harness/session/session-service.js'
 import { SessionTerminals } from './harness/terminal/session-terminals.js'
+import { JsonAgentApiSessionRegistry } from './infrastructure/agent-api/json-agent-api-session-registry.js'
+import { JsonlAgentApiEventStore } from './infrastructure/agent-api/jsonl-agent-api-event-store.js'
+import { NodeAgentApiWorkspace } from './infrastructure/agent-api/node-agent-api-workspace.js'
 import { WorkerDataRecorder } from './infrastructure/data/worker-data-recorder.js'
 import { JsonSessionMetadataStore } from './infrastructure/session/json-session-metadata-store.js'
 import { NodeUserFileSystem } from './infrastructure/filesystem/node-user-file-system.js'
@@ -118,6 +122,17 @@ export async function startServer(): Promise<void> {
   })
   sessionService.bindWarmListing((harness) => agentHarness.listWarm(harness))
   sessionService.bindContextUsageReader((ref, spec) => agentHarness.readContextUsage(ref, spec))
+  const agentApi = new AgentApiService({
+    providers,
+    harness: agentHarness,
+    sessions: sessionService,
+    registry: new JsonAgentApiSessionRegistry(runtimeConfig.agentApiSessionsDir),
+    events: new JsonlAgentApiEventStore(runtimeConfig.agentApiSessionsDir),
+    workspace: new NodeAgentApiWorkspace(fileSystem),
+    modelProfiles: modelProfileService,
+    agentProfiles: agentProfileService,
+    reportError: (error) => { dataLog.error(`agent api: ${error instanceof Error ? error.stack ?? error.message : String(error)}`) },
+  })
   const configDistributor = new ConfigDistributor([
     new ClaudeConfigAdapter(),
     new PiConfigAdapter(),
@@ -138,6 +153,7 @@ export async function startServer(): Promise<void> {
     piEffortLevels: (modelId) => resolvePiThinkingCapability(modelId).effortLevels,
     agentProfileService,
     agentHarness,
+    agentApi,
     sessionTerminals,
     sessionService,
     configDistributor,
@@ -151,6 +167,7 @@ export async function startServer(): Promise<void> {
   const host = process.env['HOST'] ?? '0.0.0.0'
 
   const close = async (): Promise<void> => {
+    await agentApi.dispose()
     await agentHarness.disposePool()
     await sessionTerminals.dispose()
     await dataRecorder.close()

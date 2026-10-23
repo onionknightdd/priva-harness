@@ -2,7 +2,7 @@ import { claudeSystemPrompt } from './claude-system-prompt.js'
 import { DEFAULT_CONTEXT_WINDOW } from '../../core/resource/model-context.js'
 import { claudeDisallowedTools } from './claude-tool-policy.js'
 import { InteractionCoordinator } from '../../core/run/interaction-coordinator.js'
-import { answersByQuestion, normalizeQuestions, type InteractionResponse } from '../../core/resource/interaction.js'
+import { answersByQuestion, interactionDenialText, normalizeQuestions, type InteractionResponse } from '../../core/resource/interaction.js'
 import { taskNotification } from '../../core/resource/background-task.js'
 import { asRecord, stringField } from '../../core/event/json-record.js'
 import { ClaudeTaskDeliveryReader } from './session/claude-task-delivery-reader.js'
@@ -25,7 +25,7 @@ import {
   profileEnvKeys,
   resolveProviderRunEnv,
 } from '../../core/resource/provider-run-env.js'
-import { userTurnText, type UserTurn } from '../../core/run/user-turn.js'
+import type { UserTurn } from '../../core/run/user-turn.js'
 import { AsyncQueue } from '../../core/stream/async-queue.js'
 import { PushableStream } from '../../core/stream/pushable-stream.js'
 import type { ToolDefinition } from '../../core/tool/define-tool.js'
@@ -99,9 +99,10 @@ export class ClaudeRuntime implements AgentRuntime {
     this.turnEnded = false
     this.events = new AsyncQueue<AgentEvent>()
     await this.deliveries.start(this.sessionId)
+    const message = await claudeUserMessage(turn)
     this.ensureQuery(turn)
     this.mapper.beginUserTurn()
-    this.input?.push(claudeUserMessage(userTurnText(turn)))
+    this.input?.push(message)
 
     const onAbort = (): void => {
       this.interactions.cancelAll()
@@ -211,7 +212,7 @@ export class ClaudeRuntime implements AgentRuntime {
       const result = await this.interactions.request(tool === 'AskUserQuestion'
         ? { ...common, kind: 'question', questions: normalizeQuestions(input['questions']) }
         : { ...common, kind: 'tool' }, { signal: context.signal })
-      if (result.decision === 'deny') return { behavior: 'deny', message: `User interaction ${result.reason}` }
+      if (result.decision === 'deny') return { behavior: 'deny', message: interactionDenialText(result.reason) }
       return tool === 'AskUserQuestion'
         ? { behavior: 'allow', updatedInput: { ...input, answers: answersByQuestion(result) } }
         : { behavior: 'allow' }

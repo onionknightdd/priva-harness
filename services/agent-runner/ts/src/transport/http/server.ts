@@ -24,12 +24,14 @@ import {
 } from '../../core/resource/runtime-settings.js'
 import { SessionError, type SessionErrorKind } from '../../core/resource/session.js'
 import { UserFileError, type UserFileErrorKind } from '../../core/resource/user-file.js'
+import type { AgentApiService } from '../../harness/agent-api/agent-api-service.js'
 import type { AgentHarness } from '../../harness/agent-harness.js'
 import type { AgentProfileService } from '../../harness/config/agent-profile-service.js'
 import type { ConfigDistributor } from '../../harness/config/config-distributor.js'
 import type { ModelProfileService } from '../../harness/config/model-profile-service.js'
 import type { SessionService } from '../../harness/session/session-service.js'
 import type { SessionTerminals } from '../../harness/terminal/session-terminals.js'
+import { agentApiRoutes, SANDBOX_AGENT_API_PREFIX } from '../agent-api/agent-api-routes.js'
 import { runWebsocketRoutes } from '../websocket/run-route.js'
 import { computerRoutes } from '../websocket/computer-route.js'
 import { terminalWebsocketRoutes } from '../websocket/terminal-route.js'
@@ -52,6 +54,7 @@ export interface BuildHttpServerOptions {
   readonly piEffortLevels?: (modelId: string) => readonly EffortLevel[]
   readonly agentProfileService: AgentProfileService
   readonly agentHarness?: AgentHarness
+  readonly agentApi?: AgentApiService
   readonly sessionTerminals?: SessionTerminals
   readonly sessionService?: SessionService
   readonly configDistributor?: ConfigDistributor
@@ -154,6 +157,9 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
   }
   if (options.usageReader !== undefined) {
     void server.register(usageRoutes, { reader: options.usageReader })
+  }
+  if (options.agentApi !== undefined) {
+    void server.register(agentApiRoutes, { service: options.agentApi, prefix: SANDBOX_AGENT_API_PREFIX })
   }
   if (options.agentHarness !== undefined) {
     void server.register(runWebsocketRoutes, {

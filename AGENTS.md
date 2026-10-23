@@ -78,7 +78,10 @@ request and event examples in
 [docs/api/agent-api-v1-examples.md](docs/api/agent-api-v1-examples.md) and the
 companion Cursor canvas
 [docs/api/agent-runner-api-io-examples.canvas.tsx](docs/api/agent-runner-api-io-examples.canvas.tsx);
-read them before implementing or changing it.
+read them before implementing or changing it. The examples document's payloads are
+validated by the backend tests; after changing the contract, regenerate the JSON
+Schema from `services/agent-runner/ts/` with
+`npx vitest run tests/unit/core/agent-api/json-schema.test.ts -u`.
 
 Usage statistics and audit records are stored in SQLite; before touching
 recording, retention, or the `dataRetention` setting, read

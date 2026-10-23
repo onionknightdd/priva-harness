@@ -1,6 +1,6 @@
 # Agent API v1：第三方会话、消息与事件接口
 
-状态：设计已确认，尚未实现。日期：2026-10-22。
+状态：设计已确认；Part A 的 A1–A4、A4.5 已在 agent-runner 实现，A5–A7 未实现（§12.1）。日期：2026-10-23。
 完整输入输出示例见 [Agent API v1 示例](../api/agent-api-v1-examples.md)。同一组示例的可筛选画布见 [agent-runner-api-io-examples.canvas.tsx](../api/agent-runner-api-io-examples.canvas.tsx)（Cursor Canvas）。
 
 本文定义 Agent Runner 面向第三方客户端的 HTTP / SSE / WebSocket 接口。它服务两个场景：
@@ -13,6 +13,14 @@
 
 两个场景共用同一套契约（路径后缀、对象、事件、错误）和同一套实现模块，差别只在部署位置、
 鉴权方式和策略（Policy）。
+
+调用方都是程序，按拿结果的方式分三类，同一个发送接口用 `response` 字段区分（§6.6）：
+
+| 调用方 | 典型形态 | 拿结果的方式 |
+| --- | --- | --- |
+| 交互式客户端 | 自建聊天前端或 App、IM 机器人 | `response = stream`，流式渲染过程；`allow_interrupt = true`，由人回答提问 |
+| 无人值守的程序 | 脚本与自动化（CI、定时任务、批处理）、其他 Agent 或编排系统 | `response = wait` 或 `accepted` + 轮询；读 `run.output_text` |
+| 平台外 Agent 的 skill | Cursor、Claude Code、Codex 等本地工具中的 skill，经网关与 API key 调用 | 同无人值守；只把 `output_text` 交给调用方 Agent，避免事件流占满它的上下文 |
 
 对外 API 是 WebUI / TUI 的**超集**：它使用程序化的 SDK 驱动，能提供比 WebUI 更细的事件和更完整的控制。
 与 WebUI / TUI 之间只要求**可回放**：API 产生的会话写入同一份原生转录和会话元数据，
@@ -46,7 +54,8 @@ AgentGateway -> Runtime Access（鉴权、选址）         AgentGateway -> agen
 范围内：
 
 - 会话创建、查询、修改、删除或关闭；会话内文件上传。
-- 发送消息（立即返回 202，或在同一请求内以 SSE 流式返回），以及运行中再次发送时的投递方式。
+- 发送消息（立即返回 202、等待结果最多 60 秒，或在同一请求内以 SSE 流式返回），以及运行中再次发送时的投递方式。
+- 查询单个 run，可以等待它结束；无人值守时自动拒绝 Agent 的提问与审批（`allow_interrupt`）。
 - 会话事件流（SSE、WebSocket）、断线续传、会话快照和历史读取。
 - 回答 Agent 的提问、审批与 MCP 授权请求；取消运行；停止后台任务。
 
@@ -55,6 +64,10 @@ AgentGateway -> Runtime Access（鉴权、选址）         AgentGateway -> agen
 - WebUI 不迁移，继续使用 `/api/sandbox/agent/ws/session` 的 v2 协议，由 TUI 驱动。
 - 不遵循 A2A；`docs/design/harness-stream` 的 v3 协议草案不再推进。
 - 不提供 fork、资源编辑、文件浏览、终端字节流、OpenAI 兼容接口。
+- 不提供文件下载。场景 A 的调用方用 Sandbox 现有的 `/api/sandbox/files` 接口（`list`、`download` 等）
+  取回 Agent 生成的文件；场景 B 的文件取回由 agent-studio 实现（§12.2）。
+- 场景 A 没有"具名 Agent"：调用方在整个 Sandbox 中自选目录、harness、模型创建会话。
+  把目录与配置保存为可调用的 Agent，与场景 B 的发布单元一起设计（§12.2）。
 - API key、会话令牌的签发与校验不在 agent-runner 实现：场景 A 由 agent-workshop 的
   Runtime Access 完成，场景 B 由 agent-studio 完成。
 
@@ -74,7 +87,7 @@ AgentGateway -> Runtime Access（鉴权、选址）         AgentGateway -> agen
 | D10 | 输入 | `parts` 数组；V1 只支持 `text`、`image`、`file` | 保留数组形式便于以后扩展，V1 不做复杂输入 |
 | D11 | 图片与文件来源 | image：`image_url`（data URL）或 `image_path`；file：`file_path` 或 `file_data` + `filename` | 第三方可以内联发送，也可以引用会话工作目录中的文件 |
 | D12 | 输入编码 | 复用后端已有的 `UserTurn`（`<priva-attachments>` 清单 + `imagePaths`） | 后端已有编码与历史解析，WebUI 能正确回放 API 发送的附件 |
-| D13 | 返回方式 | 同一个 `POST …/messages`，用请求体的 `stream` 字段区分：`false` 返回 202，`true` 返回本次 run 的 SSE | 脚本和长连接客户端都方便使用 |
+| D13 | 返回方式 | 同一个 `POST …/messages`，用请求体的 `response` 字段三选一：`accepted` 返回 202；`wait` 最多等 60 秒后返回结束或暂停的 run，超时退回 202；`stream`（默认）返回本次 run 的 SSE | 聊天客户端、脚本与外部 Agent 的 skill 都能直接使用；60 秒低于常见代理的默认超时 |
 | D14 | 运行中发送 | `delivery`：`follow-up` / `steer` / `interrupt`，两个场景一致；省略时取 agent profile 的 `queueBehavior` | 与 WebUI 的投递语义一致 |
 | D15 | WebSocket | 给第三方客户端用；每个会话一条连接；子协议 `agent-workshop.v1`；命令帧等于 HTTP 请求体加 `type`、`request_id`；每条命令都有 `reply` | 双向通道，同时与 HTTP 保持一一对应 |
 | D16 | 对象模型 | Session → Thread → Run（input + items）；Task；Interaction | 参照 OpenAI Responses / Codex app-server / Anthropic Managed Agents 收敛出的对象模型 |
@@ -83,6 +96,9 @@ AgentGateway -> Runtime Access（鉴权、选址）         AgentGateway -> agen
 | D19 | 默认订阅 | 增量默认下发；所有线程（含子 Agent）默认内联在主流；原生事件默认关闭，可按连接开启，仅实时 | 第三方聊天客户端开箱即用；原生事件只用于排查 |
 | D20 | 历史 | `GET …/sessions/{ses}/runs`，每个 run 含 `input` 与 `items` | 历史与事件携带同构对象 |
 | D21 | 错误 | HTTP 与 WS `reply` 使用同一个 `error` 结构：`type`、`code`、`message`、`param`、`request_id` | 一套错误处理代码 |
+| D22 | 无人值守 | 发送消息时用 `allow_interrupt` 声明是否允许 run 为等人回答而暂停；默认 `false`：提问、审批、授权自动拒绝并告诉 Agent 没有人可以回答，run 继续到完成；`true` 时暂停并把问题返回给调用方，10 分钟未回答按超时拒绝。子 Agent 线程跟随父 run，后台任务结果触发的 run 一律按 `false` | 多数调用方是程序，没有人能回答；聊天客户端与 IM 机器人显式开启 |
+| D23 | 最终回复 | 结束的 run 带 `output_text`：该 run 最后一条 assistant 消息的文本 | 调用方不必解析 items 就能拿到结论 |
+| D24 | 运行模式 | 创建会话时可选 `run_mode`（`agent` / `code`，默认 `agent`），创建后不可变；只对 Claude 生效，Pi 会话忽略 | 运行模式属于 Agent 配置，与 WebUI 首条消息后锁定一致 |
 
 讨论过但未采用的方案：
 
@@ -97,6 +113,9 @@ AgentGateway -> Runtime Access（鉴权、选址）         AgentGateway -> agen
 | 主流只发子线程生命周期 | 选择与 WebUI 实时展示一致的内联方式 |
 | 原生事件持久化并占用 `seq` | 存储与重连成本高，收益只在排查场景 |
 | 由前端或客户端编码引用、批注等富输入 | V1 只支持 text / image / file |
+| `stream` 布尔值 + 调用方指定的 `wait_seconds` | 三种返回方式用一个枚举表达更清楚；等待上限由服务端统一决定 |
+| 交互策略作为会话级设置 | 是否有人在等待回答取决于每次调用的调用方 |
+| webhook 回调 | 现有调用方用等待、轮询或事件流即可 |
 
 ## 3. 架构与代码复用
 
@@ -128,19 +147,29 @@ WebUI ── WS /api/sandbox/agent/ws/session（v2，不变）── TerminalCha
 建议的代码位置（均相对 `services/agent-runner/ts/src/`）：
 
 ```text
-core/agent-api/                 契约：对象、输入、事件、错误的类型与 zod schema（纯函数，无 IO）
-core/contract/agent-api-*.ts    端口：SessionRegistry、EventLog、WorkspaceFiles、AgentApiPolicy
+core/agent-api/                       契约与纯函数（无 IO）
+  objects.ts / input.ts / events.ts   对象、请求体、事件的 zod schema 与类型
+  responses.ts / errors.ts            响应体、错误外壳与错误码
+  ids.ts / tool-kind.ts               平台 ID（签发与确定性派生）、工具类别映射
+  thread-projection.ts                SessionStream 状态 → 对象图（run / item / task / interaction）
+  graph-diff.ts                       两个对象图之间的持久事件（§8.5 顺序）与会话状态
+  run-lineage.ts                      子线程 run → 启动它的主线程 run；某个 run 待回答的交互
+  json-schema.ts                      生成 docs/api/agent-api-v1.schema.json
+core/contract/agent-api-*.ts          端口：session-registry、event-store（事件日志 + 投影状态）、workspace
 harness/agent-api/
-  agent-api-service.ts          门面：供传输层调用，不依赖 HTTP / WS
-  message-service.ts            parts → UserTurn、投递队列、幂等、调用 AgentHarness
-  object-projector.ts           SessionStream 状态 → 对象图 → 生命周期事件
-  id-derivation.ts              原生 ID → 平台 ID 的确定性派生
-infrastructure/agent-api/       场景 A 的适配器：JSON 会话注册表、JSONL 事件日志、工作目录文件
-transport/agent-api/            Fastify 插件：HTTP 路由、SSE 编码、WS 路由；挂载前缀可配置
+  agent-api-service.ts                门面：会话、文件、发送消息、快照、历史、订阅；不依赖 HTTP / WS
+  message-input.ts                    parts → UserTurn 与回显的 content
+  session-projector.ts                每个会话一个：订阅 SessionStream，产生持久事件与增量
+  event-subscription.ts               续传：补发 → resync → 实时；response=stream 的 run 范围过滤
+  run-wait.ts                         response=wait 与 GET run 的等待：结束、待回答的交互或超时
+  unattended-interactions.ts          allow_interrupt=false：自动拒绝无人回答的交互
+infrastructure/agent-api/             场景 A 的适配器：JSON 会话注册表、JSONL 事件日志、工作目录文件
+transport/agent-api/                  Fastify 插件：HTTP 路由、SSE 编码；挂载前缀可配置
 ```
 
-依赖方向与现有代码一致：`core` 只含类型和端口；`harness` 依赖端口；文件和存储实现在
-`infrastructure`；`transport` 只做协议转换。
+依赖方向与现有代码一致：`core` 只含类型、端口和纯函数；`harness` 依赖端口；文件和存储实现在
+`infrastructure`；`transport` 只做协议转换。`buildRunSpec` 位于 `harness/config/run-spec.ts`，
+WebUI 入口与 Agent API 共用。投递队列（A5）将加入 `harness/agent-api`。
 
 场景 B 复用的边界：
 
@@ -173,7 +202,7 @@ Session  ses_…    status: idle | running | requires_action；settings；active
 
 | 前缀 | 对象 | 来源 |
 | --- | --- | --- |
-| `ses_` | Session | 平台生成；注册表映射到原生会话 |
+| `ses_` | Session | API 创建的由平台生成，注册表映射到原生会话；WebUI 创建、API 尚未写入的会话由原生会话 ID 派生 |
 | `run_` | Run | API 发起的 run 由 API 生成并作为 harness runId 传入；其他 run 由原生 runId 派生 |
 | `msg_` | 用户消息 | API 发起的由 API 生成；其他由原生转录 UUID 派生 |
 | `itm_` | Item | 由原生消息 ID、block ID 或工具调用 ID 派生 |
@@ -192,6 +221,7 @@ ID 是不透明字符串，客户端不得解析。
   "id": "ses_01JDX4",
   "harness": "claude",
   "workdir": "projects/shop-web",
+  "run_mode": "agent",
   "title": "结账页报错排查",
   "settings": { "model": "default:claude-sonnet-4-5", "effort": "high", "context_window": 200000 },
   "status": { "state": "idle", "active_tasks": 0 },
@@ -205,6 +235,7 @@ ID 是不透明字符串，客户端不得解析。
 | --- | --- |
 | `harness` | `claude` 或 `pi`，创建后不可变 |
 | `workdir` | 相对 Sandbox 工作区的目录，创建后不可变；场景 B 不返回 |
+| `run_mode` | 仅 Claude：`agent` / `code`，创建后不可变（D24）；Pi 会话不返回 |
 | `settings.model` | `profileId:modelId`，与 WebUI 的模型引用格式相同 |
 | `settings.effort` | Claude：`low` / `medium` / `high` / `xhigh` / `max`；Pi：按模型支持的档位 |
 | `settings.context_window` | `200000` 或 `1000000` |
@@ -228,6 +259,7 @@ ID 是不透明字符串，客户端不得解析。
   "model": "claude-sonnet-4-5",
   "input": { "type": "user_message", "message_id": "msg_3fA", "source": "api", "content": [] },
   "stop_reason": "end_turn",
+  "output_text": "问题出在 CartTotal：未使用优惠券时 coupon 为 null，读取 amount 抛错。\n已改为空值默认 0，购物车测试 24/24 通过；e2e 已在后台运行。",
   "usage": { "input_tokens": 52310, "output_tokens": 4120, "cache_read_tokens": 38000, "cache_write_tokens": 0, "cost_usd": 0.21 },
   "context": { "used_tokens": 41200, "limit_tokens": 200000 },
   "duration_ms": 48210,
@@ -242,6 +274,7 @@ ID 是不透明字符串，客户端不得解析。
 | `position` | 仅 `queued`：在队列中的位置，从 1 开始 |
 | `input` | 见下表；后台结果触发的 run 在输入解析完成前可能为 `null`，随后由 `run.updated` 补齐 |
 | `stop_reason` | `end_turn` / `cancelled` / `interrupted` / `error` / `max_turns` / `budget_exceeded` |
+| `output_text` | run 结束后才有：该 run 最后一条 assistant 消息的文本（D23）；没有文字回复时省略 |
 | `interrupted_by` | `status = interrupted` 时：`{ message_id }`，指向打断它的消息 |
 | `error` | `status = failed` 时：`{ code, message }` |
 | `usage` | 本次 run 的用量；`cost_usd` 未知时省略，不填 0 |
@@ -358,7 +391,7 @@ Agent / Task 类工具不生成 `tool_call`，而是生成 `subagent` item。
 | `questions` | `question` 时：与现有 InteractionQuestion 相同的结构 |
 | `url`、`server` | `open_url` 时：要打开的地址与 MCP 服务名 |
 | `status` | `pending` / `resolved` |
-| `resolution` | `{ decision: allow \| deny, reason: answered \| skipped \| timeout \| cancelled, answers? }` |
+| `resolution` | `{ decision: allow \| deny, reason: answered \| skipped \| timeout \| cancelled \| unattended, answers? }`；`unattended` 表示按 `allow_interrupt = false` 自动拒绝（§6.6） |
 
 `open_url` 的回答：用户在浏览器中完成授权后回答 `allow`，放弃则回答 `deny`。
 Pi 扩展的自定义终端 UI（`ui.custom`）无法表示为交互，按 Pi SDK 的现有行为向扩展返回错误。
@@ -429,33 +462,52 @@ Claude SDK 驱动目前只发送文本（`claudeUserMessage`），需要补上 `
 | GET | `{base}/sessions` | 列出会话（含 WebUI 创建的会话） | 不提供 |
 | GET | `{base}/sessions/{ses}` | 会话快照 | 提供 |
 | PATCH | `{base}/sessions/{ses}` | 修改标题、设置 | 不提供 |
-| DELETE | `{base}/sessions/{ses}` | 删除会话 | 关闭会话 |
+| DELETE | `{base}/sessions/{ses}` | 删除会话，成功返回 204 | 关闭会话 |
 | POST | `{base}/sessions/{ses}/files` | 上传一个文件 | 提供 |
 | POST | `{base}/sessions/{ses}/messages` | 发送消息 | 提供 |
 | GET | `{base}/sessions/{ses}/runs` | 历史：run 及其 items | 提供 |
+| GET | `{base}/sessions/{ses}/runs/{run}` | 单个 run 与它待回答的交互；`?wait=true` 时等待它结束或暂停 | 提供 |
 | GET | `{base}/sessions/{ses}/events` | SSE 事件流 | 提供 |
 | GET | `{base}/sessions/{ses}/ws` | WebSocket | 提供 |
 | POST | `{base}/sessions/{ses}/runs/{run}/cancel` | 取消排队中或运行中的 run | 提供 |
 | POST | `{base}/sessions/{ses}/interactions/{int}` | 回答提问、审批或授权请求 | 提供 |
 | POST | `{base}/sessions/{ses}/tasks/{task}/stop` | 停止后台任务 | 提供 |
 
+能力描述（场景 A）列出 harness、默认模型、各 profile 支持图片输入的模型、限额，以及当前版本已提供的功能；
+`features.deliveries` 是会话忙碌时可用的投递方式，A5 之前为空（会话忙碌时发送返回 409 `session_busy`）：
+
+```json
+{
+  "api_version": "v1",
+  "harnesses": ["claude", "pi"],
+  "defaults": { "harness": "claude", "model": "default:claude-sonnet-4-5" },
+  "profiles": [{ "id": "default", "label": "Default", "default_model": "claude-sonnet-4-5", "image_input_models": ["claude-sonnet-4-5"] }],
+  "limits": { "max_upload_bytes": 104857600, "max_inline_bytes": 20971520, "max_queued_runs": 3, "max_wait_seconds": 60 },
+  "features": { "websocket": false, "native_events": false, "interactions": false, "task_stop": false, "settings_update": false, "deliveries": [] }
+}
+```
+
 ### 6.3 创建会话
 
 ```text
 POST {base}/sessions
-{ "harness": "claude", "workdir": "projects/shop-web",
+{ "harness": "claude", "workdir": "projects/shop-web", "run_mode": "agent",
   "settings": { "model": "default:claude-sonnet-4-5", "effort": "high" },
-  "message": { "parts": [ … ] }, "delivery": "follow-up", "stream": false }
-→ 201 { session }                                   未带 message
-→ 201 { session, message, run, last_event_seq }     带 message 且 stream=false
-→ 200 text/event-stream                             带 message 且 stream=true
+  "message": { "parts": [ … ] }, "delivery": "follow-up", "response": "wait", "allow_interrupt": false }
+→ 201 { session }                                                  未带 message
+→ 201 { session, message, run, last_event_seq }                    response=accepted，或 wait 超时
+→ 201 { session, message, run, interactions, last_event_seq }      response=wait，run 已结束或暂停
+→ 200 text/event-stream                                            response=stream（默认）
 ```
 
+- 所有响应都带 `Location: {base}/sessions/{ses}`；`response = stream` 时客户端从这个头得到会话 ID。
+- `delivery`、`response`、`stream_options`、`allow_interrupt` 只能与 `message` 一起出现，含义同 §6.6。
 - 场景 A 的所有字段都可省略：`harness` 默认取用户默认值；`workdir` 默认为工作区根目录；
-  `settings` 默认取用户默认 profile 与模型。
+  `settings` 默认取用户默认 profile 与模型；`run_mode` 默认 `agent`。
+- `run_mode` 只对 Claude 生效，创建后不可变；Pi 会话忽略该字段，会话对象中也不返回。
 - 创建会话只登记并预分配原生会话 UUID；首条消息才打开 SDK 运行时，与 WebUI 新对话的懒创建一致。
 - 新会话的内部配置固定为：`visualizeMode = false`、`promptSuggestions = false`、
-  `runMode = agent`、`contextWindow = 200000`（未指定时）。这些值写入会话元数据，WebUI 回放时沿用。
+  `contextWindow = 200000`（未指定时）。这些值与 `run_mode` 写入会话元数据，WebUI 回放时沿用。
 
 ### 6.4 修改会话
 
@@ -489,11 +541,23 @@ POST {base}/sessions/{ses}/messages
 Idempotency-Key: <客户端生成>
 { "message": UserMessage,
   "delivery": "follow-up" | "steer" | "interrupt",
-  "stream": false | true,
+  "response": "accepted" | "wait" | "stream",
+  "allow_interrupt": false | true,
   "stream_options": { "deltas": true, "threads": "all" | "main", "native": false } }
 ```
 
-`stream = false`：
+```text
+POST …/messages { message, response, allow_interrupt }
+   │
+   ├─ response = accepted ─────────────────────────────> 202 { message, run: { id, status }, last_event_seq }
+   ├─ response = wait（最多 60 秒）
+   │     ├─ run 结束 ──────────────────────────────────> 200 { message, run（含 output_text）, interactions: [], last_event_seq }
+   │     ├─ allow_interrupt = true 且有问题待回答 ─────> 200 { message, run（in_progress）, interactions: [...], last_event_seq }
+   │     └─ 超过 60 秒 ────────────────────────────────> 202，与 accepted 相同；之后 GET …/runs/{run}?wait=true
+   └─ response = stream（默认）────────────────────────> 200 text/event-stream，本次 run 的事件
+```
+
+`response = accepted`：
 
 ```json
 202 Accepted
@@ -503,7 +567,20 @@ Idempotency-Key: <客户端生成>
 - `run.status` 为 `queued` 表示前面还有 run；否则为 `in_progress`。
 - `last_event_seq` 是本消息产生任何事件之前的游标；客户端随后用它订阅，不会漏事件。
 
-`stream = true`：返回 `200 text/event-stream`，内容为以下事件，在本次 run 的 `run.completed` 之后关闭：
+`response = wait`：等待本次 run 结束，或者（`allow_interrupt = true` 时）出现待回答的交互，最多 60 秒
+（能力描述的 `limits.max_wait_seconds`）。等到时返回 `200`，`run` 是完整的 Run 对象（不含 items），
+`interactions` 是本次 run 及其子线程中待回答的交互；超时返回与 `accepted` 相同的 `202`，调用方改用
+`GET …/runs/{run}?wait=true` 继续等待（§6.8）。客户端断开只结束等待，不取消运行。
+
+```json
+200 OK
+{ "message": { "id": "msg_3fA" },
+  "run": { "id": "run_7Ka2", "status": "completed", "stop_reason": "end_turn", "output_text": "问题出在…", "…": "…" },
+  "interactions": [],
+  "last_event_seq": 0 }
+```
+
+`response = stream`（省略 `response` 时的默认值）：返回 `200 text/event-stream`，内容为以下事件，在本次 run 的 `run.completed` 之后关闭：
 
 - 本次 run 的 `run.*`、`item.*`、`item.delta`、`interaction.*`。
 - 本次 run 派生的子线程的 run 与 item（`threads = all` 时）。
@@ -511,6 +588,18 @@ Idempotency-Key: <客户端生成>
 - 期间的 `session.status_changed`。
 
 连接断开不会取消运行。
+
+`allow_interrupt`（默认 `false`）决定 run 能否为等人回答而暂停，三种 `response` 都适用：
+
+| 值 | Agent 提问、请求审批或 MCP 授权时 |
+| --- | --- |
+| `false` | 立即自动拒绝（`resolution.reason = unattended`），并告诉 Agent 没有人可以回答；run 继续到完成 |
+| `true` | run 暂停，会话进入 `requires_action`，交互返回给调用方；10 分钟内未回答按 `timeout` 拒绝 |
+
+- 自动拒绝同样产生 `interaction.requested` 与紧随其后的 `interaction.resolved`，调用方能看到 Agent 问过什么。
+- 子 Agent 线程中的交互跟随父 run 的值；后台任务结果触发的 run 没有调用方在等待，一律按 `false` 处理。
+- 只作用于 API 写入的会话；由 WebUI / TUI 驱动的会话按 WebUI 的方式处理交互。
+- A5 之前 API 还不能回答交互（`features.interactions = false`），`true` 时只能等待超时或在 WebUI 中回答。
 
 `delivery`：
 
@@ -526,7 +615,8 @@ Idempotency-Key: <客户端生成>
 ### 6.7 幂等
 
 - `Idempotency-Key` 可选，强烈建议使用；作用域为"主体 + 会话 + 键"，保存 24 小时。
-- 相同键、相同请求体：返回首次结果（`stream = true` 时从该 run 的第一个事件开始重放）。
+- 相同键、相同请求体：返回首次结果（`response = stream` 时从该 run 的第一个事件开始重放；
+  `response = wait` 时重新等待同一个 run）。
 - 相同键、不同请求体：409 `idempotency_conflict`。
 - WS 中对应字段为 `idempotency_key`。
 
@@ -539,6 +629,15 @@ GET {base}/sessions/{ses}/runs?thread=all|main&order=desc&limit=20&cursor=…
 
 默认返回主线程与所有子线程的 run，最新的在前。对象与事件中携带的对象完全同构。
 历史从原生转录读取，因此 WebUI / TUI 中产生的 run 也会出现（`input.source` 为 `web` / `terminal`）。
+
+```text
+GET {base}/sessions/{ses}/runs/{run}?wait=true
+→ 200 { "run": Run, "interactions": Interaction[] }
+```
+
+单个 run（不含 items；需要过程时读历史）与它及其子线程中待回答的交互。`wait = true` 时与
+`response = wait` 相同：等到 run 结束、出现待回答的交互（仅 `allow_interrupt = true` 的 run）或 60 秒，
+超时也返回 `200` 和当前状态，调用方可以再次等待。run 不存在返回 404 `not_found`。
 
 ### 6.9 取消、回答、停止
 
@@ -583,7 +682,7 @@ Sec-WebSocket-Protocol: agent-workshop.v1
 
 | `type` | 字段 | 对应 HTTP |
 | --- | --- | --- |
-| `message.send` | `request_id`、`idempotency_key?`、`message`、`delivery?` | `POST …/messages`（`stream` 不适用） |
+| `message.send` | `request_id`、`idempotency_key?`、`message`、`delivery?`、`allow_interrupt?` | `POST …/messages`（`response` 不适用：回执等于 `accepted` 的响应体，过程从连接上的事件得到） |
 | `run.cancel` | `request_id`、`run_id` | `POST …/runs/{run}/cancel` |
 | `interaction.respond` | `request_id`、`interaction_id`、`decision`、`answers?` | `POST …/interactions/{int}` |
 | `task.stop` | `request_id`、`task_id` | `POST …/tasks/{task}/stop` |
@@ -761,7 +860,8 @@ Policy 可以省略字段，但不改变事件形状和对象结构。例如场�
 | `task_runtime_unavailable` | 任务所属的运行时已释放，无法停止 |
 | `settings_change_failed` | 设置未能应用（含后台任务运行中需要重建运行时的情况） |
 | `session_busy` | 当前状态不允许该操作（例如删除运行中的会话） |
-| `feature_unavailable` | Policy 不允许的功能 |
+| `not_found` | 会话或对象不存在或不可见 |
+| `feature_unavailable` | Policy 不允许或当前版本尚未提供的功能 |
 | `runtime_start_failed` | SDK 运行时启动失败 |
 
 事件流建立之后的错误用事件表达（`session.error`、`run.completed` 的 `failed`），不在流中拼接 HTTP 错误体。
@@ -821,6 +921,8 @@ API 不复制 WebUI / TUI 的交互行为和限制。约束只有一条：API �
 | 用量与费用 | 转录与 statusLine 推算，费用可能未知 | SDK `result` 给出 |
 | 模型不支持图片 | 静默作为文件 | 422 |
 | 可视化回答、输入建议 | 支持 | 不提供（新会话关闭） |
+| 无人值守 | 提问一直等到有人回答或 10 分钟超时 | 默认自动拒绝并告诉 Agent 没有人可以回答（`allow_interrupt`）；WebUI 回放时显示为"已跳过" |
+| 一次请求拿到最终回复 | 无 | `response = wait` 与 `output_text` |
 
 ### 10.5 与 WebUI 行为保持一致的部分
 
@@ -830,6 +932,7 @@ API 不复制 WebUI / TUI 的交互行为和限制。约束只有一条：API �
 - 交互的请求与回答结构与 `permission.requested` / `permission.respond` 相同，同一个 `InteractionCoordinator`。
 - 附件落在 `.priva-attachments/file-*/`。
 - 模型引用使用 `profileId:modelId`，模型选择逻辑使用同一个 `buildRunSpec`。
+- 运行模式（`agent` / `code`）在会话创建时确定、之后不可变，默认 `agent`，与 WebUI 新对话相同。
 
 ## 11. 实现要点
 
@@ -881,11 +984,18 @@ SessionRegistry 必须持久化 run 索引（run_id ↔ 原生用户消息 UUID�
 
 ### 11.4 EventLog
 
-- 场景 A：每个平台会话一个追加写的 JSONL 文件，位于 `$RUNTIME_HOME/agent-api/sessions/<ses>/`；
-  同目录保存会话注册信息、设置与 run 索引，权限 0600。
+- 场景 A：每个平台会话一个目录 `$RUNTIME_HOME/agent-api/sessions/<ses>/`，权限 0700，文件 0600：
+  `session.json`（注册信息与设置）、`events.jsonl`（持久事件）、`projection.json`（run 索引与投影记忆）。
 - 保留：每个会话最近 10000 条或 7 天，取先到者；超出部分返回 410。
 - `seq` 随日志持久化，runner 重启后继续递增（`SessionStream` 的 seq 在重启后重置，不能直接使用）。
 - 投影器在会话运行时存活期间（含后台任务）持续运行，不依赖是否有订阅者，保证"执行不依赖连接"。
+- **投影记忆**：`projection.json` 记录日志已经为每个对象说过什么（开始、终态）。投影器重新挂到
+  `SessionStream` 时（runner 重启、API 首次访问 WebUI 推进过的会话）以记忆为基线做 diff，补发期间
+  错过的事件，例如重启前进行中的 run 的 `run.completed`。API 创建的会话从空记忆开始；API 从未观察过的
+  WebUI 会话从当前状态开始，之前的历史只通过 `GET` 读取，不重放为事件。
+- **run 索引**：API 发起的 run 在 `launch` 之前登记（输入回显、`msg_` ID、幂等键与首次响应），因此
+  运行时启动失败也会以 `run.completed`（`failed`）结束。重启后，转录中的用户消息按"文本相同、时间不早于
+  上一个匹配"认领索引中的 run，历史中的 run_id 保持不变；认领不到时按原生 UUID 派生。
 
 ### 11.5 MessageService
 
@@ -899,6 +1009,11 @@ SessionRegistry 必须持久化 run 索引（run_id ↔ 原生用户消息 UUID�
   - `steer`：等 `runningToolIds` 为空 → `abortLive` → 等 run 结束 → `launch`。
   - `interrupt`：`abortLive` → 等 run 结束 → `launch`。
 - 发送前检查驱动互斥：原生终端存活时返回 409 `session_driven_by_terminal`。
+- run 索引记录每个 API run 的 `allow_interrupt`。自动拒绝订阅会话的 `SessionStream`：出现待处理的
+  `InteractionRequest` 时，沿子线程找到它所属的主线程 run；只有该 run 是 `allow_interrupt = true` 的
+  API run 时保留，否则以 `reason = unattended` 回答 `deny`。会话由终端驱动时不处理。
+- 等待（`response = wait`、`GET …/runs/{run}?wait=true`）只读投影器：每个持久事件之后检查 run 是否结束、
+  是否有属于它的待回答交互，与 SSE 看到的是同一份状态。
 
 ### 11.6 SDK 驱动需要补齐的能力
 
@@ -916,15 +1031,23 @@ SessionRegistry 必须持久化 run 索引（run_id ↔ 原生用户消息 UUID�
 鉴权不在本次实现：runner 只在内部端口提供 `/api/agent/v1/sandbox`，由 agent-workshop 的
 Runtime Access 校验用户 API key 后转发。分层推进，每层都可端到端验收：
 
-| 层 | 内容 | 验收 |
-| --- | --- | --- |
-| A1 | `core/agent-api` 契约：类型、zod schema、错误；对象与事件的 JSON Schema | 示例文档中的全部 JSON 能通过 schema |
-| A2 | SessionRegistry、WorkspaceFiles、`POST/GET/DELETE /sessions`、能力描述、上传 | 创建的会话在 WebUI 列表中可见 |
-| A3 | MessageService + `POST /messages`（202）+ Claude 图片输入 | API 会话结束后在 WebUI 中完整回放，并能以 TUI 继续 |
-| A4 | ObjectProjector + EventLog + SSE + `stream = true` + 续传 | 持久事件回放结果与 GET 快照、历史逐字段一致 |
-| A5 | 取消、三种投递、交互（含 `onElicitation`）、任务停止、PATCH 设置、历史 | 每个操作都有 Claude 与 Pi 的集成测试 |
-| A6 | WebSocket | 命令与 HTTP 结果一致 |
-| A7 | 原生通道、Workflow Agent 实时内联 | 原生事件与语义对象的 `refs` 对应 |
+| 层 | 内容 | 验收 | 状态 |
+| --- | --- | --- | --- |
+| A1 | `core/agent-api` 契约：类型、zod schema、错误；对象与事件的 JSON Schema | 示例文档中的全部 JSON 能通过 schema | 已完成 |
+| A2 | SessionRegistry、WorkspaceFiles、`POST/GET/DELETE /sessions`、能力描述、上传 | 会话可创建、列出（含 WebUI 会话）、删除；首条消息之后才出现在 WebUI 列表中（与 WebUI 新对话一样懒创建原生会话） | 已完成 |
+| A3 | MessageService + `POST /messages`（202）+ Claude 图片输入 | API 会话结束后在 WebUI 中完整回放，并能以 TUI 继续 | 已完成；WebUI 回放与 TUI 续写尚未用真实模型验证 |
+| A4 | ObjectProjector + EventLog + SSE + `response = stream` + 续传 | 持久事件回放结果与 GET 快照、历史逐字段一致 | 已完成 |
+| A4.5 | 程序化调用：`response` 三种返回方式、`GET …/runs/{run}?wait`、`output_text`、`allow_interrupt` 与自动拒绝、创建时的 `run_mode` | 脚本与外部 Agent 的 skill 只用一次请求（或请求 + 轮询）拿到最终回复；无人值守时提问不会挂起会话 | 已完成 |
+| A5 | 取消、三种投递、交互（含 `onElicitation`）、任务停止、PATCH 设置 | 每个操作都有 Claude 与 Pi 的集成测试 | 未开始 |
+| A6 | WebSocket | 命令与 HTTP 结果一致 | 未开始 |
+| A7 | 原生通道、Workflow Agent 实时内联 | 原生事件与语义对象的 `refs` 对应 | 未开始 |
+
+`GET …/runs` 历史随 A4 一起提供。A5 之前，会话忙碌时发送返回 409 `session_busy`，`native = true`
+返回 403 `feature_unavailable`；能力描述的 `features` 如实反映当前提供的功能。
+
+API 发起的 run 在用量统计中记为 `source = 'api'`（[用量与审计数据存储](usage-data-store.md)）。
+示例文档的载荷与 JSON Schema 由测试校验，修改契约时重新生成：
+`npx vitest run tests/unit/core/agent-api/json-schema.test.ts -u`（在 `services/agent-runner/ts/` 中执行）。
 
 验证方式：
 
@@ -961,6 +1084,7 @@ agent-studio 只提供 API；agent-ui 中添加对应的 UI 入口。必须满�
 | `native = true` | 不允许（发布者预览可开启） |
 | `open_url` 交互 | 由 Release 声明是否允许；不允许时拒绝 MCP 的 URL 授权请求 |
 | 排队上限 | 由 Release limits 声明，默认 3 |
+| `allow_interrupt` | 与场景 A 相同，默认 `false` |
 
 - **存储。** 会话注册表、run 索引与 EventLog 使用 agent-studio 的持久存储，满足多副本与重启后 `seq` 连续；
   保留策略与 410 语义与本文一致。
@@ -970,16 +1094,33 @@ agent-studio 只提供 API；agent-ui 中添加对应的 UI 入口。必须满�
   数据来源是同一套历史接口（§6.8）。
 - **agent-ui 入口。** 发布管理页面使用 agent-studio 自己的管理接口。发布者的预览对话建议直接使用
   本文的调用接口（以预览令牌创建会话），这样预览与外部调用走同一条路径。
+- **文件取回。** 调用方无法访问执行环境的文件系统；Agent 生成的文件（`tool_call.output` 中的
+  `image_path` / `file_path`、任务的 `output_path`）由 agent-studio 提供下载，范围限于该会话的工作目录。
+  场景 A 不需要这一项，调用方直接使用 Sandbox 的文件接口。
+- **具名 Agent。** 场景 A 推迟的"把目录与配置保存为可调用的 Agent"在这里与发布单元（D5）一起设计。
+  运行模式属于 Agent 配置：发布时固定在 Release 中，调用方不能修改。
 
 ## 13. 已知限制与待定事项
 
-- **事件 JSON Schema 尚未编写**，在 A1 完成。
-- **SDK 驱动需要补齐的能力**见 §11.6：Claude 图片输入、`onElicitation`、原生通道、Workflow Agent 实时内联。
+- **JSON Schema** 见 [agent-api-v1.schema.json](../api/agent-api-v1.schema.json)，由契约生成。
+- **SDK 驱动需要补齐的能力**见 §11.6：Claude 图片输入已完成；`onElicitation`、原生通道、Workflow Agent 实时内联未完成。
+- **A4 实现的已知差距**（在后续层中处理）：
+  - 投影器尚未跟随 Claude 原生 `/clear` 产生的 `session.rebound`，也不产生 `context_reset` item。
+  - `session.settings_changed` 尚未发出（随 A5 的 PATCH 设置一起实现）；`run.context` 尚未填充。
+  - Monitor 任务的 `last_event`、Workflow Agent 线程的 run 尚未产生。
+  - API run 的 `run.started` 在受理时发出，provider 报告模型后紧跟一条带 `model` 的 `run.updated`。
+  - Claude 内置工具没有执行开始信号：参数完整（assistant 消息结束）即视为 `running`。
   在 Workflow Agent 实时内联完成前，只能通过 `task.updated` 看到进度。
 - **Claude 内置工具（如 Bash）的输出没有实时增量**，完成时一次给出。
+- **示例画布** `docs/api/agent-runner-api-io-examples.canvas.tsx` 是早期的示意版本，与示例文档有出入
+  （例如上传路径、创建会话的响应外壳）；以示例文档为准。
 - **API 不接管仍由原生终端持有的会话**；需要先在 WebUI 中退出终端或等待空闲回收。
 - **后台结果触发的 run** 在输入解析完成前 `input` 为 `null`，随后由 `run.updated` 补齐。
 - **场景 B 中和 `/命令` 与 `@路径` 的具体方式**待 agent-studio 实施时验证。
+- **`allow_interrupt = true` 在 A5 之前只能等待**：API 还不能回答交互，暂停的 run 等到 10 分钟超时，
+  或由用户在 WebUI 中回答。
+- **`response = wait` 的 60 秒上限**低于常见代理的默认超时；部署方的网关超时更短时，调用方会先收到网关错误，
+  此时改用 `accepted` + `GET …/runs/{run}?wait=true`。
 
 ## 14. 与其他文档的关系
 

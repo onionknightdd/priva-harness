@@ -1,6 +1,6 @@
 # Agent API v1 示例
 
-状态：与 [Agent API v1 设计](../architecture/agent-api-v1.md) 同步的示例，尚未实现。日期：2026-10-22。
+状态：与 [Agent API v1 设计](../architecture/agent-api-v1.md) 同步的示例；实现进度见设计文档 §12.1。日期：2026-10-23。
 同一组示例的可筛选画布：[agent-runner-api-io-examples.canvas.tsx](agent-runner-api-io-examples.canvas.tsx)（Cursor Canvas）。
 
 本文沿一个完整会话推进：创建会话，带截图和日志发消息，Agent 查问题、提问、改文件、启动后台测试、
@@ -9,7 +9,10 @@
 
 约定：
 
-- `…` 表示与前文相同、为简洁省略的字段；真实响应中这些字段完整出现。
+- `json` / `http` 块中的载荷都是完整对象，可直接用于测试；只有时间戳会写作 `"…"`。
+  `text` 块（SSE、WebSocket 帧）中的 `…` 表示为简洁省略的字段，真实响应中这些字段完整出现。
+- 全部载荷由 `services/agent-runner/ts/tests/unit/core/agent-api/examples.test.ts` 按 schema 校验；
+  JSON Schema 见 [agent-api-v1.schema.json](agent-api-v1.schema.json)。
 - 事件外壳：`seq`、`type`、`created_at`，按需带 `run_id`、`thread_id`；`thread_id` 省略表示主线程。
 - 持久事件带 `seq` 并携带一个完整对象；`item.delta` 与 `native` 是临时事件，不带 `seq`。
 - 主线示例会话是由 API 以 SDK 驱动运行的 Claude 会话。只在特定 harness 出现的增量会单独注明，
@@ -26,7 +29,7 @@
 
 | 类别 | 项目（括号内为案例编号） |
 | --- | --- |
-| 请求 | `POST /sessions`（1, 2）、`POST /files`（3）、`POST /messages`（4, 5, 6）、`stream: true`（6）、WebSocket（7）、`POST /interactions/{id}`（8）、`POST /runs/{id}/cancel`（9）、`POST /tasks/{id}/stop`（9）、`GET /sessions/{id}`（40）、`GET /runs`（40）、`GET /events`（37, 38, 39）、错误响应（10, 39） |
+| 请求 | `POST /sessions`（1, 2）、`POST /files`（3）、`POST /messages`（4, 5, 6）、`response: accepted / wait`（4）、`response: stream`（6）、`allow_interrupt`（4, 15）、WebSocket（7）、`POST /interactions/{id}`（8）、`POST /runs/{id}/cancel`（9）、`POST /tasks/{id}/stop`（9）、`GET /sessions/{id}`（40）、`GET /runs`（40）、`GET /runs/{id}`（4）、`GET /events`（37, 38, 39）、错误响应（10, 39） |
 | 持久事件 | `session.status_changed`（11, 15, 16, 22, 31）、`session.settings_changed`（32）、`session.error`（34）、`run.queued`（7, 17）、`run.started`（6, 12, 20, 23, 26, 31, 36）、`run.updated`（18）、`run.completed`（6, 20, 22, 25, 35, 36）、`item.started`（13, 14, 15, 16, 19, 21, 23, 24, 33）、`item.updated`（14）、`item.completed`（13, 14, 16, 19, 21, 24, 25, 27, 31, 33）、`interaction.requested`（15, 16）、`interaction.resolved`（15, 16）、`task.started`（27）、`task.updated`（28, 29）、`task.completed`（30） |
 | 临时事件 | `item.delta`（6, 13, 14, 19, 24, 38）、resync 的 `item.updated`（38）、`native`（37） |
 
@@ -39,6 +42,7 @@
 覆盖：`POST /sessions`
 
 所有字段都可省略，默认取用户 Runner 的设置。`workdir` 相对 Sandbox 工作区。
+`run_mode` 只对 Claude 生效，默认 `agent`，创建后不可变。
 创建只做登记并预分配原生会话 UUID，首条消息才打开 SDK 运行时。`driver` 为当前写入驱动。
 
 ```http
@@ -49,6 +53,7 @@ Content-Type: application/json
 {
   "harness": "claude",
   "workdir": "projects/shop-web",
+  "run_mode": "agent",
   "settings": { "model": "default:claude-sonnet-4-5", "effort": "high" }
 }
 ```
@@ -58,16 +63,19 @@ Content-Type: application/json
 Request-Id: req_01Ka
 
 {
-  "id": "ses_01JDX4",
-  "harness": "claude",
-  "workdir": "projects/shop-web",
-  "title": null,
-  "settings": { "model": "default:claude-sonnet-4-5", "effort": "high", "context_window": 200000 },
-  "status": { "state": "idle", "active_tasks": 0 },
-  "driver": "none",
-  "last_event_seq": 0,
-  "created_at": "2026-10-22T00:20:00.000Z",
-  "updated_at": "2026-10-22T00:20:00.000Z"
+  "session": {
+    "id": "ses_01JDX4",
+    "harness": "claude",
+    "workdir": "projects/shop-web",
+    "run_mode": "agent",
+    "title": null,
+    "settings": { "model": "default:claude-sonnet-4-5", "effort": "high", "context_window": 200000 },
+    "status": { "state": "idle", "active_tasks": 0 },
+    "driver": "none",
+    "last_event_seq": 0,
+    "created_at": "2026-10-22T00:20:00.000Z",
+    "updated_at": "2026-10-22T00:20:00.000Z"
+  }
 }
 ```
 
@@ -157,11 +165,12 @@ Content-Type: multipart/form-data; boundary=----x
 +------------------------------------------------------------+
 ```
 
-### 4. 发送消息：stream = false
+### 4. 发送消息：response = accepted / wait
 
-覆盖：`POST /messages`
+覆盖：`POST /messages`、`response: accepted`、`response: wait`、`allow_interrupt`、`GET /runs/{id}`
 
-立即返回 202。客户端随后用 `last_event_seq` 订阅事件流，不会漏事件。
+`response = accepted` 立即返回 202。客户端随后用 `last_event_seq` 订阅事件流，不会漏事件。
+这条消息带截图，Agent 可能会提问，所以客户端开启 `allow_interrupt`（默认 `false`，见下文）。
 
 ```http
 POST /api/agent/v1/sandbox/sessions/ses_01JDX4/messages
@@ -177,7 +186,8 @@ Content-Type: application/json
     ]
   },
   "delivery": "follow-up",
-  "stream": false
+  "response": "accepted",
+  "allow_interrupt": true
 }
 ```
 
@@ -200,6 +210,103 @@ Content-Type: application/json
                                   | 结账页报错了，帮我查一下并修复 |
                                   +--------------------------+
                                                        已发送
+```
+
+#### 等待结果：脚本与外部 Agent 的 skill
+
+`response = wait` 最多等 60 秒。run 结束后返回 200，`run` 是不含 items 的完整 Run 对象，
+`output_text` 是这次 run 最后一条 assistant 消息的文本。下面是另一个由 CI 脚本创建的会话；
+没有传 `allow_interrupt`，Agent 即使提问也会被自动拒绝，run 一直跑到完成（见案例 15）。
+
+```http
+POST /api/agent/v1/sandbox/sessions/ses_01JH3R/messages
+Content-Type: application/json
+
+{
+  "message": { "parts": [{ "type": "text", "text": "列出 src/cart 下缺少测试的文件" }] },
+  "response": "wait"
+}
+```
+
+```http
+200 OK
+
+{
+  "message": { "id": "msg_6Wd" },
+  "run": {
+    "id": "run_9Tb4",
+    "status": "completed",
+    "model": "claude-sonnet-4-5",
+    "input": {
+      "type": "user_message",
+      "message_id": "msg_6Wd",
+      "source": "api",
+      "content": [{ "type": "text", "text": "列出 src/cart 下缺少测试的文件" }]
+    },
+    "stop_reason": "end_turn",
+    "output_text": "缺少测试的文件有 2 个：src/cart/coupon.ts、src/cart/shipping.ts。",
+    "usage": { "input_tokens": 8120, "output_tokens": 310, "cost_usd": 0.03 },
+    "duration_ms": 12400,
+    "created_at": "…",
+    "started_at": "…",
+    "completed_at": "…"
+  },
+  "interactions": [],
+  "last_event_seq": 41
+}
+```
+
+60 秒内没有结束时返回与 `accepted` 相同的 202，调用方再用 `GET …/runs/{run}?wait=true` 等待；
+它同样最多等 60 秒，超时也返回 200 和当前状态，可以反复调用。
+
+```http
+202 Accepted
+
+{
+  "message": { "id": "msg_6Wd" },
+  "run": { "id": "run_9Tb4", "status": "in_progress" },
+  "last_event_seq": 41
+}
+```
+
+```http
+GET /api/agent/v1/sandbox/sessions/ses_01JH3R/runs/run_9Tb4?wait=true
+```
+
+```http
+200 OK
+
+{
+  "run": {
+    "id": "run_9Tb4",
+    "status": "completed",
+    "model": "claude-sonnet-4-5",
+    "input": {
+      "type": "user_message",
+      "message_id": "msg_6Wd",
+      "source": "api",
+      "content": [{ "type": "text", "text": "列出 src/cart 下缺少测试的文件" }]
+    },
+    "stop_reason": "end_turn",
+    "output_text": "缺少测试的文件有 2 个：src/cart/coupon.ts、src/cart/shipping.ts。",
+    "usage": { "input_tokens": 8120, "output_tokens": 310, "cost_usd": 0.03 },
+    "duration_ms": 72400,
+    "created_at": "…",
+    "started_at": "…",
+    "completed_at": "…"
+  },
+  "interactions": []
+}
+```
+
+`allow_interrupt = true` 时，等待在 Agent 提问的那一刻结束：返回 200，`run.status` 仍为 `in_progress`，
+`interactions` 列出待回答的问题（结构同案例 15 的 `interaction`）。调用方回答后再次等待。
+
+调用方 Agent 看到：
+
+```text
+$ agent-run "列出 src/cart 下缺少测试的文件"
+缺少测试的文件有 2 个：src/cart/coupon.ts、src/cart/shipping.ts。
 ```
 
 ### 5. part 的另外两种写法
@@ -235,11 +342,12 @@ Content-Type: application/json
                                   +--------------------------+
 ```
 
-### 6. 发送消息：stream = true
+### 6. 发送消息：response = stream
 
-覆盖：`POST /messages`、`stream: true`、`run.started`、`item.delta`、`run.completed`
+覆盖：`POST /messages`、`response: stream`、`run.started`、`item.delta`、`run.completed`
 
 同一个请求直接返回本次 run 的 SSE，在 `run.completed` 之后关闭。客户端断开不会取消运行。
+省略 `response` 时就是这种方式。
 
 ```http
 POST /api/agent/v1/sandbox/sessions/ses_01JDX4/messages
@@ -247,7 +355,8 @@ Idempotency-Key: 0c4d2f6e-…
 
 {
   "message": { "parts": [{ "type": "text", "text": "结账页报错了，帮我查一下并修复" }] },
-  "stream": true,
+  "response": "stream",
+  "allow_interrupt": true,
   "stream_options": { "deltas": true, "threads": "all", "native": false }
 }
 ```
@@ -692,9 +801,10 @@ claude-sonnet-4-5 · 正在处理…
 
 ### 15. Agent 提问
 
-覆盖：`item.started`、`interaction.requested`、`session.status_changed`、`interaction.resolved`
+覆盖：`item.started`、`interaction.requested`、`session.status_changed`、`interaction.resolved`、`allow_interrupt`
 
 提问也是一个 `tool_call`；interaction 引用它的 `item_id`。挂起期间会话进入 `requires_action`，并列出待处理的 interaction。
+这条消息发送时带了 `allow_interrupt: true`（案例 4），所以 run 暂停等待回答；默认的 `false` 见本案例末尾。
 
 ```json
 {
@@ -765,7 +875,21 @@ claude-sonnet-4-5 · 正在处理…
     "type": "question",
     "run_id": "run_7Ka2",
     "item_id": "itm_05",
-    "questions": [ … ],
+    "questions": [
+      {
+        "id": "q0",
+        "question": "这次修复的范围？",
+        "header": null,
+        "options": [
+          { "label": "只修复问题", "description": null },
+          { "label": "顺便重构 CartTotal", "description": "改动更大，需要补测试" }
+        ],
+        "multi_select": false,
+        "allow_custom": true,
+        "multiline": false,
+        "initial_text": null
+      }
+    ],
     "expires_at": "2026-10-22T00:30:41.000Z",
     "status": "resolved",
     "resolution": {
@@ -796,6 +920,61 @@ claude-sonnet-4-5 · 正在处理…
 |                                      [跳过]  [提交]     |
 +--------------------------------------------------------+
 提交后 → 这次修复的范围？只修复问题
+```
+
+#### 无人值守：allow_interrupt = false
+
+案例 4 中 CI 脚本发送的消息没有传 `allow_interrupt`。Agent 提问时，服务端立即以 `unattended` 拒绝，
+并告诉 Agent 没有人可以回答，Agent 自行决定后继续。拒绝发生在请求出现之后，所以事件流里仍能看到问题：
+
+```text
+seq 42  item.started            tool_call AskUserQuestion（pending）
+seq 43  interaction.requested   int_8
+seq 44  session.status_changed  requires_action（短暂）
+seq 45  interaction.resolved    int_8：decision = deny，reason = unattended
+seq 46  session.status_changed  running
+seq 47  item.completed          tool_call（declined）
+```
+
+```json
+{
+  "seq": 45,
+  "type": "interaction.resolved",
+  "created_at": "…",
+  "run_id": "run_9Tb4",
+  "interaction": {
+    "id": "int_8",
+    "type": "question",
+    "run_id": "run_9Tb4",
+    "item_id": "itm_3c",
+    "questions": [
+      {
+        "id": "q0",
+        "question": "shipping.ts 也要列入吗？",
+        "header": null,
+        "options": [
+          { "label": "列入", "description": null },
+          { "label": "不列入", "description": null }
+        ],
+        "multi_select": false,
+        "allow_custom": true,
+        "multiline": false,
+        "initial_text": null
+      }
+    ],
+    "expires_at": "…",
+    "status": "resolved",
+    "resolution": { "decision": "deny", "reason": "unattended" }
+  }
+}
+```
+
+用户看到（在 WebUI 中回放这个会话时）：
+
+```text
++-- Agent 提问 ---------------------------------- 已跳过 --+
+| shipping.ts 也要列入吗？                                  |
++----------------------------------------------------------+
 ```
 
 ### 16. 修改文件需要审批
@@ -836,7 +1015,11 @@ Claude 默认 `bypassPermissions`，只有 SDK 的 `canUseTool` 明确要求确�
     "run_id": "run_7Ka2",
     "item_id": "itm_06",
     "tool": { "name": "Edit", "kind": "file_edit" },
-    "input": { "file_path": "src/cart/CartTotal.tsx", … },
+    "input": {
+      "file_path": "src/cart/CartTotal.tsx",
+      "old_string": "const discount = coupon.amount",
+      "new_string": "const discount = coupon?.amount ?? 0"
+    },
     "title": "修改 src/cart/CartTotal.tsx",
     "reason": "项目规则要求编辑文件前确认",
     "expires_at": "2026-10-22T00:31:10.000Z",
@@ -863,7 +1046,17 @@ Claude 默认 `bypassPermissions`，只有 SDK 的 `canUseTool` 明确要求确�
   "interaction": {
     "id": "int_7",
     "type": "approval",
-    …,
+    "run_id": "run_7Ka2",
+    "item_id": "itm_06",
+    "tool": { "name": "Edit", "kind": "file_edit" },
+    "input": {
+      "file_path": "src/cart/CartTotal.tsx",
+      "old_string": "const discount = coupon.amount",
+      "new_string": "const discount = coupon?.amount ?? 0"
+    },
+    "title": "修改 src/cart/CartTotal.tsx",
+    "reason": "项目规则要求编辑文件前确认",
+    "expires_at": "2026-10-22T00:31:10.000Z",
     "status": "resolved",
     "resolution": { "decision": "allow", "reason": "answered" }
   }
@@ -881,7 +1074,11 @@ Claude 默认 `bypassPermissions`，只有 SDK 的 `canUseTool` 明确要求确�
     "type": "tool_call",
     "status": "completed",
     "tool": { "name": "Edit", "kind": "file_edit" },
-    "input": { … },
+    "input": {
+      "file_path": "src/cart/CartTotal.tsx",
+      "old_string": "const discount = coupon.amount",
+      "new_string": "const discount = coupon?.amount ?? 0"
+    },
     "output": { "content": [{ "type": "text", "text": "已修改 1 处" }], "is_error": false },
     "duration_ms": 40
   }
@@ -988,7 +1185,16 @@ POST /api/agent/v1/sandbox/sessions/ses_01JDX4/interactions/int_9
     "id": "run_7Ka2",
     "status": "in_progress",
     "model": "claude-sonnet-4-5",
-    "input": { … },
+    "input": {
+      "type": "user_message",
+      "message_id": "msg_3fA",
+      "source": "api",
+      "content": [
+        { "type": "image", "image_path": ".priva-attachments/file-3a91/image-1.png", "media_type": "image/png" },
+        { "type": "text", "text": "结账页报错了，帮我查一下并修复" },
+        { "type": "file", "file_path": ".priva-attachments/file-8f2c/checkout-error.log", "name": "checkout-error.log", "media_type": "text/plain", "size": 18342 }
+      ]
+    },
     "usage": { "input_tokens": 18240, "output_tokens": 1630, "cache_read_tokens": 12000, "cache_write_tokens": 0 },
     "context": { "used_tokens": 41200, "limit_tokens": 200000 },
     "created_at": "…",
@@ -1070,8 +1276,18 @@ SDK 驱动下 Claude 与 Pi 的正文增量都是逐 token 到达；完成事件
     "id": "run_7Ka2",
     "status": "completed",
     "stop_reason": "end_turn",
+    "output_text": "问题出在 CartTotal：未使用优惠券时 coupon 为 null，读取 amount 抛错。\n已改为空值默认 0，购物车测试 24/24 通过；e2e 已在后台运行。",
     "model": "claude-sonnet-4-5",
-    "input": { … },
+    "input": {
+      "type": "user_message",
+      "message_id": "msg_3fA",
+      "source": "api",
+      "content": [
+        { "type": "image", "image_path": ".priva-attachments/file-3a91/image-1.png", "media_type": "image/png" },
+        { "type": "text", "text": "结账页报错了，帮我查一下并修复" },
+        { "type": "file", "file_path": ".priva-attachments/file-8f2c/checkout-error.log", "name": "checkout-error.log", "media_type": "text/plain", "size": 18342 }
+      ]
+    },
     "usage": {
       "input_tokens": 52310,
       "output_tokens": 4120,
@@ -1097,8 +1313,13 @@ SDK 驱动下 Claude 与 Pi 的正文增量都是逐 token 到达；完成事件
     "id": "run_8Lm",
     "status": "in_progress",
     "model": "claude-sonnet-4-5",
-    "input": { "type": "user_message", "message_id": "msg_5Qe", "source": "api", "content": [ … ] },
-    "created_at": "…",
+    "input": {
+      "type": "user_message",
+      "message_id": "msg_5Qe",
+      "source": "api",
+      "content": [{ "type": "text", "text": "再生成一张修复后结账页的示意图" }]
+    },
+    "created_at": "2026-10-22T00:20:41.300Z",
     "started_at": "2026-10-22T00:20:51.330Z"
   }
 }
@@ -1148,7 +1369,7 @@ SDK 驱动下 Claude 与 Pi 的正文增量都是逐 token 到达；完成事件
     "type": "tool_call",
     "status": "completed",
     "tool": { "name": "mcp__agentWorkshop__image_gen", "kind": "image", "server": "agentWorkshop" },
-    "input": { … },
+    "input": { "prompt": "修复后的结账页示意图，展示优惠券为空时的总价", "size": "1536x1024" },
     "output": {
       "content": [
         { "type": "image", "image_path": ".images/checkout-fixed.png", "media_type": "image/png" },
@@ -1204,7 +1425,23 @@ run 结束、会话空闲、后台任务结束是三件独立的事。`active_ta
   "seq": 37,
   "type": "run.completed",
   "created_at": "…",
-  "run": { "id": "run_8Lm", "status": "completed", "stop_reason": "end_turn", … }
+  "run": {
+    "id": "run_8Lm",
+    "status": "completed",
+    "stop_reason": "end_turn",
+    "model": "claude-sonnet-4-5",
+    "input": {
+      "type": "user_message",
+      "message_id": "msg_5Qe",
+      "source": "api",
+      "content": [{ "type": "text", "text": "再生成一张修复后结账页的示意图" }]
+    },
+    "usage": { "input_tokens": 21400, "output_tokens": 860, "cache_read_tokens": 18000, "cache_write_tokens": 0, "cost_usd": 0.07 },
+    "duration_ms": 28680,
+    "created_at": "2026-10-22T00:20:41.300Z",
+    "started_at": "2026-10-22T00:20:51.330Z",
+    "completed_at": "2026-10-22T00:21:20.000Z"
+  }
 }
 ```
 
@@ -1330,7 +1567,7 @@ Claude 的数据来自 SDK 中带 `parent_tool_use_id` 的消息与 `task_*` 系
     "type": "tool_call",
     "status": "completed",
     "tool": { "name": "Grep", "kind": "search" },
-    "input": { … },
+    "input": { "pattern": "orderTotal|calcTotal", "path": "src" },
     "output": {
       "content": [{ "type": "text", "text": "src/cart/CartTotal.tsx:42\nsrc/api/order.ts:88" }],
       "is_error": false
@@ -1365,7 +1602,12 @@ Claude 的数据来自 SDK 中带 `parent_tool_use_id` 的消息与 `task_*` 系
     "thread_id": "thr_2",
     "status": "completed",
     "stop_reason": "end_turn",
-    "input": { … },
+    "model": "claude-haiku-4-5",
+    "input": {
+      "type": "agent_task",
+      "item_id": "itm_03",
+      "prompt": "找出所有计算订单总价的位置，列出文件和行号"
+    },
     "usage": { "input_tokens": 8200, "output_tokens": 920, "cache_read_tokens": 0, "cache_write_tokens": 0 },
     "duration_ms": 6400,
     "created_at": "…",
@@ -1388,7 +1630,7 @@ Claude 的数据来自 SDK 中带 `parent_tool_use_id` 的消息与 `task_*` 系
     "agent": { "name": "Explore", "description": "查找结账金额计算代码" },
     "thread_id": "thr_2",
     "mode": "foreground",
-    "input": { … },
+    "input": { "prompt": "找出所有计算订单总价的位置，列出文件和行号" },
     "output": { "content": [{ "type": "text", "text": "共 2 处：CartTotal.tsx:42、order.ts:88" }], "is_error": false },
     "usage": { "input_tokens": 8200, "output_tokens": 920 },
     "duration_ms": 6400
@@ -1693,10 +1935,24 @@ PATCH /api/agent/v1/sandbox/sessions/ses_01JDX4
 ```http
 202 Accepted
 
-{ "session": { "id": "ses_01JDX4", … }, "settings_change": { "id": "chg_01", "status": "pending" } }
+{
+  "session": {
+    "id": "ses_01JDX4",
+    "harness": "claude",
+    "workdir": "projects/shop-web",
+    "title": "结账页报错排查",
+    "settings": { "model": "default:claude-opus-4-1", "effort": "high", "context_window": 200000 },
+    "status": { "state": "running", "active_tasks": 0 },
+    "driver": "sdk",
+    "last_event_seq": 70,
+    "created_at": "2026-10-22T00:20:00.000Z",
+    "updated_at": "2026-10-22T00:26:00.000Z"
+  },
+  "settings_change": { "id": "chg_01", "status": "pending" }
+}
 ```
 
-随后发出 `session.settings_changed`（`"source": "api"`，`"change_id": "chg_01"`）；失败则发出 `session.error`
+`session.settings` 在变更生效前保持原值。随后发出 `session.settings_changed`（`"source": "api"`，`"change_id": "chg_01"`）；失败则发出 `session.error`
 （`"code": "settings_change_failed"`，`"change_id": "chg_01"`）。
 
 用户看到：
@@ -1803,7 +2059,13 @@ PATCH /api/agent/v1/sandbox/sessions/ses_01JDX4
     "id": "run_B7e",
     "status": "failed",
     "stop_reason": "error",
-    "input": { … },
+    "model": "claude-opus-4-1",
+    "input": {
+      "type": "user_message",
+      "message_id": "msg_7Hw",
+      "source": "api",
+      "content": [{ "type": "text", "text": "把结账页的按钮样式也统一一下" }]
+    },
     "error": { "code": "upstream_overloaded", "message": "重试 5 次后仍失败" },
     "usage": { "input_tokens": 3100, "output_tokens": 0, "cache_read_tokens": 0, "cache_write_tokens": 0 },
     "duration_ms": 61000,
@@ -1836,7 +2098,13 @@ PATCH /api/agent/v1/sandbox/sessions/ses_01JDX4
     "status": "interrupted",
     "stop_reason": "interrupted",
     "interrupted_by": { "message_id": "msg_9Tz" },
-    "input": { … },
+    "model": "claude-opus-4-1",
+    "input": {
+      "type": "user_message",
+      "message_id": "msg_8Kd",
+      "source": "api",
+      "content": [{ "type": "text", "text": "再试一次：把结账页的按钮样式统一一下" }]
+    },
     "usage": { "input_tokens": 9100, "output_tokens": 210, "cache_read_tokens": 0, "cache_write_tokens": 0 },
     "duration_ms": 5200,
     "created_at": "…",
@@ -2021,19 +2289,55 @@ GET /api/agent/v1/sandbox/sessions/ses_01JDX4
   "id": "ses_01JDX4",
   "harness": "claude",
   "workdir": "projects/shop-web",
+  "run_mode": "agent",
   "title": "结账页报错排查",
   "settings": { "model": "default:claude-sonnet-4-5", "effort": "high", "context_window": 200000 },
-  "status": { "state": "requires_action", "interaction_ids": ["int_7"], "active_tasks": 1 },
+  "status": { "state": "requires_action", "interaction_ids": ["int_7"], "active_tasks": 0 },
   "driver": "sdk",
-  "active_run": { "id": "run_7Ka2", "status": "in_progress", … },
+  "active_run": {
+    "id": "run_7Ka2",
+    "status": "in_progress",
+    "model": "claude-sonnet-4-5",
+    "input": {
+      "type": "user_message",
+      "message_id": "msg_3fA",
+      "source": "api",
+      "content": [
+        { "type": "image", "image_path": ".priva-attachments/file-3a91/image-1.png", "media_type": "image/png" },
+        { "type": "text", "text": "结账页报错了，帮我查一下并修复" },
+        { "type": "file", "file_path": ".priva-attachments/file-8f2c/checkout-error.log", "name": "checkout-error.log", "media_type": "text/plain", "size": 18342 }
+      ]
+    },
+    "created_at": "2026-10-22T00:20:03.050Z",
+    "started_at": "2026-10-22T00:20:03.110Z"
+  },
   "queued_runs": [],
-  "interactions": [{ "id": "int_7", "type": "approval", "item_id": "itm_06", "status": "pending", … }],
-  "tasks": [{ "id": "task_9", "kind": "shell", "status": "running", … }],
+  "interactions": [
+    {
+      "id": "int_7",
+      "type": "approval",
+      "run_id": "run_7Ka2",
+      "item_id": "itm_06",
+      "tool": { "name": "Edit", "kind": "file_edit" },
+      "input": {
+        "file_path": "src/cart/CartTotal.tsx",
+        "old_string": "const discount = coupon.amount",
+        "new_string": "const discount = coupon?.amount ?? 0"
+      },
+      "title": "修改 src/cart/CartTotal.tsx",
+      "reason": "项目规则要求编辑文件前确认",
+      "expires_at": "2026-10-22T00:31:10.000Z",
+      "status": "pending"
+    }
+  ],
+  "tasks": [],
   "last_event_seq": 22,
-  "created_at": "…",
-  "updated_at": "…"
+  "created_at": "2026-10-22T00:20:00.000Z",
+  "updated_at": "2026-10-22T00:20:40.000Z"
 }
 ```
+
+快照对应 seq 22 的时刻：审批 `int_7` 等待处理，e2e 后台任务（seq 28）尚未启动。
 
 ```http
 GET /api/agent/v1/sandbox/sessions/ses_01JDX4/runs?thread=all&order=desc&limit=20
@@ -2045,22 +2349,104 @@ GET /api/agent/v1/sandbox/sessions/ses_01JDX4/runs?thread=all&order=desc&limit=2
       "id": "run_7Ka2",
       "status": "in_progress",
       "model": "claude-sonnet-4-5",
-      "input": { "type": "user_message", "message_id": "msg_3fA", "source": "api", "content": [ … ] },
+      "input": {
+        "type": "user_message",
+        "message_id": "msg_3fA",
+        "source": "api",
+        "content": [
+          { "type": "image", "image_path": ".priva-attachments/file-3a91/image-1.png", "media_type": "image/png" },
+          { "type": "text", "text": "结账页报错了，帮我查一下并修复" },
+          { "type": "file", "file_path": ".priva-attachments/file-8f2c/checkout-error.log", "name": "checkout-error.log", "media_type": "text/plain", "size": 18342 }
+        ]
+      },
+      "created_at": "2026-10-22T00:20:03.050Z",
+      "started_at": "2026-10-22T00:20:03.110Z",
       "items": [
-        { "id": "itm_01", "type": "reasoning", "status": "completed", … },
-        { "id": "itm_02", "type": "tool_call", "status": "failed", … },
-        { "id": "itm_03", "type": "subagent", "status": "completed", "thread_id": "thr_2", … },
-        { "id": "itm_06", "type": "tool_call", "status": "pending", … }
-      ],
-      …
+        {
+          "id": "itm_01",
+          "type": "reasoning",
+          "status": "completed",
+          "text": "先看日志里的堆栈，错误来自 CartTotal 计算优惠券……",
+          "duration_ms": 2140
+        },
+        {
+          "id": "itm_02",
+          "type": "tool_call",
+          "status": "failed",
+          "tool": { "name": "Bash", "kind": "command" },
+          "input": { "command": "npm test -- cart", "description": "运行购物车相关测试" },
+          "output": {
+            "content": [{ "type": "text", "text": "FAIL src/cart/total.test.ts\n  ✕ applies empty coupon (12 ms)\nTests: 1 failed, 23 passed, 24 total" }],
+            "is_error": true
+          },
+          "duration_ms": 8312
+        },
+        {
+          "id": "itm_03",
+          "type": "subagent",
+          "status": "completed",
+          "agent": { "name": "Explore", "description": "查找结账金额计算代码" },
+          "thread_id": "thr_2",
+          "mode": "foreground",
+          "input": { "prompt": "找出所有计算订单总价的位置，列出文件和行号" },
+          "output": { "content": [{ "type": "text", "text": "共 2 处：CartTotal.tsx:42、order.ts:88" }], "is_error": false },
+          "usage": { "input_tokens": 8200, "output_tokens": 920 },
+          "duration_ms": 6400
+        },
+        {
+          "id": "itm_05",
+          "type": "tool_call",
+          "status": "completed",
+          "tool": { "name": "AskUserQuestion", "kind": "question" },
+          "input": {
+            "questions": [{
+              "question": "这次修复的范围？",
+              "options": [{ "label": "只修复问题" }, { "label": "顺便重构 CartTotal", "description": "改动更大，需要补测试" }],
+              "multiSelect": false
+            }]
+          },
+          "output": { "content": [{ "type": "text", "text": "这次修复的范围？只修复问题" }], "is_error": false },
+          "duration_ms": 9200
+        },
+        {
+          "id": "itm_06",
+          "type": "tool_call",
+          "status": "pending",
+          "tool": { "name": "Edit", "kind": "file_edit" },
+          "input": {
+            "file_path": "src/cart/CartTotal.tsx",
+            "old_string": "const discount = coupon.amount",
+            "new_string": "const discount = coupon?.amount ?? 0"
+          }
+        }
+      ]
     },
     {
       "id": "run_9Xb",
       "thread_id": "thr_2",
       "status": "completed",
-      "input": { "type": "agent_task", "item_id": "itm_03", … },
-      "items": [{ "id": "itm_04", "type": "tool_call", … }],
-      …
+      "stop_reason": "end_turn",
+      "model": "claude-haiku-4-5",
+      "input": { "type": "agent_task", "item_id": "itm_03", "prompt": "找出所有计算订单总价的位置，列出文件和行号" },
+      "usage": { "input_tokens": 8200, "output_tokens": 920, "cache_read_tokens": 0, "cache_write_tokens": 0 },
+      "duration_ms": 6400,
+      "created_at": "2026-10-22T00:20:05.950Z",
+      "started_at": "2026-10-22T00:20:05.950Z",
+      "completed_at": "2026-10-22T00:20:12.350Z",
+      "items": [
+        {
+          "id": "itm_04",
+          "type": "tool_call",
+          "status": "completed",
+          "tool": { "name": "Grep", "kind": "search" },
+          "input": { "pattern": "orderTotal|calcTotal", "path": "src" },
+          "output": {
+            "content": [{ "type": "text", "text": "src/cart/CartTotal.tsx:42\nsrc/api/order.ts:88" }],
+            "is_error": false
+          },
+          "duration_ms": 310
+        }
+      ]
     }
   ],
   "next_cursor": null

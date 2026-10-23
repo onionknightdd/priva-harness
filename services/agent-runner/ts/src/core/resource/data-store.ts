@@ -4,7 +4,7 @@ import type { ModelTokenUsage, RunFailureCode, TokenUsage } from '../event/agent
 // immutable audit_event row; run/tool records additionally project into the
 // typed fact tables so aggregation never has to parse JSON.
 
-export const RUN_SOURCES = ['web', 'subagent-test', 'channel', 'scheduled'] as const
+export const RUN_SOURCES = ['web', 'api', 'subagent-test', 'channel', 'scheduled'] as const
 export type RunSource = (typeof RUN_SOURCES)[number]
 
 export const RUN_OUTCOMES = ['running', 'completed', 'failed', 'aborted'] as const
