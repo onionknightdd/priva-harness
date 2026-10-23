@@ -763,6 +763,8 @@ export const en = {
       unsupportedHarness: "Sessions are available for Claude and Pi",
       pin: "Pin",
       unpin: "Unpin",
+      pinnedSection: "Pinned",
+      unpinnedSection: "Unpinned",
       tag: "Tag",
       tagTitle: "Edit tags",
       tagDescription: "Up to 3 tags.",

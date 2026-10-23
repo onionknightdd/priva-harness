@@ -761,6 +761,8 @@ export const zhCN = {
       unsupportedHarness: "会话列表仅支持 Claude 和 Pi",
       pin: "置顶",
       unpin: "取消置顶",
+      pinnedSection: "置顶",
+      unpinnedSection: "未置顶",
       tag: "Tag",
       tagTitle: "编辑标签",
       tagDescription: "最多 3 个标签。",

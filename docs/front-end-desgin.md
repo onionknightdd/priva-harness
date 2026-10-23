@@ -1249,6 +1249,52 @@ Sidebar
     session-mid
 ```
 
+2026-10-24：侧栏会话行尾按 `Tag / Pin / 更多` 排列，复用现有 20px 图标按钮样式；
+标题为三个按钮预留宽度。已置顶的 Pin 填充并常显，未置顶时跟随行悬停或焦点显示，
+不再在标题左侧重复显示置顶图标。侧栏更多菜单仅保留归档和删除，聊天页头更多菜单
+仍保留 Pin。点击 Pin 不打开会话，状态与持久化沿用 `useSessionList.setPinned`。
+
+每个项目使用 `@animate-ui/react/primitives/pinned-list` 的独立布局组，
+`PinnedListItem asChild + customTrigger` 组合现有 `SidebarMenuSubItem`，保持 `ul / li`
+结构与按钮、标签弹层、菜单的基础实现。沿用库的弹簧（stiffness 320、damping 25、
+mass 0.8），置顶或取消置顶时整行移动，其他行同步让位；移动中可反向切换。
+侧栏实际滚动容器通过业务层 `motion.create(SidebarContent)` 启用 `layoutScroll`。
+取消置顶后移出当前前 5 条时，`AnimatePresence popLayout` 保留旧行，下移一行并以
+180ms / 共享 `EASE_OUT` 淡出，结束后卸载；退出行立即 inert 并从辅助技术隐藏。
+仍可见的行保留原按钮焦点；聚焦行移出分页时，焦点接续到同项目同位置的替代行 Pin。
+减少动态效果时立即重排、退出，不执行位移或缩放。
+
+同一项目当前筛选结果里存在置顶会话时，显示「置顶 / 未置顶」两个分区标题；
+没有置顶会话时恢复无分区标题的列表。标题使用 `text-xs`、正常字重和
+`text-muted-foreground/60` 三级文本色，与会话文字左侧对齐。标题与首条会话、
+置顶末条与未置顶标题之间均为 8px。两个分区仍合计默认显示前 5 条，标题不计入
+分页；即使当前可见会话全部置顶，也保留「未置顶」标题及原有「更多」入口。
+标题和会话是同一 `ul / AnimatePresence` 中的同级稳定节点，跨分区移动不重挂载
+会话。首次置顶时标题淡入，取消最后一个置顶后标题淡出；减少动态效果时立即切换。
+
+```text
+Project
+  置顶                       (tertiary, 12px)
+     | 8px
+  Session A     [Tag][Pin][More]
+     | 8px
+  未置顶                     (tertiary, 12px)
+     | 8px
+  Session B     [Tag][Pin][More]
+  More
+```
+
+```text
+[Session title......] [Tag] [Pin] [More]
+                              |
+                              v
+                 setPinned -> same-project sort
+                    |                   |
+              still visible         outside first 5
+              spring + make room    slide/fade -> unmount
+                                    focus -> replacement Pin
+```
+
 2026-09-11：工作目录选择器与新建文件夹弹窗使用共享 `shadow-modal` token，
 由 2px / 8px 的轻柔边缘阴影和 16px / 48px 的扩散阴影组成；浅色透明度为
 6% / 14%，深色为 20% / 36%，突出嵌套弹窗层次。保留原有细边框和共享弹窗动效。
@@ -3039,6 +3085,16 @@ Workspace 电脑连接与视图生命周期回归（仓库根目录）：
 ```sh
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/sidebar/content/session-projects.test.ts
 ```
+
+在开发服务器打开 `/tests/features/sidebar/content/session-pin-browser.html`，点击
+**Run session pin checks**，验证 `Tag / Pin / 更多` 顺序与 20px 尺寸、置顶与取消置顶
+的中间帧、快速反向切换、跨分页的下移淡出与节点清理、两种菜单的 Pin 范围、滚动
+偏移、长标题、焦点接续，以及有无置顶时的分区标题与 8px 间距。追加
+`?zh&dark&reduced-motion&mobile=390` 检查中文深色、
+减少动态效果与独立 390px iframe。点击 **Focus a pin for keyboard check** 后使用
+真实 Space / Enter，应切换一次并保留焦点，Selected sessions 保持 0。
+测试通过真实 Session context 与排序逻辑，所有 API 请求均由页面内存 fixture 拦截，
+不读取或修改真实会话。
 
 外部 MCP 工具名称解析、内置工具分流、流式输入、输出与错误、复制及中英文展示回归，
 包含 Computer 工具统一图标、动作标题、参数细化、安装预览与未知工具展示，

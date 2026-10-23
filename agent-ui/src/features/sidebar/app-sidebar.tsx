@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import gsap from "gsap"
+import { motion } from "motion/react"
 
 import type { AppView } from "@/lib/app-view"
 import type { SessionInfo } from "@/lib/api/sandbox-sessions"
@@ -21,6 +22,8 @@ import { NavUser } from "./footer/nav-user"
 import { HarnessSwitcher } from "./header/harness-switcher"
 import { SidebarModeTabs } from "./header/sidebar-mode-tabs"
 import { sidebarData } from "./sidebar-data"
+
+const ScrollableSidebarContent = motion.create(SidebarContent)
 
 export function AppSidebar({
   activeView,
@@ -77,7 +80,7 @@ export function AppSidebar({
         <HarnessSwitcher />
         <SidebarModeTabs />
       </SidebarHeader>
-      <SidebarContent>
+      <ScrollableSidebarContent layoutScroll>
         <NavMenu
           items={sidebarData.menu}
           activeView={activeView}
@@ -92,7 +95,7 @@ export function AppSidebar({
             if (isMobile) setOpenMobile(false)
           }}
         />
-      </SidebarContent>
+      </ScrollableSidebarContent>
       <SidebarFooter className="relative z-20 bg-sidebar">
         <div
           ref={footerFadeRef}

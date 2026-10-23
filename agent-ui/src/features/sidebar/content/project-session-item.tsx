@@ -3,8 +3,9 @@
 import { useHarness } from "../header/harness-context"
 import { useBackgroundTasks, taskIsActive } from "@/features/agent-message/background-task-store"
 import * as React from "react"
+import { PinnedListItem, PinnedListTrigger } from "@animate-ui/react/primitives/pinned-list"
 import { MoreHorizontalIcon, PinIcon, TagIcon } from "lucide-react"
-import { motion, useReducedMotion } from "motion/react"
+import { motion, useIsPresent, useReducedMotionConfig } from "motion/react"
 import { useTranslation } from "react-i18next"
 
 import { StatusDot } from "@/components/kibo-ui/status"
@@ -29,6 +30,7 @@ import { sessionDisplayTitle, type KnownSessionTag } from "./session-projects"
 import { SessionTagPopover, sessionTagTriggerClassName } from "./session-tag-popover"
 import { TooltipHint } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
+import { EASE_OUT } from "@/lib/ease"
 
 const renameTransition = {
   type: "spring" as const,
@@ -68,6 +70,7 @@ function SessionLiveStatus({
 // row carries a tag popover, a menu and several tooltips, so only rows whose
 // session or active flag changed should render.
 export const ProjectSessionItem = React.memo(function ProjectSessionItem({
+  ref,
   session,
   isMobile,
   untitled,
@@ -77,6 +80,7 @@ export const ProjectSessionItem = React.memo(function ProjectSessionItem({
   knownTags,
   isActive = false,
 }: {
+  ref?: React.Ref<HTMLLIElement>
   session: SessionInfo
   isMobile: boolean
   untitled: string
@@ -87,13 +91,15 @@ export const ProjectSessionItem = React.memo(function ProjectSessionItem({
   isActive?: boolean
 }) {
   const { t } = useTranslation()
-  const shouldReduceMotion = Boolean(useReducedMotion())
+  const shouldReduceMotion = Boolean(useReducedMotionConfig())
+  const isPresent = useIsPresent()
   const title = sessionDisplayTitle(session, untitled)
   const [editing, setEditing] = React.useState(false)
   const [draft, setDraft] = React.useState(title)
   const inputRef = React.useRef<HTMLInputElement>(null)
   const skipBlurCommitRef = React.useRef(false)
   const tagged = session.tags.length > 0
+  const pinLabel = t(session.pinned ? "sidebar.projects.unpin" : "sidebar.projects.pin")
   // The tag popover and the "more" menu are Base UI roots with a dozen fibers
   // each; a long session list pays for them on every row. Mount them once the
   // pointer or keyboard focus reaches the row, which precedes any click on
@@ -133,136 +139,177 @@ export const ProjectSessionItem = React.memo(function ProjectSessionItem({
     void onRename(session, nextTitle)
   }
 
-  return (
-    <SidebarMenuSubItem onPointerEnter={arm} onFocusCapture={arm}>
-      {editing ? (
-        <motion.div
-          initial={
-            shouldReduceMotion ? false : { opacity: 0, scaleX: 0.96 }
-          }
-          animate={{ opacity: 1, scaleX: 1 }}
-          transition={shouldReduceMotion ? { duration: 0 } : renameTransition}
+  const pinAction = (
+    <div className={session.pinned ? undefined : sessionHoverRevealClassName}>
+      <TooltipHint content={pinLabel}>
+        <PinnedListTrigger
+          type="button"
+          className={rowHoverActionButtonClassName}
+          aria-label={pinLabel}
+          aria-pressed={session.pinned}
+          whileTap={undefined}
+          style={shouldReduceMotion ? { scale: 1 } : undefined}
+          onPointerDown={(event) => event.stopPropagation()}
         >
-          <SidebarInput
-            ref={inputRef}
-            value={draft}
-            aria-label={t("sidebar.projects.renameSession")}
-            className="h-7 border-0 bg-[color-mix(in_oklch,var(--sidebar-accent),black_6%)] px-2 shadow-none focus-visible:border-0 focus-visible:ring-0 dark:bg-[color-mix(in_oklch,var(--sidebar-accent),black_12%)]"
-            onChange={(event) => setDraft(event.target.value)}
-            onClick={(event) => event.stopPropagation()}
-            onPointerDown={(event) => event.stopPropagation()}
-            onBlur={() => {
-              if (skipBlurCommitRef.current) {
-                skipBlurCommitRef.current = false
-                return
-              }
+          <PinIcon className={cn("size-3.5", session.pinned && "fill-current")} aria-hidden="true" />
+        </PinnedListTrigger>
+      </TooltipHint>
+    </div>
+  )
 
-              stopEditing(true)
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault()
-                stopEditing(true)
-              }
-              if (event.key === "Escape") {
-                event.preventDefault()
-                stopEditing(false)
-              }
-            }}
-          />
-        </motion.div>
-      ) : (
-        <TooltipHint content={title}>
-          <SidebarMenuSubButton
-            render={<button type="button" />}
-            className="w-full pr-12 text-left"
-            isActive={isActive}
-            onClick={() => onSelect(session)}
-            onDoubleClick={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              skipBlurCommitRef.current = false
-              setDraft(title)
-              setEditing(true)
-            }}
+  // Rows stay in one list. Ordinary layout lets reduced motion skip projection
+  // completely, including the first frame of a shared-layout animation.
+  return (
+    <PinnedListItem
+      asChild
+      customTrigger
+      id={session.sessionId}
+      layoutId={undefined}
+      layout={!shouldReduceMotion}
+      data-slot="sidebar-menu-sub-item"
+      initial={false}
+      animate={{ opacity: 1, transform: "translateY(0%)" }}
+      exit={{
+        opacity: 0,
+        transform: shouldReduceMotion ? "translateY(0%)" : "translateY(100%)",
+        transition: { duration: shouldReduceMotion ? 0 : 0.18, ease: EASE_OUT },
+      }}
+    >
+      <SidebarMenuSubItem
+        ref={ref}
+        className="rounded-md bg-sidebar"
+        data-session-id={session.sessionId}
+        data-exiting={!isPresent || undefined}
+        inert={!isPresent}
+        aria-hidden={!isPresent || undefined}
+        onPointerEnter={arm}
+        onFocusCapture={arm}
+      >
+        {editing ? (
+          <motion.div
+            initial={
+              shouldReduceMotion ? false : { opacity: 0, scaleX: 0.96 }
+            }
+            animate={{ opacity: 1, scaleX: 1 }}
+            transition={shouldReduceMotion ? { duration: 0 } : renameTransition}
           >
-            <SessionLiveStatus
-              sessionId={session.sessionId}
-              runningLabel={t("sidebar.projects.sessionRunning")}
-              warmLabel={t("sidebar.projects.sessionWarm")}
-            />
-            {session.pinned ? (
-              <PinIcon
-                className="size-3.5 shrink-0 fill-current"
-                aria-hidden="true"
-              />
-            ) : null}
-            <span>{title}</span>
-          </SidebarMenuSubButton>
-        </TooltipHint>
-      )}
-      {editing ? null : !armed ? (
-        <div className="absolute top-1/2 right-1 z-[2] flex -translate-y-1/2 items-center gap-px">
-          <div className={tagged ? undefined : sessionHoverRevealClassName}>
-            <button
-              type="button"
-              className={sessionTagTriggerClassName(tagged)}
-              aria-label={t("sidebar.projects.tag")}
-              aria-pressed={tagged}
-            >
-              <TagIcon className={cn("size-3.5", tagged && "fill-current")} aria-hidden="true" />
-            </button>
-          </div>
-          <div className={sessionHoverRevealClassName}>
-            <button
-              type="button"
-              className={rowHoverActionButtonClassName}
-              aria-label={t("common.more")}
-            >
-              <MoreHorizontalIcon className="size-3.5" aria-hidden="true" />
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="absolute top-1/2 right-1 z-[2] flex -translate-y-1/2 items-center gap-px">
-          <div className={tagged ? undefined : sessionHoverRevealClassName}>
-            <SessionTagPopover
-              session={session}
-              knownTags={knownTags}
-              isMobile={isMobile}
-              reduceMotion={shouldReduceMotion}
-              tagged={tagged}
-              onSave={onSaveTags}
-            />
-          </div>
-          <div className={sessionHoverRevealClassName}>
-            <DropdownMenu>
-              {/* No press scale here: Base UI opens the menu on pointerdown and
-                  anchors to this button, so shrinking it would drag the popup
-                  along and back (the "jitter" on open). */}
-              <DropdownMenuTrigger
-                render={
-                  <button
-                    type="button"
-                    className={rowHoverActionButtonClassName}
-                    aria-label={t("common.more")}
-                    onPointerDown={(event) => event.stopPropagation()}
-                  />
+            <SidebarInput
+              ref={inputRef}
+              value={draft}
+              aria-label={t("sidebar.projects.renameSession")}
+              className="h-7 border-0 bg-[color-mix(in_oklch,var(--sidebar-accent),black_6%)] px-2 shadow-none focus-visible:border-0 focus-visible:ring-0 dark:bg-[color-mix(in_oklch,var(--sidebar-accent),black_12%)]"
+              onChange={(event) => setDraft(event.target.value)}
+              onClick={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+              onBlur={() => {
+                if (skipBlurCommitRef.current) {
+                  skipBlurCommitRef.current = false
+                  return
                 }
+
+                stopEditing(true)
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault()
+                  stopEditing(true)
+                }
+                if (event.key === "Escape") {
+                  event.preventDefault()
+                  stopEditing(false)
+                }
+              }}
+            />
+          </motion.div>
+        ) : (
+          <TooltipHint content={title}>
+            <SidebarMenuSubButton
+              render={<button type="button" />}
+              className="w-full pr-[69px] text-left"
+              isActive={isActive}
+              onClick={() => onSelect(session)}
+              onDoubleClick={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                skipBlurCommitRef.current = false
+                setDraft(title)
+                setEditing(true)
+              }}
+            >
+              <SessionLiveStatus
+                sessionId={session.sessionId}
+                runningLabel={t("sidebar.projects.sessionRunning")}
+                warmLabel={t("sidebar.projects.sessionWarm")}
+              />
+              <span>{title}</span>
+            </SidebarMenuSubButton>
+          </TooltipHint>
+        )}
+        {editing ? null : !armed ? (
+          <div className="absolute top-1/2 right-1 z-[2] flex -translate-y-1/2 items-center gap-px">
+            <div className={tagged ? undefined : sessionHoverRevealClassName}>
+              <button
+                type="button"
+                className={sessionTagTriggerClassName(tagged)}
+                aria-label={t("sidebar.projects.tag")}
+                aria-pressed={tagged}
+              >
+                <TagIcon className={cn("size-3.5", tagged && "fill-current")} aria-hidden="true" />
+              </button>
+            </div>
+            {pinAction}
+            <div className={sessionHoverRevealClassName}>
+              <button
+                type="button"
+                className={rowHoverActionButtonClassName}
+                aria-label={t("common.more")}
               >
                 <MoreHorizontalIcon className="size-3.5" aria-hidden="true" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                className="w-fit"
-                side={isMobile ? "bottom" : "right"}
-                align={isMobile ? "end" : "start"}
-              >
-                <SessionMenuItems session={session} />
-              </DropdownMenuContent>
-            </DropdownMenu>
+              </button>
+            </div>
           </div>
-        </div>
-      )}
-    </SidebarMenuSubItem>
+        ) : (
+          <div className="absolute top-1/2 right-1 z-[2] flex -translate-y-1/2 items-center gap-px">
+            <div className={tagged ? undefined : sessionHoverRevealClassName}>
+              <SessionTagPopover
+                session={session}
+                knownTags={knownTags}
+                isMobile={isMobile}
+                reduceMotion={shouldReduceMotion}
+                tagged={tagged}
+                onSave={onSaveTags}
+              />
+            </div>
+            {pinAction}
+            <div className={sessionHoverRevealClassName}>
+              <DropdownMenu>
+                {/* No press scale here: Base UI opens the menu on pointerdown and
+                    anchors to this button, so shrinking it would drag the popup
+                    along and back (the "jitter" on open). */}
+                <DropdownMenuTrigger
+                  render={
+                    <button
+                      type="button"
+                      className={rowHoverActionButtonClassName}
+                      aria-label={t("common.more")}
+                      onPointerDown={(event) => event.stopPropagation()}
+                    />
+                  }
+                >
+                  <MoreHorizontalIcon className="size-3.5" aria-hidden="true" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  className="w-fit"
+                  side={isMobile ? "bottom" : "right"}
+                  align={isMobile ? "end" : "start"}
+                >
+                  <SessionMenuItems session={session} showPin={false} />
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+        )}
+      </SidebarMenuSubItem>
+    </PinnedListItem>
   )
 })

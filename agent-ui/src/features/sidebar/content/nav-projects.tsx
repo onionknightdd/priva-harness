@@ -1,9 +1,10 @@
 "use client"
 
 import * as React from "react"
+import { PinnedList } from "@animate-ui/react/primitives/pinned-list"
 import claudeIcon from "@lobehub/icons-static-svg/icons/claude-color.svg"
 import { ChevronRightIcon, FolderIcon, MoreHorizontalIcon, PlusIcon } from "lucide-react"
-import { motion, useReducedMotion, type Transition } from "motion/react"
+import { AnimatePresence, LayoutGroup, motion, useReducedMotion, type Transition } from "motion/react"
 import { useTranslation } from "react-i18next"
 import { DirectoryPickerDialog } from "@/features/project-directory/directory-picker-dialog"
 
@@ -25,6 +26,7 @@ import {
 import { useActiveSession, useSessionList } from "@/features/chat-session"
 import { useHarness } from "@/features/sidebar/header/harness-context"
 import type { SessionInfo } from "@/lib/api/sandbox-sessions"
+import { EASE_OUT, SPRING_LAYOUT } from "@/lib/ease"
 import { collapsePanel } from "@/lib/surfaces"
 
 import { ProjectHeader } from "./project-header"
@@ -39,6 +41,7 @@ import {
 } from "./session-projects"
 
 const SESSION_PAGE_SIZE = 5
+const SessionSectionHeading = motion.create(SidebarMenuSubItem)
 
 const emptyStateTransition: Transition = {
   type: "spring",
@@ -78,6 +81,7 @@ function ProjectMenuItem({
   onLoadMore,
   onRename,
   onSaveTags,
+  onSetPinned,
   onSelect,
   onCreateSession,
   knownTags,
@@ -96,6 +100,7 @@ function ProjectMenuItem({
   onLoadMore: (cwd: string) => Promise<void>
   onRename: (session: SessionInfo, title: string) => Promise<void>
   onSaveTags: (sessionId: string, tags: string[]) => Promise<void>
+  onSetPinned: (sessionId: string, pinned: boolean) => Promise<void>
   onSelect: (session: SessionInfo) => void
   onCreateSession: (cwd: string) => void
   knownTags: KnownSessionTag[]
@@ -103,6 +108,20 @@ function ProjectMenuItem({
 }) {
   const { t } = useTranslation()
   const [visibleCount, setVisibleCount] = React.useState(SESSION_PAGE_SIZE)
+  const pinLayoutId = React.useId()
+  const listRef = React.useRef<HTMLUListElement>(null)
+  const pinFocusRef = React.useRef<{ sessionId: string; index: number } | null>(null)
+  const togglePinned = React.useCallback((sessionId: string) => {
+    const session = sessions.find((item) => item.sessionId === sessionId)
+    if (!session) return
+
+    const focused = document.activeElement
+    const focusedRow = focused?.closest<HTMLElement>("[data-session-id]")
+    pinFocusRef.current = focusedRow?.dataset.sessionId === sessionId && listRef.current?.contains(focused)
+      ? { sessionId, index: Array.from(listRef.current.querySelectorAll('[data-session-id]:not([data-exiting="true"])')).indexOf(focusedRow) }
+      : null
+    void onSetPinned(sessionId, !session.pinned)
+  }, [onSetPinned, sessions])
 
   React.useEffect(() => {
     if (!open) {
@@ -113,6 +132,64 @@ function ProjectMenuItem({
   const shownCount = paginate ? visibleCount : sessions.length
   const visibleSessions = sessions.slice(0, shownCount)
   const canShowMore = paginate && (sessions.length > shownCount || hasMore)
+  const hasPinned = sessions.some((session) => session.pinned)
+
+  React.useLayoutEffect(() => {
+    const pending = pinFocusRef.current
+    if (!pending) return
+    pinFocusRef.current = null
+    if (visibleSessions.some((session) => session.sessionId === pending.sessionId)) return
+
+    // The old row becomes inert while exiting. Keep keyboard navigation in
+    // this project when unpinning moves the focused session beyond the page.
+    const next = visibleSessions[Math.min(pending.index, visibleSessions.length - 1)]
+    const nextRow = Array.from(listRef.current?.querySelectorAll<HTMLElement>("[data-session-id]") ?? [])
+      .find((row) => row.dataset.sessionId === next?.sessionId)
+    nextRow?.querySelector<HTMLButtonElement>('[data-slot="pinned-list-trigger"]')?.focus({ preventScroll: true })
+  }, [visibleSessions])
+
+  const sectionHeading = (section: "pinned" | "unpinned") => (
+    <SessionSectionHeading
+      key={`section:${section}`}
+      data-session-section={section}
+      className={section === "pinned" ? "px-2 pb-1" : "px-2 pt-1 pb-1"}
+      layout={!reduceMotion}
+      initial={{ opacity: reduceMotion ? 1 : 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={reduceMotion ? { duration: 0 } : { duration: 0.18, ease: EASE_OUT, layout: SPRING_LAYOUT }}
+    >
+      <h4 data-session-section-title className="text-xs leading-4 font-normal text-muted-foreground/60">
+        {t(section === "pinned" ? "sidebar.projects.pinnedSection" : "sidebar.projects.unpinnedSection")}
+      </h4>
+    </SessionSectionHeading>
+  )
+
+  // Keep sections and rows as siblings so pinning preserves each row's DOM,
+  // focus, and layout animation while it crosses a section heading.
+  const sessionItems: React.ReactNode[] = []
+  let unpinnedHeadingAdded = false
+  if (hasPinned) sessionItems.push(sectionHeading("pinned"))
+  for (const session of visibleSessions) {
+    if (hasPinned && !session.pinned && !unpinnedHeadingAdded) {
+      sessionItems.push(sectionHeading("unpinned"))
+      unpinnedHeadingAdded = true
+    }
+    sessionItems.push(
+      <ProjectSessionItem
+        key={session.sessionId}
+        session={session}
+        isMobile={isMobile}
+        untitled={untitled}
+        onRename={onRename}
+        onSaveTags={onSaveTags}
+        onSelect={onSelect}
+        knownTags={knownTags}
+        isActive={session.sessionId === activeSessionId}
+      />
+    )
+  }
+  if (hasPinned && !unpinnedHeadingAdded) sessionItems.push(sectionHeading("unpinned"))
 
   return (
     <Collapsible
@@ -154,45 +231,39 @@ function ProjectMenuItem({
         </div>
       </div>
       <CollapsibleContent className={collapsePanel}>
-        <SidebarMenuSub className="ml-3.5 mr-0 pr-0">
-          {visibleSessions.map((session) => (
-            <ProjectSessionItem
-              key={session.sessionId}
-              session={session}
-              isMobile={isMobile}
-              untitled={untitled}
-              onRename={onRename}
-              onSaveTags={onSaveTags}
-              onSelect={onSelect}
-              knownTags={knownTags}
-              isActive={session.sessionId === activeSessionId}
-            />
-          ))}
-          {sessions.length === 0 && (
-            <SidebarMenuSubItem>
-              <span className="flex h-7 items-center px-2 text-sm text-sidebar-foreground/60">
-                {t("sidebar.projects.noSessions")}
-              </span>
-            </SidebarMenuSubItem>
-          )}
-          {canShowMore && (
-            <SidebarMenuSubItem>
-              <button
-                type="button"
-                className="flex h-7 w-full items-center px-2 text-sm text-sidebar-foreground/50 transition-colors hover:text-sidebar-foreground"
-                onClick={() => {
-                  const nextCount = shownCount + SESSION_PAGE_SIZE
-                  if (nextCount > sessions.length && hasMore) {
-                    void onLoadMore(cwd).catch(() => undefined)
-                  }
-                  setVisibleCount(nextCount)
-                }}
-              >
-                {t("sidebar.projects.moreSessions")}
-              </button>
-            </SidebarMenuSubItem>
-          )}
-        </SidebarMenuSub>
+        <LayoutGroup id={pinLayoutId}>
+          <PinnedList onPinnedChange={togglePinned}>
+            <SidebarMenuSub ref={listRef} className="relative ml-3.5 mr-0 pr-0">
+              <AnimatePresence initial={false} mode="popLayout">
+                {sessionItems}
+              </AnimatePresence>
+              {sessions.length === 0 && (
+                <SidebarMenuSubItem>
+                  <span className="flex h-7 items-center px-2 text-sm text-sidebar-foreground/60">
+                    {t("sidebar.projects.noSessions")}
+                  </span>
+                </SidebarMenuSubItem>
+              )}
+              {canShowMore && (
+                <SidebarMenuSubItem>
+                  <button
+                    type="button"
+                    className="flex h-7 w-full items-center px-2 text-sm text-sidebar-foreground/50 transition-colors hover:text-sidebar-foreground"
+                    onClick={() => {
+                      const nextCount = shownCount + SESSION_PAGE_SIZE
+                      if (nextCount > sessions.length && hasMore) {
+                        void onLoadMore(cwd).catch(() => undefined)
+                      }
+                      setVisibleCount(nextCount)
+                    }}
+                  >
+                    {t("sidebar.projects.moreSessions")}
+                  </button>
+                </SidebarMenuSubItem>
+              )}
+            </SidebarMenuSub>
+          </PinnedList>
+        </LayoutGroup>
       </CollapsibleContent>
     </Collapsible>
   )
@@ -250,6 +321,7 @@ export function NavProjects({
     refresh,
     loadMore,
     setTags,
+    setPinned,
     rename,
   } = useSessionList()
   const { highlightedSessionId } = useActiveSession()
@@ -393,6 +465,7 @@ export function NavProjects({
         onLoadMore={loadMore}
         onRename={renameSession}
         onSaveTags={setTags}
+        onSetPinned={setPinned}
         onSelect={onSelectSession}
         onCreateSession={onCreateSession}
         knownTags={knownTags}
