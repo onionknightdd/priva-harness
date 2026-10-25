@@ -89,6 +89,17 @@ infrastructure, or the terminal WebSocket route.
 Add exact backend commands here when additional test tooling is introduced;
 add frontend commands to `docs/front-end-desgin.md`.
 
+The standalone Claude SDK / bubblewrap PoC lives in
+`experiments/claude-sdk-bwrap/` and does not use the Agent Runner. From that
+directory run `npm ci`, `npm run check`, and `npm test` (Linux, non-root, with
+bubblewrap installed). Its README documents the isolated Debian Docker build
+and run commands for hosts without Linux user namespaces.
+Its directory and mount overhead benchmark is `npm run bench:mounts`, run
+inside the standalone Debian image at `/opt/poc` as documented in its README.
+Its concurrent SDK benchmark is `npm run bench:concurrency -- 10` (also `50`
+and `100`), run in a dedicated, resource-limited cgroup v2 container as
+documented in the PoC README. Run each level in a fresh container.
+
 ## Engineering Principles
 
 - Read the relevant code, configuration, documentation, and applicable
