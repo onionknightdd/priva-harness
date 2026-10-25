@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useSidebar } from "@/components/ui/sidebar"
 import { useWorkspaceTab } from "../workspace-files-context"
+import { useActiveSession } from "@/features/chat-session/chat-session-context"
 
 const FileBrowserPage = React.lazy(async () => {
   const module = await import("@/features/file-browser")
@@ -17,6 +18,7 @@ export function WorkspaceFileView({
 }) {
   const { t } = useTranslation()
   const { activeTabId } = useWorkspaceTab()
+  const { runCwd } = useActiveSession()
   const { isMobile, open, openMobile } = useSidebar()
   const active = activeTabId === "files" && (isMobile ? openMobile : open)
   return (
@@ -30,6 +32,7 @@ export function WorkspaceFileView({
         active={active}
         className="h-full p-0"
         compact
+        initialDirectory={runCwd || undefined}
         onMinimumWidthChange={onMinimumWidthChange}
       />
     </React.Suspense>

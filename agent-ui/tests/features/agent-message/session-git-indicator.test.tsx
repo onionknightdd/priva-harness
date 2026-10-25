@@ -37,6 +37,7 @@ const { zhCN } = await import("../../../src/i18n/locales/zh-CN.ts")
 await i18n.use(initReactI18next).init({ lng: "en", resources: { en: { translation: en }, "zh-CN": { translation: zhCN } } })
 const { TooltipProvider } = await import("../../../src/components/ui/tooltip.tsx")
 const { SessionGitIndicator } = await import("../../../src/features/agent-message/components/session-git-indicator.tsx")
+const { dispatchGitUpdated, GIT_UPDATED_EVENT } = await import("../../../src/lib/api/git-repository.ts")
 
 const latest = () => requests.at(-1)!
 const status = (cwd: string, branch: string | null, commit: string | null = "a1b2c3d"): GitStatus => ({ cwd, root: cwd, branch, commit })
@@ -144,6 +145,53 @@ test("hidden views stop querying and becoming visible refreshes Git status", asy
     assert.equal(requests.length, beforeDisabled)
   } finally {
     Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" })
+    await view.close()
+  }
+})
+
+test("Git actions refresh a nested project's branch without a notification feedback loop", async () => {
+  const view = await mount({ cwd: "/workspace/repo/nested" })
+  try {
+    await respond(latest(), { ...status("/workspace/repo/nested", "main"), root: "/workspace/repo" })
+    const beforeUnrelated = requests.length
+    await act(async () => dispatchGitUpdated({ cwd: "/another", root: "/another" }))
+    assert.equal(requests.length, beforeUnrelated)
+    await act(async () => dispatchGitUpdated({ cwd: "/workspace/repo", root: "/workspace/repo" }))
+    assert.equal(requests.length, beforeUnrelated + 1)
+    await respond(latest(), { ...status("/workspace/repo/nested", "feature/from-git"), root: "/workspace/repo" })
+    assert.equal(view.host.textContent, "feature/from-git")
+    assert.equal(requests.length, beforeUnrelated + 1)
+  } finally { await view.close() }
+})
+
+test("Agent lifecycle transitions notify Git views once and never from status responses or retries", async () => {
+  const view = await mount({ cwd: "/workspace/repo/nested" })
+  const notifications: unknown[] = []
+  const updated = (event: Event) => { notifications.push((event as CustomEvent).detail) }
+  window.addEventListener(GIT_UPDATED_EVENT, updated)
+  try {
+    await respond(latest(), { ...status("/workspace/repo/nested", "main"), root: "/workspace/repo" })
+    const initialCount = requests.length
+    await view.update({ isStreaming: true })
+    assert.equal(requests.length, initialCount + 1)
+    assert.deepEqual(notifications, [{ cwd: "/workspace/repo/nested", root: "/workspace/repo" }])
+    await respond(latest(), status("/workspace/repo/nested", "main"))
+    assert.equal(notifications.length, 1)
+    await view.update({ isStreaming: false })
+    assert.equal(requests.length, initialCount + 2)
+    assert.equal(notifications.length, 2)
+    await respond(latest(), { detail: "Temporary Git error" }, 500)
+    await act(async () => view.host.querySelector<HTMLButtonElement>('[aria-label="Retry Git status"]')!.click())
+    assert.equal(notifications.length, 2)
+    await respond(latest(), status("/workspace/repo/nested", "recovered"))
+    await view.update({ sessionId: "another-session" })
+    assert.equal(notifications.length, 3)
+    await view.update({ enabled: false })
+    assert.equal(notifications.length, 3)
+    await view.update({ enabled: true })
+    assert.equal(notifications.length, 4)
+  } finally {
+    window.removeEventListener(GIT_UPDATED_EVENT, updated)
     await view.close()
   }
 })

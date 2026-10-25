@@ -2625,6 +2625,77 @@ Context Usage               ×
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/compact-lifecycle.test.ts agent-ui/tests/features/agent-message/compact-session-stream.test.ts agent-ui/tests/features/agent-message/slash-command-envelope.test.ts agent-ui/tests/features/agent-message/snapshot-messages.test.ts agent-ui/tests/features/agent-message/compact-session-marker.test.tsx
 ```
 
+### 文件 / Git 双视图
+
+2026-10-24：按确认的双视图方案，Agent Workspace 与独立文件浏览器共用
+`FileBrowserPage`，在地址栏创建文件夹图标左侧提供「文件 / Git」Tab 切换。
+普通目录不显示；进入仓库子目录后仍可切换。长路径折叠中间层级，窄容器优先显示
+当前目录，其余层级可从省略菜单访问；Tab 和文件操作图标保持可见。
+退出仓库或目录不再是 Git 仓库时返回文件视图。Workspace 首次进入或
+切换会话时定位到当前 `runCwd`；独立浏览器跟随当前目录。Git 统计与操作覆盖整个
+仓库，不按 Agent 来源过滤。
+
+```text
+Agent Workspace / 文件浏览器
+                |
+                v
++-------------------------+-----------------------------------+
+| / workspace / repo / src   [文件 | Git] [新建目录] [上传]    |
++-------------------------+-----------------------------------+
+| 文件树 / Git 操作       | 文件预览 / Git Diff                |
+| 目录 本地 -> 远端 [操作] | [差异 | 源码]  [行内 | 并排]       |
+| [变更 | 历史]           | HEAD → Index / Index → Working tree|
+| 冲突 / 已暂存 / 未暂存   | 或 parent → commit                 |
+| 未跟踪                  |                                   |
++-------------------------+-----------------------------------+
+窄容器 < 600px：… / 当前目录 [文件 | Git] [新建目录] [上传]
+              Git 列表 -> 选择文件/提交 -> 预览 -> 返回 Git
+Git 列表头：目录名 [main v] -> [origin/main v] [刷新 Git]
+远程下拉： [搜索远程分支...] [Fetch]
+           origin/main
+           origin/feature
+```
+
+两种模式保持挂载，保留文件树展开、搜索、已打开文件和 Git 列表状态。Git
+窄布局依据容器宽度切换，保持同一组面板和选中项；宽布局支持拖动分隔线。文件树右侧
+保留 16px 状态槽，文件使用 12px（`text-xs`）状态字母，文字和颜色同时表达状态，目录用 6px
+圆点表示后代有改动。颜色复用
+`status-*` token。地址栏切换使用紧凑 BeUI Tabs：24px 高、12px 文字，底槽、按钮和
+选中块的圆角沿用共享 BeUI Tabs，与其他分段 Tab 一致。
+底槽和按钮使用块级 flex，按钮采用单倍行高，消除两层行内基线留白；文字、选中块和
+底槽均与工具栏垂直居中。选中块填满 20px 按钮高度，由底槽提供上下各 2px 内边距。
+选中色使用 [BeUI 官网默认主题](https://beui.dev/docs/theme)：选中项为 `#0285f7` 蓝底、
+`#ffffff` 白字；浅色底槽按用户指定复用 `tabs-background`（`rgb(229 229 229)`），深色为 `#1c1c1c`，未选中文字为
+`oklch(50% 0 0)` / `oklch(62% 0 0)`。这些主题变量只在地址栏 Tab 内设置，避免继承
+项目黑白灰的 `primary`。Tab 通过 `aria-selected` 表达状态，`aria-controls` 关联文件和 Git 区域。
+点击当前 Tab 保持当前视图。视图、变更/历史和 Diff/源码使用 BeUI Tabs，共享 Motion 弹簧，
+键盘切换和减少动态效果时立即切换；Git 文件行沿用 26px 高度。
+
+左侧分支菜单仅列出已有本地分支，支持搜索和切换，不提供创建分支入口；右侧菜单仅
+列出远程分支，支持搜索和选择当前本地分支的上游。选择远程分支只更新 tracking 配置，
+不切换本地分支或修改工作区；无远程分支时提示 Fetch，未创建首个提交或 detached HEAD
+时禁止设置上游。暂存/取消暂存按
+文件或分组操作，部分暂存文件分别出现在两个组。界面移除底部提交说明输入框和
+「提交已暂存」按钮，变更列表占满剩余高度；提交及 merge/rebase/cherry-pick 的完成操作在终端进行。
+2026-10-25：按用户要求移除界面的 Pull、Push 和首次推送的「发布分支」入口及弹窗；
+目录标题使用 14px（`text-sm`）和 `font-semibold` 加粗，旁边同一行显示「本地分支 → 上游分支」，箭头使用 Lucide `move-right`，刷新 Git
+靠右；Fetch 放在远程分支下拉菜单的搜索框右侧，加载时显示转圈并禁用重复操作。
+左右两侧均可下拉；窄栏内名称截断，悬停可查看完整路径或分支名；未设置上游时
+显示对应提示。API 与操作边界见 [Git 仓库接口](architecture/project-git-status.md)。
+
+读取在隐藏时暂停，焦点恢复、Agent 运行状态变化、手动刷新和 Git 操作完成时更新。
+写操作不会因切换视图而取消；旧目录响应不会覆盖新目录。文件操作后刷新 Git，Git
+写操作后刷新文件树和已打开的源码，聊天输入框的分支指示也同步更新。Diff 明确区分
+暂存前后和提交版本，二进制、内容过大、非仓库、空历史和读取失败分别显示。
+
+浏览器回归：打开 `/tests/features/git/git-workspace-browser.html`；使用 **Run Git workspace checks**
+检查共享页面交互，**Wide / Narrow** 检查容器布局。`?compact` 对应 Workspace，
+`?zh&dark&compact` 对应中文深色。该页面使用内存 API fixture，不操作真实仓库。
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/git/*.test.ts agent-ui/tests/features/git/*.test.tsx agent-ui/tests/features/file-browser/*.test.ts agent-ui/tests/features/file-browser/*.test.tsx agent-ui/tests/features/agent-message/session-git-indicator.test.tsx
+```
+
 ## Layout approval
 
 以下两条布局要求从 `AGENTS.md` 原样迁入，继续生效。

@@ -9,11 +9,13 @@ import type { DataRecorder } from '../../core/contract/data-recorder.js'
 import type { EffortLevel } from '../../core/contract/agent-provider.js'
 import type { ComputerConfig } from '../../computer-config.js'
 import type { GitStatusReader } from '../../core/contract/git-status-reader.js'
+import type { GitRepositoryService } from '../../core/contract/git-repository-service.js'
 import type { UsageReader } from '../../core/contract/usage-reader.js'
 import type { UserFileSystem } from '../../core/contract/user-file-system.js'
 import type { ResourceService } from '../../core/contract/resource-service.js'
 import { ResourceError } from '../../core/resource/resource-catalog.js'
 import { GitStatusError } from '../../core/resource/git-status.js'
+import { GitRepositoryError } from '../../core/resource/git-repository.js'
 import {
   ModelProfileError,
   type ModelProfileErrorKind,
@@ -35,6 +37,7 @@ import { computerRoutes } from '../websocket/computer-route.js'
 import { terminalWebsocketRoutes } from '../websocket/terminal-route.js'
 import { agentProfileRoutes } from './route/agent-profile.js'
 import { gitStatusRoutes } from './route/git-status.js'
+import { gitRepositoryRoutes } from './route/git-repository.js'
 import { modelProfileRoutes } from './route/model-profiles.js'
 import { sessionRoutes } from './route/sessions.js'
 import { slashCommandRoutes } from './route/slash-commands.js'
@@ -48,6 +51,7 @@ export interface BuildHttpServerOptions {
   readonly computer?: ComputerConfig
   readonly userFileSystem: UserFileSystem
   readonly gitStatusReader?: GitStatusReader
+  readonly gitRepositoryService?: GitRepositoryService
   readonly modelProfileService: ModelProfileService
   readonly piEffortLevels?: (modelId: string) => readonly EffortLevel[]
   readonly agentProfileService: AgentProfileService
@@ -68,7 +72,7 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
   })
 
   server.setErrorHandler((error, request, reply) => {
-    if (error instanceof GitStatusError) {
+    if (error instanceof GitStatusError || error instanceof GitRepositoryError) {
       if (error.statusCode >= 500) request.log.error({ err: error }, 'Git status request failed')
       void reply.code(error.statusCode).send({ detail: error.message })
       return
@@ -130,6 +134,9 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
   void server.register(userFileRoutes, { fileSystem: options.userFileSystem })
   if (options.gitStatusReader !== undefined) {
     void server.register(gitStatusRoutes, { reader: options.gitStatusReader })
+  }
+  if (options.gitRepositoryService !== undefined) {
+    void server.register(gitRepositoryRoutes, { service: options.gitRepositoryService })
   }
   const recorder = options.recorder
   void server.register(websocket)

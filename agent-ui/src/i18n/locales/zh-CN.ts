@@ -562,6 +562,8 @@ export const zhCN = {
     noResults: "未找到与“{{query}}”匹配的文件或文件夹",
     itemCount: "共 {{count}} 项",
     showTree: "展开文件树",
+    workspaceView: "工作区视图",
+    filesView: "文件",
     hideTree: "收起文件树",
     showPreview: "显示文件预览",
     hidePreview: "隐藏文件预览",

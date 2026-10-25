@@ -30,17 +30,26 @@ type VisibleBreadcrumbEntry =
   | { entries: FileBrowserBreadcrumbEntry[]; type: "collapsed" }
 
 function getVisibleBreadcrumbEntries(
-  path: FileBrowserBreadcrumbEntry[]
+  path: FileBrowserBreadcrumbEntry[],
+  condensed: boolean
 ): VisibleBreadcrumbEntry[] {
-  if (path.length <= 4) {
+  if (path.length <= (condensed ? 2 : 4)) {
     return path.map((entry) => ({ entry, type: "item" }))
   }
 
-  return [
-    { entry: path[0], type: "item" },
-    { entries: path.slice(1, -3), type: "collapsed" },
-    ...path.slice(-3).map((entry) => ({ entry, type: "item" }) as const),
-  ]
+  const visible = new Set(condensed
+    ? [path.length - 1]
+    : [0, path.length - 3, path.length - 2, path.length - 1])
+  const entries: VisibleBreadcrumbEntry[] = []
+  for (const [index, entry] of path.entries()) {
+    if (visible.has(index)) entries.push({ entry, type: "item" })
+    else {
+      const previous = entries.at(-1)
+      if (previous?.type === "collapsed") previous.entries.push(entry)
+      else entries.push({ entries: [entry], type: "collapsed" })
+    }
+  }
+  return entries
 }
 
 function CollapsedPathMenu({
@@ -106,7 +115,7 @@ function PathItem({
           size="xs"
           aria-current={current ? "location" : undefined}
           className={cn(
-            "max-w-12 min-w-0 rounded-r-none font-normal data-[current=true]:bg-muted data-[current=true]:text-foreground sm:max-w-36",
+            "max-w-12 min-w-0 shrink rounded-r-none font-normal data-[current=true]:bg-muted data-[current=true]:text-foreground sm:max-w-36",
             compact ? "px-0.5 text-xs" : "px-1.5 text-sm"
           )}
           data-current={current || undefined}
@@ -149,15 +158,17 @@ function PathItem({
 export function FilePathBreadcrumb({
   breadcrumb,
   compact = false,
+  condensed = false,
   model,
   onNavigate,
 }: {
   breadcrumb: FileBrowserBreadcrumbEntry[]
   compact?: boolean
+  condensed?: boolean
   model: FileBrowserModel
   onNavigate: (path: string, type: FileBrowserItem["type"]) => void
 }) {
-  const entries = getVisibleBreadcrumbEntries(breadcrumb)
+  const entries = getVisibleBreadcrumbEntries(breadcrumb, condensed)
   const currentPath = breadcrumb.at(-1)?.path
 
   return (
@@ -170,7 +181,7 @@ export function FilePathBreadcrumb({
       >
         {entries.map((entry, index) => (
           <React.Fragment
-            key={entry.type === "item" ? entry.entry.path : "collapsed"}
+            key={entry.type === "item" ? entry.entry.path : `collapsed:${entry.entries[0].path}`}
           >
             {index > 0 && (
               <BreadcrumbSeparator
@@ -181,7 +192,7 @@ export function FilePathBreadcrumb({
               />
             )}
             <BreadcrumbItem
-              className={cn("min-w-0 shrink-0", compact && "gap-0")}
+              className={cn("min-w-0", entry.type === "collapsed" ? "shrink-0" : "shrink", compact && "gap-0")}
             >
               {entry.type === "collapsed" ? (
                 <CollapsedPathMenu

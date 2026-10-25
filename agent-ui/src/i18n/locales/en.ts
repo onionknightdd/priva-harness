@@ -564,6 +564,8 @@ export const en = {
     noResults: "No files or folders match “{{query}}”",
     itemCount: "{{count}} items",
     showTree: "Show file tree",
+    workspaceView: "Workspace view",
+    filesView: "Files",
     hideTree: "Hide file tree",
     showPreview: "Show file preview",
     hidePreview: "Hide file preview",

@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Git workspace checks</title></head>
+<body>
+  <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:12px;font:12px system-ui">
+    <button id="run" type="button">Run Git workspace checks</button>
+    <button id="wide" type="button">Wide</button><button id="narrow" type="button">Narrow (390px)</button>
+    <label>Fixture <select id="scenario"><option value="normal">Repository</option><option value="conflict">Merge conflict</option><option value="nonrepo">No repository</option><option value="error">Read error</option></select></label>
+    <span>Isolated in-memory files and Git. Add ?compact, ?zh, ?dark, ?reduced-motion, or ?auto.</span>
+  </div>
+  <pre id="results" role="status" aria-label="Check results" style="margin:0 12px 12px;white-space:pre-wrap;font:12px system-ui">Ready</pre>
+  <div id="page" style="display:flex;height:min(760px,calc(100dvh - 80px));min-height:360px;width:1300px;max-width:100%;margin:0 auto"></div>
+  <script type="module" src="./git-workspace-browser.tsx"></script>
+</body></html>
