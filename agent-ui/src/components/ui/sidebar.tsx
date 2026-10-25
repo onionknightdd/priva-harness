@@ -508,12 +508,10 @@ function SidebarResizeHandle({
     scaleX: (value: number) => void
     scaleY: (value: number) => void
   } | null>(null)
-  const [displayedWidth, setDisplayedWidth] = React.useState(sidebarWidth)
   const [isDragging, setIsDragging] = React.useState(false)
 
   React.useEffect(() => {
     activeWidthRef.current = sidebarWidth
-    setDisplayedWidth(sidebarWidth)
   }, [sidebarWidth])
 
   React.useLayoutEffect(() => {
@@ -586,12 +584,18 @@ function SidebarResizeHandle({
         maxSidebarWidth,
         minSidebarWidth
       )
+      if (nextWidth === activeWidthRef.current) {
+        return
+      }
+
       const wrapper = handleRef.current?.closest(
         '[data-slot="sidebar-wrapper"]'
       ) as HTMLElement | null
 
       activeWidthRef.current = nextWidth
-      setDisplayedWidth(nextWidth)
+      // Transient width already lives in the DOM; keep its accessible value in
+      // sync without rendering the handle and tooltip on every pointer move.
+      handleRef.current?.setAttribute("aria-valuenow", String(nextWidth))
       wrapper?.style.setProperty("--sidebar-width", `${nextWidth}px`)
     },
     [maxSidebarWidth, minSidebarWidth]
@@ -688,7 +692,7 @@ function SidebarResizeHandle({
         aria-orientation="vertical"
         aria-valuemin={minSidebarWidth}
         aria-valuemax={maxSidebarWidth}
-        aria-valuenow={displayedWidth}
+        aria-valuenow={sidebarWidth}
         tabIndex={0}
         data-slot="sidebar-resize-handle"
         data-side={side}

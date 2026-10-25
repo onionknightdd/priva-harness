@@ -3005,6 +3005,47 @@ Shift+Tab、Esc、已有草稿、重复快照、断线重连和原生会话重�
 
 浏览器打开 `/tests/features/agent-message/render-ui-browser.html`，点击 **Stream next line**，确认半截程序先出现标题，写完后三张卡并排、图表在下一行。追加 `?dark` 看深色。把窗口收到 390px，三张卡仍在同一行里收缩。
 
+2026-10-24：生成回答中的柱状图、折线图和面积图通过
+`render-ui/viewport-chart-container.tsx` 提交受控尺寸。距聊天视口上下 400px 内
+仍连续接收尺寸；更远的图表只记录最新尺寸，接近视口或获得键盘焦点时同步。
+保留图表实例、固定高度、现有 320ms 动画和标签避让规则。离屏冻结期间裁剪
+旧尺寸的 SVG，避免它撑宽聊天滚动区域。图表模型、渲染函数与主题配置保持稳定；
+保留父组件的原有更新行为，避免改变数值标签避让缓存的重置时机。
+
+```text
+容器 resize -> 可见 / 临近视口 -> 提交尺寸 -> 原有图表与动画
+            -> 远离视口       -> 记录尺寸 -> 接近视口时同步
+```
+
+尺寸控制回归（仓库根目录）：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/chart-dimensions.test.tsx
+```
+
+浏览器打开 `/tests/features/agent-message/chart-resize-browser.html`，点击
+**Run chart resize checks**，验证两图同时可见时连续缩放、离屏暂停、无横向溢出、
+快速滚回后的尺寸同步、实例保持和中途反向切换。追加 `?dark` 验证深色。
+页面记录帧间隔和图表提交次数；使用隔离数据，不修改真实会话。
+追加 `?narrow` 可直接检查窄图的初始布局。真实会话还需复测 Workspace
+展开 / 折叠和分隔条往返拖动，分别记录开发版与生产构建的帧间隔。
+
+Workspace 拖动时，分隔条同步更新宽度 CSS 变量与 `aria-valuenow`，相同的整数
+宽度不重复写入；松手仍按原有规则提交偏好。密度桥只在是否超过 shell 宽度的
+60% 发生变化时发布状态，保留原有阈值、最大化与移动端规则。布局、图表标签、
+320ms 图表动画以及滚动跟随不变。
+
+```text
+拖动 -> 实时宽度 + 可访问读数 -> 松手提交
+     -> 是否超过 60% 改变    -> 更新密度状态
+```
+
+拖动、取消、键盘、宽度限制及密度阈值回归（仓库根目录）：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/workspace/workspace-resize.test.tsx agent-ui/tests/features/sidebar/header/harness-default-width.test.tsx
+```
+
 可视化开关与终端连接回归（仓库根目录）：
 
 ```sh

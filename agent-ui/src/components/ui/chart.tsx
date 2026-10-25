@@ -45,6 +45,7 @@ function ChartContainer({
   children,
   config,
   initialDimension = INITIAL_DIMENSION,
+  dimensions,
   ...props
 }: React.ComponentProps<"div"> & {
   config: ChartConfig
@@ -55,12 +56,23 @@ function ChartContainer({
     width: number
     height: number
   }
+  dimensions?: { width: number; height: number }
 }) {
   const uniqueId = React.useId()
   const chartId = `chart-${id ?? uniqueId.replace(/:/g, "")}`
+  const context = React.useMemo(() => ({ config }), [config])
+  const chart = (
+    <RechartsPrimitive.ResponsiveContainer
+      initialDimension={initialDimension}
+      width={dimensions?.width}
+      height={dimensions?.height}
+    >
+      {children}
+    </RechartsPrimitive.ResponsiveContainer>
+  )
 
   return (
-    <ChartContext.Provider value={{ config }}>
+    <ChartContext.Provider value={context}>
       <div
         data-slot="chart"
         data-chart={chartId}
@@ -71,17 +83,19 @@ function ChartContainer({
         {...props}
       >
         <ChartStyle id={chartId} config={config} />
-        <RechartsPrimitive.ResponsiveContainer
-          initialDimension={initialDimension}
-        >
-          {children}
-        </RechartsPrimitive.ResponsiveContainer>
+        {dimensions ? (
+          // Match ResponsiveContainer's shrinkable layout when its numeric
+          // dimensions skip the built-in size detector and wrapper elements.
+          <div className="size-full min-w-0">
+            <div className="size-0 overflow-visible">{chart}</div>
+          </div>
+        ) : chart}
       </div>
     </ChartContext.Provider>
   )
 }
 
-const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
+const ChartStyle = React.memo(({ id, config }: { id: string; config: ChartConfig }) => {
   const colorConfig = Object.entries(config).filter(
     ([, config]) => config.theme ?? config.color
   )
@@ -112,7 +126,7 @@ ${colorConfig
       }}
     />
   )
-}
+})
 
 const ChartTooltip = RechartsPrimitive.Tooltip
 
