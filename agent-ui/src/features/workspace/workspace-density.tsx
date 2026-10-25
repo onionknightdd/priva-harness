@@ -36,11 +36,9 @@ export function WorkspaceDensityBridge({
 }) {
   const rootRef = React.useRef<HTMLDivElement>(null)
   const { isMobile, open, sidebarWidth } = useSidebar()
-  const [liveWidth, setLiveWidth] = React.useState(sidebarWidth)
-
-  React.useLayoutEffect(() => {
-    setLiveWidth(sidebarWidth)
-  }, [sidebarWidth])
+  const [widthTakesMajority, setWidthTakesMajority] = React.useState(
+    () => sidebarWidth * 5 > shellWidth * 3
+  )
 
   React.useLayoutEffect(() => {
     if (!workspaceEnabled || isMobile) {
@@ -56,8 +54,15 @@ export function WorkspaceDensityBridge({
     }
 
     const gap = wrapper.querySelector('[data-slot="sidebar-gap"]')
+    let previousMajority: boolean | undefined
     const syncWidth = () => {
-      setLiveWidth(readLiveSidebarWidth(wrapper, sidebarWidth))
+      const width = readLiveSidebarWidth(wrapper, sidebarWidth)
+      const nextMajority = width * 5 > shellWidth * 3
+      // Consumers only need this boundary, not every intermediate pixel.
+      if (nextMajority !== previousMajority) {
+        previousMajority = nextMajority
+        setWidthTakesMajority(nextMajority)
+      }
     }
 
     syncWidth()
@@ -70,13 +75,13 @@ export function WorkspaceDensityBridge({
     }
 
     return () => observer.disconnect()
-  }, [isMobile, sidebarWidth, workspaceEnabled])
+  }, [isMobile, shellWidth, sidebarWidth, workspaceEnabled])
 
   const takesMajority =
     workspaceEnabled &&
     !isMobile &&
     shellWidth > 0 &&
-    (maximized || (open && liveWidth * 5 > shellWidth * 3))
+    (maximized || (open && widthTakesMajority))
 
   return (
     <WorkspaceDensityContext.Provider value={takesMajority}>

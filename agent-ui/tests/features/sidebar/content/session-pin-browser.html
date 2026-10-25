@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Session pin browser checks</title>
+    <style>
+      body { overflow: auto !important; padding: 24px; }
+      #fixtures { width: 280px; max-width: 100%; margin-block: 20px; }
+      #results { white-space: pre-wrap; max-width: 760px; }
+      #mobile-frame { display: block; height: 900px; max-width: 100%; border: 1px solid #888; }
+    </style>
+  </head>
+  <body>
+    <button id="run" type="button">Run session pin checks</button>
+    <button id="focus-pin" type="button">Focus a pin for keyboard check</button>
+    <pre id="results" role="status">Ready</pre>
+    <div id="fixtures"></div>
+    <p id="keyboard-hint">Keyboard check: focus a pin, then press Space and Enter. Each press should toggle once, preserve focus, and leave selected sessions at zero.</p>
+    <script type="module" src="./session-pin-browser.tsx"></script>
+  </body>
+</html>

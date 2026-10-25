@@ -1,7 +1,7 @@
 import * as React from "react"
 
 import type { PreviewFile } from "@/features/files"
-import { useUploadQueue } from "@/features/uploads"
+import { useUploadQueue } from "@/features/uploads/upload-queue-context"
 
 import {
   createDirectory,
@@ -42,6 +42,8 @@ export function useFileBrowser() {
     string | null
   >(null)
   const [openedFiles, setOpenedFiles] = React.useState<PreviewFile[]>([])
+  const openedFilesRef = React.useRef(openedFiles)
+  React.useLayoutEffect(() => { openedFilesRef.current = openedFiles }, [openedFiles])
   const [activeFileId, setActiveFileId] = React.useState<string | null>(null)
   const [loadingDirectories, setLoadingDirectories] = React.useState(
     () => new Set<string>()
@@ -53,6 +55,7 @@ export function useFileBrowser() {
   )
   const directoryGenerationRef = React.useRef(new Map<string, number>())
   const previewRequestsRef = React.useRef(new Map<string, Promise<void>>())
+  const navigationGenerationRef = React.useRef(0)
 
   const updateModel = React.useCallback(
     (updater: (currentModel: FileBrowserModel) => FileBrowserModel) => {
@@ -157,6 +160,7 @@ export function useFileBrowser() {
     activate = true
   ) => {
     if (activate) {
+      navigationGenerationRef.current += 1
       setSelectedItemPath(item.path)
       setActiveFileId(item.path)
     }
@@ -220,6 +224,7 @@ export function useFileBrowser() {
 
   const openPath = React.useCallback(
     async (path: string) => {
+      const navigation = ++navigationGenerationRef.current
       const parentPath = getFileBrowserParentPath(path)
       if (parentPath) {
         const workspaceRoot = workspaceRootRef.current ?? await loadDirectory()
@@ -232,6 +237,7 @@ export function useFileBrowser() {
         }
       }
 
+      if (navigationGenerationRef.current !== navigation) return
       return openFile({
         path,
         name: getFileBrowserPathName(path),
@@ -252,6 +258,7 @@ export function useFileBrowser() {
         return
       }
 
+      navigationGenerationRef.current += 1
       setSelectedItemPath(path)
       if (item.type === "file") {
         await openFile(item)
@@ -272,11 +279,14 @@ export function useFileBrowser() {
 
   const goToDirectory = React.useCallback(
     async (path: string) => {
+      const navigation = ++navigationGenerationRef.current
       try {
         const directory = await loadDirectory(path)
+        if (navigationGenerationRef.current !== navigation) return false
         updateModel((current) => revealFileBrowserDirectory(current, directory.path, directory.root))
         const ancestors = getFileBrowserBreadcrumb(directory.path, directory.root).slice(0, -1)
         await Promise.all(ancestors.map((entry) => loadDirectory(entry.path)))
+        if (navigationGenerationRef.current !== navigation) return false
         setSelectedItemPath(directory.path)
         return true
       } catch {
@@ -317,6 +327,25 @@ export function useFileBrowser() {
       loadedPaths.map((path) => loadDirectory(path, path, { force: true }))
     )
   }, [loadDirectory])
+
+  const refreshOpenedFiles = React.useCallback(async () => {
+    await Promise.all(openedFilesRef.current.map(async (file) => {
+      // A preview started before checkout may still be reading the old file.
+      // Let it finish, then read the current working tree without activating tabs.
+      await previewRequestsRef.current.get(file.path)
+      // A user can close this tab while its previous preview is still pending.
+      if (!openedFilesRef.current.some((current) => current.id === file.id)) return
+      await openFile({
+        path: file.path,
+        name: file.name,
+        type: "file",
+        size: null,
+        modifiedAt: null,
+        permissions: null,
+        parentPath: getFileBrowserParentPath(file.path),
+      }, false)
+    }))
+  }, [openFile])
 
   const makeDirectory = React.useCallback(
     async (directory: string, name: string) => {
@@ -388,6 +417,7 @@ export function useFileBrowser() {
   )
 
   const setActiveFile = React.useCallback((fileId: string) => {
+    navigationGenerationRef.current += 1
     setActiveFileId(fileId)
     setSelectedItemPath(fileId)
   }, [])
@@ -454,6 +484,7 @@ export function useFileBrowser() {
     openPath,
     refreshDirectory,
     refreshLoadedDirectories,
+    refreshOpenedFiles,
     rootPath,
     selectItem,
     selectedItem,

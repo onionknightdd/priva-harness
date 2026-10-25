@@ -19,7 +19,7 @@ import { useTheme, type Theme } from "@openuidev/react-ui/ThemeProvider"
 
 export { Renderer }
 import { useReducedMotion } from "motion/react"
-import type { ReactNode } from "react"
+import { useMemo, type ReactNode } from "react"
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, LabelList, Line, LineChart, XAxis, YAxis } from "recharts"
 import { z } from "zod/v4"
 
@@ -30,7 +30,6 @@ import {
   DonutChartPlot,
 } from "@/components/charts/donut-chart"
 import {
-  ChartContainer,
   ChartLegend,
   ChartLegendContent,
   ChartTooltip,
@@ -38,6 +37,7 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart"
 import { cn } from "@/lib/utils"
+import { ViewportChartContainer } from "./viewport-chart-container"
 
 const gapClass = {
   none: "gap-0",
@@ -399,6 +399,7 @@ function chartColors(theme: Theme, kind: "bar" | "line" | "area", count: number)
 function chartModel(labels: unknown, series: unknown, colors: readonly string[]) {
   const names = stringList(labels)
   const items = elements(series)
+  const values = items.map((item) => numberList(item.props.values))
   const config: ChartConfig = {}
   items.forEach((item, index) => {
     config[`s${index}`] = {
@@ -409,12 +410,13 @@ function chartModel(labels: unknown, series: unknown, colors: readonly string[])
   const rows = names.map((label, index) => {
     const row: Record<string, string | number> = { label }
     items.forEach((item, seriesIndex) => {
-      const value = numberList(item.props.values)[index]
+      const value = values[seriesIndex]?.[index]
       if (value !== undefined) row[`s${seriesIndex}`] = value
     })
     return row
   })
-  return { config, rows, count: items.length }
+  const gutter = endLabelGutter(rows, items.length)
+  return { config, rows, count: items.length, margin: { ...chartMargin, left: gutter, right: gutter } }
 }
 
 function ChartFrame({
@@ -439,27 +441,54 @@ function ChartFrame({
   const { theme } = useTheme()
   const streaming = useIsStreaming()
   const reduce = Boolean(useReducedMotion())
-  const seriesCount = elements(series).length
-  const model = chartModel(labels, series, chartColors(theme, kind, seriesCount))
+  const model = useMemo(() => chartModel(labels, series, chartColors(theme, kind, elements(series).length)),
+    [labels, series, theme, kind])
+  const animate = !streaming && !reduce
+  const chart = useMemo(() => children(model, animate), [children, model, animate])
   if (model.rows.length === 0 || model.count === 0) return null
   return (
     <div data-slot={slot} className="flex min-w-0 flex-col gap-1">
       {textOf(yLabel) !== "" ? (
         <p className="text-xs" style={axisStyle}>{textOf(yLabel)}</p>
       ) : null}
-      <ChartContainer
+      <ViewportChartContainer
         config={model.config}
         className={cn(
           "aspect-auto h-48 w-full [&_.recharts-cartesian-axis-tick-value]:![fill:var(--openui-text-neutral-secondary)]",
           className,
         )}
       >
-        {children(model, !streaming && !reduce)}
-      </ChartContainer>
+        {chart}
+      </ViewportChartContainer>
       {textOf(xLabel) !== "" ? (
         <p className="text-xs" style={axisStyle}>{textOf(xLabel)}</p>
       ) : null}
     </div>
+  )
+}
+
+function renderBarChart(model: ReturnType<typeof chartModel>, animate: boolean) {
+  return (
+    <BarChart
+      data={model.rows}
+      margin={model.margin}
+    >
+      <CartesianGrid stroke="var(--openui-border-default)" vertical={false} />
+      <XAxis dataKey="label" tick={axisTick} tickLine={false} axisLine={false} />
+      <ChartTooltip content={<ChartTooltipContent />} />
+      {Array.from({ length: model.count }, (_, index) => (
+        <Bar
+          key={index}
+          dataKey={`s${index}`}
+          fill={`var(--color-s${index})`}
+          radius={4}
+          isAnimationActive={animate}
+          animationDuration={320}
+        >
+          {chartValueLabel(`s${index}`)}
+        </Bar>
+      ))}
+    </BarChart>
   )
 }
 
@@ -481,31 +510,42 @@ const BarChartBlock = defineComponent({
       slot="render-ui-bar-chart"
       kind="bar"
     >
-      {(model, animate) => (
-        <BarChart
-          data={model.rows}
-          margin={{ ...chartMargin, left: endLabelGutter(model.rows, model.count), right: endLabelGutter(model.rows, model.count) }}
-        >
-          <CartesianGrid stroke="var(--openui-border-default)" vertical={false} />
-          <XAxis dataKey="label" tick={axisTick} tickLine={false} axisLine={false} />
-          <ChartTooltip content={<ChartTooltipContent />} />
-          {Array.from({ length: model.count }, (_, index) => (
-            <Bar
-              key={index}
-              dataKey={`s${index}`}
-              fill={`var(--color-s${index})`}
-              radius={4}
-              isAnimationActive={animate}
-              animationDuration={320}
-            >
-              {chartValueLabel(`s${index}`)}
-            </Bar>
-          ))}
-        </BarChart>
-      )}
+      {renderBarChart}
     </ChartFrame>
   ),
 })
+
+function renderLineChart(model: ReturnType<typeof chartModel>, animate: boolean) {
+  const occupied = new Map<string, LabelBox>()
+  return (
+    <LineChart
+      data={model.rows}
+      margin={model.margin}
+    >
+      <CartesianGrid stroke="var(--openui-border-default)" vertical={false} />
+      <XAxis dataKey="label" tick={axisTick} tickLine={false} axisLine={false} />
+      <ChartTooltip content={<ChartTooltipContent />} />
+      {Array.from({ length: model.count }, (_, index) => {
+        const seriesColor = `var(--color-s${index})`
+        return (
+          <Line
+            key={index}
+            type="monotone"
+            dataKey={`s${index}`}
+            stroke={seriesColor}
+            strokeWidth={2}
+            dot={{ r: 3, fill: seriesColor, stroke: seriesColor, strokeWidth: 0 }}
+            activeDot={{ r: 4, fill: seriesColor, stroke: seriesColor, strokeWidth: 0 }}
+            isAnimationActive={animate}
+            animationDuration={320}
+          >
+            {lineValueLabels(`s${index}`, occupied)}
+          </Line>
+        )
+      })}
+    </LineChart>
+  )
+}
 
 const LineChartBlock = defineComponent({
   name: "LineChart",
@@ -525,40 +565,38 @@ const LineChartBlock = defineComponent({
       slot="render-ui-line-chart"
       kind="line"
     >
-      {(model, animate) => {
-        const occupied = new Map<string, LabelBox>()
-        return (
-        <LineChart
-          data={model.rows}
-          margin={{ ...chartMargin, left: endLabelGutter(model.rows, model.count), right: endLabelGutter(model.rows, model.count) }}
-        >
-          <CartesianGrid stroke="var(--openui-border-default)" vertical={false} />
-          <XAxis dataKey="label" tick={axisTick} tickLine={false} axisLine={false} />
-          <ChartTooltip content={<ChartTooltipContent />} />
-          {Array.from({ length: model.count }, (_, index) => {
-            const seriesColor = `var(--color-s${index})`
-            return (
-              <Line
-                key={index}
-                type="monotone"
-                dataKey={`s${index}`}
-                stroke={seriesColor}
-                strokeWidth={2}
-                dot={{ r: 3, fill: seriesColor, stroke: seriesColor, strokeWidth: 0 }}
-                activeDot={{ r: 4, fill: seriesColor, stroke: seriesColor, strokeWidth: 0 }}
-                isAnimationActive={animate}
-                animationDuration={320}
-              >
-                {lineValueLabels(`s${index}`, occupied)}
-              </Line>
-            )
-          })}
-        </LineChart>
-        )
-      }}
+      {renderLineChart}
     </ChartFrame>
   ),
 })
+
+function renderAreaChart(model: ReturnType<typeof chartModel>, animate: boolean) {
+  return (
+    <AreaChart data={model.rows} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
+      <CartesianGrid stroke="var(--openui-border-default)" vertical={false} />
+      <XAxis dataKey="label" tick={axisTick} tickLine={false} axisLine={false} tickMargin={8} />
+      <YAxis tick={axisTick} tickLine={false} axisLine={false} tickMargin={8} tickCount={3} width="auto" />
+      <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="line" />} />
+      {Array.from({ length: model.count }, (_, index) => {
+        const seriesColor = `var(--color-s${index})`
+        return (
+          <Area
+            key={index}
+            type="natural"
+            dataKey={`s${index}`}
+            fill={seriesColor}
+            fillOpacity={0.4}
+            stroke={seriesColor}
+            stackId="a"
+            isAnimationActive={animate}
+            animationDuration={320}
+          />
+        )
+      })}
+      <ChartLegend content={<ChartLegendContent />} />
+    </AreaChart>
+  )
+}
 
 const AreaChartBlock = defineComponent({
   name: "AreaChart",
@@ -580,31 +618,7 @@ const AreaChartBlock = defineComponent({
       kind="area"
       className="h-56"
     >
-      {(model, animate) => (
-        <AreaChart data={model.rows} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
-          <CartesianGrid stroke="var(--openui-border-default)" vertical={false} />
-          <XAxis dataKey="label" tick={axisTick} tickLine={false} axisLine={false} tickMargin={8} />
-          <YAxis tick={axisTick} tickLine={false} axisLine={false} tickMargin={8} tickCount={3} width="auto" />
-          <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="line" />} />
-          {Array.from({ length: model.count }, (_, index) => {
-            const seriesColor = `var(--color-s${index})`
-            return (
-              <Area
-                key={index}
-                type="natural"
-                dataKey={`s${index}`}
-                fill={seriesColor}
-                fillOpacity={0.4}
-                stroke={seriesColor}
-                stackId="a"
-                isAnimationActive={animate}
-                animationDuration={320}
-              />
-            )
-          })}
-          <ChartLegend content={<ChartLegendContent />} />
-        </AreaChart>
-      )}
+      {renderAreaChart}
     </ChartFrame>
   ),
 })

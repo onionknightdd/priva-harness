@@ -39,6 +39,7 @@ import {
 import { FileTreeFolderIcon } from "./file-tree-folder-icon"
 import { FileTreeItemMenu } from "./file-tree-item-menu"
 import { FileTypeIcon } from "./file-type-icon"
+import { FileGitStatus } from "./file-git-status"
 import { TooltipHint } from "@/components/ui/tooltip"
 
 const FILE_TREE_INDENT = 20
@@ -229,6 +230,7 @@ const FileBrowserTreeRow = React.memo(function FileBrowserTreeRow({
             </TooltipHint>
           </span>
         )}
+        <FileGitStatus path={data.path} />
       </TreeItemLabel>
     </TreeItem>
   )

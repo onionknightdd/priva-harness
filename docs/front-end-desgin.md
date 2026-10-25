@@ -1249,6 +1249,52 @@ Sidebar
     session-mid
 ```
 
+2026-10-24：侧栏会话行尾按 `Tag / Pin / 更多` 排列，复用现有 20px 图标按钮样式；
+标题为三个按钮预留宽度。已置顶的 Pin 填充并常显，未置顶时跟随行悬停或焦点显示，
+不再在标题左侧重复显示置顶图标。侧栏更多菜单仅保留归档和删除，聊天页头更多菜单
+仍保留 Pin。点击 Pin 不打开会话，状态与持久化沿用 `useSessionList.setPinned`。
+
+每个项目使用 `@animate-ui/react/primitives/pinned-list` 的独立布局组，
+`PinnedListItem asChild + customTrigger` 组合现有 `SidebarMenuSubItem`，保持 `ul / li`
+结构与按钮、标签弹层、菜单的基础实现。沿用库的弹簧（stiffness 320、damping 25、
+mass 0.8），置顶或取消置顶时整行移动，其他行同步让位；移动中可反向切换。
+侧栏实际滚动容器通过业务层 `motion.create(SidebarContent)` 启用 `layoutScroll`。
+取消置顶后移出当前前 5 条时，`AnimatePresence popLayout` 保留旧行，下移一行并以
+180ms / 共享 `EASE_OUT` 淡出，结束后卸载；退出行立即 inert 并从辅助技术隐藏。
+仍可见的行保留原按钮焦点；聚焦行移出分页时，焦点接续到同项目同位置的替代行 Pin。
+减少动态效果时立即重排、退出，不执行位移或缩放。
+
+同一项目当前筛选结果里存在置顶会话时，显示「置顶 / 未置顶」两个分区标题；
+没有置顶会话时恢复无分区标题的列表。标题使用 `text-xs`、正常字重和
+`text-muted-foreground/60` 三级文本色，与会话文字左侧对齐。标题与首条会话、
+置顶末条与未置顶标题之间均为 8px。两个分区仍合计默认显示前 5 条，标题不计入
+分页；即使当前可见会话全部置顶，也保留「未置顶」标题及原有「更多」入口。
+标题和会话是同一 `ul / AnimatePresence` 中的同级稳定节点，跨分区移动不重挂载
+会话。首次置顶时标题淡入，取消最后一个置顶后标题淡出；减少动态效果时立即切换。
+
+```text
+Project
+  置顶                       (tertiary, 12px)
+     | 8px
+  Session A     [Tag][Pin][More]
+     | 8px
+  未置顶                     (tertiary, 12px)
+     | 8px
+  Session B     [Tag][Pin][More]
+  More
+```
+
+```text
+[Session title......] [Tag] [Pin] [More]
+                              |
+                              v
+                 setPinned -> same-project sort
+                    |                   |
+              still visible         outside first 5
+              spring + make room    slide/fade -> unmount
+                                    focus -> replacement Pin
+```
+
 2026-09-11：工作目录选择器与新建文件夹弹窗使用共享 `shadow-modal` token，
 由 2px / 8px 的轻柔边缘阴影和 16px / 48px 的扩散阴影组成；浅色透明度为
 6% / 14%，深色为 20% / 36%，突出嵌套弹窗层次。保留原有细边框和共享弹窗动效。
@@ -1618,6 +1664,48 @@ original Office bytes ----> SHA-256 file revision
                      file_annotation inline node
                                   |
                      Composer -> user message -> Agent
+```
+
+### 预览光标与表格悬浮外框
+
+2026-10-24：DOCX / PPTX 的 Agent 协助内容区，以及 XLSX / CSV 的表格视口，
+使用 `@animate-ui/react/primitives/cursor` 的局部 Cursor；依赖为
+`@animate-ui/react@2` 与 `motion@14`，入口为 `features/files/preview/preview-cursor.tsx`。
+光标使用带对比描边的主题色箭头，不显示跟随文字；直接跟随指针，仅以 100ms 透明度
+进入和退出，减少动态效果时立即显示。普通 DOCX / PPTX 预览、工具栏、公式输入框、
+询问浮层、按钮、链接、行列 resize handle 与滚动条继续使用原生指针；触摸设备不挂载。
+CursorContainer 放在非滚动视口中，卸载 Cursor 时由库恢复原生指针。
+
+DOCX / PPTX Agent 协助的悬浮框在同一页内复用 Motion 节点，以 120ms 平滑平移、伸缩，
+旋转在内层独立过渡，避免和布局变换相互覆盖。多框按页面与页内序号配对，跨页只淡入淡出。
+滚动、缩放、键盘操作和减少动态效果时立即对齐；点击锁定时切换至独立草稿框，
+立即贴合真实目标，保持输入、确认、编号和发送交互。
+
+XLSX / CSV 悬浮框采用 1px 淡主色描边、极浅高光和背景色隔离线；空单元格同样命中，
+合并单元格框住整个合并区域。已选范围沿用库的 SVG 几何与 2px 主色边框，
+在原生 SVG 内增加 1px 背景隔离线及约 4px 柔和外晕。宽高都达到 48px 时，
+只在真实边缘交点添加 6px 短角线，冻结分界和裁剪边缘不生成假角。
+询问输入打开后略微增强外晕。悬浮框复用同一 Motion 节点，以 120ms transform 平移和伸缩；
+鼠标点击改变已选范围时，原生描边、隔离线、外晕和短角线同步以 WAAPI transform 过渡，
+连续切换从当前显示位置接续。拖选、滚动、缩放、换表、键盘选取和减少动态效果时立即对齐；
+冻结分片拓扑变化时立即更新，以保持真实边缘。外晕强度以 120ms 透明度切换。
+同一目标的悬浮框与选中框合并显示；移至其他格时保留已选框并显示较淡的悬浮框。
+使用库的 `getCellAt`、`getCellViewportRect` 与
+`getViewportOffset` 定位，冻结窗格按行列分片裁剪，并支持 RTL。
+外框不接收指针事件，不调用 `setSelection`，不改变公式栏或选区元数据。
+拖选期间隐藏悬浮框，松开后恢复；选中后及询问浮层打开时仍可悬浮其他单元格，
+但不改变已选范围、公式栏或询问对象，浮层继续锚定已选目标。按键选取、滚动、缩放、
+换表、隐藏和卸载时清除，下一次指针移动重新定位。
+行号 / 列标继续使用原有选行列逻辑，不新增表头悬浮框。
+
+```text
+DOCX / PPTX Agent Assist --+-> PreviewCursor -> local Animate UI Cursor
+XLSX / CSV grid -----------+
+        |
+        +-> pointermove -> cell / merged range -> visible pane rectangles
+                                                |
+                                      pointer-events-none frame
+        +-> click / drag -> existing selection -> Ask Agent -> Composer
 ```
 
 ### Office 文件预览
@@ -2537,6 +2625,77 @@ Context Usage               ×
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/compact-lifecycle.test.ts agent-ui/tests/features/agent-message/compact-session-stream.test.ts agent-ui/tests/features/agent-message/slash-command-envelope.test.ts agent-ui/tests/features/agent-message/snapshot-messages.test.ts agent-ui/tests/features/agent-message/compact-session-marker.test.tsx
 ```
 
+### 文件 / Git 双视图
+
+2026-10-24：按确认的双视图方案，Agent Workspace 与独立文件浏览器共用
+`FileBrowserPage`，在地址栏创建文件夹图标左侧提供「文件 / Git」Tab 切换。
+普通目录不显示；进入仓库子目录后仍可切换。长路径折叠中间层级，窄容器优先显示
+当前目录，其余层级可从省略菜单访问；Tab 和文件操作图标保持可见。
+退出仓库或目录不再是 Git 仓库时返回文件视图。Workspace 首次进入或
+切换会话时定位到当前 `runCwd`；独立浏览器跟随当前目录。Git 统计与操作覆盖整个
+仓库，不按 Agent 来源过滤。
+
+```text
+Agent Workspace / 文件浏览器
+                |
+                v
++-------------------------+-----------------------------------+
+| / workspace / repo / src   [文件 | Git] [新建目录] [上传]    |
++-------------------------+-----------------------------------+
+| 文件树 / Git 操作       | 文件预览 / Git Diff                |
+| 目录 本地 -> 远端 [操作] | [差异 | 源码]  [行内 | 并排]       |
+| [变更 | 历史]           | HEAD → Index / Index → Working tree|
+| 冲突 / 已暂存 / 未暂存   | 或 parent → commit                 |
+| 未跟踪                  |                                   |
++-------------------------+-----------------------------------+
+窄容器 < 600px：… / 当前目录 [文件 | Git] [新建目录] [上传]
+              Git 列表 -> 选择文件/提交 -> 预览 -> 返回 Git
+Git 列表头：目录名 [main v] -> [origin/main v] [刷新 Git]
+远程下拉： [搜索远程分支...] [Fetch]
+           origin/main
+           origin/feature
+```
+
+两种模式保持挂载，保留文件树展开、搜索、已打开文件和 Git 列表状态。Git
+窄布局依据容器宽度切换，保持同一组面板和选中项；宽布局支持拖动分隔线。文件树右侧
+保留 16px 状态槽，文件使用 12px（`text-xs`）状态字母，文字和颜色同时表达状态，目录用 6px
+圆点表示后代有改动。颜色复用
+`status-*` token。地址栏切换使用紧凑 BeUI Tabs：24px 高、12px 文字，底槽、按钮和
+选中块的圆角沿用共享 BeUI Tabs，与其他分段 Tab 一致。
+底槽和按钮使用块级 flex，按钮采用单倍行高，消除两层行内基线留白；文字、选中块和
+底槽均与工具栏垂直居中。选中块填满 20px 按钮高度，由底槽提供上下各 2px 内边距。
+选中色使用 [BeUI 官网默认主题](https://beui.dev/docs/theme)：选中项为 `#0285f7` 蓝底、
+`#ffffff` 白字；浅色底槽按用户指定复用 `tabs-background`（`rgb(229 229 229)`），深色为 `#1c1c1c`，未选中文字为
+`oklch(50% 0 0)` / `oklch(62% 0 0)`。这些主题变量只在地址栏 Tab 内设置，避免继承
+项目黑白灰的 `primary`。Tab 通过 `aria-selected` 表达状态，`aria-controls` 关联文件和 Git 区域。
+点击当前 Tab 保持当前视图。视图、变更/历史和 Diff/源码使用 BeUI Tabs，共享 Motion 弹簧，
+键盘切换和减少动态效果时立即切换；Git 文件行沿用 26px 高度。
+
+左侧分支菜单仅列出已有本地分支，支持搜索和切换，不提供创建分支入口；右侧菜单仅
+列出远程分支，支持搜索和选择当前本地分支的上游。选择远程分支只更新 tracking 配置，
+不切换本地分支或修改工作区；无远程分支时提示 Fetch，未创建首个提交或 detached HEAD
+时禁止设置上游。暂存/取消暂存按
+文件或分组操作，部分暂存文件分别出现在两个组。界面移除底部提交说明输入框和
+「提交已暂存」按钮，变更列表占满剩余高度；提交及 merge/rebase/cherry-pick 的完成操作在终端进行。
+2026-10-25：按用户要求移除界面的 Pull、Push 和首次推送的「发布分支」入口及弹窗；
+目录标题使用 14px（`text-sm`）和 `font-semibold` 加粗，旁边同一行显示「本地分支 → 上游分支」，箭头使用 Lucide `move-right`，刷新 Git
+靠右；Fetch 放在远程分支下拉菜单的搜索框右侧，加载时显示转圈并禁用重复操作。
+左右两侧均可下拉；窄栏内名称截断，悬停可查看完整路径或分支名；未设置上游时
+显示对应提示。API 与操作边界见 [Git 仓库接口](architecture/project-git-status.md)。
+
+读取在隐藏时暂停，焦点恢复、Agent 运行状态变化、手动刷新和 Git 操作完成时更新。
+写操作不会因切换视图而取消；旧目录响应不会覆盖新目录。文件操作后刷新 Git，Git
+写操作后刷新文件树和已打开的源码，聊天输入框的分支指示也同步更新。Diff 明确区分
+暂存前后和提交版本，二进制、内容过大、非仓库、空历史和读取失败分别显示。
+
+浏览器回归：打开 `/tests/features/git/git-workspace-browser.html`；使用 **Run Git workspace checks**
+检查共享页面交互，**Wide / Narrow** 检查容器布局。`?compact` 对应 Workspace，
+`?zh&dark&compact` 对应中文深色。该页面使用内存 API fixture，不操作真实仓库。
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/git/*.test.ts agent-ui/tests/features/git/*.test.tsx agent-ui/tests/features/file-browser/*.test.ts agent-ui/tests/features/file-browser/*.test.tsx agent-ui/tests/features/agent-message/session-git-indicator.test.tsx
+```
+
 ## Layout approval
 
 以下两条布局要求从 `AGENTS.md` 原样迁入，继续生效。
@@ -2917,6 +3076,47 @@ Shift+Tab、Esc、已有草稿、重复快照、断线重连和原生会话重�
 
 浏览器打开 `/tests/features/agent-message/render-ui-browser.html`，点击 **Stream next line**，确认半截程序先出现标题，写完后三张卡并排、图表在下一行。追加 `?dark` 看深色。把窗口收到 390px，三张卡仍在同一行里收缩。
 
+2026-10-24：生成回答中的柱状图、折线图和面积图通过
+`render-ui/viewport-chart-container.tsx` 提交受控尺寸。距聊天视口上下 400px 内
+仍连续接收尺寸；更远的图表只记录最新尺寸，接近视口或获得键盘焦点时同步。
+保留图表实例、固定高度、现有 320ms 动画和标签避让规则。离屏冻结期间裁剪
+旧尺寸的 SVG，避免它撑宽聊天滚动区域。图表模型、渲染函数与主题配置保持稳定；
+保留父组件的原有更新行为，避免改变数值标签避让缓存的重置时机。
+
+```text
+容器 resize -> 可见 / 临近视口 -> 提交尺寸 -> 原有图表与动画
+            -> 远离视口       -> 记录尺寸 -> 接近视口时同步
+```
+
+尺寸控制回归（仓库根目录）：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/chart-dimensions.test.tsx
+```
+
+浏览器打开 `/tests/features/agent-message/chart-resize-browser.html`，点击
+**Run chart resize checks**，验证两图同时可见时连续缩放、离屏暂停、无横向溢出、
+快速滚回后的尺寸同步、实例保持和中途反向切换。追加 `?dark` 验证深色。
+页面记录帧间隔和图表提交次数；使用隔离数据，不修改真实会话。
+追加 `?narrow` 可直接检查窄图的初始布局。真实会话还需复测 Workspace
+展开 / 折叠和分隔条往返拖动，分别记录开发版与生产构建的帧间隔。
+
+Workspace 拖动时，分隔条同步更新宽度 CSS 变量与 `aria-valuenow`，相同的整数
+宽度不重复写入；松手仍按原有规则提交偏好。密度桥只在是否超过 shell 宽度的
+60% 发生变化时发布状态，保留原有阈值、最大化与移动端规则。布局、图表标签、
+320ms 图表动画以及滚动跟随不变。
+
+```text
+拖动 -> 实时宽度 + 可访问读数 -> 松手提交
+     -> 是否超过 60% 改变    -> 更新密度状态
+```
+
+拖动、取消、键盘、宽度限制及密度阈值回归（仓库根目录）：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/workspace/workspace-resize.test.tsx agent-ui/tests/features/sidebar/header/harness-default-width.test.tsx
+```
+
 可视化开关与终端连接回归（仓库根目录）：
 
 ```sh
@@ -2997,6 +3197,16 @@ Workspace 电脑连接与视图生命周期回归（仓库根目录）：
 ```sh
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/sidebar/content/session-projects.test.ts
 ```
+
+在开发服务器打开 `/tests/features/sidebar/content/session-pin-browser.html`，点击
+**Run session pin checks**，验证 `Tag / Pin / 更多` 顺序与 20px 尺寸、置顶与取消置顶
+的中间帧、快速反向切换、跨分页的下移淡出与节点清理、两种菜单的 Pin 范围、滚动
+偏移、长标题、焦点接续，以及有无置顶时的分区标题与 8px 间距。追加
+`?zh&dark&reduced-motion&mobile=390` 检查中文深色、
+减少动态效果与独立 390px iframe。点击 **Focus a pin for keyboard check** 后使用
+真实 Space / Enter，应切换一次并保留焦点，Selected sessions 保持 0。
+测试通过真实 Session context 与排序逻辑，所有 API 请求均由页面内存 fixture 拦截，
+不读取或修改真实会话。
 
 外部 MCP 工具名称解析、内置工具分流、流式输入、输出与错误、复制及中英文展示回归，
 包含 Computer 工具统一图标、动作标题、参数细化、安装预览与未知工具展示，
@@ -3164,6 +3374,12 @@ Office 预览的选区坐标、文本边界、CSV 编码与格式路由回归：
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/files/preview/document-selection.test.ts agent-ui/tests/features/files/preview/office-selection.test.ts agent-ui/tests/features/files/preview/spreadsheet-model.test.ts agent-ui/tests/features/files/preview/csv-cell-values.test.ts
 ```
 
+表格悬浮框的空单元格、合并单元格、冻结窗格裁剪与 RTL 几何回归：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/files/preview/xlsx-hover.test.ts
+```
+
 DOCX / PPTX Agent 协助的真实源定位、单元格与父表格拾取、合并 / 跨页归属，
 以及 Office 注解序列化、版本、坐标系及无效引用回归：
 
@@ -3191,17 +3407,19 @@ Alt 悬停选择整表；点击当前元素或询问按钮后检查输入立即�
 
 在开发服务器打开 `/tests/features/files/preview/office-browser.html`，点击
 **Run Office preview checks**，可检查真实 DOCX / XLSX / PPTX / CSV 渲染、选区 / 公式 /
-复制、工作表切换、损坏文件提示及卸载时的 Worker 释放。CSV 样例包含引号内逗号 / 换行
+复制、悬浮单元格 / 合并区域不改变选区和公式栏、工作表切换、损坏文件提示及卸载时的 Worker 释放。CSV 样例包含引号内逗号 / 换行
 和中文；DOCX 样例包含文本、表格和分页。追加 `?dark` 可检查深色主题的行号 / 列标对比度。
 点击 **Run spreadsheet checks** 可仅检查 CSV 超大选区取值、公式栏展开 / 滚动和窄栏工作表标签。
 点击 **Run formula bar checks** 可仅检查短文本选字、自适应浮层高度和长文本点击展开。
 样例在内存生成，不访问用户文件。
+使用鼠标在 DOCX / PPTX Agent 协助与 XLSX / CSV 内容区检查自定义光标，移至询问输入、
+公式栏、工具栏及行列 resize handle 时应恢复原生指针；普通 DOCX / PPTX 预览不替换光标。
 
 文件选区输入交互：打开 `/tests/features/files/selection/selection-actions-browser.html`，
 点击 **Run selection input checks**。覆盖第一行胶囊与图标保持、第二行输入与独立方形确认按钮、
 自动焦点、整体视口避让、原生输入导航、
 长文字滚动、IME / Escape、外点关闭、输入期间源码选区高亮保持及清理，
-以及 XLSX / CSV 的选区和公式保留。
+以及 XLSX / CSV 的选区和公式保留；点击选中后继续悬浮其他格，输入内容、焦点和浮层锚点不变。
 可使用 **Select fixture** 手动体验输入，追加 `?zh` 显示中文。
 完整页面中，勾按钮应将文件引用和问题插入 Composer 当前光标、保留已有草稿，
 并等待手动发送；检查源码行号、XLSX 工作表与范围、CSV 地址，以及发送前后的行内引用。

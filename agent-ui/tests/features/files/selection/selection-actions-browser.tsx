@@ -250,10 +250,47 @@ document.querySelector<HTMLButtonElement>("#run")!.addEventListener("click", asy
       selectedAfterInputFocus && selectedAfterEscape &&
       !menu())
 
+    show("xlsx")
+    await until(() => address() === "A1" && viewport(), "XLSX click fixture loads")
+    const grid = viewport()
+    const gridBounds = grid.getBoundingClientRect()
+    for (const type of ["pointerdown", "pointerup"]) {
+      grid.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 1, isPrimary: true,
+        pointerType: "mouse", button: 0, buttons: type === "pointerup" ? 0 : 1,
+        clientX: gridBounds.left + 65, clientY: gridBounds.top + 72 }))
+    }
+    await until(() => address() === "A2" && askButton() && host.querySelector("[data-xlsx-selection-isolation]") &&
+      !host.querySelector('[data-xlsx-hover-cell="A2"]'), "clicking A2 shows one enhanced selected outline")
+    const clickedSelection = snapshot()
+    const selectedBorder = host.querySelector<SVGElement>("[data-xlsx-selection-border]")!
+    const isolation = host.querySelector<SVGElement>("[data-xlsx-selection-isolation]")!
+    const glow = host.querySelector<SVGElement>("[data-xlsx-selection-glow]")!
+    await wait(150)
+    const restingGlow = Number(getComputedStyle(glow).opacity)
+    check("selected cells have a crisp border and one-pixel isolation without corner handles",
+      getComputedStyle(selectedBorder).strokeWidth === "2px" && getComputedStyle(isolation).strokeWidth === "4px" &&
+      !host.querySelector("[data-xlsx-selection-corners]"))
+    input = await openInput()
+    enterText(input, "Explain this selected cell")
+    await wait(200)
+    check("question input subtly strengthens the selected halo", Number(getComputedStyle(glow).opacity) > restingGlow)
+    const anchoredMenu = menu()!.getBoundingClientRect()
+    grid.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 1, isPrimary: true,
+      pointerType: "mouse", button: 0, buttons: 0, clientX: gridBounds.left + 65, clientY: gridBounds.top + 92 }))
+    await until(() => host.querySelector('[data-xlsx-hover-cell="A3"]'), "hover continues while the question is open")
+    const hoveredMenu = menu()!.getBoundingClientRect()
+    check("click selection keeps hover active without changing the range, formula, question, focus or action anchor",
+      snapshot() === clickedSelection && promptInput() === input && input.value === "Explain this selected cell" &&
+      document.activeElement === input && Math.abs(hoveredMenu.left - anchoredMenu.left) <= 1 &&
+      Math.abs(hoveredMenu.top - anchoredMenu.top) <= 1)
+    outsideClick()
+    await until(() => !menu(), "click fixture outside dismissal")
+
     for (const nextMode of ["xlsx", "csv"] as const) {
       show(nextMode)
       await selectFixture()
       const before = snapshot()
+      await until(() => host.querySelector("[data-xlsx-selection-isolation]"), nextMode + " selection decoration appears")
       input = await openInput()
       allInputsInViewport &&= inViewport()
       enterText(input, "Explain this selected range")

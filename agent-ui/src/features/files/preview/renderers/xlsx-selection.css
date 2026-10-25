@@ -1,0 +1,55 @@
+.xlsx-preview {
+  --xlsx-selection-accent: var(--primary);
+  --xlsx-selection-isolation: var(--background);
+  --xlsx-selection-glow: color-mix(in srgb, var(--foreground) 50%, var(--background));
+}
+
+.xlsx-preview .xlsx-hover-frame {
+  border: 1px solid color-mix(in srgb, var(--xlsx-selection-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--xlsx-selection-accent) 2%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--xlsx-selection-isolation) 65%, transparent);
+}
+
+.xlsx-preview [data-xlsx-selection-border],
+.xlsx-preview [data-xlsx-active-cell-border] {
+  stroke: var(--xlsx-selection-accent);
+}
+
+.xlsx-preview :is([data-xlsx-selection-border], [data-xlsx-active-cell-border],
+  [data-xlsx-selection-glow], [data-xlsx-selection-isolation], [data-xlsx-selection-corners]) {
+  vector-effect: non-scaling-stroke;
+}
+
+.xlsx-preview [data-xlsx-selection-glow] {
+  stroke: var(--xlsx-selection-glow);
+  filter: blur(2px);
+  opacity: 0.24;
+  transition: opacity 120ms var(--ease-out);
+}
+
+.xlsx-preview [data-xlsx-selection-isolation] {
+  stroke: var(--xlsx-selection-isolation);
+  stroke-width: calc(var(--xlsx-selection-stroke-width) + 2px);
+}
+
+.xlsx-preview [data-xlsx-selection-corners] {
+  fill: none;
+  stroke: var(--xlsx-selection-accent);
+  stroke-width: 3;
+  stroke-linecap: square;
+  opacity: 0.9;
+}
+
+.xlsx-preview[data-xlsx-question-open] [data-xlsx-selection-glow] {
+  opacity: 0.4;
+}
+
+.xlsx-preview[data-xlsx-selection-instant] [data-xlsx-selection-glow] {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xlsx-preview [data-xlsx-selection-glow] {
+    transition: none;
+  }
+}

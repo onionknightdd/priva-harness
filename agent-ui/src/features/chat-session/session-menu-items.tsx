@@ -9,28 +9,37 @@ import type { SessionInfo } from "@/lib/api/sandbox-sessions"
 
 import { useSessionList } from "./chat-session-context"
 
-/** The session "⋯" menu body, shared by the sidebar row and the chat header
- * so both places offer the same actions in the same order. Render inside a
- * `DropdownMenuContent`. */
-export function SessionMenuItems({ session }: { session: SessionInfo }) {
+/** Shared session actions. The sidebar has its own inline pin trigger;
+ * the chat header keeps pinning in this menu. */
+export function SessionMenuItems({
+  session,
+  showPin = true,
+}: {
+  session: SessionInfo
+  showPin?: boolean
+}) {
   const { t } = useTranslation()
   const { setPinned, archive, remove } = useSessionList()
 
   return (
     <>
-      <DropdownMenuItem
-        onClick={() => {
-          void setPinned(session.sessionId, !session.pinned)
-        }}
-      >
-        <PinIcon className={session.pinned ? "fill-current" : undefined} />
-        <span>
-          {session.pinned
-            ? t("sidebar.projects.unpin")
-            : t("sidebar.projects.pin")}
-        </span>
-      </DropdownMenuItem>
-      <DropdownMenuSeparator />
+      {showPin && (
+        <>
+          <DropdownMenuItem
+            onClick={() => {
+              void setPinned(session.sessionId, !session.pinned)
+            }}
+          >
+            <PinIcon className={session.pinned ? "fill-current" : undefined} />
+            <span>
+              {session.pinned
+                ? t("sidebar.projects.unpin")
+                : t("sidebar.projects.pin")}
+            </span>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+        </>
+      )}
       <DropdownMenuItem
         onClick={() => {
           void archive(session.sessionId)

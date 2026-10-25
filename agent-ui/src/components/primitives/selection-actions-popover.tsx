@@ -18,7 +18,7 @@ function moveMenu(menu: HTMLDivElement, position: Position): Position {
   return { left, top }
 }
 
-export function SelectionActionsPopover({ anchorRect, instant, menuRef, kind, label, actions, openInputActionId }: {
+export function SelectionActionsPopover({ anchorRect, instant, menuRef, kind, label, actions, openInputActionId, onInputOpenChange }: {
   anchorRect: SelectionActionsRect | null
   instant: boolean
   menuRef: RefObject<HTMLDivElement | null>
@@ -26,6 +26,7 @@ export function SelectionActionsPopover({ anchorRect, instant, menuRef, kind, la
   label: string
   actions: ComponentProps<typeof SelectionActions>["actions"]
   openInputActionId?: string
+  onInputOpenChange?: (open: boolean) => void
 }) {
   const [mounted, setMounted] = useState(false)
   const previousAnchor = useRef(anchorRect)
@@ -105,7 +106,7 @@ export function SelectionActionsPopover({ anchorRect, instant, menuRef, kind, la
           exit={{ opacity: 0, transition: { duration: instant ? 0 : 0.1, ease: EASE_OUT } }}
           transition={{ duration: instant ? 0 : 0.16, ease: EASE_OUT }}
         >
-          <SelectionActions label={label} instant={instant} actions={actions} openInputActionId={openInputActionId} onLayoutChange={positionMenu} onDragStart={startDrag} />
+          <SelectionActions label={label} instant={instant} actions={actions} openInputActionId={openInputActionId} onInputOpenChange={onInputOpenChange} onLayoutChange={positionMenu} onDragStart={startDrag} />
         </motion.div>
       ) : null}
     </AnimatePresence>,

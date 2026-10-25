@@ -19,6 +19,7 @@ import { WorkerDataRecorder } from './infrastructure/data/worker-data-recorder.j
 import { JsonSessionMetadataStore } from './infrastructure/session/json-session-metadata-store.js'
 import { NodeUserFileSystem } from './infrastructure/filesystem/node-user-file-system.js'
 import { NodeGitStatusReader } from './infrastructure/git/node-git-status-reader.js'
+import { NodeGitRepositoryService } from './infrastructure/git/node-git-repository-service.js'
 import { LocalResourceService } from './infrastructure/resources/local-resource-service.js'
 import { CompatibleModelEndpointClient } from './infrastructure/model-profile/compatible-model-endpoint-client.js'
 import { JsonModelProfileStore } from './infrastructure/model-profile/json-model-profile-store.js'
@@ -149,6 +150,7 @@ export async function startServer(): Promise<void> {
     }),
     userFileSystem: fileSystem,
     gitStatusReader: new NodeGitStatusReader(fileSystem.initialDirectory),
+    gitRepositoryService: new NodeGitRepositoryService(fileSystem.initialDirectory),
     modelProfileService,
     piEffortLevels: (modelId) => resolvePiThinkingCapability(modelId).effortLevels,
     agentProfileService,

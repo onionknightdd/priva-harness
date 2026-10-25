@@ -371,17 +371,16 @@
   max-width: none;
 }
 
-[data-streamdown="mermaid-block"]
-  > :first-child:not(:has([data-streamdown="mermaid-block-actions"])) {
+/* Streamdown always renders the title first. Keep these selectors structural:
+   relational descendant matching can invalidate styles during unrelated resizes. */
+[data-streamdown="mermaid-block"] > :first-child {
   grid-column: 1;
   grid-row: 1;
   height: auto;
   min-height: 1.5rem;
 }
 
-[data-streamdown="mermaid-block"]
-  > :first-child:not(:has([data-streamdown="mermaid-block-actions"]))
-  span {
+[data-streamdown="mermaid-block"] > :first-child > span {
   text-transform: capitalize;
 }
 
