@@ -12,6 +12,7 @@ dist-ssr/
 .vite/
 coverage/
 .priva-attachments/
+agent-ui/public/model-codecs/
 
 # Logs
 logs/

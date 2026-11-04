@@ -62,11 +62,15 @@ function visualizeSandboxRuntime(): Plugin {
         format: "iife",
         jsx: "automatic",
         minify: true,
+        metafile: true,
         platform: "browser",
         target: "es2022",
         write: false,
         logLevel: "silent",
       })
+      for (const source of Object.keys(result.metafile?.inputs ?? {})) {
+        if (!source.includes("node_modules")) this.addWatchFile(path.resolve(import.meta.dirname, source))
+      }
       const code = result.outputFiles[0]?.text
       if (!code) {
         throw new Error("visualize sandbox runtime bundle is empty")

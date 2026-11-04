@@ -1,6 +1,8 @@
 import { resourcesEn } from "./resources"
+import { modelEn } from "./model"
 
 export const en = {
+  modelPreview: modelEn,
   interaction: {
     skip: "Skip", continue: "Continue", send: "Send answers", custom: "Something else…", previous: "Previous question", next: "Next question",
     submitting: "Submitting…", toolTitle: "Allow this tool to run?", allow: "Allow once",

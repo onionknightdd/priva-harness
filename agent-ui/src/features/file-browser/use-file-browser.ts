@@ -199,7 +199,7 @@ export function useFileBrowser() {
         const nextFile = previewResponseToFile(preview)
         setOpenedFiles((currentFiles) =>
           currentFiles.map((file) =>
-            file.id === item.path ? nextFile : file
+            file.id === item.path ? { ...nextFile, previewGeneration: (file.previewGeneration ?? 0) + 1 } : file
           )
         )
       })

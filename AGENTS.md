@@ -89,6 +89,17 @@ infrastructure, or the terminal WebSocket route.
 Add exact backend commands here when additional test tooling is introduced;
 add frontend commands to `docs/front-end-desgin.md`.
 
+3D resource / Range and point-cloud conversion regression tests, from
+`services/agent-runner/ts/`:
+
+- `TMPDIR=/tmp npx vitest run tests/integration/transport/http/model-assets.test.ts tests/unit/infrastructure/filesystem/point-cloud-conversions.test.ts`
+- `node --import tsx tests/fixtures/filesystem/point-cloud-probe.ts /absolute/path/to/pdal`
+
+The second command uses real PDAL 2.9.3 to convert isolated PLY, PCD, LAS and
+LAZ fixtures to COPC and checks the resulting data; it requires PDAL installed.
+The deployment image bundles PDAL. Local development must make `pdal` available
+on `PATH`. Do not count the mocked lifecycle tests as verification of PDAL.
+
 The standalone Claude SDK / bubblewrap PoC lives in
 `experiments/claude-sdk-bwrap/` and does not use the Agent Runner. From that
 directory run `npm ci`, `npm run check`, and `npm test` (Linux, non-root, with

@@ -6,6 +6,7 @@ export type FileRenderKind =
   | "image"
   | "json"
   | "markdown"
+  | "model"
   | "pdf"
   | "presentation"
   | "spreadsheet"
@@ -20,6 +21,10 @@ export type PreviewFile = {
   previewError?: "too-large"
   renderKind?: FileRenderKind
   renderSource?: string
+  size?: number
+  revision?: string
+  /** Explicit refresh also invalidates external model resources. */
+  previewGeneration?: number
   status?: "loading" | "ready" | "error"
 }
 

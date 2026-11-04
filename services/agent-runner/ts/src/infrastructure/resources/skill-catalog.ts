@@ -55,6 +55,11 @@ export class SkillCatalog {
     return { data, mediaType }
   }
 
+  async resolveAsset(query: ResourceQuery, id: string, path: string): Promise<string> {
+    const { item } = await this.find(query, id)
+    return await containedFile(item.path, path)
+  }
+
   async toggle(query: ResourceQuery, id: string, enabled: boolean): Promise<SkillDetail> {
     const { item, source: origin } = await this.find(query, id)
     if (!item.canToggle) throw new ResourceError(403, 'This skill is controlled by its package, a broader deny rule, or a read-only source')

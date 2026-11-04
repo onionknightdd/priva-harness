@@ -1,5 +1,6 @@
 import { mkdir } from 'node:fs/promises'
 import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 import { readComputerConfig } from './computer-config.js'
@@ -13,6 +14,8 @@ import { SessionService } from './harness/session/session-service.js'
 import { SessionTerminals } from './harness/terminal/session-terminals.js'
 import { WorkerDataRecorder } from './infrastructure/data/worker-data-recorder.js'
 import { JsonSessionMetadataStore } from './infrastructure/session/json-session-metadata-store.js'
+import { NodeModelAssets } from './infrastructure/filesystem/node-model-assets.js'
+import { PointCloudConversions } from './infrastructure/filesystem/point-cloud-conversions.js'
 import { NodeUserFileSystem } from './infrastructure/filesystem/node-user-file-system.js'
 import { NodeGitStatusReader } from './infrastructure/git/node-git-status-reader.js'
 import { NodeGitRepositoryService } from './infrastructure/git/node-git-repository-service.js'
@@ -123,16 +126,23 @@ export async function startServer(): Promise<void> {
     new ClaudeConfigAdapter(),
     new PiConfigAdapter(),
   ])
+  const resourceService = new LocalResourceService({
+    claudeDir: claudeConfigDir,
+    claudeConfigFilePath: claudeGlobalConfigFilePath(),
+    piDir: piConfigDir,
+    activeCwd: initialDirectory,
+    discoverProjects: async (provider) => (await providers[provider].sessions.list({}))
+      .map((session) => session.cwd).filter((cwd): cwd is string => cwd !== null && cwd !== ''),
+  })
+  const modelAssets = new NodeModelAssets(fileSystem, resourceService)
+  const pointClouds = new PointCloudConversions({
+    cacheDirectory: join(runtimeConfig.runtimeHome, 'pointcloud-cache'), assets: modelAssets, files: fileSystem,
+  })
   const server = buildHttpServer({
     ...(computer === undefined ? {} : { computer }),
-    resourceService: new LocalResourceService({
-      claudeDir: claudeConfigDir,
-      claudeConfigFilePath: claudeGlobalConfigFilePath(),
-      piDir: piConfigDir,
-      activeCwd: initialDirectory,
-      discoverProjects: async (provider) => (await providers[provider].sessions.list({}))
-        .map((session) => session.cwd).filter((cwd): cwd is string => cwd !== null && cwd !== ''),
-    }),
+    resourceService,
+    modelAssets,
+    pointClouds,
     userFileSystem: fileSystem,
     gitStatusReader: new NodeGitStatusReader(fileSystem.initialDirectory),
     gitRepositoryService: new NodeGitRepositoryService(fileSystem.initialDirectory),

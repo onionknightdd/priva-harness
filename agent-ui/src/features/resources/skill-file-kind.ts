@@ -1,4 +1,7 @@
-export function skillFileKind(path: string): "markdown" | "image" | "pdf" | "text" | "binary" {
+import { getModelFormat } from "@/features/files/preview/model/model-format"
+
+export function skillFileKind(path: string): "markdown" | "image" | "pdf" | "text" | "binary" | "model" {
+  if (getModelFormat(path)) return "model"
   const extension = path.split(".").at(-1)?.toLowerCase()
   if (extension && ["md", "markdown", "mdown", "mkd"].includes(extension)) return "markdown"
   if (extension && ["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "ico", "svg", "apng"].includes(extension)) return "image"

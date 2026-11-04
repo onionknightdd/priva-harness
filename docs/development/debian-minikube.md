@@ -673,3 +673,45 @@ Pi 的通过会话为 `01a12c31-3438-7055-a890-7d74d4708255`，证明文件为
 成功，验证通过不代表每次工具调用或每个模型都能一次成功。
 本轮还发现一个配置的 DeepSeek 模型在 Pi 的 OpenAI API 路径返回 404；这次失败发生
 在调用电脑工具之前，不能算作该模型的桌面验证通过。
+
+
+### 3D 预览与点云转换（2026-11-04）
+
+普通模型在浏览器加载；STEP/IGES 使用本地 OCCT WASM Worker。大点云使用
+COPC 的空间索引和 HTTP Range。已有 COPC 直接读取；普通 LAS/LAZ、大 PLY/PCD
+通过 Runner 中的 PDAL 转换，衍生文件放在 `runtimeHome/pointcloud-cache`。
+
+```text
+模型 / Skill 文件 -> inspect + scoped asset -> Three.js / CAD Worker
+                       |
+                       +-- COPC -------------> Range -> Giro3D
+                       |
+                       +-- 点云 -> PDAL 单 worker -> COPC 缓存
+                                     |
+                              取消 / 超时 / 容量限制
+```
+
+Dockerfile 增加 micromamba 2.3.2 构建阶段，固定 `libpdal-core=2.9.3`，将运行时复制到
+`/opt/pdal` 并加入 PATH。本机开发需自行提供 PDAL 2.9.3 的 `pdal` 命令；常规模型和
+已有 COPC 不依赖本机转换器。未安装转换器时返回可操作错误，不能假装转换成功。
+
+转换默认单并发、最多 4 个排队任务、输入 2 GiB、缓存 2 GiB、进程内存 2 GiB，
+单任务超时 10 分钟。已有 COPC 不受转换输入上限限制。Linux 在启动子进程前设置
+地址空间和输出文件限制；macOS 本机开发补充 RSS 监测。共享 Pod 原有 2 CPU / 4 GiB
+仍需按实际数据评估，不能由小样本通过推断大文件处理吞吐。
+
+同一来源版本合并转换，通过 consumer token 独立取消；仅最后消费者离开才取消
+未完成的任务。输出在临时目录完成并检查源版本后原子发布。重启清理未完成目录；
+缓存按访问时间淘汰，并保护当前下载。更新访问时间不改变 mtime，避免破坏 If-Range。
+
+开发验证（`services/agent-runner/ts/`）：
+
+```sh
+TMPDIR=/tmp npx vitest run tests/integration/transport/http/model-assets.test.ts tests/unit/infrastructure/filesystem/point-cloud-conversions.test.ts
+node --import tsx tests/fixtures/filesystem/point-cloud-probe.ts /absolute/path/to/pdal
+```
+
+本轮实际验证了 macOS 上 PDAL 2.9.3 的 PLY、PCD、LAS、LAZ 转 COPC，以及隔离
+Fastify 直连与 Vite 代理的首段、中段、后缀、416、HEAD、If-Range 命中/过期行为，
+响应头与内容字节一致。当前 Docker daemon 未运行，尚未构建或部署新增镜像；
+Linux 转换的硬限制和实际 Pod 峰值资源仍待该环境验证。

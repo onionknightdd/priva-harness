@@ -13,13 +13,16 @@ import { errorMessage, resourceRequest, resourceUrl, type ResourceQuery, type Sk
 import { ResourceEmpty, ResourceErrorState, ResourceLoading } from "./resource-shared"
 import { skillFileKind } from "./skill-file-kind"
 import { TooltipHint } from "@/components/ui/tooltip"
+import type { ModelViewState } from "@/features/files/preview/model/model-renderer"
 
 const PdfRenderer = React.lazy(async () => ({ default: (await import("@/features/files/preview/renderers/pdf-renderer")).PdfRenderer }))
+const ModelRenderer = React.lazy(async () => ({ default: (await import("@/features/files/preview/model/model-renderer")).ModelRenderer }))
 
 export const SkillContent = React.memo(function SkillContent({ detail, query, file }: {
   detail: SkillDetail; query: ResourceQuery; file: string
 }) {
   const { t } = useTranslation()
+  const modelViews = React.useRef(new Map<string, ModelViewState>())
   const kind = skillFileKind(file)
   const textAvailable = kind === "markdown" || kind === "text" || /\.svg$/iu.test(file)
   const [mode, setMode] = React.useState("preview")
@@ -56,10 +59,11 @@ export const SkillContent = React.memo(function SkillContent({ detail, query, fi
     <TabsContent value="source" className="min-h-0 flex-1 overflow-auto">
       {textState ?? <SourcePreview content={content!} fileName={file} highlight={kind === "markdown"} />}
     </TabsContent>
-    <TabsContent value="preview" className={cn("min-h-0 flex-1", kind === "pdf" ? "overflow-hidden" : "overflow-auto")}>
+    <TabsContent value="preview" className={cn("min-h-0 flex-1", kind === "pdf" || kind === "model" ? "overflow-hidden" : "overflow-auto")}>
       <PreviewRendererBoundary key={fileId}>
         <React.Suspense fallback={<ResourceLoading />}>
           {kind === "image" ? <ImageRenderer key={source} source={source} alt={file} />
+            : kind === "model" ? <ModelRenderer key={fileId} file={{ ...previewFile, renderKind: "model", renderSource: source }} viewStates={modelViews.current} sourceContext={{ kind: "skill", skillId: detail.id, harness: query.harness, cwd: query.cwd, path: file }} />
             : kind === "pdf" ? <PreviewSelectionBridgeProvider activeFile={previewFile} scopeKey={fileId}><PdfRenderer fileId={fileId} source={source} /></PreviewSelectionBridgeProvider>
             : kind === "binary" ? <ResourceEmpty text={t("resources.previewUnavailable")} />
             : textState ?? (kind === "markdown" ? <MarkdownRenderer content={file === "SKILL.md" ? content!.replace(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/u, "") : content!} />

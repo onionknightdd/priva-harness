@@ -13,6 +13,7 @@ import type { StreamBlock } from "../agent-message-data"
 import { isToolRunning, toolItemStatusLabel } from "../tool-activity"
 import { visualizeJsxFromTool } from "../visualize-jsx"
 import { VisualizeSandboxFrame } from "../visualize-sandbox/visualize-sandbox-frame"
+import { visualizeAssetsFromInput } from "../visualize-sandbox/assets"
 
 export function VisualizeToolItem({
   block,
@@ -40,6 +41,7 @@ export function VisualizeToolItem({
     >
       <VisualizePreviewBody
         jsx={jsx}
+        assets={visualizeAssetsFromInput(tool?.input ?? block.input)}
         running={running}
         failed={status === "error"}
         errorText={status === "error" ? (tool?.output ?? "") : ""}
@@ -52,6 +54,7 @@ export function VisualizeToolItem({
 
 function VisualizePreviewBody({
   jsx,
+  assets,
   running,
   failed,
   errorText,
@@ -59,6 +62,7 @@ function VisualizePreviewBody({
   frameTitle,
 }: {
   jsx: string
+  assets: string[]
   running: boolean
   failed: boolean
   errorText: string
@@ -81,6 +85,7 @@ function VisualizePreviewBody({
     >
       <VisualizeSandboxFrame
         jsx={jsx}
+        assets={assets}
         streaming={running}
         title={frameTitle}
       />

@@ -23,6 +23,7 @@ export type FilePreviewResponse = {
   name: string
   mime_type: string
   size: number
+  revision?: string
   content: string | null
   is_binary: boolean
   preview_url: string | null

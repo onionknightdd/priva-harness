@@ -2,6 +2,7 @@ import type {
   FileRenderKind,
   PreviewFile,
 } from "@/features/files"
+import { getModelFormat } from "@/features/files/preview/model/model-format"
 
 import {
   getDownloadUrl,
@@ -290,14 +291,17 @@ export function previewResponseToFile(
     path: preview.path,
     name: preview.name,
     mediaType: preview.mime_type,
+    size: preview.size,
+    revision: preview.revision,
     status: "ready",
   }
-  if (preview.preview_error === "too-large") {
+  const renderKind = getFileRenderKind(preview)
+  if (preview.preview_error === "too-large" && renderKind !== "model") {
     return { ...file, status: "error", previewError: "too-large" }
   }
 
-  const renderKind = getFileRenderKind(preview)
   const needsBinarySource =
+    renderKind === "model" ||
     renderKind === "document" ||
     renderKind === "image" ||
     renderKind === "pdf" ||
@@ -306,7 +310,7 @@ export function previewResponseToFile(
 
   return {
     ...file,
-    content: preview.content ?? undefined,
+    content: renderKind === "model" ? undefined : preview.content ?? undefined,
     renderKind,
     renderSource: needsBinarySource
       ? preview.preview_url ?? getDownloadUrl(preview.path)
@@ -334,6 +338,8 @@ function getFileRenderKind(
 ): FileRenderKind | undefined {
   const extension = preview.name.split(".").at(-1)?.toLocaleLowerCase()
   const mediaType = preview.mime_type.toLocaleLowerCase()
+
+  if (getModelFormat(preview.name)) return "model"
 
   if (
     mediaType === "application/pdf" ||

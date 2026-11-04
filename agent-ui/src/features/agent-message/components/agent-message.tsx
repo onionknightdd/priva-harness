@@ -187,6 +187,12 @@ export function AgentMessage({
   }, [setView])
   const registerFileAnnotationComposer = workspaceFiles?.registerFileAnnotationComposer
   useLayoutEffect(() => registerFileAnnotationComposer?.(insertFileAnnotations), [insertFileAnnotations, registerFileAnnotationComposer])
+  const registerAttachmentComposer = workspaceFiles?.registerAttachmentComposer
+  const attachFiles = useCallback((files: File[]) => {
+    setView("chat")
+    onFilesSelected(files)
+  }, [onFilesSelected, setView])
+  useLayoutEffect(() => registerAttachmentComposer?.(attachFiles), [attachFiles, registerAttachmentComposer])
   const dockRef = useRef<HTMLDivElement>(null)
   const dockSpacerRef = useRef<HTMLDivElement>(null)
   const dockTop = useRef<number | null>(null)

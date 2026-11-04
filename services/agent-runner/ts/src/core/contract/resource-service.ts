@@ -34,6 +34,7 @@ export interface ResourceService {
     get(query: ResourceQuery, id: string): Promise<SkillDetail>
     file(query: ResourceQuery, id: string, path: string): Promise<{ path: string; content: string }>
     asset(query: ResourceQuery, id: string, path: string): Promise<{ data: Buffer; mediaType: string }>
+    resolveAsset(query: ResourceQuery, id: string, path: string): Promise<string>
     toggle(query: ResourceQuery, id: string, enabled: boolean): Promise<SkillDetail>
     delete(query: ResourceQuery, id: string): Promise<void>
   }

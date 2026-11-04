@@ -30,6 +30,16 @@ describe('visualize tool', () => {
     })
   })
 
+  it('accepts only a bounded list of explicit local asset paths', async () => {
+    const jsx = '<div>3D scene</div>'
+    await expect(visualizeTool.execute({ jsx, assets: '/work/texture.png\n/work/mesh.bin' }, context)).resolves.toEqual({ ok: true, text: jsx })
+    for (const assets of ['https://example.com/a', '../file', '/work/*', '/bad\0path', Array.from({ length: 17 }, (_, i) => `/file-${i}`).join('\n'), ['array']]) {
+      expect((await visualizeTool.execute({ jsx, assets }, context)).ok).toBe(false)
+    }
+    expect(visualizeTool.description).toContain('createThreeScene')
+    expect(visualizeTool.description).toContain('assets.read(path)')
+  })
+
   it('is registered on the product catalog', () => {
     expect(productTools.map((tool) => tool.name)).toEqual([
       VISUALIZE_TOOL_NAME,

@@ -1,4 +1,4 @@
-import { Readable } from 'node:stream'
+import { sendFile } from '../send-file.js'
 
 import type { FastifyPluginCallback } from 'fastify'
 
@@ -78,19 +78,9 @@ export const userFileRoutes: FastifyPluginCallback<UserFileRoutesOptions> = (
     `${FILE_ROUTE_PREFIX}/download`,
     { schema: downloadFileSchema },
     async (request, reply) => {
-      const download = await fileSystem.openDownload(request.query.path)
-      const content = download.content instanceof Readable
-        ? download.content
-        : Readable.from(download.content, { objectMode: false })
-
-      void reply.header('Content-Type', download.mimeType)
-      void reply.header('Content-Length', String(download.size))
-      void reply.header('Last-Modified', new Date(download.modified * 1000).toUTCString())
-      void reply.header(
-        'Content-Disposition',
-        `attachment; filename*=UTF-8''${encodeRfc5987(download.name)}`,
-      )
-      return await reply.send(content)
+      const download = await fileSystem.inspectFile(request.query.path)
+      void reply.header('Content-Disposition', `attachment; filename*=UTF-8''${encodeRfc5987(download.name)}`)
+      return await sendFile(request, reply, download)
     },
   )
 
@@ -104,6 +94,7 @@ export const userFileRoutes: FastifyPluginCallback<UserFileRoutesOptions> = (
         name: preview.name,
         mime_type: preview.mimeType,
         size: preview.size,
+        revision: preview.revision,
         content: preview.content,
         is_binary: preview.isBinary,
         preview_url: preview.previewUrl,

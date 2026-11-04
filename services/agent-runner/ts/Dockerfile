@@ -1,4 +1,15 @@
+FROM mambaorg/micromamba:2.3.2 AS pointcloud-runtime
+USER root
+# libpdal-core includes the CLI and PLY/PCD/LAS/COPC drivers without the
+# optional Python, database and cloud plugin bundles in the pdal metapackage.
+RUN micromamba create --yes --prefix /opt/pdal --channel conda-forge 'libpdal-core=2.9.3' \
+    && /opt/pdal/bin/pdal --drivers | grep -q writers.copc \
+    && micromamba clean --all --yes
+
 FROM node:24-trixie-slim@sha256:173f125896c3b47ddf056734c7ea789d04595a6a08769a8f78e0df642781fb66
+
+COPY --from=pointcloud-runtime /opt/pdal /opt/pdal
+ENV PATH="/opt/pdal/bin:${PATH}"
 
 ARG DEBIAN_MIRROR=https://deb.debian.org
 
@@ -48,7 +59,7 @@ USER node
 ENV OPENUI_TELEMETRY_DISABLED=1
 RUN --mount=type=cache,target=/home/node/.npm,uid=1000,gid=1000,sharing=locked \
     npm ci --registry="$NPM_REGISTRY" --no-audit --no-fund
-COPY --chown=node:node tsconfig.json tsconfig.build.json eslint.config.js ./
+COPY --chown=node:node tsconfig.json tsconfig.build.json eslint.config.js vitest.config.mjs ./
 COPY --chown=node:node src ./src
 COPY --chown=node:node tests ./tests
 RUN npm run build

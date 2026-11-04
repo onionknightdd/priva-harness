@@ -1447,6 +1447,91 @@ npx shadcn add @beui/tabs
 安装时保留现有 `lib/ease.ts` 和 `lib/utils.ts`，避免覆盖项目共享配置；
 本地 Tabs 补充键盘导航、禁用外观和可见焦点，升级时保留这些行为。
 
+### 3D 文件预览与工程工具（2026-11-04）
+
+Workspace 文件树、聊天文件引用与 Skill 资源共用
+`features/files/preview/model/model-renderer.tsx`。文件分类仍由轻量扩展名识别，新增
+`renderKind: "model"`；Three.js、CAD Worker 和 Giro3D 在打开相应模型时加载。
+模型默认进入渲染视图，不经过源码预览的 3 MiB 限制。普通文本的限制保持原有语义。
+
+```text
+文件树 / 聊天文件引用 / Skill 资源
+                 |
+        现有预览入口 -> model renderer
+                       +-- GLB/glTF/OBJ/STL -> Three.js loaders
+                       +-- PLY/PCD -> float64 局部原点 -> Three.js
+                       +-- STEP/STP/IGES/IGS -> OCCT Worker -> Three.js
+                       +-- 大点云/LAS/LAZ -> COPC -> Giro3D + Range
+
+选择 / 测量 / 相机 / 剖切 -> file_annotation -> 现有 Composer
+截图 File -> 现有附件上传队列 -> imagePaths
+```
+
+布局已由用户确认：沿用外层文件与模式 Tabs；工具位于画布上方，桌面设置在右侧，
+窄容器通过「工具」菜单选择功能并在画布下方显示设置。基础控件复用共享 Button、
+Select、Switch 与 Base UI Slider，状态使用主题 tokens；设置面板有轻量淡入淡出，
+减少动态效果时立即切换。交互动画模型只有显式播放才连续渲染。
+
+```text
+Desktop
++---------------------------------------------------------+
+| 现有文件标签 / 源码・渲染                                |
+| [视角] [选择] [距离] [角度] [剖切]    [截图] [加入提问] |
++-----------------------------------------+---------------+
+|                3D 画布                  | 按需工具设置  |
++-----------------------------------------+---------------+
+| 操作提示 / 状态                           数量・单位     |
++---------------------------------------------------------+
+Narrow
++-----------------------------+
+| 文件标签 / 源码・渲染        |
+| [视角] [工具] [截图] [提问] |
+|          3D 画布            |
+| 工具设置（按需）            |
+| 状态 / 数量・单位           |
++-----------------------------+
+```
+
+加载态提供阶段、取消与下载；错误提供具体原因、重试和下载。`active` 从工作区可见性
+传到 renderer，隐藏时暂停绘制。关闭/切换模型终止 fetch/Worker，释放几何、材质、纹理、
+环境贴图和 WebGL context。相机与单位只在当前打开文件集合中缓存，文件关闭后移除；
+Skill 使用自己的组件缓存。显式刷新递增 `previewGeneration`，即使主文件未变也重新读取
+贴图、MTL、bin 等依赖。重新打开标注时校验依赖版本，变化则提示过期。
+
+网格使用表面命中；点云使用实际顶点，不能用射线最近投影代替原坐标。点云和 CAD
+先以 double 精度减去局部原点，再生成 GPU Float32 数据；标注保存加回原点的坐标。
+glTF 与 CAD 解析结果有明确单位，其他格式未知时显示「模型单位」，用户声明后再换算。
+距离和角度基于显示几何；平面剖切不生成 CAD 封口或截面几何。COPC 选择来自当前显示
+的 LOD，标注保留 nodeId 与节点内索引，不宣称全分辨率测绘精度。当前视角使用透视投影；
+动画模型进入选择/测量时暂停，标注记录动画时间，恢复时保持相同姿态。
+
+主文件与附属资源走 `/api/sandbox/models/inspect`、`/models/asset`，后端校验真实目录。
+Skill 使用自己的 source context，不借普通文件接口绕过 Skill 范围。模型数据仅允许
+相对资源与内嵌资源；Draco、Basis/KTX2、OCCT、laz-perf 使用安装时复制的本地资源。
+`scripts/copy-model-codecs.mjs` 在 postinstall/predev/prebuild 运行，生成目录
+`public/model-codecs/` 已加入忽略规则。
+
+交互式 `visualize` 使用已有 iframe 沙箱中的本地 `THREE`、`OrbitControls` 和
+`createThreeScene`。生成完成后才执行代码，主题通过消息更新；资源必须列在工具参数
+`assets` 中，再用 `assets.read(path)` / `assets.url(path)` 读取。iframe 继续保持
+opaque origin 与受限 CSP，实例管理按需渲染、动画可见性和 dispose。
+
+3D 回归（仓库根目录）：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/files/preview/model/*.test.ts agent-ui/tests/features/files/preview/model-measurement.test.ts agent-ui/tests/features/agent-message/model-annotation.test.ts agent-ui/tests/features/agent-message/visualize-assets.test.ts agent-ui/tests/features/workspace/workspace-attachments.test.tsx
+```
+
+浏览器样例：`/tests/features/files/preview/model-browser.html` 检查真实查看器；
+`/tests/features/files/preview/model/model-runtime-browser.html` 检查 OCCT Worker 与 COPC；
+`/tests/features/agent-message/visualize-three-browser.html?auto` 检查交互沙箱生命周期。
+样例使用隔离文件与网络，不调用真实模型。Playwright 不加入生产依赖；已有本地安装时：
+
+```sh
+PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs CHROME_PATH=/absolute/path/to/chrome TEST_URL=http://127.0.0.1:5176/tests/features/files/preview/model-browser.html node agent-ui/tests/features/files/preview/model-browser.mjs
+PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs CHROME_PATH=/absolute/path/to/chrome node agent-ui/tests/features/agent-message/visualize-three-browser.mjs
+```
+
 ### 文件选区操作
 
 2026-10-14：按用户确认的范围与布局，没有“Agent协助”Tab 且能显示源码的文件，

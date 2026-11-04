@@ -5,7 +5,7 @@ import { fileNameFromPath } from "@/lib/file-path"
 import { focusRing } from "@/lib/surfaces"
 import { cn } from "@/lib/utils"
 
-import { fileAnnotationLabel, isElementFileAnnotation, isOfficeFileAnnotation, type FileAnnotation } from "../file-annotation"
+import { fileAnnotationLabel, isSpatialFileAnnotation, isOfficeFileAnnotation, type FileAnnotation } from "../file-annotation"
 import { AssistantFileReference } from "./assistant-file-reference"
 
 export function FileAnnotationReference({ annotation, onRemove, removeLabel }: {
@@ -14,7 +14,7 @@ export function FileAnnotationReference({ annotation, onRemove, removeLabel }: {
   removeLabel?: string
 }) {
   const { t } = useTranslation()
-  const element = isElementFileAnnotation(annotation) ? annotation : null
+  const element = isSpatialFileAnnotation(annotation) ? annotation : null
   const office = isOfficeFileAnnotation(annotation) ? annotation : null
   const label = office
     ? `${fileNameFromPath(office.filePath)} · ${t(`agentMessage.officeAnnotation.${office.kind === "document" ? "page" : "slide"}`, {

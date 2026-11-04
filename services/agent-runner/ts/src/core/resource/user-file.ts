@@ -29,13 +29,13 @@ export interface DeletedUserPath {
   readonly path: string
 }
 
-export interface UserFileDownload {
+export interface UserFileInfo {
   readonly path: string
   readonly name: string
   readonly mimeType: string
   readonly size: number
   readonly modified: number
-  readonly content: AsyncIterable<Uint8Array>
+  readonly revision: string
 }
 
 export interface UserFilePreview {
@@ -43,6 +43,7 @@ export interface UserFilePreview {
   readonly name: string
   readonly mimeType: string
   readonly size: number
+  readonly revision: string
   readonly content: string | null
   readonly isBinary: boolean
   readonly previewUrl: string | null

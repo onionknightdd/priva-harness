@@ -2,13 +2,13 @@ import * as React from "react"
 
 import { useSidebar } from "@/components/ui/sidebar"
 import type { FilePreviewMode } from "@/features/files/model/file.types"
-import type { ElementFileAnnotation, FileAnnotation, FileAnnotationInput } from "@/features/agent-message/file-annotation"
+import type { SpatialFileAnnotation, FileAnnotation, FileAnnotationInput } from "@/features/agent-message/file-annotation"
 
 import { type WorkspaceModuleId } from "./workspace-modules"
 
 export type OpenFileInWorkspaceOptions = {
   previewMode?: FilePreviewMode
-  annotation?: ElementFileAnnotation
+  annotation?: SpatialFileAnnotation
 }
 
 // Tab selection lives in its own context so that switching tabs does not
@@ -22,7 +22,7 @@ type WorkspaceTabContextValue = {
 type WorkspaceFilesContextValue = {
   pendingFilePath: string | null
   pendingPreviewMode: FilePreviewMode | null
-  pendingAnnotation: ElementFileAnnotation | null
+  pendingAnnotation: SpatialFileAnnotation | null
   fileOpenNonce: number
   openFileInWorkspace: (
     path: string,
@@ -32,6 +32,9 @@ type WorkspaceFilesContextValue = {
   insertFileAnnotation: (annotation: FileAnnotation, question: string) => boolean
   insertFileAnnotations: (items: readonly FileAnnotationInput[]) => boolean
   registerFileAnnotationComposer: (handler: (items: readonly FileAnnotationInput[]) => boolean) => () => void
+  canAttachFiles: boolean
+  addAttachmentFiles: (files: File[]) => boolean
+  registerAttachmentComposer: (handler: (files: File[]) => void) => () => void
 }
 
 const WorkspaceTabContext =
@@ -57,9 +60,27 @@ export function WorkspaceFilesProvider({
   const [pendingPreviewMode, setPendingPreviewMode] =
     React.useState<FilePreviewMode | null>(null)
   const [fileOpenNonce, setFileOpenNonce] = React.useState(0)
-  const [pendingAnnotation, setPendingAnnotation] = React.useState<ElementFileAnnotation | null>(null)
+  const [pendingAnnotation, setPendingAnnotation] = React.useState<SpatialFileAnnotation | null>(null)
   const composer = React.useRef<((items: readonly FileAnnotationInput[]) => boolean) | null>(null)
   const pendingAnnotations = React.useRef<FileAnnotationInput[]>([])
+  const attachmentComposer = React.useRef<((files: File[]) => void) | null>(null)
+  const [canAttachFiles, setCanAttachFiles] = React.useState(false)
+  const registerAttachmentComposer = React.useCallback((handler: (files: File[]) => void) => {
+    attachmentComposer.current = handler
+    setCanAttachFiles(true)
+    return () => {
+      if (attachmentComposer.current !== handler) return
+      attachmentComposer.current = null
+      setCanAttachFiles(false)
+    }
+  }, [])
+  const addAttachmentFiles = React.useCallback((files: File[]) => {
+    if (!files.length || !attachmentComposer.current) return false
+    attachmentComposer.current(files)
+    onShowChat?.()
+    if (isMobile) setOpenMobile(false)
+    return true
+  }, [isMobile, onShowChat, setOpenMobile])
   const registerFileAnnotationComposer = React.useCallback((handler: (items: readonly FileAnnotationInput[]) => boolean) => {
     composer.current = handler
     if (pendingAnnotations.current.length && handler(pendingAnnotations.current)) pendingAnnotations.current = []
@@ -116,9 +137,12 @@ export function WorkspaceFilesProvider({
       insertFileAnnotation,
       insertFileAnnotations,
       registerFileAnnotationComposer,
+      canAttachFiles,
+      addAttachmentFiles,
+      registerAttachmentComposer,
       clearPendingAnnotation,
     }),
-    [fileOpenNonce, openFileInWorkspace, pendingFilePath, pendingPreviewMode, pendingAnnotation, insertFileAnnotation, insertFileAnnotations, registerFileAnnotationComposer, clearPendingAnnotation]
+    [fileOpenNonce, openFileInWorkspace, pendingFilePath, pendingPreviewMode, pendingAnnotation, insertFileAnnotation, insertFileAnnotations, registerFileAnnotationComposer, canAttachFiles, addAttachmentFiles, registerAttachmentComposer, clearPendingAnnotation]
   )
 
   return (

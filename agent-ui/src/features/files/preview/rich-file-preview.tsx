@@ -30,6 +30,9 @@ import { MarkdownRenderer } from "./renderers/markdown-renderer"
 import { isCsvSource } from "./renderers/spreadsheet-source"
 import { SourcePreview } from "./source-preview"
 import { UnsupportedPreview } from "./unsupported-preview"
+import type { ModelViewState } from "./model/model-renderer"
+
+const ModelRenderer = React.lazy(() => import("./model/model-renderer").then((module) => ({ default: module.ModelRenderer })))
 
 const DocumentRenderer = React.lazy(() =>
   import("./renderers/document-renderer").then((module) => ({
@@ -74,9 +77,13 @@ function getAvailableMode(
   return canRenderFile(file) ? "render" : null
 }
 
-function RenderedFile({ file }: { file: PreviewFile }) {
+function RenderedFile({ file, visible, modelViews }: { file: PreviewFile; visible: boolean; modelViews: Map<string, ModelViewState> }) {
   if (!file.renderKind) {
     return <UnsupportedPreview hasFile />
+  }
+
+  if (file.renderKind === "model" && file.renderSource) {
+    return <ModelRenderer file={file} active={visible} viewStates={modelViews} />
   }
 
   if (file.renderKind === "markdown" && file.content !== undefined) {
@@ -125,11 +132,15 @@ function RenderedFile({ file }: { file: PreviewFile }) {
 
 function FilePreviewPanel({
   active,
+  visible,
+  modelViews,
   file,
   fileTabsId,
   mode,
 }: {
   active: boolean
+  visible: boolean
+  modelViews: Map<string, ModelViewState>
   file: PreviewFile
   fileTabsId: string
   mode: FilePreviewMode | null
@@ -146,6 +157,7 @@ function FilePreviewPanel({
           "pdf",
           "presentation",
           "spreadsheet",
+          "model",
         ].includes(file.renderKind ?? "")))
 
   React.useLayoutEffect(() => {
@@ -213,7 +225,7 @@ function FilePreviewPanel({
             key={`${file.id}:${file.renderSource ?? "inline"}`}
           >
             <React.Suspense fallback={<PreviewRequestState loading />}>
-              <RenderedFile file={file} />
+              <RenderedFile file={file} visible={visible} modelViews={modelViews} />
             </React.Suspense>
           </PreviewRendererBoundary>
         )}
@@ -255,6 +267,11 @@ export function RichFilePreview({
 }) {
   const { t } = useTranslation()
   const fileTabsId = React.useId()
+  const modelViews = React.useRef(new Map<string, ModelViewState>())
+  React.useEffect(() => {
+    const open = new Set(files.map((file) => file.id))
+    for (const id of modelViews.current.keys()) if (!open.has(id)) modelViews.current.delete(id)
+  }, [files])
   const [internalMode, setInternalMode] =
     React.useState<FilePreviewMode>("source")
   const preferredMode = mode ?? internalMode
@@ -333,6 +350,8 @@ export function RichFilePreview({
               <FilePreviewPanel
                 key={file.id}
                 active={file.id === activeFileId}
+                visible={active && file.id === activeFileId}
+                modelViews={modelViews.current}
                 file={file}
                 fileTabsId={fileTabsId}
                 mode={getAvailableMode(file, preferredMode)}

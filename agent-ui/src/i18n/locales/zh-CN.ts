@@ -1,6 +1,8 @@
 import { resourcesZh } from "./resources"
+import { modelZhCN } from "./model"
 
 export const zhCN = {
+  modelPreview: modelZhCN,
   interaction: {
     skip: "跳过", continue: "继续", send: "提交回答", custom: "输入其他回答…", previous: "上一题", next: "下一题",
     submitting: "提交中…", toolTitle: "允许执行此工具？", allow: "允许本次",

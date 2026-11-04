@@ -5,6 +5,8 @@ import Fastify, {
   type FastifyServerOptions,
 } from 'fastify'
 
+import type { ModelAssets, PointClouds } from '../../core/contract/model-assets.js'
+import { modelAssetRoutes } from './route/model-assets.js'
 import type { DataRecorder } from '../../core/contract/data-recorder.js'
 import type { EffortLevel } from '../../core/contract/agent-provider.js'
 import type { ComputerConfig } from '../../computer-config.js'
@@ -49,6 +51,8 @@ import { terminalEventRoutes } from './route/terminal-events.js'
 
 export interface BuildHttpServerOptions {
   readonly computer?: ComputerConfig
+  readonly modelAssets?: ModelAssets
+  readonly pointClouds?: PointClouds
   readonly userFileSystem: UserFileSystem
   readonly gitStatusReader?: GitStatusReader
   readonly gitRepositoryService?: GitRepositoryService
@@ -132,6 +136,10 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
     },
   })
   void server.register(userFileRoutes, { fileSystem: options.userFileSystem })
+  if (options.modelAssets !== undefined) {
+    void server.register(modelAssetRoutes, { assets: options.modelAssets,
+      ...(options.pointClouds === undefined ? {} : { pointClouds: options.pointClouds }) })
+  }
   if (options.gitStatusReader !== undefined) {
     void server.register(gitStatusRoutes, { reader: options.gitStatusReader })
   }

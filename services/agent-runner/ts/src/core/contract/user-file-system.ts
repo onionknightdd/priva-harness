@@ -3,7 +3,7 @@ import type {
   CreatedUserDirectory,
   DeletedUserPath,
   UserFileDirectory,
-  UserFileDownload,
+  UserFileInfo,
   UserFilePreview,
   UserFileUploadResult,
 } from '../resource/user-file.js'
@@ -23,7 +23,7 @@ export interface UserFileSystem {
   listDirectory(path: string): Promise<UserFileDirectory>
   createDirectory(directory: string, name: string): Promise<CreatedUserDirectory>
   deletePath(path: string): Promise<DeletedUserPath>
-  openDownload(path: string): Promise<UserFileDownload>
+  inspectFile(path: string): Promise<UserFileInfo>
   previewFile(path: string): Promise<UserFilePreview>
   /**
    * Whether each path can be previewed as a file. Mirrors `previewFile`

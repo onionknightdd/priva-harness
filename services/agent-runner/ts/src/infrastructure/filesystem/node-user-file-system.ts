@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { createReadStream, createWriteStream, type Stats } from 'node:fs'
 import {
   type FileHandle,
@@ -28,6 +29,7 @@ import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 
 import { lookup as lookupMimeType } from 'mime-types'
+import { isModelFile } from '../../core/resource/model-file.js'
 import type { UserAttachment } from '../../core/run/user-turn.js'
 
 import type {
@@ -41,7 +43,7 @@ import {
   type CreatedUserDirectory,
   type DeletedUserPath,
   type UserFileDirectory,
-  type UserFileDownload,
+  type UserFileInfo,
   type UserFileEntry,
   type UserFilePreview,
   type UserFileUploadResult,
@@ -220,18 +222,12 @@ export class NodeUserFileSystem implements UserFileSystem {
     return { status: 'ok', path: targetPath }
   }
 
-  async openDownload(requestedPath: string): Promise<UserFileDownload> {
+  async inspectFile(requestedPath: string): Promise<UserFileInfo> {
     const opened = await this.openUserFile(requestedPath)
-    const content = opened.handle.createReadStream({ autoClose: true })
-
-    return {
-      path: opened.path,
-      name: basename(opened.path),
-      mimeType: detectMimeType(opened.path),
-      size: opened.stats.size,
-      modified: opened.stats.mtimeMs / 1000,
-      content,
-    }
+    try {
+      return { path: opened.path, name: basename(opened.path), mimeType: detectMimeType(opened.path),
+        size: opened.stats.size, modified: opened.stats.mtimeMs / 1000, revision: fileRevision(opened.stats) }
+    } finally { await opened.handle.close() }
   }
 
   async filesExist(paths: readonly string[]): Promise<Record<string, boolean>> {
@@ -267,7 +263,10 @@ export class NodeUserFileSystem implements UserFileSystem {
       let previewUrl: string | null = null
       let previewError: UserFilePreview['previewError'] = null
 
-      if (isKnownText || (!isImage && !isPdf && await looksLikeText(opened.handle, opened.stats.size))) {
+      if (isModelFile(name)) {
+        isBinary = true
+        previewUrl = `/api/sandbox/models/asset?source=file&path=${encodePathQueryValue(opened.path)}`
+      } else if (isKnownText || (!isImage && !isPdf && await looksLikeText(opened.handle, opened.stats.size))) {
         if (opened.stats.size > USER_FILE_PREVIEW_LIMIT_BYTES) {
           previewError = 'too-large'
         } else {
@@ -288,6 +287,7 @@ export class NodeUserFileSystem implements UserFileSystem {
         name,
         mimeType,
         size: opened.stats.size,
+        revision: fileRevision(opened.stats),
         content,
         isBinary,
         previewUrl,
@@ -724,4 +724,8 @@ async function ignoreMissing(operation: () => Promise<void>): Promise<void> {
       throw error
     }
   }
+}
+
+function fileRevision(stats: Stats): string {
+  return createHash('sha256').update(`${stats.dev}:${stats.ino}:${stats.size}:${stats.mtimeMs}:${stats.ctimeMs}`).digest('hex')
 }
