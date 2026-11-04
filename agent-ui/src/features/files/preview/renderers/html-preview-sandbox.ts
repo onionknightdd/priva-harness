@@ -20,17 +20,21 @@ export const HTML_PREVIEW_IFRAME = {
 
 const SECURITY_META = `<meta http-equiv="Content-Security-Policy" content="${HTML_PREVIEW_CSP}">`
 
-export function createHtmlPreviewDocument(content: string) {
+export function createHtmlPreviewDocument(content: string, runtime?: { code: string; nonce: string }) {
+  if (runtime && !/^[a-zA-Z0-9-]{16,128}$/.test(runtime.nonce)) throw new Error("Invalid HTML assist channel")
+  const headContent = SECURITY_META + (runtime
+    ? `<script data-html-assist-nonce="${runtime.nonce}">${runtime.code.replace(/<\/script/gi, "<\\/script")}</script>`
+    : "")
   if (/<head(?:\s[^>]*)?>/i.test(content)) {
-    return content.replace(/<head(?:\s[^>]*)?>/i, (head) => `${head}${SECURITY_META}`)
+    return content.replace(/<head(?:\s[^>]*)?>/i, (head) => `${head}${headContent}`)
   }
 
   if (/<html(?:\s[^>]*)?>/i.test(content)) {
     return content.replace(
       /<html(?:\s[^>]*)?>/i,
-      (html) => `${html}<head>${SECURITY_META}</head>`
+      (html) => `${html}<head>${headContent}</head>`
     )
   }
 
-  return `<!doctype html><html><head>${SECURITY_META}</head><body>${content}</body></html>`
+  return `<!doctype html><html><head>${headContent}</head><body>${content}</body></html>`
 }

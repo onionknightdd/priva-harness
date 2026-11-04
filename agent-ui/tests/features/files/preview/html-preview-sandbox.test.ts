@@ -25,4 +25,16 @@ describe("HTML preview sandbox", () => {
     assert.match(document, /script-src 'unsafe-inline'/)
     assert.match(document, /<button>Go<\/button>/)
   })
+
+  it("installs the picker before page scripts without allowing a script closing tag to escape", () => {
+    const nonce = "01234567-89ab-cdef-0123-456789abcdef"
+    const document = createHtmlPreviewDocument(
+      '<html><head><script>window.pageLoaded = true</script></head><body>Body</body></html>',
+      { nonce, code: 'window.example = "</script><script>untrusted()</script>"' }
+    )
+    assert.ok(document.indexOf("Content-Security-Policy") < document.indexOf("data-html-assist-nonce"))
+    assert.ok(document.indexOf("data-html-assist-nonce") < document.indexOf("window.pageLoaded"))
+    assert.ok(document.includes('<\\/script><script>untrusted()<\\/script>'))
+    assert.throws(() => createHtmlPreviewDocument("Body", { nonce: '\" onclick=\"oops', code: "" }))
+  })
 })

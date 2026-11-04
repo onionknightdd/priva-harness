@@ -6,15 +6,8 @@ import {
   DownloadIcon,
   MaximizeIcon,
   MinimizeIcon,
-  SaveIcon,
   XIcon,
 } from "lucide-react"
-import {
-  AnimatePresence,
-  motion,
-  useReducedMotion,
-  type Transition,
-} from "motion/react"
 import { useTranslation } from "react-i18next"
 
 import { OverflowMarquee } from "@/components/motion/overflow-marquee"
@@ -27,7 +20,6 @@ import {
 } from "@/components/motion/tabs"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { Spinner } from "@/components/ui/spinner"
 import {
   TooltipHint,
   Tooltip,
@@ -42,14 +34,7 @@ import type {
 import { writeClipboardText } from "@/lib/clipboard"
 import { SPRING_LAYOUT } from "@/lib/ease"
 import { cn } from "@/lib/utils"
-import { OfficeAssistControls } from "../office-assist/office-assist-controls"
-
-const saveButtonTransition: Transition = {
-  type: "spring",
-  stiffness: 420,
-  damping: 34,
-  mass: 0.75,
-}
+import { FileAssistControls } from "../element-assist/file-assist-controls"
 
 function animateControl(control: HTMLButtonElement) {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -83,7 +68,6 @@ export function FilePreviewToolbar({
   onDownload,
   onExpandedChange,
   onModeChange,
-  onSave,
   renderAvailable,
   sourceAvailable,
   editAvailable,
@@ -100,16 +84,11 @@ export function FilePreviewToolbar({
   onDownload?: (file: PreviewFile) => void
   onExpandedChange?: (expanded: boolean) => void
   onModeChange: (mode: FilePreviewMode) => void
-  onSave?: (file: PreviewFile) => Promise<{ fileName: string }>
   renderAvailable: boolean
   sourceAvailable: boolean
   editAvailable: boolean
 }) {
   const { t } = useTranslation()
-  const shouldReduceMotion = Boolean(useReducedMotion())
-  const saveTransition: Transition = shouldReduceMotion
-    ? { duration: 0 }
-    : saveButtonTransition
   const feedbackTimerRef = React.useRef<number | null>(null)
   const closeTweensRef = React.useRef(
     new Map<string, gsap.core.Tween>()
@@ -119,16 +98,6 @@ export function FilePreviewToolbar({
     string | null
   >(null)
   const [copied, setCopied] = React.useState(false)
-  const [saving, setSaving] = React.useState(false)
-  const [savedFileName, setSavedFileName] = React.useState<string | null>(
-    null
-  )
-  const saveAvailable = mode === "edit" && Boolean(onSave)
-  const saveLabel = saving
-    ? t("filePreview.saving")
-    : savedFileName
-      ? t("filePreview.saved", { fileName: savedFileName })
-      : t("filePreview.save")
   const expandLabel = expanded
     ? t("filePreview.restore")
     : t("filePreview.maximize")
@@ -155,7 +124,6 @@ export function FilePreviewToolbar({
     feedbackTimerRef.current = window.setTimeout(() => {
       setAnnouncement("")
       setCopied(false)
-      setSavedFileName(null)
     }, 1600)
   }, [])
 
@@ -184,28 +152,6 @@ export function FilePreviewToolbar({
 
     onDownload(activeFile)
     announce(t("filePreview.downloadStarted"))
-  }
-
-  const handleSave = async (event: React.MouseEvent<HTMLButtonElement>) => {
-    animateControl(event.currentTarget)
-
-    if (!activeFile || !onSave || saving) {
-      announce(t("filePreview.saveUnavailable"))
-      return
-    }
-
-    setSaving(true)
-    setSavedFileName(null)
-
-    try {
-      const result = await onSave(activeFile)
-      setSavedFileName(result.fileName)
-      announce(t("filePreview.saved", { fileName: result.fileName }))
-    } catch {
-      announce(t("filePreview.saveFailed"))
-    } finally {
-      setSaving(false)
-    }
   }
 
   const handleFileClose = (
@@ -421,9 +367,9 @@ export function FilePreviewToolbar({
                 <TooltipHint
                   content={
                     editAvailable
-                      ? ["document", "presentation"].includes(activeFile?.renderKind ?? "")
-                        ? t("filePreview.officeAssist.modeHint")
-                        : t("filePreview.edit")
+                      ? activeFile?.renderKind === "html"
+                        ? t("filePreview.htmlAssist.modeHint")
+                        : t("filePreview.officeAssist.modeHint")
                       : t("filePreview.editUnavailable")
                   }
                 >
@@ -441,7 +387,7 @@ export function FilePreviewToolbar({
             </PreviewModeTabsList>
           </PreviewModeTabs>
 
-          <OfficeAssistControls />
+          <FileAssistControls />
 
           <Tooltip>
             <TooltipTrigger
@@ -492,55 +438,6 @@ export function FilePreviewToolbar({
               {t("filePreview.download")}
             </TooltipContent>
           </Tooltip>
-
-          <AnimatePresence initial={false}>
-            {saveAvailable && (
-              <motion.div
-                key="save-edited-html"
-                className="flex shrink-0 items-center"
-                initial={
-                  shouldReduceMotion
-                    ? false
-                    : { opacity: 0, x: 8, scale: 0.96 }
-                }
-                animate={{ opacity: 1, x: 0, scale: 1 }}
-                exit={
-                  shouldReduceMotion
-                    ? { opacity: 0 }
-                    : { opacity: 0, x: 6, scale: 0.96 }
-                }
-                transition={saveTransition}
-              >
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        disabled={
-                          saving ||
-                          activeFile?.content === undefined ||
-                          activeFile.status === "loading"
-                        }
-                        aria-label={saveLabel}
-                        onClick={(event) => void handleSave(event)}
-                      />
-                    }
-                  >
-                    {saving ? (
-                      <Spinner className="size-4" aria-hidden="true" />
-                    ) : savedFileName ? (
-                      <CheckIcon aria-hidden="true" />
-                    ) : (
-                      <SaveIcon aria-hidden="true" />
-                    )}
-                  </TooltipTrigger>
-                  <TooltipContent>{saveLabel}</TooltipContent>
-                </Tooltip>
-              </motion.div>
-            )}
-          </AnimatePresence>
 
           {onExpandedChange && (
             <Tooltip>

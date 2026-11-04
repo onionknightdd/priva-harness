@@ -6,13 +6,13 @@ import { useTranslation } from "react-i18next"
 import { SelectionActionsPopover } from "@/components/primitives/selection-actions-popover"
 import { Button } from "@/components/ui/button"
 import { TooltipHint } from "@/components/ui/tooltip"
-import type { OfficeFileAnnotation } from "@/features/agent-message/file-annotation"
+import { isOfficeFileAnnotation, type OfficeFileAnnotation } from "@/features/agent-message/file-annotation"
 import { useOptionalWorkspaceFiles } from "@/features/workspace/workspace-files-context"
 import { EASE_OUT } from "@/lib/ease"
 import { cn } from "@/lib/utils"
 
 import { PreviewCursor } from "../preview/preview-cursor"
-import { useOfficeAssist } from "./office-assist-provider"
+import { useFileAssist } from "../element-assist/file-assist-provider"
 import type { OfficeAssistSurface, OfficeElementBox, OfficeElementTarget } from "./office-assist.types"
 
 type ProjectedBox = { left: number; top: number; width: number; height: number; rotation: number }
@@ -59,7 +59,7 @@ export function OfficeAssistOverlay({ fileId, containerRef, surface }: {
 }) {
   const { t } = useTranslation()
   const reduceMotion = useReducedMotion()
-  const assist = useOfficeAssist()
+  const assist = useFileAssist()
   const workspace = useOptionalWorkspaceFiles()
   const menuRef = React.useRef<HTMLDivElement>(null)
   const hostRef = React.useRef<HTMLDivElement>(null)
@@ -73,7 +73,7 @@ export function OfficeAssistOverlay({ fileId, containerRef, surface }: {
   live.current = { assist, surface }
   const active = assist?.activeFile?.id === fileId
   const enabled = Boolean(active && assist?.enabled)
-  const draft = active ? assist?.draft ?? null : null
+  const draft = active && assist?.draft?.kind !== "html" ? assist?.draft ?? null : null
   const selected = draft ?? candidate
   const registerRevision = assist?.registerRevision
   const activePath = assist?.activeFile?.path
@@ -91,7 +91,7 @@ export function OfficeAssistOverlay({ fileId, containerRef, surface }: {
 
   React.useEffect(() => {
     const pending = workspace?.pendingAnnotation
-    if (!surface || !pending || !active || pending.filePath !== activePath) return
+    if (!surface || !pending || !isOfficeFileAnnotation(pending) || !active || pending.filePath !== activePath) return
     if (pending.fileRevision !== surface.fileRevision) {
       reportError?.(t("filePreview.officeAssist.fileChanged"))
     } else {
@@ -310,7 +310,7 @@ export function OfficeAssistOverlay({ fileId, containerRef, surface }: {
     transform: box.rotation ? `rotate(${box.rotation}deg)` : undefined,
   })
   const closeDraft = () => { assist.cancelDraft(); candidateRef.current = null; setCandidate(null) }
-  const saved = enabled ? assist.items : []
+  const saved = enabled ? assist.items.filter((item): item is typeof item & { annotation: OfficeFileAnnotation } => isOfficeFileAnnotation(item.annotation)) : []
   const animateHover = animateCandidate && !draft && !reduceMotion
 
   return (

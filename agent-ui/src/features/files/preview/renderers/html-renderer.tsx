@@ -1,31 +1,27 @@
 import * as React from "react"
 import { useTranslation } from "react-i18next"
+import runtimeCode from "virtual:html-assist-runtime"
 
-import {
-  createHtmlPreviewDocument,
-  HTML_PREVIEW_IFRAME,
-} from "./html-preview-sandbox"
+import { HtmlAssistOverlay } from "../../html-assist/html-assist-overlay"
+import { useHtmlAssist } from "../../html-assist/use-html-assist"
+import { createHtmlPreviewDocument, HTML_PREVIEW_IFRAME } from "./html-preview-sandbox"
 
-export function HtmlRenderer({
-  content,
-  fileName,
-}: {
-  content: string
-  fileName: string
-}) {
+export function HtmlRenderer({ fileId, content, fileName }: { fileId: string; content: string; fileName: string }) {
   const { t } = useTranslation()
-  const previewDocument = React.useMemo(
-    () => createHtmlPreviewDocument(content),
-    [content]
-  )
+  const iframeRef = React.useRef<HTMLIFrameElement>(null)
+  const menuRef = React.useRef<HTMLDivElement>(null)
+  const document = React.useMemo(() => {
+    const nonce = "html-" + crypto.randomUUID()
+    return { fileId, nonce, source: createHtmlPreviewDocument(content, { code: runtimeCode, nonce }) }
+  }, [content, fileId])
+  const assist = useHtmlAssist({ fileId, content, nonce: document.nonce, iframeRef, menuRef })
 
   return (
-    <iframe
-      className="block size-full border-0 bg-white"
-      referrerPolicy={HTML_PREVIEW_IFRAME.referrerPolicy}
-      sandbox={HTML_PREVIEW_IFRAME.sandbox}
-      srcDoc={previewDocument}
-      title={t("filePreview.htmlFrameTitle", { fileName })}
-    />
+    <div className="relative h-full min-h-0 overflow-hidden" data-html-assist-ready={assist.ready}>
+      <iframe key={document.fileId} ref={iframeRef} className="block size-full border-0 bg-white"
+        referrerPolicy={HTML_PREVIEW_IFRAME.referrerPolicy} sandbox={HTML_PREVIEW_IFRAME.sandbox}
+        srcDoc={document.source} title={t("filePreview.htmlFrameTitle", { fileName })} data-html-assist-frame />
+      <HtmlAssistOverlay state={assist} iframeRef={iframeRef} menuRef={menuRef} />
+    </div>
   )
 }

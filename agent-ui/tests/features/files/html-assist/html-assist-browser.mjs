@@ -1,0 +1,218 @@
+import assert from "node:assert/strict"
+import { writeFile } from "node:fs/promises"
+import { pathToFileURL } from "node:url"
+
+// Keep browser tooling separate from production dependencies. Use an installed
+// Playwright module, a fresh browser profile, and only the local fixture server.
+const modulePath = process.env.PLAYWRIGHT_MODULE
+const { chromium } = await import(modulePath ? pathToFileURL(modulePath).href : "playwright")
+const url = process.env.TEST_URL ?? "http://127.0.0.1:5173/tests/features/files/html-assist/html-assist-browser.html"
+assert.ok(["127.0.0.1", "localhost"].includes(new URL(url).hostname), "Fixture URL must be local")
+const output = process.env.TEST_OUTPUT ?? "/tmp/html-assist-browser-results.json"
+const browser = await chromium.launch({ headless: true, ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}) })
+const page = await browser.newPage({ viewport: { width: 1300, height: 1000 }, reducedMotion: process.env.REDUCED_MOTION === "1" ? "reduce" : "no-preference" })
+const checks = []
+const errors = []
+page.on("pageerror", (error) => errors.push(String(error)))
+await page.route("**/*", (route) => {
+  const request = new URL(route.request().url())
+  return request.protocol === "http:" && ["127.0.0.1", "localhost"].includes(request.hostname) && !request.pathname.startsWith("/api/")
+    ? route.continue() : route.abort()
+})
+const frame = () => page.frameLocator("#preview iframe:visible")
+const state = async () => JSON.parse(await page.locator("#fixture-state").textContent())
+const count = async () => Number(await page.locator("[data-office-assist-count]").textContent())
+const candidate = () => page.locator("[data-html-assist-candidate]")
+const input = () => page.locator("input[data-selection-action-input], [data-selection-action-input] input").filter({ visible: true })
+const saved = (index) => page.locator(`[data-html-assist-saved="${index}"]`)
+async function wait(check, label) {
+  const end = Date.now() + 10_000
+  while (!(await check())) {
+    if (Date.now() > end) throw new Error("Timed out: " + label)
+    await page.waitForTimeout(30)
+  }
+}
+function check(label, value) {
+  assert.ok(value, label)
+  checks.push({ label, passed: true })
+  console.log("PASS " + label)
+}
+async function mode(name) {
+  await page.getByRole("tab", { name, exact: true }).click()
+  await wait(async () => (await state()).mode === (name === "Agent Assist" ? "edit" : "render"), name)
+  await frame().locator("body").waitFor()
+  if (name === "Agent Assist") await page.locator('[data-html-assist-ready="true"]').waitFor()
+  await page.waitForTimeout(100)
+}
+async function select(selector) {
+  await page.locator('[data-html-assist-ready="true"]').waitFor()
+  await page.waitForTimeout(100)
+  await frame().locator(selector).hover()
+  await wait(() => candidate().count(), "hover outline")
+  await frame().locator(selector).click()
+  await input().waitFor()
+  await wait(() => input().evaluate((element) => element === document.activeElement), "focused question")
+  await wait(async () => await candidate().count() === 1 && await candidate().getAttribute("data-html-assist-draft") === "true", "draft transition settled")
+}
+async function confirm(question) {
+  const previous = await count()
+  await input().fill(question)
+  await page.getByRole("button", { name: "Confirm question", exact: true }).click()
+  await wait(async () => await count() === previous + 1 && !(await input().count()), "confirmed question")
+}
+async function clear() {
+  await page.locator("[data-office-assist-clear]").click()
+  await wait(async () => await count() === 0 && !(await input().count()), "cleared batch")
+}
+let failure
+try {
+  await page.goto(url)
+  await frame().locator("#action").waitFor()
+  check("sandbox preserves opaque origin and scripts-only policy", await page.locator("#preview iframe:visible").getAttribute("sandbox") === "allow-scripts")
+  await frame().locator("#action").click()
+  check("ordinary preview executes original business click", await frame().locator("body").evaluate(() => window.fixtureClicks) === 1)
+  check("ordinary preview has no selection overlay", await candidate().count() === 0)
+  await mode("Agent Assist")
+  await select("#action span")
+  check("element click opens a focused question and locks an outline", await candidate().getAttribute("data-html-assist-draft") === "true")
+  check("assist click suppresses original business click", await frame().locator("body").evaluate(() => window.fixtureClicks) === 1)
+  const locked = await candidate().boundingBox()
+  await frame().locator("h1").hover()
+  const after = await candidate().boundingBox()
+  check("moving elsewhere keeps draft attached to selected element", Math.abs(locked.x - after.x) < 1 && Math.abs(locked.y - after.y) < 1)
+  await page.screenshot({ path: output.replace(/\.json$/, "-selection.png") })
+  await input().press("Escape")
+  await wait(async () => !(await input().count()), "first Escape closes question")
+  check("first Escape closes input while preserving the selected target", await candidate().getAttribute("data-html-assist-draft") === "true" && await count() === 0)
+  await page.keyboard.press("Escape")
+  await wait(async () => !(await candidate().count()), "second Escape cancels selection")
+  check("second Escape cancels the unfinished selection", await count() === 0)
+  await frame().locator("#action span").hover()
+  await page.getByRole("button", { name: "Ask Agent", exact: true }).click()
+  await input().waitFor()
+  check("hover Ask Agent button opens a question", await input().evaluate((element) => element === document.activeElement))
+  await input().evaluate((element) => {
+    element.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true, data: "正在" }))
+    element.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", isComposing: true, bubbles: true }))
+    element.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true, data: "正在" }))
+  })
+  check("synthetic IME Enter does not confirm during composition", await count() === 0 && await input().count() === 1)
+  await confirm("Explain this button")
+  check("confirmation stores numbered selection 1", await saved(1).count() === 1)
+  await select("#action span")
+  await confirm("Another question about the same button")
+  check("repeated selection is a separate numbered item", await count() === 2 && await saved(2).count() === 1)
+  await page.getByRole("button", { name: "Remove selection 1", exact: true }).click()
+  await wait(async () => await count() === 1 && await saved(1).count() === 0, "deleted item exit transition")
+  check("deleting an item leaves remaining numbers unchanged", await count() === 1 && await saved(1).count() === 0 && await saved(2).count() === 1)
+  await select("#icon path")
+  await confirm("")
+  check("SVG and blank questions can be confirmed without renumbering", await count() === 2 && await saved(3).count() === 1)
+  await clear()
+  await select("#action span")
+  await confirm("First batch item")
+  check("clear resets numbering to 1", await saved(1).count() === 1)
+  await select("#icon path")
+  await confirm("Second batch item")
+  await page.locator("[data-reject-insert]").check()
+  await page.locator("[data-office-assist-send]").click()
+  check("failed composer insertion retains confirmed selections", await count() === 2 && (await state()).batches.length === 0)
+  await page.locator("[data-reject-insert]").uncheck()
+  await select("#remove-target")
+  await input().fill("Unconfirmed draft")
+  await page.locator("[data-office-assist-send]").click()
+  await wait(async () => (await state()).batches.length === 1, "composer insertion")
+  const delivered = await state()
+  const batch = delivered.batches[0]
+  check("batch delivery includes only confirmed questions", batch.length === 2 && batch[0].question === "First batch item" && batch[1].question === "Second batch item" && !delivered.draft.includes("Unconfirmed draft"))
+  check("Composer preserves pre-existing draft and serializes HTML annotations", delivered.draft.startsWith("Existing chat draft.") && delivered.parsed.filter((part) => part.type === "file_annotation").length === 2)
+  check("HTML annotation identifies current file and source revision", batch.every(({ annotation }) => annotation.filePath === "/html-assist-fixture/review.html" && annotation.fileRevision && annotation.kind === "html"))
+  check("successful batch delivery clears preview selections", await count() === 0)
+  await page.screenshot({ path: output.replace(/\.json$/, "-composer.png") })
+  await page.locator("[data-composer-fixture] [data-file-annotation]").first().getByRole("button", { name: /^Open / }).click()
+  await wait(async () => (await state()).mode === "render", "reference opens render mode")
+  await page.locator("[data-html-assist-revealed]").waitFor()
+  check("Composer reference reopens its file and reveals the original HTML element", (await state()).activeFileId === "html" && await page.locator("[data-html-assist-revealed]").count() === 1)
+  await page.getByRole("button", { name: "Cancel this selection", exact: true }).click()
+  await wait(async () => !(await page.locator("[data-html-assist-revealed]").count()), "reference highlight closes")
+  check("reference highlight can be closed independently", true)
+  await mode("Agent Assist")
+
+  await select("#remove-target")
+  await frame().locator("#remove-target").evaluate((element) => element.remove())
+  await wait(async () => !(await input().count()), "removed draft invalidated")
+  check("removing the selected DOM node invalidates unfinished draft", await count() === 0)
+
+  await frame().locator("#scroller").evaluate((element) => { element.scrollTop = 150 })
+  await select("#scroll-target")
+  await confirm("Review scrolling content")
+  await frame().locator("#scroller").evaluate((element) => { element.scrollTop += 24 })
+  await wait(async () => {
+    const element = await frame().locator("#scroll-target").boundingBox()
+    const outline = await saved(1).boundingBox()
+    return outline && element && Math.abs(outline.y - element.y) < 2
+  }, "selection geometry after scroll")
+  check("saved outline follows internal iframe scrolling", true)
+  await mode("Preview")
+  await mode("Agent Assist")
+  check("switching preview mode clears selection session", await count() === 0)
+
+  await select("#action span")
+  await confirm("Clear on file switch")
+  await page.getByRole("tab", { name: "other.html", exact: true }).click()
+  await wait(async () => (await state()).activeFileId === "other", "other file")
+  await page.getByRole("tab", { name: "review.html", exact: true }).click()
+  await frame().locator("#action").waitFor()
+  check("switching files clears selections", await count() === 0)
+  await select("#action span")
+  await confirm("Clear on hide")
+  await page.locator("[data-preview-active-toggle]").click()
+  await page.locator("[data-preview-active-toggle]").click()
+  await frame().locator("#action").waitFor()
+  check("hiding the preview clears selections", await count() === 0)
+  await select("#action span")
+  await confirm("Clear on revision change")
+  await page.locator("[data-preview-revision]").click()
+  await wait(async () => await count() === 0, "revision clear")
+  check("new source revision clears selections", true)
+  await select("#shadow-host button")
+  await confirm("Inspect shadow content")
+  await select("#transparent-control")
+  await confirm("Inspect the transparent control")
+  await frame().locator("#disabled-action").hover()
+  const disabledBox = await frame().locator("#disabled-action").boundingBox()
+  await page.mouse.click(disabledBox.x + disabledBox.width / 2, disabledBox.y + disabledBox.height / 2)
+  await input().waitFor()
+  await confirm("Inspect the disabled control")
+  await page.locator("[data-office-assist-send]").click()
+  await wait(async () => (await state()).batches.length === 2, "special targets delivered")
+  const special = (await state()).batches[1]
+  check("open shadow DOM has a replayable root selector chain", special[0].annotation.locator.selectors.length === 2)
+  check("transparent interactive overlay remains the picked target", special[1].annotation.html.includes('id="transparent-control"'))
+  check("disabled control can be selected with a real pointer without duplicate confirmation", special.length === 3 && special[2].annotation.html.includes('id="disabled-action"'))
+  await page.keyboard.down("Alt")
+  await frame().locator("#action span").hover()
+  await wait(() => candidate().count(), "Alt parent hover")
+  await frame().locator("#action span").click({ modifiers: ["Alt"] })
+  await page.keyboard.up("Alt")
+  await input().waitFor()
+  await confirm("Inspect the parent button")
+  await page.locator("[data-office-assist-send]").click()
+  await wait(async () => (await state()).batches.length === 3, "parent target delivered")
+  check("Alt picks the parent of the hovered child", (await state()).batches[2][0].annotation.locator.tagName === "button")
+  await select("#action span")
+  await page.locator("body > p").click()
+  await wait(async () => !(await input().count()), "outside click cancels draft")
+  check("outside click cancels the unfinished selection", await count() === 0)
+  check("no JavaScript errors or unhandled rejections", errors.length === 0 && (await state()).errors.length === 0)
+} catch (error) {
+  failure = String(error.stack ?? error)
+  console.error(failure)
+} finally {
+  const result = { browser: await browser.version(), url, reducedMotion: process.env.REDUCED_MOTION === "1", checks, errors, failure: failure ?? null, state: await state().catch(() => null) }
+  await page.locator("#results").evaluate((element, text) => { element.textContent = text }, JSON.stringify(result, null, 2)).catch(() => {})
+  await writeFile(output, JSON.stringify(result, null, 2))
+  await page.screenshot({ path: output.replace(/\.json$/, ".png"), fullPage: true })
+  await browser.close()
+}
+if (failure) process.exitCode = 1

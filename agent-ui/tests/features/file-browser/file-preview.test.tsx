@@ -7,7 +7,7 @@ import { I18nextProvider, initReactI18next } from "react-i18next"
 
 import { previewResponseToFile } from "../../../src/features/file-browser/file-browser-data.ts"
 import {
-  canEditHtmlFile,
+  canUseHtmlAssist,
   canRenderFile,
   canShowFileSource,
 } from "../../../src/features/files/model/file.types.ts"
@@ -55,7 +55,7 @@ test("oversized text reports a preview error and cannot fall through to a render
     assert.equal(file.renderSource, undefined)
     assert.equal(canShowFileSource(file), false)
     assert.equal(canRenderFile(file), false)
-    assert.equal(canEditHtmlFile(file), false)
+    assert.equal(canUseHtmlAssist(file), false)
     assert.ok(getDownloadUrl(file.path).includes("/download?path="))
   }
 })

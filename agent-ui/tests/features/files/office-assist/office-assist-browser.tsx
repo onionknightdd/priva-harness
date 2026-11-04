@@ -160,6 +160,9 @@ function slidePoint(x: number, y: number) {
 async function hover(point: { x: number; y: number }, type: string, alt = false) {
   move(point.x, point.y, alt)
   await until(() => candidate()?.dataset.officeAssistCandidate === type, type + " hover frame")
+  // A candidate type updates before its 120 ms layout transition finishes.
+  // Geometry-based follow-up clicks must use the settled outline.
+  await sleep(160)
 }
 async function openInput() {
   await until(() => button(i18n.t("filePreview.askAgent"), menu()), "Ask Agent action")

@@ -5,6 +5,7 @@ import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
 import { build as esbuildBuild } from "esbuild"
 import { defineConfig, type Plugin } from "vite"
+import { htmlAssistRuntime } from "./scripts/html-assist-runtime-plugin.ts"
 
 function materialIconThemeAssets(): Plugin {
   const sourceDirectory = path.resolve(
@@ -81,6 +82,7 @@ export default defineConfig({
     tailwindcss(),
     materialIconThemeAssets(),
     visualizeSandboxRuntime(),
+    htmlAssistRuntime(),
   ],
   server: {
     proxy: {

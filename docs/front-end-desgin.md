@@ -1400,10 +1400,10 @@ Agent UI 文件浏览器与 Agent Workspace 文件浏览器共用此实现。
 轨道仅覆盖实际文件标签的宽度，不延伸到空白区域；无文件时不渲染轨道。
 使用 BeUI 内置横向滚动、选中项定位与键盘操作；文件 Tab 和内容面板通过独立实例 ID
 关联 `aria-controls` / `aria-labelledby`，内容保留现有挂载、选区及切换动效。
-“Agent协助”（英文 `Agent Assist`）沿用内部 `edit` 模式及现有 HTML 可视化编辑功能。
+“Agent协助”（英文 `Agent Assist`）沿用内部 `edit` 模式；HTML、DOCX 和 PPTX 均使用元素选取与批量提问。
 仅活动文件的扩展名为 `.pptx`、`.docx`、`.html`、`.htm`、`.xhtml` 或 `.pdf` 时
 挂载此 Tab，扩展名判断不区分大小写；其他文件和未选文件时不显示。
-HTML 系列加载成功后可以使用现有编辑功能。2026-10-15：DOCX / PPTX 加载成功后开放
+2026-11-04：HTML 系列加载成功后使用 finder 元素选取，移除 GrapesJS 编辑器与另存编辑稿入口。2026-10-15：DOCX / PPTX 加载成功后开放
 元素选取式 Agent 协助，继续使用 Office 预览器；PDF 保留禁用状态及
 “此文件的Agent协助暂未开放”提示。
 
@@ -1415,7 +1415,7 @@ FileBrowserPage (full / compact)
         +-- BeUI mode tabs: source / render / edit
              edit visibility: selected .pptx/.docx/.html/.htm/.xhtml/.pdf
              edit enabled: loaded HTML / DOCX / PPTX
-             edit renderer: HTML editor / Office element picker
+             edit renderer: HTML finder picker / Office element picker
              PDF: disabled
 ```
 
@@ -1665,6 +1665,54 @@ original Office bytes ----> SHA-256 file revision
                                   |
                      Composer -> user message -> Agent
 ```
+
+### HTML 元素选区与批量询问
+
+2026-11-04：按用户确认的 finder 方案，HTML / HTM / XHTML 的 Agent 协助复用上述
+Office 的悬停、点选、提问、编号、单项删除、清空和批量加入聊天流程。
+共享状态与工具栏位于 `features/files/element-assist/`；DOCX / PPTX 保留各自排版拾取器。
+移除 GrapesJS、块插件及其 React 包装、编辑草稿和另存为路径。
+
+```text
+HTML original text -> SHA-256 revision
+        |
+        v
+opaque iframe (allow-scripts, original CSP)
+  DOM hit / open ShadowRoot -> hover rectangle
+  click -> finder selector path + node identity + bounded context
+        |
+        | nonce + source checked postMessage
+        v
+shared FileAssistProvider -> SelectionActionsPopover -> numbered batch
+        | confirm / add to chat: revalidate live targets
+        v
+file_annotation(kind=html) -> Composer -> user sends manually
+```
+
+预览与 Agent 协助共用同一个 iframe，切换模式不重新加载 HTML。普通预览保留页面交互；
+协助模式在 iframe 内捕获输入，点选不触发网页自身的链接或按钮。
+默认选择鼠标下的实际元素，开放 Shadow DOM 深入内部；仅跳过无子元素、无文本、
+无语义交互标记的全屏透明装饰层，保留按钮、role、tabindex 等可交互遮罩。
+Alt 选择父级，表格内优先选择整表；点击使用已显示的候选，放开 Alt 不改变已选目标。
+高亮、selector、HTML 和文本始终来自同一个元素，不暗中把 locator 提升到父节点。
+
+picker 通过 Vite/esbuild 的虚拟模块内联到 srcdoc，先于页面脚本安装，不放宽
+`allow-scripts`、`connect-src 'none'` 或 `frame-src 'none'`。消息校验来源窗口、
+每次加载的 nonce、类型、字段、长度与坐标。文件路径和 SHA-256 由父应用的真实预览内容
+生成，不接受 iframe 覆盖。矩形使用 iframe 视口 CSS 像素，滚动、缩放、布局变化后更新。
+悬停只执行命中与几何读取，点击后才调用 finder。
+
+HTML 注解保留文件路径、原始文本 UTF-8 SHA-256、序号、选区身份、根路径数组
+`locator.selectors`、标签、DOM 实例身份及快照指纹。每个路径片段在对应 Document /
+ShadowRoot 内唯一定位；跨 shadow root 不伪装成普通 CSS selector。
+附带最多 4,000 字符文本、8,000 字符 HTML、8 层祖先语义，以及显式截断标记；
+它们是 DOM 上下文，不声称包含 HTML 源码行号。单批最多保存 200 个选区，超限时保留
+当前未确认目标并提示先处理已有批次。
+
+确认问题和加入聊天前校验 live DOM 身份、快照及 locator 回放。元素移除、替换、内容变化
+或 selector 漂移时使对应选区失效，提示重新选择。文件或模式切换、隐藏、卸载等沿用
+Office 批次清理规则。点击聊天引用前先检查文件版本；同一次文档加载以节点身份定位，
+跨加载仅在 selector 和快照均唯一时回放，无法唯一定位时显示提示，不套用旧屏幕坐标。
 
 ### 预览光标与表格悬浮外框
 
@@ -2748,7 +2796,7 @@ Git 列表头：目录名 [main v] -> [origin/main v] [刷新 Git]
 | AI Elements + Streamdown | [ai-elements/message.tsx](../agent-ui/src/components/ai-elements/message.tsx) | 消息容器、操作区、流式 Markdown、代码/数学/Mermaid；复用本地 Button、Tooltip，另有内容样式。 |
 | Kibo UI 命名空间下的本地组件 | [status/index.tsx](../agent-ui/src/components/kibo-ui/status/index.tsx) | 会话状态点，已改为 `status-idle/running/warm` token 和 CSS ping。 |
 | 本地领域组件 | [agents](../agent-ui/src/components/agents)、[elements](../agent-ui/src/components/elements)、[motion](../agent-ui/src/components/motion)、[heatmap](../agent-ui/src/components/heatmap)、[interior](../agent-ui/src/components/interior) | 工具结果、Diff、任务计划、状态交换、热力图、Lightbox；没有明确来源证据的组件按本地实现记录，不推断上游。 |
-| 专业运行时库 | Recharts、Shiki、EmbedPDF、@silurus/ooxml、GrapesJS | 分别负责图表、代码和文件内容；部分自带工具栏/视觉，见下表。 |
+| 专业运行时库 | Recharts、Shiki、EmbedPDF、@silurus/ooxml、@medv/finder | 分别负责图表、代码和文件内容；部分自带工具栏/视觉，见下表。 |
 
 [components.json](../agent-ui/components.json) 配置了 9 个扩展 registry：
 `@loading-ui`、`@heatmap`、`@reui`、`@assistant-ui`、`@animate-ui`、`@ai-elements`、
@@ -2856,7 +2904,7 @@ App TooltipProvider -> 首次悬浮 1s -> 连续切换 0ms
 | Image / Lightbox | [image-renderer](../agent-ui/src/features/files/preview/renderers/image-renderer.tsx)、[interior/lightbox](../agent-ui/src/components/interior/lightbox.tsx) | 图片预览；Lightbox 为本地 Motion 手势/缩放和覆盖层实现 |
 | PDF | [pdf-renderer](../agent-ui/src/features/files/preview/renderers/pdf-renderer.tsx)，EmbedPDF | 库内查看器 UI，接入应用浅/深色与 Inter 配置；不是 shadcn 基础组件 |
 | DOCX / PPTX | [document-renderer](../agent-ui/src/features/files/preview/renderers/document-renderer.tsx)、[presentation-renderer](../agent-ui/src/features/files/preview/renderers/presentation-renderer.tsx) | @silurus/ooxml 渲染文档内容，应用外框使用项目 token |
-| HTML 编辑器 | [html-visual-editor](../agent-ui/src/features/files/preview/renderers/html-visual-editor.tsx)，GrapesJS | 编辑器自带 UI；全局 CSS 当前明确保留默认粉/紫色点缀，形成应用内可见的独立风格 |
+| HTML 元素协助 | [html-assist](../agent-ui/src/features/files/html-assist/)，原生 DOM + `@medv/finder@4.0.2` | 复用 Office 批次与 SelectionActionsPopover；iframe 内运行 picker，父页面显示主题化外框和提问 |
 | HTML / JSX 生成内容 | [html-renderer](../agent-ui/src/features/files/preview/renderers/html-renderer.tsx)、[visualize-sandbox](../agent-ui/src/features/agent-message/visualize-sandbox) | iframe 中的内容；JSX 沙箱另有 Button、Badge、Card、Progress、Separator 简化实现，传入主题颜色但不共享主应用全部字号、圆角与交互 |
 | 可视化回答 | [render-ui/library](../agent-ui/src/features/agent-message/render-ui/library.tsx)、[generated-visual](../agent-ui/src/features/agent-message/render-ui/generated-visual.tsx) | 开关打开后，`static_visualize` / `interactive_visualize` 的 OpenUI Lang 画在随后正文上方。工具结果为失败，或调用已经结束但程序仍有校验错误时，不显示。这一块使用 OpenUI 自带色彩主题，主题变量只注入到生成结果上。柱状图和折线图默认在柱顶和数据点上方标出数值，首尾数值留在图内。折线上相距过近的数值会挪到点的旁边，仍然显示。数值和刻度文字跟随 OpenUI 主题在深色和浅色之间切换。环形图使用 BeUI Donut Chart，分段按示例色循环：蓝、青、绿、黄。面积图是带坐标轴和图例的堆叠面积图，系列颜色使用 shadcn 图表文档的多色色板。按钮发下一轮 |
 
@@ -2951,7 +2999,7 @@ Feature / Page
 | 2 | GSAP 直接用于 15 个 `.tsx` 模块，包括 [LanguageToggle](../agent-ui/src/features/sidebar/footer/language-toggle.tsx) 这样简单的标签反馈；共享 `ease.ts` 与局部曲线并存 | 简单反馈收敛到已有 CSS / Motion 和共享参数，GSAP 保留给复杂时序；逐项替换后删除不再使用的实现 |
 | 2 | 工具代码使用 GitHub high-contrast Shiki 主题，文件源码高亮加载普通 GitHub 主题 | 先明确代码阅读区是否需要两种对比度，再统一主题、字号与等宽字体 token；见 [agent-shiki](../agent-ui/src/components/agents/agent-shiki.tsx)、[shiki-highlighter](../agent-ui/src/features/files/preview/shiki-highlighter.ts) |
 | 2 | 文件卡有 Attachment、File 和 FileUploadItem，分别定义卡片间距和状态表现 | 按“选择文件 / 显示附件 / 上传进度”明确职责，复用共同视觉；不同语义不必强行合成一个大型组件 |
-| 3 | GrapesJS 内部 UI、文档内容、JSX 沙箱拥有独立渲染边界 | 先统一应用工具栏和状态反馈；沙箱通过主题快照对齐视觉，保持既有隔离边界；文档内容保留其自身格式 |
+| 3 | HTML、文档内容、JSX 沙箱拥有独立渲染边界 | 应用工具栏、选区和提问使用共享组件；保留沙箱隔离和文档自身格式 |
 
 ### 新组件的查找顺序
 
@@ -3386,6 +3434,28 @@ DOCX / PPTX Agent 协助的真实源定位、单元格与父表格拾取、合�
 ```sh
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/files/office-assist/docx-element-picker.test.ts agent-ui/tests/features/files/office-assist/pptx-element-picker.test.ts agent-ui/tests/features/agent-message/file-annotation.test.ts
 ```
+
+HTML finder 的定位、Shadow DOM、失效、消息输入校验与注解序列化回归：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/files/html-assist/*.test.ts agent-ui/tests/features/files/html-assist/*.test.tsx agent-ui/tests/features/files/element-assist/*.test.tsx agent-ui/tests/features/files/preview/html-preview-sandbox.test.ts agent-ui/tests/features/agent-message/file-annotation.test.ts
+```
+
+在 `agent-ui/` 运行 `npm run dev` 后打开
+`/tests/features/files/html-assist/html-assist-browser.html`。该页使用真实 RichFilePreview、
+共享询问组件与 Composer，以及内存 HTML，拒绝真实 API / 模型请求。
+本地 Playwright 检查器使用独立临时浏览器，仅访问本地测试页面；显式提供独立安装的
+Playwright 与 Chrome / Chromium 路径，无需向产品增加测试依赖：
+
+```sh
+PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs CHROME_PATH=/absolute/path/to/chrome TEST_URL=http://127.0.0.1:5173/tests/features/files/html-assist/html-assist-browser.html node agent-ui/tests/features/files/html-assist/html-assist-browser.mjs
+```
+
+覆盖普通预览点击、协助模式阻止网页按钮误触、悬停 / 锁定、询问输入、编号、重复项、
+单项删除、清空、批量插入且不发送、引用回放与关闭、Shadow DOM、透明交互遮罩、
+禁用按钮、Alt 父级、外点、目标失效、滚动与模式 / 文件 / 隐藏切换。
+设置 `REDUCED_MOTION=1` 并在 `TEST_URL` 加 `?dark` 检查深色与减少动态效果。
+源码与 iframe 运行时测试分别负责定位和边界；DOM 模拟不替代真实浏览器验证。
 
 在开发服务器打开 `/tests/features/files/office-assist/office-assist-browser.html`，点击
 **Run Office Agent Assist checks**，使用真实预览与 Composer、内存文件验证悬停、

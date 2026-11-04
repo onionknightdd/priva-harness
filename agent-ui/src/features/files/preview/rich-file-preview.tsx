@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next"
 
 import { Tabs } from "@/components/motion/tabs"
 import {
-  canEditHtmlFile,
   canRenderFile,
   canShowAgentAssist,
   canShowFileSource,
@@ -19,7 +18,7 @@ import {
 import { cn } from "@/lib/utils"
 
 import { SourceSelectionActions } from "../selection/source-selection-actions"
-import { OfficeAssistProvider, isOfficeAssistFile } from "../office-assist/office-assist-provider"
+import { FileAssistProvider } from "../element-assist/file-assist-provider"
 import { downloadTextFile } from "./download-text-file"
 import { FilePreviewToolbar } from "./file-preview-toolbar"
 import { PreviewRendererBoundary } from "./preview-renderer-boundary"
@@ -52,20 +51,6 @@ const SpreadsheetRenderer = React.lazy(() =>
     default: module.SpreadsheetRenderer,
   }))
 )
-const HtmlVisualEditor = React.lazy(() =>
-  import("./renderers/html-visual-editor").then((module) => ({
-    default: module.HtmlVisualEditor,
-  }))
-)
-
-function withDraftContent(
-  file: PreviewFile,
-  drafts: Record<string, string>
-) {
-  const draft = drafts[file.id]
-  return draft === undefined ? file : { ...file, content: draft }
-}
-
 function getAvailableMode(
   file: PreviewFile | null,
   preferredMode: FilePreviewMode
@@ -103,7 +88,7 @@ function RenderedFile({ file }: { file: PreviewFile }) {
   }
 
   if (file.renderKind === "html" && file.content !== undefined) {
-    return <HtmlRenderer content={file.content} fileName={file.name} />
+    return <HtmlRenderer fileId={file.id} content={file.content} fileName={file.name} />
   }
 
   if (file.renderKind === "image" && file.renderSource) {
@@ -143,13 +128,11 @@ function FilePreviewPanel({
   file,
   fileTabsId,
   mode,
-  onHtmlChange,
 }: {
   active: boolean
   file: PreviewFile
   fileTabsId: string
   mode: FilePreviewMode | null
-  onHtmlChange: (content: string) => void
 }) {
   const contentRef = React.useRef<HTMLDivElement>(null)
   const usesInternalScroller =
@@ -225,23 +208,7 @@ function FilePreviewPanel({
           ) : (
             <SourcePreview content={file.content} fileName={file.name} />
           )
-        ) : mode === "edit" && isOfficeAssistFile(file) ? (
-          <PreviewRendererBoundary key={`${file.id}:${file.renderSource ?? "office"}`}>
-            <React.Suspense fallback={<PreviewRequestState loading />}>
-              <RenderedFile file={file} />
-            </React.Suspense>
-          </PreviewRendererBoundary>
-        ) : mode === "edit" && file.content !== undefined ? (
-          <PreviewRendererBoundary key={`${file.id}:html-edit`}>
-            <React.Suspense fallback={<PreviewRequestState loading />}>
-              <HtmlVisualEditor
-                content={file.content}
-                fileName={file.name}
-                onChange={onHtmlChange}
-              />
-            </React.Suspense>
-          </PreviewRendererBoundary>
-        ) : mode === "edit" ? null : (
+        ) : (
           <PreviewRendererBoundary
             key={`${file.id}:${file.renderSource ?? "inline"}`}
           >
@@ -269,7 +236,6 @@ export function RichFilePreview({
   onDownload,
   onExpandedChange,
   onModeChange,
-  onSaveHtml,
   onSelectionChange,
 }: {
   active?: boolean
@@ -285,20 +251,15 @@ export function RichFilePreview({
   onDownload?: (file: PreviewFile) => void
   onExpandedChange?: (expanded: boolean) => void
   onModeChange?: (mode: FilePreviewMode) => void
-  onSaveHtml?: (file: PreviewFile) => Promise<{ fileName: string }>
   onSelectionChange?: (selection: PreviewSelection | null) => void
 }) {
   const { t } = useTranslation()
   const fileTabsId = React.useId()
   const [internalMode, setInternalMode] =
     React.useState<FilePreviewMode>("source")
-  const [drafts, setDrafts] = React.useState<Record<string, string>>(
-    {}
-  )
   const preferredMode = mode ?? internalMode
-  const previewFiles = files.map((file) => withDraftContent(file, drafts))
   const activeFile =
-    previewFiles.find((file) => file.id === activeFileId) ?? null
+    files.find((file) => file.id === activeFileId) ?? null
   const activeMode = getAvailableMode(activeFile, preferredMode)
   const sourceAvailable = canShowFileSource(activeFile)
   const renderAvailable = canRenderFile(activeFile)
@@ -310,43 +271,7 @@ export function RichFilePreview({
     onModeChange?.(nextMode)
   }
 
-  const handleHtmlChange = React.useCallback(
-    (fileId: string, content: string) => {
-      setDrafts((currentDrafts) =>
-        currentDrafts[fileId] === content
-          ? currentDrafts
-          : { ...currentDrafts, [fileId]: content }
-      )
-    },
-    []
-  )
-
-  const handleFileClose = (fileId: string) => {
-    setDrafts((currentDrafts) => {
-      if (!(fileId in currentDrafts)) {
-        return currentDrafts
-      }
-
-      const nextDrafts = { ...currentDrafts }
-      delete nextDrafts[fileId]
-      return nextDrafts
-    })
-    onFileClose(fileId)
-  }
-
-  const handleCloseAll = () => {
-    setDrafts({})
-    onCloseAll()
-  }
-
   const handleDownload = (file: PreviewFile) => {
-    const draft = drafts[file.id]
-
-    if (draft !== undefined) {
-      downloadTextFile(file.name, draft, file.mediaType || "text/html")
-      return
-    }
-
     if (onDownload) {
       onDownload(file)
       return
@@ -369,7 +294,7 @@ export function RichFilePreview({
         className
       )}
     >
-      <OfficeAssistProvider active={active} activeFile={activeFile} files={previewFiles} mode={activeMode}>
+      <FileAssistProvider active={active} activeFile={activeFile} files={files} mode={activeMode}>
       <PreviewSelectionBridgeProvider
         activeFile={activeFile}
         onSelectionChange={onSelectionChange}
@@ -392,27 +317,25 @@ export function RichFilePreview({
             editAvailable={editAvailable}
             expanded={expanded}
             fileTabsId={fileTabsId}
-            files={previewFiles}
+            files={files}
             mode={activeMode}
-            onCloseAll={handleCloseAll}
-            onFileClose={handleFileClose}
+            onCloseAll={onCloseAll}
+            onFileClose={onFileClose}
             onDownload={handleDownload}
             onExpandedChange={onExpandedChange}
             onModeChange={handleModeChange}
-            onSave={canEditHtmlFile(activeFile) ? onSaveHtml : undefined}
             renderAvailable={renderAvailable}
             sourceAvailable={sourceAvailable}
           />
 
-          {previewFiles.length > 0 ? (
-            previewFiles.map((file) => (
+          {files.length > 0 ? (
+            files.map((file) => (
               <FilePreviewPanel
                 key={file.id}
                 active={file.id === activeFileId}
                 file={file}
                 fileTabsId={fileTabsId}
                 mode={getAvailableMode(file, preferredMode)}
-                onHtmlChange={(content) => handleHtmlChange(file.id, content)}
               />
             ))
           ) : (
@@ -422,7 +345,7 @@ export function RichFilePreview({
           )}
         </Tabs>
       </PreviewSelectionBridgeProvider>
-      </OfficeAssistProvider>
+      </FileAssistProvider>
     </section>
   )
 }

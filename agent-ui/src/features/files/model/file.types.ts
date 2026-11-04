@@ -35,7 +35,7 @@ export function canShowAgentAssist(file: PreviewFile | null) {
   return Boolean(file && /\.(pptx|docx|html|htm|xhtml|pdf)$/i.test(file.name))
 }
 
-export function canEditHtmlFile(file: PreviewFile | null) {
+export function canUseHtmlAssist(file: PreviewFile | null) {
   return (
     file?.renderKind === "html" &&
     /\.(html|htm|xhtml)$/i.test(file.name) &&
@@ -46,7 +46,7 @@ export function canEditHtmlFile(file: PreviewFile | null) {
 }
 
 export function canUseAgentAssist(file: PreviewFile | null) {
-  return canEditHtmlFile(file) || Boolean(
+  return canUseHtmlAssist(file) || Boolean(
     file && ["document", "presentation"].includes(file.renderKind ?? "") &&
     file.renderSource && file.status !== "loading" && file.status !== "error"
   )

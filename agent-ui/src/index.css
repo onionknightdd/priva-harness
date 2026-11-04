@@ -264,54 +264,6 @@
   container-type: inline-size;
 }
 
-.file-html-visual-editor {
-  --gjs-main-font: var(--font-sans);
-  --gjs-font-size: 0.75rem;
-}
-
-.file-html-visual-editor,
-.file-html-visual-editor .gjs-editor-wrapper,
-.file-html-visual-editor .gjs-editor {
-  height: 100%;
-  min-height: 0;
-}
-
-.file-html-visual-editor .gjs-cv-canvas {
-  background-color: var(--background);
-}
-
-/* Tailwind preflight sets `svg { display: block }` with no size. GrapesJS basic
-   blocks only ship viewBox SVGs, so the tiles collapse unless we size them.
-   Do not restyle block colors — GrapesJS default pink/purple accents are the UI. */
-.file-html-visual-editor .gjs-block__media {
-  display: flex;
-  min-height: 3.25rem;
-  align-items: center;
-  justify-content: center;
-}
-
-.file-html-visual-editor .gjs-block__media svg {
-  display: block;
-  width: 3.25rem;
-  height: 3.25rem;
-  flex-shrink: 0;
-}
-
-.file-html-visual-editor .gjs-field {
-  min-height: 1.75rem;
-}
-
-.file-html-visual-editor .gjs-field-colorp,
-.file-html-visual-editor .gjs-field-color-picker {
-  min-height: 1.5rem;
-}
-
-@container file-preview (max-width: 720px) {
-  .file-html-visual-editor {
-    --gjs-left-width: 9.5rem;
-  }
-}
-
 @container file-preview (max-width: 520px) {
   .file-preview-toolbar {
     display: grid;

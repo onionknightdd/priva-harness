@@ -2,13 +2,13 @@ import * as React from "react"
 
 import { useSidebar } from "@/components/ui/sidebar"
 import type { FilePreviewMode } from "@/features/files/model/file.types"
-import type { FileAnnotation, FileAnnotationInput, OfficeFileAnnotation } from "@/features/agent-message/file-annotation"
+import type { ElementFileAnnotation, FileAnnotation, FileAnnotationInput } from "@/features/agent-message/file-annotation"
 
 import { type WorkspaceModuleId } from "./workspace-modules"
 
 export type OpenFileInWorkspaceOptions = {
   previewMode?: FilePreviewMode
-  annotation?: OfficeFileAnnotation
+  annotation?: ElementFileAnnotation
 }
 
 // Tab selection lives in its own context so that switching tabs does not
@@ -22,7 +22,7 @@ type WorkspaceTabContextValue = {
 type WorkspaceFilesContextValue = {
   pendingFilePath: string | null
   pendingPreviewMode: FilePreviewMode | null
-  pendingAnnotation: OfficeFileAnnotation | null
+  pendingAnnotation: ElementFileAnnotation | null
   fileOpenNonce: number
   openFileInWorkspace: (
     path: string,
@@ -57,7 +57,7 @@ export function WorkspaceFilesProvider({
   const [pendingPreviewMode, setPendingPreviewMode] =
     React.useState<FilePreviewMode | null>(null)
   const [fileOpenNonce, setFileOpenNonce] = React.useState(0)
-  const [pendingAnnotation, setPendingAnnotation] = React.useState<OfficeFileAnnotation | null>(null)
+  const [pendingAnnotation, setPendingAnnotation] = React.useState<ElementFileAnnotation | null>(null)
   const composer = React.useRef<((items: readonly FileAnnotationInput[]) => boolean) | null>(null)
   const pendingAnnotations = React.useRef<FileAnnotationInput[]>([])
   const registerFileAnnotationComposer = React.useCallback((handler: (items: readonly FileAnnotationInput[]) => boolean) => {

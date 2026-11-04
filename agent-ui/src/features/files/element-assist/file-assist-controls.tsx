@@ -5,11 +5,11 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { TooltipHint } from "@/components/ui/tooltip"
 
-import { useOfficeAssist } from "./office-assist-provider"
+import { useFileAssist } from "./file-assist-provider"
 
-export function OfficeAssistControls() {
+export function FileAssistControls() {
   const { t } = useTranslation()
-  const assist = useOfficeAssist()
+  const assist = useFileAssist()
   if (!assist?.enabled) return null
   return (
     <div className="flex shrink-0 items-center gap-1" data-office-assist-controls>
@@ -24,7 +24,7 @@ export function OfficeAssistControls() {
       </TooltipHint>
       <TooltipHint content={assist.error ?? t("filePreview.officeAssist.send")}>
         <Button variant="ghost" size="icon-sm" aria-label={t("filePreview.officeAssist.send")}
-          disabled={!assist.items.length} onClick={assist.send} data-office-assist-send>
+          disabled={!assist.items.length || assist.sending} onClick={assist.send} data-office-assist-send>
           <SendIcon aria-hidden="true" />
         </Button>
       </TooltipHint>
