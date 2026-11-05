@@ -4,7 +4,7 @@ import {
   Plane, Points, PointsMaterial, Raycaster, Scene, Sphere, SphereGeometry, SRGBColorSpace, Vector2,
   Vector3, WebGLRenderer, PMREMGenerator, type WebGLRenderTarget, type Object3D, type Material,
 } from "three"
-import { OrbitControls } from "three/addons/controls/OrbitControls.js"
+import { ModelNavigation } from "./model-navigation"
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js"
 import type { ModelAnchor, ModelFileAnnotation, ModelVector3 } from "@/features/agent-message/file-annotation"
 import type { LoadedModel } from "./model-types"
@@ -15,7 +15,7 @@ export type ModelSceneDriver = {
   renderer: WebGLRenderer
   scene: Scene
   camera: PerspectiveCamera
-  controls: OrbitControls
+  controls: ModelNavigation
   requestRender: () => void
   setVisible: (visible: boolean) => void
   dispose: () => void
@@ -37,7 +37,7 @@ export class ModelScene {
   readonly renderer: WebGLRenderer
   readonly scene: Scene
   readonly camera: PerspectiveCamera
-  readonly controls: OrbitControls
+  readonly controls: ModelNavigation
   readonly bounds = new Box3()
   readonly origin = new Vector3()
   readonly overlay = new Group()
@@ -62,13 +62,12 @@ export class ModelScene {
     this.scene = driver?.scene ?? new Scene()
     this.camera = driver?.camera ?? new PerspectiveCamera(45, 1, 0.01, 100000)
     this.defaultUp = this.camera.up.clone()
-    this.controls = driver?.controls ?? new OrbitControls(this.camera, this.renderer.domElement)
+    this.controls = driver?.controls ?? new ModelNavigation(this.camera, this.renderer.domElement)
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
     this.renderer.localClippingEnabled = true
     this.renderer.domElement.style.cssText = "display:block;width:100%;height:100%;touch-action:none;outline:none"
     if (!driver) {
       host.append(this.renderer.domElement)
-      this.controls.enableDamping = false
       this.scene.add(new HemisphereLight(0xffffff, 0x566078, 2.5))
       const light = new DirectionalLight(0xffffff, 3)
       light.position.set(2, 4, 3)
@@ -91,6 +90,7 @@ export class ModelScene {
 
   private changed = () => { this.requestRender(); this.onViewChange?.() }
   private visibilityChanged = () => {
+    this.controls.setActive(this.visible && !document.hidden)
     this.driver?.setVisible(this.visible && !document.hidden)
     if (document.hidden) { cancelAnimationFrame(this.frame); this.frame = 0 }
     else this.requestRender()
@@ -103,6 +103,7 @@ export class ModelScene {
       this.camera.aspect = width / height
       this.camera.updateProjectionMatrix()
     }
+    this.controls.handleResize()
     this.requestRender()
   }
 
@@ -139,7 +140,7 @@ export class ModelScene {
 
   setVisible(visible: boolean) {
     this.visible = visible
-    this.controls.enabled = visible
+    this.controls.setActive(visible && !document.hidden)
     this.driver?.setVisible(visible && !document.hidden)
     if (!visible) { cancelAnimationFrame(this.frame); this.frame = 0; this.lastFrame = 0 }
     else this.resizeViewport()

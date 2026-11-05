@@ -5,6 +5,8 @@ import copcUrl from "./fixtures/color.copc.laz?url"
 import { loadModel } from "../../../../../src/features/files/preview/model/model-loader"
 import { createPointCloudOwner } from "../../../../../src/features/files/preview/model/model-pointcloud"
 import { runThreeMfRuntimeChecks } from "./model-3mf-browser"
+import { ModelScene } from "../../../../../src/features/files/preview/model/model-scene"
+import { runModelNavigationChecks } from "./model-navigation-browser"
 
 const target = document.querySelector<HTMLDivElement>("#viewport")!
 const status = document.querySelector<HTMLPreElement>("#status")!
@@ -64,6 +66,14 @@ async function run() {
     owner.setVisible(false); await wait(200)
     owner.setVisible(true); owner.requestRender(); await wait(500)
     check(errors.length === 0, "COPC: hide/show preserves a usable owner")
+    const viewport = new ModelScene(target, {
+      renderer: owner.renderer, scene: owner.scene, camera: owner.camera, controls: owner.controls,
+      requestRender: owner.requestRender, setVisible: owner.setVisible, dispose: owner.dispose,
+    })
+    try {
+      viewport.setPointCloud(owner.bounds, owner.origin)
+      checks.push(...await runModelNavigationChecks(viewport, "COPC"))
+    } finally { viewport.dispose() }
   } finally { owner.dispose(); controller.abort() }
   check(target.querySelectorAll("canvas").length === 0, "dispose removes runtime canvases")
   const cancellation = new AbortController()

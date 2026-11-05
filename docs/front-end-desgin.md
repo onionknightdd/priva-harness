@@ -1472,6 +1472,20 @@ Workspace 文件树、聊天文件引用与 Skill 资源共用
 Select、Switch 与 Base UI Slider，状态使用主题 tokens；设置面板有轻量淡入淡出，
 减少动态效果时立即切换。交互动画模型只有显式播放才连续渲染。
 
+模型、CAD 和点云使用 Three.js `TrackballControls` 自由旋转，可跨过上下极点并保留
+翻转后的方向。左键或单指拖拽旋转，右键或 Ctrl / Command / Shift + 左键拖拽平移，
+滚轮缩放；触屏双指平移和捏合缩放。视角菜单与 Home 恢复标准方向。旋转只改变相机，
+源几何、测量和剖切仍使用原始坐标；标注和文件切换保存并恢复相机的朝上方向。
+`model-navigation.ts` 在原生输入处理后更新相机，松手立即停止，不运行空闲动画循环；
+禁用控制器的全局字母模式快捷键，隐藏或取消拖拽时清理指针，避免影响聊天输入或恢复时跳动。
+
+```text
+画布拖拽 / 触屏 -> TrackballControls -> 相机 position / target / up
+                                       +-> 按需绘制
+                                       +-> 视角缓存 / 标注恢复
+视角菜单 / Home -> 文件默认朝上方向 -> 适应窗口
+```
+
 ```text
 Desktop
 +---------------------------------------------------------+
@@ -1519,7 +1533,8 @@ STL 颜色读取支持 Magics 与 VisCAM/SolidView 两种二进制扩展。优�
 
 3MF 使用已有 `ThreeMFLoader`，支持网格、部件、基础材质、顶点颜色和包内贴图。
 读取包内主模型声明的单位（缺省为毫米），保留源坐标，测量按该单位换算；相机按
-3MF 的 Z-up 设置视角，不旋转源几何。包内相对主模型关系会规范化后交给加载器；
+3MF 的 Z-up 设置初始和标准视角，自由拖拽可改变朝向，不旋转源几何。
+包内相对主模型关系会规范化后交给加载器；
 展开内容限制为 128 MiB / 4096 项。缺失资源、无效 XML、未知单位和不支持的必需
 扩展明确报错，贴图就绪后才完成加载，取消和关闭时释放贴图 Blob URL。当前支持
 常见模型内容，不把切片器项目设置或其他厂商扩展当成已支持的模型能力。
@@ -1537,7 +1552,7 @@ opaque origin 与受限 CSP，实例管理按需渲染、动画可见性和 disp
 
 浏览器样例：`/tests/features/files/preview/model-browser.html` 检查真实查看器；
 追加 `?colored` 加载六面彩色二进制 STL，浏览器回归会检查红、绿、蓝面实际像素；
-`/tests/features/files/preview/model/model-runtime-browser.html` 检查 3MF 贴图、单位、Z-up、OCCT Worker 与 COPC；
+`/tests/features/files/preview/model/model-runtime-browser.html` 检查自由旋转、视角恢复、3MF 贴图、单位、Z-up、OCCT Worker 与 COPC；
 `/tests/features/agent-message/visualize-three-browser.html?auto` 检查交互沙箱生命周期。
 样例使用隔离文件与网络，不调用真实模型。Playwright 不加入生产依赖；已有本地安装时：
 

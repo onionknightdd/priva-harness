@@ -2,6 +2,7 @@ import { zipSync, strToU8 } from "fflate"
 import { Mesh, type Texture } from "three"
 import { loadModel } from "../../../../../src/features/files/preview/model/model-loader"
 import { ModelScene } from "../../../../../src/features/files/preview/model/model-scene"
+import { runModelNavigationChecks } from "./model-navigation-browser"
 
 function texturedPackage(png: Uint8Array) {
   return zipSync({
@@ -43,10 +44,17 @@ export async function runThreeMfRuntimeChecks(target: HTMLElement) {
     viewport.renderer.render(viewport.scene, viewport.camera)
     check(viewport.renderer.info.render.triangles === 1, "3MF: real WebGL draws a textured mesh")
     check(viewport.view().camera.up.join(",") === "0,0,1", "3MF: camera uses Z-up without rotating model coordinates")
+    const sourceTransform = loaded.root.matrixWorld.clone()
+    checks.push(...await runModelNavigationChecks(viewport, "3MF"))
+    loaded.root.updateMatrixWorld(true)
+    check(loaded.root.matrixWorld.equals(sourceTransform), "3MF: free rotation leaves source geometry and measurement coordinates unchanged")
     viewport.fit("top")
     check(viewport.camera.position.z > viewport.controls.target.z, "3MF: top view looks down the source Z axis")
   } finally { loaded.dispose(); viewport.dispose(); controller.abort(); URL.revokeObjectURL(source) }
   check(target.querySelectorAll("canvas").length === 0, "3MF: closing the viewport releases its canvas")
+  const closedPosition = viewport.camera.position.clone()
+  viewport.renderer.domElement.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: 100 }))
+  check(viewport.camera.position.equals(closedPosition), "3MF: disposed navigation no longer responds to input")
 
   const broken = URL.createObjectURL(new Blob([texturedPackage(new Uint8Array([1, 2, 3]))]))
   try {

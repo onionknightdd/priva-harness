@@ -1,5 +1,5 @@
 import { Box3, Color, PerspectiveCamera, Vector2, Vector3, type Plane, type Scene, type WebGLRenderer } from "three"
-import { OrbitControls } from "three/addons/controls/OrbitControls.js"
+import { ModelNavigation } from "./model-navigation"
 import type { ModelProgress, ModelSourceContext, ModelVector, ModelMetadata } from "./model-types"
 import { throwIfModelAborted } from "./model-types"
 import { inspectModel, modelAssetUrl, type ModelInspection } from "./model-asset"
@@ -74,7 +74,7 @@ export type PointCloudOwner = {
   renderer: WebGLRenderer
   scene: Scene
   camera: PerspectiveCamera
-  controls: OrbitControls
+  controls: ModelNavigation
   target: Vector3
   bounds: Box3
   origin: ModelVector
@@ -152,7 +152,7 @@ export async function createPointCloudOwner(options: {
   const progress = () => options.onProgress?.({ phase: "decode", loaded: source.progress, total: 1 })
   source.addEventListener("progress", progress)
   let instance: InstanceType<typeof Instance> | undefined
-  let controls: OrbitControls | undefined
+  let controls: ModelNavigation | undefined
   const colorMaps: InstanceType<typeof ColorMap>[] = []
   let disposed = false
   const dispose = () => {
@@ -194,9 +194,8 @@ export async function createPointCloudOwner(options: {
     camera.far = radius * 100
     camera.position.copy(center).add(new Vector3(1, -1, 0.8).normalize().multiplyScalar(radius * 3))
     camera.updateProjectionMatrix()
-    controls = new OrbitControls(camera, instance.renderer.domElement)
+    controls = new ModelNavigation(camera, instance.renderer.domElement)
     controls.target.copy(center)
-    controls.enableDamping = true
     controls.update()
     instance.view.setControls(controls)
     const rgb = sourceMetadata.attributes.find((attribute) => attribute.interpretation === "color")
@@ -228,7 +227,7 @@ export async function createPointCloudOwner(options: {
     const owner: PointCloudOwner = {
       renderer: instance.renderer, scene: instance.scene, camera, controls, target: controls.target, bounds, origin, revision: options.source.revision, metadata,
       requestRender: () => { if (!disposed && visible) instance!.notifyChange(camera) },
-      setVisible: (value) => { visible = value; cloud.visible = value; controls!.enabled = value; if (!value) cloud.clear(); else instance!.notifyChange(cloud) },
+      setVisible: (value) => { visible = value; cloud.visible = value; controls!.setActive(value); if (!value) cloud.clear(); else instance!.notifyChange(cloud) },
       pick: (x, y, normalized = false) => {
         if (disposed || !visible) return null
         const canvas = instance!.renderer.domElement

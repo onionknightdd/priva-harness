@@ -53,6 +53,18 @@ try {
   await page.getByRole("button", { name: "Add to chat", exact: true }).click()
   const selected = (await state()).annotations[0]?.annotation
   check("selection includes source coordinates, dependency revision and camera", selected?.kind === "model" && selected.fileRevision.length === 64 && selected.selection.anchors.length === 1 && selected.view.camera.position.length === 3)
+  bounds = await canvas.boundingBox()
+  await page.mouse.move(bounds.x + bounds.width * 0.4, bounds.y + bounds.height * 0.7)
+  await page.mouse.down()
+  await page.mouse.move(bounds.x + bounds.width * 0.7, bounds.y + bounds.height * 0.7, { steps: 8 })
+  await page.mouse.move(bounds.x + bounds.width * 0.7, bounds.y + bounds.height * 0.2, { steps: 12 })
+  await page.mouse.up()
+  await page.getByRole("button", { name: "Add to chat", exact: true }).click()
+  const rotated = (await state()).annotations.at(-1).annotation
+  check("dragging freely changes camera up and preserves the selected source point", Math.hypot(...rotated.view.camera.up.map((value, i) => value - selected.view.camera.up[i])) > 0.1 && JSON.stringify(rotated.selection.anchors) === JSON.stringify(selected.selection.anchors))
+  await page.getByRole("application").press("Home")
+  await page.getByRole("button", { name: "Add to chat", exact: true }).click()
+  check("Home restores the model's standard up direction after free rotation", (await state()).annotations.at(-1).annotation.view.camera.up.every((value, i) => Math.abs(value - selected.view.camera.up[i]) < 1e-8))
   await page.getByRole("button", { name: "Distance", exact: true }).click()
   bounds = await canvas.boundingBox()
   await page.mouse.click(bounds.x + bounds.width * 0.46, bounds.y + bounds.height * 0.48)
