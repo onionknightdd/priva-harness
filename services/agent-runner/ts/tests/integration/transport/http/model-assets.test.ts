@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { FastifyInstance } from 'fastify'
+import { strToU8, zipSync } from 'fflate'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SkillDetail } from '../../../../src/core/resource/resource-catalog.js'
 import { NodeUserFileSystem } from '../../../../src/infrastructure/filesystem/node-user-file-system.js'
@@ -69,6 +70,34 @@ describe('model resources and byte ranges', () => {
     }
   })
 
+  it('routes binary 3MF archives to model preview and preserves their MIME type and bytes', async () => {
+    const path = join(root, 'model.3MF')
+    const bytes = zipSync({
+      '[Content_Types].xml': strToU8('<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/></Types>'),
+      '3D/3dmodel.model': strToU8('<model xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" unit="millimeter"><resources/><build/></model>'),
+      'Metadata/padding.bin': new Uint8Array(3 * 1024 * 1024),
+    }, { level: 0 })
+    await writeFile(path, bytes)
+    const query = new URLSearchParams({ path }).toString()
+    const preview = await server.inject(`/api/sandbox/files/preview?${query}`)
+    expect(preview.statusCode).toBe(200)
+    expect(preview.json<unknown>()).toMatchObject({ mime_type: 'model/3mf', content: null, is_binary: true, preview_error: null })
+    expect(preview.json<{ preview_url: string }>().preview_url).toContain('/api/sandbox/models/asset?')
+    const inspect = await server.inject(`/api/sandbox/models/inspect?${new URLSearchParams({ source: 'file', path }).toString()}`)
+    expect(inspect.statusCode).toBe(200)
+    expect(inspect.json<unknown>()).toMatchObject({ name: 'model.3MF', mediaType: 'model/3mf', size: bytes.length, pointCloud: null })
+    for (const route of [url(path), `/api/sandbox/files/download?${query}`]) {
+      const response = await server.inject(route)
+      expect(response.statusCode).toBe(200)
+      expect(response.headers['content-type']).toBe('model/3mf')
+      expect(response.rawPayload.equals(Buffer.from(bytes))).toBe(true)
+      const range = await server.inject({ url: route, headers: { range: 'bytes=0-3' } })
+      expect(range.statusCode).toBe(206)
+      expect(range.headers['content-type']).toBe('model/3mf')
+      expect(range.rawPayload).toEqual(Buffer.from(bytes.subarray(0, 4)))
+    }
+  })
+
   it('allows model-local nested dependencies while rejecting traversal, URI and symlink escapes', async () => {
     const directory = join(root, 'models')
     await mkdir(join(directory, 'textures'), { recursive: true })
@@ -91,12 +120,20 @@ describe('model resources and byte ranges', () => {
     await mkdir(join(directory, 'models'), { recursive: true })
     await writeFile(join(directory, 'SKILL.md'), '---\nname: model\ndescription: Model fixture\n---\n# Model')
     await writeFile(join(directory, 'models', 'scene.gltf'), '{}')
+    await writeFile(join(directory, 'models', 'part.3mf'), Buffer.from([0x50, 0x4b, 3, 4]))
     await writeFile(join(directory, 'models', 'data.bin'), 'buffer')
     const listing = await resources.skills.list({ harness: 'claude', cwd: root })
     const skill = listing.groups.flatMap((group) => group.items).find((item) => item.name === 'model') as SkillDetail | undefined
     expect(skill).toBeDefined()
     const query = new URLSearchParams({ source: 'skill', skillId: skill?.id ?? '', harness: 'claude', cwd: root, path: 'models/scene.gltf' })
     expect((await server.inject(`/api/sandbox/models/inspect?${query.toString()}`)).statusCode).toBe(200)
+    const threeMfQuery = new URLSearchParams(query)
+    threeMfQuery.set('path', 'models/part.3mf')
+    expect((await server.inject(`/api/sandbox/models/inspect?${threeMfQuery.toString()}`)).json<unknown>()).toMatchObject({ mediaType: 'model/3mf' })
+    const threeMfAsset = await server.inject(`/api/sandbox/models/asset?${threeMfQuery.toString()}`)
+    expect(threeMfAsset.statusCode).toBe(200)
+    expect(threeMfAsset.headers['content-type']).toBe('model/3mf')
+    expect(threeMfAsset.rawPayload).toEqual(Buffer.from([0x50, 0x4b, 3, 4]))
     query.set('resource', 'data.bin')
     expect((await server.inject(`/api/sandbox/models/asset?${query.toString()}`)).body).toBe('buffer')
     query.set('resource', '../SKILL.md')

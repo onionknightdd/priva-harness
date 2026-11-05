@@ -1458,7 +1458,7 @@ Workspace 文件树、聊天文件引用与 Skill 资源共用
 文件树 / 聊天文件引用 / Skill 资源
                  |
         现有预览入口 -> model renderer
-                       +-- GLB/glTF/OBJ/STL -> Three.js loaders
+                       +-- GLB/glTF/OBJ/STL/3MF -> Three.js loaders
                        +-- PLY/PCD -> float64 局部原点 -> Three.js
                        +-- STEP/STP/IGES/IGS -> OCCT Worker -> Three.js
                        +-- 大点云/LAS/LAZ -> COPC -> Giro3D + Range
@@ -1511,6 +1511,19 @@ Skill 使用自己的 source context，不借普通文件接口绕过 Skill 范�
 `scripts/copy-model-codecs.mjs` 在 postinstall/predev/prebuild 运行，生成目录
 `public/model-codecs/` 已加入忽略规则。
 
+STL 颜色读取支持 Magics 与 VisCAM/SolidView 两种二进制扩展。优先采用 Three.js
+解析的 Magics 颜色；没有 Magics 颜色时，按 VisCAM 的有效位及 RGB 顺序读取面颜色，
+无有效颜色的面沿用默认灰色。无颜色的普通 STL 仍显示灰色。带顶点色的网格使用白色
+基础材质，避免将默认灰色与原色相乘。STL 没有统一的颜色规范，缺失格式标记或使用
+其他自定义属性编码的文件不保证能自动判断。
+
+3MF 使用已有 `ThreeMFLoader`，支持网格、部件、基础材质、顶点颜色和包内贴图。
+读取包内主模型声明的单位（缺省为毫米），保留源坐标，测量按该单位换算；相机按
+3MF 的 Z-up 设置视角，不旋转源几何。包内相对主模型关系会规范化后交给加载器；
+展开内容限制为 128 MiB / 4096 项。缺失资源、无效 XML、未知单位和不支持的必需
+扩展明确报错，贴图就绪后才完成加载，取消和关闭时释放贴图 Blob URL。当前支持
+常见模型内容，不把切片器项目设置或其他厂商扩展当成已支持的模型能力。
+
 交互式 `visualize` 使用已有 iframe 沙箱中的本地 `THREE`、`OrbitControls` 和
 `createThreeScene`。生成完成后才执行代码，主题通过消息更新；资源必须列在工具参数
 `assets` 中，再用 `assets.read(path)` / `assets.url(path)` 读取。iframe 继续保持
@@ -1523,7 +1536,8 @@ opaque origin 与受限 CSP，实例管理按需渲染、动画可见性和 disp
 ```
 
 浏览器样例：`/tests/features/files/preview/model-browser.html` 检查真实查看器；
-`/tests/features/files/preview/model/model-runtime-browser.html` 检查 OCCT Worker 与 COPC；
+追加 `?colored` 加载六面彩色二进制 STL，浏览器回归会检查红、绿、蓝面实际像素；
+`/tests/features/files/preview/model/model-runtime-browser.html` 检查 3MF 贴图、单位、Z-up、OCCT Worker 与 COPC；
 `/tests/features/agent-message/visualize-three-browser.html?auto` 检查交互沙箱生命周期。
 样例使用隔离文件与网络，不调用真实模型。Playwright 不加入生产依赖；已有本地安装时：
 

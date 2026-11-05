@@ -4,6 +4,7 @@ import igesSource from "occt-import-js/test/testfiles/cube-10x10mm/Cube 10x10.ig
 import copcUrl from "./fixtures/color.copc.laz?url"
 import { loadModel } from "../../../../../src/features/files/preview/model/model-loader"
 import { createPointCloudOwner } from "../../../../../src/features/files/preview/model/model-pointcloud"
+import { runThreeMfRuntimeChecks } from "./model-3mf-browser"
 
 const target = document.querySelector<HTMLDivElement>("#viewport")!
 const status = document.querySelector<HTMLPreElement>("#status")!
@@ -13,6 +14,8 @@ const wait = (duration: number) => new Promise((resolve) => setTimeout(resolve, 
 
 async function run() {
   checks.length = 0
+  status.textContent = "Running real 3MF checks…"
+  checks.push(...await runThreeMfRuntimeChecks(target))
   status.textContent = "Running real CAD workers…"
   for (const [name, text] of [["cube.step", stepSource], ["cube.iges", igesSource]]) {
     const url = URL.createObjectURL(new Blob([text]))
@@ -74,5 +77,5 @@ async function run() {
   return checks
 }
 
-Object.assign(window, { runModelRuntimeChecks: run })
+Object.assign(window, { runModelRuntimeChecks: run, runThreeMfRuntimeChecks: () => runThreeMfRuntimeChecks(target) })
 document.querySelector("#run")!.addEventListener("click", () => { void run().catch((error) => { status.textContent = `FAIL: ${error.stack ?? error}` }) })

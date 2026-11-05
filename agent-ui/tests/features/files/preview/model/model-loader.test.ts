@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { createRequire } from "node:module"
 import { test } from "node:test"
-import { Mesh, Points } from "three"
+import { Mesh, MeshStandardMaterial, Points } from "three"
 import { ModelAssetResolver, modelAssetUrl, normalizeModelResource } from "../../../../../src/features/files/preview/model/model-asset"
 import { getModelFormat } from "../../../../../src/features/files/preview/model/model-format"
 import { buildCadModel } from "../../../../../src/features/files/preview/model/model-cad"
@@ -15,7 +15,7 @@ import { doubleBinaryPcd, doubleBinaryPly, pointPcd, pointPly, triangleGlb, tria
 globalThis.ProgressEvent ??= class extends Event { constructor(type: string, init: ProgressEventInit = {}) { super(type); Object.assign(this, init) } } as typeof ProgressEvent
 
 test("model formats recognize all supported families and COPC suffix", () => {
-  for (const [name, format] of [["x.GLB", "glb"], ["x.gltf", "gltf"], ["x.obj", "obj"], ["x.stl", "stl"], ["x.ply", "ply"], ["x.pcd", "pcd"], ["x.STP", "step"], ["x.step", "step"], ["x.IGS", "iges"], ["x.iges", "iges"], ["x.las", "las"], ["x.laz", "laz"], ["x.copc.laz", "copc"]]) assert.equal(getModelFormat(name), format)
+  for (const [name, format] of [["x.GLB", "glb"], ["x.gltf", "gltf"], ["x.obj", "obj"], ["x.stl", "stl"], ["x.3MF", "3mf"], ["x.ply", "ply"], ["x.pcd", "pcd"], ["x.STP", "step"], ["x.step", "step"], ["x.IGS", "iges"], ["x.iges", "iges"], ["x.las", "las"], ["x.laz", "laz"], ["x.copc.laz", "copc"]]) assert.equal(getModelFormat(name), format)
   assert.equal(getModelFormat("document.docx"), null)
 })
 
@@ -60,6 +60,31 @@ test("real native loaders parse GLB, external glTF, OBJ/MTL, STL and precision-p
       model.dispose()
       model.dispose()
     }
+  } finally { globalThis.fetch = originalFetch }
+})
+
+test("colored binary STL preserves all six face colors through the preview loader", async () => {
+  const bytes = await readFile(new URL("./fixtures/colored-cube.stl", import.meta.url))
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => new Response(new Uint8Array(bytes))
+  try {
+    const model = await loadModel({ name: "colored-cube.stl", url: "/colored-cube.stl", resourceUrl: (uri) => uri, signal: new AbortController().signal })
+    try {
+      assert.equal(model.metadata.triangleCount, 12)
+      const mesh = model.root.children[0] as Mesh
+      assert.ok(mesh.material instanceof MeshStandardMaterial)
+      assert.equal(mesh.material.vertexColors, true)
+      assert.equal(mesh.material.color.getHex(), 0xffffff)
+      const colors = mesh.geometry.getAttribute("color")
+      assert.equal(colors.count, 36)
+      const counts = new Map<string, number>()
+      for (let i = 0; i < colors.count; i++) {
+        const color = [colors.getX(i), colors.getY(i), colors.getZ(i)].join(",")
+        counts.set(color, (counts.get(color) ?? 0) + 1)
+      }
+      assert.deepEqual([...counts.keys()].sort(), ["0,0,1", "0,1,0", "0,1,1", "1,0,0", "1,0,1", "1,1,0"])
+      assert.ok([...counts.values()].every((count) => count === 6))
+    } finally { model.dispose() }
   } finally { globalThis.fetch = originalFetch }
 })
 

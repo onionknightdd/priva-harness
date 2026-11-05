@@ -3,6 +3,12 @@ import type { ModelAnchor, ModelFileAnnotation, ModelVector3 } from "@/features/
 export type ModelUnits = ModelFileAnnotation["units"]
 export const METERS_PER_UNIT = { mm: 0.001, cm: 0.01, m: 1, in: 0.0254, ft: 0.3048, model: 1 }
 
+export function initialModelUnits(unit: Pick<ModelUnits, "metersPerUnit" | "source">): ModelUnits {
+  const displayUnit = unit.metersPerUnit === null ? "model"
+    : (Object.keys(METERS_PER_UNIT) as ModelUnits["displayUnit"][]).find((name) => name !== "model" && METERS_PER_UNIT[name] === unit.metersPerUnit) ?? "mm"
+  return { ...unit, displayUnit }
+}
+
 export function distanceBetween(a: ModelVector3, b: ModelVector3) {
   return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2])
 }

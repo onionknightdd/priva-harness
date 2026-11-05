@@ -17,7 +17,13 @@ const positions = geometry.getAttribute("position")
 const triangles = []
 for (let i = 0; i < positions.count; i += 3) triangles.push(`facet normal 0 0 0\nouter loop\n${[i, i + 1, i + 2].map((index) => `vertex ${positions.getX(index)} ${positions.getY(index)} ${positions.getZ(index)}`).join("\n")}\nendloop\nendfacet`)
 geometry.dispose()
-const stl = `solid box\n${triangles.join("\n")}\nendsolid box`
+const stl = query.has("colored")
+  ? await fetch(new URL("./model/fixtures/colored-cube.stl", import.meta.url)).then((response) => response.arrayBuffer())
+  : `solid box\n${triangles.join("\n")}\nendsolid box`
+const fileName = query.get("name") ?? (query.has("colored") ? "colored-cube.stl" : "box.stl")
+const filePath = `/fixture/${fileName}`
+const mediaType = fileName.toLowerCase().endsWith(".3mf") ? "model/3mf" : "model/stl"
+const fileSize = typeof stl === "string" ? stl.length : stl.byteLength
 const observed = { frames: 0, requests: 0, delayNextAssetMs: 0, annotations: [] as FileAnnotationInput[], errors: [] as string[] }
 for (const method of ["drawArrays", "drawElements"] as const) {
   const draw = WebGL2RenderingContext.prototype[method]
@@ -28,14 +34,14 @@ window.addEventListener("unhandledrejection", (event) => observed.errors.push(St
 const nativeFetch = fetch.bind(window)
 window.fetch = async (input, init) => {
   const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url, location.href)
-  if (url.pathname === "/api/sandbox/models/inspect") return Response.json({ name: "box.stl", path: "/fixture/box.stl", size: stl.length, revision: "a".repeat(64), mediaType: "model/stl", pointCloud: null })
+  if (url.pathname === "/api/sandbox/models/inspect") return Response.json({ name: fileName, path: filePath, size: fileSize, revision: "a".repeat(64), mediaType, pointCloud: null })
   if (url.pathname === "/api/sandbox/models/asset") {
     observed.requests++
     const delay = observed.delayNextAssetMs
     observed.delayNextAssetMs = 0
     if (delay) await new Promise((resolve) => setTimeout(resolve, delay))
     init?.signal?.throwIfAborted()
-    return new Response(stl, { headers: { "Content-Type": "model/stl", "Content-Length": String(stl.length) } })
+    return new Response(stl, { headers: { "Content-Type": mediaType, "Content-Length": String(fileSize) } })
   }
   if (url.pathname.startsWith("/api/")) throw new Error("Unexpected fixture request: " + url.pathname)
   return nativeFetch(input, init)
@@ -47,7 +53,7 @@ function Fixture() {
   const [mounted, setMounted] = React.useState(true)
   const [generation, setGeneration] = React.useState(0)
   const [fileId, setFileId] = React.useState("box")
-  const files: PreviewFile[] = [{ id: "box", path: "/fixture/box.stl", name: "box.stl", mediaType: "model/stl", renderKind: "model", renderSource: "fixture", status: "ready", previewGeneration: generation }, { id: "text", path: "/fixture/note.txt", name: "note.txt", mediaType: "text/plain", content: "A text file", status: "ready" }]
+  const files: PreviewFile[] = [{ id: "box", path: filePath, name: fileName, mediaType, renderKind: "model", renderSource: "fixture", status: "ready", previewGeneration: generation }, { id: "text", path: "/fixture/note.txt", name: "note.txt", mediaType: "text/plain", content: "A text file", status: "ready" }]
   React.useEffect(() => workspace.registerFileAnnotationComposer((items) => { observed.annotations.push(...items); return true }), [workspace.registerFileAnnotationComposer])
   return <div className="w-full">
     <nav className="mb-3 flex flex-wrap gap-3 text-sm"><button onClick={() => setActive(!active)}>{active ? "Hide preview" : "Show preview"}</button><button onClick={() => setMounted(!mounted)}>{mounted ? "Unmount" : "Mount"}</button><button onClick={() => setGeneration(generation + 1)}>Refresh</button></nav>

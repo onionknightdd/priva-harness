@@ -2,7 +2,6 @@ import { Box3, BufferGeometry, Group, LoadingManager, Material, Mesh, MeshStanda
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js"
 import { OBJLoader } from "three/addons/loaders/OBJLoader.js"
 import { MTLLoader } from "three/addons/loaders/MTLLoader.js"
-import { STLLoader } from "three/addons/loaders/STLLoader.js"
 import { PLYLoader } from "three/addons/loaders/PLYLoader.js"
 import { PCDLoader } from "three/addons/loaders/PCDLoader.js"
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js"
@@ -12,6 +11,8 @@ import { ModelAssetResolver, normalizeModelResource } from "./model-asset"
 import { buildCadModel, parseCadInWorker } from "./model-cad"
 import { getModelFormat } from "./model-format"
 import { rebasePcd, rebasePly } from "./model-precision"
+import { parseStl } from "./model-stl"
+import { parseThreeMf } from "./model-3mf"
 import { ModelConversionRequiredError, throwIfModelAborted, type LoadedModel, type LoadModelOptions, type ModelMetadata, type ModelVector } from "./model-types"
 
 export const MAX_STATIC_POINTS_BYTES = 32 * 1024 * 1024
@@ -69,7 +70,8 @@ function countGeometry(root: Object3D) {
 
 function defaultMesh(geometry: BufferGeometry) {
   if (!geometry.getAttribute("normal")) geometry.computeVertexNormals()
-  return new Mesh(geometry, new MeshStandardMaterial({ color: 0xb5bac4, vertexColors: Boolean(geometry.getAttribute("color")), metalness: 0.05, roughness: 0.65 }))
+  const vertexColors = geometry.hasAttribute("color")
+  return new Mesh(geometry, new MeshStandardMaterial({ color: vertexColors ? 0xffffff : 0xb5bac4, vertexColors, metalness: 0.05, roughness: 0.65 }))
 }
 
 async function loadObj(text: string, resolver: ModelAssetResolver, manager: LoadingManager) {
@@ -114,6 +116,7 @@ export async function loadModel(options: LoadModelOptions): Promise<LoadedModel>
   const codecBase = `${import.meta.env?.BASE_URL ?? "/"}model-codecs/`
   const draco = new DRACOLoader(codecManager).setDecoderPath(codecBase + "draco/").setWorkerLimit(2)
   let ktx2: KTX2Loader | undefined
+  let threeMf: ReturnType<typeof parseThreeMf> | undefined
   let root = new Group()
   const unusedScenes: Group[] = []
   let animations: AnimationClip[] = []
@@ -128,6 +131,7 @@ export async function loadModel(options: LoadModelOptions): Promise<LoadedModel>
     codecManager.abort()
     draco.dispose()
     ktx2?.dispose()
+    threeMf?.dispose()
     disposeModelObject(root)
     for (const scene of unusedScenes) disposeModelObject(scene)
     resolver.dispose()
@@ -159,10 +163,13 @@ export async function loadModel(options: LoadModelOptions): Promise<LoadedModel>
       animations = result.animations
       // Other glTF scenes can own resources even when they are not displayed.
       for (const scene of result.scenes) if (scene !== result.scene) unusedScenes.push(scene)
+    } else if (format === "3mf") {
+      threeMf = parseThreeMf(bytes, manager)
+      root.add(threeMf.root)
     } else if (format === "obj") {
       root.add(await loadObj(new TextDecoder().decode(bytes), resolver, manager))
     } else if (format === "stl") {
-      const geometry = new STLLoader(manager).parse(bytes)
+      const geometry = parseStl(bytes)
       // Many STL exporters write zero facet normals. Reconstruct them from winding.
       geometry.computeVertexNormals()
       root.add(defaultMesh(geometry))
@@ -209,7 +216,7 @@ export async function loadModel(options: LoadModelOptions): Promise<LoadedModel>
     const counts = countGeometry(root)
     const metadata: ModelMetadata = {
       format, kind, origin, bounds: new Box3().setFromObject(root), ...counts,
-      unit: format === "glb" || format === "gltf" || kind === "cad" ? { metersPerUnit: 1, source: "format" } : { metersPerUnit: null, source: "unknown" },
+      unit: threeMf?.unit ?? (format === "glb" || format === "gltf" || kind === "cad" ? { metersPerUnit: 1, source: "format" } : { metersPerUnit: null, source: "unknown" }),
       warnings: kind === "cad" ? ["CAD measurements use tessellated surfaces."] : kind === "pointcloud" ? ["Measurements select displayed points; source units must be confirmed."] : [],
     }
     const revision = await resolver.revision()

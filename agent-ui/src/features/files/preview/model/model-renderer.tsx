@@ -16,7 +16,7 @@ import { inspectModel, modelAssetUrl, type ModelSourceContext } from "./model-as
 import { shouldStreamPointCloud } from "./model-pointcloud"
 import { loadModel } from "./model-loader"
 import { ModelScene } from "./model-scene"
-import { METERS_PER_UNIT, displayDistance, measurementValue, type ModelUnits } from "./model-measurement"
+import { METERS_PER_UNIT, displayDistance, initialModelUnits, measurementValue, type ModelUnits } from "./model-measurement"
 import { ModelSelect, ModelSlider } from "./model-controls"
 import { ModelConversionRequiredError, type LoadedModel, type ModelMetadata, type ModelProgress } from "./model-types"
 
@@ -129,7 +129,7 @@ export function ModelRenderer({ file, active = true, sourceContext, viewStates }
         viewport.restore(saved.view); setUnits(saved.units); setClipping(saved.view.clipping)
       } else {
         const unit = loadedMetadata?.unit
-        setUnits(unit ? { ...unit, displayUnit: unit.metersPerUnit === 1 ? "m" : unit.metersPerUnit === 0.001 ? "mm" : "model" } : unknownUnits)
+        setUnits(unit ? initialModelUnits(unit) : unknownUnits)
       }
       setRevision(loadedRevision)
       setStatus("ready")

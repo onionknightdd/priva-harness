@@ -119,6 +119,7 @@ export class ModelScene {
   }
 
   setModel(model: LoadedModel) {
+    this.defaultUp.set(0, model.metadata.format === "3mf" ? 0 : 1, model.metadata.format === "3mf" ? 1 : 0)
     this.root = model.root
     this.scene.add(model.root)
     this.origin.fromArray(model.metadata.origin)

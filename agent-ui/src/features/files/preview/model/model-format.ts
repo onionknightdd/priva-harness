@@ -1,7 +1,7 @@
 import type { ModelFormat } from "./model-types"
 
 const formats: Record<string, ModelFormat> = {
-  glb: "glb", gltf: "gltf", obj: "obj", stl: "stl", ply: "ply", pcd: "pcd",
+  glb: "glb", gltf: "gltf", obj: "obj", stl: "stl", "3mf": "3mf", ply: "ply", pcd: "pcd",
   step: "step", stp: "step", iges: "iges", igs: "iges", las: "las", laz: "laz", copc: "copc",
 }
 

@@ -24,6 +24,30 @@ try {
   await page.waitForTimeout(500)
   check("static viewport renders on demand", (await state()).frames === settled)
   const canvas = page.locator("canvas")
+  if (new URL(url).searchParams.has("colored")) {
+    const suffix = new URL(url).searchParams.has("dark") ? "-dark" : ""
+    const screenshot = await canvas.screenshot({ path: `/tmp/colored-stl-canvas${suffix}.png` })
+    const pixels = await page.evaluate(async (base64) => {
+      const image = await createImageBitmap(new Blob([Uint8Array.from(atob(base64), (character) => character.charCodeAt(0))], { type: "image/png" }))
+      const surface = document.createElement("canvas")
+      surface.width = image.width; surface.height = image.height
+      const context = surface.getContext("2d")
+      context.drawImage(image, 0, 0)
+      image.close()
+      const data = context.getImageData(0, 0, surface.width, surface.height).data
+      const counts = { red: 0, green: 0, blue: 0 }
+      for (let i = 0; i < data.length; i += 4) {
+        const [red, green, blue] = [data[i], data[i + 1], data[i + 2]]
+        // PBR lighting adds white reflections, so detect hue dominance rather than pure RGB.
+        if (red > Math.max(green, blue) + 24) counts.red++
+        if (green > Math.max(red, blue) + 24) counts.green++
+        if (blue > Math.max(red, green) + 24) counts.blue++
+      }
+      return counts
+    }, screenshot.toString("base64"))
+    check(`colored STL renders red, green and blue faces (${JSON.stringify(pixels)})`, Object.values(pixels).every((count) => count > 500))
+    await page.screenshot({ path: `/tmp/colored-stl-preview${suffix}.png` })
+  }
   let bounds = await canvas.boundingBox()
   await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
   await page.getByRole("button", { name: "Add to chat", exact: true }).click()

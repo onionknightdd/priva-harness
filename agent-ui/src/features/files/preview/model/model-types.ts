@@ -1,6 +1,6 @@
 import type { AnimationClip, Box3, Group, WebGLRenderer } from "three"
 
-export type ModelFormat = "glb" | "gltf" | "obj" | "stl" | "ply" | "pcd" | "step" | "iges" | "las" | "laz" | "copc"
+export type ModelFormat = "glb" | "gltf" | "obj" | "stl" | "3mf" | "ply" | "pcd" | "step" | "iges" | "las" | "laz" | "copc"
 export type ModelVector = [number, number, number]
 export type ModelSourceContext =
   | { kind: "file"; path: string }
