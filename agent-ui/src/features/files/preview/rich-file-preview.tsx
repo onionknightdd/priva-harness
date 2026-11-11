@@ -1,5 +1,4 @@
 import * as React from "react"
-import gsap from "gsap"
 import { useTranslation } from "react-i18next"
 
 import { Tabs } from "@/components/motion/tabs"
@@ -31,6 +30,7 @@ import { isCsvSource } from "./renderers/spreadsheet-source"
 import { SourcePreview } from "./source-preview"
 import { UnsupportedPreview } from "./unsupported-preview"
 import type { ModelViewState } from "./model/model-renderer"
+import { playEnter } from "@/lib/motion-effects"
 
 const ModelRenderer = React.lazy(() => import("./model/model-renderer").then((module) => ({ default: module.ModelRenderer })))
 
@@ -171,31 +171,11 @@ function FilePreviewPanel({
         ].includes(file.renderKind ?? "")))
 
   React.useLayoutEffect(() => {
-    const content = contentRef.current
-
-    if (
-      !active ||
-      !content ||
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
+    if (!active) {
       return
     }
 
-    const context = gsap.context(() => {
-      gsap.fromTo(
-        content,
-        { opacity: 0, y: 5 },
-        {
-          opacity: 1,
-          y: 0,
-          duration: 0.22,
-          ease: "power2.out",
-          clearProps: "transform,opacity",
-        }
-      )
-    }, content)
-
-    return () => context.revert()
+    return playEnter(contentRef.current, { y: 5 })
   }, [active, file.id, mode])
 
   return (

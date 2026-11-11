@@ -1,5 +1,4 @@
 import * as React from "react"
-import gsap from "gsap"
 import { LoaderCircleIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
@@ -15,34 +14,17 @@ import {
 import { Input } from "@/components/ui/input"
 
 import type { FileBrowserItem } from "../file-browser-data"
+import { playEnter } from "@/lib/motion-effects"
 
 function useAnimatedError(error: string | null) {
   const errorRef = React.useRef<HTMLParagraphElement>(null)
 
   React.useLayoutEffect(() => {
-    if (
-      !error ||
-      !errorRef.current ||
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
+    if (!error) {
       return
     }
 
-    const tween = gsap.fromTo(
-      errorRef.current,
-      { opacity: 0, x: -4 },
-      {
-        opacity: 1,
-        x: 0,
-        duration: 0.22,
-        ease: "power2.out",
-        clearProps: "transform,opacity",
-      }
-    )
-
-    return () => {
-      tween.kill()
-    }
+    return playEnter(errorRef.current, { x: -4 })
   }, [error])
 
   return errorRef

@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import gsap from "gsap"
 import { motion } from "motion/react"
 
 import type { AppView } from "@/lib/app-view"
@@ -22,6 +21,7 @@ import { NavUser } from "./footer/nav-user"
 import { HarnessSwitcher } from "./header/harness-switcher"
 import { SidebarModeTabs } from "./header/sidebar-mode-tabs"
 import { sidebarData } from "./sidebar-data"
+import { playEnter } from "@/lib/motion-effects"
 
 const ScrollableSidebarContent = motion.create(SidebarContent)
 
@@ -44,35 +44,16 @@ export function AppSidebar({
     (session: SessionInfo) => {
       onViewChange("agent-message")
       openSession(session)
+      // The phone sidebar covers the chat; choosing a session reveals it.
+      if (isMobile) setOpenMobile(false)
     },
-    [onViewChange, openSession]
+    [isMobile, onViewChange, openSession, setOpenMobile]
   )
 
-  React.useLayoutEffect(() => {
-    const footerFade = footerFadeRef.current
-
-    if (
-      !footerFade ||
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
-      return
-    }
-
-    const context = gsap.context(() => {
-      gsap.fromTo(
-        footerFade,
-        { opacity: 0 },
-        {
-          opacity: 1,
-          duration: 0.24,
-          ease: "power1.out",
-          clearProps: "opacity",
-        }
-      )
-    }, footerFade)
-
-    return () => context.revert()
-  }, [])
+  React.useLayoutEffect(
+    () => playEnter(footerFadeRef.current, { duration: 240 }),
+    []
+  )
 
   return (
     <Sidebar collapsible="icon" resizable {...props}>

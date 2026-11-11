@@ -1,5 +1,4 @@
 import * as React from "react"
-import gsap from "gsap"
 import { FolderIcon, SearchIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
@@ -15,6 +14,7 @@ import type {
   FileBrowserItem,
 } from "../file-browser-data"
 import { TooltipHint } from "@/components/ui/tooltip"
+import { playEnter } from "@/lib/motion-effects"
 
 type PathMenuEntry = Pick<
   FileBrowserBreadcrumbEntry,
@@ -90,37 +90,15 @@ export function SearchablePathMenuContent({
   React.useLayoutEffect(() => {
     const results = resultsRef.current
 
-    if (
-      !results ||
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
+    if (!results) {
       return
     }
 
-    const items = results.querySelectorAll<HTMLElement>(
-      "[data-path-menu-result]"
-    )
-
-    if (items.length === 0) {
-      return
-    }
-
-    const context = gsap.context(() => {
-      gsap.fromTo(
-        items,
-        { opacity: 0, y: 3 },
-        {
-          opacity: 1,
-          y: 0,
-          duration: 0.16,
-          stagger: 0.015,
-          ease: "power1.out",
-          clearProps: "opacity,transform",
-        }
-      )
-    }, results)
-
-    return () => context.revert()
+    return playEnter(results.querySelectorAll("[data-path-menu-result]"), {
+      y: 3,
+      duration: 160,
+      stagger: 15,
+    })
   }, [normalizedQuery])
 
   return (

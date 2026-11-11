@@ -1,5 +1,4 @@
 import * as React from "react"
-import gsap from "gsap"
 import {
   CheckIcon,
   CopyIcon,
@@ -35,25 +34,7 @@ import { writeClipboardText } from "@/lib/clipboard"
 import { SPRING_LAYOUT } from "@/lib/ease"
 import { cn } from "@/lib/utils"
 import { FileAssistControls } from "../element-assist/file-assist-controls"
-
-function animateControl(control: HTMLButtonElement) {
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    return
-  }
-
-  const target = control.querySelector("svg") ?? control
-
-  gsap.fromTo(
-    target,
-    { scale: 0.78 },
-    {
-      scale: 1,
-      duration: 0.28,
-      ease: "back.out(2.5)",
-      clearProps: "transform",
-    }
-  )
-}
+import { playControlPop } from "@/lib/motion-effects"
 
 export function FilePreviewToolbar({
   activeFile,
@@ -90,9 +71,7 @@ export function FilePreviewToolbar({
 }) {
   const { t } = useTranslation()
   const feedbackTimerRef = React.useRef<number | null>(null)
-  const closeTweensRef = React.useRef(
-    new Map<string, gsap.core.Tween>()
-  )
+  const closeAnimationsRef = React.useRef(new Map<string, Animation>())
   const [announcement, setAnnouncement] = React.useState("")
   const [marqueeFileId, setMarqueeFileId] = React.useState<
     string | null
@@ -108,8 +87,8 @@ export function FilePreviewToolbar({
         window.clearTimeout(feedbackTimerRef.current)
       }
 
-      closeTweensRef.current.forEach((tween) => tween.kill())
-      closeTweensRef.current.clear()
+      closeAnimationsRef.current.forEach((animation) => animation.cancel())
+      closeAnimationsRef.current.clear()
     },
     []
   )
@@ -132,7 +111,7 @@ export function FilePreviewToolbar({
       return
     }
 
-    animateControl(event.currentTarget)
+    playControlPop(event.currentTarget)
 
     try {
       await writeClipboardText(activeFile.content)
@@ -144,7 +123,7 @@ export function FilePreviewToolbar({
   }
 
   const handleDownload = (event: React.MouseEvent<HTMLButtonElement>) => {
-    animateControl(event.currentTarget)
+    playControlPop(event.currentTarget)
     if (!activeFile || !onDownload) {
       announce(t("filePreview.downloadUnavailable"))
       return
@@ -160,7 +139,7 @@ export function FilePreviewToolbar({
   ) => {
     event.stopPropagation()
 
-    if (closeTweensRef.current.has(fileId)) {
+    if (closeAnimationsRef.current.has(fileId)) {
       return
     }
 
@@ -176,23 +155,23 @@ export function FilePreviewToolbar({
       return
     }
 
-    const tween = gsap.to(tab, {
-      opacity: 0,
-      scale: 0.96,
-      duration: 0.16,
-      ease: "power2.in",
-      onComplete: () => {
-        closeTweensRef.current.delete(fileId)
-        onFileClose(fileId)
-      },
+    // The tab stays faded until its removal commits, so it never flashes back.
+    const animation = tab.animate([{ opacity: 0, scale: 0.96 }], {
+      duration: 160,
+      easing: "ease-in",
+      fill: "forwards",
     })
+    animation.onfinish = () => {
+      closeAnimationsRef.current.delete(fileId)
+      onFileClose(fileId)
+    }
 
-    closeTweensRef.current.set(fileId, tween)
+    closeAnimationsRef.current.set(fileId, animation)
   }
 
   const handleCloseAll = () => {
-    closeTweensRef.current.forEach((tween) => tween.kill())
-    closeTweensRef.current.clear()
+    closeAnimationsRef.current.forEach((animation) => animation.cancel())
+    closeAnimationsRef.current.clear()
     onCloseAll()
   }
 

@@ -17,10 +17,10 @@ Return to files      -> reveal same tree and preview -> 150 ms opacity feedback
 Previously the keyed panel under `AnimatePresence mode="wait"` destroyed the
 browser on every tab switch. Its mount effect requested the initial directory
 again and discarded search, directory, and open-file state. A blur/scale spring
-on the entire tab panel also overlapped a second GSAP entrance on the file page.
+on the entire tab panel also overlapped a second staggered entrance on the file page.
 The panel now uses a short opacity transition without an exit wait or blur;
 keyboard and reduced-motion transitions are immediate. Compact file pages skip
-the separate GSAP entrance. Lazy loading has a skeleton instead of a blank area.
+the separate staggered entrance. Lazy loading has a skeleton instead of a blank area.
 
 Manual regression check in the actual app: open Files, navigate to a directory,
 enter a search, and open a source preview. Switch to Tasks & Activity or Terminal,

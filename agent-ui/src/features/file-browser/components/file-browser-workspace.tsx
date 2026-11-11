@@ -1,5 +1,4 @@
 import * as React from "react"
-import gsap from "gsap"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -9,6 +8,7 @@ import {
 } from "@/components/ui/resizable"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
+import { playEnter } from "@/lib/motion-effects"
 
 export function FileBrowserWorkspace({
   compact = false,
@@ -133,30 +133,10 @@ export function FileBrowserWorkspace({
       return
     }
 
-    const pane = pageRef.current?.querySelector("[data-mobile-file-pane]")
-
-    if (
-      !pane ||
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
-      return
-    }
-
-    const context = gsap.context(() => {
-      gsap.fromTo(
-        pane,
-        { opacity: 0, y: 5 },
-        {
-          opacity: 1,
-          y: 0,
-          duration: 0.22,
-          ease: "power2.out",
-          clearProps: "transform,opacity",
-        }
-      )
-    }, pageRef)
-
-    return () => context.revert()
+    return playEnter(
+      pageRef.current?.querySelector("[data-mobile-file-pane]"),
+      { y: 5 }
+    )
   }, [isMobile, treeVisible])
 
   return (

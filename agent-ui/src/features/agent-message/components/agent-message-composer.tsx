@@ -80,6 +80,9 @@ function measureTextWidth(text: string, source: HTMLElement) {
   return measureContext.measureText(text).width
 }
 
+/** Below this composer width the single-line layout truncates the placeholder. */
+const COMPOSER_SINGLE_LINE_MIN_WIDTH = 480
+
 function useOffsetWidth(
   ref: React.RefObject<HTMLElement | null>,
   enabled = true
@@ -393,8 +396,13 @@ export function AgentMessageComposer({
     draftParts.filter((part) => part.type !== "text").length
   )
   // The home composer starts at two lines. A session composer stays one line
-  // until the draft or an attachment needs the footer layout.
-  const singleLine = compact && attachments.length === 0 && !overflowsLine
+  // until the draft or an attachment needs the footer layout, or the composer
+  // itself is too narrow to leave the placeholder room beside the controls
+  // (a phone, or a chat column squeezed by the sidebar and Workspace).
+  const shellWidth = useOffsetWidth(shellRef)
+  const narrow = shellWidth > 0 && shellWidth < COMPOSER_SINGLE_LINE_MIN_WIDTH
+  const singleLine =
+    compact && attachments.length === 0 && !overflowsLine && !narrow
   const promptId = React.useId()
   const slashMenuId = React.useId()
   const mentionMenuId = React.useId()

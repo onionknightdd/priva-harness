@@ -187,6 +187,8 @@ export function UsageOverviewCards() {
             label={t("usage.overview.rangeLabel")}
             closeOnSelect
             showSummary
+            className="max-sm:w-full"
+            triggerClassName="max-sm:w-full"
           />
         </div>
       </div>
@@ -201,7 +203,9 @@ export function UsageOverviewCards() {
       <div
         aria-busy={summary.loading || undefined}
         className={cn(
-          "grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5",
+          // Five cards in two columns would strand the last one, so the
+          // headline figure takes the first row on phones.
+          "grid grid-cols-2 gap-2 max-md:*:first:col-span-2 md:grid-cols-3 lg:grid-cols-5",
           "motion-safe:transition-opacity motion-safe:duration-150",
           summary.loading && summary.data ? "opacity-60" : "opacity-100"
         )}

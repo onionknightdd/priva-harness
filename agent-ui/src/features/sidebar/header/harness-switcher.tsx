@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import gsap from "gsap"
 import { BotIcon, CheckIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
@@ -39,6 +38,7 @@ import {
   type HarnessId,
 } from "./harness-options"
 import { TooltipHint } from "@/components/ui/tooltip"
+import { playEnter, playMotion } from "@/lib/motion-effects"
 
 function HarnessOptionList({
   activeHarnessId,
@@ -55,38 +55,14 @@ function HarnessOptionList({
   React.useLayoutEffect(() => {
     const list = listRef.current
 
-    if (
-      !open ||
-      !list ||
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
+    if (!open || !list) {
       return
     }
 
-    const items = list.querySelectorAll<HTMLElement>("[data-harness-option]")
-
-    if (items.length === 0) {
-      return
-    }
-
-    const context = gsap.context(() => {
-      items.forEach((item, index) => {
-        gsap.fromTo(
-          item,
-          { opacity: 0, y: 8 },
-          {
-            opacity: 1,
-            y: 0,
-            duration: 0.22,
-            delay: index * 0.045,
-            ease: "power2.out",
-            clearProps: "opacity,transform",
-          }
-        )
-      })
-    }, list)
-
-    return () => context.revert()
+    return playEnter(list.querySelectorAll("[data-harness-option]"), {
+      y: 8,
+      stagger: 45,
+    })
   }, [open])
 
   return (
@@ -153,32 +129,10 @@ export function HarnessSwitcher() {
     }
   }, [isCollapsed])
 
-  React.useLayoutEffect(() => {
-    const logo = logoRef.current
-
-    if (
-      !logo ||
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
-      return
-    }
-
-    const context = gsap.context(() => {
-      gsap.fromTo(
-        logo,
-        { scale: 0.86, y: 2 },
-        {
-          scale: 1,
-          y: 0,
-          duration: 0.22,
-          ease: "power2.out",
-          clearProps: "transform",
-        }
-      )
-    }, logo)
-
-    return () => context.revert()
-  }, [])
+  React.useLayoutEffect(
+    () => playMotion(logoRef.current, [{ translate: "0 2px", scale: 0.86 }]),
+    []
+  )
 
   return (
     <div className="flex items-center gap-1">

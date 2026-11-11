@@ -4,7 +4,6 @@ import { baseModelReference } from "../model-context"
 import type { AgentRunEffort } from "../run-agent-session"
 import * as React from "react"
 import { CheckIcon, ChevronDownIcon, SearchIcon } from "lucide-react"
-import gsap from "gsap"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
@@ -53,6 +52,7 @@ import {
 import { ProviderIcon } from "@/features/model-settings/provider-icon"
 import { useWorkspaceTakesMajority } from "@/features/workspace"
 import { TooltipHint } from "@/components/ui/tooltip"
+import { playEnter } from "@/lib/motion-effects"
 import "./composer-model-selector.css"
 
 const COMPOSER_MENU_WIDTH_CLASS = "composer-model-menu w-56 min-w-56 max-w-56 text-sm"
@@ -238,37 +238,15 @@ function ProfileModelSubmenu({
   React.useLayoutEffect(() => {
     const results = resultsRef.current
 
-    if (
-      !results ||
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
+    if (!results) {
       return
     }
 
-    const items = results.querySelectorAll<HTMLElement>(
-      "[data-model-menu-result]"
-    )
-
-    if (items.length === 0) {
-      return
-    }
-
-    const context = gsap.context(() => {
-      gsap.fromTo(
-        items,
-        { opacity: 0, y: 3 },
-        {
-          opacity: 1,
-          y: 0,
-          duration: 0.16,
-          stagger: 0.015,
-          ease: "power1.out",
-          clearProps: "opacity,transform",
-        }
-      )
-    }, results)
-
-    return () => context.revert()
+    return playEnter(results.querySelectorAll("[data-model-menu-result]"), {
+      y: 3,
+      duration: 160,
+      stagger: 15,
+    })
   }, [resultsKey])
 
   return (

@@ -1,5 +1,4 @@
 import * as React from "react"
-import gsap from "gsap"
 import {
   CheckIcon,
   CopyIcon,
@@ -43,27 +42,9 @@ import { AssistantMarkdown } from "./assistant-markdown"
 import { AgentMessageDownloadAction } from "./assistant-download-action"
 import { QuoteSelectable } from "./quote-selectable"
 import { UserMessageContent } from "./user-message-content"
+import { playControlPop } from "@/lib/motion-effects"
 
 const MotionMessageActions = motion.create(MessageActions)
-
-function animateControl(control: HTMLButtonElement) {
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    return
-  }
-
-  const target = control.querySelector("svg") ?? control
-
-  gsap.fromTo(
-    target,
-    { scale: 0.78 },
-    {
-      scale: 1,
-      duration: 0.28,
-      ease: "back.out(2.5)",
-      clearProps: "transform",
-    }
-  )
-}
 
 function AgentMessageCopyAction({ text }: { text: string }) {
   const { t } = useTranslation()
@@ -92,7 +73,7 @@ function AgentMessageCopyAction({ text }: { text: string }) {
       tooltip={tooltip}
       label={tooltip}
       onClick={(event) => {
-        animateControl(event.currentTarget)
+        playControlPop(event.currentTarget)
 
         void writeClipboardText(text)
           .then(() => {
@@ -140,7 +121,7 @@ function AgentMessageSplitAction({ message }: { message: AgentThreadMessage }) {
           return
         }
 
-        animateControl(event.currentTarget)
+        playControlPop(event.currentTarget)
         forkFrom?.(message)
       }}
     >

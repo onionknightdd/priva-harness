@@ -1,5 +1,4 @@
 import * as React from "react"
-import gsap from "gsap"
 import { FolderPlusIcon, FoldersIcon, UploadIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
@@ -20,34 +19,13 @@ import type {
 
 import { FileGoToControl } from "./file-go-to-control"
 import { FilePathBreadcrumb } from "./file-path-breadcrumb"
+import { playControlPop } from "@/lib/motion-effects"
 
 export type FileBrowserGitView = {
   root: string
   active: boolean
   controls: { files: string; git: string }
   onChange: (value: string) => void
-}
-
-function animateActionIcon(control: HTMLButtonElement) {
-  const icon = control.querySelector("svg")
-
-  if (
-    !icon ||
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  ) {
-    return
-  }
-
-  gsap.fromTo(
-    icon,
-    { scale: 0.78 },
-    {
-      scale: 1,
-      duration: 0.28,
-      ease: "back.out(2.5)",
-      clearProps: "transform",
-    }
-  )
 }
 
 export function FileAddressBar({
@@ -178,7 +156,7 @@ export function FileAddressBar({
                     disabled={!currentDirectory}
                     aria-label={t("fileBrowser.createFolder")}
                     onClick={(event) => {
-                      animateActionIcon(event.currentTarget)
+                      playControlPop(event.currentTarget)
                       if (currentDirectory) {
                         onCreateFolder(currentDirectory)
                       }
@@ -200,7 +178,7 @@ export function FileAddressBar({
                     disabled={!currentDirectory}
                     aria-label={t("fileBrowser.upload")}
                     onClick={(event) => {
-                      animateActionIcon(event.currentTarget)
+                      playControlPop(event.currentTarget)
                       if (currentDirectory) {
                         onUpload(currentDirectory)
                       }

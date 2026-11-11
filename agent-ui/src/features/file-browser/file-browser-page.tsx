@@ -1,5 +1,4 @@
 import * as React from "react"
-import gsap from "gsap"
 import { useTranslation } from "react-i18next"
 
 import { RichFilePreview, type FilePreviewMode } from "@/features/files"
@@ -24,6 +23,7 @@ import { useGitRepository } from "@/features/git/use-git-repository"
 import { GIT_UPDATED_EVENT, type GitUpdatedDetail } from "@/lib/api/git-repository"
 import { FileGitStatusProvider } from "./components/file-git-status"
 import { FileGitWorkspace } from "./components/file-git-workspace"
+import { playEnter } from "@/lib/motion-effects"
 
 export function FileBrowserPage({
   active = true,
@@ -171,30 +171,15 @@ export function FileBrowserPage({
   React.useLayoutEffect(() => {
     const page = pageRef.current
 
-    if (
-      compact ||
-      !page ||
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
+    if (compact || !page) {
       return
     }
 
-    const context = gsap.context(() => {
-      gsap.fromTo(
-        "[data-file-browser-enter]",
-        { y: 8, opacity: 0 },
-        {
-          y: 0,
-          opacity: 1,
-          duration: 0.32,
-          stagger: 0.05,
-          ease: "power2.out",
-          clearProps: "transform,opacity",
-        }
-      )
-    }, page)
-
-    return () => context.revert()
+    return playEnter(page.querySelectorAll("[data-file-browser-enter]"), {
+      y: 8,
+      duration: 320,
+      stagger: 50,
+    })
   }, [compact])
 
   React.useEffect(() => {

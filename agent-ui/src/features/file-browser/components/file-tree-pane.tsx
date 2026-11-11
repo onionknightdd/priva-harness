@@ -1,5 +1,4 @@
 import * as React from "react"
-import gsap from "gsap"
 import {
   ArrowLeftToLineIcon,
   ArrowRightToLineIcon,
@@ -25,6 +24,7 @@ import {
 } from "../file-browser-data"
 import { createFileTreeNameMeasurer } from "../file-tree-content-width"
 import { FileBrowserTree } from "./file-browser-tree"
+import { playMotion } from "@/lib/motion-effects"
 
 export function FileTreePane({
   compact = false,
@@ -241,21 +241,11 @@ export function FileTreePane({
 
     setRefreshing(true)
 
-    if (
-      refreshIconRef.current &&
-      !window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
-      gsap.fromTo(
-        refreshIconRef.current,
-        { rotate: 0 },
-        {
-          rotate: 360,
-          duration: 0.45,
-          ease: "power2.out",
-          clearProps: "transform",
-        }
-      )
-    }
+    playMotion(
+      refreshIconRef.current,
+      [{ rotate: "0deg" }, { rotate: "360deg" }],
+      { duration: 450 }
+    )
 
     try {
       await onRefresh()

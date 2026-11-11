@@ -197,6 +197,98 @@ prefers-reduced-motion -> 规则不生效，行保持静态 accent 底色
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/components/motion/menu-glide.test.tsx
 ```
 
+### 动效分层与公共入口（2026-11-12）
+
+GSAP 原先用于 15 个模块，逐一核对后全部是一次性的补间（淡入上移、图标回弹、旋转一圈、
+拖动指示线加粗），没有一处用到 timeline 或滚动驱动，因此全部迁出并移除了 `gsap` 依赖。
+上面「Reserve GSAP for…」的规则不变：出现真正的复杂时间线或滚动场景时再装回。
+
+选哪一层，按「动效由什么驱动」判断：
+
+```text
+状态 / 属性变化（hover、open、active、data-*）
+  -> CSS transition              popup-motion.ts、surfaces.tsx、index.css
+一次性反馈（挂载后入场、点击确认、内容切换后重播）
+  -> lib/motion-effects.ts       playEnter / playControlPop / playMotion（WAAPI）
+跨元素共享布局、手势、弹簧、进出场编排（AnimatePresence、layoutId）
+  -> Motion                      ease.ts 的 SPRING_* 与 EASE_*
+复杂时间线 / 滚动驱动
+  -> GSAP                        当前无此场景，未安装
+```
+
+公共入口：
+
+| 入口 | 负责 | 使用方 |
+| --- | --- | --- |
+| [lib/ease.ts](../agent-ui/src/lib/ease.ts) | 缓动曲线与弹簧参数 | 所有 Motion 组件；`EASE_OUT_CSS` 供 CSS / WAAPI |
+| [lib/popup-motion.ts](../agent-ui/src/lib/popup-motion.ts) | Base UI 弹层的进出场 class | 菜单、Popover、Select、Combobox、Dialog、Sheet、Tooltip |
+| [lib/surfaces.tsx](../agent-ui/src/lib/surfaces.tsx) | 按压、焦点环、图标 / 文案交换、折叠面板 class | 自定义可交互表面 |
+| [lib/motion-effects.ts](../agent-ui/src/lib/motion-effects.ts) | 一次性补间；自带 reduced-motion 判断，返回取消函数，可直接作为 effect 的清理 | 入场、点击回弹、刷新旋转、错误提示滑入 |
+| [motion/menu-glide.ts](../agent-ui/src/components/motion/menu-glide.ts) | Base UI 菜单 / 列表的行间滑动高亮 | dropdown-menu、context-menu、select、combobox |
+| [motion/menu-highlight-transition.ts](../agent-ui/src/components/motion/menu-highlight-transition.ts) | Motion 滑动高亮的弹簧 | 侧栏、文件树、Slash 菜单 |
+
+`motion-effects` 直接用 Web Animations API 而不是 Motion 的 `animate()`：这些补间只动
+`opacity` / `translate` / `scale` / `rotate`，由合成器线程执行，结束后不在元素上留下
+内联样式（Motion 的 `animate()` 会留下终值，GSAP 需要 `clearProps`），因此不会盖住
+Tailwind 的 hover / group 状态类。四个文件里各自复制的 `animateControl` 合并为
+`playControlPop`。
+
+```text
+迁移前（GSAP）                         迁移后
+侧栏页脚淡入 / Harness logo            playEnter / playMotion
+Harness 菜单项逐个入场                 playEnter（stagger 45ms）
+语言按钮文字回弹                       playMotion
+文件浏览器分区入场 / 移动端面板        playEnter（stagger 50ms）
+路径菜单、模型菜单搜索结果             playEnter（stagger 15ms）
+文件预览内容切换 / 表单错误提示        playEnter
+复制、下载、展开等按钮的图标回弹 ×4    playControlPop
+刷新图标旋转一圈                       playMotion
+文件标签关闭时淡出                     element.animate + onfinish
+侧栏拖动指示线加粗                     CSS transition（scale）
+```
+
+主题按钮改用 `ui/button` 的 `buttonVariants`（`icon-sm`，32px），与旁边的语言按钮同一套
+尺寸、焦点环和按压反馈。Animate UI 的 `components/buttons/icon.tsx`、
+`primitives/buttons/button.tsx`、`primitives/effects/particles.tsx` 不再有引用，已删除。
+文件浏览器整页有自己的分区入场，不再叠加 `view-enter`。
+
+回归（仓库根目录）：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/lib/motion-effects.test.ts
+```
+
+### 手机宽度下的 Chat 与用量页（2026-11-12 已确认）
+
+按用户确认的线框实现，桌面布局不变。
+
+```text
+A. Chat 输入框：外壳宽度 < 480px 时固定两行（手机，或被侧栏 / Workspace 挤窄的聊天列）
++----------------------------------+
+| 输入你的问题，输入 / 使用技能…    |
+| + ▦            deepseek-flash  ⬆ |
++----------------------------------+
+
+B. 用量概览（< md）：首张卡片独占一行，日期区间占满宽度
+[日期区间                ]
+[总 Token（整行）         ]
+[命中率     ][会话       ]
+[单日最高   ][最长连续   ]
+
+C. Chat 页头（手机）：复制会话 ID 收进「更多」菜单
+[≡] 标题…   ⋯   [💬|⌨] [▯]
+            └─ 复制会话 ID / 置顶 / 归档 / 删除
+```
+
+A 按 composer 外壳自身的宽度判断（`COMPOSER_SINGLE_LINE_MIN_WIDTH`），不是视口宽度，
+所以 768px 平板在侧栏展开时同样走两行。C 的菜单项点击后不关闭菜单，原位显示「已复制」
+或失败文案；按钮与菜单项共用 `useSessionIdCopy`。另外，手机上在侧栏选择会话后侧栏会
+自动收起（此前只有导航项会收起）。
+
+在 390px 视口检查：会话页 composer 为两行且占位文字完整；页头「更多」菜单首项为复制
+会话 ID；用量页首卡整行、日期选择器与卡片同宽；1440px 下 composer 仍为单行、复制按钮
+仍在页头。
+
 ### Tab 与侧栏底色
 
 2026-09-09：按用户确认，以下背景色仅用于浅色主题。Tab 修改整组标签栏的底色；
@@ -3008,7 +3100,7 @@ Git 列表头：目录名 [main v] -> [origin/main v] [刷新 Git]
 | 字体 | `font-sans` 为 Inter Variable，`font-code` 为 JetBrains Mono Variable；仍有代码组件使用 `font-mono` | [index.css](../agent-ui/src/index.css)、[AgentCode](../agent-ui/src/components/agents/agent-code.tsx) |
 | 字号与圆角 | 已定义 `text-ui: 0.9375rem`、`text-code: 12.25px`；`--radius: 0.625rem` 派生多级圆角 | [index.css](../agent-ui/src/index.css) |
 | 基础图标 | Lucide；侧栏用 AnimateIcons 的 Lucide 动画图标；模型品牌和文件类型另有专用资源 | [sidebar-data.tsx](../agent-ui/src/features/sidebar/sidebar-data.tsx)、[ProviderIcon](../agent-ui/src/features/model-settings/provider-icon.tsx) |
-| 动效与交互表面 | CSS transition、Animate UI、Motion、GSAP 并存；已有共享曲线、弹窗动效、focus ring | [ease.ts](../agent-ui/src/lib/ease.ts)、[popup-motion.ts](../agent-ui/src/lib/popup-motion.ts)、[surfaces.tsx](../agent-ui/src/lib/surfaces.tsx) |
+| 动效与交互表面 | CSS transition、WAAPI 一次性补间（`motion-effects`）、Animate UI、Motion；共享曲线、弹窗动效、focus ring；GSAP 未安装 | [ease.ts](../agent-ui/src/lib/ease.ts)、[popup-motion.ts](../agent-ui/src/lib/popup-motion.ts)、[surfaces.tsx](../agent-ui/src/lib/surfaces.tsx) |
 
 `base-vega` 是生成配置，不代表每个历史组件仍与上游模板完全一致。多数组件已经
 经过本地修改，应以本地源码为准。上游目前提供 Base UI 组件版本，并将 Vega
@@ -3053,7 +3145,7 @@ Git 列表头：目录名 [main v] -> [origin/main v] [刷新 Git]
 | Toggle | [ui/toggle](../agent-ui/src/components/ui/toggle.tsx)，Base UI Toggle | 两态按压按钮；default / outline，选中态 `bg-muted` | 当前仅 `toggleVariants` 被 ToggleGroup 复用，没有独立 `<Toggle>` 业务实例 |
 | ToggleGroup | [ui/toggle-group](../agent-ui/src/components/ui/toggle-group.tsx)，Base UI ToggleGroup + Toggle | `outline`、`sm` 的分段按钮 | 图片工具的展示模式与原图选择 |
 | Switch | [motion/switch](../agent-ui/src/components/motion/switch.tsx)，BeUI + Motion | 默认 48 × 28px / 滑块 20px；`sm` 34 × 20 / 14px，对齐图标按钮和 text-sm；按下缩放，spring `stiffness: 800 / damping: 80 / mass: 4` | 输入建议、Skill / MCP 启停、MCP 工具布尔参数 |
-| 主题 / 语言 / 工作区切换 | [ThemeToggle](../agent-ui/src/features/sidebar/footer/theme-toggle.tsx)、[LanguageToggle](../agent-ui/src/features/sidebar/footer/language-toggle.tsx)、[WorkspaceToggle](../agent-ui/src/features/workspace/workspace-toggle.tsx) | 分别是 Animate UI 主题按钮、shadcn Button + GSAP、Button + Motion；名称带 toggle，但并未使用通用 Toggle 或 Switch | 全局模式与面板开关 |
+| 主题 / 语言 / 工作区切换 | [ThemeToggle](../agent-ui/src/features/sidebar/footer/theme-toggle.tsx)、[LanguageToggle](../agent-ui/src/features/sidebar/footer/language-toggle.tsx)、[WorkspaceToggle](../agent-ui/src/features/workspace/workspace-toggle.tsx) | 分别是 Animate UI 主题切换（View Transition）+ 共享 Button variants、shadcn Button + `playMotion`、Button + Motion；名称带 toggle，但并未使用通用 Toggle 或 Switch | 全局模式与面板开关 |
 | Input / Textarea | [ui/input](../agent-ui/src/components/ui/input.tsx)、[ui/textarea](../agent-ui/src/components/ui/textarea.tsx) | Input 基于 Base UI，Textarea 是本地样式的原生 textarea；共享 input / ring / destructive token | 搜索、名称、配置文本 |
 | Field / Label | [ui/field](../agent-ui/src/components/ui/field.tsx)、[ui/label](../agent-ui/src/components/ui/label.tsx) | 本地 shadcn 风格的标签、说明、错误与分组结构 | 设置和表单；资源表单还存在本地 FormField 组合 |
 | InputGroup / ButtonGroup | [ui/input-group](../agent-ui/src/components/ui/input-group.tsx)、[ui/button-group](../agent-ui/src/components/ui/button-group.tsx) | 组合输入、前后缀、附属动作、按钮组，共享基础组件 | 聊天输入框、表格预览搜索；消息动作内组合按钮组 |
@@ -3111,7 +3203,7 @@ App TooltipProvider -> 首次悬浮 1s -> 连续切换 0ms
 | 资源 Tabs | [animate-ui/components/radix/tabs](../agent-ui/src/components/animate-ui/components/radix/tabs.tsx)，Radix + Motion | 24px 标签栏、共享底色和滑块；键盘及减少动态效果时立即切换 | Skill 文件预览、MCP 工具 / 提示词 / 资源 / 配置 |
 | 文件预览 Tabs | [motion/tabs](../agent-ui/src/components/motion/tabs.tsx)，BeUI + Motion | 文件标签使用 underline，轨道与选中下划线均为 2px；模式使用 32px segment，工作表使用 underline；键盘导航、禁用提示与减少动态效果 | 文件浏览器 / Agent Workspace 的文件、源码、预览、Agent协助模式及 XLSX / CSV 工作表切换 |
 | ExpandableTabs | [motion/expandable-tabs](../agent-ui/src/components/motion/expandable-tabs.tsx)，BE UI 衍生 | 胶囊图标展开标签；固定 26px 外框 / 18px 内容圆角、本地 tab 语义和动画 | Workspace 模块切换 |
-| Sidebar | [ui/sidebar](../agent-ui/src/components/ui/sidebar.tsx)，shadcn 衍生组合 | `sidebar-*` token；Base UI Sheet 处理移动端，GSAP 调整桌面宽度，Motion 处理行高亮 | 主侧栏、工作区侧栏 |
+| Sidebar | [ui/sidebar](../agent-ui/src/components/ui/sidebar.tsx)，shadcn 衍生组合 | `sidebar-*` token；Base UI Sheet 处理移动端，拖动指示线用 CSS transition，Motion 处理行高亮 | 主侧栏、工作区侧栏 |
 | Breadcrumb | [ui/breadcrumb](../agent-ui/src/components/ui/breadcrumb.tsx) | shadcn 风格路径层级，Lucide 分隔图标 | 顶栏、设置导航、文件路径 |
 | Collapsible / Disclosure | [ui/collapsible](../agent-ui/src/components/ui/collapsible.tsx)，Base UI；[AgentDisclosure](../agent-ui/src/components/agents/agent-disclosure.tsx)，本地 CSS | 普通折叠与对话内容向下展开分别实现；`collapsePanel` 是可复用样式 | 项目/文件夹、工作流、工具结果 |
 | Resizable | [ui/resizable](../agent-ui/src/components/ui/resizable.tsx)，`react-resizable-panels` | 本地分隔手柄、伸缩面板 | 文件浏览器、资源列表/详情分栏 |
@@ -3178,7 +3270,6 @@ Chat composer 上下留白缩小三分之一：单行上下内边距各为 14/3p
 - [ui/bubble.tsx](../agent-ui/src/components/ui/bubble.tsx)、[ui/message.tsx](../agent-ui/src/components/ui/message.tsx)：未发现生产源码调用。实际消息使用 `ai-elements/message.tsx`。
 - [ai-elements/jsx-preview.tsx](../agent-ui/src/components/ai-elements/jsx-preview.tsx)：未发现调用；实际可视化内容使用 `visualize-sandbox`，不能将 `react-jsx-parser` 记为当前页面渲染路径。
 - `Toggle` 组件没有独立业务实例，但 `toggleVariants` 正在被 ToggleGroup 使用，不能将整个文件当成未使用。
-- Animate UI 的 `IconButton` / 粒子按钮没有业务实例；主题按钮只复用该文件的 `buttonVariants`，不能将粒子效果记为已展示。
 - 尚无独立通用入口的类型包括 Checkbox、RadioGroup、Slider、Accordion、Command、Toast、Table/DataTable。日期选择使用 [BeUI DateRangePicker](../agent-ui/src/components/motion/date-range-picker.tsx)（用量页区间）。菜单中的 CheckboxItem / RadioItem 不等于已经建立了通用表单组件；当前错误反馈主要是页面内提示。需要时先核对 shadcn 的 Base UI 实现及本地依赖，不预装整套组件。
 
 ## Recommendations
@@ -3209,7 +3300,8 @@ Feature / Page
 动画补充
   +--> 已有 CSS / popup-motion
   +--> Animate UI 成品 / Motion 自定义交互
-  +--> GSAP：复杂 timeline / scroll 场景
+  +--> lib/motion-effects：一次性补间
+  +--> GSAP：复杂 timeline / scroll 场景（当前未安装）
 ```
 
 | 选择对象 | 建议 | 原因 / 使用边界 |
@@ -3229,9 +3321,8 @@ Feature / Page
 | --- | --- | --- |
 | 1 | `ui/dropdown-menu` 与 Animate UI Menu 在边框、分组字号、入场时长和高亮方式上不同 | 通用菜单固定 `ui/dropdown-menu`；将需要的滑动高亮整合为该组件的统一能力，再更新附件菜单调用方 |
 | 1 | 普通 Tabs 位于 `assistant-ui/tabs`，工作区 ExpandableTabs 自行实现交互 | 将通用 Tabs 的现有实现归到 `ui/tabs` 并更新所有调用；工作区展开标签作为组合组件复用通用 Tabs 语义。现有 `ui/tabs` 文件尚不存在 |
-| 1 | Button 的 icon-xs 为 24px，而 Animate UI variants 的 xs 为 28px；业务还有独立圆形按钮和缩放值 | 集中 Button/IconButton 的尺寸、圆角、focus 与按压反馈；特殊状态交换只负责内容动画，避免继续复制按钮外观 |
+| 1 | 业务里还有独立圆形按钮和各自的缩放值（Animate UI 的第二套按钮 variants 已于 2026-11-12 删除） | 集中圆形按钮的尺寸、focus 与按压反馈；特殊状态交换只负责内容动画，避免继续复制按钮外观 |
 | 2 | [AgentPlan](../agent-ui/src/components/elements/agent-plan.tsx) 的完成色使用 emerald；[Profile heatmap](../agent-ui/src/features/profile/profile-token-heatmap.tsx) 传固定蓝色；ExpandableTabs 写固定圆角 | 将应共享的状态、图表色和容器圆角提升为有语义的 token，保留有明确用途的组件变体 |
-| 2 | GSAP 直接用于 15 个 `.tsx` 模块，包括 [LanguageToggle](../agent-ui/src/features/sidebar/footer/language-toggle.tsx) 这样简单的标签反馈；共享 `ease.ts` 与局部曲线并存 | 简单反馈收敛到已有 CSS / Motion 和共享参数，GSAP 保留给复杂时序；逐项替换后删除不再使用的实现 |
 | 2 | 工具代码使用 GitHub high-contrast Shiki 主题，文件源码高亮加载普通 GitHub 主题 | 先明确代码阅读区是否需要两种对比度，再统一主题、字号与等宽字体 token；见 [agent-shiki](../agent-ui/src/components/agents/agent-shiki.tsx)、[shiki-highlighter](../agent-ui/src/features/files/preview/shiki-highlighter.ts) |
 | 2 | 文件卡有 Attachment、File 和 FileUploadItem，分别定义卡片间距和状态表现 | 按“选择文件 / 显示附件 / 上传进度”明确职责，复用共同视觉；不同语义不必强行合成一个大型组件 |
 | 3 | HTML、文档内容、JSX 沙箱拥有独立渲染边界 | 应用工具栏、选区和提问使用共享组件；保留沙箱隔离和文档自身格式 |
@@ -3286,7 +3377,7 @@ disabled/error、键盘、窄屏和 reduced motion；布局修改仍先提供已
 ```sh
 rg --files agent-ui/src/components
 rg -n '@/components/(ui|animate-ui|assistant-ui|reui|ai-elements|kibo-ui|motion)' agent-ui/src/features agent-ui/src/app agent-ui/src/App.tsx
-rg -n '@base-ui/react|motion/react|gsap' agent-ui/src
+rg -n '@base-ui/react|motion/react|motion-effects' agent-ui/src
 ```
 
 ## Development and verification

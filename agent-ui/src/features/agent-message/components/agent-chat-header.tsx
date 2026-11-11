@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import gsap from "gsap"
 import { CheckIcon, CopyIcon, MoreHorizontalIcon } from "lucide-react"
 import { motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
@@ -11,6 +10,8 @@ import { useSidebar } from "@/components/ui/sidebar"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
@@ -31,6 +32,7 @@ import { writeClipboardText } from "@/lib/clipboard"
 import { cn } from "@/lib/utils"
 
 import { fitSessionTitle } from "../fit-session-title"
+import { playControlPop } from "@/lib/motion-effects"
 
 // Workspace toggle is a 32px button fixed 16px from the viewport edge.
 // Header content is already inset 16px, so 40px more leaves an 8px gap
@@ -48,30 +50,12 @@ const renameTransition = {
   mass: 0.75,
 }
 
-function animateControl(control: HTMLButtonElement) {
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    return
-  }
+type CopyState = "idle" | "copied" | "failed"
 
-  const target = control.querySelector("svg") ?? control
-
-  gsap.fromTo(
-    target,
-    { scale: 0.78 },
-    {
-      scale: 1,
-      duration: 0.28,
-      ease: "back.out(2.5)",
-      clearProps: "transform",
-    }
-  )
-}
-
-function SessionIdCopyButton({ sessionId }: { sessionId: string }) {
+/** Copies the session ID and reports the outcome for a moment. */
+function useSessionIdCopy(sessionId: string) {
   const { t } = useTranslation()
-  const [copyState, setCopyState] = React.useState<
-    "idle" | "copied" | "failed"
-  >("idle")
+  const [copyState, setCopyState] = React.useState<CopyState>("idle")
   const resetTimerRef = React.useRef<number | null>(null)
 
   React.useEffect(() => {
@@ -82,12 +66,46 @@ function SessionIdCopyButton({ sessionId }: { sessionId: string }) {
     }
   }, [])
 
-  const tooltip =
+  const copy = React.useCallback(() => {
+    void writeClipboardText(sessionId)
+      .then(() => {
+        setCopyState("copied")
+      })
+      .catch(() => {
+        setCopyState("failed")
+      })
+      .finally(() => {
+        if (resetTimerRef.current !== null) {
+          window.clearTimeout(resetTimerRef.current)
+        }
+
+        resetTimerRef.current = window.setTimeout(() => {
+          setCopyState("idle")
+          resetTimerRef.current = null
+        }, 1600)
+      })
+  }, [sessionId])
+
+  const label =
     copyState === "copied"
       ? t("agentMessage.copied")
       : copyState === "failed"
         ? t("agentMessage.copyFailed")
         : t("agentMessage.copySessionId")
+
+  return { copy, copyState, label }
+}
+
+function SessionIdCopyIcon({ copyState }: { copyState: CopyState }) {
+  return copyState === "copied" ? (
+    <CheckIcon className="size-3.5" aria-hidden="true" />
+  ) : (
+    <CopyIcon className="size-3.5" aria-hidden="true" />
+  )
+}
+
+function SessionIdCopyButton({ sessionId }: { sessionId: string }) {
+  const { copy, copyState, label } = useSessionIdCopy(sessionId)
 
   return (
     <Tooltip>
@@ -98,38 +116,31 @@ function SessionIdCopyButton({ sessionId }: { sessionId: string }) {
             variant="ghost"
             size="icon-xs"
             className="shrink-0"
-            aria-label={tooltip}
+            aria-label={label}
             onClick={(event) => {
-              animateControl(event.currentTarget)
-              void writeClipboardText(sessionId)
-                .then(() => {
-                  setCopyState("copied")
-                })
-                .catch(() => {
-                  setCopyState("failed")
-                })
-                .finally(() => {
-                  if (resetTimerRef.current !== null) {
-                    window.clearTimeout(resetTimerRef.current)
-                  }
-
-                  resetTimerRef.current = window.setTimeout(() => {
-                    setCopyState("idle")
-                    resetTimerRef.current = null
-                  }, 1600)
-                })
+              playControlPop(event.currentTarget)
+              copy()
             }}
           />
         }
       >
-        {copyState === "copied" ? (
-          <CheckIcon className="size-3.5" aria-hidden="true" />
-        ) : (
-          <CopyIcon className="size-3.5" aria-hidden="true" />
-        )}
+        <SessionIdCopyIcon copyState={copyState} />
       </TooltipTrigger>
-      <TooltipContent>{tooltip}</TooltipContent>
+      <TooltipContent>{label}</TooltipContent>
     </Tooltip>
+  )
+}
+
+/** The phone header has no room for the button, so the action joins the menu.
+ * The menu stays open on click to show whether the copy worked. */
+function SessionIdCopyMenuItem({ sessionId }: { sessionId: string }) {
+  const { copy, copyState, label } = useSessionIdCopy(sessionId)
+
+  return (
+    <DropdownMenuItem closeOnClick={false} onClick={copy}>
+      <SessionIdCopyIcon copyState={copyState} />
+      <span aria-live="polite">{label}</span>
+    </DropdownMenuItem>
   )
 }
 
@@ -296,7 +307,9 @@ export function AgentChatHeader() {
       )}
       {activeSession && !editing ? (
         <div className="flex shrink-0 items-center">
-          <SessionIdCopyButton sessionId={activeSession.sessionId} />
+          {isMobile ? null : (
+            <SessionIdCopyButton sessionId={activeSession.sessionId} />
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
@@ -311,6 +324,12 @@ export function AgentChatHeader() {
               <MoreHorizontalIcon className="size-3.5" aria-hidden="true" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" side="bottom" className="w-fit">
+              {isMobile ? (
+                <>
+                  <SessionIdCopyMenuItem sessionId={activeSession.sessionId} />
+                  <DropdownMenuSeparator />
+                </>
+              ) : null}
               <SessionMenuItems session={activeSession} />
             </DropdownMenuContent>
           </DropdownMenu>

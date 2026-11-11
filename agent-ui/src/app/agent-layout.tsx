@@ -152,10 +152,14 @@ export function AgentLayout({
         </React.Suspense>
       ) : (
         // Keyed per view so each switch replays the shared enter motion. The
-        // chat keeps its own composer choreography and is left out.
+        // chat keeps its own composer choreography, and the file browser
+        // staggers its own regions in, so both are left out.
         <div
           key={activeView}
-          className="view-enter flex min-h-0 min-w-0 flex-1 flex-col"
+          className={cn(
+            "flex min-h-0 min-w-0 flex-1 flex-col",
+            !isFileBrowser && "view-enter"
+          )}
         >
           <React.Suspense fallback={<AgentLayoutFallback />}>
             {isResource ? (

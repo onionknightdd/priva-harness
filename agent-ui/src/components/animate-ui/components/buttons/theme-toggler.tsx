@@ -11,7 +11,7 @@ import {
   type ThemeSelection,
   type Resolved,
 } from '@/components/animate-ui/primitives/effects/theme-toggler';
-import { buttonVariants } from '@/components/animate-ui/components/buttons/icon';
+import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 const getIcon = (
@@ -47,7 +47,7 @@ type ThemeTogglerButtonProps = React.ComponentProps<'button'> &
 
 function ThemeTogglerButton({
   variant = 'default',
-  size = 'default',
+  size = 'icon',
   modes = ['light', 'dark', 'system'],
   direction = 'ltr',
   onImmediateChange,

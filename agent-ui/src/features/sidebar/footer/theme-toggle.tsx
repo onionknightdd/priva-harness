@@ -18,7 +18,7 @@ export function ThemeToggle({ className }: { className?: string }) {
       <ThemeTogglerButton
         type="button"
         variant="ghost"
-        size="sm"
+        size="icon-sm"
         modes={["light", "dark"]}
         direction="btt"
         className={cn("shrink-0 border-0", className)}

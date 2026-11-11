@@ -2,7 +2,6 @@ import * as React from "react"
 import { mergeProps } from "@base-ui/react/merge-props"
 import { useRender } from "@base-ui/react/use-render"
 import { cva, type VariantProps } from "class-variance-authority"
-import gsap from "gsap"
 import { PanelLeftIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
@@ -497,16 +496,11 @@ function SidebarResizeHandle({
   } = useSidebar()
   const { t } = useTranslation()
   const handleRef = React.useRef<HTMLDivElement>(null)
-  const indicatorRef = React.useRef<HTMLSpanElement>(null)
   const activePointerIdRef = React.useRef<number | null>(null)
   const activeWidthRef = React.useRef(sidebarWidth)
   const previousBodyStyleRef = React.useRef<{
     cursor: string
     userSelect: string
-  } | null>(null)
-  const indicatorTweensRef = React.useRef<{
-    scaleX: (value: number) => void
-    scaleY: (value: number) => void
   } | null>(null)
   const [isDragging, setIsDragging] = React.useState(false)
 
@@ -581,40 +575,6 @@ function SidebarResizeHandle({
     if (!isDragging) setLiveWidth(null)
   }, [isDragging, setLiveWidth])
 
-  React.useLayoutEffect(() => {
-    const handle = handleRef.current
-    const indicator = indicatorRef.current
-
-    if (
-      !handle ||
-      !indicator ||
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
-      return
-    }
-
-    const context = gsap.context(() => {
-      const scaleX = gsap.quickTo(indicator, "scaleX", {
-        duration: 0.16,
-        ease: "power2.out",
-      })
-      const scaleY = gsap.quickTo(indicator, "scaleY", {
-        duration: 0.16,
-        ease: "power2.out",
-      })
-
-      indicatorTweensRef.current = {
-        scaleX: (value) => void scaleX(value),
-        scaleY: (value) => void scaleY(value),
-      }
-    }, handle)
-
-    return () => {
-      indicatorTweensRef.current = null
-      context.revert()
-    }
-  }, [])
-
   const restoreBodyInteraction = React.useCallback(() => {
     handleRef.current
       ?.closest('[data-slot="sidebar-wrapper"]')
@@ -640,8 +600,6 @@ function SidebarResizeHandle({
 
   const setHandleActive = React.useCallback((active: boolean) => {
     setIsDragging(active)
-    indicatorTweensRef.current?.scaleX(active ? 2 : 1)
-    indicatorTweensRef.current?.scaleY(active ? 1.04 : 1)
   }, [])
 
   const applySidebarWidth = React.useCallback(
@@ -823,10 +781,10 @@ function SidebarResizeHandle({
         onLostPointerCapture={finishResize}
       >
         <span
-          ref={indicatorRef}
           className={cn(
-            "h-full w-px origin-center bg-sidebar-border/70 transition-colors group-hover/resize:bg-sidebar-ring group-focus-visible/resize:bg-sidebar-ring",
-            isDragging && "bg-sidebar-ring"
+            "h-full w-px origin-center bg-sidebar-border/70 transition-[background-color,scale] duration-150 ease-out group-hover/resize:bg-sidebar-ring group-focus-visible/resize:bg-sidebar-ring motion-reduce:transition-none",
+            // The line thickens while it is being dragged.
+            isDragging && "scale-x-200 scale-y-[1.04] bg-sidebar-ring"
           )}
         />
       </div>
