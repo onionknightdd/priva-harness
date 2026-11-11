@@ -136,9 +136,12 @@ export function XlsxRenderer({ fileId, fileName, mediaType, source }: {
         selectingPointer.dragged = true
       }
       const input = viewportInput()
-      if (!active || !viewer || !worksheetName || !input || !visible() || selectingPointer ||
+      // `visible()` reads geometry, which forces a layout when another pointer
+      // handler has just resized the page (a sidebar drag). Check it last, so
+      // moves that cannot hover a cell never pay for it.
+      if (!active || !viewer || !worksheetName || !input || selectingPointer ||
           event.buttons || event.pointerType === "touch" || !(event.target instanceof Node) || !input.contains(event.target) ||
-          ["col-resize", "row-resize"].includes(input.style.cursor)) {
+          ["col-resize", "row-resize"].includes(input.style.cursor) || !visible()) {
         clearHover()
         return
       }
@@ -234,6 +237,11 @@ export function XlsxRenderer({ fileId, fileName, mediaType, source }: {
     const resizeObserver = new ResizeObserver(handleDismiss)
     resizeObserver.observe(container)
     const visibilityObserver = new MutationObserver(() => {
+      // Ancestor styles change on every frame of a sidebar drag. Reading
+      // geometry there forces a layout, so only look when there is pointer
+      // or popover state that hiding the preview would have to cancel.
+      if (!selectingPointer && !actionsOpen && selectionFrame === null &&
+          hoverFrame === null && hoverKey === "") return
       if (!visible()) cancelPointer()
     })
     for (let ancestor: HTMLElement | null = container; ancestor; ancestor = ancestor.parentElement) {

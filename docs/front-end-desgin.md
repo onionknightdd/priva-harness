@@ -1447,6 +1447,52 @@ npx shadcn add @beui/tabs
 安装时保留现有 `lib/ease.ts` 和 `lib/utils.ts`，避免覆盖项目共享配置；
 本地 Tabs 补充键盘导航、禁用外观和可见焦点，升级时保留这些行为。
 
+### 文件树虚拟化（2026-11-11）
+
+按用户确认的方案，共享的 `FileBrowserTree`（Workspace 文件树、工作目录选择器、
+Skill 资源树）从嵌套的折叠面板改为扁平的虚拟列表，窗口计算使用
+`@tanstack/react-virtual`。行高 26px、行距 1px 不变；只挂载视口上下各 12 行以内的行，
+以及当前键盘焦点所在的行。细节和验证方式见
+[file-tree-performance.md](file-tree-performance.md)。
+
+```text
+滚动容器 [data-file-tree-scroll]
+└─ Tree（role=tree）
+   └─ 列表容器  height = 行数 × 27 − 1
+      ├─ 钉住的祖先文件夹   position: sticky，top = level × 26，按层级排在最前
+      └─ 窗口内的行         position: absolute，top = 行号 × 27
+```
+
+- 展开 / 收起不再有 200ms 高度动画；由展开新出现的行做 200ms 淡入加 4px 位移，
+  减少动态效果时关闭。滚动进入窗口的行不做动画。
+- 祖先文件夹的钉住位置由滚动偏移计算；钉住和释放只改变同一个元素的定位方式，
+  不重新挂载，焦点和悬浮状态保留。`data-stuck` 的含义不变。
+- 收起或滚出窗口的行会卸载；已加载的目录数据仍在模型里，不会重新请求。
+- 缩进竖线由每一行按祖先层级各画一条。
+
+实测（dev 构建，无头 Chrome，816 行文件树，Workspace 分隔条 2 秒内移动约 470px）：
+页面元素约 21900 → 约 3000，挂载的树行 816 → 约 50；无文件打开时超过 50ms 的帧
+42 → 0，主线程 3577ms → 约 1050ms；XLSX 激活时超过 50ms 的帧 41 → 0，主线程
+约 4070ms → 约 1000–1100ms。剩余耗时来自聊天区图表和预览工具栏，与文件树行数无关。
+
+### DOCX 预览的首屏与标签切换（2026-11-11）
+
+`document-renderer.tsx` 以 `progressiveLayout` 加载 DOCX，加载返回后立即创建查看器，
+页面随排版进度出现。Agent 协助的元素拾取索引需要完整排版，改为在查看器之后建立；
+索引就绪前悬停不产生候选，就绪后行为不变。`FilePreviewPanel` 对已显示过的 DOCX
+渲染视图保持挂载，切到其他文件标签时仅隐藏，切回不再重新下载、解析和排版；关闭
+标签、切到源码或文件内容变化时照常卸载。PPTX 和其他类型的挂载规则不变。
+
+```text
+打开 DOCX -> 读取 -> load(progressiveLayout) -> 查看器（首屏）
+                                              -> 排版完成 -> 拾取索引 -> Agent 协助可选取
+切到其他标签 -> DOCX 面板隐藏并保持挂载 -> 切回直接显示
+```
+
+实测（同上环境，255KB / 多页 DOCX）：点击到首屏 950ms → 约 590ms，切回标签
+625ms → 约 55ms。解析和排版仍在主线程（约 370ms，已分片）；拾取补丁要求
+`mode: "main"`，改用 worker 需另行设计。
+
 ### 3D 文件预览与工程工具（2026-11-04）
 
 Workspace 文件树、聊天文件引用与 Skill 资源共用
@@ -2905,7 +2951,7 @@ Git 列表头：目录名 [main v] -> [origin/main v] [刷新 Git]
 | Animate UI | [components/animate-ui](../agent-ui/src/components/animate-ui) | 附件菜单使用 Base UI Menu + Motion 滑动高亮；主题按钮使用另一份按钮 variants 和 View Transition。布尔开关已改到 BeUI。 |
 | assistant-ui 命名空间下的本地组件 | [tabs.tsx](../agent-ui/src/components/assistant-ui/tabs.tsx)、[file.tsx](../agent-ui/src/components/assistant-ui/file.tsx) | Tabs 已采用 Base UI + Motion，有 default / line / ghost / pills / outline；File 提供上传队列文件卡片。没有直接依赖 `@assistant-ui/react` 运行时。 |
 | BE UI | [switch.tsx](../agent-ui/src/components/motion/switch.tsx)、[expandable-tabs.tsx](../agent-ui/src/components/motion/expandable-tabs.tsx) | Switch 是全部布尔开关；工作区胶囊 Tabs 收起为图标、选中后展开文字，交互由本地代码 + Motion 实现。 |
-| ReUI + Headless Tree | [tree.tsx](../agent-ui/src/components/reui/tree.tsx) | 文件树外观；Headless Tree 提供树状态与交互，业务层叠加选中高亮、展开动画和溢出文字滚动；文件浏览器与 Skill 资源树共享业务树组件。 |
+| ReUI + Headless Tree + TanStack Virtual | [tree.tsx](../agent-ui/src/components/reui/tree.tsx) | 文件树外观；Headless Tree 提供树状态与交互，TanStack Virtual 计算可见行窗口，业务层叠加选中高亮、行淡入、钉住的祖先文件夹和溢出文字滚动；文件浏览器与 Skill 资源树共享业务树组件。 |
 | Dice UI + shadcnblocks | [file-upload.tsx](../agent-ui/src/components/ui/file-upload.tsx)、[file-upload-dropzone-1.tsx](../agent-ui/src/components/file-upload-dropzone-1.tsx) | Skill 压缩包上传；Dice UI 的 Base UI 适配实现 + shadcnblocks 上传布局 + Motion。来源有源码注释和[迁移记录](architecture/skills-mcp-migration.md)支持。 |
 | AI Elements + Streamdown | [ai-elements/message.tsx](../agent-ui/src/components/ai-elements/message.tsx) | 消息容器、操作区、流式 Markdown、代码/数学/Mermaid；复用本地 Button、Tooltip，另有内容样式。 |
 | Kibo UI 命名空间下的本地组件 | [status/index.tsx](../agent-ui/src/components/kibo-ui/status/index.tsx) | 会话状态点，已改为 `status-idle/running/warm` token 和 CSS ping。 |
@@ -3263,15 +3309,35 @@ Shift+Tab、Esc、已有草稿、重复快照、断线重连和原生会话重�
 追加 `?narrow` 可直接检查窄图的初始布局。真实会话还需复测 Workspace
 展开 / 折叠和分隔条往返拖动，分别记录开发版与生产构建的帧间隔。
 
-Workspace 拖动时，分隔条同步更新宽度 CSS 变量与 `aria-valuenow`，相同的整数
+Workspace 拖动时，分隔条同步更新实时宽度与 `aria-valuenow`，相同的整数
 宽度不重复写入；松手仍按原有规则提交偏好。密度桥只在是否超过 shell 宽度的
 60% 发生变化时发布状态，保留原有阈值、最大化与移动端规则。布局、图表标签、
 320ms 图表动画以及滚动跟随不变。
 
+2026-11-11：拖动中的实时宽度不再写 `sidebar-wrapper` 的 `--sidebar-width`。该变量
+会被继承，在 wrapper 上每次指针移动改一次，整页元素都要重算样式。空的
+`sidebar-gap` 用行内 `width`；`sidebar-container` 是侧栏全部内容的祖先，预览器
+（XLSX 库的主题刷新、选区可见性检查）会监听祖先的 `style` / `class` 变化并读取
+样式，所以它的宽度由一条 `<style data-sidebar-live-width>` 规则提供，拖动中只改写
+这条规则，容器上只在开始和结束时各改一次 `data-live-width`。松手时提交的宽度写回
+变量，预览宽度在同一次提交里清除；键盘调整直接提交，拖到折叠阈值以下或卸载时
+清除预览。密度桥读取 gap 的行内宽度，没有时用已提交的宽度。左侧主侧栏使用同一
+分隔条。
+
 ```text
-拖动 -> 实时宽度 + 可访问读数 -> 松手提交
-     -> 是否超过 60% 改变    -> 更新密度状态
+拖动 -> gap 行内 width + container 样式规则 + 可访问读数 -> 松手：变量提交，预览清除
+     -> 是否超过 60% 改变（读 gap 行内 width）          -> 更新密度状态
 ```
+
+拖动期间在指针或观察者回调里读几何（`getBoundingClientRect`、`offsetWidth`、
+`getComputedStyle`）会把当帧的布局提前强制执行；文件树行使用容器查询单位，读取
+计算样式同样会触发布局。新增这类读取前先用不读布局的条件排除无关情况：
+`xlsx-renderer.tsx` 的悬停判断把可见性读取放在条件末尾，祖先样式观察者只在有
+指针或浮层状态可取消时才读取。
+
+实测（dev 构建，无头 Chrome，7 轮会话 + 一个 DOCX 预览，约 5400 个元素，
+分隔条 2 秒内移动约 470px）：主线程 1850–2014ms → 229ms，超过 50ms 的帧
+8–15 → 0，样式重算合计 974ms → 117ms。
 
 拖动、取消、键盘、宽度限制及密度阈值回归（仓库根目录）：
 
@@ -3515,10 +3581,10 @@ node --test agent-ui/tests/features/agent-message/composer-attachments.test.ts a
 目录，不启动模型请求。视觉检查需将鼠标停留在吸顶目录行上滚动，确认悬浮时仍保持
 选中底色，并在移出鼠标后保持一致。
 
-文件树范围、行修订号与宽度测量回归：
+文件树范围、扁平行 / 钉住计算与宽度测量回归：
 
 ```sh
-./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/file-browser/file-browser-scope.test.ts agent-ui/tests/features/file-browser/file-tree-revisions.test.ts
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/file-browser/file-browser-scope.test.ts agent-ui/tests/features/file-browser/file-tree-rows.test.ts
 node --test agent-ui/tests/features/file-browser/file-tree-content-width.test.ts
 ```
 

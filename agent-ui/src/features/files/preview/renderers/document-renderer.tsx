@@ -48,11 +48,9 @@ export function DocumentRenderer({ fileId, source }: { fileId: string; source: s
     void (async () => {
       const { data, fileRevision } = await readOfficeSource(source, controller.signal, t("filePreview.loadFailedDescription"))
       if (!active) return
-      const loaded = await DocxDocument.load(data.slice(0), { mode: "main", useGoogleFonts: false, sliceLayout: true })
+      const loaded = await DocxDocument.load(data.slice(0), { mode: "main", useGoogleFonts: false, sliceLayout: true, progressiveLayout: true })
       if (!active) { loaded.destroy(); return }
       document = loaded
-      const picker = await createDocxElementPicker(loaded, data)
-      if (!active) return
       viewer = DocxScrollViewer.fromDocument(container, loaded, {
         enableTextSelection: true,
         background: "transparent",
@@ -67,6 +65,11 @@ export function DocumentRenderer({ fileId, source }: { fileId: string; source: s
           selectionFrame = requestAnimationFrame(updateSelection)
         },
       })
+      // Pages paint as soon as they are laid out. The element picker needs the
+      // complete layout and is only used by Agent Assist, so it follows.
+      setLoading(false)
+      const picker = await createDocxElementPicker(loaded, data)
+      if (!active) return
       if (viewer.pageCount === 0) throw new Error(t("filePreview.loadFailedDescription"))
       const getCanvas = (index: number) => container.querySelector<HTMLElement>(
         '[data-ooxml-selection-surface="docx"][data-page-index="' + index + '"]'
@@ -79,7 +82,6 @@ export function DocumentRenderer({ fileId, source }: { fileId: string; source: s
           return width ? loaded.pageSize(index).widthPt / width : 0
         },
       })
-      setLoading(false)
     })().catch(fail)
 
     return () => {

@@ -10,17 +10,13 @@ export function useWorkspaceTakesMajority() {
   return React.useContext(WorkspaceDensityContext)
 }
 
-function readLiveSidebarWidth(
-  wrapper: HTMLElement,
-  fallback: number
-) {
-  const fromVar = Number.parseFloat(
-    getComputedStyle(wrapper).getPropertyValue("--sidebar-width")
-  )
+// A drag previews its width inline on the gap; the committed width is the
+// context value. Reading the inline style never forces a style recalculation.
+function readLiveSidebarWidth(gap: Element | null, committed: number) {
+  const live =
+    gap instanceof HTMLElement ? Number.parseFloat(gap.style.width) : NaN
 
-  return Number.isFinite(fromVar) && fromVar > 0
-    ? Math.round(fromVar)
-    : fallback
+  return Number.isFinite(live) && live > 0 ? Math.round(live) : committed
 }
 
 export function WorkspaceDensityBridge({
@@ -56,7 +52,7 @@ export function WorkspaceDensityBridge({
     const gap = wrapper.querySelector('[data-slot="sidebar-gap"]')
     let previousMajority: boolean | undefined
     const syncWidth = () => {
-      const width = readLiveSidebarWidth(wrapper, sidebarWidth)
+      const width = readLiveSidebarWidth(gap, sidebarWidth)
       const nextMajority = width * 5 > shellWidth * 3
       // Consumers only need this boundary, not every intermediate pixel.
       if (nextMajority !== previousMajority) {

@@ -514,6 +514,73 @@ function SidebarResizeHandle({
     activeWidthRef.current = sidebarWidth
   }, [sidebarWidth])
 
+  // A drag previews its width on the two boxes that size the sidebar instead
+  // of `--sidebar-width`: that variable is inherited, so changing it on the
+  // wrapper per pointer move restyles every element of the page. The empty gap
+  // takes an inline width. The container is an ancestor of the whole sidebar
+  // content, where an attribute change per move would wake every observer of
+  // ancestor styles (previews watch them for theme and visibility), so its
+  // width comes from one style rule that is rewritten in place.
+  const liveWidthId = React.useId()
+  const liveWidthRuleRef = React.useRef<{
+    element: HTMLStyleElement
+    rule: CSSStyleRule
+  } | null>(null)
+  const removeLiveWidthRule = React.useCallback(() => {
+    liveWidthRuleRef.current?.element.remove()
+    liveWidthRuleRef.current = null
+  }, [])
+  const setLiveWidth = React.useCallback((width: number | null) => {
+    const container = handleRef.current?.closest<HTMLElement>(
+      '[data-slot="sidebar-container"]'
+    )
+    const gap = container?.parentElement?.querySelector<HTMLElement>(
+      ':scope > [data-slot="sidebar-gap"]'
+    )
+
+    if (width === null) {
+      gap?.style.removeProperty("width")
+      container?.removeAttribute("data-live-width")
+      removeLiveWidthRule()
+      return
+    }
+
+    gap?.style.setProperty("width", `${width}px`)
+
+    if (!container) {
+      return
+    }
+
+    const live = liveWidthRuleRef.current
+
+    if (live) {
+      live.rule.style.setProperty("width", `${width}px`)
+      return
+    }
+
+    const element = document.createElement("style")
+    element.setAttribute("data-sidebar-live-width", "")
+    element.textContent = `[data-live-width="${liveWidthId}"] { width: ${width}px; }`
+    document.head.append(element)
+    const rule = element.sheet?.cssRules[0]
+
+    if (!(rule instanceof CSSStyleRule)) {
+      element.remove()
+      return
+    }
+
+    container.setAttribute("data-live-width", liveWidthId)
+    liveWidthRuleRef.current = { element, rule }
+  }, [liveWidthId, removeLiveWidthRule])
+
+  React.useEffect(() => removeLiveWidthRule, [removeLiveWidthRule])
+
+  // Runs in the commit that also carries the committed width, so the boxes
+  // hand over from the preview to the variable without a frame between.
+  React.useLayoutEffect(() => {
+    if (!isDragging) setLiveWidth(null)
+  }, [isDragging, setLiveWidth])
+
   React.useLayoutEffect(() => {
     const handle = handleRef.current
     const indicator = indicatorRef.current
@@ -588,17 +655,14 @@ function SidebarResizeHandle({
         return
       }
 
-      const wrapper = handleRef.current?.closest(
-        '[data-slot="sidebar-wrapper"]'
-      ) as HTMLElement | null
-
       activeWidthRef.current = nextWidth
       // Transient width already lives in the DOM; keep its accessible value in
       // sync without rendering the handle and tooltip on every pointer move.
       handleRef.current?.setAttribute("aria-valuenow", String(nextWidth))
-      wrapper?.style.setProperty("--sidebar-width", `${nextWidth}px`)
+      // Only a pointer drag previews; keyboard steps commit straight away.
+      if (activePointerIdRef.current !== null) setLiveWidth(nextWidth)
     },
-    [maxSidebarWidth, minSidebarWidth]
+    [maxSidebarWidth, minSidebarWidth, setLiveWidth]
   )
 
   const getWidthFromPointer = React.useCallback(
@@ -634,9 +698,11 @@ function SidebarResizeHandle({
 
   const collapseSidebarFromResize = React.useCallback(() => {
     applySidebarWidth(sidebarWidth)
+    // The collapsed sidebar is sized by its state classes, not by a width.
+    setLiveWidth(null)
     endResize(false)
     setOpen(false)
-  }, [applySidebarWidth, endResize, setOpen, sidebarWidth])
+  }, [applySidebarWidth, endResize, setLiveWidth, setOpen, sidebarWidth])
 
   const handleKeyDown = React.useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>) => {

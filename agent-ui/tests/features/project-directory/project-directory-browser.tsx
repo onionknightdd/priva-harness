@@ -69,7 +69,7 @@ async function runChecks() {
     check("project header opens the shared picker at the current directory", selected("/workspace/work/existing"))
     check("path input receives focus", document.activeElement === pathInput())
     check("the picker starts at WORKSPACE_DIR without loading its parents", Boolean(row("/workspace")) && !row("/") && !fixtures.requests.some((request) => new URL(request.split(" ")[1], location.href).searchParams.get("path") === "/"))
-    check("tree only contains directories and preserves shared row spacing", !dialog().textContent?.includes("notes.txt") && row("/workspace/work/existing").getBoundingClientRect().height === Number.parseFloat(row("/workspace/work").style.top))
+    check("tree only contains directories and preserves shared row spacing", !dialog().textContent?.includes("notes.txt") && row("/workspace/work/existing").getBoundingClientRect().height === 26 && Number.parseFloat(row("/workspace/work").style.top) % 27 === 0)
     check("unopened folders load lazily", !fixtures.requests.some((request) => request.endsWith("path=%2Fworkspace%2Fwork%2Flazy")))
     await act(async () => {
       row("/workspace").focus()

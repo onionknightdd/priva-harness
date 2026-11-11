@@ -108,25 +108,28 @@ async function runChecks() {
     await settle()
     const src = row("/workspace/src")
     const docs = row("/workspace/docs")
+    const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches
+    const missing = (path: string) => !host.querySelector(`[data-file-tree-item-id="${path}"]`)
     await act(async () => { src.click() })
+    check("rows revealed by an expansion fade in", row("/workspace/src/alpha.ts").dataset.entering === "true" && (reducedMotion || getComputedStyle(row("/workspace/src/alpha.ts")).animationName === "file-tree-row-enter") && docs.dataset.entering !== "true")
     await settle()
-    const alpha = row("/workspace/src/alpha.ts")
+    let alpha = row("/workspace/src/alpha.ts")
+    check("the entering state ends with the animation", alpha.dataset.entering !== "true")
     const label = alpha.querySelector<HTMLElement>('[data-slot="tree-item-label"]')!
     check("shared file trees use 26px rows with 3px vertical padding", label.getBoundingClientRect().height === 26 && getComputedStyle(label).paddingTop === "3px" && getComputedStyle(label).paddingBottom === "3px")
-    check("shared file trees use 1px gaps and matching nested sticky offsets", Math.abs(row("/workspace/src/beta.ts").getBoundingClientRect().top - alpha.getBoundingClientRect().bottom - 1) < 0.1 && getComputedStyle(src).top === "26px")
-    check("folder opens with its original height transition", src.getAttribute("aria-expanded") === "true")
-    const panel = alpha.closest<HTMLElement>('[data-slot="collapsible-content"]')!
-    check("height animation retains its 200 ms duration", getComputedStyle(panel).transitionDuration === "0.2s" || matchMedia("(prefers-reduced-motion: reduce)").matches)
-    check("open panel releases clipping for sticky descendants", getComputedStyle(panel).overflow === "visible")
+    check("shared file trees use 1px gaps and matching nested sticky offsets", Math.abs(row("/workspace/src/beta.ts").getBoundingClientRect().top - alpha.getBoundingClientRect().bottom - 1) < 0.1 && getComputedStyle(src).position === "absolute" && getComputedStyle(src).top === "27px" && getComputedStyle(docs).top === "108px")
+    check("the list is as tall as its rows", src.parentElement!.getBoundingClientRect().height === 5 * 27 - 1)
+    check("rows are a flat list with their level, position and set size", src.parentElement === alpha.parentElement && src.getAttribute("aria-expanded") === "true" && alpha.getAttribute("aria-level") === "3" && alpha.getAttribute("aria-posinset") === "1" && alpha.getAttribute("aria-setsize") === "2")
+    check("each row draws one indent guide per ancestor level", alpha.querySelectorAll('[data-slot="file-tree-indent-line"]').length === 2 && src.querySelectorAll('[data-slot="file-tree-indent-line"]').length === 1 && row("/workspace").querySelectorAll('[data-slot="file-tree-indent-line"]').length === 0)
 
     await act(async () => { src.click() })
     await settle()
-    check("collapsed descendants remain mounted", row("/workspace/src/alpha.ts") === alpha)
-    check("collapsed descendants are hidden from layout and accessibility", panel.hidden && getComputedStyle(panel).display === "none")
-    check("sibling rows retain their DOM identity", row("/workspace/docs") === docs)
+    check("collapsed descendants leave the list", missing("/workspace/src/alpha.ts") && docs.getBoundingClientRect().top - src.getBoundingClientRect().bottom === 1)
+    check("sibling rows retain their DOM identity", row("/workspace/docs") === docs && row("/workspace/src") === src)
     await act(async () => { src.click() })
     await settle()
-    check("reopening reuses the same child row", row("/workspace/src/alpha.ts") === alpha && !panel.hidden)
+    alpha = row("/workspace/src/alpha.ts")
+    check("reopening shows the children again", alpha.getBoundingClientRect().top - src.getBoundingClientRect().bottom === 1)
 
     await act(async () => { alpha.click() })
     check("selection moves to the clicked file", alpha.getAttribute("aria-selected") === "true" && src.getAttribute("aria-selected") === "false")
@@ -134,20 +137,26 @@ async function runChecks() {
       pressKey(alpha, "ArrowDown")
     })
     check("keyboard focus updates the next memoized row", row("/workspace/src/beta.ts").dataset.focus === "true" && alpha.dataset.focus === "false")
+    // Headless Tree moves DOM focus on a short poll. Let each move land, as it
+    // does between real key presses, before the row it targets can go away.
+    await settle()
     await act(async () => {
       pressKey(row("/workspace/src/beta.ts"), "ArrowLeft")
     })
     check("keyboard left moves focus to the parent folder", src.dataset.focus === "true")
+    await settle()
+    check("DOM focus follows the focused row", document.activeElement === src)
     await act(async () => {
       pressKey(src, "ArrowLeft")
     })
     await settle()
-    check("keyboard collapse updates aria-expanded", src.getAttribute("aria-expanded") === "false")
+    check("keyboard collapse updates aria-expanded", src.getAttribute("aria-expanded") === "false" && missing("/workspace/src/alpha.ts"))
     await act(async () => {
       pressKey(src, "ArrowRight")
     })
     await settle()
-    check("keyboard expand reveals the retained children", src.getAttribute("aria-expanded") === "true" && !panel.hidden)
+    alpha = row("/workspace/src/alpha.ts")
+    check("keyboard expand reveals the children", src.getAttribute("aria-expanded") === "true")
 
     const extra = item("/workspace/src/gamma.ts", "file")
     const updatedModel = {
@@ -189,17 +198,53 @@ async function runChecks() {
     await settle()
     const background = (element: HTMLElement) => getComputedStyle(element.querySelector('[data-slot="tree-item-label"]')!).backgroundColor
     const transparent = (element: HTMLElement) => ["transparent", "rgba(0, 0, 0, 0)"].includes(background(element))
-    check("expanded ancestors keep their sticky background", row("/workspace").dataset.stuck === "true" && src.dataset.stuck === "true" && !transparent(src))
+    alpha = row("/workspace/src/alpha.ts")
+    const hostTop = host.getBoundingClientRect().top
+    check("expanded ancestors are pinned in their slots with the sticky background", row("/workspace").dataset.stuck === "true" && src.dataset.stuck === "true" && !transparent(src) && row("/workspace").getBoundingClientRect().top === hostTop && src.getBoundingClientRect().top === hostTop + 26 && getComputedStyle(src).position === "sticky")
+    check("a pinned row is the same element as before it was pinned", row("/workspace/src") === src)
     check("collapsed rows passing underneath sticky ancestors never acquire the sticky highlight", closedFolders.every((entry) => row(entry.path).dataset.stuck !== "true" && row(entry.path).getAttribute("aria-selected") === "false" && transparent(row(entry.path))))
     check("an expanded empty folder cannot acquire the sticky highlight", row(empty.path).getAttribute("aria-expanded") === "true" && row(empty.path).dataset.stuck !== "true" && transparent(row(empty.path)))
     check("scrolling keeps the real selected file highlighted", alpha.getAttribute("aria-selected") === "true" && !transparent(alpha))
-    const sectionBottom = src.parentElement!.getBoundingClientRect().bottom - host.getBoundingClientRect().top + host.scrollTop
+    const sectionBottom = row("/workspace/src/beta.ts").getBoundingClientRect().bottom - hostTop + host.scrollTop
     await act(async () => { host.scrollTop = sectionBottom - 42 })
     await settle()
     check("an expanded ancestor loses the sticky highlight when its subtree pushes it underneath its parent", src.getBoundingClientRect().top < host.getBoundingClientRect().top + 26 && src.dataset.stuck === "false" && transparent(src) && row("/workspace").dataset.stuck === "true")
     await act(async () => { host.scrollTop = 0 })
     await settle()
-    check("returning to the top clears sticky highlights without clearing selection", row("/workspace").dataset.stuck === "false" && src.dataset.stuck === "false" && alpha.getAttribute("aria-selected") === "true" && !transparent(alpha))
+    check("returning to the top clears sticky highlights without clearing selection", row("/workspace").dataset.stuck === "false" && src.dataset.stuck === "false" && alpha.getAttribute("aria-selected") === "true" && !transparent(alpha) && getComputedStyle(src).position === "absolute")
+
+    // Windowing: a directory far larger than the viewport.
+    const manyFiles = Array.from({ length: 600 }, (_, index) => item(`/workspace/docs/file-${String(index).padStart(3, "0")}.txt`, "file"))
+    const largeModel = {
+      items: { ...scrollingModel.items, ...Object.fromEntries(manyFiles.map((entry) => [entry.path, entry])) },
+      childrenByPath: { ...scrollingModel.childrenByPath, "/workspace/docs": manyFiles.map((entry) => entry.path) },
+    }
+    // The earlier search expanded every folder, `docs` included.
+    await render(largeModel, "", noLoading, "/workspace/src/alpha.ts")
+    await settle()
+    const mounted = () => host.querySelectorAll("[data-file-tree-item-id]").length
+    const totalRows = 17 + 1 + 600 + 20
+    check("only the rows around the viewport are mounted", mounted() < 80 && docs.parentElement!.getBoundingClientRect().height === totalRows * 27 - 1)
+    await act(async () => { host.scrollTop = host.scrollHeight })
+    await settle()
+    check("scrolling to the end mounts the last rows and releases the first", !missing("/workspace/following-19") && missing("/workspace/src/alpha.ts") && mounted() < 80)
+    check("past the end of a folder only its still-open ancestors stay pinned", row("/workspace").dataset.stuck === "true" && missing("/workspace/docs"))
+    await act(async () => { host.scrollTop = 300 * 27 })
+    await settle()
+    check("the open folder is pinned while its children scroll", row("/workspace/docs").dataset.stuck === "true" && row("/workspace/docs").getBoundingClientRect().top === hostTop + 26 && row("/workspace").getBoundingClientRect().top === hostTop)
+    const middle = [...host.querySelectorAll<HTMLButtonElement>('[data-file-tree-item-id^="/workspace/docs/file-"]')].find((element) => element.getBoundingClientRect().top > hostTop + 120)!
+    await act(async () => { middle.click() })
+    middle.focus()
+    const middleId = middle.dataset.fileTreeItemId!
+    await act(async () => { host.scrollTop = 0 })
+    await settle()
+    check("the focused row stays mounted outside the window", row(middleId) === middle && document.activeElement === middle && mounted() < 80)
+    await act(async () => { pressKey(middle, "ArrowDown") })
+    await settle()
+    const next = host.querySelector<HTMLElement>('[data-focus="true"]')!
+    check("keyboard navigation from an offscreen row scrolls its target into view", next !== middle && next.getBoundingClientRect().top >= hostTop + 52 && next.getBoundingClientRect().bottom <= hostTop + host.clientHeight && document.activeElement === next)
+    await act(async () => { host.scrollTop = 0 })
+    await settle()
 
     await document.fonts.ready
     const measurer = createFileTreeNameMeasurer(document)

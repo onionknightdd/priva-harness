@@ -23,28 +23,68 @@ forced layout of the page. Loaded session messages made those layout passes
 much more expensive. Batching removes the per-name layout cycle; caching avoids
 probe insertion entirely for repeated names.
 
-Rows are memoized using their current expansion, focus, selection, search,
-loading, item data and sibling positions. Headless Tree item instances are
-mutable, so memoizing only the instance would leave those states stale.
-Sibling positions come from the directory structure because Headless Tree
-clears metadata for descendants during a parent's closing animation. Shared
-tree context and action callbacks remain stable.
+## Flat virtual list
 
-Nodes (the folder `Collapsible` plus its row and children) are memoized too.
-Because their state lives on mutable instances, `file-tree-revisions.ts`
-diffs the tree inputs on every render — expanded, selected and focused items,
-search, the loading set and the model's items / children maps — and bumps a
-per-item revision for each changed item and all of its ancestors. A search
-change bumps everything. The node receives `revision` as a prop, so React.memo
-re-renders exactly the changed branch; the loading set travels through a ref
-so replacing it does not invalidate untouched nodes.
+The shared tree renders a flat list of the rows that are currently visible
+(`file-tree-rows.ts`), not nested folder panels. `@tanstack/react-virtual`
+computes the window from the scroll surface the host marks with
+`data-file-tree-scroll`; the tree mounts the rows within 12 rows of the
+viewport, the row that holds keyboard focus, and the pinned ancestors. A tree
+of 816 rows used to keep about 20,000 elements in the document and relaid all
+of them whenever the pane changed width; it now mounts about 50 rows.
 
 ```text
-Tree state -> revision diff -> bump changed items + ancestors
-           -> memoized nodes: changed branch renders, siblings bail out
-Folder toggle -> existing 200 ms panel animation -> hide/reveal retained rows
-Panel animation completion -> update clipping on that panel
+scroll surface [data-file-tree-scroll]
+└─ Tree (role=tree)
+   └─ list box   height = rows × 27 − 1
+      ├─ pinned ancestors   position: sticky, top = level × 26, first in DOM order
+      └─ windowed rows      position: absolute, top = index × 27
 ```
+
+Rows are memoized on their current expansion, focus, selection, search,
+loading, item data, sibling position, list index and pinned state. Headless
+Tree item instances are mutable, so memoizing only the instance would leave
+those states stale. Level, sibling position and subtree extent come from the
+flat list, which is rebuilt only when the open folders or the directory model
+change; a scroll re-renders the tree component but its rows bail out.
+
+Every mounted row is a child of the same list box and rows are rendered in
+ascending index order. A pinned ancestor always has a lower index than the rows
+in the window, so pinning or releasing a folder changes its `position` and
+never moves or remounts its element: focus, hover and the marquee state
+survive. Pinned rows are the only rows in normal flow. Each sits at the top of
+the list box and gives its height back with a negative margin, so `sticky`
+holds it in its slot on the compositor. Only the push-out phase, when the last
+row of a folder's subtree carries it away, is positioned from the scroll offset
+with a transform.
+
+```text
+scroll offset -> slot d at offset + d × 26
+              -> the level-d ancestor of the row under that slot
+              -> pinned if it is an open folder with children whose own row
+                 has scrolled above the slot
+              -> shifted up once its subtree's last row reaches the slot
+```
+
+The list's offset inside the scroll surface (`scrollMargin`) is measured, not
+assumed: the Skills page stacks several trees and section headers in one
+surface. It is re-read on scroll and when the surface or its children resize.
+
+Collapsed descendants and rows outside the window are unmounted. The loaded
+directory model is kept, so reopening a folder or scrolling back does not
+request it again; rows, their context menus and observers are created again.
+Expanding or collapsing no longer animates height. Rows revealed by an
+expansion fade in over 200 ms with a 4 px offset (`file-tree-row-enter`,
+disabled for reduced motion); rows that scroll into the window do not animate.
+Indent guides are drawn by each row, one per ancestor level, and bridge the
+1 px gap to the next row.
+
+Keyboard focus can move to a row outside the window. Headless Tree's
+`scrollToItem` hook scrolls the list so the target clears the ancestors pinned
+above it before the library focuses the element; the focused row stays mounted
+while it is scrolled out of view, so arrow keys keep working from there.
+Headless Tree moves DOM focus on a 20 ms poll and falls back to the first row
+when its target has no element after 500 ms.
 
 First expansion of a directory used to spend one long frame on: rendering the
 whole tree twice (click, then data arrival), Base UI Collapsible layout effects,
@@ -52,7 +92,7 @@ the address bar's `layout` projection re-measuring the page, and the name
 measurement plus `panel.getSize()` forcing further layouts before the first
 paint — the width-fit spring then started late and visibly jumped. Now:
 
-- Only the clicked branch renders on click and on data arrival.
+- Only the rows in the window render on click and on data arrival.
 - The overflow report waits one painted frame (double `requestAnimationFrame`)
   so the new rows are on screen before measuring; `fitTreeToNameOverflow`
   returns before `getSize()` when the overflow is under the threshold.
@@ -66,7 +106,7 @@ paint — the width-fit spring then started late and visibly jumped. Now:
   per-frame preview toolbar measurement and measures once when it ends.
 
 ```text
-click -> render clicked branch -> fetch -> render branch + mount new rows -> paint
+click -> render window -> fetch -> render window + mount new rows -> paint
       -> next frame: measure visible names (contained probes) -> fit spring
       -> spring frames: panel.resize only; toolbar measure deferred to the end
 ```
@@ -74,15 +114,6 @@ click -> render clicked branch -> fetch -> render branch + mount new rows -> pai
 The fit now grows to the names in view (with the existing 64 px margin) and
 grows again as more rows scroll into view; before, the same expansion often
 jumped straight to the maximum width.
-
-Base UI's `keepMounted` retains loaded descendants across toggles; its `hidden`
-attribute removes closed panels from layout and accessibility after the exit
-animation. This retains DOM for loaded directories until the file tree unmounts,
-in exchange for avoiding repeated row, context menu and observer setup. Directory
-loading remains demand driven. Panel clipping state lives separately from rows,
-so finishing an animation does not render the subtree again. Folder icons,
-sticky headers, indentation, hover highlights, marquee and reduced-motion styles
-keep their existing markup and motion settings.
 
 Skills, Workspace and Data and Usage file browsers share 26 px rows with 3 px
 vertical padding and 1 px gaps. Sticky offsets and off-screen intrinsic sizes
@@ -96,10 +127,10 @@ top or side padding, bottom padding, stable scrollbar gutter, inline-size
 containment and contained overscroll. The shared tree therefore keeps the same
 sticky edges and background in both views, including dark mode.
 
-Only expanded folders with children can acquire the sticky highlight. Two
-IntersectionObserver sentinels delimit the interval in which the row is pinned:
-its normal position has passed the sticky boundary, while its subtree still has
-enough height below that boundary. Collapsed and empty folders scrolling under
+Only expanded folders with children can acquire the sticky highlight. The row
+is pinned while its normal position has passed the sticky boundary and its
+subtree still has enough height below that boundary; both are computed from the
+scroll offset and the flat list. Collapsed and empty folders scrolling under
 an ancestor, and expanded folders pushed out by the end of their subtree, keep
 their normal background. Real selection remains independent of this state.
 
@@ -127,25 +158,32 @@ Directory listing root -> WORKSPACE_DIR -> selected path's ancestors
 From the repository root:
 
 ```sh
-./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/file-browser/file-browser-scope.test.ts agent-ui/tests/features/file-browser/file-tree-revisions.test.ts
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/file-browser/file-browser-scope.test.ts agent-ui/tests/features/file-browser/file-tree-rows.test.ts
 node --test agent-ui/tests/features/file-browser/file-tree-content-width.test.ts
 ```
 
 The tests assert batched read/write ordering, duplicate-name caching, distinct
 fonts, current slot widths after resizing, empty names, font invalidation, the
-persistent contained probe host and its disposal, and that revisions move for
-exactly the changed items and their ancestors (expansion, loading, model
-children and item data, removed items, focus / selection, search). From
+persistent contained probe host and its disposal, and the flat list: display
+order, level, sibling position and subtree extent, which ancestors are pinned at
+a scroll offset (closed and empty folders never, a folder pushed out with the
+last row of its subtree), and the offset that reveals a row beneath its pinned
+ancestors. From
 `agent-ui/`, run `npm run lint` and `npm run build` for static analysis and
 production compilation.
 
 For real browser regression checks, start `npm run dev` in `agent-ui/`, open
 `/tests/features/file-browser/file-tree-browser.html`, and click **Run file tree
 checks**. The standalone page needs no backend or session data. It exercises
-row retention, hidden state, the original transition and clipping, selection,
-arrow-key navigation, sibling insertion, search and loading indicators. Sticky
-checks cover collapsed/empty folders underneath pinned ancestors, a subtree
-pushing its header out, and retained selection; append `?dark=1` for dark mode. It also
+the flat list geometry, indent guides, the entering fade, collapsed rows
+leaving the list, selection, arrow-key navigation, sibling insertion, search
+and loading indicators. Sticky checks cover the slot each pinned ancestor rests
+in, that pinning keeps the same element, collapsed/empty folders underneath
+pinned ancestors, a subtree pushing its header out, and retained selection.
+Windowing checks use a 600-file folder: the mounted row count, the first and
+last rows, a pinned folder above its scrolling children, the focused row kept
+outside the window, and keyboard navigation scrolling its target into view.
+Append `?dark=1` for dark mode. It also
 compares cached measurements with the previous DOM algorithm for 36 combinations
 of fonts, names and slot widths, including CJK, emoji and whitespace.
 
@@ -172,3 +210,14 @@ first expansion of an unloaded directory (click frame / data-arrival frame):
 for 4 rows. The remaining data-arrival cost is mounting the new rows themselves
 (Base UI Collapsible, context menu and tooltip per row). The browser regression
 page passed 60 checks.
+
+2026-11-11, development build, headless Chrome, 816 tree rows, dragging the
+Workspace divider about 470 px in 2 s: document elements about 21,900 → about
+3,000, mounted tree rows 816 → about 50. With no file open, frames over 50 ms
+42 → 0 and main-thread time 3,577 ms → about 1,050 ms; with an XLSX preview
+active, 41 → 0 and about 4,070 ms → about 1,000–1,100 ms. The browser
+regression page passed 69 checks and the focused Node suite passed 10 tests.
+The Skills and Git workspace regression pages pass. The project-directory page
+stops at "existing project plus starts a clean draft in that project's cwd",
+which also fails without these changes, so its sticky checks further down did
+not run.

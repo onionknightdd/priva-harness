@@ -3,7 +3,7 @@ import { after, test } from "node:test"
 import { JSDOM } from "jsdom"
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost", pretendToBeVisual: true })
-for (const key of ["window", "document", "navigator", "HTMLElement", "Element", "Node", "SVGElement", "DOMRect", "DOMException", "getComputedStyle"]) {
+for (const key of ["window", "document", "navigator", "HTMLElement", "Element", "Node", "SVGElement", "DOMRect", "DOMException", "getComputedStyle", "CSSStyleRule"]) {
   Object.defineProperty(globalThis, key, { configurable: true, value: dom.window[key as keyof typeof dom.window] })
 }
 Object.assign(globalThis, {
@@ -58,8 +58,17 @@ async function mount(overrides: Partial<Options> = {}) {
   await update({})
   const handle = host.querySelector<HTMLElement>('[role="separator"]')!
   const wrapper = host.querySelector<HTMLElement>('[data-slot="sidebar-wrapper"]')!
+  const gap = host.querySelector<HTMLElement>('[data-slot="sidebar-gap"]')!
+  const container = host.querySelector<HTMLElement>('[data-slot="sidebar-container"]')!
   return {
-    handle, wrapper, commits, update,
+    handle, wrapper, gap, container, commits, update,
+    // The container previews through a style rule: no attribute of an ancestor
+    // of the sidebar content may change per pointer move.
+    liveRule: () => {
+      const style = document.head.querySelector<HTMLStyleElement>("style[data-sidebar-live-width]")
+      const rule = style?.sheet?.cssRules[0] as CSSStyleRule | undefined
+      return rule ? { selector: rule.selectorText, width: rule.style.width } : null
+    },
     width: () => sidebar.sidebarWidth,
     majority: () => host.querySelector("output")!.textContent,
     open: () => sidebar.open,
@@ -72,7 +81,7 @@ async function mount(overrides: Partial<Options> = {}) {
       await act(async () => { handle.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key, bubbles: true })) })
     },
     async notify(width?: number) {
-      if (width !== undefined) wrapper.style.setProperty("--sidebar-width", `${width}px`)
+      if (width !== undefined) gap.style.setProperty("width", `${width}px`)
       await act(async () => { for (const observer of ResizeProbe.instances) observer.callback([], observer as unknown as ResizeObserver) })
     },
     async setOpen(open: boolean) { await act(async () => sidebar.setOpen(open)) },
@@ -89,7 +98,10 @@ test("drag keeps live geometry and accessible width in sync without handle or de
       await view.pointer("pointermove", width)
       await view.notify()
       assert.equal(view.handle.getAttribute("aria-valuenow"), String(Math.round(width)))
-      assert.equal(view.wrapper.style.getPropertyValue("--sidebar-width"), `${Math.round(width)}px`)
+      assert.equal(view.gap.style.width, `${Math.round(width)}px`)
+      assert.deepEqual(view.liveRule(), { selector: `[data-live-width="${view.container.getAttribute("data-live-width")}"]`, width: `${Math.round(width)}px` })
+      assert.equal(view.container.getAttribute("style"), null)
+      assert.equal(view.wrapper.style.getPropertyValue("--sidebar-width"), "500px", "An inherited variable on the wrapper restyles the whole page per pointer move")
       assert.equal(view.majority(), "false", "The boundary remains strictly greater than 60%")
     }
     assert.deepEqual(view.commits, before)
@@ -103,10 +115,18 @@ test("drag keeps live geometry and accessible width in sync without handle or de
     assert.equal(view.commits.density, pastBoundary)
     await view.pointer("pointerup", 650)
     assert.equal(view.width(), 650)
+    assert.equal(view.wrapper.style.getPropertyValue("--sidebar-width"), "650px")
+    assert.equal(view.gap.style.width, "", "The committed variable sizes the sidebar again")
+    assert.equal(view.liveRule(), null)
+    assert.equal(view.container.hasAttribute("data-live-width"), false)
     assert.equal(view.handle.getAttribute("aria-valuenow"), "650")
     assert.equal(view.wrapper.hasAttribute("data-resizing"), false)
     assert.equal(document.body.style.userSelect, "")
+    await view.pointer("pointerdown")
+    await view.pointer("pointermove", 660)
+    assert.equal(view.liveRule()?.width, "660px")
   } finally { await view.close() }
+  assert.equal(document.head.querySelector("style[data-sidebar-live-width]"), null, "Unmounting mid-drag removes the preview rule")
   assert.equal(ResizeProbe.instances.size, 0)
 })
 
@@ -167,6 +187,8 @@ test("keyboard, clamping, external limits and collapse keep the width contract",
     await view.update({ min: 0 })
     await view.key("Home")
     assert.equal(view.open(), false)
+    assert.equal(view.gap.style.width, "", "A collapsed sidebar is sized by its state classes")
+    assert.equal(view.liveRule(), null)
     assert.equal(view.handle.getAttribute("aria-valuenow"), "692")
   } finally { await view.close() }
 })

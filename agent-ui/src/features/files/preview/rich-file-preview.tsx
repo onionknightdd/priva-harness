@@ -146,6 +146,16 @@ function FilePreviewPanel({
   mode: FilePreviewMode | null
 }) {
   const contentRef = React.useRef<HTMLDivElement>(null)
+  const showsSource = mode === "source" && file.content !== undefined
+  // A DOCX is laid out on the main thread when its renderer mounts. Once shown,
+  // its view stays mounted behind the other file tabs so that returning to it
+  // does not parse and lay out the whole document again.
+  const [documentShown, setDocumentShown] = React.useState(false)
+  const keepsDocument = file.renderKind === "document" && !showsSource
+  const nextDocumentShown = keepsDocument && (active || documentShown)
+  if (nextDocumentShown !== documentShown) {
+    setDocumentShown(nextDocumentShown)
+  }
   const usesInternalScroller =
     file.status !== "loading" &&
     file.status !== "error" &&
@@ -212,7 +222,7 @@ function FilePreviewPanel({
           <PreviewRequestState loading />
         ) : file.status === "error" ? (
           <PreviewRequestState error={file.error} reason={file.previewError} />
-        ) : !active ? null : mode === "source" && file.content !== undefined ? (
+        ) : !active && !documentShown ? null : mode === "source" && file.content !== undefined ? (
           !canShowAgentAssist(file) && !isCsvSource(file.name, file.mediaType) ? (
             <SourceSelectionActions filePath={file.path} content={file.content}>
               <SourcePreview content={file.content} fileName={file.name} />

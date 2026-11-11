@@ -9,21 +9,17 @@ import {
   type ItemInstance,
 } from "@headless-tree/core"
 import { useTree } from "@headless-tree/react"
+import { useVirtualizer } from "@tanstack/react-virtual"
 import { LoaderCircleIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { OverflowMarquee } from "@/components/motion/overflow-marquee"
 import { MenuItemHighlight } from "@/components/motion/sidebar-menu-highlight"
 import {
-  Collapsible,
-  CollapsibleContent,
-} from "@/components/ui/collapsible"
-import {
   Tree,
   TreeItem,
   TreeItemLabel,
 } from "@/components/reui/tree"
-import { cn } from "@/lib/utils"
 
 import {
   FILE_BROWSER_ROOT_ID,
@@ -33,9 +29,12 @@ import {
   type FileBrowserModel,
 } from "../file-browser-data"
 import {
-  createFileTreeRevisions,
-  type FileTreeRevisions,
-} from "../file-tree-revisions"
+  FILE_TREE_ROW_HEIGHT,
+  FILE_TREE_ROW_PITCH,
+  fileTreeRevealOffset,
+  flattenFileTree,
+  pinnedFileTreeRows,
+} from "../file-tree-rows"
 import { FileTreeFolderIcon } from "./file-tree-folder-icon"
 import { FileTreeItemMenu } from "./file-tree-item-menu"
 import { FileTypeIcon } from "./file-type-icon"
@@ -43,41 +42,15 @@ import { FileGitStatus } from "./file-git-status"
 import { TooltipHint } from "@/components/ui/tooltip"
 
 const FILE_TREE_INDENT = 20
-const FILE_TREE_ROW_HEIGHT = 26
-const FILE_TREE_PANEL_TRANSITION_MS = 200
-const fileTreeRowVisibilityStyle = {
-  contentVisibility: "auto",
-  containIntrinsicSize: `auto ${FILE_TREE_ROW_HEIGHT}px`,
-} satisfies React.CSSProperties
+// Rows rendered beyond each edge of the viewport, so a fast scroll and the
+// next arrow-key target are already mounted.
+const FILE_TREE_OVERSCAN = 12
+const FILE_TREE_ENTER_MS = 200
 
 function resolveFileTreeHighlightElement(item: HTMLElement) {
   return item.querySelector<HTMLElement>(
     '[data-slot="tree-item-label"]'
   )
-}
-
-function useClipUntilOpenTransitionEnds(open: boolean) {
-  const [clipContents, setClipContents] = React.useState(!open)
-
-  React.useEffect(() => {
-    if (!open) {
-      setClipContents(true)
-      return
-    }
-
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setClipContents(false)
-      return
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      setClipContents(false)
-    }, FILE_TREE_PANEL_TRANSITION_MS)
-
-    return () => window.clearTimeout(timeoutId)
-  }, [open])
-
-  return clipContents
 }
 
 type FileBrowserTreeActions = {
@@ -90,14 +63,17 @@ type FileBrowserTreeActions = {
 const FileBrowserTreeRow = React.memo(function FileBrowserTreeRow({
   compact,
   data,
+  entering,
   expanded,
   focused,
+  index,
   item,
   icon,
   metadata,
   hideToggle,
   level,
   loading,
+  pinnedShift,
   positionInSet,
   searchMatch,
   selected,
@@ -109,14 +85,24 @@ const FileBrowserTreeRow = React.memo(function FileBrowserTreeRow({
 }: FileBrowserTreeActions & {
   compact: boolean
   data: FileBrowserItem
+  /** Revealed by an expansion just now, as opposed to scrolled into view. */
+  entering: boolean
   expanded: boolean
   focused: boolean
+  /** Position in the flat list of visible rows. */
+  index: number
   item: ItemInstance<FileBrowserItem>
   icon?: React.ReactNode
   metadata?: React.ReactNode
   hideToggle?: boolean
   level: number
   loading: boolean
+  /**
+   * null for a row at its place in the list. A number for an ancestor held
+   * at the top of the viewport: 0 at rest, negative while the end of its
+   * subtree pushes it out.
+   */
+  pinnedShift: number | null
   positionInSet: number
   searchMatch: boolean
   selected: boolean
@@ -161,27 +147,42 @@ const FileBrowserTreeRow = React.memo(function FileBrowserTreeRow({
       data-search-match={searchMatch}
       data-file-tree-item-id={item.getId()}
       data-file-tree-folder-row={isFolder || undefined}
-      className="relative box-border w-full min-w-0 max-w-full rounded-none pb-0! text-start data-[file-tree-folder-row=true]:sticky data-[stuck=true]:bg-card"
+      data-stuck={isFolder ? pinnedShift === 0 : undefined}
+      data-entering={entering || undefined}
+      className="box-border w-full min-w-0 max-w-full rounded-none pb-0! text-start data-[stuck=true]:bg-card data-[entering=true]:animate-file-tree-row-enter motion-reduce:animate-none"
       onPointerEnter={() => setNameMarqueeActive(true)}
       onPointerLeave={() => setNameMarqueeActive(false)}
       onFocusCapture={() => setNameMarqueeActive(true)}
       onBlurCapture={() => setNameMarqueeActive(false)}
       style={
-        isFolder
+        pinnedShift === null
           ? {
-              top: `${level * FILE_TREE_ROW_HEIGHT}px`,
-              zIndex: 50 - level,
+              position: "absolute",
+              insetInlineStart: 0,
+              top: index * FILE_TREE_ROW_PITCH,
             }
-          : fileTreeRowVisibilityStyle
+          : {
+              // Pinned rows are the only rows in flow. Each sits at the top
+              // of the list and gives its height back, so `sticky` holds it
+              // in its slot on the compositor while the list scrolls.
+              position: "sticky",
+              top: level * FILE_TREE_ROW_HEIGHT,
+              marginBottom: -FILE_TREE_ROW_HEIGHT,
+              zIndex: 50 - level,
+              transform: pinnedShift
+                ? `translateY(${pinnedShift}px)`
+                : undefined,
+            }
       }
     >
-      {isFolder &&
-        Array.from({ length: level }, (_, lineIndex) => (
+      {Array.from({ length: level }, (_, lineIndex) => (
           <span
             key={lineIndex}
             aria-hidden="true"
-            data-slot="file-tree-sticky-indent-line"
-            className="pointer-events-none absolute inset-y-0 z-[1] hidden w-px bg-border in-data-[stuck=true]:block"
+            data-slot="file-tree-indent-line"
+            // One guide per ancestor level, bridging the 1px gap to the next
+            // row so the guides read as continuous lines.
+            className="pointer-events-none absolute top-0 -bottom-px w-px bg-border"
             style={{
               left: `${(lineIndex + 1) * FILE_TREE_INDENT - 5}px`,
             }}
@@ -249,244 +250,6 @@ const FileBrowserTreeRow = React.memo(function FileBrowserTreeRow({
   )
 })
 
-function FileBrowserTreePanel({
-  children,
-  level,
-  open,
-}: {
-  children: React.ReactNode
-  level: number
-  open: boolean
-}) {
-  // Finishing the height transition only updates the panel, not every row.
-  const clipContents = useClipUntilOpenTransitionEnds(open)
-
-  return (
-    <CollapsibleContent
-      keepMounted
-      role="group"
-      className={cn(
-        "h-[var(--collapsible-panel-height)] overflow-hidden transition-[height] duration-200 ease-out starting:h-0 data-[ending-style]:h-0 data-[starting-style]:h-0 motion-reduce:transition-none",
-        // Sticky nested folders need overflow:visible once open. During the
-        // height animation it would paint children over still-collapsed rows.
-        open && !clipContents && "overflow-visible"
-      )}
-    >
-      <div
-        className="relative flex w-full min-w-0 max-w-full flex-col gap-px pt-px before:pointer-events-none before:absolute before:inset-y-0 before:start-[var(--file-tree-line-offset)] before:w-px before:bg-border"
-        style={
-          {
-            "--file-tree-line-offset": `${(level + 1) * FILE_TREE_INDENT - 5}px`,
-          } as React.CSSProperties
-        }
-      >
-        {children}
-      </div>
-    </CollapsibleContent>
-  )
-}
-
-// Shared per-tree data that nodes read at render time. It travels through a
-// ref so that replacing the loading set does not invalidate every memoized
-// node; the revision tracker bumps exactly the nodes whose loading changed.
-type FileBrowserTreeShared = {
-  loadingDirectories: ReadonlySet<string>
-  revisions: FileTreeRevisions
-}
-
-// Item instances are stable per id but mutable, so the node is memoized on
-// `revision`, which the tree bumps for an item and its ancestors whenever
-// their state, children or loading flag changes.
-const FileBrowserTreeNode = React.memo(function FileBrowserTreeNode({
-  compact,
-  item,
-  level,
-  loading,
-  positionInSet,
-  setSize,
-  shared,
-  onActionFeedback,
-  onDeleteRequest,
-  onDownload,
-  onUpload,
-  onFolderExpand,
-  rootIcon,
-  rootMetadata,
-  hideRootToggle,
-}: FileBrowserTreeActions & {
-  compact: boolean
-  item: ItemInstance<FileBrowserItem>
-  level: number
-  loading: boolean
-  positionInSet: number
-  /** Only compared by React.memo; bumping it is what re-renders the node. */
-  revision: number
-  setSize: number
-  shared: React.RefObject<FileBrowserTreeShared>
-  onFolderExpand?: (path: string) => void
-  rootIcon?: React.ReactNode
-  rootMetadata?: React.ReactNode
-  hideRootToggle?: boolean
-}) {
-  const data = item.getItemData()
-  const isFolder = item.isFolder()
-  const children = isFolder ? item.getChildren() : []
-  const expanded = item.isExpanded()
-  const { loadingDirectories, revisions } = shared.current
-  // Wait for the first directory listing so the panel measures its real height.
-  const panelOpen = expanded && (children.length > 0 || !loading)
-  const canStick = isFolder && expanded && children.length > 0
-  const stickySentinelRef = React.useRef<HTMLSpanElement>(null)
-  const stickyEndSentinelRef = React.useRef<HTMLSpanElement>(null)
-
-  React.useEffect(() => {
-    if (isFolder && expanded) onFolderExpand?.(data.path)
-  }, [data.path, expanded, isFolder, onFolderExpand])
-
-  React.useEffect(() => {
-    const sentinel = stickySentinelRef.current
-    const endSentinel = stickyEndSentinelRef.current
-    const row = sentinel?.parentElement?.querySelector<HTMLButtonElement>(
-      ':scope > [data-file-tree-folder-row="true"]'
-    )
-    const scrollContainer = sentinel?.closest<HTMLElement>(
-      "[data-file-tree-scroll]"
-    )
-
-    if (
-      !isFolder ||
-      !sentinel ||
-      !endSentinel ||
-      !row ||
-      !scrollContainer
-    ) {
-      return
-    }
-
-    row.dataset.stuck = "false"
-    if (!canStick || typeof IntersectionObserver === "undefined") return
-
-    let isStuck = false
-    let startAboveBoundary = false
-    let endAboveBoundary = false
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          const stickyBoundary =
-            entry.rootBounds?.top ??
-            scrollContainer.getBoundingClientRect().top +
-              level * FILE_TREE_ROW_HEIGHT
-          const aboveBoundary =
-            !entry.isIntersecting &&
-            entry.boundingClientRect.top < stickyBoundary
-          if (entry.target === sentinel) startAboveBoundary = aboveBoundary
-          if (entry.target === endSentinel) endAboveBoundary = aboveBoundary
-        }
-
-        // Crossing the top alone also catches ordinary rows scrolling away.
-        // A sticky row must still have enough subtree below it to stay pinned.
-        const nextIsStuck = startAboveBoundary && !endAboveBoundary
-
-        if (nextIsStuck === isStuck) {
-          return
-        }
-
-        isStuck = nextIsStuck
-        row.dataset.stuck = String(nextIsStuck)
-      },
-      {
-        root: scrollContainer,
-        rootMargin: `-${level * FILE_TREE_ROW_HEIGHT}px 0px 0px 0px`,
-        threshold: 0,
-      }
-    )
-
-    observer.observe(sentinel)
-    observer.observe(endSentinel)
-
-    return () => {
-      observer.disconnect()
-      delete row.dataset.stuck
-    }
-  }, [canStick, isFolder, level])
-
-  // ItemInstance is mutable. Pass current primitive state into the memoized
-  // row so selection, keyboard focus, search and sibling metadata stay fresh.
-  // Sibling positions come from the directory, since Headless Tree resets
-  // metadata for hidden descendants while their closing animation still runs.
-  const treeItem = (
-    <FileBrowserTreeRow
-      compact={compact}
-      data={data}
-      expanded={expanded}
-      focused={item.isFocused()}
-      item={item}
-      icon={level === 0 ? rootIcon : undefined}
-      metadata={level === 0 ? rootMetadata : undefined}
-      hideToggle={level === 0 && hideRootToggle}
-      level={level}
-      loading={loading}
-      positionInSet={positionInSet}
-      searchMatch={item.isMatchingSearch()}
-      selected={item.isSelected()}
-      setSize={setSize}
-      onActionFeedback={onActionFeedback}
-      onDeleteRequest={onDeleteRequest}
-      onDownload={onDownload}
-      onUpload={onUpload}
-    />
-  )
-
-  if (!isFolder) {
-    return treeItem
-  }
-
-  return (
-    <Collapsible
-      open={panelOpen}
-      role="none"
-      className="relative flex w-full min-w-0 max-w-full flex-col"
-    >
-      <span
-        ref={stickySentinelRef}
-        aria-hidden="true"
-        className="pointer-events-none -mb-px block h-px w-full"
-      />
-      {treeItem}
-      <FileBrowserTreePanel open={panelOpen} level={level}>
-        {children.map((child, index) => {
-          const childId = child.getId()
-          return (
-            <FileBrowserTreeNode
-              key={childId}
-              compact={compact}
-              item={child}
-              level={level + 1}
-              loading={child.isFolder() && loadingDirectories.has(childId)}
-              positionInSet={index + 1}
-              revision={revisions.get(childId)}
-              setSize={children.length}
-              shared={shared}
-              onActionFeedback={onActionFeedback}
-              onDeleteRequest={onDeleteRequest}
-              onDownload={onDownload}
-              onUpload={onUpload}
-              onFolderExpand={onFolderExpand}
-            />
-          )
-        })}
-      </FileBrowserTreePanel>
-      <span
-        ref={stickyEndSentinelRef}
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 h-px"
-        style={{ bottom: FILE_TREE_ROW_HEIGHT }}
-      />
-    </Collapsible>
-  )
-})
-
 export function FileBrowserTree({
   compact = false,
   defaultExpanded = true,
@@ -535,7 +298,11 @@ export function FileBrowserTree({
       isSameOrDescendantPath(item.path, rootPath) &&
       item.name.toLocaleLowerCase().includes(normalizedQuery)
   )
+  const containerRef = React.useRef<HTMLDivElement>(null)
+  const revealRowRef = React.useRef<(itemId: string) => void>(() => undefined)
   const tree = useTree<FileBrowserItem>({
+    // Keyboard focus can move to a row outside the rendered window.
+    scrollToItem: (item) => revealRowRef.current(item.getId()),
     initialState: {
       expandedItems: defaultExpanded ? [rootPath] : [],
       selectedItems: selectedItemPath ? [selectedItemPath] : [],
@@ -573,26 +340,139 @@ export function FileBrowserTree({
   const treeState = tree.getState()
   const expandedKey = treeState.expandedItems.join("\n")
 
-  // Revision bookkeeping is derived from the same inputs as this render and
-  // is idempotent per input set, so it runs inline rather than in an effect
-  // that would need a second render to propagate.
-  const revisionsRef = React.useRef<FileTreeRevisions>(null)
-  revisionsRef.current ??= createFileTreeRevisions()
-  const revisions = revisionsRef.current
-  revisions.update({
-    expandedItems: treeState.expandedItems,
-    selectedItems: treeState.selectedItems,
-    focusedItem: treeState.focusedItem,
-    search: treeState.search,
-    loadingDirectories,
-    model,
-    rootPath,
+  // Item instances are stable but mutable: the flat list only depends on which
+  // folders are open and what the directories contain.
+  const rows = React.useMemo(
+    () => {
+      void expandedKey
+      void model
+      return flattenFileTree(tree.getRootItem().getChildren(), {
+        isFolder: (item) => item.isFolder(),
+        isExpanded: (item) => item.isExpanded(),
+        getChildren: (item) => item.getChildren(),
+      })
+    },
+    [expandedKey, model, tree]
+  )
+  const rowIndexById = React.useMemo(
+    () => new Map(rows.map((row, index) => [row.node.getId(), index])),
+    [rows]
+  )
+
+  // Rows revealed by an expansion fade in; rows that merely scroll into the
+  // window must not, so the set only lives for the length of the animation.
+  const [previousRows, setPreviousRows] = React.useState(rows)
+  const [enteringIds, setEnteringIds] =
+    React.useState<ReadonlySet<string> | null>(null)
+  if (previousRows !== rows) {
+    const known = new Set(previousRows.map((row) => row.node.getId()))
+    const added = rows
+      .map((row) => row.node.getId())
+      .filter((id) => !known.has(id))
+    setPreviousRows(rows)
+    setEnteringIds(added.length > 0 ? new Set(added) : null)
+  }
+  React.useEffect(() => {
+    if (!enteringIds) return
+    const timeoutId = window.setTimeout(
+      () => setEnteringIds(null),
+      FILE_TREE_ENTER_MS
+    )
+    return () => window.clearTimeout(timeoutId)
+  }, [enteringIds])
+
+  // The tree lives in a scroll surface owned by its host, possibly below other
+  // content. `scrollMargin` is the list's offset inside that surface.
+  const [scrollElement, setScrollElement] = React.useState<HTMLElement | null>(
+    null
+  )
+  const [scrollMargin, setScrollMargin] = React.useState(0)
+  React.useLayoutEffect(() => {
+    const container = containerRef.current
+    const scroller =
+      container?.closest<HTMLElement>("[data-file-tree-scroll]") ?? null
+    setScrollElement(scroller)
+    if (!container || !scroller) return
+
+    const measure = () => {
+      const margin = Math.round(
+        container.getBoundingClientRect().top -
+          scroller.getBoundingClientRect().top -
+          scroller.clientTop +
+          scroller.scrollTop
+      )
+      setScrollMargin((current) => (current === margin ? current : margin))
+    }
+    measure()
+    // Content above the list can grow or shrink without the list resizing.
+    const observer = new ResizeObserver(measure)
+    observer.observe(scroller)
+    for (const child of scroller.children) observer.observe(child)
+    scroller.addEventListener("scroll", measure, { passive: true })
+    return () => {
+      observer.disconnect()
+      scroller.removeEventListener("scroll", measure)
+    }
+  }, [rows.length])
+
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollElement,
+    estimateSize: () => FILE_TREE_ROW_PITCH,
+    overscan: FILE_TREE_OVERSCAN,
+    scrollMargin,
   })
-  const sharedRef = React.useRef<FileBrowserTreeShared>({
-    loadingDirectories,
-    revisions,
-  })
-  sharedRef.current = { loadingDirectories, revisions }
+  const listOffset = (virtualizer.scrollOffset ?? 0) - scrollMargin
+  const pinned = pinnedFileTreeRows(rows, listOffset)
+  const pinnedShiftByIndex = new Map(
+    pinned.map((entry) => [entry.index, entry.shift])
+  )
+  // Without a scroll surface there is no window to compute: render every row.
+  const windowIndexes = scrollElement
+    ? virtualizer.getVirtualItems().map((entry) => entry.index)
+    : rows.map((_, index) => index)
+  const focusedIndex = treeState.focusedItem
+    ? rowIndexById.get(treeState.focusedItem)
+    : undefined
+  // Ascending order keeps every mounted row at a stable place among its
+  // siblings: a row never moves in the DOM when it is pinned or released, so
+  // it keeps its focus and hover state. Pinned ancestors precede the window.
+  const renderedIndexes = [
+    ...new Set([
+      ...pinned.map((entry) => entry.index),
+      ...(focusedIndex === undefined ? [] : [focusedIndex]),
+      ...windowIndexes,
+    ]),
+  ].sort((left, right) => left - right)
+
+  revealRowRef.current = (itemId) => {
+    const index = rowIndexById.get(itemId)
+    if (index === undefined || !scrollElement) return
+    const offset = fileTreeRevealOffset(
+      { index, level: rows[index].level },
+      scrollElement.scrollTop - scrollMargin,
+      scrollElement.clientHeight
+    )
+    if (offset !== null) scrollElement.scrollTop = offset + scrollMargin
+  }
+
+  // A folder reports its expansion once, when it first shows as open, and
+  // again only after it has been closed.
+  const reportedExpansionsRef = React.useRef(new Set<string>())
+  React.useEffect(() => {
+    const reported = reportedExpansionsRef.current
+    const expandedIds = new Set(treeState.expandedItems)
+    for (const id of reported) {
+      if (!expandedIds.has(id)) reported.delete(id)
+    }
+    for (const row of rows) {
+      const id = row.node.getId()
+      if (row.node.isFolder() && expandedIds.has(id) && !reported.has(id)) {
+        reported.add(id)
+        onFolderExpand?.(id)
+      }
+    }
+  }, [onFolderExpand, rows, treeState.expandedItems])
 
   React.useLayoutEffect(() => {
     tree.rebuildTree()
@@ -632,11 +512,11 @@ export function FileBrowserTree({
         }
       })
 
-    const selectedItem = tree.getItemInstance(selectedItemPath)
-
-    window.requestAnimationFrame(() => {
-      void selectedItem.scrollTo({ block: "nearest" })
+    // The ancestors expanded above reach the flat list on the next render.
+    const frame = window.requestAnimationFrame(() => {
+      revealRowRef.current(selectedItemPath)
     })
+    return () => window.cancelAnimationFrame(frame)
   }, [model, rootPath, selectedItemPath, tree])
 
   React.useEffect(() => {
@@ -672,29 +552,51 @@ export function FileBrowserTree({
         tree={tree}
         indent={FILE_TREE_INDENT}
         aria-label={t("fileBrowser.treeLabel")}
-        className="w-full min-w-0 max-w-full gap-px overflow-x-clip"
+        className="block w-full min-w-0 max-w-full overflow-x-clip"
       >
-        {tree.getRootItem().getChildren().map((item) => (
-          <FileBrowserTreeNode
-            key={item.getId()}
-            compact={compact}
-            item={item}
-            level={0}
-            loading={loadingDirectories.has(item.getId())}
-            positionInSet={1}
-            revision={revisions.get(item.getId())}
-            setSize={1}
-            shared={sharedRef}
-            onActionFeedback={onActionFeedback}
-            onDeleteRequest={onDeleteRequest}
-            onDownload={onDownload}
-            onUpload={onUpload}
-            onFolderExpand={onFolderExpand}
-            rootIcon={rootIcon}
-            rootMetadata={rootMetadata}
-            hideRootToggle={hideRootToggle}
-          />
-        ))}
+        {/* Pinned rows stack in this box's normal flow; every other row is
+            positioned inside it. Its height is that of the whole list. */}
+        <div
+          ref={containerRef}
+          role="presentation"
+          className="relative"
+          style={{
+            height: Math.max(0, rows.length * FILE_TREE_ROW_PITCH - 1),
+          }}
+        >
+        {renderedIndexes.map((index) => {
+          const row = rows[index]
+          const item = row.node
+          const id = item.getId()
+          const root = row.level === 0
+          return (
+            <FileBrowserTreeRow
+              key={id}
+              compact={compact}
+              data={item.getItemData()}
+              entering={enteringIds?.has(id) ?? false}
+              expanded={item.isExpanded()}
+              focused={item.isFocused()}
+              index={index}
+              item={item}
+              icon={root ? rootIcon : undefined}
+              metadata={root ? rootMetadata : undefined}
+              hideToggle={root && hideRootToggle}
+              level={row.level}
+              loading={item.isFolder() && loadingDirectories.has(id)}
+              pinnedShift={pinnedShiftByIndex.get(index) ?? null}
+              positionInSet={row.positionInSet}
+              searchMatch={item.isMatchingSearch()}
+              selected={item.isSelected()}
+              setSize={row.setSize}
+              onActionFeedback={onActionFeedback}
+              onDeleteRequest={onDeleteRequest}
+              onDownload={onDownload}
+              onUpload={onUpload}
+            />
+          )
+        })}
+        </div>
       </Tree>
     </MenuItemHighlight>
   )
