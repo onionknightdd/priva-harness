@@ -73,9 +73,33 @@ surface. It is re-read on scroll and when the surface or its children resize.
 Collapsed descendants and rows outside the window are unmounted. The loaded
 directory model is kept, so reopening a folder or scrolling back does not
 request it again; rows, their context menus and observers are created again.
-Expanding or collapsing no longer animates height. Rows revealed by an
-expansion fade in over 200 ms with a 4 px offset (`file-tree-row-enter`,
-disabled for reduced motion); rows that scroll into the window do not animate.
+Expanding or collapsing keeps the 200 ms ease-out push of the nested panels,
+with a gradient along the folding direction. Rows stay at their final places; the list box animates two
+registered custom properties with the Web Animations API, `--file-tree-reveal`
+(a length from 0 to the height of the block) and
+`--file-tree-reveal-progress` (0 to 1), and rows derive their style from them,
+so the motion needs no React render per frame.
+
+```text
+open:   children   mask: opaque above the edge at seam + reveal, transparent
+                   below it, with a vertical gradient up to one row tall
+        rows below translate by reveal − distance   (they ride the edge down)
+close:  children   kept for 200 ms (inert, aria-hidden), same mask
+        rows below translate by reveal              (they ride the edge up)
+```
+
+The gradient is a mask along the direction of the motion, not an opacity on
+the rows: a row is solid except where it nears the moving edge. Its height is
+`26px × (1 − progress)`, so it is widest while the block is closed and becomes
+a hard edge once the block is fully open.
+
+`fileTreeToggle` starts the motion only when the row list changes by one
+contiguous block, which is what a folder opening, closing or receiving its
+listing does; a search or a refresh is applied at once. While a block opens,
+the rows it pushes out stay mounted until they have left, and a closing block
+keeps the list's height until it is covered so the scroll position is not
+clamped under the moving rows. Reduced motion switches without animating. Rows
+that scroll into the window do not animate.
 Indent guides are drawn by each row, one per ancestor level, and bridge the
 1 px gap to the next row.
 
@@ -175,12 +199,14 @@ production compilation.
 For real browser regression checks, start `npm run dev` in `agent-ui/`, open
 `/tests/features/file-browser/file-tree-browser.html`, and click **Run file tree
 checks**. The standalone page needs no backend or session data. It exercises
-the flat list geometry, indent guides, the entering fade, collapsed rows
+the flat list geometry, indent guides, collapsed rows
 leaving the list, selection, arrow-key navigation, sibling insertion, search
 and loading indicators. Sticky checks cover the slot each pinned ancestor rests
 in, that pinning keeps the same element, collapsed/empty folders underneath
 pinned ancestors, a subtree pushing its header out, and retained selection.
-Windowing checks use a 600-file folder: the mounted row count, the first and
+Motion checks cover the 200 ms duration, the rows below riding the moving
+edge, the vertical gradient that ends at that edge, and the rows a closing
+folder keeps on screen. Windowing checks use a 600-file folder: the mounted row count, the first and
 last rows, a pinned folder above its scrolling children, the focused row kept
 outside the window, and keyboard navigation scrolling its target into view.
 Append `?dark=1` for dark mode. It also
@@ -216,7 +242,7 @@ Workspace divider about 470 px in 2 s: document elements about 21,900 → about
 3,000, mounted tree rows 816 → about 50. With no file open, frames over 50 ms
 42 → 0 and main-thread time 3,577 ms → about 1,050 ms; with an XLSX preview
 active, 41 → 0 and about 4,070 ms → about 1,000–1,100 ms. The browser
-regression page passed 69 checks and the focused Node suite passed 10 tests.
+regression page passed 72 checks and the focused Node suite passed 13 tests.
 The Skills and Git workspace regression pages pass. The project-directory page
 stops at "existing project plus starts a clean draft in that project's cwd",
 which also fails without these changes, so its sticky checks further down did

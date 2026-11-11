@@ -86,9 +86,6 @@
     /* Tool spinners: the default 1s `animate-spin` reads as idle; 0.7s reads as work. */
     --animate-spin-fast: spin 0.7s linear infinite;
     --animate-loading-state-pixel: loading-state-pixel 650ms ease-in-out infinite;
-    /* File tree rows revealed by expanding a folder. `translate` leaves the
-       `transform` that positions pinned rows alone. */
-    --animate-file-tree-row-enter: file-tree-row-enter 200ms ease-out;
     --color-context-system: var(--context-system);
     --color-context-tools: var(--context-tools);
     --color-context-skills: var(--context-skills);
@@ -406,11 +403,19 @@
   }
 }
 
-@keyframes file-tree-row-enter {
-  from {
-    opacity: 0;
-    translate: 0 -4px;
-  }
+/* How far a file tree folder has opened. Registered as a length so that it
+   can be animated; rows derive their mask and offset from it. */
+@property --file-tree-reveal {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
+/* The same motion as a fraction, for the width of the fade at the moving edge. */
+@property --file-tree-reveal-progress {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 1;
 }
 
 @keyframes loading-state-pixel {

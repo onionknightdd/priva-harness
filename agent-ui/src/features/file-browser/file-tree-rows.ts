@@ -135,3 +135,44 @@ export function fileTreeRevealOffset(
 
   return null
 }
+
+export type FileTreeToggle = {
+  kind: "open" | "close"
+  /** Index of the first row that appeared (open) or disappeared (close). */
+  first: number
+  count: number
+}
+
+/**
+ * Describes the change between two row lists when it is one contiguous block
+ * appearing or disappearing, which is what opening or closing a folder (or its
+ * listing arriving) does. Any other change returns null.
+ */
+export function fileTreeToggle<T>(
+  previous: readonly FileTreeRow<T>[],
+  next: readonly FileTreeRow<T>[],
+  getId: (node: T) => string
+): FileTreeToggle | null {
+  const count = Math.abs(next.length - previous.length)
+  if (count === 0) {
+    return null
+  }
+
+  const [longer, shorter] =
+    next.length > previous.length ? [next, previous] : [previous, next]
+  let first = 0
+  while (
+    first < shorter.length &&
+    getId(shorter[first].node) === getId(longer[first].node)
+  ) {
+    first++
+  }
+
+  for (let index = first; index < shorter.length; index++) {
+    if (getId(shorter[index].node) !== getId(longer[index + count].node)) {
+      return null
+    }
+  }
+
+  return { kind: next.length > previous.length ? "open" : "close", first, count }
+}

@@ -5,6 +5,7 @@ import {
   FILE_TREE_ROW_HEIGHT,
   FILE_TREE_ROW_PITCH,
   fileTreeRevealOffset,
+  fileTreeToggle,
   flattenFileTree,
   pinnedFileTreeRows,
 } from "../../../src/features/file-browser/file-tree-rows.ts"
@@ -121,5 +122,32 @@ describe("fileTreeRevealOffset", () => {
 
   it("scrolls down just far enough to show the whole row", () => {
     assert.equal(fileTreeRevealOffset(row("r20"), 0, viewport), top("r20") + FILE_TREE_ROW_HEIGHT - viewport)
+  })
+})
+
+describe("fileTreeToggle", () => {
+  const list = (nodes: Node[]) => flattenFileTree(nodes, accessors)
+  const id = (node: Node) => node.id
+  const withSrc = (open: boolean, children = files("s", 3)): Node[] => [{
+    id: "root", open: true, children: [{ id: "src", open, children }, { id: "docs", children: [] }, ...files("r", 2)],
+  }]
+
+  it("reports the block a folder reveals or hides", () => {
+    assert.deepEqual(fileTreeToggle(list(withSrc(false)), list(withSrc(true)), id), { kind: "open", first: 2, count: 3 })
+    assert.deepEqual(fileTreeToggle(list(withSrc(true)), list(withSrc(false)), id), { kind: "close", first: 2, count: 3 })
+  })
+
+  it("covers a listing that arrives under an already open folder and a block at the end", () => {
+    assert.deepEqual(fileTreeToggle(list(withSrc(true, [])), list(withSrc(true)), id), { kind: "open", first: 2, count: 3 })
+    const tail = (open: boolean): Node[] => [{ id: "root", open: true, children: [{ id: "last", open, children: files("t", 2) }] }]
+    assert.deepEqual(fileTreeToggle(list(tail(true)), list(tail(false)), id), { kind: "close", first: 2, count: 2 })
+  })
+
+  it("ignores changes that are not one contiguous block", () => {
+    const same = list(withSrc(true))
+    assert.equal(fileTreeToggle(same, list(withSrc(true)), id), null)
+    assert.equal(fileTreeToggle(list(withSrc(true)), list(withSrc(true, files("x", 3))), id), null, "Same length, different rows")
+    const scattered: Node[] = [{ id: "root", open: true, children: [{ id: "src", open: true, children: files("s", 3) }, { id: "docs", open: true, children: files("d", 2) }, ...files("r", 2)] }]
+    assert.equal(fileTreeToggle(list(withSrc(false)), list(scattered), id), null, "Two folders opened at once")
   })
 })

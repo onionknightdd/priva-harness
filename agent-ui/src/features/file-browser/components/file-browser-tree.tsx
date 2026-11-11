@@ -32,7 +32,9 @@ import {
   FILE_TREE_ROW_HEIGHT,
   FILE_TREE_ROW_PITCH,
   fileTreeRevealOffset,
+  fileTreeToggle,
   flattenFileTree,
+  type FileTreeRow,
   pinnedFileTreeRows,
 } from "../file-tree-rows"
 import { FileTreeFolderIcon } from "./file-tree-folder-icon"
@@ -45,7 +47,35 @@ const FILE_TREE_INDENT = 20
 // Rows rendered beyond each edge of the viewport, so a fast scroll and the
 // next arrow-key target are already mounted.
 const FILE_TREE_OVERSCAN = 12
-const FILE_TREE_ENTER_MS = 200
+const FILE_TREE_REVEAL_MS = 200
+// Enough rows to fill the tallest tree surface while a block slides past.
+const FILE_TREE_REVEAL_ROWS = 60
+
+// A folder opening or closing. The rows keep their final places in the list;
+// `--file-tree-reveal` runs between 0 and `distance` and the rows derive
+// their mask or offset from it, while `--file-tree-reveal-progress` runs
+// between 0 and 1 for the width of the fade at the moving edge, so the motion
+// costs no React work per frame.
+type FileTreeReveal = {
+  kind: "open" | "close"
+  /** Bottom edge of the row above the block, in list coordinates. */
+  seam: number
+  distance: number
+  first: number
+  count: number
+  /** The rows that just left, kept on screen while they are covered. */
+  leaving: FileTreeRow<ItemInstance<FileBrowserItem>>[]
+}
+
+// The mask of a row whose top is `offset` px below the seam: opaque above the
+// moving edge, transparent below it, with a gradient along the direction in
+// which the block opens.
+function fileTreeRevealMask(offset: number): React.CSSProperties {
+  const edge = `calc(var(--file-tree-reveal) - ${offset}px)`
+  const fade = `calc(${FILE_TREE_ROW_HEIGHT}px * (1 - var(--file-tree-reveal-progress)))`
+  const mask = `linear-gradient(to bottom, #000 calc(${edge} - ${fade}), transparent ${edge})`
+  return { maskImage: mask, WebkitMaskImage: mask }
+}
 
 function resolveFileTreeHighlightElement(item: HTMLElement) {
   return item.querySelector<HTMLElement>(
@@ -63,7 +93,6 @@ type FileBrowserTreeActions = {
 const FileBrowserTreeRow = React.memo(function FileBrowserTreeRow({
   compact,
   data,
-  entering,
   expanded,
   focused,
   index,
@@ -75,6 +104,8 @@ const FileBrowserTreeRow = React.memo(function FileBrowserTreeRow({
   loading,
   pinnedShift,
   positionInSet,
+  revealRole,
+  revealSeam,
   searchMatch,
   selected,
   setSize,
@@ -85,8 +116,6 @@ const FileBrowserTreeRow = React.memo(function FileBrowserTreeRow({
 }: FileBrowserTreeActions & {
   compact: boolean
   data: FileBrowserItem
-  /** Revealed by an expansion just now, as opposed to scrolled into view. */
-  entering: boolean
   expanded: boolean
   focused: boolean
   /** Position in the flat list of visible rows. */
@@ -104,6 +133,14 @@ const FileBrowserTreeRow = React.memo(function FileBrowserTreeRow({
    */
   pinnedShift: number | null
   positionInSet: number
+  /**
+   * While a folder opens or closes: "covered" rows are its children, masked
+   * at the moving edge; "pushed" and "pulled" rows follow that edge, below a
+   * block that is opening or closing; "leaving" rows are covered children
+   * that are already gone from the tree.
+   */
+  revealRole: "covered" | "leaving" | "pushed" | "pulled" | null
+  revealSeam: number
   searchMatch: boolean
   selected: boolean
   setSize: number
@@ -148,8 +185,10 @@ const FileBrowserTreeRow = React.memo(function FileBrowserTreeRow({
       data-file-tree-item-id={item.getId()}
       data-file-tree-folder-row={isFolder || undefined}
       data-stuck={isFolder ? pinnedShift === 0 : undefined}
-      data-entering={entering || undefined}
-      className="box-border w-full min-w-0 max-w-full rounded-none pb-0! text-start data-[stuck=true]:bg-card data-[entering=true]:animate-file-tree-row-enter motion-reduce:animate-none"
+      data-reveal={revealRole ?? undefined}
+      aria-hidden={revealRole === "leaving" || undefined}
+      inert={revealRole === "leaving" || undefined}
+      className="box-border w-full min-w-0 max-w-full rounded-none pb-0! text-start data-[stuck=true]:bg-card"
       onPointerEnter={() => setNameMarqueeActive(true)}
       onPointerLeave={() => setNameMarqueeActive(false)}
       onFocusCapture={() => setNameMarqueeActive(true)}
@@ -160,6 +199,25 @@ const FileBrowserTreeRow = React.memo(function FileBrowserTreeRow({
               position: "absolute",
               insetInlineStart: 0,
               top: index * FILE_TREE_ROW_PITCH,
+              ...(revealRole === "covered" || revealRole === "leaving"
+                ? {
+                    // Hidden below the edge at `seam + reveal`, and fading
+                    // towards it. The fade is as tall as a row when the block
+                    // is closed and narrows to a hard edge once it is open.
+                    ...fileTreeRevealMask(
+                      index * FILE_TREE_ROW_PITCH - revealSeam
+                    ),
+                    pointerEvents:
+                      revealRole === "leaving" ? "none" : undefined,
+                  }
+                : revealRole === "pushed"
+                  ? {
+                      translate:
+                        "0 calc(var(--file-tree-reveal) - var(--file-tree-reveal-distance))",
+                    }
+                  : revealRole === "pulled"
+                    ? { translate: "0 var(--file-tree-reveal)" }
+                    : null),
             }
           : {
               // Pinned rows are the only rows in flow. Each sits at the top
@@ -359,27 +417,54 @@ export function FileBrowserTree({
     [rows]
   )
 
-  // Rows revealed by an expansion fade in; rows that merely scroll into the
-  // window must not, so the set only lives for the length of the animation.
+  // Opening or closing a folder inserts or removes one block of rows. Compare
+  // the lists during render so the motion starts with the commit that changes
+  // them; any other change (search, a refresh) is applied without motion.
   const [previousRows, setPreviousRows] = React.useState(rows)
-  const [enteringIds, setEnteringIds] =
-    React.useState<ReadonlySet<string> | null>(null)
+  const [reveal, setReveal] = React.useState<FileTreeReveal | null>(null)
   if (previousRows !== rows) {
-    const known = new Set(previousRows.map((row) => row.node.getId()))
-    const added = rows
-      .map((row) => row.node.getId())
-      .filter((id) => !known.has(id))
+    const toggle = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ? null
+      : fileTreeToggle(previousRows, rows, (item) => item.getId())
     setPreviousRows(rows)
-    setEnteringIds(added.length > 0 ? new Set(added) : null)
-  }
-  React.useEffect(() => {
-    if (!enteringIds) return
-    const timeoutId = window.setTimeout(
-      () => setEnteringIds(null),
-      FILE_TREE_ENTER_MS
+    setReveal(
+      toggle && {
+        ...toggle,
+        seam: toggle.first * FILE_TREE_ROW_PITCH,
+        distance: toggle.count * FILE_TREE_ROW_PITCH,
+        leaving:
+          toggle.kind === "close"
+            ? previousRows.slice(
+                toggle.first,
+                toggle.first + Math.min(toggle.count, FILE_TREE_REVEAL_ROWS)
+              )
+            : [],
+      }
     )
-    return () => window.clearTimeout(timeoutId)
-  }, [enteringIds])
+  }
+  React.useLayoutEffect(() => {
+    const container = containerRef.current
+    if (!reveal) return
+    if (!container || typeof container.animate !== "function") {
+      setReveal(null)
+      return
+    }
+    const closed = "0px"
+    const open = `${reveal.distance}px`
+    const animation = container.animate(
+      {
+        "--file-tree-reveal":
+          reveal.kind === "open" ? [closed, open] : [open, closed],
+        "--file-tree-reveal-progress": reveal.kind === "open" ? [0, 1] : [1, 0],
+      } as PropertyIndexedKeyframes,
+      { duration: FILE_TREE_REVEAL_MS, easing: "ease-out", fill: "both" }
+    )
+    animation.finished.then(
+      () => setReveal((current) => (current === reveal ? null : current)),
+      () => undefined
+    )
+    return () => animation.cancel()
+  }, [reveal])
 
   // The tree lives in a scroll surface owned by its host, possibly below other
   // content. `scrollMargin` is the list's offset inside that surface.
@@ -442,8 +527,56 @@ export function FileBrowserTree({
       ...pinned.map((entry) => entry.index),
       ...(focusedIndex === undefined ? [] : [focusedIndex]),
       ...windowIndexes,
+      // The rows a large folder pushes out start right below it, so they stay
+      // mounted until they have left, wherever the list now puts them.
+      ...(reveal?.kind === "open"
+        ? Array.from(
+            { length: FILE_TREE_REVEAL_ROWS },
+            (_, offset) => reveal.first + reveal.count + offset
+          ).filter((index) => index < rows.length)
+        : []),
     ]),
   ].sort((left, right) => left - right)
+  const renderedRows = renderedIndexes.flatMap((index) => {
+    const pinnedShift = pinnedShiftByIndex.get(index) ?? null
+    const entry = {
+      row: rows[index],
+      index,
+      pinnedShift,
+      revealRole:
+        !reveal || pinnedShift !== null || index < reveal.first
+          ? null
+          : reveal.kind === "close"
+            ? ("pulled" as const)
+            : index < reveal.first + reveal.count
+              ? ("covered" as const)
+              : ("pushed" as const),
+    }
+    // Leaving rows keep their old places, between the folder and the rows
+    // that follow it, so no mounted row changes its order in the DOM.
+    return reveal?.kind === "close" && index === reveal.first
+      ? [
+          ...reveal.leaving.map((row, offset) => ({
+            row,
+            index: reveal.first + offset,
+            pinnedShift: null,
+            revealRole: "leaving" as const,
+          })),
+          entry,
+        ]
+      : [entry]
+  })
+  // Closing the last folder of the list leaves no row to carry the leaving ones.
+  if (reveal?.kind === "close" && reveal.first >= rows.length) {
+    renderedRows.push(
+      ...reveal.leaving.map((row, offset) => ({
+        row,
+        index: reveal.first + offset,
+        pinnedShift: null,
+        revealRole: "leaving" as const,
+      }))
+    )
+  }
 
   revealRowRef.current = (itemId) => {
     const index = rowIndexById.get(itemId)
@@ -560,12 +693,21 @@ export function FileBrowserTree({
           ref={containerRef}
           role="presentation"
           className="relative"
-          style={{
-            height: Math.max(0, rows.length * FILE_TREE_ROW_PITCH - 1),
-          }}
+          style={
+            {
+              // A closing block keeps its room until it has been covered, so
+              // the scroll position is not clamped under the moving rows.
+              height: Math.max(
+                0,
+                rows.length * FILE_TREE_ROW_PITCH -
+                  1 +
+                  (reveal?.kind === "close" ? reveal.distance : 0)
+              ),
+              "--file-tree-reveal-distance": `${reveal?.distance ?? 0}px`,
+            } as React.CSSProperties
+          }
         >
-        {renderedIndexes.map((index) => {
-          const row = rows[index]
+        {renderedRows.map(({ row, index, pinnedShift, revealRole }) => {
           const item = row.node
           const id = item.getId()
           const root = row.level === 0
@@ -574,7 +716,6 @@ export function FileBrowserTree({
               key={id}
               compact={compact}
               data={item.getItemData()}
-              entering={enteringIds?.has(id) ?? false}
               expanded={item.isExpanded()}
               focused={item.isFocused()}
               index={index}
@@ -584,8 +725,10 @@ export function FileBrowserTree({
               hideToggle={root && hideRootToggle}
               level={row.level}
               loading={item.isFolder() && loadingDirectories.has(id)}
-              pinnedShift={pinnedShiftByIndex.get(index) ?? null}
+              pinnedShift={pinnedShift}
               positionInSet={row.positionInSet}
+              revealRole={revealRole}
+              revealSeam={reveal?.seam ?? 0}
               searchMatch={item.isMatchingSearch()}
               selected={item.isSelected()}
               setSize={row.setSize}

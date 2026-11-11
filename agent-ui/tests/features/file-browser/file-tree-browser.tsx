@@ -110,11 +110,24 @@ async function runChecks() {
     const docs = row("/workspace/docs")
     const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches
     const missing = (path: string) => !host.querySelector(`[data-file-tree-item-id="${path}"]`)
+    const list = () => src.parentElement!
+    const revealing = () => list().getAnimations().length === 1
     await act(async () => { src.click() })
-    check("rows revealed by an expansion fade in", row("/workspace/src/alpha.ts").dataset.entering === "true" && (reducedMotion || getComputedStyle(row("/workspace/src/alpha.ts")).animationName === "file-tree-row-enter") && docs.dataset.entering !== "true")
+    check("an opening folder uncovers its rows and pushes the rows below it", reducedMotion || (revealing() && list().getAnimations()[0].effect!.getTiming().duration === 200 && row("/workspace/src/alpha.ts").dataset.reveal === "covered" && row("/workspace/src/alpha.ts").style.maskImage.includes("--file-tree-reveal") && docs.dataset.reveal === "pushed" && src.dataset.reveal === undefined && list().style.getPropertyValue("--file-tree-reveal-distance") === "54px"))
+    if (!reducedMotion) {
+      await new Promise((resolve) => setTimeout(resolve, 80))
+      const edge = src.getBoundingClientRect().bottom + Number.parseFloat(getComputedStyle(list()).getPropertyValue("--file-tree-reveal"))
+      check("the rows below ride the moving edge", Number.parseFloat(getComputedStyle(list()).getPropertyValue("--file-tree-reveal")) > 0 && Math.abs(docs.getBoundingClientRect().top - edge) < 1.5)
+      // Sample the mask the way the browser resolves it: the gradient runs
+      // down the row and ends, transparent, at the moving edge.
+      const mask = getComputedStyle(row("/workspace/src/beta.ts")).maskImage
+      const stops = [...mask.matchAll(/(-?[\d.]+)px\)?(?=,|\)$)/g)].map((match) => Number.parseFloat(match[1]))
+      const betaEdge = edge - row("/workspace/src/beta.ts").getBoundingClientRect().top
+      check("uncovered rows fade along the opening direction, not as a whole", mask.startsWith("linear-gradient(rgb(0, 0, 0)") && mask.includes("rgba(0, 0, 0, 0)") && stops.length === 2 && stops[0] < stops[1] && stops[1] - stops[0] <= 26 && Math.abs(stops[1] - betaEdge) < 1.5 && getComputedStyle(row("/workspace/src/beta.ts")).opacity === "1" && getComputedStyle(docs).maskImage === "none")
+    }
     await settle()
     let alpha = row("/workspace/src/alpha.ts")
-    check("the entering state ends with the animation", alpha.dataset.entering !== "true")
+    check("the motion ends at the rows' own places", !revealing() && alpha.dataset.reveal === undefined && alpha.style.maskImage === "" && getComputedStyle(alpha).maskImage === "none" && docs.style.translate === "")
     const label = alpha.querySelector<HTMLElement>('[data-slot="tree-item-label"]')!
     check("shared file trees use 26px rows with 3px vertical padding", label.getBoundingClientRect().height === 26 && getComputedStyle(label).paddingTop === "3px" && getComputedStyle(label).paddingBottom === "3px")
     check("shared file trees use 1px gaps and matching nested sticky offsets", Math.abs(row("/workspace/src/beta.ts").getBoundingClientRect().top - alpha.getBoundingClientRect().bottom - 1) < 0.1 && getComputedStyle(src).position === "absolute" && getComputedStyle(src).top === "27px" && getComputedStyle(docs).top === "108px")
@@ -123,6 +136,7 @@ async function runChecks() {
     check("each row draws one indent guide per ancestor level", alpha.querySelectorAll('[data-slot="file-tree-indent-line"]').length === 2 && src.querySelectorAll('[data-slot="file-tree-indent-line"]').length === 1 && row("/workspace").querySelectorAll('[data-slot="file-tree-indent-line"]').length === 0)
 
     await act(async () => { src.click() })
+    check("a closing folder keeps its rows on screen, fading at the edge that covers them", reducedMotion || (revealing() && alpha.isConnected && alpha.dataset.reveal === "leaving" && alpha.style.maskImage.includes("--file-tree-reveal-progress") && alpha.inert && alpha.getAttribute("aria-hidden") === "true" && docs.dataset.reveal === "pulled" && row("/workspace/docs") === docs))
     await settle()
     check("collapsed descendants leave the list", missing("/workspace/src/alpha.ts") && docs.getBoundingClientRect().top - src.getBoundingClientRect().bottom === 1)
     check("sibling rows retain their DOM identity", row("/workspace/docs") === docs && row("/workspace/src") === src)
