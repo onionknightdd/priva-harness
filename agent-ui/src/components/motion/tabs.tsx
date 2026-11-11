@@ -404,7 +404,7 @@ export function TabsTrigger({
           if (!event.defaultPrevented) setValue(value);
         }}
         className={cn(
-          "relative z-10 inline-flex items-center justify-center whitespace-nowrap bg-transparent px-3.5 py-1.5 text-sm font-medium outline-none",
+          "relative z-10 inline-flex items-center justify-center whitespace-nowrap bg-transparent px-3.5 py-1.5 text-sm font-medium outline-none transition-[color,scale] duration-200 ease-out enabled:active:scale-[0.97] motion-reduce:transition-none",
           focusRing,
           "text-muted-foreground enabled:hover:text-foreground disabled:opacity-50",
           radius,

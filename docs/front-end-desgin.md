@@ -128,6 +128,75 @@ npx shadcn add @beui/switch
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/process-status.test.ts agent-ui/tests/features/agent-message/process-status-text.test.tsx agent-ui/tests/features/agent-message/stable-text.test.tsx
 ```
 
+### 层级、明度与菜单滑动高亮（2026-11-12）
+
+一轮只改共享 token 和基础组件的精修，不改任何页面布局。
+
+**层级阴影。** `shadow-2xs … shadow-xl` 由 [index.css](../agent-ui/src/index.css) 的
+`--elevation-*` 提供，浅色和深色各一套；每一级是「贴边的接触阴影 + 大范围环境阴影」
+叠加。组件只选级别，不写自定义阴影：
+
+```text
+xs  控件（输入框、outline / 实心按钮）
+sm  凸起的小块（Tabs 滑块、标尺卡片）
+md  锚定弹层（菜单、Popover、Select、Combobox、HoverCard）
+lg  子菜单、Sheet、悬浮面板
+xl  脱离锚点的浮层
+modal  Dialog / AlertDialog（现为默认，调用方不再单独传 shadow-modal）
+```
+
+遮罩使用 `bg-scrim`：浅色 14%，深色 48%（原先两种主题都是 10%，深色下几乎看不出层次）。
+
+**明度方向。** 悬停和按下总是朝「离开所在表面」的方向变化。深色主题里 popover 是最亮
+的一层，不透明的 `accent` 会让悬停行变暗，所以 `.dark .bg-popover` 内 `--accent` 改为
+`oklch(1 0 0 / 9%)`，悬停行变亮。Button 各 variant 增加 `active:` 明度一档（悬停一档、
+按下再一档），实心按钮加 `shadow-xs` 和 1px 顶部高光；Input / Textarea / SelectTrigger
+悬停时边框加深到 `foreground/25`，聚焦和错误态不受影响。
+
+**菜单滑动高亮。** `ui/dropdown-menu`、`ui/context-menu`、`ui/select`、`ui/combobox`
+共用 [useMenuGlide](../agent-ui/src/components/motion/menu-glide.ts)：Base UI 用
+`data-highlighted` 标记当前行，hook 用 MutationObserver 把该行的盒子写进容器的
+`--menu-glide-*` 变量，`[data-menu-glide]::before` 负责绘制和过渡。只在高亮行变化时
+执行，不触发 React 渲染，也没有逐帧循环。
+
+```text
+指针 / 键盘 -> Base UI 设置 data-highlighted
+            -> MutationObserver -> --menu-glide-top/left/width/height
+            -> ::before 140ms 滑到新行（首行直接落位并淡入）
+无高亮 90ms 后 -> idle，淡出（跨过分隔线和行间空隙时不闪）
+destructive 行 -> 保留自己的红色底，不显示滑块
+prefers-reduced-motion -> 规则不生效，行保持静态 accent 底色
+```
+
+行的静态底色改读 `--menu-item-highlight`（滑块生效时为透明，否则回落到 `accent`）。
+调用方自己覆盖 `focus:bg-*` 的行不受影响。不是「一行一项」的列表用
+`<ComboboxList glide={false}>` 关闭（会话标签筛选的 chip 列表）。附件菜单
+（Animate UI Menu）的外框同步改为 `ring-1 ring-foreground/10`，与通用菜单一致。
+
+曾尝试纯 CSS anchor positioning（`anchor-name` 跟随高亮行）：位置能解析，但锚点换到
+另一个元素时 Chrome 不会为 `anchor()` 的结果启动过渡，因此没有采用。
+
+**视图切换。** 用量、文件浏览器、Skills、MCP 在主列里互相替换时，外层按视图加 key 的
+容器播放一次 `view-enter`（上移 6px + 淡入，260ms）。Chat 有自己的 composer 停靠动画，
+不参与。
+
+**全局细节。** `body` 使用 `antialiased`；滚动条统一为细条并读取 `foreground` 22%
+（macOS 仍是覆盖式滚动条）；按钮、链接、tab、菜单项设 `touch-action: manipulation`，
+触屏点击不再等待双击缩放判定；Badge、Progress 的 `transition-all` 收窄到实际变化的属性。
+
+**Tabs 与悬浮控件。** 三套 Tabs（`assistant-ui/tabs`、Animate UI Radix Tabs、
+`motion/tabs` 的 segment）的触发器统一为 `transition-[color,scale]` 200ms，按下缩放到
+0.97，与 Button 的按压语言一致；资源 Tabs 补上悬停变色。回到最新消息的按钮悬浮在内容
+之上，加 `shadow-sm`、背景色过渡和按下缩放（原先自带的 transition 覆盖了 Button 的
+反馈）。InputGroup 悬停时边框与 Input 一样加深。ChatComposer 外壳按 2026-09-12 的约定
+保持不变：聚焦时不改边框和阴影。
+
+回归（仓库根目录）：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/components/motion/menu-glide.test.tsx
+```
+
 ### Tab 与侧栏底色
 
 2026-09-09：按用户确认，以下背景色仅用于浅色主题。Tab 修改整组标签栏的底色；
@@ -3008,12 +3077,12 @@ Tabs，文件的源码 / 预览 / Agent协助模式使用上述 BeUI Tabs。不�
 | TooltipHint | 同一 [ui/tooltip](../agent-ui/src/components/ui/tooltip.tsx) 中的组合入口 | 替代浏览器原生 `title`，复用全局延迟组，不添加布局包裹元素，保留多行提示 | 图标按钮、路径、错误、状态、截断文字 |
 | 富内容提示 | [composer-slash-chip](../agent-ui/src/features/agent-message/components/composer-slash-chip.tsx)，Base UI Tooltip | 沿用 popover token 的卡片样式，与其他提示共享计时 | Slash command chip 预览；旧 HoverCard 入口当前无业务调用 |
 | Popover | [ui/popover](../agent-ui/src/components/ui/popover.tsx)，Base UI Popover | 浮层表单 / 信息面板，160ms 进入 / 100ms 退出 | 标签、上下文占用、任务计划、上传队列 |
-| DropdownMenu | [ui/dropdown-menu](../agent-ui/src/components/ui/dropdown-menu.tsx)，Base UI Menu | `ring-1`、共享 CSS 弹层动画、焦点行背景；`DropdownMenuContent` 透出 Positioner 的 `anchor`，一个菜单可挂多个 Trigger | 模型、会话、账户、路径、Harness 菜单 |
+| DropdownMenu | [ui/dropdown-menu](../agent-ui/src/components/ui/dropdown-menu.tsx)，Base UI Menu | `ring-1`、共享 CSS 弹层动画、行间滑动高亮（`useMenuGlide`）；`DropdownMenuContent` 透出 Positioner 的 `anchor`，一个菜单可挂多个 Trigger | 模型、会话、账户、路径、Harness 菜单 |
 | 附件 Menu | [animate-ui/components/base/menu](../agent-ui/src/components/animate-ui/components/base/menu.tsx)，Base UI Menu + Animate UI | `border`、200ms 弹层、Motion 滑动高亮；与通用 DropdownMenu 的分组字号等不同 | 聊天附件菜单 |
 | ContextMenu | [ui/context-menu](../agent-ui/src/components/ui/context-menu.tsx)，Base UI ContextMenu | shadcn 风格的右键菜单；行内文件菜单为 12px | 文件树节点、助手行内文件引用 |
 | Slash / 选区动作菜单 | [composer-slash-menu](../agent-ui/src/features/agent-message/components/composer-slash-menu.tsx)、[composer-mention-menu](../agent-ui/src/features/agent-message/components/composer-mention-menu.tsx)、[message-selection-actions](../agent-ui/src/features/agent-message/components/message-selection-actions.tsx)，本地 Portal + Motion | Slash 与 `@` 文件共用同一建议菜单，列表最多显示 5 行选项，其余滚动；选区复用 Beautiful UI 胶囊外观与工具条键盘操作 | 输入 `/`、输入 `@`、在对话中引用 assistant / user 选区 |
 | Composer 编辑内容 | [composer-editor](../agent-ui/src/features/agent-message/components/composer-editor.tsx)、[message-selection-quote](../agent-ui/src/features/agent-message/components/message-selection-quote.tsx)，ProseMirror + React Portal | 文本、换行、可删除的行内引用；撤销 / 重做、纯文本协议剪贴板 | composer 草稿与消息里的只读引用 |
-| Dialog / AlertDialog | [ui/dialog](../agent-ui/src/components/ui/dialog.tsx)、[ui/alert-dialog](../agent-ui/src/components/ui/alert-dialog.tsx)，Base UI | 居中模态框 + 遮罩；200ms 进入 / 150ms 退出 | 设置、资源表单、重命名、删除确认 |
+| Dialog / AlertDialog | [ui/dialog](../agent-ui/src/components/ui/dialog.tsx)、[ui/alert-dialog](../agent-ui/src/components/ui/alert-dialog.tsx)，Base UI | 居中模态框 + `bg-scrim` 遮罩 + `shadow-modal`；200ms 进入 / 150ms 退出 | 设置、资源表单、重命名、删除确认 |
 | Sheet | [ui/sheet](../agent-ui/src/components/ui/sheet.tsx)，Base UI Dialog | 边缘滑入；共享 `sheetMotion`，380ms 进入 / 220ms 退出 | 移动端侧栏、资源详情抽屉 |
 | Badge / Status | [ui/badge](../agent-ui/src/components/ui/badge.tsx)、[kibo-ui/status](../agent-ui/src/components/kibo-ui/status/index.tsx)、[workflow-status](../agent-ui/src/features/agent-message/components/workflow-status.tsx) | 标签 pill、状态圆点、带图标状态组合；Kibo 状态点使用语义 token | 会话状态、资源类型、工作流状态 |
 | Progress | [ui/progress](../agent-ui/src/components/ui/progress.tsx)，Base UI；[AgentPlan](../agent-ui/src/components/elements/agent-plan.tsx) 另有自绘条 | 通用进度轨道和计划中的细线进度条并存 | Profile 用量、Agent 任务进度 |

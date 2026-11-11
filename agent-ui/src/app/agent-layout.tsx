@@ -146,22 +146,27 @@ export function AgentLayout({
           )}
         </div>
       </header>
-      {isResource ? (
-        <React.Suspense fallback={<AgentLayoutFallback />}>
-          <ResourcePage key={activeView} kind={activeView} />
-        </React.Suspense>
-      ) : isUsage ? (
-        <React.Suspense fallback={<AgentLayoutFallback />}>
-          <UsagePage />
-        </React.Suspense>
-      ) : isFileBrowser ? (
-        <React.Suspense fallback={<AgentLayoutFallback />}>
-          <FileBrowserPage />
-        </React.Suspense>
-      ) : (
+      {isChat ? (
         <React.Suspense fallback={<AgentLayoutFallback />}>
           <AgentMessagePage key={agentMessageSessionKey} />
         </React.Suspense>
+      ) : (
+        // Keyed per view so each switch replays the shared enter motion. The
+        // chat keeps its own composer choreography and is left out.
+        <div
+          key={activeView}
+          className="view-enter flex min-h-0 min-w-0 flex-1 flex-col"
+        >
+          <React.Suspense fallback={<AgentLayoutFallback />}>
+            {isResource ? (
+              <ResourcePage key={activeView} kind={activeView} />
+            ) : isUsage ? (
+              <UsagePage />
+            ) : (
+              <FileBrowserPage />
+            )}
+          </React.Suspense>
+        </div>
       )}
     </WorkspaceShell>
     </SessionViewProvider>

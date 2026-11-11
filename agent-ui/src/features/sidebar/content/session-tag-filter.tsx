@@ -184,7 +184,7 @@ export function SessionTagFilter({
               ? t("sidebar.projects.filterTagsEmpty")
               : t("sidebar.projects.filterTagsNoResults")}
           </ComboboxEmpty>
-          <ComboboxList className="flex max-h-40 flex-wrap gap-1 p-0.5">
+          <ComboboxList glide={false} className="flex max-h-40 flex-wrap gap-1 p-0.5">
             {(item: KnownSessionTag) => (
               <ComboboxItem
                 key={item.name}

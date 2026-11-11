@@ -82,7 +82,7 @@ function MenuPanel({
           transition={transition}
           id={id}
           className={cn(
-            'bg-popover text-popover-foreground max-h-(--available-height) min-w-[8rem] origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-md border p-1 shadow-md outline-none',
+            'bg-popover text-popover-foreground max-h-(--available-height) min-w-[8rem] origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-md p-1 shadow-md ring-1 ring-foreground/10 outline-none',
             className,
           )}
         >
@@ -314,7 +314,7 @@ function MenuSubmenuPanel({
           transition={transition}
           id={id}
           className={cn(
-            'bg-popover text-popover-foreground max-h-(--available-height) min-w-[8rem] origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-md border p-1 shadow-md',
+            'bg-popover text-popover-foreground max-h-(--available-height) min-w-[8rem] origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-md p-1 shadow-md ring-1 ring-foreground/10',
             className,
           )}
         >

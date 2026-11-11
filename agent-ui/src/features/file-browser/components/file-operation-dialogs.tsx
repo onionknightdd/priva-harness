@@ -104,7 +104,7 @@ export function CreateFolderDialog({
         }
       }}
     >
-      <DialogContent className="shadow-modal" finalFocus={finalFocus}>
+      <DialogContent finalFocus={finalFocus}>
         <form className="grid gap-6" onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>{t("fileBrowser.createDialog.title")}</DialogTitle>
