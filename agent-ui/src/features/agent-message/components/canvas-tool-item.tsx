@@ -1,11 +1,13 @@
-import { AppWindowIcon } from "lucide-react"
+import { useWorkspaceWhiteboard, whiteboardScope } from "@/features/workspace/workspace-whiteboard-context"
+import { useHarness } from "@/features/sidebar/header/harness-context"
+import { AppWindowIcon, PanelsTopLeftIcon } from "lucide-react"
 import { motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
 import type { ToolResultStatus } from "@/components/agents/tool-result"
 import { useActiveSession } from "@/features/chat-session"
 import { rememberFileExists } from "@/features/files/file-existence"
-import { useOptionalWorkspaceFiles } from "@/features/workspace"
+import { useOptionalWorkspaceFiles } from "@/features/workspace/workspace-files-context"
 import { SPRING_PRESS } from "@/lib/ease"
 import { fileNameFromPath, resolveAgainstCwd } from "@/lib/file-path"
 import { focusRing } from "@/lib/surfaces"
@@ -16,6 +18,7 @@ import {
   canvasPathFromTool,
   canvasTitleFromInput,
 } from "../canvas-html"
+import { whiteboardPathFromTool, whiteboardToolKind } from "../whiteboard-tools"
 import { isToolRunning, toolItemStatusLabel } from "../tool-activity"
 import { TooltipHint } from "@/components/ui/tooltip"
 
@@ -26,22 +29,25 @@ export function CanvasToolItem({
 }) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
-  const { runCwd } = useActiveSession()
+  const { runCwd, runSessionId } = useActiveSession()
+  const { runHarnessId } = useHarness()
+  const boards = useWorkspaceWhiteboard()
   const workspaceFiles = useOptionalWorkspaceFiles()
   const tool = block.tool
   const running = isToolRunning(tool)
   const status = canvasStatus(tool?.ok, running)
   const input = tool?.input ?? block.input
-  const path = resolveAgainstCwd(
-    canvasPathFromTool(tool?.output, input),
-    runCwd
-  )
+  const whiteboard = whiteboardToolKind(block.name) !== null
+  const Icon = whiteboard ? PanelsTopLeftIcon : AppWindowIcon
+  const path = whiteboard
+    ? whiteboardPathFromTool(tool?.output, input, runCwd, runSessionId)
+    : resolveAgainstCwd(canvasPathFromTool(tool?.output, input), runCwd)
   const title = canvasTitleFromInput(input)
   const fileName = path === "" ? "" : fileNameFromPath(path)
   const canOpen =
-    status === "success" &&
+    (status === "success" || whiteboard && running) &&
     path !== "" &&
-    workspaceFiles !== null
+    (whiteboard ? boards !== null : workspaceFiles !== null)
   const openLabel = t("agentMessage.canvasOpenPreview")
   const displayName = title || fileName
 
@@ -53,11 +59,12 @@ export function CanvasToolItem({
           disabled={!canOpen}
           aria-label={canOpen ? openLabel : undefined}
           onClick={() => {
-            if (!canOpen || workspaceFiles === null) {
+            if (!canOpen) {
               return
             }
             rememberFileExists(path, true)
-            workspaceFiles.openFileInWorkspace(path, { previewMode: "render" })
+            if (whiteboard) boards?.open(whiteboardScope(runHarnessId, runSessionId, runCwd), path)
+            else workspaceFiles?.openFileInWorkspace(path, { previewMode: "render" })
           }}
           whileTap={
             shouldReduceMotion || !canOpen ? undefined : { scale: 0.98 }
@@ -69,7 +76,7 @@ export function CanvasToolItem({
             !canOpen && "cursor-default"
           )}
         >
-          <AppWindowIcon className="me-[0.25em] size-4 shrink-0" aria-hidden="true" />
+          <Icon className="me-[0.25em] size-4 shrink-0" aria-hidden="true" />
           <span className={cn("min-w-0", running && "shimmer")}>
             {toolItemStatusLabel(block.name, running, t)}
           </span>

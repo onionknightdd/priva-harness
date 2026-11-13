@@ -15,3 +15,14 @@ Verification:
 - Browser fixture: /tests/agent-preview.html; toggle the container width, change Agents and tabs, expand tools/reasoning, and verify internal scrolling.
 
 History ownership fix: SDK enumeration includes Workflow workers, which may have no parent tool ID. The history loader now admits only sidechains attached to an Agent/Task call reachable from the main conversation, recovering ordinary Agent ownership from tool results when needed. Unowned Workflow records remain in the workflow detail endpoint. This prevents internal enforcement prompts and worker answers from being replayed as main user/assistant turns. StructuredOutput is hidden case-insensitively in visible process rows, labels, and activity counts; structured results remain available as output.
+
+Whiteboard tools: `whiteboard_read` and `whiteboard_write` (including native MCP
+aliases) use the Workspace artifact card. Reading and drawing have separate
+activity labels. A successful result's resolved `.board.json` path opens the
+dedicated Whiteboard tab; live writes open it automatically. Cards stay on one
+line without disclosure or expansion; failures show the tool error. Board JSON remains
+available in Source mode. See [whiteboard architecture](architecture/whiteboard.md).
+
+```text
+Tool result -> resolved board path -> artifact card -> Workspace Whiteboard tab -> live React Flow canvas
+```

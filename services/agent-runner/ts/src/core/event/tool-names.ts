@@ -12,6 +12,8 @@ const TERMINAL_STATUSES = new Set([
 
 export const VISUALIZE_TOOL_NAME = 'visualize'
 export const CANVAS_TOOL_NAME = 'canvas'
+export const WHITEBOARD_READ_TOOL_NAME = 'whiteboard_read'
+export const WHITEBOARD_WRITE_TOOL_NAME = 'whiteboard_write'
 export const STATIC_VISUALIZE_TOOL_NAME = 'static_visualize'
 export const INTERACTIVE_VISUALIZE_TOOL_NAME = 'interactive_visualize'
 export const IMAGE_GEN_TOOL_NAME = 'image_gen'
@@ -21,6 +23,8 @@ export const IMAGE_EDIT_TOOL_NAME = 'image_edit'
 const PRODUCT_TOOL_NAMES = new Set([
   VISUALIZE_TOOL_NAME,
   CANVAS_TOOL_NAME,
+  WHITEBOARD_READ_TOOL_NAME,
+  WHITEBOARD_WRITE_TOOL_NAME,
   STATIC_VISUALIZE_TOOL_NAME,
   INTERACTIVE_VISUALIZE_TOOL_NAME,
   IMAGE_GEN_TOOL_NAME,

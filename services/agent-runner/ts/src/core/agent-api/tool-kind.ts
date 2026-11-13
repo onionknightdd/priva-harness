@@ -51,7 +51,7 @@ const NATIVE_KINDS: Readonly<Record<string, ToolKind>> = {
   ask_user_question: 'question',
 }
 
-const VISUALIZE_TOOLS = new Set(['visualize', 'canvas', 'static_visualize', 'interactive_visualize'])
+const VISUALIZE_TOOLS = new Set(['visualize', 'canvas', 'static_visualize', 'interactive_visualize', 'whiteboard_read', 'whiteboard_write'])
 const MCP_TOOL = /^mcp__([a-zA-Z0-9_-]+)__.+$/u
 
 /** Unrecognized tools are `other`; the native name is always preserved. */

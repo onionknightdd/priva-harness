@@ -2,6 +2,22 @@ import { resourcesEn } from "./resources"
 import { modelEn } from "./model"
 
 export const en = {
+  whiteboard: {
+    loading: "Loading whiteboard…",
+    connecting: "Connecting…",
+    disconnected: "Connection lost. Reconnecting…",
+    retry: "Retry",
+    saving: "Saving…",
+    title: "Whiteboard",
+    fit: "Fit to view",
+    zoomIn: "Zoom in",
+    zoomOut: "Zoom out",
+    delete: "Delete selected",
+    minimap: "Minimap",
+    drawing: "Agent is drawing",
+    empty: "Ask the agent to draw on this whiteboard.",
+    editLabel: "Edit text",
+  },
   modelPreview: modelEn,
   interaction: {
     skip: "Skip", continue: "Continue", send: "Send answers", custom: "Something else…", previous: "Previous question", next: "Next question",
@@ -418,6 +434,9 @@ export const en = {
       visualizeDone: "Visualize",
       renderUiRunning: "Rendering",
       renderUiDone: "Interface",
+      whiteboardReadRunning: "Reading whiteboard",
+      whiteboardWriteRunning: "Drawing whiteboard",
+      whiteboardDone: "Whiteboard",
       canvasRunning: "Writing canvas",
       canvasDone: "Canvas",
       imageGenRunning: "Generating image",

@@ -20,6 +20,10 @@ describe('compile custom tools', () => {
     expect(compiled.toolAliases).toEqual({
       visualize: 'mcp__agentWorkshop__visualize',
       canvas: 'mcp__agentWorkshop__canvas',
+      whiteboard_read: 'mcp__agentWorkshop__whiteboard_read',
+      whiteboard_write: 'mcp__agentWorkshop__whiteboard_write',
+      static_visualize: 'mcp__agentWorkshop__static_visualize',
+      interactive_visualize: 'mcp__agentWorkshop__interactive_visualize',
       image_gen: 'mcp__agentWorkshop__image_gen',
       image_read: 'mcp__agentWorkshop__image_read',
       image_edit: 'mcp__agentWorkshop__image_edit',

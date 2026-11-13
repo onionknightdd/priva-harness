@@ -1,3 +1,4 @@
+import { whiteboardToolKind } from "./whiteboard-tools"
 import type { TFunction } from "i18next"
 
 import type { StreamBlock, ToolCard } from "./agent-message-data"
@@ -105,6 +106,10 @@ export function toolItemStatusLabel(
         : "agentMessage.toolItem.visualizeDone"
     )
   }
+  const boardKind = whiteboardToolKind(name)
+  if (boardKind) return t(running
+    ? (boardKind === "read" ? "agentMessage.toolItem.whiteboardReadRunning" : "agentMessage.toolItem.whiteboardWriteRunning")
+    : "agentMessage.toolItem.whiteboardDone")
   if (isCanvasTool(name)) {
     return t(
       running
@@ -150,6 +155,8 @@ export function toolItemStatusLabel(
 }
 
 export function classifyToolName(name: string): ToolActivityKind {
+  if (whiteboardToolKind(name) === "read") return "read"
+  if (whiteboardToolKind(name) === "write") return "write"
   if (isReadTool(name)) return "read"
   if (isEditTool(name)) return "edit"
   if (isWriteTool(name)) return "write"

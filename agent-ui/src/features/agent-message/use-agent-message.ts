@@ -27,10 +27,11 @@ import { applyThreadStreamFrame, mergeSnapshotMessages, type StreamFrame } from 
 import { updatePromptSuggestion, type PromptSuggestion } from "./prompt-suggestion"
 import { baseModelReference, DEFAULT_CONTEXT_WINDOW, type ContextWindow } from "./model-context"
 import { isLiveComputerToolStart } from "./computer-tool-data"
+import { createLiveWhiteboardNavigation, type WhiteboardNavigation } from "./live-whiteboard-navigation"
 
 const AWAITING_NATIVE_EFFORT_LEVELS: readonly AgentRunEffort[] = []
 
-export function useAgentMessage({ onComputerToolStarted }: { onComputerToolStarted?: () => void } = {}) {
+export function useAgentMessage({ onComputerToolStarted, onWhiteboardToolActivity }: { onComputerToolStarted?: () => void; onWhiteboardToolActivity?: (activity: WhiteboardNavigation & { sessionId: string | null; cwd: string }) => void } = {}) {
   const { t } = useTranslation()
   const { resolvedTheme } = useTheme()
   const { preserveViewForSession, setView } = useSessionView()
@@ -69,6 +70,7 @@ export function useAgentMessage({ onComputerToolStarted }: { onComputerToolStart
   const hasSnapshotRef = React.useRef(false)
   const nativeConfigRef = React.useRef<string | undefined>(undefined)
   const latestConfigRef = React.useRef<StreamFrame["config"]>(undefined)
+  const whiteboardNavigation = React.useRef(createLiveWhiteboardNavigation())
   const configurationRequestRef = React.useRef<string | undefined>(undefined)
   const confirmedVisualizeModeRef = React.useRef<{ connection: AgentSessionConnection | null; value: boolean }>({ connection: null, value: visualizeMode })
 
@@ -87,6 +89,9 @@ export function useAgentMessage({ onComputerToolStarted }: { onComputerToolStart
     if (isLiveComputerToolStart(frame)) onComputerToolStarted?.()
     setInteractions((current) => updateInteractions(current, frame))
     const id = frame.sessionId ?? connectionRef.current?.sessionId
+    const whiteboardCwd = frame.config?.cwd ?? latestConfigRef.current?.cwd ?? runCwd
+    const whiteboardActivity = whiteboardNavigation.current.receive(frame, whiteboardCwd, id)
+    if (whiteboardActivity && id) onWhiteboardToolActivity?.({ ...whiteboardActivity, sessionId: id, cwd: whiteboardCwd })
     if (id && ["suggestion.prompts", "session.snapshot", "run.started", "session.rebound"].includes(frame.type ?? "")) {
       setSuggestion((current) => updatePromptSuggestion(current, `${runHarnessId}:${id}`, frame))
     }
@@ -175,6 +180,7 @@ export function useAgentMessage({ onComputerToolStarted }: { onComputerToolStart
         hasSnapshotRef.current = true
         setMessages((current) => current.filter((message) => pendingIdsRef.current.has(message.id) || pendingIdsRef.current.has(message.id.replace(/:user$/, ''))))
         setInteractions([])
+        whiteboardNavigation.current.reset()
         setSuggestion(null)
         setContextUsage(emptyContextUsage())
       },
@@ -195,6 +201,7 @@ export function useAgentMessage({ onComputerToolStarted }: { onComputerToolStart
     hasSnapshotRef.current = false
     nativeConfigRef.current = undefined
     latestConfigRef.current = undefined
+    whiteboardNavigation.current.reset()
     configurationRequestRef.current = undefined
     setConfigurationPending(false)
     setEffortLevels(undefined)

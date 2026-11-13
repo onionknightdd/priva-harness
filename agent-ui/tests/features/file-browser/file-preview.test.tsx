@@ -97,3 +97,14 @@ test("the preview error renders the oversized-content message in both languages"
     assert.ok(html.includes('role="alert"'))
   }
 })
+
+test("board JSON receives the whiteboard renderer and keeps source mode", () => {
+  const content = '{"v":1,"title":"Board","revision":1,"order":[],"elements":{}}'
+  const file = previewResponseToFile(preview({ name: "demo.board.json", path: "/workspace/.whiteboard/session-a/demo.board.json", mime_type: "application/json", content }))
+  assert.equal(file.renderKind, "whiteboard")
+  assert.equal(file.content, content)
+  assert.equal(canRenderFile(file), true)
+  assert.equal(canShowFileSource(file), true)
+  assert.equal(canUseHtmlAssist(file), false)
+  assert.equal(previewResponseToFile(preview({ name: "regular.json", mime_type: "application/json" })).renderKind, "json")
+})

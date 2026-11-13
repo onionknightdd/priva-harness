@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next"
 
 import { ExpandableTabs } from "@/components/motion/expandable-tabs"
 
+import { WorkspaceWhiteboardView } from "./views/workspace-whiteboard-view"
 import { WorkspaceWorkflowView } from "./views/workspace-workflow-view"
 import { WorkspaceFileView } from "./views/workspace-file-view"
 import { WorkspaceComputerView } from "./views/workspace-computer-view"
@@ -23,6 +24,7 @@ function WorkspaceModuleContent({
   onFileBrowserMinimumWidthChange?: (width: number) => void
 }) {
   if (moduleId === "tasks") return <WorkspaceWorkflowView />
+  if (moduleId === "whiteboard") return <WorkspaceWhiteboardView />
   if (moduleId === "computer") return <WorkspaceComputerView />
   if (moduleId === "files") {
     return (

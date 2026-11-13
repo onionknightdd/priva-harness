@@ -1,0 +1,96 @@
+.whiteboard {
+  --wb-fl: .87; --wb-fc: .095; --wb-ll: .52; --wb-lc: .14; --wb-il: .27; --wb-ic: .075; --wb-lit: 16%;
+  --wb-sl: .55; --wb-sc: .13; --wb-sa: 26%; --wb-sa2: 38%;
+  --wb-plain: oklch(.925 0 0); --wb-plain-shadow: rgb(0 0 0 / 11%); --wb-plain-shadow-2: rgb(0 0 0 / 18%);
+  --wb-wire: oklch(.36 0 0);
+  --wb-marker: oklch(.7 .17 45); --wb-marker-2: oklch(.62 .16 300);
+  container-type: inline-size; position: relative; width: 100%; height: 100%; min-height: 280px; overflow: hidden; background: var(--background); color: var(--foreground);
+  --xy-background-pattern-dots-color: color-mix(in oklch, var(--foreground), transparent 90%);
+  --xy-minimap-background-color: var(--background);
+  --xy-minimap-mask-background-color: color-mix(in oklch, var(--foreground), transparent 94%);
+}
+.dark .whiteboard {
+  --wb-fl: .44; --wb-fc: .105; --wb-ll: .8; --wb-lc: .11; --wb-il: .97; --wb-ic: .025; --wb-lit: 10%;
+  --wb-sl: 0; --wb-sc: 0; --wb-sa: 42%; --wb-sa2: 58%;
+  --wb-plain: oklch(.37 0 0); --wb-plain-shadow: rgb(0 0 0 / 42%); --wb-plain-shadow-2: rgb(0 0 0 / 58%); --wb-wire: oklch(.84 0 0);
+  --wb-marker: oklch(.76 .15 50); --wb-marker-2: oklch(.74 .14 300);
+}
+.wb-element, .wb-arrow { --wb-h: 250; --wb-fill: oklch(var(--wb-fl) var(--wb-fc) var(--wb-h)); --wb-line: oklch(var(--wb-ll) var(--wb-lc) var(--wb-h)); --wb-ink: oklch(var(--wb-il) var(--wb-ic) var(--wb-h)); --wb-fill-lit: color-mix(in oklch, var(--wb-fill), white var(--wb-lit)); --wb-shadow: oklch(var(--wb-sl) var(--wb-sc) var(--wb-h) / var(--wb-sa)); --wb-shadow-hover: oklch(var(--wb-sl) var(--wb-sc) var(--wb-h) / var(--wb-sa2)); }
+.wb-color-blue { --wb-h: 250; } .wb-color-green { --wb-h: 158; } .wb-color-amber { --wb-h: 78; } .wb-color-rose { --wb-h: 12; } .wb-color-violet { --wb-h: 300; }
+.wb-color-plain, .wb-color-gray { --wb-fill: var(--wb-plain); --wb-line: var(--muted-foreground); --wb-ink: var(--foreground); --wb-shadow: var(--wb-plain-shadow); --wb-shadow-hover: var(--wb-plain-shadow-2); }
+.wb-element { position: relative; width: 100%; height: 100%; color: var(--wb-ink); }
+.wb-shape-svg { display: block; overflow: visible; filter: drop-shadow(0 .5px .5px rgb(0 0 0 / 24%)) drop-shadow(0 3px 4px var(--wb-shadow)); transition: filter 180ms var(--ease-out); }
+.wb-outline { fill: none; stroke: var(--wb-line); stroke-width: 1.5; stroke-linejoin: round; stroke-dasharray: 1; opacity: 0; }
+.wb-cap { fill: none; stroke: color-mix(in oklch, var(--wb-line), var(--wb-fill) 28%); stroke-width: 1.25; stroke-linejoin: round; stroke-dasharray: 1; }
+.wb-label { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; font-weight: 600; line-height: 1.3; }
+.wb-shape > .wb-label { position: absolute; inset: 12px; display: flex; align-items: center; justify-content: center; text-align: center; overflow: hidden; }
+.wb-text .wb-label { height: 100%; overflow: hidden; font-size: 18px; font-weight: 500; }
+.wb-edit { resize: none; outline: 1px solid var(--ring); outline-offset: 2px; border-radius: 3px; background: var(--background); color: var(--foreground); padding: 4px; width: 100%; height: 100%; font: inherit; }
+.wb-shape > .wb-edit { position: absolute; inset: 12px; width: calc(100% - 24px); height: calc(100% - 24px); }
+.whiteboard .react-flow__node-element.selected:not(:has(.wb-container)) { outline: 1.5px solid var(--ring); outline-offset: 5px; border-radius: 3px; }
+.whiteboard .react-flow__node-element:focus-visible { outline: 2px solid var(--ring); outline-offset: 5px; }
+.whiteboard .react-flow__handle.wb-handle { width: 1px; height: 1px; opacity: 0; border: none; pointer-events: none; }
+.wb-container { --wb-fill: color-mix(in oklch, var(--foreground), transparent 96%); --wb-fill-lit: var(--wb-fill); --wb-ink: var(--muted-foreground); }
+.wb-container .wb-shape-svg { filter: none; }
+.wb-container > .wb-label { position: absolute; left: 4px; top: -24px; font-size: 12px; line-height: 20px; }
+.wb-container > .wb-edit { position: absolute; left: 4px; top: -28px; height: 26px; max-width: 300px; }
+.wb-element.wb-stroke.wb-color-amber { --wb-line: var(--wb-marker); }
+.wb-element.wb-stroke.wb-color-violet { --wb-line: var(--wb-marker-2); }
+.wb-stroke-svg { display: block; overflow: visible; }
+.wb-stroke-svg > .wb-stroke { fill: none; stroke: var(--wb-line); stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; opacity: .88; }
+.wb-image { width: 100%; height: 100%; object-fit: contain; }
+.wb-html { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--card); box-shadow: var(--elevation-md); }
+.wb-embed-title { flex: 0 0 36px; padding: 8px 12px; border-bottom: 1px solid var(--border); color: var(--foreground); }
+.wb-embed-title .wb-label { font-size: 12.5px; }
+.wb-embed-frame { width: 100%; flex: 1; min-height: 0; border: none; background: var(--card); }
+.wb-table { background: var(--card); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--elevation-sm); overflow: hidden; color: var(--foreground); }
+.wb-table-scroll { width: 100%; height: 100%; overflow: auto; }
+.wb-table table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.wb-table tr { height: 36px; border-bottom: 1px solid var(--border); }
+.wb-table th { background: var(--muted); color: var(--muted-foreground); font-weight: 600; }
+.wb-table td, .wb-table th { padding: 0; min-width: 64px; }
+.wb-table input { width: 100%; height: 35px; padding: 0 12px; background: transparent; font-size: 12.5px; outline: none; border: none; text-overflow: ellipsis; }
+.wb-table input:focus { background: var(--background); box-shadow: inset 0 0 0 1px var(--ring); }
+/* Keep opaque labels above React Flow's elevated edges, including selection. */
+.whiteboard .react-flow__edgelabel-renderer { z-index: 10000; }
+.wb-arrow-label { position: absolute; max-width: 260px; pointer-events: all; }
+.wb-arrow-label-content { border-radius: 999px; padding: 3px 9px; border: 1px solid var(--border); background: var(--card); box-shadow: var(--elevation-xs); color: var(--foreground); }
+.wb-arrow-label .wb-label { font-size: 11.5px; font-weight: 500; }
+.wb-arrow .react-flow__edge-path { stroke-dasharray: 1; stroke-linecap: round; stroke-linejoin: round; }
+.wb-arrow-head { pointer-events: none; }
+.wb-arrow:not(.wb-color-plain):not(.wb-color-gray) { --wb-wire: var(--wb-line); }
+.wb-arrow-selected .react-flow__edge-path { filter: drop-shadow(0 0 2px var(--ring)); }
+.wb-pen { filter: drop-shadow(0 0 3px var(--wb-line)); fill: var(--wb-line); offset-rotate: 0deg; opacity: 0; pointer-events: none; }
+.wb-arrow .wb-pen { filter: drop-shadow(0 0 3px var(--wb-wire)); fill: var(--wb-wire); }
+.wb-drawing .wb-outline { animation: wb-trace var(--wb-trace-duration) var(--ease-out) var(--wb-delay) both, wb-outline-fade 860ms linear var(--wb-delay) both; }
+.wb-drawing .wb-fill { animation: wb-opacity 280ms var(--ease-out) calc(var(--wb-delay) + 300ms) both; }
+.wb-drawing .wb-cap { animation: wb-trace 280ms var(--ease-out) calc(var(--wb-delay) + 300ms) both, wb-opacity 160ms var(--ease-out) calc(var(--wb-delay) + 300ms) both; }
+.wb-drawing .wb-label { animation: wb-content 280ms var(--ease-out) calc(var(--wb-delay) + 380ms) both; }
+.wb-drawing .wb-pen { animation: wb-pen var(--wb-trace-duration) var(--ease-out) var(--wb-delay) both; }
+.wb-drawing .wb-stroke, .wb-arrow.wb-drawing .react-flow__edge-path { animation: wb-trace var(--wb-trace-duration) var(--ease-out) var(--wb-delay) both; }
+.wb-arrow.wb-drawing .wb-arrow-head { animation: wb-opacity 160ms var(--ease-out) var(--wb-head-delay) both; }
+.wb-arrow-label-drawing .wb-arrow-label-content { animation: wb-arrow-label-enter 320ms var(--ease-out) var(--wb-label-delay) both; }
+.wb-html.wb-drawing, .wb-image.wb-drawing { animation: wb-enter 520ms var(--ease-out) var(--wb-delay) both; }
+.wb-table.wb-drawing { animation: wb-opacity 260ms var(--ease-out) var(--wb-delay) both; }
+.wb-table.wb-drawing tbody tr { animation: wb-content 280ms var(--ease-out) calc(var(--wb-delay) + var(--wb-row-delay) + 80ms) both; }
+@keyframes wb-trace { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes wb-outline-fade { 0%, 62% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes wb-opacity { from { opacity: 0; } to { opacity: 1; } }
+@keyframes wb-content { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes wb-enter { from { opacity: 0; transform: translateY(8px) scale(.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes wb-arrow-label-enter { from { opacity: 0; transform: scale(.85); } to { opacity: 1; transform: scale(1); } }
+@keyframes wb-pen { 0% { offset-distance: 0%; opacity: 0; } 8%, 86% { opacity: 1; } 100% { offset-distance: 100%; opacity: 0; } }
+.wb-topbar { width: calc(100% - 24px); display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: 6px; pointer-events: none !important; }
+.wb-topbar > * { pointer-events: auto; }
+.wb-label:focus-visible { outline: 1px solid var(--ring); outline-offset: 2px; }
+.wb-toolbar { display: flex; align-items: center; gap: 4px; padding: 4px; background: var(--background); border: 1px solid var(--border); border-radius: 9px; box-shadow: var(--elevation-xs); max-width: calc(100% - 24px); }
+.wb-toolbar-title { padding: 0 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; max-width: 200px; }
+.wb-status { font-size: 11px; color: var(--muted-foreground); display: flex; align-items: center; gap: 6px; padding: 0 8px; white-space: nowrap; }
+.wb-status i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.wb-status[data-drawing="true"] i { color: var(--primary); animation: wb-opacity 800ms ease-in-out infinite alternate; }
+.wb-claim { border: 1px dashed var(--primary); border-radius: 8px; background: color-mix(in oklch, var(--primary), transparent 97%); pointer-events: none; }
+.wb-claim span { position: absolute; top: -25px; left: 0; font-size: 11px; color: var(--primary); white-space: nowrap; }
+.whiteboard .react-flow__minimap { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; box-shadow: var(--elevation-xs); }
+@media (hover: hover) and (pointer: fine) { .wb-shape:hover .wb-shape-svg { filter: drop-shadow(0 .5px .5px rgb(0 0 0 / 24%)) drop-shadow(0 8px 10px var(--wb-shadow-hover)); } }
+@container (max-width: 640px) { .wb-toolbar-title { max-width: 80px; } .wb-status { max-width: 110px; overflow: hidden; text-overflow: ellipsis; } .whiteboard .react-flow__minimap { width: 100px; height: 70px; } }
+@media (prefers-reduced-motion: reduce) { .whiteboard *, .whiteboard *::before, .whiteboard *::after { animation: none !important; transition: none !important; } }

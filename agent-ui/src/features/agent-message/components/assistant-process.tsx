@@ -1,3 +1,4 @@
+import { whiteboardToolKind } from "../whiteboard-tools"
 import { isQuestionTool } from "../interaction-data"
 import { QuestionSummary } from "./interaction-card"
 import { BackgroundTaskCard } from "./background-task-card"
@@ -355,7 +356,7 @@ export function ToolItem({
   if (isVisualizeTool(block.name)) {
     return <VisualizeToolItem block={block} />
   }
-  if (isCanvasTool(block.name)) {
+  if (isCanvasTool(block.name) || whiteboardToolKind(block.name)) {
     return <CanvasToolItem block={block} />
   }
   if (isImageGenTool(block.name)) {

@@ -32,6 +32,8 @@ import { UnsupportedPreview } from "./unsupported-preview"
 import type { ModelViewState } from "./model/model-renderer"
 import { playEnter } from "@/lib/motion-effects"
 
+const WhiteboardRenderer = React.lazy(() => import("@/features/whiteboard/whiteboard-renderer").then((module) => ({ default: module.WhiteboardRenderer })))
+
 const ModelRenderer = React.lazy(() => import("./model/model-renderer").then((module) => ({ default: module.ModelRenderer })))
 
 const DocumentRenderer = React.lazy(() =>
@@ -77,9 +79,14 @@ function getAvailableMode(
   return canRenderFile(file) ? "render" : null
 }
 
-function RenderedFile({ file, visible, modelViews }: { file: PreviewFile; visible: boolean; modelViews: Map<string, ModelViewState> }) {
+function RenderedFile({ file, visible, modelViews, onBoardContentChange }: { file: PreviewFile; visible: boolean; modelViews: Map<string, ModelViewState>; onBoardContentChange: (file: PreviewFile, content: string) => void }) {
+  const updateBoardContent = React.useCallback((content: string) => onBoardContentChange(file, content), [file, onBoardContentChange])
   if (!file.renderKind) {
     return <UnsupportedPreview hasFile />
+  }
+
+  if (file.renderKind === "whiteboard") {
+    return <WhiteboardRenderer key={`${file.path}:${file.previewGeneration ?? 0}`} path={file.path} active={visible} onContentChange={updateBoardContent} />
   }
 
   if (file.renderKind === "model" && file.renderSource) {
@@ -134,6 +141,7 @@ function FilePreviewPanel({
   active,
   visible,
   modelViews,
+  onBoardContentChange,
   file,
   fileTabsId,
   mode,
@@ -141,6 +149,7 @@ function FilePreviewPanel({
   active: boolean
   visible: boolean
   modelViews: Map<string, ModelViewState>
+  onBoardContentChange: (file: PreviewFile, content: string) => void
   file: PreviewFile
   fileTabsId: string
   mode: FilePreviewMode | null
@@ -168,6 +177,7 @@ function FilePreviewPanel({
           "presentation",
           "spreadsheet",
           "model",
+          "whiteboard",
         ].includes(file.renderKind ?? "")))
 
   React.useLayoutEffect(() => {
@@ -215,7 +225,7 @@ function FilePreviewPanel({
             key={`${file.id}:${file.renderSource ?? "inline"}`}
           >
             <React.Suspense fallback={<PreviewRequestState loading />}>
-              <RenderedFile file={file} visible={visible} modelViews={modelViews} />
+              <RenderedFile file={file} visible={visible} modelViews={modelViews} onBoardContentChange={onBoardContentChange} />
             </React.Suspense>
           </PreviewRendererBoundary>
         )}
@@ -230,7 +240,7 @@ export function RichFilePreview({
   className,
   compact = false,
   expanded = false,
-  files,
+  files: incomingFiles,
   mode,
   onActiveFileChange,
   onCloseAll,
@@ -257,6 +267,21 @@ export function RichFilePreview({
 }) {
   const { t } = useTranslation()
   const fileTabsId = React.useId()
+  const [boardContents, setBoardContents] = React.useState<Record<string, { revision?: string; generation?: number; content: string }>>({})
+  const onBoardContentChange = React.useCallback((file: PreviewFile, content: string) => {
+    setBoardContents((current) => current[file.path]?.content === content && current[file.path]?.revision === file.revision && current[file.path]?.generation === file.previewGeneration
+      ? current : { ...current, [file.path]: { revision: file.revision, generation: file.previewGeneration, content } })
+  }, [])
+  React.useEffect(() => {
+    const openPaths = new Set(incomingFiles.map((file) => file.path))
+    setBoardContents((current) => Object.keys(current).every((path) => openPaths.has(path))
+      ? current : Object.fromEntries(Object.entries(current).filter(([path]) => openPaths.has(path))))
+  }, [incomingFiles])
+  const files = incomingFiles.map((file) => {
+    const board = boardContents[file.path]
+    return file.renderKind === "whiteboard" && board && board.revision === file.revision && board.generation === file.previewGeneration
+      ? { ...file, content: board.content } : file
+  })
   const modelViews = React.useRef(new Map<string, ModelViewState>())
   React.useEffect(() => {
     const open = new Set(files.map((file) => file.id))
@@ -342,6 +367,7 @@ export function RichFilePreview({
                 active={file.id === activeFileId}
                 visible={active && file.id === activeFileId}
                 modelViews={modelViews.current}
+                onBoardContentChange={onBoardContentChange}
                 file={file}
                 fileTabsId={fileTabsId}
                 mode={getAvailableMode(file, preferredMode)}

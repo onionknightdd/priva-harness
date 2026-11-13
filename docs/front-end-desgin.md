@@ -4030,3 +4030,48 @@ Codemode [状态]
 点击 Start calls / Complete calls 检查运行到完成；展开 JavaScript 与 MCP 子行，
 确认 JSON 结果、图片灯箱、取消行和历史摘要提示。追加 `?zh&dark&reduced-motion`
 及 `&mobile=390` 的真实 390px iframe 检查中文、深色、减少动态效果和无横向溢出。
+
+
+### Whiteboard（2026-11-13）
+
+按确认的视觉样张与后续入口调整，Agent Workspace 增加「白板」Tab，展示完整
+React Flow 画布并实时接收 Agent 绘制。工具卡片保持单行，不提供折叠展开；点击
+历史卡片打开相应白板，实时工具调用自动打开白板 Tab。文件浏览器也识别
+`*.board.json`，源码和下载内容跟随预览收到的最新快照。
+
+白板统一保存在 `<cwd>/.whiteboard/<当前会话ID>/`。文件名由 Agent 根据内容主题
+生成并通过必填的 `path` 显式传入，例如 `login-flow.board.json`；后续修改复用
+同一路径，没有默认文件名。工具输入的短路径相对该会话目录；实时导航、历史恢复和
+工具卡片使用同一规则解析，完成结果使用 Runner 返回的规范化绝对路径。
+实时事件尚无会话 ID 或有效路径时不打开猜测白板。每个会话可有多个白板文件，
+Workspace 记住各会话当前查看的一个路径；不同会话使用相同文件名时也分别保存。
+
+```text
+Agent 工具调用 -> 单行工具卡片 -> Agent Workspace [白板]
+                                      |
+                                      v
+                    标题 / 状态 / 适应画面 / 缩放 / 删除
+                    React Flow：绘制、移动、调整大小、编辑
+```
+
+画布采用 `@xyflow/react`。八种元素和十二种形状的具体字段、持久化、协作上下文和
+沙箱协议见 [whiteboard](architecture/whiteboard.md)。无常驻外轮廓、明度渐变、锐利
+接触阴影，数据库和队列保留完整椭圆端面边线。新 Agent 元素沿路径绘制并显现填色
+和文字；历史快照和用户修改不重复进场。减少动态效果时立即显示。窄 Workspace
+容器保留相同操作，按容器宽度紧凑排布。
+
+连线使用固定种子的 Rough.js 笔迹，同一元素重渲染时不随机变化；对齐端口之间
+保留轻微弧度，同侧端口保留回流路线。箭头和标签随笔迹进度出现。手绘笔迹使用
+D3 Catmull–Rom 曲线连接采样点，支持样张中的橙色下划线、圈注和紫色波浪线。
+连线标签使用不透明的卡片底色，标签层始终位于连线之上，包括节点选中或拖动时。
+
+回归从仓库根目录运行：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/whiteboard/*.test.ts agent-ui/tests/features/agent-message/whiteboard-tools.test.ts agent-ui/tests/features/file-browser/file-preview.test.tsx agent-ui/tests/features/workspace/workspace-whiteboard-navigation.test.tsx
+```
+
+浏览器检查：启动前端开发服务后打开
+`/tests/features/whiteboard/whiteboard-browser.html`，点击 **Run whiteboard checks**。
+**Stream Agent drawing** 逐批演示绘制；`?dark&narrow` 检查深色和窄容器。
+检查包含曲线路径、回流方向，以及新笔迹在开始、中途和结束时的实际绘制进度。

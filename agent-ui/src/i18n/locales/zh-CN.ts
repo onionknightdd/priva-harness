@@ -2,6 +2,22 @@ import { resourcesZh } from "./resources"
 import { modelZhCN } from "./model"
 
 export const zhCN = {
+  whiteboard: {
+    loading: "正在加载白板…",
+    connecting: "正在连接…",
+    disconnected: "连接已断开，正在重连…",
+    retry: "重试",
+    saving: "正在保存…",
+    title: "白板",
+    fit: "适应画面",
+    zoomIn: "放大",
+    zoomOut: "缩小",
+    delete: "删除选中元素",
+    minimap: "小地图",
+    drawing: "Agent 正在绘制",
+    empty: "让 Agent 在这块白板上开始绘制。",
+    editLabel: "编辑文字",
+  },
   modelPreview: modelZhCN,
   interaction: {
     skip: "跳过", continue: "继续", send: "提交回答", custom: "输入其他回答…", previous: "上一题", next: "下一题",
@@ -417,6 +433,9 @@ export const zhCN = {
       visualizeDone: "可视化",
       renderUiRunning: "正在生成界面",
       renderUiDone: "界面",
+      whiteboardReadRunning: "正在读取白板",
+      whiteboardWriteRunning: "正在绘制白板",
+      whiteboardDone: "白板",
       canvasRunning: "正在写入画布",
       canvasDone: "画布",
       imageGenRunning: "创建图片",

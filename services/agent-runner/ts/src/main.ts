@@ -1,4 +1,5 @@
-import { mkdir } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
+import { mkdir, rename, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -41,6 +42,7 @@ import { CodingAgentSessionFactory } from './provider/pi/pi-session-factory.js'
 import { defaultDataRetention, type DataRetention, type DataStoreLogger } from './core/resource/data-store.js'
 import type { RuntimeSettingsStore } from './core/contract/runtime-settings.js'
 import { productTools } from './core/tool/product-tools.js'
+import { WHITEBOARD_ENDPOINT_ENV } from './core/tool/whiteboard.js'
 import {
   createRuntimeConfig,
   resolveRuntimeHome,
@@ -55,6 +57,8 @@ export async function startServer(): Promise<void> {
   const runtimeConfig = createRuntimeConfig(
     resolveRuntimeHome(process.env[RUNTIME_HOME_ENV]),
   )
+  const whiteboardEndpointFile = join(runtimeConfig.runtimeHome, 'whiteboard-endpoint.json')
+  process.env[WHITEBOARD_ENDPOINT_ENV] = whiteboardEndpointFile
   const claudeConfigDir = claudeGlobalDir()
   const piConfigDir = piGlobalDir()
   const initialDirectory = process.env['WORKSPACE_DIR'] ?? homedir()
@@ -189,6 +193,13 @@ export async function startServer(): Promise<void> {
   process.once('SIGTERM', () => { void close() })
 
   await server.listen({ host, port })
+  const address = server.server.address()
+  if (!address || typeof address === 'string') throw new Error('Runner did not bind a network address')
+  const boundHost = address.address === '::' ? '::1' : address.address === '0.0.0.0' ? '127.0.0.1' : address.address
+  const endpointHost = address.family === 'IPv6' ? `[${boundHost}]` : boundHost
+  const temporaryEndpoint = `${whiteboardEndpointFile}.${randomUUID()}.tmp`
+  await writeFile(temporaryEndpoint, JSON.stringify({ url: `http://${endpointHost}:${address.port}` }), { mode: 0o600, flag: 'wx' })
+  await rename(temporaryEndpoint, whiteboardEndpointFile)
 }
 
 // Retention is read once at boot. A broken settings file must not keep the

@@ -50,6 +50,13 @@ To verify the compiled Claude native product MCP entry point after building:
 
 - `node --import tsx tests/fixtures/terminal/native-product-probe.ts dist/provider/claude/tools/native-product-server.js`
 
+Whiteboard native tool / live WebSocket verification uses an isolated Runner and
+workspace (no real model calls). From `services/agent-runner/ts/`:
+
+- `node --import tsx tests/fixtures/whiteboard/native-whiteboard-probe.ts`
+- After building: `node --import tsx tests/fixtures/whiteboard/native-whiteboard-probe.ts dist/provider/claude/tools/native-product-server.js`
+- `TMPDIR=/tmp npx vitest run tests/unit/harness/whiteboard/whiteboard-service.test.ts tests/integration/transport/http/whiteboards.test.ts tests/unit/provider/whiteboard-native-launch.test.ts`
+
 The Debian 13 / minikube development environment is documented in
 [docs/development/debian-minikube.md](docs/development/debian-minikube.md).
 From the repository root, build and deploy with

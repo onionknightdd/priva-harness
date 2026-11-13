@@ -1,9 +1,11 @@
 import { agentToolsForThread } from "./agent-tool-data"
 import { useCallback, useEffect } from "react"
-import { useActiveSession, useChatSessionActions } from "@/features/chat-session"
+import { useActiveSession, useChatSessionActions, useChatThread } from "@/features/chat-session"
 import { useHarness } from "@/features/sidebar/header/harness-context"
 import { useWorkspaceWorkflow } from "@/features/workspace/use-workspace-workflow"
 import { useOpenWorkspaceTab } from "@/features/workspace/workspace-files-context"
+import { useWhiteboardHistory, useWorkspaceWhiteboard, whiteboardScope } from "@/features/workspace/workspace-whiteboard-context"
+import type { WhiteboardNavigation } from "./live-whiteboard-navigation"
 import { useAgentMessage } from "./use-agent-message"
 import { AgentMessage } from "./components/agent-message"
 import { SessionTerminalView } from "./components/session-terminal-view"
@@ -13,11 +15,18 @@ import { useSessionView } from "./session-view-context"
 export function AgentMessagePage() {
   const openWorkspaceTab = useOpenWorkspaceTab()
   const openComputer = useCallback(() => openWorkspaceTab("computer"), [openWorkspaceTab])
-  const agentMessage = useAgentMessage({ onComputerToolStarted: openComputer })
+  const whiteboard = useWorkspaceWhiteboard()
   const { syncWorkflows, syncAgents } = useWorkspaceWorkflow()
   const { activeSession, runSessionId, runCwd } = useActiveSession()
   const { bindRunSession } = useChatSessionActions()
   const { runHarnessId } = useHarness()
+  const { threadMessages } = useChatThread()
+  const openWhiteboard = useCallback((activity: WhiteboardNavigation & { sessionId: string | null; cwd: string }) => {
+    if (!runHarnessId) return
+    whiteboard?.open(whiteboardScope(runHarnessId, activity.sessionId, activity.cwd), activity.path, activity.focus, activity.animateInitial)
+  }, [whiteboard, runHarnessId])
+  const agentMessage = useAgentMessage({ onComputerToolStarted: openComputer, onWhiteboardToolActivity: openWhiteboard })
+  useWhiteboardHistory(threadMessages, whiteboardScope(runHarnessId, runSessionId, runCwd), runCwd, runSessionId)
   const { view, terminalOpened, preserveViewForSession } = useSessionView()
   const viewedSessionId = activeSession?.sessionId ?? runSessionId
   const sourceKey = `${runHarnessId}:${viewedSessionId}`

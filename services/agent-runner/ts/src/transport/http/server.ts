@@ -1,3 +1,5 @@
+import { WhiteboardService } from '../../harness/whiteboard/whiteboard-service.js'
+import { whiteboardRoutes } from './route/whiteboards.js'
 import multipart from '@fastify/multipart'
 import websocket from '@fastify/websocket'
 import Fastify, {
@@ -151,6 +153,7 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
   }
   const recorder = options.recorder
   void server.register(websocket)
+  void server.register(whiteboardRoutes, { service: new WhiteboardService() })
   void server.register(computerRoutes, options.computer === undefined ? {} : { computer: options.computer })
   void server.register(modelProfileRoutes, { service: options.modelProfileService,
     ...(options.piEffortLevels ? { piEffortLevels: options.piEffortLevels } : {}),
