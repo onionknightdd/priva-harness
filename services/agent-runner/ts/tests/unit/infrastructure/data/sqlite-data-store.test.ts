@@ -95,6 +95,25 @@ describe('SqliteDataStore', () => {
     expect(rows).toEqual([{ run_id: 'legacy', cwd: null }, { run_id: 'run-new', cwd: '/work/demo' }])
   })
 
+  it('keeps runs and per-model usage when rebuilding run_fact for the api source', () => {
+    store.writeBatch([started('run-old'), finished('run-old', NOW.toISOString(), { byModel: { 'gpt-x': { input: 1, output: 2 } } })])
+    store.close()
+    const db = new DatabaseSync(path)
+    db.exec('PRAGMA user_version = 2')
+    db.close()
+    store = SqliteDataStore.open(path)
+    expect(pragma('user_version')).toBe(SCHEMA_VERSION)
+    store.writeBatch([{ ...started('run-api'), source: 'api' }])
+    const check = raw()
+    expect(check.prepare('SELECT run_id, source FROM run_fact ORDER BY id').all()).toEqual([
+      { run_id: 'run-old', source: 'web' }, { run_id: 'run-api', source: 'api' },
+    ])
+    expect(check.prepare('SELECT model, input_tokens, output_tokens FROM run_model_usage').all()).toEqual([
+      { model: 'gpt-x', input_tokens: 1, output_tokens: 2 },
+    ])
+    check.close()
+  })
+
   it('refuses a database written by a newer schema', () => {
     store.close()
     const db = new DatabaseSync(path)

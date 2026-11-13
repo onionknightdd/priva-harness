@@ -12,7 +12,7 @@ import type { ModelProfileService } from '../../harness/config/model-profile-ser
 import { EnvelopeStamper } from '../../harness/run/envelope-stamper.js'
 import type { LiveRun } from '../../harness/run/live-run.js'
 import type { SessionStream } from '../../harness/session/session-stream.js'
-import { buildRunSpec } from './run-spec.js'
+import { buildRunSpec } from '../../harness/config/run-spec.js'
 import {
   parseClientFrame,
   sessionTargetFromInit,

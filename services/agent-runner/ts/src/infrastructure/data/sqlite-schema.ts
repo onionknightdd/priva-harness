@@ -87,6 +87,72 @@ const MIGRATIONS: readonly ((db: DatabaseSync) => void)[] = [
   (db) => {
     db.exec('ALTER TABLE run_fact ADD COLUMN cwd TEXT')
   },
+  // Agent API runs record source 'api'. SQLite cannot alter a CHECK, so the
+  // table is rebuilt; per-model rows are set aside first so dropping run_fact
+  // cannot cascade-delete them.
+  (db) => {
+    db.exec(`
+      CREATE TABLE run_model_usage_copy AS SELECT * FROM run_model_usage;
+      DROP TABLE run_model_usage;
+
+      CREATE TABLE run_fact_next (
+        id                 INTEGER PRIMARY KEY,
+        run_id             TEXT NOT NULL,
+        started_audit_id   INTEGER REFERENCES audit_event(id) ON DELETE SET NULL,
+        finished_audit_id  INTEGER REFERENCES audit_event(id) ON DELETE SET NULL,
+        started_utc        TEXT NOT NULL,
+        finished_utc       TEXT,
+        session_id         TEXT,
+        provider           TEXT NOT NULL,
+        profile_id         TEXT,
+        model              TEXT NOT NULL,
+        source             TEXT NOT NULL CHECK (source IN ('web', 'api', 'subagent-test', 'channel', 'scheduled')),
+        prompt_chars       INTEGER NOT NULL,
+        attachment_count   INTEGER NOT NULL,
+        outcome            TEXT NOT NULL CHECK (outcome IN ('running', 'completed', 'failed', 'aborted')),
+        failure_code       TEXT CHECK (failure_code IN (
+                             'max_turns', 'max_budget', 'api_error', 'auth_error', 'compaction_failed',
+                             'provider_error', 'transport_error', 'runtime_crash', 'unknown')),
+        duration_ms        INTEGER,
+        api_duration_ms    INTEGER,
+        num_turns          INTEGER,
+        input_tokens       INTEGER,
+        output_tokens      INTEGER,
+        cache_read_tokens  INTEGER,
+        cache_write_tokens INTEGER,
+        cost_usd           REAL,
+        cwd                TEXT
+      );
+      INSERT INTO run_fact_next (
+        id, run_id, started_audit_id, finished_audit_id, started_utc, finished_utc, session_id, provider, profile_id,
+        model, source, prompt_chars, attachment_count, outcome, failure_code, duration_ms, api_duration_ms, num_turns,
+        input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd, cwd)
+      SELECT
+        id, run_id, started_audit_id, finished_audit_id, started_utc, finished_utc, session_id, provider, profile_id,
+        model, source, prompt_chars, attachment_count, outcome, failure_code, duration_ms, api_duration_ms, num_turns,
+        input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd, cwd
+      FROM run_fact;
+      DROP TABLE run_fact;
+      ALTER TABLE run_fact_next RENAME TO run_fact;
+      CREATE INDEX run_fact_started ON run_fact(started_utc);
+      CREATE INDEX run_fact_run     ON run_fact(run_id);
+      CREATE INDEX run_fact_session ON run_fact(session_id);
+
+      CREATE TABLE run_model_usage (
+        run_fact_id        INTEGER NOT NULL REFERENCES run_fact(id) ON DELETE CASCADE,
+        model              TEXT NOT NULL,
+        input_tokens       INTEGER NOT NULL,
+        output_tokens      INTEGER NOT NULL,
+        cache_read_tokens  INTEGER,
+        cache_write_tokens INTEGER,
+        cost_usd           REAL,
+        PRIMARY KEY (run_fact_id, model)
+      );
+      INSERT INTO run_model_usage SELECT run_fact_id, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd
+        FROM run_model_usage_copy;
+      DROP TABLE run_model_usage_copy;
+    `)
+  },
 ]
 
 export const SCHEMA_VERSION = MIGRATIONS.length

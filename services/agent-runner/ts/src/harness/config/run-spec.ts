@@ -7,8 +7,8 @@ import {
   rewriteProviderBaseUrl,
   type RunHarnessId,
 } from '../../core/resource/run-harness.js'
-import type { AgentProfileService } from '../../harness/config/agent-profile-service.js'
-import type { ModelProfileService } from '../../harness/config/model-profile-service.js'
+import type { AgentProfileService } from './agent-profile-service.js'
+import type { ModelProfileService } from './model-profile-service.js'
 
 export interface RunSpecServices {
   readonly modelProfileService: ModelProfileService
@@ -28,8 +28,8 @@ export interface RunSpecRequest {
 
 /**
  * Resolve the model profile and agent profile behind a client request into
- * the provider-facing run spec. Shared by every WebSocket entry point so the
- * chat run and the session terminal launch the same configuration.
+ * the provider-facing run spec. Shared by the WebUI entry points and the
+ * Agent API so every driver launches the same configuration.
  */
 export async function buildRunSpec(services: RunSpecServices, request: RunSpecRequest): Promise<ProviderRunSpec> {
   if (request.harness === 'claude' && request.effort !== undefined && !isClaudeEffortLevel(request.effort)) {

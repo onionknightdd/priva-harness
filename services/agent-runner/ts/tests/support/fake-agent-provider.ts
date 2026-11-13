@@ -12,9 +12,16 @@ import type { TerminalLaunchContext, TerminalLaunchSpec } from '../../src/core/c
 import type { AgentEvent } from '../../src/core/event/agent-event.js'
 import { emptyContextUsage } from '../../src/core/resource/context-usage.js'
 import type { ContextUsage } from '../../src/core/resource/context-usage.js'
+import { normalizeQuestions, type InteractionResolution, type InteractionResponse } from '../../src/core/resource/interaction.js'
 import type { SlashCommand } from '../../src/core/resource/slash-command.js'
+import { InteractionCoordinator } from '../../src/core/run/interaction-coordinator.js'
 import type { UserTurn } from '../../src/core/run/user-turn.js'
 import { FakeSessionStore } from './fake-session-store.js'
+
+export interface FakeQuestion {
+  readonly question: string
+  readonly options: readonly { readonly label: string }[]
+}
 
 export class FakeAgentProvider implements AgentProvider {
   readonly id: ProviderId
@@ -28,6 +35,9 @@ export class FakeAgentProvider implements AgentProvider {
   slashCommands: readonly SlashCommand[] = []
   gate: Promise<void> | undefined
   afterEventsGate: Promise<void> | undefined
+  /** When set, each run asks this with AskUserQuestion before its events and waits for the answer. */
+  question: FakeQuestion | undefined
+  readonly resolutions: InteractionResolution[] = []
   lastRuntime: FakeAgentRuntime | undefined
   delayMs = 0
   contextUsage: ContextUsage = emptyContextUsage()
@@ -62,6 +72,7 @@ export class FakeAgentProvider implements AgentProvider {
 export class FakeAgentRuntime implements AgentRuntime {
   readonly session
   private idleListener: ((events: readonly AgentEvent[]) => void) | undefined
+  private coordinator: InteractionCoordinator | undefined
 
   constructor(
     private readonly provider: FakeAgentProvider,
@@ -90,12 +101,44 @@ export class FakeAgentRuntime implements AgentRuntime {
       yield { type: 'run.aborted', sessionId: this.session.id }
       return
     }
+    if (this.provider.question !== undefined) yield* this.ask(this.provider.question, context.signal)
     for (const event of this.provider.events) {
       yield withSession(event, this.session.id)
     }
     if (this.provider.afterEventsGate !== undefined) {
       await waitAbortable(this.provider.afterEventsGate, context.signal)
     }
+  }
+
+  respondPermission(response: InteractionResponse): void {
+    if (this.coordinator === undefined) throw new Error('No interaction was requested')
+    this.coordinator.respond(response)
+  }
+
+  /** The tool call, then the request and its resolution as the coordinator emits them. */
+  private async *ask(question: FakeQuestion, signal: AbortSignal): AsyncIterable<AgentEvent> {
+    const input = { questions: [{ question: question.question, options: question.options.map(({ label }) => ({ label })) }] }
+    const emitted: AgentEvent[] = []
+    let wake: (() => void) | undefined
+    this.coordinator = new InteractionCoordinator((event) => {
+      emitted.push(event)
+      wake?.()
+    })
+    yield { type: 'assistant.message', messageId: 'msg_q', blocks: [{ type: 'tool_use', blockId: 'toolu_q', index: 0, id: 'toolu_q', name: 'AskUserQuestion', input }] }
+    let resolution: InteractionResolution | undefined
+    void this.coordinator.request({ kind: 'question', tool: 'AskUserQuestion', toolUseId: 'toolu_q', input, questions: normalizeQuestions(input.questions) }, { signal })
+      .then((result) => {
+        resolution = result
+        wake?.()
+      })
+    for (;;) {
+      for (let event = emitted.shift(); event !== undefined; event = emitted.shift()) yield event
+      if (resolution !== undefined) break
+      await new Promise<void>((resolve) => { wake = resolve })
+    }
+    this.provider.resolutions.push(resolution)
+    yield { type: 'tool.completed', messageId: 'msg_q', blockId: 'toolu_q', id: 'toolu_q', name: 'AskUserQuestion',
+      ok: resolution.decision === 'allow', output: resolution.decision === 'allow' ? 'answered' : 'declined', durationMs: 1 }
   }
 
   applyRunSpec(): Promise<void> {

@@ -116,6 +116,25 @@ export class AgentHarness {
     return stream
   }
 
+  /** The stream only if something already loaded it; never creates an empty one. */
+  loadedSessionStream(ref: SessionRef): SessionStream | undefined {
+    return this.streams.get(sessionRefKey(ref))
+  }
+
+  /**
+   * Which driver currently writes the session. A live terminal owns it even
+   * while idle; an SDK runtime owns it while running or kept warm in the pool.
+   */
+  async sessionActivity(ref: SessionRef): Promise<{ readonly driver: 'sdk' | 'terminal' | 'none'; readonly running: boolean }> {
+    if (await this.terminals?.isAlive(ref)) {
+      const chat = this.terminalChats?.list(ref.provider).find((item) => item.ref.id === ref.id)
+      return { driver: 'terminal', running: chat?.runId !== undefined }
+    }
+    const running = this.liveForSession(ref) !== undefined
+    if (running || this.sdkSessions.has(sessionRefKey(ref)) || this.pool?.peek(ref) !== undefined) return { driver: 'sdk', running }
+    return { driver: 'none', running: false }
+  }
+
   async loadSessionStream(ref: SessionRef): Promise<SessionStream> {
     const key = sessionRefKey(ref)
     const existing = this.streams.get(key)

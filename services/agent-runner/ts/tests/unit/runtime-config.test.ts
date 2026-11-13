@@ -21,6 +21,7 @@ describe('runtimeConfig', () => {
       settingsFilePath: join(runtimeHome, 'bambuddy.settings.json'),
       dataFilePath: join(runtimeHome, '.data.db'),
       terminalsDir: join(runtimeHome, 'terminals'),
+      agentApiSessionsDir: join(runtimeHome, 'agent-api', 'sessions'),
     })
     expect(Object.isFrozen(runtimeConfig)).toBe(true)
     expect(RUNTIME_HOME_ENV).toBe('RUNTIME_HOME_DIR')
@@ -40,6 +41,7 @@ describe('runtimeConfig', () => {
       settingsFilePath: join(runtimeHome, 'bambuddy.settings.json'),
       dataFilePath: join(runtimeHome, '.data.db'),
       terminalsDir: join(runtimeHome, 'terminals'),
+      agentApiSessionsDir: join(runtimeHome, 'agent-api', 'sessions'),
     })
   })
 

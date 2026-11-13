@@ -7,6 +7,7 @@ const RUNTIME_HOME_DIRECTORY = '.bambuddy'
 const SETTINGS_FILE_NAME = 'bambuddy.settings.json'
 const DATA_FILE_NAME = '.data.db'
 const TERMINALS_DIRECTORY = 'terminals'
+const AGENT_API_DIRECTORY = 'agent-api'
 
 export interface RuntimeConfig {
   readonly runtimeHome: string
@@ -17,6 +18,8 @@ export interface RuntimeConfig {
   // Per-session terminal sockets and launch files. Deterministic per session
   // so a restarted runner finds terminals that kept running.
   readonly terminalsDir: string
+  // One directory per Agent API session: registry record, run index, event log.
+  readonly agentApiSessionsDir: string
 }
 
 export function defaultRuntimeHome(): string {
@@ -40,6 +43,7 @@ export function createRuntimeConfig(runtimeHome: string): RuntimeConfig {
     settingsFilePath: join(home, SETTINGS_FILE_NAME),
     dataFilePath: join(home, DATA_FILE_NAME),
     terminalsDir: join(home, TERMINALS_DIRECTORY),
+    agentApiSessionsDir: join(home, AGENT_API_DIRECTORY, 'sessions'),
   })
 }
 
