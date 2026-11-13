@@ -107,6 +107,12 @@ resolved path, viewer context, and claims. The write endpoint accepts
 `{path,cwd,sessionId,owner,ops,title?,claim?}` and returns `{path,board}`. These are internal
 single-user sandbox endpoints, not an additional public Agent API.
 
+`POST /api/sandbox/whiteboards/list` accepts only `{cwd,sessionId}` and returns
+`{files:[{name,path}]}`. It recursively lists `.board.json` files within that
+session, with basename labels and canonical absolute paths, sorted by name and
+path. Missing directories return an empty list without creating anything. Root
+symlinks are rejected; descendant symlinks and non-board files are skipped.
+
 `/api/sandbox/whiteboards/stream?path=...` (optional `cwd`) emits a `snapshot`
 followed by revisioned `change` messages containing final `order`, `ops`, title,
 and `source` (`agent` or `user`). Client writes carry `{type:"write",requestId,ops}`;
@@ -123,12 +129,20 @@ The Workspace remembers one selected path per harness/session/workspace scope
 in memory. Multiple boards within a session use different filenames; there is
 no board-list registry. History restores the most recent valid path without
 changing the active tab. Switching paths reconnects the viewer to that file.
+The top-left filename menu reads the session directory through the list endpoint.
+Visible filename labels omit the trailing `.json`; selection still uses the full path.
+It refreshes on scope/path changes, menu opening, and the first persisted revision
+received for a path; the revision-zero placeholder does not consume that refresh.
+Stale requests are aborted and ignored. Without an existing selection, Workspace
+opens the first listed file; user selections do not replay drawing. Loading or
+failed files keep the filename menu available so another file can be selected.
 
 ```text
 Open -> snapshot -> changes -> disconnect -> reconnect -> fresh snapshot
 User edit -> write(requestId) -> validation/save -> change + ack
 Selection / viewport / layout issues -> context -> whiteboard_read
 Agent claim -> presence -> work-area rectangle -> clear or expire
+Filename menu -> current session directory -> selected path -> new viewer socket
 ```
 
 Claims are temporary work rectangles (`id,label,x,y,w,h`), renewed by the Agent
@@ -149,8 +163,63 @@ instead of turning the samples into zigzags.
 A newly opened live-tool view can animate its first snapshot when creation
 finished before the viewer subscribed; reconnecting never replays it.
 Reduced motion displays the complete result immediately.
+All drawing animations play at two-thirds speed (50% longer), keeping paths,
+fills, arrowheads, labels and the drawing-presence frame synchronized.
+
+While a new element is actually drawing, a transient viewport overlay surrounds
+it with a light blue (`rgb(96,165,250)`) dashed frame, a matching fill at 6% opacity,
+and an attached upper-left tab labelled `Bambuddy`. The tab text is white in
+light mode and `#071e40` in dark mode. The overlay does not intercept interaction.
+Node frames sit outside clipped HTML/table content; connector frames include
+their complete curve and opaque label. The overlay follows the canvas viewport.
+
+```text
+New Agent element cue
+  -> first CSS animation starts -> frame + Bambuddy tab
+  -> all element animations finish -> remove frame and cue
+```
+
+Completion follows the actual CSS animation lifecycle, including portal-rendered
+connector labels and staggered table rows. There is no fixed cleanup timeout.
+Queued elements do not show a frame before drawing starts. Removing an element,
+resetting the board, cancelling animations, or enabling reduced motion removes
+the presentation state. The drawing frames are client-only and are separate
+from the Agent's 60-second work-area claims; neither is persisted in board JSON.
 
 Embedded applications use an opaque-origin `allow-scripts` iframe, a restrictive
 CSP, and no network access. The API is `window.whiteboard.state`,
 `window.whiteboard.setState(next)`, and `window.whiteboard.subscribe(listener)`.
 Only messages from that element's iframe and channel update its persisted state.
+
+## PNG and PDF export
+
+The download menu follows the delete action. Export clones the current viewport
+into an isolated, inert stage, strips drawing/selection overlays, and renders the
+completed elements without advancing the live animations or changing zoom/pan.
+The stage retains React Flow's ancestor class so connector SVG overflow and
+positioning remain intact. Bounds include negative coordinates, overflowing
+shapes, strokes, connector paths and labels, with 32 pixels of padding.
+Tables retain their current internal scroll position and displayed dimensions.
+
+```text
+Download PNG / PDF
+  -> clone final element state + capture sandboxed HTML
+  -> measure complete content bounds + padding
+  -> rasterize PNG
+       -> PNG download
+       -> fit to one custom-sized PDF page -> PDF download
+```
+
+HTML elements snapshot their own current DOM through a separate
+`priva-whiteboard-export` request/response channel. The parent checks iframe
+identity and request ID and replaces each cloned iframe with its PNG before
+mounting the clone. The existing opaque-origin sandbox and CSP remain in force.
+Missing images, iframe failures and timeouts surface as export errors instead
+of silently producing partial files. The temporary stage and capture contexts
+are cleaned up after success or failure.
+
+Raster output uses up to 2× resolution, bounded by 8,192 pixels per side and
+32 million total pixels. PDF uses the same complete image on a single page with
+the canvas aspect ratio, uniformly scaled to the 14,400-point page limit when
+needed. It does not split elements across fixed paper pages. Both formats use
+the current board's basename with `.png` or `.pdf` replacing `.board.json`.

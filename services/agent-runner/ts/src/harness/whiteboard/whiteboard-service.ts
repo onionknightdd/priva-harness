@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto'
-import { lstat, mkdir, open, readFile, realpath, rename, rm } from 'node:fs/promises'
+import { lstat, mkdir, open, readFile, readdir, realpath, rename, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { type Whiteboard, type WhiteboardClaim, type WhiteboardContext, type WhiteboardOperation,
   type WhiteboardWrite, WhiteboardError, validateWhiteboard, whiteboardSchema, whiteboardWriteSchema, whiteboardSessionIdSchema } from '../../core/resource/whiteboard.js'
 
 const MAX_BOARD_BYTES = 4 * 1024 * 1024
+export interface WhiteboardFile { name: string; path: string }
 export type WhiteboardEvent =
   | { type: 'change'; path: string; revision: number; title: string; order: string[]; ops: WhiteboardOperation[]; source: 'agent' | 'user' }
   | { type: 'presence'; contexts: (WhiteboardContext & { id: string })[]; claims: WhiteboardClaim[] }
@@ -16,6 +17,40 @@ export class WhiteboardService {
   private readonly listeners = new Map<string, Set<Listener>>()
   private readonly contexts = new Map<string, Map<string, WhiteboardContext>>()
   private readonly claims = new Map<string, Map<string, { claim: WhiteboardClaim; expires: number }>>()
+
+  async listSession(cwd: string, sessionId: string): Promise<WhiteboardFile[]> {
+    const parsedSession = whiteboardSessionIdSchema.safeParse(sessionId)
+    if (!parsedSession.success) throw new WhiteboardError(400, 'A safe native session id is required')
+    if (!cwd.trim()) throw new WhiteboardError(400, 'A workspace cwd is required')
+    const workspace = await realpath(path.resolve(cwd))
+    const parent = path.join(workspace, '.whiteboard')
+    const root = path.join(parent, parsedSession.data)
+    for (const directory of [parent, root]) {
+      try {
+        const info = await lstat(directory)
+        if (info.isSymbolicLink() || !info.isDirectory()) throw new WhiteboardError(403, 'Whiteboard session directories must be real directories, not symbolic links')
+      } catch (error) { if (missing(error)) return []; throw error }
+    }
+    const files: WhiteboardFile[] = []
+    const directories = [root]
+    while (directories.length) {
+      const directory = directories.pop()
+      if (!directory) continue
+      try {
+        // Recheck queued directories instead of following a replaced symlink.
+        const info = await lstat(directory)
+        if (info.isSymbolicLink() || !info.isDirectory()) continue
+        const entries = await readdir(directory, { withFileTypes: true })
+        for (const entry of entries) {
+          if (/[\\<>]/u.test(entry.name) || hasControlCharacters(entry.name)) continue
+          const file = path.join(directory, entry.name)
+          if (entry.isDirectory()) directories.push(file)
+          else if (entry.isFile() && entry.name.endsWith('.board.json')) files.push({ name: entry.name, path: file })
+        }
+      } catch (error) { if (!missing(error)) throw error }
+    }
+    return files.sort((a, b) => a.name.localeCompare(b.name) || a.path.localeCompare(b.path))
+  }
 
   /** Tool paths are scoped to the current native session, independently of viewers. */
   async resolveSessionPath(raw: string, cwd: string, sessionId: string, create = false): Promise<string> {

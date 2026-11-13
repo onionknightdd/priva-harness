@@ -6,7 +6,8 @@ import { WhiteboardError, whiteboardContextSchema, whiteboardWriteSchema, whiteb
 import type { WhiteboardService, WhiteboardEvent } from '../../../harness/whiteboard/whiteboard-service.js'
 
 const locationSchema = z.object({ path: z.string().min(1).max(8192), cwd: z.string().min(1).max(8192).optional() }).strict()
-const readSchema = locationSchema.extend({ cwd: z.string().min(1).max(8192), sessionId: whiteboardSessionIdSchema })
+const sessionSchema = z.object({ cwd: z.string().min(1).max(8192), sessionId: whiteboardSessionIdSchema }).strict()
+const readSchema = locationSchema.extend(sessionSchema.shape)
 const writeSchema = readSchema.extend({ ...whiteboardWriteSchema.shape, owner: z.string().max(200) }).strict()
 const clientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('write'), requestId: z.string().min(1).max(128), ops: whiteboardWriteSchema.shape.ops }).strict(),
@@ -19,6 +20,10 @@ export const whiteboardRoutes: FastifyPluginCallback<{ service: WhiteboardServic
     if (error instanceof z.ZodError) { void reply.code(400).send({ detail: error.message }); return }
     request.log.error({ err: error }, 'Whiteboard request failed')
     void reply.code(500).send({ detail: 'Could not access whiteboard' })
+  })
+  server.post('/api/sandbox/whiteboards/list', async (request) => {
+    const input = sessionSchema.parse(request.body)
+    return { files: await service.listSession(input.cwd, input.sessionId) }
   })
   server.post('/api/sandbox/whiteboards/read', async (request) => {
     const input = readSchema.parse(request.body)

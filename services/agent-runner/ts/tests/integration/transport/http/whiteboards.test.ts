@@ -52,6 +52,31 @@ async function connect(url: string) {
 }
 
 describe('live whiteboard transport and tools', () => {
+  it('lists the current session and discovers newly created Agent boards without a registry', async () => {
+    const { app, cwd, context } = await fixture()
+    const list = async (sessionId = context.session.id) => app.inject({ method: 'POST', url: '/api/sandbox/whiteboards/list', payload: { cwd, sessionId } })
+    const empty = await list()
+    expect(empty.statusCode).toBe(200)
+    expect(empty.json()).toEqual({ files: [] })
+    await expect(stat(path.join(cwd, '.whiteboard'))).rejects.toMatchObject({ code: 'ENOENT' })
+    const written = await whiteboardWriteTool.execute({ path: 'design/new-flow.board.json', ops: '[]' }, context)
+    expect(written.ok).toBe(true)
+    const created = JSON.parse(written.text) as { path: string }
+    expect((await list()).json()).toEqual({ files: [{ name: 'new-flow.board.json', path: created.path }] })
+    expect((await list('another-session')).json()).toEqual({ files: [] })
+  })
+
+  it('strictly validates the session listing request', async () => {
+    const { app, cwd } = await fixture()
+    for (const payload of [
+      {}, { cwd }, { sessionId: 'agent' }, { cwd, sessionId: '../other' }, { cwd, sessionId: '' },
+      { cwd: ' ', sessionId: 'agent' }, { cwd, sessionId: 'agent', path: '/arbitrary' },
+    ]) {
+      const response = await app.inject({ method: 'POST', url: '/api/sandbox/whiteboards/list', payload })
+      expect(response.statusCode).toBe(400)
+    }
+  })
+
   it('shares agent writes, browser edits, context and reconnect snapshots through one service', async () => {
     const { cwd, url, context } = await fixture()
     const created = await whiteboardWriteTool.execute({ path: 'data-flow.board.json', ops: JSON.stringify([{ op: 'set', id: 'a', element: shape }]), title: 'Flow' }, context)

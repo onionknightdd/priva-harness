@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -16,6 +16,54 @@ const shape = { type: 'shape', kind: 'rounded', x: 10, y: 20, w: 120, h: 60, tex
 const set = (id: string, element: unknown = shape) => ({ op: 'set', id, element })
 
 describe('WhiteboardService', () => {
+  it('lists every regular board in one session recursively with canonical paths and stable names', async () => {
+    const { service, cwd } = await fixture()
+    const workspace = await realpath(cwd)
+    const root = path.join(workspace, '.whiteboard', 'agent')
+    await mkdir(path.join(root, 'design'))
+    await mkdir(path.join(workspace, '.whiteboard', 'other'))
+    for (const file of ['z.board.json', 'a.board.json', 'design/a.board.json', 'design/模型.board.json', 'readme.md', 'other.BOARD.JSON', 'a.board.json.pending.tmp', 'bad<name>.board.json']) {
+      await writeFile(path.join(root, file), '{}')
+    }
+    await writeFile(path.join(workspace, '.whiteboard', 'other', 'private.board.json'), '{}')
+    await symlink(path.join(workspace, '.whiteboard', 'other'), path.join(root, 'linked-directory'))
+    await symlink(path.join(root, 'a.board.json'), path.join(root, 'linked.board.json'))
+    expect(await service.listSession(cwd, 'agent')).toEqual([
+      { name: 'a.board.json', path: path.join(root, 'a.board.json') },
+      { name: 'a.board.json', path: path.join(root, 'design', 'a.board.json') },
+      { name: 'z.board.json', path: path.join(root, 'z.board.json') },
+      { name: '模型.board.json', path: path.join(root, 'design', '模型.board.json') },
+    ])
+    const alias = path.join(cwd, 'workspace-alias')
+    await symlink(workspace, alias)
+    expect(await service.listSession(alias, 'agent')).toEqual(await service.listSession(cwd, 'agent'))
+  })
+
+  it('returns an empty list without creating a whiteboard or session directory', async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), 'board-empty-')); roots.push(cwd)
+    const service = new WhiteboardService()
+    expect(await service.listSession(cwd, 'new-session')).toEqual([])
+    await expect(stat(path.join(cwd, '.whiteboard'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await mkdir(path.join(cwd, '.whiteboard'))
+    expect(await service.listSession(cwd, 'new-session')).toEqual([])
+    await expect(stat(path.join(cwd, '.whiteboard', 'new-session'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await mkdir(path.join(cwd, '.whiteboard', 'new-session'))
+    expect(await service.listSession(cwd, 'new-session')).toEqual([])
+  })
+
+  it('rejects unsafe listing scopes and symbolic-link roots', async () => {
+    const { service, cwd } = await fixture()
+    for (const sessionId of ['', '../other', 'agent/other', 'agent\\other']) await expect(service.listSession(cwd, sessionId)).rejects.toMatchObject({ statusCode: 400 })
+    await expect(service.listSession(' ', 'agent')).rejects.toMatchObject({ statusCode: 400 })
+    await symlink(path.join(cwd, '.whiteboard', 'agent'), path.join(cwd, '.whiteboard', 'linked'))
+    await expect(service.listSession(cwd, 'linked')).rejects.toMatchObject({ statusCode: 403 })
+    const outside = await mkdtemp(path.join(tmpdir(), 'board-link-')); roots.push(outside)
+    await symlink(path.join(cwd, '.whiteboard'), path.join(outside, '.whiteboard'))
+    await expect(service.listSession(outside, 'agent')).rejects.toMatchObject({ statusCode: 403 })
+    await writeFile(path.join(cwd, '.whiteboard', 'not-directory'), '{}')
+    await expect(service.listSession(cwd, 'not-directory')).rejects.toMatchObject({ statusCode: 403 })
+  })
+
   it('persists a complete atomic board and serializes concurrent field updates', async () => {
     const { service, file } = await fixture()
     await service.write(file, { ops: [set('a'), set('b')] }, 'agent', 'agent')

@@ -85,12 +85,19 @@
 .wb-label:focus-visible { outline: 1px solid var(--ring); outline-offset: 2px; }
 .wb-toolbar { display: flex; align-items: center; gap: 4px; padding: 4px; background: var(--background); border: 1px solid var(--border); border-radius: 9px; box-shadow: var(--elevation-xs); max-width: calc(100% - 24px); }
 .wb-toolbar-title { padding: 0 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; max-width: 200px; }
+.wb-file-picker { max-width: 240px; min-width: 0; gap: 4px; font-size: 12px; }
+.wb-file-picker > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wb-status { font-size: 11px; color: var(--muted-foreground); display: flex; align-items: center; gap: 6px; padding: 0 8px; white-space: nowrap; }
 .wb-status i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .wb-status[data-drawing="true"] i { color: var(--primary); animation: wb-opacity 800ms ease-in-out infinite alternate; }
 .wb-claim { border: 1px dashed var(--primary); border-radius: 8px; background: color-mix(in oklch, var(--primary), transparent 97%); pointer-events: none; }
 .wb-claim span { position: absolute; top: -25px; left: 0; font-size: 11px; color: var(--primary); white-space: nowrap; }
+.wb-drawing-frame { --wb-presence: rgb(96 165 250); position: absolute; box-sizing: border-box; border: 1.5px dashed var(--wb-presence); border-radius: 3px; background: rgb(96 165 250 / 6%); pointer-events: none; z-index: 9999; }
+.wb-drawing-tab { position: absolute; top: -26px; left: -1.5px; width: 112px; height: 26px; display: grid; place-items: center; color: #fff; font-size: 12px; font-weight: 600; line-height: 1; white-space: nowrap; }
+.dark .wb-drawing-tab { color: #071e40; }
+.wb-drawing-tab svg { position: absolute; inset: 0; width: 100%; height: 100%; fill: var(--wb-presence); }
+.wb-drawing-tab span { position: relative; padding-top: 3px; }
 .whiteboard .react-flow__minimap { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; box-shadow: var(--elevation-xs); }
 @media (hover: hover) and (pointer: fine) { .wb-shape:hover .wb-shape-svg { filter: drop-shadow(0 .5px .5px rgb(0 0 0 / 24%)) drop-shadow(0 8px 10px var(--wb-shadow-hover)); } }
-@container (max-width: 640px) { .wb-toolbar-title { max-width: 80px; } .wb-status { max-width: 110px; overflow: hidden; text-overflow: ellipsis; } .whiteboard .react-flow__minimap { width: 100px; height: 70px; } }
-@media (prefers-reduced-motion: reduce) { .whiteboard *, .whiteboard *::before, .whiteboard *::after { animation: none !important; transition: none !important; } }
+@container (max-width: 640px) { .wb-toolbar-title { max-width: 150px; } .wb-file-picker { max-width: 190px; } .wb-status { max-width: 110px; overflow: hidden; text-overflow: ellipsis; } .whiteboard .react-flow__minimap { width: 100px; height: 70px; } }
+@media (prefers-reduced-motion: reduce) { .whiteboard *, .whiteboard *::before, .whiteboard *::after { animation: none !important; transition: none !important; } .wb-drawing-frame { display: none; } }

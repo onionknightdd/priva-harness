@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react"
 import { createHtmlPreviewDocument, HTML_PREVIEW_IFRAME } from "@/features/files/preview/renderers/html-preview-sandbox"
 import type { JsonValue } from "./whiteboard-model"
+import screenshotRuntime from "modern-screenshot/dist/index.js?raw"
 
 import { EMBED_RUNTIME, EMBED_STATE_CHANNEL, isEmbedStateMessage } from "./whiteboard-embed-runtime"
 
@@ -8,7 +9,7 @@ export function WhiteboardEmbed({ html, state, title, disabled, onState }: { htm
   const ref = useRef<HTMLIFrameElement>(null)
   const latest = useRef({ state, onState, disabled })
   latest.current = { state, onState, disabled }
-  const source = useMemo(() => createHtmlPreviewDocument(`<!doctype html><html><head></head><body>${html}</body></html>`, { code: EMBED_RUNTIME, nonce: "whiteboard-state-runtime" }), [html])
+  const source = useMemo(() => createHtmlPreviewDocument(`<!doctype html><html><head></head><body>${html}</body></html>`, { code: [screenshotRuntime, EMBED_RUNTIME].join(";"), nonce: "whiteboard-state-runtime" }), [html])
   useEffect(() => {
     function receive(event: MessageEvent) {
       if (!ref.current?.contentWindow || event.source !== ref.current.contentWindow || !isEmbedStateMessage(event.data)) return

@@ -20,6 +20,16 @@ const hooks = registerHooks({
   load(url, context, nextLoad) {
     if (url.endsWith(".css")) return { format: "module", source: "export default {}", shortCircuit: true }
     if (url.endsWith(".svg")) return { format: "module", source: `export default ${JSON.stringify(url)}`, shortCircuit: true }
+    if (url.endsWith("/whiteboard-renderer.tsx")) return { format: "module", shortCircuit: true, source: `
+      import React from "react";
+      export function WhiteboardRenderer({ path, filePicker, onContentChange }) {
+        return React.createElement("div", { "data-whiteboard-path": path },
+          React.createElement("select", { "aria-label": "Session whiteboards", value: path, onChange: event => filePicker.onSelect(event.target.value) },
+            filePicker.files.map(file => React.createElement("option", { key: file.path, value: file.path }, file.name))),
+          React.createElement("button", { "data-list-refresh": "", onClick: filePicker.onRefresh }, "Refresh files"),
+          React.createElement("button", { "data-board-placeholder": "", onClick: () => onContentChange("{}", 0) }, "Receive placeholder"),
+          React.createElement("button", { "data-board-content": "", onClick: () => onContentChange("{}", 1) }, "Receive content"));
+      }` }
     return nextLoad(url, context)
   },
 })
@@ -36,8 +46,15 @@ function sessionHistory(sessionId: string): AgentThreadMessage {
 const originalFetch = globalThis.fetch
 const originalSocket = globalThis.WebSocket
 const unexpected: string[] = []
-globalThis.fetch = async (input) => {
+const listRequests: { cwd: string; sessionId: string }[] = []
+let listedNames = ["history.board.json", "second.board.json"]
+globalThis.fetch = async (input, options) => {
   const path = new URL(String(input), dom.window.location.href).pathname
+  if (path === "/api/sandbox/whiteboards/list") {
+    const scope = JSON.parse(String(options?.body)) as { cwd: string; sessionId: string }
+    listRequests.push(scope)
+    return Response.json({ files: listedNames.map(name => ({ name, path: `${scope.cwd}/.whiteboard/${scope.sessionId}/${name}` })) })
+  }
   if (path === "/api/sandbox/agent/profile") return Response.json({ queue_behavior: "follow-up" })
   if (path === "/api/sandbox/credentials/profiles") return Response.json({ default_profile_id: null, profiles: [] })
   if (path === "/api/sandbox/agent/sessions/running") return Response.json({ running: [], warm: [] })
@@ -83,6 +100,7 @@ const { useAgentMessage } = await import("../../../src/features/agent-message/us
 
 const { WorkspaceWhiteboardProvider, useWorkspaceWhiteboard, useWhiteboardHistory, whiteboardScope, latestWhiteboardActivity } = await import("../../../src/features/workspace/workspace-whiteboard-context.tsx")
 const { CanvasToolItem } = await import("../../../src/features/agent-message/components/canvas-tool-item.tsx")
+const { WorkspaceWhiteboardView } = await import("../../../src/features/workspace/views/workspace-whiteboard-view.tsx")
 
 test("history recovery requires a named board in the selected session", () => {
   const inputOnly = (input: unknown): AgentThreadMessage => ({ ...history, blocks: [{ type: "tool_use", id: "input-only", blockId: "input-only", index: 0, name: "whiteboard_write", input }] })
@@ -113,10 +131,11 @@ function Probe() {
   useWhiteboardHistory(useChatThread().threadMessages, scope, runCwd, runSessionId)
   controls = { agent, actions: useChatSessionActions(), sidebar: useSidebar(), tabs: useWorkspaceTab(), boards, scope }
   const block = sessionHistory(runSessionId ?? "unknown").blocks?.[0]
-  return block?.type === "tool_use" ? <CanvasToolItem block={block} /> : null
+  return <>{block?.type === "tool_use" && <CanvasToolItem block={block} />}<WorkspaceWhiteboardView /></>
 }
 
 for (const [harness, width] of [["claude", 1280], ["pi", 390]] as const) test(`${harness} live whiteboard navigation uses events without replay or history stealing focus`, async () => {
+  listedNames = ["history.board.json", "second.board.json"]
   Object.defineProperty(window, "innerWidth", { configurable: true, value: width })
   localStorage.clear()
   localStorage.setItem("agent-ui-agent-preferences", JSON.stringify({ defaultHarness: harness }))
@@ -216,6 +235,29 @@ for (const [harness, width] of [["claude", 1280], ["pi", 390]] as const) test(`$
     await act(async () => controls.actions.openSession({ sessionId: "session", summary: "History", firstPrompt: null, customTitle: null,
       cwd: "/work", lastModified: 0, tag: null, tags: [], tagColors: {}, pinned: false, archived: false, runMode: "agent" }))
     assert.equal(path(), "/work/.whiteboard/session/history.board.json", "switching back keeps the first session selection")
+    const picker = host.querySelector<HTMLSelectElement>('select[aria-label="Session whiteboards"]')!
+    assert.deepEqual([...picker.options].map(option => option.textContent), listedNames, "picker labels contain filenames only")
+    assert.ok([...picker.options].every(option => option.value.startsWith("/work/.whiteboard/session/")), "picker stays within the active session")
+    await act(async () => {
+      closeWorkspace(); controls.tabs.setActiveTabId("tasks")
+      picker.value = "/work/.whiteboard/session/second.board.json"
+      picker.dispatchEvent(new Event("change", { bubbles: true }))
+    })
+    assert.equal(path(), "/work/.whiteboard/session/second.board.json")
+    assert.equal(controls.boards?.live[controls.scope], false, "manual board switching does not replay existing drawing")
+    assert.equal(opened(), false, "manual selection updates the board without forcing Workspace focus")
+    assert.equal(host.querySelector("[data-whiteboard-path]")?.getAttribute("data-whiteboard-path"), path())
+    const beforeContent = listRequests.length
+    await act(async () => host.querySelector<HTMLButtonElement>("[data-board-placeholder]")!.click())
+    assert.equal(listRequests.length, beforeContent, "the file-less streaming placeholder does not mark the file as created")
+    await act(async () => host.querySelector<HTMLButtonElement>("[data-board-content]")!.click())
+    assert.equal(listRequests.length, beforeContent + 1, "first board content refreshes newly created files")
+    await act(async () => host.querySelector<HTMLButtonElement>("[data-board-content]")!.click())
+    assert.equal(listRequests.length, beforeContent + 1, "incremental board contents do not repeatedly scan the directory")
+    listedNames.push("new-file.board.json")
+    await act(async () => host.querySelector<HTMLButtonElement>("[data-list-refresh]")!.click())
+    assert.deepEqual([...picker.options].map(option => option.textContent), listedNames, "opening the picker refresh discovers files added outside the current viewer")
+    assert.deepEqual(listRequests.at(-1), { cwd: "/work", sessionId: "session" })
     assert.deepEqual(unexpected, [])
   } finally {
     await act(async () => root.unmount())

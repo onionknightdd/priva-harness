@@ -10,7 +10,9 @@ import { boardLayoutIssues, type AnimationCue, type Board, type BoardClaim, type
 import "@xyflow/react/dist/style.css"
 import "./whiteboard.css"
 import { WhiteboardEditContext } from "./whiteboard-edit-context"
+import { WhiteboardDrawingContext } from "./whiteboard-drawing-context"
 import { boardFlowElements, committedPositionOperations } from "./whiteboard-flow"
+import { WhiteboardDownloadMenu, WhiteboardFileMenu, type WhiteboardFilePickerOptions } from "./whiteboard-menus"
 
 const NODE_TYPES = { element: WhiteboardElement, anchor: WhiteboardAnchor }
 const EDGE_TYPES = { arrow: WhiteboardArrow }
@@ -19,26 +21,34 @@ const EMPTY_CUES: Record<string, AnimationCue> = {}
 
 export type WhiteboardCanvasProps = {
   board: Board; cues?: Record<string, AnimationCue>; claims?: BoardClaim[]; disabled?: boolean
+  path?: string; filePicker?: WhiteboardFilePickerOptions
   status?: WhiteboardConnectionState; pending?: number
   onWrite(ops: BoardOperation[]): void
   onContext?(context: BoardContext): void
   onRetry?(): void
+  onDrawingComplete?(id: string, revision: number): void
 }
 export function WhiteboardCanvas(props: WhiteboardCanvasProps) { return <ReactFlowProvider><Canvas {...props} /></ReactFlowProvider> }
 
-function Canvas({ board, cues = EMPTY_CUES, claims = [], disabled = false, status = "connected", pending = 0, onWrite, onContext, onRetry }: WhiteboardCanvasProps) {
+function Canvas({ board, path, filePicker, cues = EMPTY_CUES, claims = [], disabled = false, status = "connected", pending = 0, onWrite, onContext, onRetry, onDrawingComplete }: WhiteboardCanvasProps) {
   const { t } = useTranslation()
   const initial = useMemo(() => boardFlowElements(board, cues), [board, cues])
   const [nodes, setNodes] = useState(initial.nodes)
   const [edges, setEdges] = useState(initial.edges)
   const [selection, setSelection] = useState<string[]>([])
   const [zoom, setZoom] = useState(1)
-  const [drawing, setDrawing] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
+  const exportInFlight = useRef(false)
+  const filename = path?.split("/").at(-1) || board.title
+  const fileLabel = path ? filename.replace(/\.json$/i, "") : filename
+  const [activeDrawings, setActiveDrawings] = useState<Record<string, number>>({})
+  const drawing = Object.entries(activeDrawings).some(([id, revision]) => cues[id]?.revision === revision && Object.hasOwn(board.elements, id))
   const initialized = useNodesInitialized()
   const hasFit = useRef(false)
   const api = useReactFlow<WhiteboardNode, WhiteboardEdge>()
-  const latest = useRef({ board, onWrite, onContext, disabled })
-  latest.current = { board, onWrite, onContext, disabled }
+  const latest = useRef({ board, cues, onWrite, onContext, onDrawingComplete, disabled })
+  latest.current = { board, cues, onWrite, onContext, onDrawingComplete, disabled }
   const surface = useRef<HTMLDivElement>(null)
   const context = useRef<BoardContext>({ selection: [] })
   const contextTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -55,11 +65,24 @@ function Canvas({ board, cues = EMPTY_CUES, claims = [], disabled = false, statu
     void api.fitView({ padding: .2, minZoom: .15, maxZoom: 1 })
   }, [initialized, board.order.length, api])
   useEffect(() => {
-    if (!Object.keys(cues).length || window.matchMedia("(prefers-reduced-motion: reduce)").matches) { setDrawing(false); return }
-    setDrawing(true)
-    const timer = setTimeout(() => setDrawing(false), 1600)
-    return () => clearTimeout(timer)
-  }, [cues])
+    setActiveDrawings(previous => {
+      const remaining = Object.fromEntries(Object.entries(previous).filter(([id, revision]) => cues[id]?.revision === revision && Object.hasOwn(board.elements, id)))
+      return Object.keys(remaining).length === Object.keys(previous).length ? previous : remaining
+    })
+  }, [board.elements, cues])
+  const drawingContext = useMemo(() => ({
+    drawingStarted(id: string, revision: number) {
+      if (latest.current.cues[id]?.revision !== revision || !Object.hasOwn(latest.current.board.elements, id)) return
+      setActiveDrawings(previous => previous[id] === revision ? previous : { ...previous, [id]: revision })
+    },
+    drawingFinished(id: string, revision: number) {
+      setActiveDrawings(previous => {
+        if (previous[id] !== revision) return previous
+        const next = { ...previous }; delete next[id]; return next
+      })
+      if (latest.current.cues[id]?.revision === revision) latest.current.onDrawingComplete?.(id, revision)
+    },
+  }), [])
   useEffect(() => () => clearTimeout(contextTimer.current), [])
   const reportContext = useCallback((patch: Partial<BoardContext>) => {
     context.current = { ...context.current, ...patch }
@@ -97,8 +120,19 @@ function Canvas({ board, cues = EMPTY_CUES, claims = [], disabled = false, statu
     setSelection(ids); reportContext({ selection: ids })
   }, [reportContext])
   const deleteSelection = () => write(selection.filter(id => Object.hasOwn(board.elements, id)).map(id => ({ op: "delete", id })))
+  const download = async (format: "png" | "pdf") => {
+    if (!surface.current || exportInFlight.current) return
+    exportInFlight.current = true
+    setExporting(true); setExportError(null)
+    try {
+      const { exportWhiteboard } = await import("./whiteboard-export")
+      if (surface.current) await exportWhiteboard(surface.current, format, filename)
+    } catch (error) {
+      setExportError(t("whiteboard.exportFailed", { message: error instanceof Error ? error.message : String(error) }))
+    } finally { exportInFlight.current = false; setExporting(false) }
+  }
   const toolbarButton = (label: string, icon: ReactNode, action: () => void, isDisabled = false) => <TooltipHint content={label}><Button variant="ghost" size="icon-xs" aria-label={label} onClick={action} disabled={isDisabled}>{icon}</Button></TooltipHint>
-  return <WhiteboardEditContext.Provider value={editContext}><div ref={surface} className="whiteboard" aria-label={t("whiteboard.title")}>
+  return <WhiteboardDrawingContext.Provider value={drawingContext}><WhiteboardEditContext.Provider value={editContext}><div ref={surface} className="whiteboard" aria-label={t("whiteboard.title")}>
     <ReactFlow<WhiteboardNode, WhiteboardEdge>
       nodes={nodes} edges={edges} nodeTypes={NODE_TYPES} edgeTypes={EDGE_TYPES}
       onNodesChange={nodeChanges} onEdgesChange={edgeChanges}
@@ -110,7 +144,7 @@ function Canvas({ board, cues = EMPTY_CUES, claims = [], disabled = false, statu
     >
       <Background gap={20} size={1} />
       <Panel position="top-left" className="wb-topbar"><div className="wb-toolbar">
-        <span className="wb-toolbar-title">{board.title}</span>
+        {filePicker && path ? <WhiteboardFileMenu path={path} filename={filename} picker={filePicker} /> : <span className="wb-toolbar-title" title={fileLabel}>{fileLabel}</span>}
         <span className="wb-status" aria-live="polite" data-drawing={drawing}><i />{status !== "connected" ? t(`whiteboard.${status}`) : pending ? t("whiteboard.saving") : drawing ? t("whiteboard.drawing") : `${board.order.length}`}</span>
         {status !== "connected" && onRetry && toolbarButton(t("whiteboard.retry"), <RotateCwIcon />, onRetry)}
       </div>
@@ -120,17 +154,19 @@ function Canvas({ board, cues = EMPTY_CUES, claims = [], disabled = false, statu
         <span className="text-xs tabular-nums">{Math.round(zoom * 100)}%</span>
         {toolbarButton(t("whiteboard.zoomIn"), <PlusIcon />, () => { void api.zoomIn() })}
         {toolbarButton(t("whiteboard.delete"), <Trash2Icon />, deleteSelection, disabled || !selection.length)}
+        <WhiteboardDownloadMenu busy={exporting} disabled={!initialized || !board.order.length} onDownload={format => { void download(format) }} />
       </div></Panel>
       <MiniMap ariaLabel={t("whiteboard.minimap")} pannable zoomable nodeColor="var(--muted-foreground)" nodeStrokeWidth={0} />
       <ViewportPortal>{claims.map(claim => <div key={claim.id} className="wb-claim" style={{ position: "absolute", transform: `translate(${claim.x}px,${claim.y}px)`, width: claim.w, height: claim.h } as CSSProperties}><span>{claim.label}</span></div>)}</ViewportPortal>
       {!board.order.length && <Panel position="bottom-center"><p className="text-sm text-muted-foreground">{t("whiteboard.empty")}</p></Panel>}
     </ReactFlow>
-  </div></WhiteboardEditContext.Provider>
+    {exportError && <div role="alert" className="absolute inset-x-3 bottom-3 z-20 rounded-md border border-destructive/30 bg-background p-3 text-xs text-destructive shadow-sm">{exportError}</div>}
+  </div></WhiteboardEditContext.Provider></WhiteboardDrawingContext.Provider>
 }
 
-type RendererProps = { path: string; active?: boolean; animateInitial?: boolean; onContentChange?(content: string): void }
+type RendererProps = { path: string; active?: boolean; animateInitial?: boolean; filePicker?: WhiteboardFilePickerOptions; onContentChange?(content: string, revision: number): void }
 export function WhiteboardRenderer(props: RendererProps) { return <WhiteboardSession key={props.path} {...props} /> }
-function WhiteboardSession({ path, active = true, animateInitial = false, onContentChange }: RendererProps) {
+function WhiteboardSession({ path, active = true, animateInitial = false, filePicker, onContentChange }: RendererProps) {
   const { t } = useTranslation()
   const [board, setBoard] = useState<Board | null>(null)
   const [cues, setCues] = useState<Record<string, AnimationCue>>({})
@@ -139,39 +175,35 @@ function WhiteboardSession({ path, active = true, animateInitial = false, onCont
   const [pending, setPending] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const connection = useRef<ReturnType<typeof connectWhiteboard> | null>(null)
-  const animationTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
   const firstSnapshot = useRef(true)
   const initialAnimation = useRef(animateInitial)
   const onContent = useRef(onContentChange)
   onContent.current = onContentChange
+  const drawingComplete = useCallback((id: string, revision: number) => {
+    setCues(previous => {
+      if (previous[id]?.revision !== revision) return previous
+      const next = { ...previous }; delete next[id]; return next
+    })
+  }, [])
   useEffect(() => {
-    if (!active) { setStatus("disconnected"); return }
-    const timers = animationTimers.current
+    if (!active) { setStatus("disconnected"); setCues({}); return }
     const client = connectWhiteboard(path, {
       board(value, animations, resetAnimations) {
         if (resetAnimations && firstSnapshot.current) {
           firstSnapshot.current = false
           if (initialAnimation.current) animations = Object.fromEntries(value.order.map((id, index) => [id, { revision: value.revision, delay: Math.min(index * 70, 700) }]))
         }
-        if (resetAnimations) { timers.forEach(clearTimeout); timers.clear() }
-        for (const [id, cue] of Object.entries(animations)) {
-          clearTimeout(timers.get(id))
-          timers.set(id, setTimeout(() => {
-            timers.delete(id)
-            setCues(previous => {
-              if (previous[id]?.revision !== cue.revision) return previous
-              const next = { ...previous }; delete next[id]; return next
-            })
-          }, cue.delay + 900))
-        }
-        setBoard(value); setCues(previous => resetAnimations ? animations : Object.fromEntries(Object.entries({ ...previous, ...animations }).filter(([id]) => Object.hasOwn(value.elements, id)))); onContent.current?.(JSON.stringify(value, null, 2) + "\n") },
+        setBoard(value); setCues(previous => resetAnimations ? animations : Object.fromEntries(Object.entries({ ...previous, ...animations }).filter(([id]) => Object.hasOwn(value.elements, id)))); onContent.current?.(JSON.stringify(value, null, 2) + "\n", value.revision) },
       status: setStatus, claims: setClaims, pending: setPending, error: setError,
     })
     connection.current = client
-    return () => { client.dispose(); connection.current = null; timers.forEach(clearTimeout); timers.clear() }
+    return () => { client.dispose(); connection.current = null }
   }, [path, active])
   return <div className="relative h-full min-h-0 w-full">
-    {board ? <WhiteboardCanvas board={board} cues={cues} claims={claims} disabled={status !== "connected"} status={status} pending={pending} onWrite={ops => { connection.current?.write(ops) }} onContext={context => connection.current?.context(context)} onRetry={() => connection.current?.retry()} /> : <div className="flex h-full min-h-40 items-center justify-center gap-2 text-sm text-muted-foreground">{t(status === "connecting" ? "whiteboard.loading" : "whiteboard.disconnected")}{status !== "connecting" && <Button size="sm" variant="outline" onClick={() => connection.current?.retry()}>{t("whiteboard.retry")}</Button>}</div>}
+    {board ? <WhiteboardCanvas board={board} path={path} filePicker={filePicker} cues={cues} claims={claims} disabled={status !== "connected"} status={status} pending={pending} onDrawingComplete={drawingComplete} onWrite={ops => { connection.current?.write(ops) }} onContext={context => connection.current?.context(context)} onRetry={() => connection.current?.retry()} /> : <div className="whiteboard flex min-h-40 items-center justify-center gap-2 text-sm text-muted-foreground">
+      {filePicker && <div className="wb-topbar absolute left-3 top-3"><div className="wb-toolbar"><WhiteboardFileMenu path={path} filename={path.split("/").at(-1) || path} picker={filePicker} /></div></div>}
+      {t(status === "connecting" ? "whiteboard.loading" : "whiteboard.disconnected")}{status !== "connecting" && <Button size="sm" variant="outline" onClick={() => connection.current?.retry()}>{t("whiteboard.retry")}</Button>}
+    </div>}
     {error && <div role="alert" className="absolute inset-x-3 bottom-3 z-20 rounded-md border border-destructive/30 bg-background p-3 text-xs text-destructive shadow-sm">{error}</div>}
   </div>
 }
