@@ -1359,6 +1359,27 @@ WebSocket 订阅同步补发的历史帧携带 `replay: true`；新发起回复�
 
 ### Workspace 标签切换性能
 
+2026-11-15：Workspace 顶部模块的内容切换采用
+[Animate UI Page Transition 的 zoom](https://animate-ui.com/docs/primitives/animate-ui/page-transition)：
+旧内容在 200ms 内放大到 1.04 并淡出，新内容从 0.94 在 400ms 内缩放、淡入，
+直接复用 Animate UI 的 `ease.leave` / `ease.out`。本地
+`components/animate-ui/primitives/animate-ui/page-transition.tsx` 使用浏览器
+View Transition API，适用于项目当前 React 19.2；上游路由组件要求 React 19.3。
+仅内容区域生成快照，按现有圆角裁剪，标签栏继续原有展开弹簧。首次显示不播放；
+快速切换取消旧过渡并显示最后选项；键盘操作、隐藏面板和不支持该 API 的浏览器直接切换，
+减少动态效果时只淡入淡出。文件面板保留原 DOM、编辑和滚动状态；电脑、白板在内容
+切换提交时立即卸载，退出动画由快照完成。
+
+```text
+Tab -> capture old panel -> commit new panel -> zoom old/new snapshots
+                            Files stays mounted; Computer / Whiteboard unmount
+Tab bar / chat -> live UI outside the snapshots
+```
+
+浏览器回归：打开 `/tests/components/motion/workspace-tabs-browser.html`，点击
+**Run workspace tab checks**。验证缩放关键帧、文件输入保留、电脑卸载、连续切换和圆角裁剪；
+追加 `?dark&narrow&reduced-motion` 检查深色、窄容器和减少动态效果。
+
 2026-09-12：「任务和活动」与「文件」互切时，保留挂载的文件浏览器不得随
 tab 切换或 Shell 重渲染而重新执行。`WorkspaceTabs` 用 `useMemo` 固定
 `ExpandableTabs` 的 `items`，让 `keepMounted` 面板的 content element 保持引用；

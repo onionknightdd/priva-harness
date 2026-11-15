@@ -21,7 +21,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { EASE_OUT } from "@/lib/ease"
+import { PageTransition } from "@/components/animate-ui/primitives/animate-ui/page-transition"
 import { cn } from "@/lib/utils"
 
 export type ExpandableTabsItem = {
@@ -332,23 +332,29 @@ export function ExpandableTabs({
             classNames?.panel
           )}
         >
-          {items.filter((item) => item.id === activeId || (item.keepMounted && visited.has(item.id))).map((item) => {
-            const selected = item.id === activeId
-            return (
-              <motion.div
-                key={item.id}
-                aria-hidden={!selected}
-                inert={!selected}
-                initial={reduce || keyboard ? false : { opacity: 0 }}
-                animate={{ opacity: selected ? 1 : 0 }}
-                transition={{ duration: reduce || keyboard ? 0 : 0.15, ease: EASE_OUT }}
-                className="min-h-0 w-full flex-1 flex-col overflow-hidden rounded-[18px]"
-                style={{ display: selected ? "flex" : "none" }}
-              >
-                {item.content}
-              </motion.div>
-            )
-          })}
+          <PageTransition
+            pageKey={visualActiveId}
+            disabled={keyboard}
+            reducedMotion={reduce}
+            className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[18px]"
+          >
+            {(displayedId) => items
+              .filter((item) => item.id === displayedId || (item.keepMounted && visited.has(item.id)))
+              .map((item) => {
+                const selected = item.id === displayedId
+                return (
+                  <div
+                    key={item.id}
+                    aria-hidden={!selected}
+                    inert={!selected}
+                    className="min-h-0 w-full flex-1 flex-col overflow-hidden rounded-[18px]"
+                    style={{ display: selected ? "flex" : "none" }}
+                  >
+                    {item.content}
+                  </div>
+                )
+              })}
+          </PageTransition>
         </div>
       </div>
       <div
