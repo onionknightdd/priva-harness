@@ -7,7 +7,7 @@ type PreviewRendererBoundaryState = {
 }
 
 export class PreviewRendererBoundary extends React.Component<
-  React.PropsWithChildren,
+  React.PropsWithChildren<{ fallback?: React.ReactNode }>,
   PreviewRendererBoundaryState
 > {
   state: PreviewRendererBoundaryState = { error: null }
@@ -20,7 +20,7 @@ export class PreviewRendererBoundary extends React.Component<
 
   render() {
     if (this.state.error) {
-      return <PreviewRequestState error={this.state.error} />
+      return this.props.fallback ?? <PreviewRequestState error={this.state.error} />
     }
 
     return this.props.children

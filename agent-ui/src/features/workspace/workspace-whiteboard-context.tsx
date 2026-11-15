@@ -1,18 +1,25 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import type { AgentThreadMessage } from "@/features/agent-message/agent-message-data"
 import { whiteboardPathFromTool, whiteboardToolKind } from "@/features/agent-message/whiteboard-tools"
 import { useOpenWorkspaceTab } from "./workspace-files-context"
 
-type Whiteboards = { paths: Record<string, string>; live: Record<string, boolean>; open(scope: string, path: string, focus?: boolean, animateInitial?: boolean): void; seen(scope: string): void }
+type Whiteboards = { paths: Record<string, string>; live: Record<string, boolean>; open(scope: string, path: string, focus?: boolean, animateInitial?: boolean): void; seen(scope: string, path: string): void }
 const Context = createContext<Whiteboards | null>(null)
 export function WorkspaceWhiteboardProvider({ children }: { children: ReactNode }) {
-  const [paths, setPaths] = useState<Record<string, string>>({})
-  const [live, setLive] = useState<Record<string, boolean>>({})
-  const seen = useCallback((scope: string) => setLive(current => current[scope] ? { ...current, [scope]: false } : current), [])
+  const [{ paths, live }, setBoards] = useState<{ paths: Record<string, string>; live: Record<string, boolean> }>({ paths: {}, live: {} })
+  // Renderer unmounts must not make a later write replay already displayed files.
+  const shown = useRef(new Map<string, Set<string>>())
+  const seen = useCallback((scope: string, path: string) => {
+    const files = shown.current.get(scope) ?? new Set<string>()
+    files.add(path); shown.current.set(scope, files)
+    setBoards(current => current.paths[scope] === path && current.live[scope] ? { ...current, live: { ...current.live, [scope]: false } } : current)
+  }, [])
   const openTab = useOpenWorkspaceTab()
   const open = useCallback((scope: string, path: string, focus = true, animateInitial = false) => {
-    setLive(current => current[scope] === animateInitial ? current : { ...current, [scope]: animateInitial })
-    setPaths(current => current[scope] === path ? current : { ...current, [scope]: path })
+    const animate = animateInitial && !shown.current.get(scope)?.has(path)
+    setBoards(current => current.paths[scope] === path && current.live[scope] === animate ? current : {
+      paths: { ...current.paths, [scope]: path }, live: { ...current.live, [scope]: animate },
+    })
     if (focus) openTab("whiteboard")
   }, [openTab])
   const value = useMemo(() => ({ paths, live, open, seen }), [paths, live, open, seen])

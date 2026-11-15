@@ -57,6 +57,22 @@ test("shows native model results, deduplicates image previews and keeps code dis
   }
   try {
     await act(async () => root.render(<I18nextProvider i18n={i18n}><CodemodeToolItem block={block}><p>MCP child call</p></CodemodeToolItem></I18nextProvider>))
+    const title = host.querySelector<HTMLButtonElement>('button[aria-expanded]')!
+    assert.equal(title.getAttribute("aria-expanded"), "false")
+    assert.equal(title.dataset.toolStatus, "success")
+    assert.equal(title.textContent, "Codemode", "success adds no status label")
+    assert.equal(title.querySelectorAll("svg").length, 2, "only the tool and disclosure icons remain")
+    assert.ok(!title.querySelector('[data-slot="tool-error-indicator"]'))
+    await act(async () => title.click())
+    for (const model of ["images/native", "classifier/judge"]) {
+      const modelButton = [...host.querySelectorAll<HTMLButtonElement>('button[aria-expanded]')].find(button => button.textContent?.includes(model))
+      assert.ok(modelButton)
+      assert.equal(modelButton.getAttribute("aria-expanded"), "false")
+      assert.equal(modelButton.dataset.toolStatus, "success")
+      assert.equal(modelButton.querySelectorAll("svg").length, 2)
+      assert.ok(!modelButton.querySelector('[data-slot="tool-error-indicator"]'))
+      await act(async () => modelButton.click())
+    }
     assert.match(host.textContent ?? "", /MCP child call/)
     assert.match(host.textContent ?? "", /accepted/)
     assert.match(host.textContent ?? "", /0.95/)
@@ -73,5 +89,51 @@ test("shows native model results, deduplicates image previews and keeps code dis
     await act(async () => i18n.changeLanguage('zh-CN'))
     assert.match(host.textContent ?? "", /图片模型/)
     assert.match(host.textContent ?? "", /分类模型/)
+  } finally { await act(async () => root.unmount()); host.remove() }
+})
+
+test("Codemode retains its running indicator and output while failure is conveyed by the tool row", async () => {
+  await i18n.changeLanguage("en")
+  const host = document.body.appendChild(document.createElement("div"))
+  const root = createRoot(host)
+  const render = async (status: "running" | "completed", ok?: boolean, output?: string) => {
+    const block: Extract<StreamBlock, { type: "tool_use" }> = {
+      type: "tool_use", blockId: "code-status", id: "code-status", name: "codemode", index: 0,
+      tool: { id: "code-status", name: "codemode", status, ok, output },
+    }
+    await act(async () => root.render(<I18nextProvider i18n={i18n}><CodemodeToolItem block={block} /></I18nextProvider>))
+    return host.querySelector<HTMLButtonElement>('button[aria-expanded]')!
+  }
+  try {
+    const running = await render("running")
+    assert.equal(running.dataset.toolStatus, "running")
+    assert.ok(running.querySelector('[aria-label="Running"] .lucide-loader-circle'))
+    await act(async () => running.click())
+    const failed = await render("completed", false, '{"error":"Original model error"}')
+    assert.equal(failed.dataset.toolStatus, "error")
+    assert.equal(failed.querySelector(".sr-only")?.textContent, "Failed")
+    const indicators = failed.querySelectorAll('[data-slot="tool-error-indicator"]')
+    assert.equal(indicators.length, 1, "failure adds exactly one filled indicator")
+    assert.equal(indicators[0].getAttribute("role"), "img")
+    assert.equal(indicators[0].getAttribute("aria-label"), "Failed")
+    const glyph = indicators[0].querySelector("svg.lucide-circle-x-filled")
+    assert.ok(glyph)
+    assert.equal(glyph.children.length, 1)
+    assert.equal(glyph.querySelector("path")?.getAttribute("fill"), "currentColor")
+    assert.equal(glyph.querySelector("path")?.getAttribute("stroke"), "none")
+    assert.equal(glyph.querySelector("path")?.getAttribute("fill-rule"), "evenodd")
+    assert.equal(failed.querySelectorAll("svg").length, 3, "failure preserves the tool and disclosure icons")
+    const originalIcon = failed.querySelector("svg.lucide-code-xml, svg.lucide-code-2")
+    assert.ok(originalIcon)
+    assert.ok(!originalIcon.closest("[data-tool-text]"), "the Codemode icon stays outside failure text coloring")
+    assert.ok(!failed.querySelector('[data-slot="badge"]'))
+    assert.equal(host.querySelector('[role="alert"]')?.textContent, '{"error":"Original model error"}')
+    const succeeded = await render("completed", true, "Recovered output")
+    assert.equal(succeeded.dataset.toolStatus, "success")
+    assert.equal(succeeded.textContent, "Codemode")
+    assert.equal(succeeded.querySelectorAll("svg").length, 2)
+    assert.ok(!succeeded.querySelector('[data-slot="tool-error-indicator"]'), "successful retry removes the alert")
+    assert.ok(!succeeded.querySelector(".sr-only"))
+    assert.match(host.textContent ?? "", /Recovered output/)
   } finally { await act(async () => root.unmount()); host.remove() }
 })

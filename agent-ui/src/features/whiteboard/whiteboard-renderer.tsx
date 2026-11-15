@@ -55,7 +55,8 @@ function Canvas({ board, path, filePicker, cues = EMPTY_CUES, claims = [], disab
   useEffect(() => {
     setNodes(previous => initial.nodes.map(node => {
       const old = previous.find(item => item.id === node.id)
-      return old ? { ...node, selected: old.selected, ...(old.dragging || old.resizing ? { position: old.position, width: old.width, height: old.height, style: old.style, dragging: old.dragging, resizing: old.resizing } : {}) } : node
+      // Retain measurements so React Flow keeps handles and mounted connectors.
+      return old ? { ...node, measured: old.measured, selected: old.selected, ...(old.dragging || old.resizing ? { position: old.position, width: old.width, height: old.height, style: old.style, dragging: old.dragging, resizing: old.resizing } : {}) } : node
     }))
     setEdges(previous => initial.edges.map(edge => ({ ...edge, selected: previous.find(item => item.id === edge.id)?.selected })))
   }, [initial])

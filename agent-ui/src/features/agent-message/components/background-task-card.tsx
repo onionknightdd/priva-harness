@@ -2,6 +2,7 @@ import { motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 import { SquareIcon, FileTextIcon, TerminalIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { ToolResultStatusIndicator } from "@/components/agents/tool-result"
 import { Button } from "@/components/ui/button"
 import { useActiveSession } from "@/features/chat-session"
 import { useHarness } from "@/features/sidebar/header/harness-context"
@@ -40,18 +41,20 @@ export function BackgroundTaskStatus({ task, onStop, onOpenOutput }: {
   const { t } = useTranslation()
   const reduced = useReducedMotion()
   const active = taskIsActive(task) || (task.control === 'terminal' && task.status === 'unknown')
+  const status = task.status === "failed" ? "error" : task.status === "completed" ? "success" : task.status === "running" ? "running" : undefined
   return (
     <div data-background-task={task.taskId} className="flex min-w-0 flex-col gap-1.5 rounded-md border border-border/60 px-3 py-2 text-sm">
       <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <span className="min-w-0 flex-1 truncate text-muted-foreground">{task.description ?? task.kind}</span>
-        <motion.span key={task.status} initial={reduced ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduced ? 0 : 0.15 }} role="status">
-          <Badge variant={task.status === "failed" ? "destructive" : "secondary"}>{t(`backgroundTasks.status.${task.status}`)}</Badge>
-        </motion.span>
+        <span data-tool-status={status} data-tool-text="" className="min-w-0 flex-1 truncate text-muted-foreground">{task.description ?? task.kind}</span>
+        {task.status === "failed" ? <ToolResultStatusIndicator status="error" />
+          : task.status !== "completed" ? <motion.span key={task.status} initial={reduced ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduced ? 0 : 0.15 }} role="status">
+            <Badge variant="secondary">{t(`backgroundTasks.status.${task.status}`)}</Badge>
+          </motion.span> : null}
         {active && onStop ? <Button type="button" variant="ghost" size="sm" disabled={task.stopRequested} onClick={onStop} aria-label={t(task.control === 'terminal' ? 'backgroundTasks.manageTask' : "backgroundTasks.stopTask", { name: task.description ?? task.taskId })}>
           {task.control === 'terminal' ? <TerminalIcon className="size-3" aria-hidden="true" /> : <SquareIcon className="size-3" aria-hidden="true" />}{t(task.control === 'terminal' ? 'backgroundTasks.manage' : task.stopRequested ? "backgroundTasks.stopping" : "backgroundTasks.stop")}
         </Button> : null}
       </div>
-      {task.summary ? <p className="m-0 break-words text-xs leading-5 text-muted-foreground">{task.summary}</p> : null}
+      {task.summary ? <p data-tool-status={status} data-tool-text="" className="m-0 break-words text-xs leading-5 text-muted-foreground">{task.summary}</p> : null}
       {(task.outputFile || task.kind === "agent") && onOpenOutput ? <Button type="button" variant="ghost" size="sm" className="h-7 w-fit max-w-full px-0 text-xs" onClick={onOpenOutput}>
         <FileTextIcon className="size-3.5" aria-hidden="true" />{t("backgroundTasks.output")}
       </Button> : null}

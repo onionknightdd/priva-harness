@@ -85,6 +85,7 @@
     --color-status-success: var(--status-success);
     --color-status-warning: var(--status-warning);
     --color-status-error: var(--status-error);
+    --color-tool-error-foreground: var(--tool-error-foreground);
     --color-loading-state: var(--loading-state);
     --color-heatmap: var(--heatmap);
     --color-usage-series-1: var(--usage-series-1);
@@ -170,6 +171,7 @@
     --status-success: oklch(0.596 0.13 163);
     --status-warning: oklch(0.681 0.162 75.834);
     --status-error: oklch(0.586 0.21 20);
+    --tool-error-foreground: oklch(0.55 0.2 20);
     --loading-state: rgb(77 159 240);
     --heatmap: rgb(78 130 239);
     /* Stacked model series: five blues from the largest share down, then a
@@ -244,6 +246,7 @@
     --status-success: oklch(0.765 0.15 163);
     --status-warning: oklch(0.852 0.199 91.936);
     --status-error: oklch(0.712 0.17 16);
+    --tool-error-foreground: var(--status-error);
     --tool-output: oklch(0.24 0 0);
     --context-system: oklch(0.82 0 0);
     --context-tools: oklch(0.78 0.18 305);
@@ -287,6 +290,15 @@
   [role="option"] {
     touch-action: manipulation;
     }
+}
+
+/* Scope failure color to text so kind icons, disclosure arrows and actions
+   retain their original colors. Nested file links stay readable on hover. */
+[data-tool-status="error"][data-tool-text],
+[data-tool-status="error"] [data-tool-text],
+[data-tool-status="error"][data-tool-text] *,
+[data-tool-status="error"] [data-tool-text] * {
+  color: var(--tool-error-foreground);
 }
 
 /* Popover surfaces are the lightest layer in the dark theme, so the opaque

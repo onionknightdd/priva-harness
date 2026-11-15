@@ -2,12 +2,13 @@ import { useContext, useLayoutEffect, useRef, useState, type RefObject } from "r
 import { WhiteboardDrawingContext } from "./whiteboard-drawing-context"
 import type { AnimationCue, BoardElement } from "./whiteboard-model"
 
-const DRAWING_PLAYBACK_RATE = 2 / 3
+const DRAWING_PLAYBACK_RATE = 1 / 2
 
 // The arrow's label is in a separate portal, so both animation roots participate.
 export function useWhiteboardDrawing(id: string, cue: AnimationCue | undefined, element: BoardElement | undefined, root: RefObject<Element | null>, label?: RefObject<Element | null>) {
   const { drawingStarted, drawingFinished } = useContext(WhiteboardDrawingContext)
   const [activeRevision, setActiveRevision] = useState<number | null>(null)
+  const trackedAnimations = useRef<CSSAnimation[]>([])
   const previousRevision = useRef<number | undefined>(undefined)
   const revision = cue?.revision
   const delay = cue?.delay
@@ -18,7 +19,11 @@ export function useWhiteboardDrawing(id: string, cue: AnimationCue | undefined, 
     let started = false
     const roots = [root.current, label?.current].filter((element): element is Element => !!element)
     const animations = roots.flatMap(element => element.getAnimations({ subtree: true })).filter((animation): animation is CSSAnimation => animation instanceof CSSAnimation && animation.animationName.startsWith("wb-"))
-    animations.forEach(animation => animation.updatePlaybackRate(DRAWING_PLAYBACK_RATE))
+    trackedAnimations.current = animations
+    // Reapplying the same rate can restart finished CSS animations in Chromium.
+    animations.forEach(animation => {
+      if (animation.playbackRate !== DRAWING_PLAYBACK_RATE) animation.updatePlaybackRate(DRAWING_PLAYBACK_RATE)
+    })
     // Batched delete/recreate can retain the DOM while introducing a new cue.
     if (previousRevision.current !== undefined && previousRevision.current !== revision) animations.forEach(animation => { animation.currentTime = 0; animation.play() })
     previousRevision.current = revision
@@ -43,8 +48,9 @@ export function useWhiteboardDrawing(id: string, cue: AnimationCue | undefined, 
     })
     return () => {
       disposed = true
+      trackedAnimations.current = []
       roots.forEach(element => element.removeEventListener("animationstart", onStart))
     }
   }, [id, revision, delay, element, root, label, drawingStarted, drawingFinished])
-  return revision !== undefined && activeRevision === revision
+  return { drawing: revision !== undefined && activeRevision === revision, animations: trackedAnimations }
 }

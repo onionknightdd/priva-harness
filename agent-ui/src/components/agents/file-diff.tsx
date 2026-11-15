@@ -28,6 +28,7 @@ import {
 } from "@/components/agents/agent-shiki";
 import { toNotationDiffSource } from "@/components/agents/notation-diff";
 import { StatusGlyphSwap } from "@/components/agents/status-glyph-swap";
+import { ToolResultStatusIndicator } from "@/components/agents/tool-result";
 import {
   TOOL_OUTPUT_FRAME_CLASS,
   TOOL_OUTPUT_INSET_CLASS,
@@ -41,7 +42,7 @@ import { focusRing } from "@/lib/surfaces";
 import { cn } from "@/lib/utils";
 import { TooltipHint } from "@/components/ui/tooltip";
 
-export type FileDiffStatus = "streaming" | "complete";
+export type FileDiffStatus = "streaming" | "complete" | "error";
 export type FileDiffLineType = "added" | "removed" | "context";
 
 export interface FileDiffLine {
@@ -128,9 +129,6 @@ export function FileDiff({
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
   const currentOpen = open ?? internalOpen;
   const streaming = status === "streaming";
-  // `previousStatus` is committed in an effect, so this is true only on the
-  // render where streaming ends — the one frame the check should pop in.
-  const settled = previousStatus.current === "streaming" && !streaming;
   const additions = lines.filter((line) => line.type === "added").length;
   const deletions = lines.filter((line) => line.type === "removed").length;
   const canCopy = Boolean(copyText || onCopy);
@@ -160,7 +158,7 @@ export function FileDiff({
     let closeTimer: number | undefined;
     if (
       previousStatus.current === "streaming" &&
-      status === "complete" &&
+      status !== "streaming" &&
       collapseOnComplete
     ) {
       const delay = reduce ? 0 : collapseDelayMs;
@@ -222,6 +220,7 @@ export function FileDiff({
       className={cn("w-full min-w-0 text-ui", className)}
     >
       <div className="group/item relative flex w-fit max-w-full min-h-0 items-center gap-1"
+        data-tool-status={streaming ? "running" : status === "error" ? "error" : "success"}
         onPointerEnter={(event) => { if (event.pointerType === "mouse" && window.matchMedia("(hover: hover)").matches) setHeaderHovered(true); }}
         onPointerLeave={() => setHeaderHovered(false)}>
         <button
@@ -248,7 +247,7 @@ export function FileDiff({
               />
             )}
           </span>
-          <span className="flex min-w-0 flex-1 items-center gap-1 font-normal leading-none text-muted-foreground/70">
+          <span data-tool-text className="flex min-w-0 flex-1 items-center gap-1 font-normal leading-none text-muted-foreground/70">
             {tool ? (
               typeof tool === "string" || typeof tool === "number" ? (
                 <ActionSwapRollText value={String(tool)} className="shrink-0">
@@ -282,23 +281,18 @@ export function FileDiff({
               </span>
             ) : null}
           </span>
-          <StatusGlyphSwap
-            swapKey={status}
-            pop={settled && !reduce}
-            className="size-[1em] shrink-0 text-muted-foreground/60"
-          >
-            {streaming ? (
+          {streaming ? (
+            <StatusGlyphSwap
+              swapKey={status}
+              pop={false}
+              className="size-[1em] shrink-0 text-muted-foreground/60"
+            >
               <LoaderCircle
                 aria-label={t("toolCard.applyingChanges")}
                 className={cn("size-[1em]", !reduce && "animate-spin-fast")}
               />
-            ) : (
-              <Check
-                aria-label={t("toolCard.changesApplied")}
-                className="size-[1em]"
-              />
-            )}
-          </StatusGlyphSwap>
+            </StatusGlyphSwap>
+          ) : status === "error" ? <ToolResultStatusIndicator status="error" /> : null}
           <motion.span
             aria-hidden="true"
             animate={{ rotate: currentOpen ? 180 : 0 }}

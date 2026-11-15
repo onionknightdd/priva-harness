@@ -25,6 +25,7 @@ import { FileRead } from "@/components/agents/file-read"
 import {
   ToolResult,
   ToolResultOutput,
+  ToolResultStatusIndicator,
   type ToolResultStatus,
 } from "@/components/agents/tool-result"
 import { MessageResponse } from "@/components/ai-elements/message"
@@ -414,16 +415,17 @@ function GenericToolItem({
 }) {
   const { t } = useTranslation()
   const tool = block.tool
-  const running = isToolRunning(tool)
-  const { label, variant } = toolBadge(tool, t)
+  const status = toolResultStatus(tool)
+  const running = status === "running"
   const output = tool?.output
 
   return (
     <ProcessRow
       icon={<WrenchIcon />}
       title={toolItemStatusLabel(block.name, running, t)}
-      badge={label}
-      badgeVariant={variant}
+      toolStatus={status}
+      badge={running ? t(tool?.launchStatus === "async_launched" ? "agentMessage.runInBackground" : "agentMessage.toolRunning") : undefined}
+      badgeVariant={tool?.launchStatus === "async_launched" ? "outline" : "secondary"}
       defaultOpen={false}
     >
       {output ? (
@@ -649,7 +651,7 @@ function WriteToolItem({
       tool={toolItemStatusLabel(block.name, running, t)}
       file={<ToolFileName path={filePath} status={status} />}
       lines={lines}
-      status={running ? "streaming" : "complete"}
+      status={running ? "streaming" : status === "error" ? "error" : "complete"}
       language={languageFromPath(filePath)}
       icon={
         <FilePlusCornerIcon
@@ -693,7 +695,7 @@ function EditToolItem({
       tool={toolItemStatusLabel(block.name, running, t)}
       file={<ToolFileName path={filePath} status={status} />}
       lines={lines}
-      status={running ? "streaming" : "complete"}
+      status={running ? "streaming" : status === "error" ? "error" : "complete"}
       language={languageFromPath(filePath)}
       icon={
         <FilePenLineIcon
@@ -736,7 +738,7 @@ function ReadToolItem({
       file={<ToolFileName path={filePath} status={status} />}
       imageHint={isImageFilePath(filePath)}
       view={view}
-      status={running ? "streaming" : "complete"}
+      status={running ? "streaming" : status === "error" ? "error" : "complete"}
       language={languageFromPath(filePath)}
       defaultOpen={false}
       collapseOnComplete
@@ -776,6 +778,7 @@ function ProcessItemGroup({
 function ProcessRow({
   icon,
   title,
+  toolStatus,
   badge,
   badgeVariant = "outline",
   defaultOpen = false,
@@ -783,6 +786,7 @@ function ProcessRow({
 }: {
   icon?: React.ReactNode
   title: React.ReactNode
+  toolStatus?: ToolResultStatus
   badge?: React.ReactNode
   badgeVariant?: "secondary" | "outline" | "destructive"
   defaultOpen?: boolean
@@ -800,8 +804,9 @@ function ProcessRow({
         </ItemMedia>
       ) : null}
       <ItemContent className="min-w-0 flex-none">
-        <ItemTitle className="text-ui font-normal">{title}</ItemTitle>
+        <ItemTitle data-tool-text={toolStatus ? true : undefined} className="text-ui font-normal">{title}</ItemTitle>
       </ItemContent>
+      {toolStatus === "error" ? <ToolResultStatusIndicator status="error" /> : null}
       {showActions ? (
         <ItemActions>
           {badge ? <Badge variant={badgeVariant}>{badge}</Badge> : null}
@@ -817,6 +822,7 @@ function ProcessRow({
     return (
       <Item
         size="sm"
+        data-tool-status={toolStatus}
         className="w-fit max-w-full bg-transparent px-0 py-0.5 text-ui hover:bg-transparent"
       >
         {header}
@@ -832,6 +838,7 @@ function ProcessRow({
     >
       <Item
         size="sm"
+        data-tool-status={toolStatus}
         className="w-fit max-w-full cursor-pointer bg-transparent px-0 py-0.5 text-left text-ui hover:bg-transparent aria-expanded:bg-transparent"
         render={<CollapsibleTrigger />}
       >
@@ -944,20 +951,4 @@ function toolResultStatus(tool: ToolCard | undefined): ToolResultStatus {
     return "error"
   }
   return "success"
-}
-
-function toolBadge(
-  tool: ToolCard | undefined,
-  t: (key: string) => string
-): { label: string; variant: "secondary" | "outline" | "destructive" } {
-  if (tool?.launchStatus === "async_launched") {
-    return { label: t("agentMessage.runInBackground"), variant: "outline" }
-  }
-  if (tool?.status === "completed") {
-    if (tool.ok === false) {
-      return { label: t("agentMessage.toolFailed"), variant: "destructive" }
-    }
-    return { label: t("agentMessage.toolCompleted"), variant: "outline" }
-  }
-  return { label: t("agentMessage.toolRunning"), variant: "secondary" }
 }

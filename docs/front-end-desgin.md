@@ -1055,9 +1055,25 @@ Markdown Mermaid block -> MermaidRenderBoundary -> rendered diagram
                          notice + original source
 ```
 
-开发环境遇到 `504 Outdated Optimize Dep` 时，先重启 Vite 并使用 `npm run dev -- --force`
-重建依赖缓存，再刷新浏览器。独立验证服务需使用单独的 `cacheDir`，避免覆盖正在运行的
-开发服务缓存；优先复用已经运行的开发服务。
+开发环境的依赖缓存按端口隔离为 `node_modules/.vite-<port>`，例如 `5173` 与 `15173`
+不会再覆盖彼此的优化依赖。Vite 配置钩子在合并 CLI 端口后选择缓存；明确配置的
+fixture `cacheDir` 优先保留。默认 `strictPort: true`，避免端口自动递增却仍复用原端口
+缓存；生产构建维持 Vite 默认缓存。白板使用的 React Flow 与 Animate UI Slot / motion
+在启动时预优化，减少第一次打开预览时的依赖重建。已打开的旧页面遇到
+`504 Outdated Optimize Dep` 时刷新页面获取当前模块地址；需要强制重建时使用
+`npm run dev -- --force`。优先复用已经运行的开发服务。
+
+```text
+Vite :5173  -> node_modules/.vite-5173
+Vite :15173 -> node_modules/.vite-15173
+显式 fixture cacheDir -> 保留指定目录
+```
+
+配置回归使用真实 Vite `resolveConfig` 验证端口合并、缓存隔离、显式覆盖与生产路径：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/vite-config.test.ts
+```
 
 ### 工作状态加载动效
 
@@ -2994,11 +3010,26 @@ Context Usage               ×
 
 相同 marker 的完成状态不会被滞后的快照退回“压缩中”；新压缩具有独立身份。
 沿用 `CompactSessionMarker` 的 200ms 淡入与摘要展开动效、主题 token 和
-减少动态效果设置，不新增页面区域。定向状态和组件回归从仓库根目录运行：
+减少动态效果设置，不新增页面区域。压缩、重置、模型和力度 marker 属于普通文档流，
+即使底层消息角色为 `user` 也不进入 StickyFreeze。摘要展开后正常占位，随滚动离开，
+不会以吸顶层遮住后续回复；它的高度也不计入流式工作状态的吸顶偏移。只有真实用户
+气泡（包括附件消息）继续吸顶。
+
+```text
+用户气泡                   -> StickyFreeze -> 工作状态排在气泡下
+压缩 / 重置 / 设置 marker  -> 普通文档流  -> 工作状态仍从页头下吸顶
+压缩展开：marker + 完整摘要 -> 后续回复顺排，摘要随滚动离开
+```
+
+定向状态和组件回归从仓库根目录运行：
 
 ```sh
-./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/compact-lifecycle.test.ts agent-ui/tests/features/agent-message/compact-session-stream.test.ts agent-ui/tests/features/agent-message/slash-command-envelope.test.ts agent-ui/tests/features/agent-message/snapshot-messages.test.ts agent-ui/tests/features/agent-message/compact-session-marker.test.tsx
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/compact-lifecycle.test.ts agent-ui/tests/features/agent-message/compact-session-stream.test.ts agent-ui/tests/features/agent-message/slash-command-envelope.test.ts agent-ui/tests/features/agent-message/snapshot-messages.test.ts agent-ui/tests/features/agent-message/compact-session-marker.test.tsx agent-ui/tests/features/agent-message/thread-turns.test.ts agent-ui/tests/features/agent-message/user-message-rail.test.ts agent-ui/tests/features/agent-message/sticky-freeze.test.ts
 ```
+
+浏览器回归打开 `/tests/features/agent-message/compact-thread-browser.html`。使用真实
+消息线程和隔离会话数据，检查长压缩摘要展开 / 收起、滚到最新回复时没有遮挡、流式
+工作状态的位置，以及普通用户气泡继续吸顶；同时检查深色、窄屏和减少动态效果。
 
 ### 文件 / Git 双视图
 
@@ -3699,6 +3730,36 @@ Workspace 路径、并排 / 对比的中文标签、50% 边界、快速正反向
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/image-edit-tool-item.test.tsx agent-ui/tests/features/agent-message/image-tool-data.test.ts
 ```
 
+工具行状态（2026-11-15）：执行成功不附加勾号、成功图标或完成徽标；失败时工具名、
+文件名、输入摘要和元信息统一显示错误红色，并在文本后添加红色填充圆形、叉形镂空的
+错误图标；叉形区域真实透明，透出所在表面。原有工具图标、展开箭头和操作按钮保持原色。运行中、暂停、取消和未知
+状态保留现有反馈。错误图标带本地化的可访问名称及 `sr-only` 文案。
+
+```text
+运行中 -> 工具名称 + 内容 + 原有运行指示
+成功   -> 工具名称 + 内容
+失败   -> [原色工具图标] 工具名称 + 内容（红色文本） (x) [原色展开箭头]
+```
+
+规则覆盖普通工具、MCP、Codemode 及嵌套模型调用、图片、Skill、文件读写、Canvas、
+白板，以及 Agent / Workflow / 后台任务工具入口。工作流展开后的阶段进度、计数和
+导航状态保留原有语义。FileRead / FileDiff 显式接收 `error`，调用层不再把失败折为完成。
+各入口只在工具标题区域设置 `data-tool-status`，用 `data-tool-text` 标记文本容器；共享
+CSS 仅以 `--tool-error-foreground` 覆盖这些文本与链接悬停色，不改变图标或展开输出。
+末尾错误图标复用 `ToolResultStatusIndicator`，大小为 14px，同样读取该文本色 token；通过 Lucide
+图标工厂生成单个 `fill="currentColor"`、`fill-rule="evenodd"` 的圆形与叉孔路径，
+不使用背景色覆盖来模拟镂空。
+浅色为 `oklch(0.55 0.2 20)`，深色复用 `--status-error`；在聊天与工作区表面验证文字
+对比度至少 4.5:1。原有展开、复制、预览、运行动态效果及减少动态效果设置保持可用。
+
+浏览器回归：打开 `/tests/components/agents/tool-status-browser.html`，点击运行检查；
+追加 `?zh&dark&reduced-motion`，并在 390px 视口验证状态切换、重试、深浅主题、
+真实文件链接和悬停、对比度及窄屏。DOM 回归（仓库根目录）：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/canvas-tool-item.test.tsx agent-ui/tests/features/agent-message/task-tool-status.test.tsx agent-ui/tests/features/agent-message/mcp-tool-item.test.tsx agent-ui/tests/features/agent-message/codemode-tool-item.test.tsx agent-ui/tests/features/agent-message/image-edit-tool-item.test.tsx
+```
+
 Agent 步骤长输入回归：打开 `/tests/components/agents/tool-result-browser.html`，点击
 **Run step overflow checks**。覆盖真实主聊天消息与 Workspace Agent 过程视图、
 长命令、短标题、Read / Edit 文件标题、inline 文件链接的字母下伸部分、悬停滚动、
@@ -4038,6 +4099,33 @@ Codemode [状态]
 React Flow 画布并实时接收 Agent 绘制。工具卡片保持单行，不提供折叠展开；点击
 历史卡片打开相应白板，实时工具调用自动打开白板 Tab。文件浏览器也识别
 `*.board.json`，源码和下载内容跟随预览收到的最新快照。
+Workspace 白板的懒加载由共享 `PreviewRendererBoundary` 隔离；模块或渲染失败时
+只在白板面板显示本地化错误与「刷新页面」，聊天和其他 Workspace 操作保持可用。
+刷新由用户点击触发，不自动重载；React.lazy 已缓存的导入失败需要重新加载文档。
+
+```text
+工具行「打开预览」 -> 白板面板 -> Suspense -> WhiteboardRenderer
+                       |
+                 加载 / 渲染异常
+                       v
+             局部提示 + 刷新页面；聊天仍可交互
+```
+
+浏览器回归入口 `/tests/features/workspace/whiteboard-preview-browser.html` 使用真实工具行、
+Workspace 和白板 Renderer，接口与 WebSocket 使用隔离数据。正常打开须出现 React Flow
+节点；拦截白板 renderer 模块请求以模拟导入失败时，局部提示、刷新按钮和聊天交互
+仍可用。追加 `?zh&dark` 验证本地化错误。
+
+白板与 HTML Canvas 复用普通工具行的状态规则：运行指示保持原样，成功不附加状态标记，
+失败时工具名与文件名使用主题适配的错误红色，文本后显示镂空错误图标；左侧工具图标
+保持原色，并保留屏幕阅读器状态文案。
+失败时不把原始错误 JSON 或堆栈作为独立正文，也不另放进悬浮提示。
+失败项不提供预览操作。
+
+```text
+[白板] 文件名 (x)         <- 失败：图标原色、文本红色、末尾镂空错误图标
+[白板] 文件名 打开预览    <- 成功：无额外状态标记
+```
 
 白板统一保存在 `<cwd>/.whiteboard/<当前会话ID>/`。文件名由 Agent 根据内容主题
 生成并通过必填的 `path` 显式传入，例如 `login-flow.board.json`；后续修改复用
@@ -4075,8 +4163,13 @@ Agent 工具调用 -> 单行工具卡片 -> Agent Workspace [白板]
 画布采用 `@xyflow/react`。八种元素和十二种形状的具体字段、持久化、协作上下文和
 沙箱协议见 [whiteboard](architecture/whiteboard.md)。无常驻外轮廓、明度渐变、锐利
 接触阴影，数据库和队列保留完整椭圆端面边线。新 Agent 元素沿路径绘制并显现填色
-和文字；整体绘制速度为原来的 2/3（时长增加 50%），笔迹、箭头、标签及提示框保持同步。
-历史快照和用户修改不重复进场。减少动态效果时立即显示。窄 Workspace
+和文字；整体绘制速度为原来的 1/2（时长加倍），笔迹、箭头、标签及提示框保持同步。
+历史快照和用户修改不重复进场。Workspace 按会话及文件路径记录已展示内容；切到其他
+Tab 后再由 Agent 自动打开同一文件时，不重播整板，首次打开未展示的新文件仍可播放
+首个快照。合并节点时保留 React Flow 的测量数据，避免无关内容更新或某个元素绘制
+结束导致连线卸载重建；节点改尺寸仍由 ResizeObserver 更新端口。
+每批新增 ID 按动画时间错开 70ms，上限 700ms；半速下实际为 140ms、1.4s，没有同时
+绘制数量上限。减少动态效果时立即显示。窄 Workspace
 容器保留相同操作，按容器宽度紧凑排布。
 
 连线使用固定种子的 Rough.js 笔迹，同一元素重渲染时不随机变化；对齐端口之间
@@ -4085,32 +4178,45 @@ D3 Catmull–Rom 曲线连接采样点，支持样张中的橙色下划线、圈
 连线标签使用不透明的卡片底色，标签层始终位于连线之上，包括节点选中或拖动时。
 
 新元素实际开始绘制时显示临时协作提示：外围是 `rgb(96,165,250)` 虚线框和同色
-6% 不透明度的淡蓝填充，左上连接同色 Chrome 标签页形状，固定显示 `Bambuddy`。
-标签文字在浅色模式为白色，深色模式为 `#071e40`。节点、手绘
-笔迹和连线均使用画布覆盖层；连线框覆盖完整曲线及标签，HTML 和表格不会裁剪
+6% 不透明度的淡蓝填充。右下角使用 [Animate UI Cursor](https://animate-ui.com/docs/primitives/animate-ui/cursor)
+的光标及跟随标签，标签显示 `Bambuddy`，浅色模式为白字，深色模式为 `#071e40`。
+光标固定在外框当前右下角，标签保持画布坐标中右移 16px、下移 24px 的偏移；
+外框、光标和标签同帧更新，不增加弹簧滞后或独立进场缩放。不再显示左上角 Tab。
+外框固定左上角，从 16 × 16px
+沿对角线展开到完整边界；有路径的元素跟随实际笔迹进度，表格、文字与 HTML 跟随
+当前显现动画的整体进度。只缩放外框及填色，虚线线宽、光标尺寸和标签字号保持稳定；
+暂停、减速、重播时同步，完成后移除。
+表格在同一轮追加行时，从当前外框尺寸继续展开，不因新行动画重新计时而回缩。
+节点、手绘笔迹和连线均使用画布覆盖层；连线框覆盖完整曲线及标签，HTML 和表格不会裁剪
 提示框，框也不接收鼠标或键盘事件。等待队列中的元素不提前显示；该元素全部 CSS
 动画完成后移除，包括箭头标签和表格最后一行。状态栏与实际动画同步，删除、切板、
 取消和减少动态效果不会留下提示框。提示仅存在于客户端，不写入 `.board.json`。
 
 ```text
-          / Bambuddy \
          + - - - - - - - - - +
          :  淡蓝底 / 绘制元素  :
-         + - - - - - - - - - +
-等待 -> 动画开始 / 显示提示 -> 所有动画完成 / 移除提示
+         + - - - - - - - - - +  ↖ Cursor
+                                  [Bambuddy]
+等待 -> 动画开始 / 左上角小框 -> 随进度向右下展开 -> 所有动画完成 / 移除提示
 ```
+
+使用本地受控 Cursor 适配，坐标由绘制进度对应的 MotionValue 驱动，仅保留淡入。
+在 Motion 的 update 阶段采样实际笔迹并更新外框，光标与标签在同一帧完成位置渲染，
+暂停、seek、变速时均保持同步；不监听或隐藏用户的真实鼠标。偏移使用画布坐标，
+缩放时不会混用屏幕坐标。
 
 回归从仓库根目录运行：
 
 ```sh
-./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/whiteboard/*.test.ts agent-ui/tests/features/agent-message/whiteboard-tools.test.ts agent-ui/tests/features/file-browser/file-preview.test.tsx agent-ui/tests/features/workspace/workspace-whiteboard-navigation.test.tsx
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/whiteboard/*.test.ts agent-ui/tests/features/agent-message/whiteboard-tools.test.ts agent-ui/tests/features/agent-message/canvas-tool-item.test.tsx agent-ui/tests/features/file-browser/file-preview.test.tsx agent-ui/tests/features/workspace/workspace-whiteboard-navigation.test.tsx
 ```
 
 浏览器检查：启动前端开发服务后打开
 `/tests/features/whiteboard/whiteboard-browser.html`，点击 **Run whiteboard checks**。
 **Stream Agent drawing** 逐批演示绘制；`?dark&narrow` 检查深色和窄容器。
-**Preview drawing frames** 暂停在绘制中途，便于检查虚线框、淡蓝底和 Bambuddy 标签。
+**Preview drawing frames** 暂停在绘制中途，便于检查虚线框、淡蓝底和右下角光标。
 检查包含曲线路径、回流方向、新笔迹实际绘制进度，以及提示框的开始/结束、延迟、
+对角缩放与笔迹逐帧同步、光标跟随右下角、标签固定偏移及尺寸、用户鼠标保持正常、
 回流曲线与标签边界、HTML/表格裁剪、长表格最后一行、删除、取消和重置清理。
 同一绘制 cue 中追加表格行后，提示保留到新行完成；窄高角色形状也验证超出节点
 尺寸的真实轮廓仍被完整包围。同一元素替换为新 revision 的 cue 时重新绘制，

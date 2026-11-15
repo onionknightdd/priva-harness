@@ -4,7 +4,7 @@ import { AppWindowIcon, PanelsTopLeftIcon } from "lucide-react"
 import { motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
-import type { ToolResultStatus } from "@/components/agents/tool-result"
+import { ToolResultStatusIndicator, type ToolResultStatus } from "@/components/agents/tool-result"
 import { useActiveSession } from "@/features/chat-session"
 import { rememberFileExists } from "@/features/files/file-existence"
 import { useOptionalWorkspaceFiles } from "@/features/workspace/workspace-files-context"
@@ -56,6 +56,7 @@ export function CanvasToolItem({
       <TooltipHint content={canOpen ? openLabel : undefined}>
         <motion.button
           type="button"
+          data-tool-status={status}
           disabled={!canOpen}
           aria-label={canOpen ? openLabel : undefined}
           onClick={() => {
@@ -77,14 +78,15 @@ export function CanvasToolItem({
           )}
         >
           <Icon className="me-[0.25em] size-4 shrink-0" aria-hidden="true" />
-          <span className={cn("min-w-0", running && "shimmer")}>
+          <span data-tool-text className={cn("min-w-0", running && "shimmer")}>
             {toolItemStatusLabel(block.name, running, t)}
           </span>
           {displayName ? (
-            <span className="min-w-0 truncate font-normal text-muted-foreground">
+            <span data-tool-text className="min-w-0 truncate font-normal text-muted-foreground">
               {displayName}
             </span>
           ) : null}
+          <ToolResultStatusIndicator status={status} />
           {canOpen ? (
             <span className="shrink-0 text-muted-foreground/70">
               {openLabel}
@@ -92,11 +94,6 @@ export function CanvasToolItem({
           ) : null}
         </motion.button>
       </TooltipHint>
-      {status === "error" ? (
-        <p className="max-w-full text-ui text-destructive">
-          {tool?.output?.trim() || t("agentMessage.toolFailed")}
-        </p>
-      ) : null}
     </div>
   )
 }

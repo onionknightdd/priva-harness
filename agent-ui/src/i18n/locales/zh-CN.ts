@@ -4,6 +4,8 @@ import { modelZhCN } from "./model"
 export const zhCN = {
   whiteboard: {
     loading: "正在加载白板…",
+    loadFailed: "白板加载失败，请刷新页面后重试。",
+    reloadPage: "刷新页面",
     connecting: "正在连接…",
     disconnected: "连接已断开，正在重连…",
     retry: "重试",

@@ -4,6 +4,8 @@ import { modelEn } from "./model"
 export const en = {
   whiteboard: {
     loading: "Loading whiteboard…",
+    loadFailed: "The whiteboard could not be loaded. Refresh the page to try again.",
+    reloadPage: "Refresh page",
     connecting: "Connecting…",
     disconnected: "Connection lost. Reconnecting…",
     retry: "Retry",

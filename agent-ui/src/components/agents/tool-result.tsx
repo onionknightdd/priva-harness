@@ -6,14 +6,13 @@ import {
   Braces,
   Check,
   ChevronDown,
-  CircleCheck,
-  CircleX,
   CircleHelp,
   Copy,
   LoaderCircle,
   RotateCcw,
   SquareTerminal,
   Wrench,
+  createLucideIcon,
 } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import {
@@ -89,18 +88,25 @@ const STATUS_LABEL_KEY = {
 const STATUS_CLASS = {
   unknown: "text-muted-foreground",
   running: "text-status-running",
-  success: "text-status-success",
-  error: "text-status-error",
+  error: "text-tool-error-foreground",
   cancelled: "text-muted-foreground",
-} as const satisfies Record<ToolResultStatus, string>;
+} as const;
+
+// Even-odd fill cuts the cross out of the disc, revealing any underlying surface.
+const CircleXFilled = createLucideIcon("circle-x-filled", [["path", {
+  d: "M12 2a10 10 0 1 0 0 20a10 10 0 0 0 0-20Z M8.5 7 12 10.5 15.5 7 17 8.5 13.5 12 17 15.5 15.5 17 12 13.5 8.5 17 7 15.5 10.5 12 7 8.5Z",
+  fill: "currentColor",
+  fillRule: "evenodd",
+  stroke: "none",
+  key: "disc-with-cross-cutout",
+}]]);
 
 const STATUS_ICON = {
   unknown: CircleHelp,
   running: LoaderCircle,
-  success: CircleCheck,
-  error: CircleX,
+  error: CircleXFilled,
   cancelled: Ban,
-} as const satisfies Record<ToolResultStatus, typeof LoaderCircle>;
+} as const;
 
 function getSwapKey(value: ReactNode, fallback: string) {
   return typeof value === "string" || typeof value === "number"
@@ -114,27 +120,38 @@ function KindIcon({ kind }: { kind: ToolResultKind }) {
   return <Wrench className="size-[1em]" />;
 }
 
-function StatusIcon({
+export function ToolResultStatusIndicator({
   status,
-  settled,
-  reduce,
 }: {
   status: ToolResultStatus;
-  /** True only on the render where the tool just left `running`, so historical
-   * cards mount their final icon without a pop. */
-  settled: boolean;
-  reduce: boolean;
 }) {
+  const { t } = useTranslation();
+  const reduce = useReducedMotion() ?? false;
+  const previousStatus = useRef(status);
+  // Historical cards mount without a pop; only leaving running animates the swap.
+  const settled = previousStatus.current === "running" && status !== "running";
+  useEffect(() => { previousStatus.current = status; }, [status]);
+  if (status === "success") return null;
   const Icon = STATUS_ICON[status];
   return (
-    <StatusGlyphSwap swapKey={status} pop={settled && !reduce}>
-      <Icon
-        className={cn(
-          "size-3",
-          status === "running" && !reduce && "animate-spin-fast",
-        )}
-      />
-    </StatusGlyphSwap>
+    <span
+      data-slot={status === "error" ? "tool-error-indicator" : undefined}
+      role="img"
+      aria-label={t(STATUS_LABEL_KEY[status])}
+      className={cn("inline-flex shrink-0 items-center", STATUS_CLASS[status])}
+    >
+      <StatusGlyphSwap swapKey={status} pop={settled && !reduce}>
+        <Icon
+          aria-hidden="true"
+          fill="none"
+          className={cn(
+            status === "error" ? "size-3.5" : "size-3",
+            status === "running" && !reduce && "animate-spin-fast",
+          )}
+        />
+      </StatusGlyphSwap>
+      {status === "error" ? <span className="sr-only">{t(STATUS_LABEL_KEY.error)}</span> : null}
+    </span>
   );
 }
 
@@ -250,15 +267,11 @@ export function ToolResult({
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
   const currentOpen = open ?? internalOpen;
   const running = status === "running";
-  // `previousStatus` is committed in an effect, so during the render where the
-  // status flips it still reads "running" — exactly the frame the icon swaps.
-  const settled = previousStatus.current === "running" && !running;
   const canCopy = Boolean(copyText || onCopy);
   const hasActions = canCopy || Boolean(onRetry);
   const titleKey = getSwapKey(title, status);
   const metaKey = getSwapKey(meta, `${status}-meta`);
   const toolKey = getSwapKey(tool, `${status}-tool`);
-  const statusLabel = t(STATUS_LABEL_KEY[status]);
 
   const setOpen = useCallback(
     (next: boolean) => {
@@ -334,6 +347,7 @@ export function ToolResult({
       <button
         id={triggerId}
         type="button"
+        data-tool-status={status}
         aria-expanded={currentOpen}
         aria-controls={contentId}
         onClick={() => setOpen(!currentOpen)}
@@ -348,7 +362,7 @@ export function ToolResult({
         >
           {icon ?? <KindIcon kind={kind} />}
         </span>
-        <span className="flex min-w-0 flex-1 items-baseline gap-2">
+        <span data-tool-text className="flex min-w-0 flex-1 items-baseline gap-2">
           {tool != null && <span className="shrink-0 font-normal text-muted-foreground/70">
             <ActionSwapRollText value={toolKey}>
               {tool}
@@ -369,15 +383,7 @@ export function ToolResult({
             </span>
           ) : null}
         </span>
-        <span
-          aria-label={statusLabel}
-          className={cn(
-            "inline-flex shrink-0 items-center",
-            STATUS_CLASS[status],
-          )}
-        >
-          <StatusIcon status={status} settled={settled} reduce={reduce} />
-        </span>
+        <ToolResultStatusIndicator status={status} />
         <motion.span
           aria-hidden="true"
           animate={{ rotate: currentOpen ? 180 : 0 }}

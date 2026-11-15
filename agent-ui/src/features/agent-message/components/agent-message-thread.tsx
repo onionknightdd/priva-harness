@@ -359,6 +359,11 @@ const ThreadTurnItem = memo(function ThreadTurnItem({
         (isLast || freezeTurn) && "[content-visibility:visible]"
       )}
     >
+      {turn.user && !user ? (
+        <div className={working ? "mt-2" : "mt-6"}>
+          {renderMessage(turn.user)}
+        </div>
+      ) : null}
       {user ? (
         <StickyFreeze
           ref={userRef}

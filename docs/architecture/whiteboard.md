@@ -160,24 +160,50 @@ curve, and same-side ports keep their return route. The arrowhead and label
 appear as the drawing reaches them. Freehand point samples use D3's centripetal
 Catmull–Rom interpolation, preserving smooth underlines, circles, and waves
 instead of turning the samples into zigzags.
-A newly opened live-tool view can animate its first snapshot when creation
-finished before the viewer subscribed; reconnecting never replays it.
+A live-tool view can animate its first snapshot for a file not yet displayed in
+that session when creation finished before the viewer subscribed. The workspace
+remembers displayed paths: reopening one after switching tabs, as well as
+reconnecting, shows existing content without replaying the whole board.
+Node reconciliation preserves React Flow measurements so an unrelated update or
+completed drawing cue cannot clear handles, unmount connectors, and restart their
+CSS animations. ResizeObserver still updates handles when node dimensions change.
+Each batch staggers new IDs by 70ms, capped at 700ms, on the animation timeline;
+there is no concurrency limit. At half playback speed these are 140ms and 1.4s.
 Reduced motion displays the complete result immediately.
-All drawing animations play at two-thirds speed (50% longer), keeping paths,
+All drawing animations play at half speed (twice the original duration), keeping paths,
 fills, arrowheads, labels and the drawing-presence frame synchronized.
 
 While a new element is actually drawing, a transient viewport overlay surrounds
 it with a light blue (`rgb(96,165,250)`) dashed frame, a matching fill at 6% opacity,
-and an attached upper-left tab labelled `Bambuddy`. The tab text is white in
-light mode and `#071e40` in dark mode. The overlay does not intercept interaction.
+and an Animate UI cursor at its moving lower-right corner. A `Bambuddy` label
+follows at a fixed canvas offset of 16px right and 24px down; its text is white in
+light mode and `#071e40` in dark mode. There is no upper-left tab. The overlay does
+not intercept interaction.
+Its upper-left corner remains anchored while the outline grows diagonally from
+a 16-pixel square to the full bounds. Path elements use the rendered trace progress;
+other elements use the complete reveal timeline, including staggered table rows.
+Appending rows rebases the remaining animation time from the frame's current
+progress, so a new row's local clock cannot shrink the frame.
+Only the outline and fill scale; the SVG stroke, cursor and label keep their size.
+Progress is read from the live animations in Motion's update phase, so pausing,
+seeking, or slowing drawing moves the frame, cursor, and label together in the
+same rendered frame. The update callback is cancelled on unmount.
 Node frames sit outside clipped HTML/table content; connector frames include
 their complete curve and opaque label. The overlay follows the canvas viewport.
 
 ```text
 New Agent element cue
-  -> first CSS animation starts -> frame + Bambuddy tab
+  -> first CSS animation starts -> small frame + cursor + Bambuddy follower
+  -> drawing progress -> frame expands -> cursor follows the lower-right corner
   -> all element animations finish -> remove frame and cue
 ```
+
+The local controlled adaptation of Animate UI Cursor accepts MotionValue
+coordinates instead of the upstream pointer-driven Provider. It uses the upstream
+opacity entrance without independent scale or follow springs, and never listens
+to or hides the user's native pointer.
+Cursor and follower offsets are in canvas coordinates, so viewport zoom does not
+mix screen measurements into their positions.
 
 Completion follows the actual CSS animation lifecycle, including portal-rendered
 connector labels and staggered table rows. There is no fixed cleanup timeout.

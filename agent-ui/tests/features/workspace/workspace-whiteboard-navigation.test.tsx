@@ -111,6 +111,40 @@ test("history recovery requires a named board in the selected session", () => {
   assert.equal(latestWhiteboardActivity([inputOnly({ path: ".canvas/old.board.json" })], "/work", "session"), null, "the old directory has no compatibility path")
 })
 
+test("live reopening only animates boards that have never been shown in that scope", async () => {
+  let boards!: NonNullable<ReturnType<typeof useWorkspaceWhiteboard>>
+  function BoardStateProbe() { boards = useWorkspaceWhiteboard()!; return null }
+  const host = document.body.appendChild(document.createElement("div"))
+  const root = createRoot(host)
+  const scope = "claude:session:/work", otherScope = "pi:session:/work"
+  const first = "/work/.whiteboard/session/first.board.json", second = "/work/.whiteboard/session/second.board.json"
+  try {
+    await act(async () => root.render(<React.StrictMode><I18nextProvider i18n={i18n}>
+      <SidebarProvider stateCookieName={false} widthCookieName={false} keyboardShortcut={false}>
+        <WorkspaceFilesProvider><WorkspaceWhiteboardProvider><BoardStateProbe /></WorkspaceWhiteboardProvider></WorkspaceFilesProvider>
+      </SidebarProvider>
+    </I18nextProvider></React.StrictMode>))
+    await act(async () => boards.open(scope, first, false, true))
+    assert.equal(boards.live[scope], true, "the first live opening can animate its snapshot")
+    await act(async () => boards.seen(scope, first))
+    assert.equal(boards.live[scope], false)
+    await act(async () => boards.open(scope, first, false, true))
+    assert.equal(boards.live[scope], false, "a new write must not replay an already displayed board")
+    await act(async () => boards.open(scope, second, false, true))
+    assert.equal(boards.live[scope], true, "a new file in the same scope still animates initially")
+    await act(async () => boards.seen(scope, first))
+    assert.equal(boards.live[scope], true, "a delayed callback for the old path must not clear the new path's animation")
+    await act(async () => boards.seen(scope, second))
+    await act(async () => boards.open(scope, first, false, true))
+    assert.equal(boards.live[scope], false, "switching through another file does not forget the first file")
+    await act(async () => boards.open(otherScope, first, false, true))
+    assert.equal(boards.live[otherScope], true, "seen state is scoped to the selected harness and session")
+  } finally {
+    await act(async () => root.unmount())
+    host.remove()
+  }
+})
+
 let controls: {
   agent: ReturnType<typeof useAgentMessage>
   actions: ReturnType<typeof useChatSessionActions>
@@ -254,6 +288,8 @@ for (const [harness, width] of [["claude", 1280], ["pi", 390]] as const) test(`$
     assert.equal(listRequests.length, beforeContent + 1, "first board content refreshes newly created files")
     await act(async () => host.querySelector<HTMLButtonElement>("[data-board-content]")!.click())
     assert.equal(listRequests.length, beforeContent + 1, "incremental board contents do not repeatedly scan the directory")
+    await act(async () => controls.boards?.open(controls.scope, "/work/.whiteboard/session/second.board.json", false, true))
+    assert.equal(controls.boards?.live[controls.scope], false, "a manually viewed board is not replayed by its next live write")
     listedNames.push("new-file.board.json")
     await act(async () => host.querySelector<HTMLButtonElement>("[data-list-refresh]")!.click())
     assert.deepEqual([...picker.options].map(option => option.textContent), listedNames, "opening the picker refresh discovers files added outside the current viewer")

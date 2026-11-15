@@ -70,7 +70,7 @@ export const WhiteboardElement = memo(function WhiteboardElement({ id, data, sel
   const w = width ?? e.w, h = height ?? e.h
   const root = useRef<HTMLDivElement>(null)
   const outlinePath = useRef<SVGPathElement>(null)
-  const drawing = useWhiteboardDrawing(id, cue, e, root)
+  const { drawing, animations } = useWhiteboardDrawing(id, cue, e, root)
   const [drawingBounds, setDrawingBounds] = useState<Rect>({ x: 0, y: 0, width: w, height: h })
   useLayoutEffect(() => {
     if (!drawing) return
@@ -111,7 +111,7 @@ export const WhiteboardElement = memo(function WhiteboardElement({ id, data, sel
   return <>
     <NodeResizer isVisible={selected && !disabled} minWidth={32} minHeight={24} onResizeEnd={(_, params) => update({ x: params.x, y: params.y, w: params.width, h: params.height })} />
     <div ref={root} className={`wb-element wb-${e.type} wb-color-${e.color ?? "plain"}${cue ? " wb-drawing" : ""}`} style={style}>{content}</div>
-    {drawing && <WhiteboardDrawingFrame id={id} bounds={{ ...drawingBounds, x: positionAbsoluteX + drawingBounds.x, y: positionAbsoluteY + drawingBounds.y }} />}
+    {drawing && <WhiteboardDrawingFrame id={id} animations={animations} bounds={{ ...drawingBounds, x: positionAbsoluteX + drawingBounds.x, y: positionAbsoluteY + drawingBounds.y }} />}
     <Handles />
   </>
 })
@@ -124,7 +124,7 @@ export const WhiteboardArrow = memo(function WhiteboardArrow(props: EdgeProps<Wh
   const root = useRef<SVGGElement>(null)
   const arrowPath = useRef<SVGPathElement>(null)
   const labelRoot = useRef<HTMLDivElement>(null)
-  const drawing = useWhiteboardDrawing(props.id, data?.cue, data?.element, root, labelRoot)
+  const { drawing, animations } = useWhiteboardDrawing(props.id, data?.cue, data?.element, root, labelRoot)
   const [drawingBounds, setDrawingBounds] = useState<Rect | null>(null)
   useLayoutEffect(() => {
     if (!drawing || !arrowPath.current) return
@@ -149,6 +149,6 @@ export const WhiteboardArrow = memo(function WhiteboardArrow(props: EdgeProps<Wh
     <path ref={arrowPath} className="wb-arrow-head" d={path} fill="none" stroke="none" strokeWidth={props.selected ? 2.5 : 1.5} markerEnd={props.markerEnd} />
     {data?.cue && <circle className="wb-pen" r="3" style={{ offsetPath: `path('${path}')` }} />}
     {data?.element.label && <EdgeLabelRenderer><div ref={labelRoot} className={`wb-arrow-label nodrag nopan${data.cue ? " wb-arrow-label-drawing" : ""}`} style={labelStyle}><div className="wb-arrow-label-content"><EditableText value={data.element.label} label={t("whiteboard.editLabel")} onCommit={label => write([{ op: "update", id: props.id, patch: { label } }])} /></div></div></EdgeLabelRenderer>}
-    {drawing && drawingBounds && <WhiteboardDrawingFrame id={props.id} bounds={drawingBounds} />}
+    {drawing && drawingBounds && <WhiteboardDrawingFrame id={props.id} animations={animations} bounds={drawingBounds} />}
   </g>
 })

@@ -3,6 +3,7 @@ import { BotIcon, SquareArrowOutUpRightIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { LiveTextScope, StableText } from "@/components/motion/stable-text"
 import { Card } from "@/components/ui/card"
+import { ToolResultStatusIndicator } from "@/components/agents/tool-result"
 import { WorkflowStatusPill } from "./workflow-status"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -22,18 +23,20 @@ export function AgentToolItem({ agent, agents }: { agent: AgentToolView; agents:
 
 export function AgentToolSummary({ agent, onOpen }: { agent: AgentToolView; onOpen: () => void }) {
   const { t } = useTranslation()
+  const status = agent.state === "failed" ? "error" : agent.state === "completed" ? "success" : agent.state === "running" ? "running" : undefined
   return (
     <LiveTextScope>
     <Card className="flex min-w-0 flex-row items-start gap-2 rounded-lg border border-border bg-muted/20 px-3 py-2 shadow-none ring-0">
-      <div className="min-w-0 flex-1">
+      <div data-tool-status={status} className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="flex min-w-0 items-center gap-1.5 text-ui leading-5 text-muted-foreground">
             <BotIcon aria-hidden="true" className="size-3.5 shrink-0" />
-            <span className="min-w-0 break-words">{agent.label}</span>
+            <span data-tool-text="" className="min-w-0 break-words">{agent.label}</span>
           </span>
-          <WorkflowStatusPill status={agent.state} />
+          {agent.state === "failed" ? <ToolResultStatusIndicator status="error" />
+            : agent.state !== "completed" ? <WorkflowStatusPill status={agent.state} /> : null}
         </div>
-        <div className="mt-1 flex flex-wrap gap-x-2 pl-5 text-xs text-muted-foreground">
+        <div data-tool-text="" className="mt-1 flex flex-wrap gap-x-2 pl-5 text-xs text-muted-foreground">
           {agent.type ? <span>{agent.type}</span> : null}
           {agent.tokens !== undefined ? <span><StableText pieces={tokenPieces(agent.tokens)} /></span> : null}
           {agent.durationMs !== undefined ? <span>{workflowDuration(agent.durationMs)}</span> : null}
