@@ -119,6 +119,7 @@ export interface SessionMetadataRecord {
   readonly tags: readonly string[]
   readonly addDirs: readonly string[]
   readonly runMode: RunMode | null
+  readonly enabledPluginIds: readonly string[]
   readonly recap: SessionRecap | null
   readonly lastResponseModel: StoredLastResponseModel | null
 }
@@ -130,6 +131,7 @@ export interface SessionMetadataPatch {
   readonly tags?: readonly string[]
   readonly addDirs?: readonly string[]
   readonly runMode?: RunMode
+  readonly enabledPluginIds?: readonly string[]
   readonly recap?: SessionRecap | null
   readonly lastResponseModel?: StoredLastResponseModel | null
 }
@@ -159,6 +161,7 @@ export function emptySessionMetadata(): SessionMetadataRecord {
     tags: [],
     addDirs: [],
     runMode: null,
+    enabledPluginIds: [],
     recap: null,
     lastResponseModel: null,
   }

@@ -31,7 +31,7 @@ export type AgentPreferences = {
   lastModelReference: string | null
   queueBehavior: QueueBehavior
   inputSuggestions: boolean
-  visualizeMode: boolean
+  enabledPluginIds: readonly string[]
 }
 
 export const DEFAULT_AGENT_PREFERENCES: AgentPreferences = {
@@ -41,7 +41,7 @@ export const DEFAULT_AGENT_PREFERENCES: AgentPreferences = {
   lastModelReference: null,
   queueBehavior: "follow-up",
   inputSuggestions: true,
-  visualizeMode: false,
+  enabledPluginIds: [],
 }
 
 const UNAVAILABLE_STORAGE_ERRORS = new Set([
@@ -124,7 +124,7 @@ export function parseAgentPreferences(raw: unknown): AgentPreferences {
       typeof raw["inputSuggestions"] === "boolean"
         ? raw["inputSuggestions"]
         : DEFAULT_AGENT_PREFERENCES.inputSuggestions,
-    visualizeMode: raw["visualizeMode"] === true,
+    enabledPluginIds: Array.isArray(raw["enabledPluginIds"]) && raw["enabledPluginIds"].includes("agent-dashboard") ? ["agent-dashboard"] : [],
     queueBehavior: DEFAULT_AGENT_PREFERENCES.queueBehavior,
   }
 }
@@ -174,7 +174,7 @@ function toStoredAgentPreferences(preferences: AgentPreferences) {
     sessionModel: preferences.sessionModel,
     lastModelReference: preferences.lastModelReference,
     inputSuggestions: preferences.inputSuggestions,
-    visualizeMode: preferences.visualizeMode,
+    enabledPluginIds: preferences.enabledPluginIds,
   }
 }
 

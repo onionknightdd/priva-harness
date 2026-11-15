@@ -1,3 +1,4 @@
+import { enabledPluginIdsSchema } from './plugin-selection.js'
 import { z } from 'zod'
 import { isContextWindow, type ContextWindow } from '../../../core/resource/model-context.js'
 import { isRunMode, type RunMode } from '../../../core/resource/session.js'
@@ -31,7 +32,7 @@ export interface InitFrame {
   readonly sessionId?: string
   readonly fork?: boolean
   readonly promptSuggestions?: boolean
-  readonly visualizeMode?: boolean
+  readonly enabledPluginIds?: readonly string[]
   readonly theme?: 'light' | 'dark'
 }
 
@@ -53,7 +54,7 @@ export interface ConfigureFrame {
   readonly cwd: string
   readonly effort?: EffortLevel
   readonly promptSuggestions?: boolean
-  readonly visualizeMode?: boolean
+  readonly enabledPluginIds?: readonly string[]
 }
 
 export interface AbortFrame {
@@ -86,16 +87,16 @@ export function parseClientFrame(raw: unknown): ParseClientResult {
       harness: z.enum(['claude', 'pi']), sessionId: z.string().trim().min(1), model: z.string().trim().min(1), cwd: z.string().trim().min(1),
       contextWindow: z.union([z.literal(200000), z.literal(1000000)]).optional(),
       effort: z.enum(EFFORT_LEVELS).optional(), promptSuggestions: z.boolean().optional(),
-      visualizeMode: z.boolean().optional(),
+      enabledPluginIds: enabledPluginIdsSchema,
     }).safeParse(raw)
     if (!result.success) return { ok: false, message: 'Invalid session configuration' }
-    const { effort, promptSuggestions, visualizeMode, contextWindow, ...frame } = result.data
+    const { effort, promptSuggestions, enabledPluginIds, contextWindow, ...frame } = result.data
     if (frame.harness === 'claude' && effort !== undefined && !isClaudeEffortLevel(effort)) {
       return { ok: false, message: 'Claude effort must be low, medium, high, xhigh, or max' }
     }
     return { ok: true, frame: { ...frame, ...(effort === undefined ? {} : { effort }),
       ...(promptSuggestions === undefined ? {} : { promptSuggestions }),
-      ...(visualizeMode === undefined ? {} : { visualizeMode }),
+      enabledPluginIds,
       ...(contextWindow === undefined ? {} : { contextWindow }) } }
   }
   if (type === 'permission.respond') {
@@ -181,9 +182,9 @@ export function parseInitFrame(raw: unknown): ParseInitResult {
   if (promptSuggestions !== undefined && typeof promptSuggestions !== 'boolean') {
     return { ok: false, message: 'Init promptSuggestions must be a boolean' }
   }
-  const visualizeMode = raw['visualizeMode']
-  if (visualizeMode !== undefined && typeof visualizeMode !== 'boolean') {
-    return { ok: false, message: 'Init visualizeMode must be a boolean' }
+  const enabledPluginIds = enabledPluginIdsSchema.safeParse(raw['enabledPluginIds'])
+  if (!enabledPluginIds.success) {
+    return { ok: false, message: 'enabledPluginIds must be an array of known product plugin IDs' }
   }
   const theme = raw['theme']
   if (theme !== undefined && theme !== 'light' && theme !== 'dark') return { ok: false, message: 'Theme must be light or dark' }
@@ -204,7 +205,7 @@ export function parseInitFrame(raw: unknown): ParseInitResult {
       ...(sessionId === undefined ? {} : { sessionId: sessionId.trim() }),
       ...(fork === true ? { fork: true } : {}),
       ...(promptSuggestions === undefined ? {} : { promptSuggestions }),
-      ...(visualizeMode === undefined ? {} : { visualizeMode }),
+      enabledPluginIds: enabledPluginIds.data,
       ...(theme === undefined ? {} : { theme }),
     },
   }

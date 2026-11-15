@@ -34,8 +34,6 @@ describe('describeTool', () => {
     ['mcp__linear__list_issues', 'mcp', 'linear'],
     ['mcp__agentWorkshop__image_gen', 'image', 'agentWorkshop'],
     ['visualize', 'visualize', undefined],
-    ['render_ui', 'visualize', undefined],
-    ['mcp__agentWorkshop__render_ui', 'visualize', 'agentWorkshop'],
     ['SomethingNew', 'other', undefined],
   ] as const)('maps %s to %s', (name, kind, server) => {
     expect(describeTool(name)).toEqual({ name, kind, ...(server === undefined ? {} : { server }) })

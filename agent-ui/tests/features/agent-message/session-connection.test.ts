@@ -23,7 +23,7 @@ for (const harness of ["claude", "pi"] as const) test(`${harness} carries the co
   Object.defineProperty(globalThis, "window", { configurable: true, value: { location: { protocol: "http:", host: "localhost" } } })
   Object.defineProperty(globalThis, "WebSocket", { configurable: true, value: Socket })
   const action = { name: "explore_region", surfaceId: "main", sourceComponentId: "explore", timestamp: "2026-11-15T00:00:00Z", context: { region: "North America" }, userMessage: "Explore North America" }
-  const text = uiActionMessage("sales-tool", action)
+  const text = uiActionMessage({ messageId: "sales-reply", embedId: "sales-ui" }, action)
   const user: AgentThreadMessage = { id: "run:user", role: "user", content: text, createdAt: "2026-11-15T00:00:00Z", status: "complete" }
   let messages: AgentThreadMessage[] = [{ id: "run", role: "assistant", content: "", createdAt: user.createdAt, status: "streaming" }]
   const connection = connectAgentSession({ harness, sessionId: "session" }, {
@@ -35,18 +35,18 @@ for (const harness of ["claude", "pi"] as const) test(`${harness} carries the co
     onError: () => {}, onSession: () => {}, onConnection: () => {},
   })
   try {
-    const pending = connection.start({ text, harness, model: "model", cwd: "/work", visualizeMode: true }, "run")
+    const pending = connection.start({ text, harness, model: "model", cwd: "/work", enabledPluginIds: ["agent-dashboard"] }, "run")
     const socket = Socket.instances.at(-1)!
     socket.open()
     assert.equal(socket.sent.find((frame) => frame.type === "run.start")?.text, text)
     socket.frame({ type: "run.started", runId: "run", seq: 1, userMessage: user })
     assert.equal(messages.find((message) => message.role === "user")?.content, action.userMessage)
-    assert.deepEqual(messages.find((message) => message.role === "user")?.uiAction, { version: 1, toolCallId: "sales-tool", action })
+    assert.deepEqual(messages.find((message) => message.role === "user")?.uiAction, { version: 1, pluginId: "agent-dashboard", messageId: "sales-reply", embedId: "sales-ui", action })
     socket.frame({ type: "run.completed", runId: "run", seq: 2 })
     await pending
     socket.frame({ type: "session.snapshot", seq: 3, messages: [user] })
     assert.equal(messages[0]?.content, action.userMessage)
-    assert.equal(messages[0]?.uiAction?.toolCallId, "sales-tool")
+    assert.equal(messages[0]?.uiAction?.embedId, "sales-ui")
     assert.equal(socket.sent.filter((frame) => frame.type === "run.start").length, 1)
   } finally {
     connection.disconnect()

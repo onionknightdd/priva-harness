@@ -1,12 +1,10 @@
 import { isProcessBlock, textFromBlocks, type AgentThreadMessage, type StreamBlock } from "./agent-message-data"
-import { isFailedGeneratedVisual, isGeneratedVisualTool } from "./a2ui-tool-data"
 
 export type AssistantPiece =
   | { kind: "process"; blocks: StreamBlock[] }
-  | { kind: "visual"; block: Extract<StreamBlock, { type: "tool_use" }> }
   | { kind: "answer"; text: string }
 
-/** Keep each generated visual above the answer text that follows it. */
+/** Keep the assistant's Markdown reply separate from its tool/thinking process. */
 export function assistantPieces(message: AgentThreadMessage): AssistantPiece[] {
   const blocks = [...(message.blocks ?? [])].sort((left, right) => left.index - right.index)
   const answer = answerBlock(blocks)
@@ -18,15 +16,6 @@ export function assistantPieces(message: AgentThreadMessage): AssistantPiece[] {
     process = []
   }
   for (const block of blocks) {
-    if (block.type === "tool_use" && isGeneratedVisualTool(block.name)) {
-      if (isFailedGeneratedVisual(block)) {
-        process.push(block)
-        continue
-      }
-      flush()
-      pieces.push({ kind: "visual", block })
-      continue
-    }
     if (answer !== undefined && block.type === "text" && block.blockId === answer.blockId) {
       flush()
       pieces.push({ kind: "answer", text: block.text })

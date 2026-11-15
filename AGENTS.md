@@ -52,8 +52,11 @@ To verify the compiled Claude native product MCP entry point after building:
 
 A2UI compiler and real canonical fixture verification, from the Runner directory:
 
-- `TMPDIR=/tmp npx vitest run tests/unit/core/tool/a2ui-render.test.ts tests/unit/core/tool/visualize-mode.test.ts`
+- `TMPDIR=/tmp npx vitest run tests/unit/core/a2ui tests/unit/core/plugin tests/integration/transport/http/a2ui.test.ts`
 - `node --import tsx tests/fixtures/a2ui/generate-sales-dashboard.ts`
+- `node --import tsx scripts/generate-dashboard-catalog.ts` (after regenerating the frontend catalog)
+- `node --import tsx tests/fixtures/a2ui/compile-http-probe.ts dist` (after build)
+- `TMPDIR=/tmp npx vitest run tests/integration/transport/websocket/terminal-plugins.test.ts tests/unit/provider/pi/pi-resource-loader.test.ts`
 
 The fixture generator compiles the sales dashboard, form actions, chart gallery and root tables;
 the frontend catalog generator and browser checks are documented in

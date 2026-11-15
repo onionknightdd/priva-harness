@@ -1,3 +1,4 @@
+import { resolveBuiltinPlugins } from '../../../../src/core/plugin/builtin-plugins.js'
 import { PLATFORM_INSTRUCTIONS } from '../../../../src/harness/prompt/platform-instructions.js'
 import { CLAUDE_DISALLOWED_TOOLS } from '../../../../src/provider/claude/claude-tool-policy.js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -108,6 +109,17 @@ describe('resolveClaudeQueryOptions', () => {
     })
     expect(options.extraArgs).toBeUndefined()
     expect(options.env?.['PATH'] ?? process.env['PATH']).toBe(process.env['PATH'])
+  })
+
+  it('loads selected local skill plugins without changing prompts or product tools', () => {
+    const off = resolveClaudeQueryOptions(spec, undefined, undefined, productTools)
+    const on = resolveClaudeQueryOptions({ ...spec, enabledPluginIds: ['agent-dashboard'] }, undefined, undefined, productTools)
+    expect(off.plugins).toEqual([])
+    expect(on.plugins).toEqual([{ type: 'local', path: resolveBuiltinPlugins(['agent-dashboard'])[0]?.rootDir }])
+    expect(on.systemPrompt).toEqual(off.systemPrompt)
+    expect(on.toolAliases).toEqual(off.toolAliases)
+    expect(on.toolAliases).not.toHaveProperty('render_ui')
+    expect(on.skills).toBeUndefined()
   })
 
   it('inherits native harness directory variables without overriding them', () => {
@@ -227,7 +239,6 @@ describe('resolveClaudeQueryOptions', () => {
       canvas: 'mcp__agentWorkshop__canvas',
       whiteboard_read: 'mcp__agentWorkshop__whiteboard_read',
       whiteboard_write: 'mcp__agentWorkshop__whiteboard_write',
-      render_ui: 'mcp__agentWorkshop__render_ui',
       image_gen: 'mcp__agentWorkshop__image_gen',
       image_read: 'mcp__agentWorkshop__image_read',
       image_edit: 'mcp__agentWorkshop__image_edit',

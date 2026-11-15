@@ -38,16 +38,16 @@ describe('Claude session run modes', () => {
     await expect(modes.resolve({ kind: 'new', provider: 'pi' }, { ...pi, runMode: 'agent' })).rejects.toMatchObject({ kind: 'invalid-request' })
   })
 
-  it('appends the visualize reminder without replacing the platform prompt', async () => {
+  it('preserves plugin selection without appending instructions to either provider', async () => {
     const modes = new SessionRunModes()
     const spec = await modes.resolve(
-      { kind: 'new', provider: 'claude', sessionId: 'visual' },
-      { ...request, visualizeMode: true },
+      { kind: 'new', provider: 'claude', sessionId: 'dashboard' },
+      { ...request, enabledPluginIds: ['agent-dashboard'] },
     )
-    expect(spec.systemInstructions?.startsWith(PLATFORM_INSTRUCTIONS)).toBe(true)
-    expect(spec.systemInstructions).toContain('</system-reminder>')
-    const pi = await modes.resolve({ kind: 'new', provider: 'pi' }, { ...testRunSpec({ provider: 'pi' }), visualizeMode: true })
-    expect(pi.systemInstructions).toContain('<system-reminder>')
-    expect(pi.systemInstructions).toContain('</system-reminder>')
+    expect(spec.systemInstructions).toBe(PLATFORM_INSTRUCTIONS)
+    expect(spec.enabledPluginIds).toEqual(['agent-dashboard'])
+    const piSpec = { ...testRunSpec({ provider: 'pi' }), enabledPluginIds: ['agent-dashboard'] }
+    const pi = await modes.resolve({ kind: 'new', provider: 'pi' }, piSpec)
+    expect(pi).toBe(piSpec)
   })
 })

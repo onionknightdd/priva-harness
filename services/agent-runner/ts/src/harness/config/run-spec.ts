@@ -1,3 +1,4 @@
+import { normalizeEnabledPluginIds } from '../../core/plugin/builtin-plugins.js'
 import type { RunMode } from '../../core/resource/session.js'
 import { DEFAULT_CONTEXT_WINDOW, type ContextWindow } from '../../core/resource/model-context.js'
 import { applyModelContext } from '../../core/resource/model-profile.js'
@@ -23,7 +24,7 @@ export interface RunSpecRequest {
   readonly effort?: EffortLevel
   readonly contextWindow?: ContextWindow
   readonly promptSuggestions?: boolean
-  readonly visualizeMode?: boolean
+  readonly enabledPluginIds?: readonly string[]
 }
 
 /**
@@ -55,7 +56,7 @@ export async function buildRunSpec(services: RunSpecServices, request: RunSpecRe
     ...(request.promptSuggestions === undefined
       ? {}
       : { promptSuggestions: request.promptSuggestions }),
-    ...(request.visualizeMode === undefined ? {} : { visualizeMode: request.visualizeMode }),
+    enabledPluginIds: normalizeEnabledPluginIds(request.enabledPluginIds),
     ...(resolved.classifier === undefined ? {} : { classifier: resolved.classifier }),
     imageTools: {
       baseUrl,

@@ -122,8 +122,8 @@ export class TerminalChatSessions {
       if (spec.runMode) chat.runMode = spec.runMode
       chat.spec = opened.adopted ? await this.options.terminals.spec(ref) ?? spec : spec
       // Viewer connections retain the live configuration, including while a
-      // visualize change is queued. The immutable session mode still applies.
-      if (chat.spec.runMode !== spec.runMode || (intent === 'run' && chat.spec.systemInstructions !== spec.systemInstructions)) {
+      // plugin change is queued. The immutable session mode still applies.
+      if (chat.spec.runMode !== spec.runMode || (intent === 'run' && (chat.spec.systemInstructions !== spec.systemInstructions || JSON.stringify(chat.spec.enabledPluginIds ?? []) !== JSON.stringify(spec.enabledPluginIds ?? [])))) {
         if (chat.active || (await this.options.terminals.state(ref))?.phase === 'running') {
           throw new SessionError('session-busy', 'Wait for the terminal reply before applying the session mode')
         }
@@ -275,10 +275,11 @@ export class TerminalChatSessions {
     chat.queue.push(...queue.map((pending) => ({ ...pending, spec: nextSpec ? { ...pending.spec,
       ...(nextSpec.runMode ? { runMode: nextSpec.runMode } : {}),
       ...(nextSpec.systemInstructions ? { systemInstructions: nextSpec.systemInstructions } : {}),
+      enabledPluginIds: nextSpec.enabledPluginIds ?? [],
     } : pending.spec })))
     await this.event(next, state)
     try {
-      if (nextSpec && (sourceSpec?.runMode !== nextSpec.runMode || sourceSpec?.systemInstructions !== nextSpec.systemInstructions)) {
+      if (nextSpec && (sourceSpec?.runMode !== nextSpec.runMode || sourceSpec?.systemInstructions !== nextSpec.systemInstructions || JSON.stringify(sourceSpec?.enabledPluginIds ?? []) !== JSON.stringify(nextSpec.enabledPluginIds ?? []))) {
         await this.restartForMode(chat, nextSpec, { cols: 120, rows: 40 })
       }
     } finally {
@@ -442,6 +443,7 @@ export class TerminalChatSessions {
     this.options.stream(chat.ref).publish({ type: 'session.config', ...(requestId ? { requestId } : {}), config: {
       model: chat.model || chat.spec.model, cwd: chat.cwd, context: chat.status?.context ?? emptyContextUsage(),
       contextWindow: chat.spec.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
+      enabledPluginIds: chat.spec.enabledPluginIds ?? [],
       ...(chat.runMode ? { runMode: chat.runMode } : {}),
       ...(chat.spec.profileId ? { profileId: chat.spec.profileId } : {}), ...(effort === undefined ? {} : { effort }),
       ...(chat.status?.effortLevels ? { effortLevels: chat.status.effortLevels } : {}),
@@ -775,6 +777,7 @@ export class TerminalChatSessions {
           const contextWindow = isContextWindow(status.context.limit) ? status.context.limit : chat.spec?.contextWindow ?? DEFAULT_CONTEXT_WINDOW
           if (chat.spec) chat.spec = { ...chat.spec, cwd: chat.cwd, model: status.model, contextWindow, ...(status.effort ? { effort: status.effort } : {}) }
           const config: SessionConfiguration = { model: status.model, cwd: chat.cwd, context: status.context,
+            enabledPluginIds: chat.spec?.enabledPluginIds ?? [],
             contextWindow,
             ...(chat.runMode ? { runMode: chat.runMode } : {}),
             ...(status.profileId ? { profileId: status.profileId } : {}), ...(status.effort ? { effort: status.effort } : {}),

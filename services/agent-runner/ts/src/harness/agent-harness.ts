@@ -197,6 +197,7 @@ export class AgentHarness {
       resolveRebound: async (source, next, reason, spec) => {
         const base = { ...spec }
         delete base.runMode
+        if (reason === 'resume') base.enabledPluginIds = (await this.options.sessions?.configuration(next))?.enabledPluginIds ?? []
         const target: SessionTarget = reason === 'resume' ? { kind: 'resume', session: next }
           : { kind: 'fork', source, sessionId: next.id }
         return this.runModes.resolve(target, base)
@@ -231,6 +232,10 @@ export class AgentHarness {
   async openTerminal(target: SessionTarget, spec: ProviderRunSpec, size: TerminalSize, intent: 'run' | 'view' = 'run') {
     if (!this.terminalChats) throw new SessionError('invalid-request', 'Terminal driver is unavailable')
     const resolved = target.kind === 'resume' ? target : { ...target, sessionId: target.sessionId ?? randomUUID() }
+    if (intent === 'view' && target.kind === 'resume' && this.options.sessions) {
+      const saved = await this.options.sessions.configuration(target.session)
+      spec = { ...spec, enabledPluginIds: saved?.enabledPluginIds ?? [] }
+    }
     const key = sessionRefKey(resolved.kind === 'resume' ? resolved.session : { provider: spec.provider, id: resolved.sessionId })
     this.openingTerminals.set(key, (this.openingTerminals.get(key) ?? 0) + 1)
     try { return await this.terminalChats.open(resolved, await this.runModes.resolve(resolved, spec), size, intent) }
@@ -285,6 +290,7 @@ export class AgentHarness {
         this.sessionStream(ref).publish({ type: 'session.config', requestId, config: {
           model: spec.model, cwd: spec.cwd, contextWindow: spec.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
           context,
+          enabledPluginIds: spec.enabledPluginIds ?? [],
           ...(spec.runMode ? { runMode: spec.runMode } : {}),
           ...(spec.profileId ? { profileId: spec.profileId } : {}), ...(spec.effort ? { effort: spec.effort } : {}),
         } })
@@ -541,6 +547,7 @@ export class AgentHarness {
       try {
         yield stamper.stamp({ type: 'session.config', config: {
           model: spec.model, cwd: spec.cwd, contextWindow: spec.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
+          enabledPluginIds: spec.enabledPluginIds ?? [],
           ...(spec.runMode ? { runMode: spec.runMode } : {}), context: await runtime.getContextUsage(),
           ...(spec.profileId ? { profileId: spec.profileId } : {}), ...(spec.effort ? { effort: spec.effort } : {}),
         } })
@@ -767,6 +774,7 @@ export class AgentHarness {
     if (this.options.sessions === undefined || spec.profileId === undefined) return
     await this.options.sessions.recordRunCompleted(session, {
       profileId: spec.profileId,
+      enabledPluginIds: spec.enabledPluginIds ?? [],
       modelId: splitModelContext(modelId).modelId ?? modelId,
       context: spec.contextWindow === 1_000_000 ? '1m' : null,
     })

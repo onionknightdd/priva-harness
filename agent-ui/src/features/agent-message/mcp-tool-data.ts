@@ -2,13 +2,12 @@ import { whiteboardToolKind } from "./whiteboard-tools"
 import type { StreamBlock } from "./agent-message-data"
 import { isCanvasTool } from "./canvas-html"
 import { isImageEditTool, isImageGenTool, isImageReadTool } from "./image-tools"
-import { isGeneratedVisualTool } from "./a2ui-tool-data"
 import { isVisualizeTool } from "./visualize-jsx"
 
 export type McpToolName = { serverName: string; toolName: string }
 
 export function externalMcpToolName(name: string): McpToolName | null {
-  if (whiteboardToolKind(name) || isCanvasTool(name) || isVisualizeTool(name) || isGeneratedVisualTool(name) || isImageGenTool(name) || isImageReadTool(name) || isImageEditTool(name)) return null
+  if (whiteboardToolKind(name) || isCanvasTool(name) || isVisualizeTool(name) || isImageGenTool(name) || isImageReadTool(name) || isImageEditTool(name)) return null
   const parts = name.trim().split("__")
   const serverName = parts[1]
   const toolName = parts.at(-1)

@@ -29,6 +29,7 @@ import { baseModelReference, DEFAULT_CONTEXT_WINDOW, type ContextWindow } from "
 import { isLiveComputerToolStart } from "./computer-tool-data"
 import { createLiveWhiteboardNavigation, type WhiteboardNavigation } from "./live-whiteboard-navigation"
 import { restoreUiActionMessage } from "./ui-action"
+import { DASHBOARD_PLUGIN_ID } from "./dashboard-plugin"
 
 const AWAITING_NATIVE_EFFORT_LEVELS: readonly AgentRunEffort[] = []
 
@@ -37,7 +38,7 @@ export function useAgentMessage({ onComputerToolStarted, onWhiteboardToolActivit
   const { resolvedTheme } = useTheme()
   const { preserveViewForSession, setView } = useSessionView()
   const { runHarnessId } = useHarness()
-  const { queueBehavior, inputSuggestions, visualizeMode, setVisualizeMode: storeVisualizeMode, setLastModelReference } = useAgentPreferences()
+  const { queueBehavior, inputSuggestions, enabledPluginIds, setEnabledPluginIds: storeEnabledPluginIds, setLastModelReference } = useAgentPreferences()
   const { threadMessages, messagesStatus, transcriptEpoch } = useChatThread()
   const { runCwd, runSessionId, runMode } = useActiveSession()
   const { bindRunSession, setRunModePending } = useChatSessionActions()
@@ -55,6 +56,11 @@ export function useAgentMessage({ onComputerToolStarted, onWhiteboardToolActivit
   const [effortLevels, setEffortLevels] = React.useState<readonly AgentRunEffort[] | undefined>(undefined)
   const [contextWindow, setContextWindow] = React.useState<ContextWindow>(DEFAULT_CONTEXT_WINDOW)
   const [configurationPending, setConfigurationPending] = React.useState(false)
+  const [configuredSessionKey, setConfiguredSessionKey] = React.useState<string | null>(null)
+  const [configurationReady, setConfigurationReady] = React.useState(false)
+  const sessionKey = runSessionId ? `${runHarnessId}:${runSessionId}` : null
+  const sessionReady = !sessionKey || (configurationReady && configuredSessionKey === sessionKey)
+  const selectedPluginIds = sessionKey && configuredSessionKey !== sessionKey ? [] : enabledPluginIds
   const [messages, setMessages] = React.useState<AgentThreadMessage[]>([])
   const [connectionError, setConnectionError] = React.useState<string | null>(null)
   const [isConnected, setConnected] = React.useState(false)
@@ -73,7 +79,8 @@ export function useAgentMessage({ onComputerToolStarted, onWhiteboardToolActivit
   const latestConfigRef = React.useRef<StreamFrame["config"]>(undefined)
   const whiteboardNavigation = React.useRef(createLiveWhiteboardNavigation())
   const configurationRequestRef = React.useRef<string | undefined>(undefined)
-  const confirmedVisualizeModeRef = React.useRef<{ connection: AgentSessionConnection | null; value: boolean }>({ connection: null, value: visualizeMode })
+  const configurationPromiseRef = React.useRef<Promise<void> | undefined>(undefined)
+  const readySessionRef = React.useRef<string | null>(null)
 
   const refreshContext = React.useCallback((sessionId: string) => {
     if (!runHarnessId) return
@@ -98,19 +105,29 @@ export function useAgentMessage({ onComputerToolStarted, onWhiteboardToolActivit
     }
     if (frame.type === "suggestion.prompts") return
     if (frame.type === 'session.rebound') return
+    if (id && (frame.config || frame.type === "session.snapshot")) {
+      readySessionRef.current = `${runHarnessId}:${id}`
+      setConfiguredSessionKey(readySessionRef.current)
+      setConfigurationReady(true)
+      if (!frame.config && !configurationRequestRef.current) {
+        latestConfigRef.current = undefined
+        storeEnabledPluginIds([])
+      }
+    }
     if (frame.config) {
       const config = frame.config
       latestConfigRef.current = config
       const acknowledged = Boolean(frame.requestId && frame.requestId === configurationRequestRef.current)
       if (acknowledged) { configurationRequestRef.current = undefined; setConfigurationPending(false) }
       // Keep the latest choice visible while older native confirmations arrive.
-      const selection = JSON.stringify([id, config.profileId, config.model, config.effort, config.effortLevels, config.contextWindow])
+      const selection = JSON.stringify([id, config.profileId, config.model, config.effort, config.effortLevels, config.contextWindow, config.enabledPluginIds])
       if (!configurationRequestRef.current && (acknowledged || selection !== nativeConfigRef.current)) {
         nativeConfigRef.current = selection
         if (config.profileId) setModelReference(baseModelReference(`${config.profileId}:${config.model}`))
         if (config.effort !== undefined) setEffort(config.effort)
         setEffortLevels(config.effortLevels)
         setContextWindow(config.contextWindow)
+        storeEnabledPluginIds(config.enabledPluginIds)
       }
       contextRequestRef.current++
       setContextUsage(config.context)
@@ -164,7 +181,11 @@ export function useAgentMessage({ onComputerToolStarted, onWhiteboardToolActivit
     const generation = generationRef.current
     const connection = connectAgentSession({ harness: runHarnessId, ...(runSessionId ? { sessionId: runSessionId } : {}) }, {
       onFrame: (frame) => { if (generation === generationRef.current) receiveRef.current(frame) },
-      onConnection: (connected) => { if (generation === generationRef.current) { setConnected(connected); if (connected) setConnectionError(null) } },
+      onConnection: (connected) => { if (generation === generationRef.current) {
+        setConnected(connected)
+        if (connected) setConnectionError(null)
+        else { readySessionRef.current = null; setConfigurationReady(false) }
+      } },
       onError: (message) => { if (generation === generationRef.current) setConnectionError(message) },
       onSession: (id) => {
         if (generation !== generationRef.current) return
@@ -204,6 +225,10 @@ export function useAgentMessage({ onComputerToolStarted, onWhiteboardToolActivit
     latestConfigRef.current = undefined
     whiteboardNavigation.current.reset()
     configurationRequestRef.current = undefined
+    configurationPromiseRef.current = undefined
+    readySessionRef.current = null
+    setConfiguredSessionKey(null)
+    setConfigurationReady(false)
     setConfigurationPending(false)
     setEffortLevels(undefined)
     setEffort("medium")
@@ -257,6 +282,21 @@ export function useAgentMessage({ onComputerToolStarted, onWhiteboardToolActivit
     return () => controller.abort()
   }, [])
 
+  // A queued turn must use the configuration acknowledged after the current reply.
+  const dispatchSelection = React.useCallback(async (connection: AgentSessionConnection, generation: number) => {
+    await configurationPromiseRef.current
+    if (!modelReference || generation !== generationRef.current || (connection.sessionId && readySessionRef.current !== `${runHarnessId}:${connection.sessionId}`)) {
+      throw new Error(t("agentMessage.visualActionUnavailable"))
+    }
+    const native = latestConfigRef.current
+    return {
+      model: native?.profileId ? baseModelReference(`${native.profileId}:${native.model}`) : modelReference,
+      effort: native?.effort ?? effort,
+      contextWindow: native?.contextWindow ?? contextWindow,
+      enabledPluginIds: native?.enabledPluginIds ?? (connection.sessionId ? [] : enabledPluginIds),
+    }
+  }, [runHarnessId, modelReference, effort, contextWindow, enabledPluginIds, t])
+
   const submit = React.useCallback(() => {
     const uploaded = readyComposerAttachments(attachments)
     const acceptsImages = modelReference !== null && imageInputModels.has(modelReference)
@@ -264,7 +304,7 @@ export function useAgentMessage({ onComputerToolStarted, onWhiteboardToolActivit
     const files = partitioned?.files ?? null
     const imagePaths = partitioned?.imagePaths ?? []
     const content = (slashCommand ? composeSlashMessage(slashCommand.name, draft) : draft).trim()
-    if (configurationRequestRef.current || interactions.length || !uploaded || (!content && !uploaded.length) || !modelReference || !runHarnessId || !runCwd.trim()) return
+    if (!sessionReady || configurationRequestRef.current || interactions.length || !uploaded || (!content && !uploaded.length) || !modelReference || !runHarnessId || !runCwd.trim()) return
     const connection = ensureConnection()
     const assistant = createAgentThreadMessage("assistant", "", "streaming")
     const user = { ...createAgentThreadMessage("user", content), id: `${assistant.id}:user`,
@@ -295,31 +335,26 @@ export function useAgentMessage({ onComputerToolStarted, onWhiteboardToolActivit
       }
       await connection.waitForIdle()
       if (generation !== generationRef.current) return
-      void connection.start({ text: content, attachments: files ?? [], ...(imagePaths.length ? { imagePaths } : {}), model: modelReference, harness: runHarnessId,
+      const selection = await dispatchSelection(connection, generation)
+      void connection.start({ text: content, attachments: files ?? [], ...(imagePaths.length ? { imagePaths } : {}), harness: runHarnessId,
         ...(runHarnessId === "claude" ? { runMode } : {}),
-        cwd: runCwd.trim(), effort, contextWindow, promptSuggestions: inputSuggestions, visualizeMode,
+        cwd: runCwd.trim(), ...selection, promptSuggestions: inputSuggestions,
         theme: resolvedTheme === "dark" ? "dark" : "light" }, assistant.id).catch(failed)
     }).catch(failed)
-  }, [interactions.length, attachments, imageInputModels, slashCommand, draft, modelReference, runHarnessId, runCwd, ensureConnection, setLastModelReference, clearAttachments, queueBehavior, effort, contextWindow, inputSuggestions, visualizeMode, resolvedTheme, runMode, setRunModePending, t])
+  }, [sessionReady, dispatchSelection, interactions.length, attachments, imageInputModels, slashCommand, draft, modelReference, runHarnessId, runCwd, ensureConnection, setLastModelReference, clearAttachments, queueBehavior, inputSuggestions, resolvedTheme, runMode, setRunModePending, t])
 
   const respondPermission = React.useCallback((response: InteractionResponse) => {
     const connection = connectionRef.current
     return connection ? connection.respondPermission(response) : Promise.reject(new Error("Connection unavailable"))
   }, [])
-  const synchronizeSelection = React.useCallback((model: string | null, nextEffort: AgentRunEffort, nextWindow: ContextWindow, nextVisualizeMode = visualizeMode) => {
-    if (!model || !runHarnessId || !runSessionId) return
+  const synchronizeSelection = React.useCallback((model: string | null, nextEffort: AgentRunEffort, nextWindow: ContextWindow, nextPluginIds = enabledPluginIds) => {
+    if (!sessionReady || !model || !runHarnessId || !runSessionId || configurationRequestRef.current) return
     const connection = ensureConnection()
-    // A native /clear rebind keeps this connection and its last confirmed choice.
-    if (confirmedVisualizeModeRef.current.connection !== connection) {
-      confirmedVisualizeModeRef.current = { connection, value: visualizeMode }
-    }
     const requestId = crypto.randomUUID(), generation = generationRef.current
     configurationRequestRef.current = requestId
     setConfigurationPending(true)
     setConnectionError(null)
-    void connection.configure({ model, cwd: runCwd, effort: nextEffort, contextWindow: nextWindow, promptSuggestions: inputSuggestions, visualizeMode: nextVisualizeMode }, requestId).then(() => {
-      if (generation === generationRef.current) confirmedVisualizeModeRef.current = { connection, value: nextVisualizeMode }
-    }).catch((error: unknown) => {
+    const configured = connection.configure({ model, cwd: runCwd, effort: nextEffort, contextWindow: nextWindow, promptSuggestions: inputSuggestions, enabledPluginIds: nextPluginIds }, requestId).catch((error: unknown) => {
       if (generation !== generationRef.current || configurationRequestRef.current !== requestId) return
       configurationRequestRef.current = undefined
       setConfigurationPending(false)
@@ -328,19 +363,22 @@ export function useAgentMessage({ onComputerToolStarted, onWhiteboardToolActivit
       if (native?.effort !== undefined) setEffort(native.effort)
       setEffortLevels(native?.effortLevels)
       setContextWindow(native?.contextWindow ?? DEFAULT_CONTEXT_WINDOW)
-      storeVisualizeMode(confirmedVisualizeModeRef.current.value)
+      if (native) storeEnabledPluginIds(native.enabledPluginIds)
       setConnectionError(error instanceof Error ? error.message : String(error))
     })
-  }, [runHarnessId, runSessionId, runCwd, inputSuggestions, visualizeMode, ensureConnection, storeVisualizeMode])
-  const changeVisualizeMode = React.useCallback((next: boolean) => {
-    storeVisualizeMode(next)
-    if (!modelReference || !runHarnessId || !runSessionId) {
-      confirmedVisualizeModeRef.current = { connection: null, value: next }
+    configurationPromiseRef.current = configured
+    void configured.finally(() => { if (configurationPromiseRef.current === configured) configurationPromiseRef.current = undefined })
+  }, [sessionReady, runHarnessId, runSessionId, runCwd, inputSuggestions, enabledPluginIds, ensureConnection, storeEnabledPluginIds])
+  const changeDashboardEnabled = React.useCallback((next: boolean) => {
+    if (!sessionReady || configurationRequestRef.current) return
+    const nextPluginIds = next ? [...new Set([...enabledPluginIds, DASHBOARD_PLUGIN_ID])] : enabledPluginIds.filter((id) => id !== DASHBOARD_PLUGIN_ID)
+    if (!runSessionId) { storeEnabledPluginIds(nextPluginIds); return }
+    if (!modelReference || !runHarnessId) {
+      setConnectionError(t("agentMessage.dashboardPluginUnavailable"))
       return
     }
-    // Only a user change sends a command; restoring a failed choice must not retry it.
-    synchronizeSelection(modelReference, effort, contextWindow, next)
-  }, [storeVisualizeMode, modelReference, runHarnessId, runSessionId, synchronizeSelection, effort, contextWindow])
+    synchronizeSelection(modelReference, effort, contextWindow, nextPluginIds)
+  }, [sessionReady, enabledPluginIds, storeEnabledPluginIds, modelReference, runHarnessId, runSessionId, synchronizeSelection, effort, contextWindow, t])
   const changeModelReference = React.useCallback((model: string | null, source?: "user", nextEffort = effort) => {
     const reference = model === null ? null : baseModelReference(model)
     setModelReference(reference)
@@ -361,7 +399,7 @@ export function useAgentMessage({ onComputerToolStarted, onWhiteboardToolActivit
   const stop = React.useCallback(() => connectionRef.current?.abort(), [])
   const sendFollowUp = React.useCallback((text: string) => {
     const content = text.trim()
-    if (configurationRequestRef.current || !content || !modelReference || !runHarnessId || !runCwd.trim()) {
+    if (!sessionReady || configurationRequestRef.current || !content || !modelReference || !runHarnessId || !runCwd.trim()) {
       return Promise.reject(new Error(t("agentMessage.visualActionUnavailable")))
     }
     const connection = ensureConnection()
@@ -387,15 +425,16 @@ export function useAgentMessage({ onComputerToolStarted, onWhiteboardToolActivit
         if (generation !== generationRef.current) throw new Error(t("agentMessage.visualActionUnavailable"))
         await connection.waitForIdle()
         if (generation !== generationRef.current) throw new Error(t("agentMessage.visualActionUnavailable"))
+        const selection = await dispatchSelection(connection, generation)
         void connection.start({
-          text: content, model: modelReference, harness: runHarnessId,
+          text: content, harness: runHarnessId,
           ...(runHarnessId === "claude" ? { runMode } : {}),
-          cwd: runCwd.trim(), effort, contextWindow, promptSuggestions: inputSuggestions, visualizeMode,
+          cwd: runCwd.trim(), ...selection, promptSuggestions: inputSuggestions,
           theme: resolvedTheme === "dark" ? "dark" : "light",
         }, assistant.id).then(resolve, rejectAction)
       }).catch(rejectAction)
     })
-  }, [modelReference, runHarnessId, runCwd, ensureConnection, effort, contextWindow, inputSuggestions, visualizeMode, resolvedTheme, runMode, setRunModePending, t])
+  }, [sessionReady, dispatchSelection, modelReference, runHarnessId, runCwd, ensureConnection, inputSuggestions, resolvedTheme, runMode, setRunModePending, t])
   const dismissPromptSuggestion = React.useCallback(() => setSuggestion((current) =>
     current && !current.dismissed ? { ...current, dismissed: true } : current), [])
   const updateDraft = React.useCallback((value: string) => {
@@ -412,9 +451,9 @@ export function useAgentMessage({ onComputerToolStarted, onWhiteboardToolActivit
     isStreaming,
     promptSuggestion: inputSuggestions && isConnected && !isStreaming && suggestion?.scope === `${runHarnessId}:${runSessionId}` && !suggestion.dismissed ? suggestion.text : undefined,
     dismissPromptSuggestion,
-    canSubmit: Boolean(!configurationPending && !interactions.length && (draft.trim() || slashCommand || attachments.length) && readyComposerAttachments(attachments) !== null && modelReference && runHarnessId && runCwd.trim()),
+    canSubmit: Boolean(sessionReady && !configurationPending && !interactions.length && (draft.trim() || slashCommand || attachments.length) && readyComposerAttachments(attachments) !== null && modelReference && runHarnessId && runCwd.trim()),
     modelReady: Boolean(modelReference && runHarnessId), slashCommand, setDraft: updateDraft, setSlashCommand,
     setModelReference: changeModelReference, setEffort: changeEffort, setContextWindow: changeContextWindow,
-    visualizeMode, setVisualizeMode: changeVisualizeMode, sendFollowUp, submit, stop,
+    enabledPluginIds: selectedPluginIds, dashboardEnabled: selectedPluginIds.includes(DASHBOARD_PLUGIN_ID), setDashboardEnabled: changeDashboardEnabled, sendFollowUp, submit, stop,
   }
 }

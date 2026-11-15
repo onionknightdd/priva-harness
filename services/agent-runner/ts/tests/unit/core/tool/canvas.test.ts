@@ -172,7 +172,6 @@ describe('canvas tool', () => {
       CANVAS_TOOL_NAME,
       'whiteboard_read',
       'whiteboard_write',
-      'render_ui',
       'image_gen',
       'image_read',
       'image_edit',

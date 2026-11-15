@@ -456,7 +456,7 @@ export class AgentApiService {
       cwd,
       contextWindow: record.settings.context_window,
       promptSuggestions: false,
-      visualizeMode: false,
+      enabledPluginIds: [],
       ...(record.settings.effort === undefined ? {} : { effort: record.settings.effort }),
       ...(target.kind === 'new' && record.harness === 'claude' ? { runMode: record.runMode ?? 'agent' } : {}),
     })

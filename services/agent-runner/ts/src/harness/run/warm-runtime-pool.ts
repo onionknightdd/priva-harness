@@ -11,6 +11,7 @@ export function identityFingerprint(spec: ProviderRunSpec): string {
     spec.provider,
     spec.runMode ?? '',
     spec.systemInstructions ?? '',
+    spec.enabledPluginIds ?? [],
     spec.cwd,
     spec.profileId ?? '',
     spec.baseUrl,

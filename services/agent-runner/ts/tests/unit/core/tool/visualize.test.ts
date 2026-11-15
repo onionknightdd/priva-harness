@@ -46,7 +46,6 @@ describe('visualize tool', () => {
       'canvas',
       'whiteboard_read',
       'whiteboard_write',
-      'render_ui',
       'image_gen',
       'image_read',
       'image_edit',

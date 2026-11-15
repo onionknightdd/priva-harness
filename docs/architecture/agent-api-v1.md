@@ -315,7 +315,7 @@ ID 是不透明字符串，客户端不得解析。
 | `mcp` | `mcp__<server>__<tool>`（`server` 字段给出服务名） | MCP 扩展工具 |
 | `question` | AskUserQuestion | ask_user_question |
 | `image` | 产品工具 image_gen / image_read / image_edit | codemode 的图片调用 |
-| `visualize` | 产品工具 visualize / render_ui / canvas / whiteboard_read / whiteboard_write（含 MCP 名称） | 对应工具 |
+| `visualize` | 产品工具 visualize / canvas / whiteboard_read / whiteboard_write（含 MCP 名称） | 对应工具 |
 | `workflow` | Workflow | 对应的 workflow 工具 |
 | `other` | 其余 | 其余 |
 
@@ -506,7 +506,7 @@ POST {base}/sessions
   `settings` 默认取用户默认 profile 与模型；`run_mode` 默认 `agent`。
 - `run_mode` 只对 Claude 生效，创建后不可变；Pi 会话忽略该字段，会话对象中也不返回。
 - 创建会话只登记并预分配原生会话 UUID；首条消息才打开 SDK 运行时，与 WebUI 新对话的懒创建一致。
-- 新会话的内部配置固定为：`visualizeMode = false`、`promptSuggestions = false`、
+- 新会话的内部配置固定为：`enabledPluginIds = []`、`promptSuggestions = false`、
   `contextWindow = 200000`（未指定时）。这些值与 `run_mode` 写入会话元数据，WebUI 回放时沿用。
 
 ### 6.4 修改会话
@@ -888,7 +888,7 @@ API 不复制 WebUI / TUI 的交互行为和限制。约束只有一条：API �
 - **RP1 原生会话。** API 通过 provider 的 SDK 驱动创建和续写原生会话：Claude 使用预分配 UUID 的
   会话（与 TUI 的 `--session-id` / `--resume` 相同），Pi 使用原生会话文件。不另建私有消息存储。
 - **RP2 元数据。** 运行模式、最近使用的模型、后台任务状态通过现有 `SessionMetadataRepository` 写入，
-  与 WebUI 读取的是同一份。API 新会话的 `visualizeMode = false`、`promptSuggestions = false` 同样记录。
+  与 WebUI 读取的是同一份。API 新会话的 `enabledPluginIds = []`、`promptSuggestions = false` 同样记录。
 - **RP3 输入编码。** 附件使用 `<priva-attachments>` 清单，图片使用原生图片块（§5.2）。
   WebUI 的历史解析（`fold-thread.ts` 的 `userTurnFromText`、原生图片提取）已能还原两者。
 - **RP4 列表可见。** API 创建的会话出现在 WebUI 的会话列表中（按 cwd 分组），标题来自首条消息。

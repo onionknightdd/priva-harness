@@ -83,8 +83,7 @@ import { isCanvasTool } from "../canvas-html"
 import { externalMcpToolName } from "../mcp-tool-data"
 import { isVisualizeTool } from "../visualize-jsx"
 import { isImageEditTool, isImageGenTool, isImageReadTool } from "../image-tools"
-import { isFailedGeneratedVisual, isGeneratedVisualTool } from "../a2ui-tool-data"
-import { GeneratedA2ui } from "../generated-a2ui"
+import { AgentDashboardIcon } from "./agent-dashboard-icon"
 import { ImageGenToolItem, ImageReadToolItem } from "./image-tool-item"
 import { ImageEditToolItem } from "./image-edit-tool-item"
 
@@ -335,9 +334,6 @@ export function ToolItem({
   block: Extract<StreamBlock, { type: "tool_use" }>
   blocks?: readonly StreamBlock[]
 }) {
-  if (isGeneratedVisualTool(block.name)) return isFailedGeneratedVisual(block)
-    ? <GenericToolItem block={block} />
-    : <GeneratedA2ui block={block} />
   if (block.name === "codemode") {
     return <CodemodeToolItem block={block}>
       {blocks.filter((child): child is Extract<StreamBlock, { type: "tool_use" }> => child.type === "tool_use" && codemodeParent(child, blocks) === block.id)
@@ -394,11 +390,13 @@ function SkillToolItem({ block }: { block: Extract<StreamBlock, { type: "tool_us
   const input = usefulToolInput(block.tool?.input) ?? usefulToolInput(block.input)
   const status = toolResultStatus(block.tool)
   const output = block.tool?.output?.trim() ?? ""
+  const skill = stringInput(input, "skill") ?? ""
+  const dashboard = skill === "agent-dashboard" || skill === "agent-dashboard:agent-dashboard"
   return (
     <ToolResult
       tool={t(status === "running" ? "agentMessage.toolItem.skillRunning" : "agentMessage.toolItem.skillDone")}
-      title={stringInput(input, "skill") ?? ""}
-      icon={<ScrollTextIcon className="size-[1em]" />}
+      title={dashboard ? "Agent dashboard" : skill}
+      icon={dashboard ? <AgentDashboardIcon className="size-[1em]" /> : <ScrollTextIcon className="size-[1em]" />}
       status={status}
       defaultOpen={false}
       maxHeight={280}

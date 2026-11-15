@@ -4,7 +4,6 @@ import type { TFunction } from "i18next"
 import type { StreamBlock, ToolCard } from "./agent-message-data"
 import { isCanvasTool } from "./canvas-html"
 import { isImageEditTool, isImageGenTool, isImageReadTool } from "./image-tools"
-import { isFailedGeneratedVisual, isGeneratedVisualTool } from "./a2ui-tool-data"
 import { isTaskBoardTool } from "./task-plan"
 import { isVisualizeTool } from "./visualize-jsx"
 
@@ -180,8 +179,7 @@ export function countToolActivity(
   const counts = emptyToolActivityCounts()
   for (const block of blocks) {
     if (block.type !== "tool_use") continue
-    if (isTaskBoardTool(block.name) || isStructuredOutputTool(block.name)
-      || (isGeneratedVisualTool(block.name) && !isFailedGeneratedVisual(block))) continue
+    if (isTaskBoardTool(block.name) || isStructuredOutputTool(block.name)) continue
     const kind = classifyToolName(block.name)
     if (isToolRunning(block.tool)) {
       counts[kind].running += 1

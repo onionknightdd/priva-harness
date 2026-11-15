@@ -34,7 +34,7 @@ function checkBindings(value: unknown, surface: SurfaceModel, componentId: strin
 /** Constraints that span component properties cannot be expressed by the catalog's JSON schema. */
 export function validateA2uiSurface(surface: SurfaceModel): void {
   if (surface.componentsModel.size > MAX_COMPONENTS) {
-    throw new A2uiValidationError(`Use at most ${MAX_COMPONENTS} components per UI; summarize or split the content into separate calls.`)
+    throw new A2uiValidationError(`Use at most ${MAX_COMPONENTS} components per UI; summarize or split the content into separate embeds.`)
   }
   // A valid acyclic graph can still expand exponentially when several parents reuse a subtree.
   const pending = ['root']

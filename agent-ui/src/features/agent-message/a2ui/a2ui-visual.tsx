@@ -14,23 +14,28 @@ export type A2uiAction = ActionPayload
 
 type SurfaceState = { revision: number; surfaces: SurfaceModel<ReactCatalogComponent>[]; error?: string }
 
-class SurfaceBoundary extends Component<{ children: ReactNode }, { error?: string }> {
+class SurfaceBoundary extends Component<{ children: ReactNode; onError?: (error: string) => void }, { error?: string }> {
   state: { error?: string } = {}
   static getDerivedStateFromError(error: Error) { return { error: error.message } }
-  componentDidCatch(error: Error, info: ErrorInfo) { console.error("A2UI surface failed", error, info.componentStack) }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("A2UI surface failed", error, info.componentStack)
+    this.props.onError?.(error.message)
+  }
   render() {
     return this.state.error ? <p role="alert" className="text-sm text-destructive">{this.state.error}</p> : this.props.children
   }
 }
 
-/** Each tool result owns its data model; replay never evaluates source code or re-emits actions. */
-export function A2uiVisual({ messages, onAction, className }: {
+/** Each compiled Markdown embed owns its data model; replay never re-emits actions. */
+export function A2uiVisual({ messages, onAction, onError, className }: {
   messages: readonly AgentToRendererMessage[]
   onAction?: (action: A2uiAction) => void | Promise<void>
+  onError?: (error: string) => void
   className?: string
 }) {
   const [state, setState] = useState<SurfaceState>({ revision: 0, surfaces: [] })
   const [actionError, setActionError] = useState<string>()
+  const reportError = useEffectEvent((error: string) => onError?.(error))
   const handleAction = useEffectEvent(async (action: A2uiAction) => {
     setActionError(undefined)
     try { await onAction?.(action) } catch (error) {
@@ -48,6 +53,7 @@ export function A2uiVisual({ messages, onAction, className }: {
     const created = processor.onSurfaceCreated((surface) => {
       subscriptions.push(surface.onError.subscribe((error) => {
         setState((previous) => ({ ...previous, error: error.message }))
+        reportError(error.message)
       }))
     })
     try {
@@ -55,7 +61,9 @@ export function A2uiVisual({ messages, onAction, className }: {
       const surfaces = Array.from(processor.getSurfaces().values())
       setState((previous) => ({ revision: previous.revision + 1, surfaces, ...(surfaces.length === 0 ? { error: "The visualization contains no surface." } : {}) }))
     } catch (error) {
-      setState((previous) => ({ revision: previous.revision + 1, surfaces: [], error: error instanceof Error ? error.message : String(error) }))
+      const message = error instanceof Error ? error.message : String(error)
+      setState((previous) => ({ revision: previous.revision + 1, surfaces: [], error: message }))
+      reportError(message)
     }
     return () => {
       created.unsubscribe()
@@ -68,7 +76,7 @@ export function A2uiVisual({ messages, onAction, className }: {
     {actionError ? <p role="alert" className="mb-3 text-sm text-destructive">{actionError}</p> : null}
     {state.error ? <p role="alert" className="text-sm text-destructive">{state.error}</p> : null}
     <A2uiInteractionContext value={onAction !== undefined}>
-      {state.surfaces.map((surface) => <SurfaceBoundary key={`${state.revision}-${surface.id}`}>
+      {state.surfaces.map((surface) => <SurfaceBoundary key={`${state.revision}-${surface.id}`} onError={onError}>
         <div className="a2ui-surface" data-a2ui-surface={surface.id}><A2uiSurface surface={surface} /></div>
       </SurfaceBoundary>)}
     </A2uiInteractionContext>

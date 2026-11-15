@@ -36,7 +36,6 @@ import { AssistantProcess } from "./assistant-process"
 import { assistantTimeline } from "../assistant-timeline"
 import { TaskNotificationCard } from "./task-notification-card"
 import { CompactSessionMarker } from "./compact-session-marker"
-import { GeneratedA2ui } from "../generated-a2ui"
 import { cn } from "@/lib/utils"
 import { assistantPieces } from "../assistant-pieces"
 import { AssistantMarkdown } from "./assistant-markdown"
@@ -379,18 +378,12 @@ function AssistantSegment({
             /></div>
           )
         }
-        if (piece.kind === "visual") {
-          return (
-            <div key={piece.block.id} data-reply="" className="min-w-0">
-              <GeneratedA2ui block={piece.block} />
-            </div>
-          )
-        }
         if (piece.text.trim() === "") return null
         return (
           <motion.div key={`answer-${index}`} data-reply="" layout="position" layoutDependency={false} className="mx-auto w-full min-w-0 max-w-3xl">
             <QuoteSelectable>
               <AssistantMarkdown
+                messageId={message.transcriptUuid ?? message.id}
                 className="[&_p]:[line-height:1.5em] [&_p+p]:mt-[2px]"
                 animated={isStreaming && !shouldReduceMotion}
                 isAnimating={isStreaming}

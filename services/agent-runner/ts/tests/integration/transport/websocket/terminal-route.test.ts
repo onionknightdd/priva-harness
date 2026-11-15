@@ -144,8 +144,14 @@ describe.skipIf(!tmuxAvailable())('terminal WebSocket route', () => {
     await expect.poll(() => bad.socket.readyState, { timeout: 5000 }).toBe(WebSocket.CLOSED)
   })
 
-  it.each([false, true])('reconnects to a running terminal without applying the viewer visualize preference (%s)', async (visualizeMode) => {
-    const first = connect(url({ harness: 'claude', cwd: root, model, visualizeMode: String(!visualizeMode) }))
+  it.each(['invalid-json', '"agent-dashboard"', '["unknown-plugin"]'])('rejects invalid plugin query selection %s', async (enabledPluginIds) => {
+    const bad = connect(url({ harness: 'claude', cwd: root, model, enabledPluginIds }))
+    expect(await bad.waitJson('error')).toMatchObject({ kind: 'invalid-request' })
+    await expect.poll(() => bad.socket.readyState).toBe(WebSocket.CLOSED)
+  })
+
+  it.each([false, true])('reconnects to a running terminal without applying the viewer plugin preference (%s)', async (pluginEnabled) => {
+    const first = connect(url({ harness: 'claude', cwd: root, model, enabledPluginIds: JSON.stringify(pluginEnabled ? [] : ['agent-dashboard']) }))
     const ready = await first.waitJson('ready')
     const sessionId = ready['sessionId'] as string
     const liveSpec = launches[0]?.spec
@@ -157,7 +163,7 @@ describe.skipIf(!tmuxAvailable())('terminal WebSocket route', () => {
     first.socket.close()
     await expect.poll(() => first.socket.readyState).toBe(WebSocket.CLOSED)
 
-    const reconnected = connect(url({ harness: 'claude', sessionId, cwd: root, model, visualizeMode: String(visualizeMode) }))
+    const reconnected = connect(url({ harness: 'claude', sessionId, cwd: root, model, enabledPluginIds: JSON.stringify(pluginEnabled ? ['agent-dashboard'] : []) }))
     expect(await reconnected.waitJson('ready')).toMatchObject({ sessionId, adopted: true })
     expect(reconnected.json.some((frame) => frame.type === 'error')).toBe(false)
     expect(launches).toHaveLength(1)

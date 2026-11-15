@@ -2931,20 +2931,21 @@ TUI /effort / Composer 思考强度选择 -> 原生命令与确认 -> effortChan
 
 snapshot.runningToolIds 恢复等待工具结束的状态。TUI 产生的内嵌图片从转录映射到现有附件卡片，
 产品 MCP 的 visualize / canvas / 图片别名继续使用既有工具卡片。
-打开可视化回答后，`render_ui` 替换 `visualize`，以 A2UI + shadcn/ui 画在随后正文的上方。成功结果与正文共用对话阅读列；调用完成前显示准备状态。工具明确失败的尝试保留在过程详情中，显示错误状态并可展开原始原因，不再占据答案区；工具声明成功但结果无效时仍显示可读渲染错误。模型修正重试后，只把成功结果绘制为回答。
+Agent dashboard 作为随源码分发的 Skill 加载。模型在 Markdown 中输出图片式引用与同消息
+A2UI Express 代码块；前端在引用处绘制，不再从工具结果提取看板。所有看板与正文共用
+对话阅读列，完整定义到达前显示准备状态，编译错误提供明确原因和「让助手修复」。
 
-可视化回答开关通过 `session.configure` 应用；开关变化不重建已挂载的终端连接，也不清屏。
-首次查看或手动重连已有终端时沿用运行进程的实际配置，不把尚未确认的开关值当作启动配置。
-当前回答结束后再应用排队的配置；失败则恢复最近一次成功的开关值和本地偏好，保留错误提示，
-不因恢复状态再次发出配置请求。连续切换按请求确认处理，旧请求失败不覆盖新选择；
-原生 `/clear` 重绑定保留确认基线，切换到另一聊天时隔离旧请求的结果。
+Composer 使用彩色 Dashboard 图标与小号 BeUI Switch，Skill 过程行复用同一彩色图标。
+开关只改变 `enabledPluginIds`，不注入产品系统提示、不切换 MCP 工具。
+服务端确认前保留实际状态并禁用重复点击；当前回答结束后应用排队配置，失败保留
+最近一次确认的状态。终端查看连接保持挂载，重连和切换聊天读取会话实际插件配置。
 
 ```text
-visualize 开关 -> session.configure -> 等当前回答结束 -> 应用 / 确认
-                       |                                  |
-                       +-> 失败 -> 恢复开关与本地偏好      +-> 更新确认值
-终端预览 ----------------------------------------------------> 保持连接
-首次查看 / 手动重连 -> 认领已有进程的实际配置 -> 附加预览
+Dashboard Switch -> session.configure -> 当前回答结束 -> 原生 Skill 加载 / 卸载
+                         |                                  |
+                         +-> 失败 -> 保留实际开关状态       +-> ACK 更新开关
+终端预览 ----------------------------------------------------> 保持查看连接
+历史 Markdown -> 原有 A2UI 渲染（不受开关影响）
 ```
 
 ```text
@@ -3285,7 +3286,7 @@ App TooltipProvider -> 首次悬浮 1s -> 连续切换 0ms
 | DOCX / PPTX | [document-renderer](../agent-ui/src/features/files/preview/renderers/document-renderer.tsx)、[presentation-renderer](../agent-ui/src/features/files/preview/renderers/presentation-renderer.tsx) | @silurus/ooxml 渲染文档内容，应用外框使用项目 token |
 | HTML 元素协助 | [html-assist](../agent-ui/src/features/files/html-assist/)，原生 DOM + `@medv/finder@4.0.2` | 复用 Office 批次与 SelectionActionsPopover；iframe 内运行 picker，父页面显示主题化外框和提问 |
 | HTML / JSX 生成内容 | [html-renderer](../agent-ui/src/features/files/preview/renderers/html-renderer.tsx)、[visualize-sandbox](../agent-ui/src/features/agent-message/visualize-sandbox) | iframe 中的内容；JSX 沙箱另有 Button、Badge、Card、Progress、Separator 简化实现，传入主题颜色但不共享主应用全部字号、圆角与交互 |
-| 可视化回答 | [A2UI catalog](../agent-ui/src/features/agent-message/a2ui/catalog.tsx)、[GeneratedA2ui](../agent-ui/src/features/agent-message/generated-a2ui.tsx) | `render_ui(source)` 经 Runner 编译为官方 A2UI 消息，使用 shadcn 卡片、表单和 Recharts 图表；所有可视化与正文共用对话容器宽度，内部按可用空间响应式布局；失败尝试保留在过程详情；按钮完整动作上下文发下一轮 |
+| 可视化回答 | [A2UI catalog](../agent-ui/src/features/agent-message/a2ui/catalog.tsx)、[MarkdownA2ui](../agent-ui/src/features/agent-message/markdown-a2ui.tsx) | Skill 教模型嵌入 Markdown；完整 source 经普通 HTTP 编译为官方 A2UI 消息，使用 shadcn 卡片、表单和 Recharts；所有看板与正文同宽；按钮动作作为下一轮用户消息 |
 
 消息共用的 `MessageResponse` 通过 `createMathPlugin({ singleDollarTextMath: true })`
 启用单美元符号行内公式（如 `$E = mc^2$`），同时保留 `$$...$$` 行内及独立公式。
@@ -3496,41 +3497,64 @@ Shift+Tab、Esc、已有草稿、重复快照、断线重连和原生会话重�
 圆角图表卡、橙/青双系列。基础组件复用项目 shadcn/ui，图表复用 Recharts，
 组件共享 `a2ui/a2ui.css` 中的视觉 token，表面和文字读取应用主题。
 
+2026-11-16：改为内置 `agent-dashboard` Skill，产品名 **Agent dashboard**。
+源码、示例及模型指引在 `services/agent-runner/ts/src/resources/plugins/agent-dashboard/`。
+开关只加载 / 卸载该 Skill；不注入系统提醒，不提供 `render_ui` MCP 工具，不迁移旧工具历史。
+
 ```text
-模型 + schema-only 组件目录
-  Claude SDK / 原生 TUI -> MCP --+
-  Pi -----------------> 原生工具 +-> render_ui({source: Express})
-                                      |
-                            官方编译器 + 完整结构/数据校验
-                                      |
-                           A2UI canonical JSON 工具结果
-                                      |
-                              现有 WS / 原生历史
-                                      |
-                    官方 MessageProcessor + React A2uiSurface
-                                      |
-                       shadcn Card / Stat / Recharts / 表单
-                                      |
-                   action + toolCallId -> 原生下一轮用户提示
+彩色图标 + Switch -> enabledPluginIds -> Claude plugins / --plugin-dir
+                                     -> Pi additionalSkillPaths
+                                             |
+                                      Skill + resource 示例
+                                             |
+模型 Markdown 回复（图片式引用 + 同消息 Express 源码）
+                     |
+     原始 Markdown AST，确认闭合 fence -> 普通 HTTP /api/sandbox/a2ui/compile
+                     |                         |
+                     |             官方编译器 + 结构 / 数据校验
+                     |                         |
+                     +---- 引用处绘制 <---- canonical A2UI messages
+                                |
+                  官方 MessageProcessor + React A2uiSurface
+                                |
+                    shadcn / Recharts / 表单
+                                |
+           messageId + embedId + action -> 下一轮用户消息
 
 对话容器（最大 48rem，所有内容统一宽度）
 +------------------------------------------+
-| 过程详情：可展开失败工具与原始原因        |
+| 回答正文                                 |
 | Heading / subtitle                       |
 | [ KPI ] [ KPI ]                          |
 | [ KPI ] [ KPI ]                          |
 | [ 图表 / 表格，宽度跟随对话容器 ]        |
 | [操作按钮] [操作按钮]                    |
-| 回答正文                                 |
+| 后续正文                                 |
 +------------------------------------------+
-窄屏继续收缩到可用宽度，KPI 自动变为一列。
+窄屏 KPI 变为一列；表格内部横向滚动。
 ```
+
+同一条助手消息中的写法：
+
+````markdown
+![区域销售](a2ui:regional-sales)
+
+```a2ui id=regional-sales
+root = Table(columns=["地区", "销售额"], rows=[["欧洲", 4200000]], title="区域销售")
+```
+````
+
+引用独占一段，ID 在同一消息中唯一，匹配 `[a-z][a-z0-9-]{0,63}`。
+代码块随原始消息保存，复制和 Markdown 下载保留完整源码；渲染时隐藏关联代码块。
+解析器使用 `mdast-util-from-markdown` 检查原始 fence，不能把 Streamdown 自动补全当作
+模型已经输出完整。缺失、重复或无效 ID 显示可读错误；修复按钮只在用户点击后发下一轮。
+完整 source 的编译结果缓存，后续正文流入不会重置表单。刷新历史重新编译，同样不依赖文件。
 
 表格列保留 `6rem` 最小宽度，避免短中文状态被长说明挤成逐字竖排；列数较多或
 窄屏空间不足时只在表格内部横向滚动，外层仍与对话正文对齐。
 
 前端固定 `@a2ui/react` / `@a2ui/web_core` 0.14.0，后端固定 `@a2ui/agent`
-0.0.2 / core 0.14.0；消息版本为 `v1.0`，外层工具封套为
+0.0.2 / core 0.14.0；消息版本为 `v1.0`，HTTP 返回
 `{format:"a2ui",version:"1.0",messages:[...]}`。不混用 0.15：该 React 发布包与
 markdown-it 的 core peer 不一致，且 agent 0.1.0 的消息版本写法已变化。
 `zod-v3` 是官方 Zod 3.25.76 的显式 npm alias，供 A2UI schema 使用；应用原有
@@ -3538,46 +3562,46 @@ Zod 4 不降级。无 force、legacy-peer-deps、SDK patch 或协议版本改写
 升级时必须同时验证两个安装树及真实编译→官方 schema→渲染→动作的链路。
 
 组件目录的唯一源是 `a2ui/catalog-definition.ts`。生成器只导入 schema，不将
-React/DOM 引入 Runner；Runner 编译 catalog 驱动的 Express，模型不写任意网页代码。
-支持 Column/Row/Grid、Heading/Text/Stat/Card/Badge/Table、Bar/Line/Area/Donut、
-Button/TextField/Select。输入绑定必须初始化；每次工具调用由 host 创建独立 `main` surface，工具提示明确
-直接赋值 `root`，不教授手动 `surface(...)`。
-不跨工具调用原地修改界面。按钮显式事件须包含可读 `userMessage`；当前官方版本使用
-`action={event:{name:"...",context:{region:{"@path":"/region"}},userMessage:"..."}}`。
+React/DOM 引入 Runner；生成 `core/a2ui/catalog.generated.ts`，Skill 的组件目录同样
+由真实 catalog 生成并验证。支持 Column/Row/Grid、Heading/Text/Stat/Card/Badge/Table、
+Bar/Line/Area/Donut、Button/TextField/Select。模型直接赋值 `root`；host 为每个嵌入创建
+独立 `main` surface，不教授手动 `surface(...)` 或跨消息更新。
 
-动作完整字段和来源 `toolCallId` 序列化为 `<priva-a2ui-action>` 提示后缀，通过现有
-会话队列发给模型。用户气泡只显示文案，历史恢复保留结构化字段；重放不自动触发动作。
-提交期间按钮禁用，传输失败明确显示。关闭视觉开关仍使用原有独立 JSX `visualize`。
-旧 OpenUI 渲染器与工具已删除，旧历史原始数据不迁移。第一版在工具完整返回后绘制；
-原生 Claude TUI 没有参数 token delta，不声称支持逐 token 绘图。
+动作字段与 `{version:1,pluginId:"agent-dashboard",messageId,embedId,action}` 来源封套
+保存为 `<priva-a2ui-action>` 提示后缀，通过现有会话队列发给模型。用户气泡只显示文案，
+历史恢复保留结构化字段；重放不自动触发动作。提交期间按钮禁用，传输失败明确显示。
+关闭插件只影响后续 Skill 加载，已读 Skill 仍可能留在模型历史，历史看板继续显示。
+原有独立 JSX `visualize` 与其他产品工具不受开关影响。
 
 目录变更后，仓库根目录生成后端 catalog，再生成真实编译的浏览器 fixtures：
 
 ```sh
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json agent-ui/scripts/generate-a2ui-catalog.ts
 cd services/agent-runner/ts
+node --import tsx scripts/generate-dashboard-catalog.ts
 node --import tsx tests/fixtures/a2ui/generate-sales-dashboard.ts
 ```
 
 前端回归（仓库根目录）：
 
 ```sh
-./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/a2ui-*.test.ts agent-ui/tests/features/agent-message/a2ui-*.test.tsx agent-ui/tests/features/agent-message/generated-a2ui.test.tsx agent-ui/tests/features/agent-message/ui-action.test.ts
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/a2ui-*.test.ts agent-ui/tests/features/agent-message/a2ui-*.test.tsx agent-ui/tests/features/agent-message/ui-action.test.ts
 ```
 
 后端回归（`services/agent-runner/ts/`）：
 
 ```sh
-TMPDIR=/tmp npx vitest run tests/unit/core/tool/a2ui-render.test.ts
+TMPDIR=/tmp npx vitest run tests/unit/core/a2ui tests/unit/core/plugin tests/integration/transport/http/a2ui.test.ts
 npm run build
 node --import tsx tests/fixtures/terminal/native-product-probe.ts dist/provider/claude/tools/native-product-server.js
 ```
 
-浏览器入口 `/tests/features/agent-message/a2ui-browser.html`：选择 Desktop/Tablet/Phone，
-切换浅色/深色并点击 **Run checks**；检查销售 Dashboard、Interactive form、动作回传
-和 **Replay saved messages**。用浏览器减少动态效果设置验证无过渡但内容完整。
-`/tests/features/agent-message/a2ui-thread-browser.html` 验证真实消息线程内 Dashboard/表格
-均与正文同宽、失败后重试成功时答案区无残留错误卡且过程详情保留原因、历史和按钮下一轮。所有 fixtures 为明确的示例数据，不连接真实模型。
+浏览器入口 `/tests/features/agent-message/a2ui-thread-browser.html`：点击 **Run conversation checks**，
+验证真实消息线程中的 Markdown 引用与隐藏源码、同宽布局、插件确认开关、表单动作、
+原始闭合 fence、缺失/重复 ID、显式修复与历史重放。追加 `?narrow&dark&zh&reduced-motion`
+检查手机宽度、深色、中文和减少动态效果。样例严格匹配真实编译器生成的 source 与
+canonical fixtures，不调用真实模型。`/tests/features/agent-message/a2ui-browser.html`
+继续提供独立组件、图表与响应式外观检查。
 
 2026-10-24：生成回答中的柱状图、折线图和面积图通过
 `a2ui/viewport-chart-container.tsx` 提交受控尺寸。距聊天视口上下 400px 内
@@ -3640,13 +3664,13 @@ Workspace 拖动时，分隔条同步更新实时宽度与 `aria-valuenow`，相
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/workspace/workspace-resize.test.tsx agent-ui/tests/features/sidebar/header/harness-default-width.test.tsx
 ```
 
-可视化开关与终端连接回归（仓库根目录）：
+Dashboard 插件开关与终端连接回归（仓库根目录）：
 
 ```sh
-./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/visualize-mode-configuration.test.tsx agent-ui/tests/features/agent-message/session-terminal-view.test.tsx agent-ui/tests/features/agent-message/session-connection.test.ts agent-ui/tests/features/agent-message/terminal-session.test.ts agent-ui/tests/features/agent-message/session-view-context.test.tsx
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/dashboard-plugin-configuration.test.tsx agent-ui/tests/features/agent-message/session-terminal-view.test.tsx agent-ui/tests/features/agent-message/session-connection.test.ts agent-ui/tests/features/agent-message/terminal-session.test.ts agent-ui/tests/features/agent-message/session-view-context.test.tsx
 ```
 
-使用隔离 DOM / WebSocket 检查 Claude、Pi 开关失败回滚、连续请求确认、断线失败、
+使用隔离 DOM / WebSocket 检查 Claude、Pi 开关确认后生效、加载失败保留状态与重复点击禁用、断线失败、
 原生重绑定及跨会话隔离；检查已挂载终端切换时不断连、不清屏、继续接收输出，
 以及显式重连采用最新开关值。测试不连接真实模型或桌面，不替代原生会话集成验证。
 

@@ -7,7 +7,7 @@
     "node": ">=22.19.0"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-builtin-resources.mjs",
     "dev": "tsx watch src/main.ts",
     "lint": "eslint src tests",
     "start": "node dist/main.js",

@@ -1,18 +1,12 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
-import { compileA2uiSource, renderUiTool } from '../../../../src/core/tool/a2ui-render.js'
+import { compileA2uiSource } from '../../../../src/core/a2ui/compiler.js'
 import { salesDashboardSource } from '../../../fixtures/a2ui/sales-dashboard.source.js'
 import { formActionSource } from '../../../fixtures/a2ui/form-action.source.js'
 import { allChartsSource } from '../../../fixtures/a2ui/all-charts.source.js'
 
-const context = {
-  cwd: '/work',
-  session: { provider: 'claude' as const, id: 'a2ui-test' },
-  signal: new AbortController().signal,
-}
-
-describe('A2UI compiler tool', () => {
+describe('A2UI compiler', () => {
   it.each([
     ['form-action', formActionSource], ['all-charts', allChartsSource],
   ])('keeps the real compiled %s browser fixture current', (name, source) => {
@@ -22,7 +16,7 @@ describe('A2UI compiler tool', () => {
     expect(compileA2uiSource(source)).toEqual(fixture)
   })
 
-  it('compiles the sales dashboard to the canonical messages used by the browser fixture', async () => {
+  it('compiles the sales dashboard to the canonical messages used by the browser fixture', () => {
     const output = compileA2uiSource(salesDashboardSource)
     const fixture: unknown = JSON.parse(readFileSync(
       new URL('../../../../../../../agent-ui/tests/fixtures/a2ui/sales-dashboard.json', import.meta.url), 'utf8',
@@ -43,7 +37,6 @@ describe('A2UI compiler tool', () => {
         name: 'explore_region', context: { region: 'North America', quarter: 'Q3' }, userMessage: 'Explore North America',
       } },
     })
-    await expect(renderUiTool.execute({ source: salesDashboardSource }, context)).resolves.toEqual({ ok: true, text: JSON.stringify(output) })
   })
 
   it('preserves initialized data bindings and structured event context', () => {
@@ -63,11 +56,7 @@ describe('A2UI compiler tool', () => {
       .toMatchObject({ action: { event: { name: 'explore', context: { region: { '@path': '/region' } }, userMessage: 'Explore this region' } } })
   })
 
-  it('accepts the complete wrapper taught by the official Express prompt', () => {
-    expect(compileA2uiSource(`<a2ui>\n${salesDashboardSource}\n</a2ui>`)).toEqual(compileA2uiSource(salesDashboardSource))
-  })
-
-  it('rejects the named-surface attempt and accepts the same table on the host surface', async () => {
+  it('rejects the named-surface attempt and accepts the same table on the host surface', () => {
     const table = 'Table(columns=["Service", "State"], rows=[["Example MCP", "Available"]])'
     const source = [
       'surface("mcp_status")',
@@ -76,31 +65,8 @@ describe('A2UI compiler tool', () => {
       `tbl = ${table}`,
       'root = Column([title, desc, tbl])',
     ].join('\n')
-    const failed = await renderUiTool.execute({ source }, context)
-    expect(failed.ok).toBe(false)
-    expect(failed.text).toContain('Use the default main surface; do not target another surface')
-
-    const retry = await renderUiTool.execute({ source: `root = ${table}` }, context)
-    expect(retry.ok).toBe(true)
-    expect(retry.text).toBe(JSON.stringify(compileA2uiSource(`root = ${table}`)))
-    expect(retry.text).not.toContain('mcp_status')
-  })
-
-  it('teaches the host-owned surface and includes an executable typed Table example', () => {
-    expect(renderUiTool.description).not.toContain('Surface targeting: Output')
-    expect(renderUiTool.description).not.toContain('surface("dashboard-surface-1")')
-    expect(renderUiTool.description).toContain('The host creates the main surface')
-    expect(renderUiTool.description).toContain('Create the UI by assigning root = Component(...)')
-    expect(renderUiTool.description).toContain('columns: string[], rows: (string | number)[][]')
-    const example = /<a2ui>\n(root = Table[^\n]*)\n<\/a2ui>/u.exec(renderUiTool.description)?.[1]
-    if (example === undefined) throw new Error('The tool prompt must include a complete Table example')
-    const output = compileA2uiSource(example)
-    const message = output.messages[0]
-    if (message === undefined || !('createSurface' in message)) throw new Error('Expected createSurface')
-    expect(message.createSurface.surfaceId).toBe('main')
-    expect(message.createSurface.components).toEqual([
-      { id: 'root', component: 'Table', columns: ['Service', 'State'], rows: [['Example MCP', 'Available']], title: 'MCP status' },
-    ])
+    expect(() => compileA2uiSource(source)).toThrow('Use the default main surface; do not target another surface')
+    expect(JSON.stringify(compileA2uiSource(`root = ${table}`))).not.toContain('mcp_status')
   })
 
   it('keeps literal path and component metadata in action context as user data', () => {
@@ -118,7 +84,6 @@ describe('A2UI compiler tool', () => {
     ['root = Button(label="Continue")', /action/],
     ['root = Button(label="Continue", action="execute script")', /action/],
     ['root = Button(label="Continue", action=Event("continue"))', /readable userMessage/],
-    ['<a2ui>root = Column(children=[missing])', /incomplete/],
     ['root = Heading(text="Unclosed)', /syntax|parse|token|unterminated/i],
     ['surface("another")\nroot = Heading(text="Another")', /main surface/],
     ['root = BarChart(title="Sales", labels=["A", "B"], series=[{name:"Revenue", values:[1]}])', /exactly 2 values/],
@@ -134,17 +99,8 @@ describe('A2UI compiler tool', () => {
     ['$/title = "Ready"\nroot = Heading(text=$title)', /relative binding/],
     ['$/items = [1]\nroot = Column(children=_template($/items,item))\nitem = Text(text="Item")', /dynamic list template/],
     ['$/region = "Unknown"\nroot = Select(label="Region", value=$/region, options=[{label:"Europe",value:"Europe"}])', /match one of the option values/],
-  ])('returns an actionable error for invalid source %s', async (source, error) => {
-    const result = await renderUiTool.execute({ source }, context)
-    expect(result.ok).toBe(false)
-    expect(result.text).toMatch(error)
-    expect(result.text).toContain('call render_ui again with the complete program')
-  })
-
-  it('requires string source instead of coercing arbitrary objects', async () => {
-    const result = await renderUiTool.execute({ source: { root: 'Heading' } }, context)
-    expect(result.ok).toBe(false)
-    expect(result.text).toContain('source is required')
+  ])('rejects invalid source %s with an actionable error', (source, error) => {
+    expect(() => compileA2uiSource(source)).toThrow(error)
   })
 
   it('does not leak data or failed source into later calls', () => {
@@ -156,45 +112,29 @@ describe('A2UI compiler tool', () => {
     expect(next.messages).toHaveLength(1)
   })
 
-  it('does not publish UI when execution has been cancelled', async () => {
+  it('does not compile when execution has been cancelled', () => {
     const controller = new AbortController()
     controller.abort()
-    await expect(renderUiTool.execute({ source: salesDashboardSource }, { ...context, signal: controller.signal }))
-      .resolves.toEqual({ ok: false, text: 'A2UI rendering was cancelled. No UI was published.' })
+    expect(() => compileA2uiSource(salesDashboardSource, controller.signal)).toThrow()
   })
 
-  it('limits source and component counts before publishing', async () => {
-    const tooLong = await renderUiTool.execute({ source: ' '.repeat(64_001) }, context)
-    expect(tooLong.ok).toBe(false)
-    expect(tooLong.text).toContain('exceeds 64000 characters')
+  it('limits source and component counts before publishing', () => {
+    expect(() => compileA2uiSource(' '.repeat(64_001))).toThrow('exceeds 64000 characters')
     const children = Array.from({ length: 200 }, (_, index) => `child${index}`)
     const source = [
       `root = Column(children=[${children.join(',')}])`,
       ...children.map((id) => `${id} = Text(text="Item")`),
     ].join('\n')
-    const tooMany = await renderUiTool.execute({ source }, context)
-    expect(tooMany.ok).toBe(false)
-    expect(tooMany.text).toContain('at most 200 components')
+    expect(() => compileA2uiSource(source)).toThrow('at most 200 components')
   })
 
-  it('bounds expansion of reused subtrees even when the component graph is small', async () => {
+  it('bounds expansion of reused subtrees even when the component graph is small', () => {
     const source = [
       'root = Column(children=[branch,branch,branch,branch,branch,branch,branch,branch,branch,branch])',
       'branch = Column(children=[twig,twig,twig,twig,twig,twig,twig,twig,twig,twig])',
       'twig = Column(children=[leaf,leaf,leaf,leaf,leaf,leaf,leaf,leaf,leaf,leaf])',
       'leaf = Text(text="Repeated")',
     ].join('\n')
-    const result = await renderUiTool.execute({ source }, context)
-    expect(result.ok).toBe(false)
-    expect(result.text).toContain('1000 rendered nodes')
-  })
-
-  it('advertises the current catalog, complete-source contract and action round trip', () => {
-    expect(renderUiTool.inputSchema.required).toEqual(['source'])
-    expect(renderUiTool.description).toContain('BarChart')
-    expect(renderUiTool.description).toContain('TextField')
-    expect(renderUiTool.description).toContain('<priva-a2ui-action>')
-    expect(renderUiTool.description).toContain('toolCallId')
-    expect(renderUiTool.description).not.toContain('OpenUI')
+    expect(() => compileA2uiSource(source)).toThrow('1000 rendered nodes')
   })
 })

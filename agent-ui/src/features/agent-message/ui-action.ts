@@ -13,7 +13,9 @@ const actionSchema = z.object({
 
 const envelopeSchema = z.object({
   version: z.literal(1),
-  toolCallId: z.string().min(1),
+  pluginId: z.literal("agent-dashboard"),
+  messageId: z.string().min(1),
+  embedId: z.string().min(1),
   action: actionSchema,
 }).strict()
 
@@ -23,8 +25,8 @@ const START = "\n\n<priva-a2ui-action>\n"
 const END = "\n</priva-a2ui-action>"
 
 /** Keep structured clicks in the native transcript so resume/fork preserve them. */
-export function uiActionMessage(toolCallId: string, action: ActionPayload): string {
-  const envelope = envelopeSchema.parse({ version: 1, toolCallId, action })
+export function uiActionMessage(origin: { messageId: string; embedId: string }, action: ActionPayload): string {
+  const envelope = envelopeSchema.parse({ version: 1, pluginId: "agent-dashboard", ...origin, action })
   const label = action.userMessage?.trim() || action.name
   const data = JSON.stringify(envelope).replaceAll("<", "\\u003c").replaceAll(">", "\\u003e")
   return `${label}${START}${data}${END}`

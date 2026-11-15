@@ -26,6 +26,7 @@ describe('run frames', () => {
     })).toEqual({
       ok: true,
       frame: {
+        enabledPluginIds: [],
         type: 'run.start',
         text: 'hi',
         model: 'gateway:llama3',
@@ -167,6 +168,7 @@ describe('run frames', () => {
     })).toEqual({
       ok: true,
       frame: {
+        enabledPluginIds: [],
         type: 'run.start',
         text: 'hi',
         model: 'p:m',
@@ -203,5 +205,18 @@ describe('run frames', () => {
       ts: 1,
       harness: 'claude',
     })
+  })
+})
+
+
+describe('product plugin selection frames', () => {
+  const common = { harness: 'claude', cwd: '/work', model: 'profile:model', sessionId: 'session' }
+  it.each([{ type: 'run.start', text: 'hello' }, { type: 'session.configure', requestId: 'configure' }])('validates and defaults enabledPluginIds for $type', (frame) => {
+    expect(parseClientFrame({ ...common, ...frame })).toMatchObject({ ok: true, frame: { enabledPluginIds: [] } })
+    expect(parseClientFrame({ ...common, ...frame, enabledPluginIds: ['agent-dashboard', 'agent-dashboard'] }))
+      .toMatchObject({ ok: true, frame: { enabledPluginIds: ['agent-dashboard'] } })
+    for (const value of ['agent-dashboard', ['unknown'], [123], null]) {
+      expect(parseClientFrame({ ...common, ...frame, enabledPluginIds: value }).ok).toBe(false)
+    }
   })
 })

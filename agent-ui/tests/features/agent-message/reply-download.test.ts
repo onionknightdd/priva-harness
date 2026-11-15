@@ -37,11 +37,10 @@ const text = (id: string, value: string, index: number): StreamBlock => ({
   type: "text", blockId: id, index, text: value,
 })
 
-test("markdown keeps every answer and drops process, notifications, and visuals", () => {
+test("markdown keeps every answer and drops process and notifications", () => {
   const blocks: StreamBlock[] = [
     { type: "thinking", blockId: "think", index: 0, text: "planning the reply" },
     { type: "tool_use", blockId: "bash", index: 1, id: "bash", name: "bash", input: { command: "ls" } },
-    { type: "tool_use", blockId: "ui", index: 2, id: "ui", name: "render_ui", input: { source: "root = Column(children=[])" } },
     text("first", "First answer", 3),
     {
       type: "task_notification",
@@ -55,12 +54,11 @@ test("markdown keeps every answer and drops process, notifications, and visuals"
   assert.equal(assistantReplyHasImage(message(blocks, "Second answer")), true)
 })
 
-test("a visual without prose can be captured but has no markdown", () => {
-  const blocks: StreamBlock[] = [
-    { type: "tool_use", blockId: "ui", index: 0, id: "ui", name: "render_ui", input: { source: "root = Column(children=[])" } },
-  ]
+test("a dashboard-only reply preserves the source in Markdown and can be captured", () => {
+  const markdown = '![Report](a2ui:report)\n\n```a2ui id=report\nroot = Column(children=[])\n```'
+  const blocks: StreamBlock[] = [text("dashboard", markdown, 0)]
   const visualOnly = message(blocks)
-  assert.equal(assistantReplyMarkdown(visualOnly), "")
+  assert.equal(assistantReplyMarkdown(visualOnly), markdown)
   assert.equal(assistantReplyHasImage(visualOnly), true)
 })
 

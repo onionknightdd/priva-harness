@@ -12,7 +12,6 @@ import { emptyContextUsage } from '../../../../src/core/resource/context-usage.j
 import { FakeAgentProvider } from '../../../support/fake-agent-provider.js'
 import { testRunSpec } from '../../../support/run-spec.js'
 import { claudePromptText } from '../../../../src/provider/claude/claude-prompt-text.js'
-import { withVisualizeInstructions } from '../../../../src/core/tool/visualize-mode.js'
 import type { AgentProvider } from '../../../../src/core/contract/agent-provider.js'
 
 const drivers: TerminalChatSessions[] = []
@@ -61,13 +60,13 @@ function setup(timeout = 1000, options: Partial<TerminalChatSessionsOptions> = {
 }
 
 describe('TerminalChatSessions', () => {
-  it.each((['claude', 'pi'] as const).flatMap((provider) => [false, true].flatMap((visualizeMode) =>
-    (['idle', 'running'] as const).map((phase) => ({ provider, visualizeMode, phase })),
-  )))('attaches and reconnects viewers using the live configuration ($provider, visualize=$visualizeMode, $phase)', async ({ provider: providerId, visualizeMode, phase }) => {
+  it.each((['claude', 'pi'] as const).flatMap((provider) => [false, true].flatMap((pluginEnabled) =>
+    (['idle', 'running'] as const).map((phase) => ({ provider, pluginEnabled, phase })),
+  )))('attaches and reconnects viewers using the live configuration ($provider, plugin=$pluginEnabled, $phase)', async ({ provider: providerId, pluginEnabled, phase }) => {
     const validateMode = vi.fn<NonNullable<TerminalChatSessionsOptions['validateMode']>>().mockResolvedValue()
     const { driver, ref, spec, provider, service, stream, frames, event } = setup(1000, { validateMode }, providerId)
-    const liveSpec = { ...spec, visualizeMode, systemInstructions: withVisualizeInstructions(spec.systemInstructions ?? '', visualizeMode) }
-    const requested = { ...spec, visualizeMode: !visualizeMode, systemInstructions: withVisualizeInstructions(spec.systemInstructions ?? '', !visualizeMode) }
+    const liveSpec = { ...spec, enabledPluginIds: pluginEnabled ? ['agent-dashboard'] : [] }
+    const requested = { ...spec, enabledPluginIds: pluginEnabled ? [] : ['agent-dashboard'] }
     provider.readTerminalSpec.mockResolvedValue(liveSpec)
     provider.readTerminalState.mockResolvedValue({ sessionId: ref.id, instanceId: 'instance', cwd: spec.cwd,
       event: 'ready', phase, updatedAt: 1 })
@@ -80,6 +79,7 @@ describe('TerminalChatSessions', () => {
     }
     await event('prompt', 'Continue with the live tools')
     expect(validateMode).toHaveBeenLastCalledWith(ref, liveSpec)
+    expect(frames.filter((frame) => frame.type === 'session.config').at(-1)).toMatchObject({ config: { enabledPluginIds: liveSpec.enabledPluginIds } })
     expect(configureTerminal).not.toHaveBeenCalled()
     expect(provider.terminalLaunch).not.toHaveBeenCalled()
     expect(service.restart).not.toHaveBeenCalled()
@@ -90,16 +90,15 @@ describe('TerminalChatSessions', () => {
   it('keeps run-start prompt checks and immutable mode checks when viewers attach', async () => {
     const { driver, ref, spec, service, event } = setup()
     await event('prompt', 'Keep running')
-    await expect(driver.open({ kind: 'resume', session: ref }, { ...spec, visualizeMode: true,
-      systemInstructions: withVisualizeInstructions(spec.systemInstructions ?? '', true) }, { cols: 120, rows: 40 })).rejects.toMatchObject({ kind: 'session-busy' })
+    await expect(driver.open({ kind: 'resume', session: ref }, { ...spec, enabledPluginIds: ['agent-dashboard'] }, { cols: 120, rows: 40 })).rejects.toMatchObject({ kind: 'session-busy' })
     await expect(driver.open({ kind: 'resume', session: ref }, { ...spec, runMode: 'agent' },
       { cols: 120, rows: 40 }, 'view')).rejects.toMatchObject({ kind: 'session-busy' })
     expect(service.restart).not.toHaveBeenCalled()
   })
 
-  it('keeps a visualize configuration queued behind the active reply when a viewer reconnects', async () => {
+  it('keeps a plugin configuration queued behind the active reply when a viewer reconnects', async () => {
     const { driver, ref, spec, provider, service, event, stream, frames } = setup()
-    const nextSpec = { ...spec, visualizeMode: true, systemInstructions: withVisualizeInstructions(spec.systemInstructions ?? '', true) }
+    const nextSpec = { ...spec, enabledPluginIds: ['agent-dashboard'] }
     const configureTerminal = vi.fn<NonNullable<AgentProvider['configureTerminal']>>().mockResolvedValue('applied')
     Object.assign(provider, { configureTerminal })
     provider.readTerminalTelemetry.mockResolvedValue({ offset: 0, events: [], status: {
@@ -107,13 +106,13 @@ describe('TerminalChatSessions', () => {
     } })
     await event('prompt', 'An active reply')
     const runId = stream.snapshot().activeRunId
-    await driver.configure(ref, nextSpec, 'visualize-change')
+    await driver.configure(ref, nextSpec, 'plugin-change')
     await driver.open({ kind: 'resume', session: ref }, nextSpec, { cols: 120, rows: 40 }, 'view')
     expect(stream.snapshot().activeRunId).toBe(runId)
     expect(configureTerminal).not.toHaveBeenCalled()
     expect(service.sendKeys).not.toHaveBeenCalled()
     await event('stop')
-    await expect.poll(() => frames.find((frame) => frame.type === 'session.config' && frame.requestId === 'visualize-change')).toBeDefined()
+    await expect.poll(() => frames.find((frame) => frame.type === 'session.config' && frame.requestId === 'plugin-change')).toMatchObject({ config: { enabledPluginIds: ['agent-dashboard'] } })
     expect(configureTerminal.mock.calls.map((call) => call[2])).toEqual([nextSpec])
     expect(frames.some((frame) => frame.type === 'run.aborted' || frame.type === 'error')).toBe(false)
   })
@@ -475,9 +474,9 @@ describe('structured native terminal turns', () => {
     return { ...fixture, native, publish, start }
   }
 
-  it('preserves an active Pi reply and its queued visualize change across viewer reconnects', async () => {
+  it('preserves an active Pi reply and its queued plugin change across viewer reconnects', async () => {
     const { driver, ref, spec, provider, native, publish, start, stream, frames } = structuredSetup({}, 'pi')
-    const nextSpec = { ...spec, visualizeMode: true, systemInstructions: withVisualizeInstructions('', true) }
+    const nextSpec = { ...spec, enabledPluginIds: ['agent-dashboard'] }
     const configureTerminal = vi.fn<NonNullable<AgentProvider['configureTerminal']>>().mockResolvedValue('applied')
     Object.assign(provider, { configureTerminal })
     const readTelemetry = provider.readTerminalTelemetry.getMockImplementation()
@@ -487,13 +486,13 @@ describe('structured native terminal turns', () => {
     } }))
     publish('pi-reply', start('Keep working'))
     await driver.open({ kind: 'resume', session: ref }, spec, { cols: 120, rows: 40 }, 'view')
-    await driver.configure(ref, nextSpec, 'pi-visualize-change')
+    await driver.configure(ref, nextSpec, 'pi-plugin-change')
     await driver.open({ kind: 'resume', session: ref }, nextSpec, { cols: 120, rows: 40 }, 'view')
     expect(stream.snapshot().activeRunId).toBe('pi-reply')
     expect(configureTerminal).not.toHaveBeenCalled()
     expect(native.abortTerminal).not.toHaveBeenCalled()
     publish('pi-reply', { type: 'run.completed', model: spec.model, durationMs: 1 })
-    await expect.poll(() => frames.find((frame) => frame.type === 'session.config' && frame.requestId === 'pi-visualize-change')).toBeDefined()
+    await expect.poll(() => frames.find((frame) => frame.type === 'session.config' && frame.requestId === 'pi-plugin-change')).toBeDefined()
     expect(configureTerminal.mock.calls.map((call) => call[2])).toEqual([nextSpec])
     expect(frames.some((frame) => frame.type === 'run.aborted' || frame.type === 'error')).toBe(false)
   })

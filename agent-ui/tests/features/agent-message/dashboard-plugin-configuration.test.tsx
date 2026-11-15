@@ -20,21 +20,21 @@ const fixture = {
   view: { preserveViewForSession: noop, setView: noop },
   uploads: { enqueueFiles: () => assert.fail("No uploads expected") },
 }
-Object.assign(globalThis, { visualizeConfigurationFixture: fixture })
+Object.assign(globalThis, { dashboardConfigurationFixture: fixture })
 const hooks = registerHooks({
   load(url, context, nextLoad) {
     let source: string | undefined
     if (url.endsWith("/features/chat-session/index.ts")) source = `
-      const fixture = globalThis.visualizeConfigurationFixture;
+      const fixture = globalThis.dashboardConfigurationFixture;
       export const useActiveSession = () => fixture.active;
       export const useChatThread = () => fixture.thread;
       export const useChatSessionActions = () => fixture.actions;
       export const useSessionList = () => fixture.list;
       export const useLiveSessions = () => fixture.live;
     `
-    if (url.endsWith("/harness-context.tsx")) source = "export const useHarness = () => globalThis.visualizeConfigurationFixture.harness"
-    if (url.endsWith("/session-view-context.tsx")) source = "export const useSessionView = () => globalThis.visualizeConfigurationFixture.view"
-    if (url.endsWith("/features/uploads/index.ts")) source = "export const useUploadQueue = () => globalThis.visualizeConfigurationFixture.uploads"
+    if (url.endsWith("/harness-context.tsx")) source = "export const useHarness = () => globalThis.dashboardConfigurationFixture.harness"
+    if (url.endsWith("/session-view-context.tsx")) source = "export const useSessionView = () => globalThis.dashboardConfigurationFixture.view"
+    if (url.endsWith("/features/uploads/index.ts")) source = "export const useUploadQueue = () => globalThis.dashboardConfigurationFixture.uploads"
     return source === undefined ? nextLoad(url, context) : { format: "module", source, shortCircuit: true }
   },
 })
@@ -76,19 +76,19 @@ const { AgentPreferencesProvider } = await import("../../../src/features/setting
 const { useAgentMessage: useMessage } = await import("../../../src/features/agent-message/use-agent-message.ts")
 const { AGENT_PREFERENCES_STORAGE_KEY } = await import("../../../src/features/settings/agent-preferences.ts")
 const { emptyContextUsage } = await import("../../../src/features/agent-message/context-usage.ts")
-const config = { model: "model", profileId: "profile", effort: "medium", contextWindow: 200000, cwd: "/work", context: emptyContextUsage() }
+const config = { model: "model", profileId: "profile", effort: "medium", contextWindow: 200000, cwd: "/work", enabledPluginIds: [] as string[], context: emptyContextUsage() }
 
 async function mount(options: { enabled?: boolean; harness?: "claude" | "pi"; draft?: boolean } = {}) {
   fixture.active = { ...fixture.active, runSessionId: options.draft ? null : "session" }
   fixture.harness = { runHarnessId: options.harness ?? "claude" }
   dom.window.localStorage.clear()
-  dom.window.localStorage.setItem(AGENT_PREFERENCES_STORAGE_KEY, JSON.stringify({ visualizeMode: options.enabled === true }))
+  dom.window.localStorage.setItem(AGENT_PREFERENCES_STORAGE_KEY, JSON.stringify({ enabledPluginIds: options.enabled ? ["agent-dashboard"] : [] }))
   const host = document.body.appendChild(document.createElement("div"))
   const root = createRoot(host)
   let state!: ReturnType<typeof useAgentMessage>
   function Probe() {
     state = useMessage()
-    return <button aria-pressed={state.visualizeMode} onClick={() => state.setVisualizeMode(!state.visualizeMode)}>Visualize</button>
+    return <button aria-pressed={state.dashboardEnabled} onClick={() => state.setDashboardEnabled(!state.dashboardEnabled)}>Dashboard</button>
   }
   const render = () => root.render(<React.StrictMode><AgentPreferencesProvider><Probe /></AgentPreferencesProvider></React.StrictMode>)
   await act(async () => { render() })
@@ -96,14 +96,14 @@ async function mount(options: { enabled?: boolean; harness?: "claude" | "pi"; dr
   await act(async () => {
     if (socket) {
       socket.open()
-      socket.frame({ type: "session.snapshot", config, tasks: [], messages: [] })
+      socket.frame({ type: "session.snapshot", config: { ...config, enabledPluginIds: options.enabled ? ["agent-dashboard"] : [] }, tasks: [], messages: [] })
     } else state.setModelReference("profile:model")
   })
   return {
     state: () => state,
     socket,
     button: () => host.querySelector("button")!,
-    stored: () => JSON.parse(dom.window.localStorage.getItem(AGENT_PREFERENCES_STORAGE_KEY)!).visualizeMode,
+    stored: () => JSON.parse(dom.window.localStorage.getItem(AGENT_PREFERENCES_STORAGE_KEY)!).enabledPluginIds.includes("agent-dashboard"),
     toggle: async () => { await act(async () => host.querySelector("button")!.click()) },
     reply: async (frame: Record<string, unknown>) => { await act(async () => socket!.frame(frame)) },
     render: async () => { await act(async () => { render() }) },
@@ -118,8 +118,8 @@ for (const harness of ["claude", "pi"] as const) for (const enabled of [false, t
       await view.reply({ type: "run.started", runId: "current", driver: "terminal" })
       await view.toggle()
       const [request] = view.socket!.configurations()
-      assert.equal(request?.visualizeMode, !enabled)
-      assert.equal(view.button().getAttribute("aria-pressed"), String(!enabled))
+      assert.deepEqual(request?.enabledPluginIds, !enabled ? ["agent-dashboard"] : [])
+      assert.equal(view.button().getAttribute("aria-pressed"), String(enabled), "wait for the native configuration before changing the switch")
       assert.equal(view.state().configurationPending, true)
       await view.reply({ type: "error", code: "session.configure", requestId: request!.requestId, message: "Finish background tasks first" })
       assert.equal(view.button().getAttribute("aria-pressed"), String(enabled))
@@ -139,46 +139,39 @@ test("a successful choice becomes the rollback value for the next failed change"
   try {
     await view.toggle()
     const first = view.socket!.configurations()[0]!
-    await view.reply({ type: "session.config", requestId: first.requestId, config })
+    await view.reply({ type: "session.config", requestId: first.requestId, config: { ...config, enabledPluginIds: ["agent-dashboard"] } })
     assert.equal(view.state().configurationPending, false)
     await view.toggle()
     const second = view.socket!.configurations()[1]!
     await view.reply({ type: "error", requestId: second.requestId, message: "Cannot disable" })
-    assert.equal(view.state().visualizeMode, true)
+    assert.equal(view.state().dashboardEnabled, true)
     assert.equal(view.stored(), true)
     assert.equal(view.socket!.configurations().length, 2)
   } finally { await view.close() }
 })
 
-test("an earlier failed request does not roll back a newer choice", async () => {
+test("a second click while configuration is pending does not queue another request", async () => {
   const view = await mount()
   try {
     await view.toggle()
     await view.toggle()
-    const [first, second] = view.socket!.configurations()
-    await view.reply({ type: "error", requestId: first!.requestId, message: "Older request failed" })
-    assert.equal(view.state().visualizeMode, false)
+    const [request] = view.socket!.configurations()
+    assert.equal(view.socket!.configurations().length, 1)
+    assert.equal(view.state().dashboardEnabled, false)
     assert.equal(view.state().configurationPending, true)
-    assert.equal(view.state().connectionError, null)
-    await view.reply({ type: "error", requestId: second!.requestId, message: "Latest request failed" })
-    assert.equal(view.state().visualizeMode, false, "both failures restore the original confirmed value")
-    assert.equal(view.stored(), false)
-    assert.equal(view.socket!.configurations().length, 2)
+    await view.reply({ type: "session.config", requestId: request!.requestId, config: { ...config, enabledPluginIds: ["agent-dashboard"] } })
+    assert.equal(view.state().dashboardEnabled, true)
+    assert.equal(view.stored(), true)
   } finally { await view.close() }
 })
 
-test("an earlier success is retained when a newer overlapping configuration fails", async () => {
-  const view = await mount()
+test("a session snapshot replaces browser preferences with the actually loaded plugins", async () => {
+  const view = await mount({ enabled: true })
   try {
-    await view.toggle()
-    await view.toggle()
-    const [first, second] = view.socket!.configurations()
-    await view.reply({ type: "session.config", requestId: first!.requestId, config })
-    assert.equal(view.state().visualizeMode, false, "an older acknowledgment must not replace the pending choice")
-    await view.reply({ type: "error", requestId: second!.requestId, message: "Latest request failed" })
-    assert.equal(view.state().visualizeMode, true)
-    assert.equal(view.stored(), true)
-    assert.equal(view.socket!.configurations().length, 2)
+    await view.reply({ type: "session.snapshot", config: { ...config, enabledPluginIds: [] }, tasks: [], messages: [] })
+    assert.equal(view.state().dashboardEnabled, false)
+    assert.equal(view.stored(), false)
+    assert.equal(view.socket!.configurations().length, 0)
   } finally { await view.close() }
 })
 
@@ -188,8 +181,8 @@ test("a failed configuration from a previous session does not roll back the next
     await view.toggle()
     fixture.active = { ...fixture.active, runSessionId: "other-session" }
     await view.render()
-    assert.equal(view.state().visualizeMode, true)
-    assert.equal(view.stored(), true)
+    assert.equal(view.state().dashboardEnabled, false)
+    assert.equal(view.stored(), false)
     assert.equal(view.state().configurationPending, false)
     assert.equal(view.state().connectionError, null)
   } finally { await view.close() }
@@ -201,10 +194,10 @@ test("a native session rebind keeps the rollback value of a pending configuratio
     await view.toggle()
     const request = view.socket!.configurations()[0]!
     await view.reply({ type: "session.rebound", nextSessionId: "cleared-session" })
-    assert.equal(view.state().visualizeMode, true)
+    assert.equal(view.state().dashboardEnabled, false)
     assert.equal(view.state().configurationPending, true)
     await view.reply({ type: "error", requestId: request.requestId, message: "Configuration failed after /clear" })
-    assert.equal(view.state().visualizeMode, false)
+    assert.equal(view.state().dashboardEnabled, false)
     assert.equal(view.stored(), false)
     assert.equal(view.socket!.configurations().length, 1)
   } finally { await view.close() }
@@ -215,7 +208,7 @@ test("losing the connection before confirmation restores the last confirmed choi
   try {
     await view.toggle()
     await act(async () => view.socket!.close())
-    assert.equal(view.state().visualizeMode, false)
+    assert.equal(view.state().dashboardEnabled, false)
     assert.equal(view.stored(), false)
     assert.equal(view.state().configurationPending, false)
     assert.match(view.state().connectionError!, /Connection lost/)
@@ -227,13 +220,70 @@ test("a draft choice is saved locally and included in its first turn without con
   const view = await mount({ draft: true })
   try {
     await view.toggle()
-    assert.equal(view.state().visualizeMode, true)
+    assert.equal(view.state().dashboardEnabled, true)
     assert.equal(view.stored(), true)
     await act(async () => view.state().setDraft("Show a chart"))
     await act(async () => view.state().submit())
     const socket = Socket.instances.at(-1)!
     await act(async () => socket.open())
     assert.equal(socket.configurations().length, 0)
-    assert.equal(socket.sent.find((frame) => frame.type === "run.start")?.visualizeMode, true)
+    assert.deepEqual(socket.sent.find((frame) => frame.type === "run.start")?.enabledPluginIds, ["agent-dashboard"])
+  } finally { await view.close() }
+})
+
+
+for (const harness of ["claude", "pi"] as const) {
+  test(`${harness} queued messages wait for plugin configuration and use its acknowledged selection`, async () => {
+    const view = await mount({ harness, enabled: true })
+    try {
+      await view.reply({ type: "run.started", runId: "active", driver: "terminal" })
+      await act(async () => view.state().setDraft("Follow up after the current reply"))
+      await act(async () => view.state().submit())
+      await view.toggle()
+      const request = view.socket!.configurations()[0]!
+      await view.reply({ type: "run.completed", runId: "active" })
+      assert.equal(view.socket!.sent.filter((frame) => frame.type === "run.start").length, 0, "queued messages must wait for configuration acknowledgement")
+      await view.reply({ type: "session.config", requestId: request.requestId, config: { ...config, enabledPluginIds: [] } })
+      const started = view.socket!.sent.find((frame) => frame.type === "run.start")!
+      assert.ok(started)
+      assert.deepEqual(started.enabledPluginIds, [], "a queued turn must not restore its captured plugin selection")
+      await view.reply({ type: "run.completed", runId: started.runId })
+    } finally { await view.close() }
+  })
+}
+
+for (const savedConfig of [undefined, { ...config, enabledPluginIds: [] }]) {
+  test(`switching sessions waits for the snapshot and restores ${savedConfig ? "saved" : "default"} disabled plugins`, async () => {
+    const view = await mount({ enabled: true })
+    try {
+      await act(async () => view.state().setDraft("A message for the other session"))
+      fixture.active = { ...fixture.active, runSessionId: "other-session" }
+      await view.render()
+      const socket = Socket.instances.at(-1)!
+      assert.equal(view.state().dashboardEnabled, false, "the prior session selection must not appear loaded")
+      assert.equal(view.stored(), true, "waiting for a session must not erase the saved draft preference")
+      assert.equal(view.state().canSubmit, false)
+      await act(async () => { socket.open(); view.state().submit() })
+      assert.equal(socket.sent.filter((frame) => frame.type === "run.start").length, 0)
+      await act(async () => socket.frame({ type: "session.snapshot", ...(savedConfig ? { config: savedConfig } : {}), tasks: [], messages: [] }))
+      assert.equal(view.state().dashboardEnabled, false)
+      assert.equal(view.state().canSubmit, true)
+      await act(async () => view.state().submit())
+      const started = socket.sent.find((frame) => frame.type === "run.start")!
+      assert.deepEqual(started.enabledPluginIds, [])
+      await act(async () => socket.frame({ type: "run.completed", runId: started.runId }))
+    } finally { await view.close() }
+  })
+}
+
+test("a disconnected existing session keeps its confirmed switch but cannot dispatch stale configuration", async () => {
+  const view = await mount({ enabled: true })
+  try {
+    await act(async () => view.state().setDraft("Wait for reconnect"))
+    await act(async () => view.socket!.close())
+    assert.equal(view.state().dashboardEnabled, true)
+    assert.equal(view.state().canSubmit, false)
+    await act(async () => view.state().submit())
+    assert.equal(view.socket!.sent.some((frame) => frame.type === "run.start"), false)
   } finally { await view.close() }
 })

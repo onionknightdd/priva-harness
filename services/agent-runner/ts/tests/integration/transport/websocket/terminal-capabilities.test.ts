@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { nativeClaudeAvailable, nativeClaudeFixture, modelMessage } from '../../../fixtures/terminal/claude-tui-fixture.js'
 import type { DataRecord } from '../../../../src/core/resource/data-store.js'
-import { salesDashboardSource } from '../../../fixtures/a2ui/sales-dashboard.source.js'
-import { compileA2uiSource } from '../../../../src/core/tool/a2ui-render.js'
 
 describe.skipIf(!nativeClaudeAvailable())('native Claude product capabilities', () => {
   it('projects a native background task and opens its native management UI without claiming it was stopped', async () => {
@@ -34,26 +32,26 @@ describe.skipIf(!nativeClaudeAvailable())('native Claude product capabilities', 
       if (!productCalled) {
         const tools = body.tools?.map((tool) => tool['name']) ?? []
         // The native CLI connects MCP servers asynchronously and exposes this lifecycle tool.
-        if (!tools.includes('mcp__agentWorkshop__render_ui')) {
+        if (!tools.includes('mcp__agentWorkshop__visualize')) {
           expect(tools).toContain('WaitForMcpServers')
           waitCalls += 1
           expect(waitCalls).toBeLessThan(4)
           return modelMessage(body, reply, [{ type: 'tool_use', id: `wait-mcp-${waitCalls}`, name: 'WaitForMcpServers', input: {} }], `mcp-wait-${waitCalls}`)
         }
-        expect(tools).not.toContain('mcp__agentWorkshop__visualize')
+        expect(tools).not.toContain('mcp__agentWorkshop__render_ui')
         productCalled = true
-        return modelMessage(body, reply, [{ type: 'tool_use', id: 'render-ui-native', name: 'mcp__agentWorkshop__render_ui', input: { source: salesDashboardSource } }], 'product-call')
+        return modelMessage(body, reply, [{ type: 'tool_use', id: 'visualize-native', name: 'mcp__agentWorkshop__visualize', input: { jsx: '<button>native</button>' } }], 'product-call')
       }
       return modelMessage(body, reply, [{ type: 'text', text: 'Native product tool complete.' }], 'product-answer')
     }, { record: (record) => records.push(record) })
     try {
-      fixture.send('Create a sales dashboard', 'native-product', 'claude-sonnet-4-6', { visualizeMode: true })
+      fixture.send('Create an interactive visualization', 'native-product')
       await expect.poll(() => fixture.frames.some((frame) => frame.type === 'run.completed'), { timeout: 45000 }).toBe(true)
       const messages = fixture.harness.sessionStream(fixture.ref).snapshot().messages
-      const tool = messages.flatMap((message) => message.blocks ?? []).find((block) => block.type === 'tool_use' && block.id === 'render-ui-native')
+      const tool = messages.flatMap((message) => message.blocks ?? []).find((block) => block.type === 'tool_use' && block.id === 'visualize-native')
       if (tool?.type !== 'tool_use') throw new Error('Product tool result is missing')
       expect(tool.tool?.ok).toBe(true)
-      expect(tool.tool?.output).toBe(JSON.stringify(compileA2uiSource(salesDashboardSource)))
+      expect(tool.tool?.output).toBe('<button>native</button>')
       await expect.poll(async () => (await fixture.harness.readContextUsage(fixture.ref)).used, { timeout: 10000 }).toBe(10)
       expect(fixture.frames.some((frame) => frame.type === 'session.config' && frame.config.model === 'claude-sonnet-4-6' && frame.config.profileId === fixture.profile.id)).toBe(true)
       expect(records.filter((record) => record.kind === 'run.started')).toHaveLength(1)
@@ -61,7 +59,7 @@ describe.skipIf(!nativeClaudeAvailable())('native Claude product capabilities', 
       const finished = records.find((record) => record.kind === 'run.finished')
       if (finished?.kind !== 'run.finished') throw new Error('Accounting is missing')
       expect(finished.costUsd).toBeGreaterThan(0)
-      expect(records.filter((record) => record.kind === 'tool' && record.toolUseId === 'render-ui-native')).toEqual([expect.objectContaining({ toolUseId: 'render-ui-native', ok: true })])
+      expect(records.filter((record) => record.kind === 'tool' && record.toolUseId === 'visualize-native')).toEqual([expect.objectContaining({ toolUseId: 'visualize-native', ok: true })])
       expect(fixture.sdkOpen).not.toHaveBeenCalled()
     } finally { await fixture.dispose() }
   }, 60000)

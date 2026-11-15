@@ -85,12 +85,12 @@ const { Terminal } = await import("@xterm/xterm") as unknown as {
   Terminal: { instances: { host: HTMLElement; resetCount: number; disposed: boolean }[] }
 }
 
-async function mount(harness: "claude" | "pi", visualizeMode = false) {
+async function mount(harness: "claude" | "pi", enabledPluginIds: readonly string[] = []) {
   const host = document.body.appendChild(document.createElement("div"))
   const root = createRoot(host)
   let props: SessionTerminalViewProps = {
     harness, cwd: "/work", model: "profile:model", effort: "medium", contextWindow: 200000,
-    sessionId: "session", hidden: false, visualizeMode,
+    sessionId: "session", hidden: false, enabledPluginIds,
   }
   const update = async (next: Partial<SessionTerminalViewProps>) => {
     props = { ...props, ...next }
@@ -103,18 +103,18 @@ async function mount(harness: "claude" | "pi", visualizeMode = false) {
 }
 
 for (const harness of ["claude", "pi"] as const) {
-  test(`${harness}: changing visualize mode preserves the viewer socket, terminal screen and output`, async () => {
+  test(`${harness}: changing loaded plugins preserves the viewer socket, terminal screen and output`, async () => {
     const view = await mount(harness)
     const socket = Socket.instances.at(-1)!
     const terminal = Terminal.instances.at(-1)!
     const socketCount = Socket.instances.length
     const resetCount = terminal.resetCount
     try {
-      assert.equal(new URL(socket.url).searchParams.get("visualizeMode"), "false")
+      assert.equal(new URL(socket.url).searchParams.get("enabledPluginIds"), "[]")
       await act(async () => { socket.ready(); socket.output("before ") })
-      await view.update({ visualizeMode: true, hidden: true })
+      await view.update({ enabledPluginIds: ["agent-dashboard"], hidden: true })
       await act(async () => socket.output("during "))
-      await view.update({ visualizeMode: false, hidden: false })
+      await view.update({ enabledPluginIds: [], hidden: false })
       await act(async () => socket.output("after"))
       assert.equal(Socket.instances.length, socketCount)
       assert.equal(socket.closeCount, 0)
@@ -128,16 +128,16 @@ for (const harness of ["claude", "pi"] as const) {
   })
 }
 
-test("an explicit reconnect reads the latest visualize mode without replacing xterm", async () => {
-  const view = await mount("claude", true)
+test("an explicit reconnect reads the latest loaded plugins without replacing xterm", async () => {
+  const view = await mount("claude", ["agent-dashboard"])
   const socket = Socket.instances.at(-1)!
   const terminal = Terminal.instances.at(-1)!
   const socketCount = Socket.instances.length
   const terminalCount = Terminal.instances.length
   try {
-    assert.equal(new URL(socket.url).searchParams.get("visualizeMode"), "true")
+    assert.equal(new URL(socket.url).searchParams.get("enabledPluginIds"), '["agent-dashboard"]')
     await act(async () => socket.ready())
-    await view.update({ visualizeMode: false })
+    await view.update({ enabledPluginIds: [] })
     assert.equal(Socket.instances.length, socketCount)
     await act(async () => socket.close())
     const reconnect = [...view.host.querySelectorAll<HTMLButtonElement>("button")]
@@ -145,7 +145,7 @@ test("an explicit reconnect reads the latest visualize mode without replacing xt
     assert.ok(reconnect)
     await act(async () => reconnect.click())
     assert.equal(Socket.instances.length, socketCount + 1)
-    assert.equal(new URL(Socket.instances.at(-1)!.url).searchParams.get("visualizeMode"), "false")
+    assert.equal(new URL(Socket.instances.at(-1)!.url).searchParams.get("enabledPluginIds"), "[]")
     assert.equal(Terminal.instances.length, terminalCount)
     assert.equal(terminal.resetCount, 2)
   } finally { await view.close() }

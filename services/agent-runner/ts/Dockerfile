@@ -60,6 +60,7 @@ RUN --mount=type=cache,target=/home/node/.npm,uid=1000,gid=1000,sharing=locked \
 COPY --chown=node:node tsconfig.json tsconfig.build.json eslint.config.js vitest.config.mjs ./
 COPY --chown=node:node src ./src
 COPY --chown=node:node tests ./tests
+COPY --chown=node:node scripts ./scripts
 RUN npm run build
 
 USER root

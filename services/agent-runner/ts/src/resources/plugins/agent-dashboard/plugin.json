@@ -1,0 +1,6 @@
+{
+  "id": "agent-dashboard",
+  "name": "Agent dashboard",
+  "description": "Interactive dashboards, charts, cards, tables and forms in conversation replies.",
+  "icon": "dashboard"
+}

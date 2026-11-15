@@ -209,7 +209,7 @@ describe('WarmRuntimePool', () => {
 
 describe('warm run spec reuse', () => {
   it('applies a model change when identity stays the same', () => {
-    expect(identityFingerprint(spec)).toBe(JSON.stringify(['claude', '', '', '/work', 'p1', 'https://example.test', 'secret']))
+    expect(identityFingerprint(spec)).toBe(JSON.stringify(['claude', '', '', [], '/work', 'p1', 'https://example.test', 'secret']))
     expect(canApplyWarmRunSpec(spec, { ...spec, model: 'other' })).toBe(true)
   })
 
@@ -296,4 +296,11 @@ describe('WarmRuntimePool resource changes', () => {
 it('does not reuse a warm process across mode or instruction changes', () => {
   expect(canApplyWarmRunSpec({ ...spec, runMode: 'agent' }, { ...spec, runMode: 'code' })).toBe(false)
   expect(canApplyWarmRunSpec({ ...spec, systemInstructions: 'one' }, { ...spec, systemInstructions: 'two' })).toBe(false)
+})
+
+
+it('requires a new runtime when the selected product plugins change', () => {
+  expect(canApplyWarmRunSpec(spec, { ...spec, enabledPluginIds: [] })).toBe(true)
+  expect(canApplyWarmRunSpec(spec, { ...spec, enabledPluginIds: ['agent-dashboard'] })).toBe(false)
+  expect(canApplyWarmRunSpec({ ...spec, enabledPluginIds: ['agent-dashboard'] }, { ...spec, enabledPluginIds: [] })).toBe(false)
 })

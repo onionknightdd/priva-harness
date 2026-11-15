@@ -52,6 +52,7 @@ import { userFileRoutes } from './route/user-files.js'
 import { resourceRoutes } from './route/resources.js'
 import { subagentTestRoutes } from './route/subagent-test.js'
 import { terminalEventRoutes } from './route/terminal-events.js'
+import { a2uiRoutes } from './route/a2ui.js'
 
 export interface BuildHttpServerOptions {
   readonly computer?: ComputerConfig
@@ -141,6 +142,7 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
     },
   })
   void server.register(userFileRoutes, { fileSystem: options.userFileSystem })
+  void server.register(a2uiRoutes)
   if (options.modelAssets !== undefined) {
     void server.register(modelAssetRoutes, { assets: options.modelAssets,
       ...(options.pointClouds === undefined ? {} : { pointClouds: options.pointClouds }) })

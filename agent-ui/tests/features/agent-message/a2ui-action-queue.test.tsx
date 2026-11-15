@@ -77,10 +77,10 @@ await i18n.use(initReactI18next).init({ lng: "en", resources: {} })
 const { AgentPreferencesProvider } = await import("../../../src/features/settings/agent-preferences-context.tsx")
 const { useAgentMessage: useMessage } = await import("../../../src/features/agent-message/use-agent-message.ts")
 const { emptyContextUsage } = await import("../../../src/features/agent-message/context-usage.ts")
-const config = { model: "model", profileId: "profile", effort: "medium", contextWindow: 200000, cwd: "/work", context: emptyContextUsage() }
+const config = { model: "model", profileId: "profile", effort: "medium", contextWindow: 200000, cwd: "/work", enabledPluginIds: [], context: emptyContextUsage() }
 
 const { uiActionMessage, parseUiActionMessage } = await import("../../../src/features/agent-message/ui-action.ts")
-const actionPrompt = uiActionMessage("sales-ui", {
+const actionPrompt = uiActionMessage({ messageId: "sales-reply", embedId: "sales-ui" }, {
   name: "view_region", surfaceId: "main", sourceComponentId: "region-button",
   timestamp: "2026-11-15T00:00:00Z", context: { region: "Europe", quarter: "Q3" },
   userMessage: "Show the European sales report",
@@ -156,3 +156,27 @@ test("follow-up mode waits for an action run without aborting it", async () => {
     await view.reply({ type: "run.completed", runId: view.socket.starts()[1].runId })
   } finally { await view.close() }
 })
+
+
+for (const harness of ["claude", "pi"] as const) {
+  test(`${harness} queued A2UI actions use the plugin selection acknowledged after the active reply`, async () => {
+    const view = await mount(harness, "follow-up")
+    let completion!: Promise<void>
+    try {
+      await view.reply({ type: "session.config", config: { ...config, enabledPluginIds: ["agent-dashboard"] } })
+      await view.reply({ type: "run.started", runId: "active" })
+      await act(async () => { completion = view.state().sendFollowUp(actionPrompt) })
+      await act(async () => view.state().setDashboardEnabled(false))
+      const request = view.socket.sent.find((frame) => frame.type === "session.configure")!
+      await view.reply({ type: "run.completed", runId: "active" })
+      assert.equal(view.socket.starts().length, 0)
+      await view.reply({ type: "session.config", requestId: request.requestId, config: { ...config, enabledPluginIds: [] } })
+      const started = view.socket.starts()[0]!
+      assert.ok(started)
+      assert.deepEqual(started.enabledPluginIds, [])
+      assert.equal(started.text, actionPrompt)
+      await view.reply({ type: "run.completed", runId: started.runId })
+      await completion
+    } finally { await view.close() }
+  })
+}

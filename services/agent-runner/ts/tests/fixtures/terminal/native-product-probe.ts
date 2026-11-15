@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { Client } from '@modelcontextprotocol/client'
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio'
-import { salesDashboardSource } from '../a2ui/sales-dashboard.source.js'
 
 // Exercise the actual built stdio entry point, including live /clear /cd context.
 const root = await mkdtemp(join(tmpdir(), 'native-product-'))
@@ -13,28 +12,21 @@ try {
   const next = join(root, 'next-workspace')
   await mkdir(next)
   const config = join(root, 'product-tools.json')
-  await writeFile(config, JSON.stringify({ cwd: root, sessionId: 'before', tools: ['visualize', 'canvas', 'render_ui', 'image_gen', 'image_read', 'image_edit'] }), { mode: 0o600 })
+  await writeFile(config, JSON.stringify({ cwd: root, sessionId: 'before', tools: ['visualize', 'canvas', 'image_gen', 'image_read', 'image_edit'] }), { mode: 0o600 })
   await client.connect(new StdioClientTransport({ command: process.execPath,
     args: [resolve(process.argv[2] ?? 'dist/provider/claude/tools/native-product-server.js'), config], stderr: 'inherit' }))
   const listed = (await client.listTools()).tools
-  assert.equal(listed.length, 6)
-  assert.ok(listed.some((tool) => tool.name === 'render_ui'))
+  assert.equal(listed.length, 5)
+  assert.ok(!listed.some((tool) => tool.name === 'render_ui'))
   const visual = await client.callTool({ name: 'visualize', arguments: { jsx: '<button>native</button>' } })
   assert.equal(visual.isError, false)
   assert.ok(JSON.stringify(visual.content).includes('<button>native</button>'))
-  const dashboard = await client.callTool({ name: 'render_ui', arguments: { source: salesDashboardSource } })
-  assert.equal(dashboard.isError, false)
-  assert.ok(JSON.stringify(dashboard.content).includes('Q3 Sales Performance'))
-  assert.ok(JSON.stringify(dashboard.content).includes('https://priva.app/a2ui/catalog/v1'))
-  const invalid = await client.callTool({ name: 'render_ui', arguments: { source: 'root = Column(children=[missing])' } })
-  assert.equal(invalid.isError, true)
-  assert.ok(JSON.stringify(invalid.content).includes('missing'))
   await writeFile(join(root, 'claude-terminal-instance'), 'instance')
   await writeFile(join(root, 'claude-terminal-state.json'), JSON.stringify({ sessionId: 'after-clear', instanceId: 'instance', cwd: next, phase: 'idle', event: 'ready', updatedAt: Date.now() }))
   const canvas = await client.callTool({ name: 'canvas', arguments: { html: '<html>native artifact</html>', name: 'probe' } })
   assert.equal(canvas.isError, false)
   assert.equal(await readFile(join(next, '.canvas/probe.html'), 'utf8'), '<html>native artifact</html>')
-  process.stdout.write('Native product MCP: compiled entry, A2UI dashboard and validation, JSX and rebound workspace passed\n')
+  process.stdout.write('Native product MCP: compiled entry, no render_ui, JSX and rebound workspace passed\n')
 } finally {
   await client.close()
   await rm(root, { recursive: true, force: true })

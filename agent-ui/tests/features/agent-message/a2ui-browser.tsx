@@ -44,7 +44,7 @@ export function Fixture() {
       return
     }
     const grid = root.querySelector<HTMLElement>(".a2ui-grid")!
-    const expectedColumns = root.clientWidth < 430 ? 1 : root.clientWidth < 760 ? 2 : 4
+    const expectedColumns = root.clientWidth < 430 ? 1 : root.clientWidth < 900 ? 2 : 4
     const cards = Array.from(root.querySelectorAll<HTMLElement>(".a2ui-stat"))
     const surfaceStyle = getComputedStyle(root.querySelector(".a2ui-surface")!)
     const motionIsReduced = surfaceStyle.transform === "none" && surfaceStyle.transitionDuration.split(",").every((duration) => {

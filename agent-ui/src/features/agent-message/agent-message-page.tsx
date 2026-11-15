@@ -50,7 +50,7 @@ export function AgentMessagePage() {
         model={agentMessage.modelReference}
         effort={agentMessage.effort}
         contextWindow={agentMessage.contextWindow}
-        visualizeMode={agentMessage.visualizeMode}
+        enabledPluginIds={agentMessage.enabledPluginIds}
         sessionId={viewedSessionId}
         hidden={!terminalView}
         onSessionRebound={rebindTerminalSession}
@@ -88,8 +88,8 @@ export function AgentMessagePage() {
       onContextWindowChange={agentMessage.setContextWindow}
       onSubmit={agentMessage.submit}
       onStop={agentMessage.stop}
-      visualizeMode={agentMessage.visualizeMode}
-      onVisualizeModeChange={agentMessage.setVisualizeMode}
+      dashboardEnabled={agentMessage.dashboardEnabled}
+      onDashboardEnabledChange={agentMessage.setDashboardEnabled}
       onContinue={agentMessage.sendFollowUp}
     />
     </>

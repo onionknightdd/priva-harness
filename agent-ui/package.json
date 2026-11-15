@@ -55,6 +55,7 @@
     "laz-perf": "0.0.7",
     "lucide-react": "^1.31.0",
     "material-icon-theme": "^5.37.0",
+    "mdast-util-from-markdown": "2.0.3",
     "mdast-util-to-string": "^4.0.0",
     "modern-screenshot": "^4.7.0",
     "motion": "^14.6.0",
