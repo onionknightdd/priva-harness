@@ -4,28 +4,23 @@ import { flushSync } from "react-dom"
 import { ThemeProvider } from "next-themes"
 
 import { Button } from "../../../src/components/ui/button"
-import { GeneratedVisual } from "../../../src/features/agent-message/render-ui/generated-visual"
-import type { StreamBlock } from "../../../src/features/agent-message/agent-message-data"
+import { A2uiVisual } from "../../../src/features/agent-message/a2ui/a2ui-visual"
+import { AgentToRendererMessageSchema } from "@a2ui/web_core/v1_0"
+import gallery from "../../fixtures/a2ui/all-charts.json"
 import "../../../src/i18n"
 import "../../../src/index.css"
 
 const query = new URLSearchParams(location.search)
 const dark = query.has("dark")
-const chartProgram = (kind: string) => [
-  "root = Stack([chart])",
-  'labels = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"]',
-  'pv = Series("页面浏览", [1200, 1450, 1380, 1720, 1960, 2140, 2050, 2380, 2510, 2760, 3020, 3350])',
-  'uv = Series("独立访客", [420, 510, 480, 620, 700, 760, 720, 830, 890, 970, 1080, 1220])',
-  'signup = Series("注册用户", [80, 95, 88, 120, 145, 160, 150, 180, 205, 230, 260, 300])',
-  `chart = ${kind}(labels, [pv, uv, signup], "月份", "数量")`,
-].join("\n")
-const block = (kind: string): Extract<StreamBlock, { type: "tool_use" }> => ({
-  type: "tool_use", id: kind, blockId: kind, index: 0, name: "static_visualize",
-  input: { lang: chartProgram(kind) },
-  tool: { id: kind, name: "static_visualize", input: { lang: chartProgram(kind) }, output: chartProgram(kind), ok: true, status: "completed" },
-})
-const area = block("AreaChart")
-const line = block("LineChart")
+// Use the real compiler output. Each independent surface isolates one chart
+// so the fixture can move it offscreen without changing its rendered model.
+function chartMessages(kind: string) {
+  const message = gallery.messages.find((item) => "createSurface" in item)!
+  const component = message.createSurface.components.find((item) => item.component === kind)!
+  return [AgentToRendererMessageSchema.parse({ ...message, createSurface: { ...message.createSurface, components: [{ ...component, id: "root" }] } })]
+}
+const area = chartMessages("AreaChart")
+const line = chartMessages("LineChart")
 let activeRun: { frames: number[]; commits: Record<string, number>; samples: unknown[] } | null = null
 function onRender(id: string) { if (activeRun) activeRun.commits[id] = (activeRun.commits[id] ?? 0) + 1 }
 const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
@@ -114,9 +109,9 @@ export function Fixture() {
       <span role="status">{status}</span>
     </div>
     <div data-slot="message-scroller-viewport" className="h-[580px] overflow-y-auto overflow-x-hidden" style={{ width: narrow ? 475 : 754, transition: "width 200ms linear" }}>
-      <Profiler id="area" onRender={onRender}><GeneratedVisual block={area} /></Profiler>
+      <Profiler id="area" onRender={onRender}><A2uiVisual messages={area} /></Profiler>
       <div style={{ height: separated ? 1200 : 24 }} />
-      <Profiler id="line" onRender={onRender}><GeneratedVisual block={line} /></Profiler>
+      <Profiler id="line" onRender={onRender}><A2uiVisual messages={line} /></Profiler>
       <div className="h-12" />
     </div>
     <details className="mt-4"><summary>Measurement results</summary><pre id="chart-resize-results">{JSON.stringify(results, null, 2)}</pre></details>

@@ -13,6 +13,8 @@
     "prebuild": "node scripts/copy-model-codecs.mjs"
   },
   "dependencies": {
+    "@a2ui/react": "0.14.0",
+    "@a2ui/web_core": "0.14.0",
     "@animate-ui/react": "^2.0.0",
     "@animateicons/react": "^0.4.3",
     "@base-ui/react": "^1.7.0",
@@ -25,8 +27,6 @@
     "@lobehub/icons-static-svg": "^1.94.0",
     "@medv/finder": "4.0.2",
     "@novnc/novnc": "^1.7.0",
-    "@openuidev/react-lang": "^1.0.1",
-    "@openuidev/react-ui": "^0.18.1",
     "@rjsf/core": "^6.10.0",
     "@rjsf/utils": "^6.10.0",
     "@rjsf/validator-ajv8": "^6.10.0",
@@ -87,7 +87,8 @@
     "three": "0.180.0",
     "tw-shimmer": "^0.4.12",
     "unist-util-visit": "^5.1.0",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "zod-v3": "npm:zod@3.25.76"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

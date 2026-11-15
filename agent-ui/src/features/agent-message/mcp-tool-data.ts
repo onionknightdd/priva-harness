@@ -2,7 +2,7 @@ import { whiteboardToolKind } from "./whiteboard-tools"
 import type { StreamBlock } from "./agent-message-data"
 import { isCanvasTool } from "./canvas-html"
 import { isImageEditTool, isImageGenTool, isImageReadTool } from "./image-tools"
-import { isGeneratedVisualTool } from "./render-ui/lang"
+import { isGeneratedVisualTool } from "./a2ui-tool-data"
 import { isVisualizeTool } from "./visualize-jsx"
 
 export type McpToolName = { serverName: string; toolName: string }

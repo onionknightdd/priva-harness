@@ -1,6 +1,5 @@
 import { isProcessBlock, textFromBlocks, type AgentThreadMessage, type StreamBlock } from "./agent-message-data"
-import { isGeneratedVisualTool, isHiddenGeneratedVisual } from "./render-ui/lang"
-import { finishedProgramRejected } from "./render-ui/visual-program"
+import { isFailedGeneratedVisual, isGeneratedVisualTool } from "./a2ui-tool-data"
 
 export type AssistantPiece =
   | { kind: "process"; blocks: StreamBlock[] }
@@ -20,7 +19,10 @@ export function assistantPieces(message: AgentThreadMessage): AssistantPiece[] {
   }
   for (const block of blocks) {
     if (block.type === "tool_use" && isGeneratedVisualTool(block.name)) {
-      if (isHiddenGeneratedVisual(block) || finishedProgramRejected(block)) continue
+      if (isFailedGeneratedVisual(block)) {
+        process.push(block)
+        continue
+      }
       flush()
       pieces.push({ kind: "visual", block })
       continue

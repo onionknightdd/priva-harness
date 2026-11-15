@@ -15,7 +15,7 @@ frontend-specific guidance there instead of duplicating it in this file.
 The TypeScript Agent Runner lives in `services/agent-runner/ts/`. Use npm and
 run the following commands from that directory:
 
-- Install dependencies: `OPENUI_TELEMETRY_DISABLED=1 npm ci`
+- Install dependencies: `npm ci`
 - Start development: `npm run dev`
 - Run static analysis: `npm run lint`
 - Run strict type checking: `npm run typecheck`
@@ -49,6 +49,15 @@ before changing the Pi terminal host or its structured control bridge.
 To verify the compiled Claude native product MCP entry point after building:
 
 - `node --import tsx tests/fixtures/terminal/native-product-probe.ts dist/provider/claude/tools/native-product-server.js`
+
+A2UI compiler and real canonical fixture verification, from the Runner directory:
+
+- `TMPDIR=/tmp npx vitest run tests/unit/core/tool/a2ui-render.test.ts tests/unit/core/tool/visualize-mode.test.ts`
+- `node --import tsx tests/fixtures/a2ui/generate-sales-dashboard.ts`
+
+The fixture generator compiles the sales dashboard, form actions, chart gallery and root tables;
+the frontend catalog generator and browser checks are documented in
+`docs/front-end-desgin.md`.
 
 Whiteboard native tool / live WebSocket verification uses an isolated Runner and
 workspace (no real model calls). From `services/agent-runner/ts/`:

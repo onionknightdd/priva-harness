@@ -315,7 +315,7 @@ ID 是不透明字符串，客户端不得解析。
 | `mcp` | `mcp__<server>__<tool>`（`server` 字段给出服务名） | MCP 扩展工具 |
 | `question` | AskUserQuestion | ask_user_question |
 | `image` | 产品工具 image_gen / image_read / image_edit | codemode 的图片调用 |
-| `visualize` | 产品工具 visualize 系列 | 对应工具 |
+| `visualize` | 产品工具 visualize / render_ui / canvas / whiteboard_read / whiteboard_write（含 MCP 名称） | 对应工具 |
 | `workflow` | Workflow | 对应的 workflow 工具 |
 | `other` | 其余 | 其余 |
 

@@ -83,8 +83,8 @@ import { isCanvasTool } from "../canvas-html"
 import { externalMcpToolName } from "../mcp-tool-data"
 import { isVisualizeTool } from "../visualize-jsx"
 import { isImageEditTool, isImageGenTool, isImageReadTool } from "../image-tools"
-import { isHiddenGeneratedVisual } from "../render-ui/lang"
-import { finishedProgramRejected } from "../render-ui/visual-program"
+import { isFailedGeneratedVisual, isGeneratedVisualTool } from "../a2ui-tool-data"
+import { GeneratedA2ui } from "../generated-a2ui"
 import { ImageGenToolItem, ImageReadToolItem } from "./image-tool-item"
 import { ImageEditToolItem } from "./image-edit-tool-item"
 
@@ -335,7 +335,9 @@ export function ToolItem({
   block: Extract<StreamBlock, { type: "tool_use" }>
   blocks?: readonly StreamBlock[]
 }) {
-  if (isHiddenGeneratedVisual(block) || finishedProgramRejected(block)) return null
+  if (isGeneratedVisualTool(block.name)) return isFailedGeneratedVisual(block)
+    ? <GenericToolItem block={block} />
+    : <GeneratedA2ui block={block} />
   if (block.name === "codemode") {
     return <CodemodeToolItem block={block}>
       {blocks.filter((child): child is Extract<StreamBlock, { type: "tool_use" }> => child.type === "tool_use" && codemodeParent(child, blocks) === block.id)

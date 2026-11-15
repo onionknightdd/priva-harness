@@ -28,6 +28,7 @@ import { updatePromptSuggestion, type PromptSuggestion } from "./prompt-suggesti
 import { baseModelReference, DEFAULT_CONTEXT_WINDOW, type ContextWindow } from "./model-context"
 import { isLiveComputerToolStart } from "./computer-tool-data"
 import { createLiveWhiteboardNavigation, type WhiteboardNavigation } from "./live-whiteboard-navigation"
+import { restoreUiActionMessage } from "./ui-action"
 
 const AWAITING_NATIVE_EFFORT_LEVELS: readonly AgentRunEffort[] = []
 
@@ -360,10 +361,12 @@ export function useAgentMessage({ onComputerToolStarted, onWhiteboardToolActivit
   const stop = React.useCallback(() => connectionRef.current?.abort(), [])
   const sendFollowUp = React.useCallback((text: string) => {
     const content = text.trim()
-    if (configurationRequestRef.current || !content || !modelReference || !runHarnessId || !runCwd.trim()) return
+    if (configurationRequestRef.current || !content || !modelReference || !runHarnessId || !runCwd.trim()) {
+      return Promise.reject(new Error(t("agentMessage.visualActionUnavailable")))
+    }
     const connection = ensureConnection()
     const assistant = createAgentThreadMessage("assistant", "", "streaming")
-    const user = { ...createAgentThreadMessage("user", content), id: `${assistant.id}:user` }
+    const user = restoreUiActionMessage({ ...createAgentThreadMessage("user", content), id: `${assistant.id}:user` })
     if (runHarnessId === "claude") setRunModePending(true)
     pendingIdsRef.current.add(assistant.id)
     setMessages((current) => [...current, user, assistant])
@@ -376,17 +379,22 @@ export function useAgentMessage({ onComputerToolStarted, onWhiteboardToolActivit
         type: "run.failed", message: error instanceof Error ? error.message : t("agentMessage.sendFailed"),
       }))
     }
-    submitChainRef.current = submitChainRef.current.catch(() => undefined).then(async () => {
-      if (generation !== generationRef.current) return
-      await connection.waitForIdle()
-      if (generation !== generationRef.current) return
-      void connection.start({
-        text: content, model: modelReference, harness: runHarnessId,
-        ...(runHarnessId === "claude" ? { runMode } : {}),
-        cwd: runCwd.trim(), effort, contextWindow, promptSuggestions: inputSuggestions, visualizeMode,
-        theme: resolvedTheme === "dark" ? "dark" : "light",
-      }, assistant.id).catch(failed)
-    }).catch(failed)
+    // Keep the shared queue limited to dispatch. Waiting for the model inside it
+    // would prevent a normal Send from steering or interrupting this action's run.
+    return new Promise<void>((resolve, reject) => {
+      const rejectAction = (error: unknown) => { failed(error); reject(error) }
+      submitChainRef.current = submitChainRef.current.catch(() => undefined).then(async () => {
+        if (generation !== generationRef.current) throw new Error(t("agentMessage.visualActionUnavailable"))
+        await connection.waitForIdle()
+        if (generation !== generationRef.current) throw new Error(t("agentMessage.visualActionUnavailable"))
+        void connection.start({
+          text: content, model: modelReference, harness: runHarnessId,
+          ...(runHarnessId === "claude" ? { runMode } : {}),
+          cwd: runCwd.trim(), effort, contextWindow, promptSuggestions: inputSuggestions, visualizeMode,
+          theme: resolvedTheme === "dark" ? "dark" : "light",
+        }, assistant.id).then(resolve, rejectAction)
+      }).catch(rejectAction)
+    })
   }, [modelReference, runHarnessId, runCwd, ensureConnection, effort, contextWindow, inputSuggestions, visualizeMode, resolvedTheme, runMode, setRunModePending, t])
   const dismissPromptSuggestion = React.useCallback(() => setSuggestion((current) =>
     current && !current.dismissed ? { ...current, dismissed: true } : current), [])

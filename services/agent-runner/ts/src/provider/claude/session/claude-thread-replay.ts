@@ -85,12 +85,13 @@ export function replayClaudeSessionMessages(
     }
     if (message.apiError) {
       const text = userContent(message.message).trim()
+      const errorCode = message.apiError.code ?? ''
       items.push({
         kind: 'frame',
         createdAt,
         event: {
           type: 'run.failed',
-          message: text || message.apiError.code || 'Claude stopped with an API error',
+          message: text !== '' ? text : errorCode !== '' ? errorCode : 'Claude stopped with an API error',
         },
       })
     }

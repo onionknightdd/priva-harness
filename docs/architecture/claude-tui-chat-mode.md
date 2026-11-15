@@ -616,9 +616,11 @@ TMPDIR=/tmp npm test -- --run tests/integration/transport/websocket/terminal-cha
 ### 4.16 产品工具与配置注入
 
 `ClaudeProvider.terminalLaunch` 将现有 `productTools` 编译为私有 stdio MCP 配置，
-通过 `--mcp-config product-mcp.json` 加入原生 CLI。`visualize`、`canvas`、`static_visualize`、
-`interactive_visualize`、`image_gen`、`image_read`、`image_edit` 复用现有实现；没有另开 SDK 对话。
-可视化回答开关会改写系统提示并重启 CLI：关闭时只注册 `visualize`，打开时改为两个 OpenUI 工具。
+通过 `--mcp-config product-mcp.json` 加入原生 CLI。`visualize`、`canvas`、`render_ui`、
+`image_gen`、`image_read`、`image_edit` 复用现有实现；没有另开 SDK 对话。
+可视化回答开关会改写系统提示并重启 CLI：关闭时只注册 `visualize`，打开时改为 A2UI `render_ui(source)`。其 Express 输入在 Runner 编译校验为 canonical JSON，
+前端通过官方 A2UI renderer 与 shadcn catalog 展示；单次调用对应独立 surface。
+按钮动作沿现有用户消息通道回传，不新增 MCP callback 服务。
 
 ```text
 UI 模型 / effort / 图片模型 / 建议设置 -> buildRunSpec -> ClaudeProvider.terminalLaunch

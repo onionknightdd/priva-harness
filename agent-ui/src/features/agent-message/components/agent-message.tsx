@@ -31,7 +31,7 @@ import {
 } from "./agent-message-composer"
 import { AgentMessageEmptyState } from "./agent-message-empty-state"
 import { AgentMessageThread } from "./agent-message-thread"
-import { VisualizeContinueProvider } from "../render-ui/visualize-continue"
+import { UiActionProvider } from "../ui-action-context"
 import type { ComposerEffort } from "./composer-model-selector"
 import { ComposerContextRing } from "./composer-context-ring"
 import { SessionCwdIndicator } from "./session-cwd-indicator"
@@ -114,7 +114,7 @@ export function AgentMessage({
   onStop: () => void
   visualizeMode?: boolean
   onVisualizeModeChange?: (active: boolean) => void
-  onContinue?: (message: string) => void
+  onContinue?: (message: string) => void | Promise<void>
 }) {
   const { t } = useTranslation()
   const sectionRef = useRef<HTMLElement>(null)
@@ -274,12 +274,12 @@ export function AgentMessage({
               exit={{ opacity: 0 }}
               transition={overlayTransition}
             >
-              <VisualizeContinueProvider onContinue={onContinue ?? (() => {})}>
+              <UiActionProvider onContinue={onContinue}>
               <AgentMessageThread
                 messages={messages}
                 onSelectionAction={onSelectionAction}
               />
-              </VisualizeContinueProvider>
+              </UiActionProvider>
             </motion.div>
           )}
         </AnimatePresence>

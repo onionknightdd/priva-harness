@@ -1,8 +1,9 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { connectAgentSession } from "../../../src/features/agent-message/run-agent-session.ts"
-import { applyThreadStreamFrame } from "../../../src/features/agent-message/run-stream-reducer.ts"
+import { applyThreadStreamFrame, mergeSnapshotMessages } from "../../../src/features/agent-message/run-stream-reducer.ts"
 import type { AgentThreadMessage } from "../../../src/features/agent-message/agent-message-data.ts"
+import { uiActionMessage } from "../../../src/features/agent-message/ui-action.ts"
 
 class Socket extends EventTarget {
   static readonly OPEN = 1
@@ -16,6 +17,42 @@ class Socket extends EventTarget {
   frame(frame: Record<string, unknown>) { this.dispatchEvent(new MessageEvent("message", { data: JSON.stringify({ v: 2, streamId: "stream", harness: "claude", sessionId: "session", ...frame }) })) }
   close() { this.readyState = 3; this.dispatchEvent(new Event("close")) }
 }
+
+for (const harness of ["claude", "pi"] as const) test(`${harness} carries the complete UI action to the model while restoring a readable user message`, async () => {
+  const originals = ["window", "WebSocket"].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const)
+  Object.defineProperty(globalThis, "window", { configurable: true, value: { location: { protocol: "http:", host: "localhost" } } })
+  Object.defineProperty(globalThis, "WebSocket", { configurable: true, value: Socket })
+  const action = { name: "explore_region", surfaceId: "main", sourceComponentId: "explore", timestamp: "2026-11-15T00:00:00Z", context: { region: "North America" }, userMessage: "Explore North America" }
+  const text = uiActionMessage("sales-tool", action)
+  const user: AgentThreadMessage = { id: "run:user", role: "user", content: text, createdAt: "2026-11-15T00:00:00Z", status: "complete" }
+  let messages: AgentThreadMessage[] = [{ id: "run", role: "assistant", content: "", createdAt: user.createdAt, status: "streaming" }]
+  const connection = connectAgentSession({ harness, sessionId: "session" }, {
+    onFrame: (frame) => {
+      messages = frame.type === "session.snapshot"
+        ? mergeSnapshotMessages(messages, frame.messages ?? [])
+        : applyThreadStreamFrame(messages, "run", frame)
+    },
+    onError: () => {}, onSession: () => {}, onConnection: () => {},
+  })
+  try {
+    const pending = connection.start({ text, harness, model: "model", cwd: "/work", visualizeMode: true }, "run")
+    const socket = Socket.instances.at(-1)!
+    socket.open()
+    assert.equal(socket.sent.find((frame) => frame.type === "run.start")?.text, text)
+    socket.frame({ type: "run.started", runId: "run", seq: 1, userMessage: user })
+    assert.equal(messages.find((message) => message.role === "user")?.content, action.userMessage)
+    assert.deepEqual(messages.find((message) => message.role === "user")?.uiAction, { version: 1, toolCallId: "sales-tool", action })
+    socket.frame({ type: "run.completed", runId: "run", seq: 2 })
+    await pending
+    socket.frame({ type: "session.snapshot", seq: 3, messages: [user] })
+    assert.equal(messages[0]?.content, action.userMessage)
+    assert.equal(messages[0]?.uiAction?.toolCallId, "sales-tool")
+    assert.equal(socket.sent.filter((frame) => frame.type === "run.start").length, 1)
+  } finally {
+    connection.disconnect()
+    for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key) }
+  }
+})
 
 for (const harness of ["claude", "pi"] as const) test(`${harness} context configuration waits for the matching acknowledgment and rejects failure`, async () => {
   const originals = ["window", "WebSocket"].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const)

@@ -2,6 +2,7 @@ import { parseMarkdownIntoBlocks } from "streamdown"
 
 import type { AgentThreadMessage } from "./agent-message-data"
 import type { MessageAttachment } from "./message-attachment"
+import { restoreUiActionMessage } from "./ui-action"
 
 const ATTACHMENTS_LANGUAGE = "AgentAttachments"
 
@@ -46,6 +47,7 @@ export function restoreUserMessageAttachments<
   T extends Pick<AgentThreadMessage, "role" | "content" | "attachments">,
 >(message: T): T {
   if (message.role !== "user") return message
+  message = restoreUiActionMessage(message)
   const parsed = attachmentsFromMessageText(message.content)
   if (!parsed) {
     if (!message.attachments?.some((file) => file.mimeType.startsWith("image/"))) return message

@@ -2,7 +2,7 @@ import type { MessageAttachment } from "./message-attachment"
 import type { WorkflowCard } from "./workflow-data"
 import type { CompactMarker } from "./slash-command-envelope"
 export type { WorkflowCard } from "./workflow-data"
-import { isGeneratedVisualTool } from "./render-ui/lang"
+import { isFailedGeneratedVisual, isGeneratedVisualTool } from "./a2ui-tool-data"
 import { isTaskBoardTool } from "./task-plan"
 
 export type AgentMessageRole = "user" | "assistant"
@@ -116,6 +116,7 @@ export type AgentThreadMessage = {
   role: AgentMessageRole
   content: string
   attachments?: MessageAttachment[]
+  uiAction?: import("./ui-action").UiActionEnvelope
   createdAt: string
   /** Wall-clock length of the finished run. Absent while the run is still streaming. */
   durationMs?: number
@@ -201,7 +202,7 @@ export function isProcessBlock(
     return true
   }
   if (block.type === "tool_use") {
-    return !isGeneratedVisualTool(block.name) && !isTaskBoardTool(block.name) && block.name.toLowerCase() !== "structuredoutput"
+    return (!isGeneratedVisualTool(block.name) || isFailedGeneratedVisual(block)) && !isTaskBoardTool(block.name) && block.name.toLowerCase() !== "structuredoutput"
   }
   if (block.type !== "text" || block.text.trim() === "") {
     return false

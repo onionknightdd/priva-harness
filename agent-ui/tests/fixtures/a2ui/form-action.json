@@ -1,0 +1,83 @@
+{
+  "format": "a2ui",
+  "version": "1.0",
+  "messages": [
+    {
+      "version": "v1.0",
+      "createSurface": {
+        "surfaceId": "main",
+        "catalogId": "https://priva.app/a2ui/catalog/v1",
+        "components": [
+          {
+            "id": "root",
+            "component": "Column",
+            "children": [
+              "heading",
+              "title",
+              "region",
+              "submit"
+            ]
+          },
+          {
+            "id": "heading",
+            "component": "Heading",
+            "text": "Regional report"
+          },
+          {
+            "id": "title",
+            "component": "TextField",
+            "label": "Report title",
+            "value": {
+              "@path": "/title"
+            }
+          },
+          {
+            "id": "region",
+            "component": "Select",
+            "label": "Region",
+            "value": {
+              "@path": "/region"
+            },
+            "options": [
+              {
+                "label": "North America",
+                "value": "North America"
+              },
+              {
+                "label": "Europe",
+                "value": "Europe"
+              },
+              {
+                "label": "Asia Pacific",
+                "value": "Asia Pacific"
+              }
+            ]
+          },
+          {
+            "id": "submit",
+            "component": "Button",
+            "label": "Update report",
+            "action": {
+              "event": {
+                "name": "update_report",
+                "context": {
+                  "title": {
+                    "@path": "/title"
+                  },
+                  "region": {
+                    "@path": "/region"
+                  }
+                },
+                "userMessage": "Update the regional report"
+              }
+            }
+          }
+        ],
+        "dataModel": {
+          "title": "Q3 plan",
+          "region": "Europe"
+        }
+      }
+    }
+  ]
+}
