@@ -14,6 +14,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { A2UI_CATALOG_ID, componentDefinitions as definitions } from "./catalog-definition"
 import { CartesianChart, DonutChartView } from "./charts"
 import { useA2uiInteraction } from "./interaction"
+import { DashboardTabs } from "./tabs"
+import { DashboardImage } from "./image"
+import { DashboardIcon } from "./icons"
+import { DashboardImageGallery } from "./gallery"
 
 function displayText(value: unknown): string {
   if (typeof value !== "string") throw new Error("A2UI text must resolve to a string.")
@@ -104,6 +108,17 @@ const SelectField = createComponentImplementation(definitions.Select, ({ props }
 
 export const a2uiCatalog = new Catalog(A2UI_CATALOG_ID, "1.0", [
   Column, Row, Grid, Heading, Text, Stat, ContentCard, StatusBadge, Table, ActionButton, TextField, SelectField,
+  createComponentImplementation(definitions.Tabs, ({ props, buildChild }) => <DashboardTabs tabs={props.tabs} buildChild={buildChild} />),
+  createComponentImplementation(definitions.Image, ({ props }) => <DashboardImage url={displayText(props.url)} description={displayText(props.description)} fit={props.fit} />),
+  createComponentImplementation(definitions.ImageGallery, ({ props }) => <DashboardImageGallery
+    title={props.title === undefined ? undefined : displayText(props.title)}
+    images={props.images.map((item) => ({
+      url: displayText(item.url),
+      description: displayText(item.description),
+      ...(item.title === undefined ? {} : { title: displayText(item.title) }),
+    }))}
+  />),
+  createComponentImplementation(definitions.Icon, ({ props }) => <DashboardIcon {...props} />),
   createComponentImplementation(definitions.BarChart, ({ props }) => <CartesianChart {...props} title={displayText(props.title)} labels={props.labels.map(displayText)} kind="bar" />),
   createComponentImplementation(definitions.LineChart, ({ props }) => <CartesianChart {...props} title={displayText(props.title)} labels={props.labels.map(displayText)} kind="line" />),
   createComponentImplementation(definitions.AreaChart, ({ props }) => <CartesianChart {...props} title={displayText(props.title)} labels={props.labels.map(displayText)} kind="area" />),

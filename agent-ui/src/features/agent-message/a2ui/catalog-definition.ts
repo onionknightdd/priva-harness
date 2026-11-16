@@ -1,6 +1,8 @@
 import { Catalog, CommonSchemas } from "@a2ui/web_core/v1_0"
 import { z } from "zod-v3"
 
+import { DASHBOARD_ICON_NAMES } from "./icon-names"
+
 /** Shared by the renderer and the generated agent catalog. No React or DOM imports. */
 export const A2UI_CATALOG_ID = "https://priva.app/a2ui/catalog/v1"
 
@@ -34,6 +36,15 @@ export const componentDefinitions = {
     schema: z.object({ children, columns: z.number().int().min(1).max(4).optional() }).strict()
       .describe("Equal columns, default 4. Automatically reduces to 2 and 1 on smaller screens."),
   },
+  Tabs: {
+    name: "Tabs",
+    schema: z.object({
+      tabs: z.array(z.object({
+        title: z.string().min(1).max(80).regex(/\S/).describe("A short, nonblank literal tab title."),
+        child: CommonSchemas.ComponentId,
+      }).strict()).min(1).max(8),
+    }).strict().describe("Local view switcher with one child component per tab. Starts on the first tab; switching preserves form values and does not send a message. Use a Column child to group content."),
+  },
   Heading: {
     name: "Heading",
     schema: z.object({ text, subtitle: text.optional(), eyebrow: text.optional() }).strict()
@@ -42,6 +53,34 @@ export const componentDefinitions = {
   Text: {
     name: "Text",
     schema: z.object({ text, tone: tone.optional() }).strict().describe("Plain text. No HTML or Markdown."),
+  },
+  Image: {
+    name: "Image",
+    schema: z.object({
+      url: text.describe("An existing image's HTTP(S) URL or sandbox:/absolute/path. No relative paths, data URLs or file URLs."),
+      description: text.describe("Accessible text describing the image's content."),
+      fit: z.enum(["contain", "cover"]).optional(),
+    }).strict().describe("Responsive image within the conversation container. Defaults to contain without cropping; cover may crop. Use only images supplied by the user or verified in tool results."),
+  },
+  ImageGallery: {
+    name: "ImageGallery",
+    schema: z.object({
+      images: z.array(z.object({
+        url: text.describe("An existing image's HTTP(S) URL or sandbox:/absolute/path. No relative paths, data URLs or file URLs."),
+        description: text.describe("Accessible text describing the image's content."),
+        title: text.optional(),
+      }).strict()).min(1).max(12),
+      title: text.optional(),
+    }).strict().describe("Local Coverflow image gallery with 1 to 12 known images. Starts on the first image, never autoplays or loops. Cropped previews open the original image in a lightbox; selection survives tab changes while mounted."),
+  },
+  Icon: {
+    name: "Icon",
+    schema: z.object({
+      name: z.enum(DASHBOARD_ICON_NAMES),
+      size: z.enum(["small", "medium", "large"]).optional(),
+      tone: tone.optional(),
+      label: text.optional().describe("Accessible label when the icon conveys meaning on its own. Omit for decoration beside text."),
+    }).strict().describe("A static Lucide icon. Sizes small, medium (default) and large are 16, 20 and 32 pixels. No click action."),
   },
   Stat: {
     name: "Stat",
@@ -108,8 +147,8 @@ export const a2uiCatalogDefinition = new Catalog(
   Object.values(componentDefinitions),
   [],
   undefined,
-  "Use one Column root. Lead dashboards with Heading, a Grid of Stats, charts, then a Row of optional actions. " +
+  "Use one root. Use Column for a single view or Tabs for related views. Lead dashboards with Heading, a Grid of Stats, charts, then a Row of optional actions. " +
     "Keep titles short, supply full category names, and ensure chart values align with labels. " +
-    "Use the provided components; do not emit HTML, CSS, JavaScript, URLs, or unknown component types. " +
+    "Use the provided components; do not emit HTML, CSS, JavaScript or unknown component types. URLs are allowed only in Image.url or ImageGallery.images[].url as an existing HTTP(S) image or sandbox:/absolute/path. " +
     "All inputs must bind to initialized data-model paths; button event.context can reference those paths.",
 ).toJson()

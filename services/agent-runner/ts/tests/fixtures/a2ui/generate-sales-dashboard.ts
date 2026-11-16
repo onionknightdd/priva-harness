@@ -7,8 +7,11 @@ import { salesDashboardSource } from './sales-dashboard.source.js'
 import { formActionSource } from './form-action.source.js'
 import { allChartsSource } from './all-charts.source.js'
 import { rootTableSource } from './root-table.source.js'
+import { tabsSource } from './tabs.source.js'
+import { mediaSource } from './media.source.js'
+import { gallerySource } from './gallery.source.js'
 
-for (const [name, source] of Object.entries({ 'sales-dashboard': salesDashboardSource, 'form-action': formActionSource, 'all-charts': allChartsSource, 'root-table': rootTableSource })) {
+for (const [name, source] of Object.entries({ 'sales-dashboard': salesDashboardSource, 'form-action': formActionSource, 'all-charts': allChartsSource, 'root-table': rootTableSource, tabs: tabsSource, media: mediaSource, gallery: gallerySource })) {
   const target = fileURLToPath(new URL(`../../../../../../agent-ui/tests/fixtures/a2ui/${name}.json`, import.meta.url))
   mkdirSync(dirname(target), { recursive: true })
   writeFileSync(target, `${JSON.stringify(compileA2uiSource(source), null, 2)}\n`)

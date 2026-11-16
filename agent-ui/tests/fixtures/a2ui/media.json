@@ -1,0 +1,125 @@
+{
+  "format": "a2ui",
+  "version": "1.0",
+  "messages": [
+    {
+      "version": "v1.0",
+      "createSurface": {
+        "surfaceId": "main",
+        "catalogId": "https://priva.app/a2ui/catalog/v1",
+        "components": [
+          {
+            "id": "root",
+            "component": "Column",
+            "children": [
+              "heading",
+              "images",
+              "icons"
+            ]
+          },
+          {
+            "id": "heading",
+            "component": "Heading",
+            "text": "Images and icons",
+            "subtitle": "Illustrative media for the component catalog"
+          },
+          {
+            "id": "images",
+            "component": "Grid",
+            "children": [
+              "localCard",
+              "remoteCard"
+            ],
+            "columns": 2
+          },
+          {
+            "id": "localCard",
+            "component": "Card",
+            "children": [
+              "localImage"
+            ],
+            "title": "Workspace image",
+            "description": "Contained image at its natural aspect ratio"
+          },
+          {
+            "id": "localImage",
+            "component": "Image",
+            "url": "sandbox:/a2ui-media-fixtures/landscape.svg",
+            "description": "Illustrative landscape orientation image"
+          },
+          {
+            "id": "remoteCard",
+            "component": "Card",
+            "children": [
+              "remoteImage"
+            ],
+            "title": "Remote image",
+            "description": "Bound image URL and alternative text"
+          },
+          {
+            "id": "remoteImage",
+            "component": "Image",
+            "url": {
+              "@path": "/image"
+            },
+            "description": {
+              "@path": "/description"
+            },
+            "fit": "cover"
+          },
+          {
+            "id": "icons",
+            "component": "Row",
+            "children": [
+              "activity",
+              "growth",
+              "caption",
+              "alert",
+              "search"
+            ]
+          },
+          {
+            "id": "activity",
+            "component": "Icon",
+            "name": "activity",
+            "size": "small",
+            "tone": "muted"
+          },
+          {
+            "id": "growth",
+            "component": "Icon",
+            "name": "trending-up",
+            "tone": "positive",
+            "label": {
+              "@path": "/status"
+            }
+          },
+          {
+            "id": "caption",
+            "component": "Text",
+            "text": "Revenue increased by 8.2%"
+          },
+          {
+            "id": "alert",
+            "component": "Icon",
+            "name": "triangle-alert",
+            "size": "large",
+            "tone": "negative",
+            "label": "Attention required"
+          },
+          {
+            "id": "search",
+            "component": "Icon",
+            "name": "search",
+            "label": "Search"
+          }
+        ],
+        "dataModel": {
+          "image": "http://127.0.0.1:5188/a2ui-media-fixtures/portrait.svg",
+          "description": "Illustrative portrait orientation image",
+          "status": "Revenue is increasing"
+        }
+      }
+    }
+  ]
+}

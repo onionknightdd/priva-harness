@@ -1,0 +1,32 @@
+.a2ui-gallery {
+  container: a2ui-gallery / inline-size;
+  min-width: 0;
+  width: 100%;
+  overflow: clip;
+  padding: clamp(0.75rem, 2cqi, 1.25rem);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--background);
+}
+.a2ui-gallery:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.a2ui-gallery-title { margin-bottom: 1rem; font-size: 1.125rem; line-height: 1.4; font-weight: 600; overflow-wrap: anywhere; }
+.a2ui-gallery-stage { position: relative; min-width: 0; aspect-ratio: 16 / 7; overflow: clip; isolation: isolate; perspective: 1000px; touch-action: pan-y; user-select: none; }
+.a2ui-gallery-slide { position: absolute; inset-block-start: 4%; inset-inline-start: 50%; width: 68%; transform-style: preserve-3d; backface-visibility: hidden; }
+.a2ui-gallery-slide .a2ui-image-frame { box-shadow: var(--elevation-sm); }
+.a2ui-gallery-slide .a2ui-image[data-state="loading"] .a2ui-image-frame { min-height: 0; }
+.a2ui-gallery-slide .a2ui-image-error { min-height: 0; width: 100%; aspect-ratio: 16 / 9; padding: 0.75rem; font-size: 0.8125rem; }
+.a2ui-gallery-slide[data-active="false"] .a2ui-image-frame:enabled { cursor: pointer; }
+.a2ui-gallery-footer { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 0.75rem; margin-top: 0.75rem; }
+.a2ui-gallery-caption { min-width: 0; }
+.a2ui-gallery-caption p:first-child { font-weight: 550; overflow-wrap: anywhere; }
+.a2ui-gallery-caption p + p { margin-top: 0.25rem; color: var(--muted-foreground); font-size: 0.8125rem; overflow-wrap: anywhere; }
+.a2ui-gallery-controls { display: flex; flex: none; align-items: center; gap: 0.125rem; }
+.a2ui-gallery-count { white-space: nowrap; color: var(--muted-foreground); font-size: 0.75rem; font-variant-numeric: tabular-nums; }
+.a2ui-gallery-progress { height: 1px; margin-top: 1rem; overflow: hidden; background: var(--border); }
+.a2ui-gallery-progress > span { display: block; width: 100%; height: 100%; transform-origin: left; background: var(--foreground); }
+@container a2ui-gallery (width < 430px) {
+  .a2ui-gallery-stage { aspect-ratio: 16 / 8; }
+  .a2ui-gallery-slide { width: 80%; }
+  .a2ui-gallery-footer { align-items: flex-start; flex-direction: column; }
+  .a2ui-gallery-controls { align-self: flex-end; }
+}

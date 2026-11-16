@@ -2,7 +2,7 @@
 export const a2uiCatalogDefinition: Record<string, unknown> = {
   "protocolVersion": "1.0",
   "catalogId": "https://priva.app/a2ui/catalog/v1",
-  "instructions": "Use one Column root. Lead dashboards with Heading, a Grid of Stats, charts, then a Row of optional actions. Keep titles short, supply full category names, and ensure chart values align with labels. Use the provided components; do not emit HTML, CSS, JavaScript, URLs, or unknown component types. All inputs must bind to initialized data-model paths; button event.context can reference those paths.",
+  "instructions": "Use one root. Use Column for a single view or Tabs for related views. Lead dashboards with Heading, a Grid of Stats, charts, then a Row of optional actions. Keep titles short, supply full category names, and ensure chart values align with labels. Use the provided components; do not emit HTML, CSS, JavaScript or unknown component types. URLs are allowed only in Image.url or ImageGallery.images[].url as an existing HTTP(S) image or sandbox:/absolute/path. All inputs must bind to initialized data-model paths; button event.context can reference those paths.",
   "components": {
     "Column": {
       "type": "object",
@@ -65,6 +65,45 @@ export const a2uiCatalogDefinition: Record<string, unknown> = {
       ],
       "unevaluatedProperties": false
     },
+    "Tabs": {
+      "type": "object",
+      "properties": {
+        "component": {
+          "const": "Tabs"
+        },
+        "tabs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "pattern": "\\S",
+                "description": "A short, nonblank literal tab title."
+              },
+              "child": {
+                "$ref": "common_types.json#/$defs/ComponentId",
+                "description": "The unique identifier for a component, used for both definitions and references within the same surface."
+              }
+            },
+            "required": [
+              "title",
+              "child"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 8
+        }
+      },
+      "required": [
+        "component",
+        "tabs"
+      ],
+      "unevaluatedProperties": false
+    },
     "Heading": {
       "type": "object",
       "properties": {
@@ -113,6 +152,214 @@ export const a2uiCatalogDefinition: Record<string, unknown> = {
       "required": [
         "component",
         "text"
+      ],
+      "unevaluatedProperties": false
+    },
+    "Image": {
+      "type": "object",
+      "properties": {
+        "component": {
+          "const": "Image"
+        },
+        "url": {
+          "description": "An existing image's HTTP(S) URL or sandbox:/absolute/path. No relative paths, data URLs or file URLs.",
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "common_types.json#/$defs/DataBinding"
+            },
+            {
+              "$ref": "common_types.json#/$defs/FunctionCall",
+              "description": "Invokes a named function, combining common function properties with the catalog function definition."
+            }
+          ]
+        },
+        "description": {
+          "description": "Accessible text describing the image's content.",
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "common_types.json#/$defs/DataBinding"
+            },
+            {
+              "$ref": "common_types.json#/$defs/FunctionCall",
+              "description": "Invokes a named function, combining common function properties with the catalog function definition."
+            }
+          ]
+        },
+        "fit": {
+          "type": "string",
+          "enum": [
+            "contain",
+            "cover"
+          ]
+        }
+      },
+      "required": [
+        "component",
+        "url",
+        "description"
+      ],
+      "unevaluatedProperties": false
+    },
+    "ImageGallery": {
+      "type": "object",
+      "properties": {
+        "component": {
+          "const": "ImageGallery"
+        },
+        "images": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "description": "An existing image's HTTP(S) URL or sandbox:/absolute/path. No relative paths, data URLs or file URLs.",
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "common_types.json#/$defs/DataBinding"
+                  },
+                  {
+                    "$ref": "common_types.json#/$defs/FunctionCall",
+                    "description": "Invokes a named function, combining common function properties with the catalog function definition."
+                  }
+                ]
+              },
+              "description": {
+                "description": "Accessible text describing the image's content.",
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "common_types.json#/$defs/DataBinding"
+                  },
+                  {
+                    "$ref": "common_types.json#/$defs/FunctionCall",
+                    "description": "Invokes a named function, combining common function properties with the catalog function definition."
+                  }
+                ]
+              },
+              "title": {
+                "$ref": "common_types.json#/$defs/DynamicString",
+                "description": "Represents a string"
+              }
+            },
+            "required": [
+              "url",
+              "description"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 12
+        },
+        "title": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Represents a string"
+        }
+      },
+      "required": [
+        "component",
+        "images"
+      ],
+      "unevaluatedProperties": false
+    },
+    "Icon": {
+      "type": "object",
+      "properties": {
+        "component": {
+          "const": "Icon"
+        },
+        "name": {
+          "type": "string",
+          "enum": [
+            "activity",
+            "arrow-down",
+            "arrow-left",
+            "arrow-right",
+            "arrow-up",
+            "bell",
+            "calendar",
+            "chart-column",
+            "chart-line",
+            "chart-pie",
+            "check",
+            "circle-check",
+            "circle-help",
+            "circle-x",
+            "clock",
+            "credit-card",
+            "dollar-sign",
+            "download",
+            "file-text",
+            "folder",
+            "globe",
+            "heart",
+            "house",
+            "image",
+            "info",
+            "mail",
+            "map-pin",
+            "package",
+            "percent",
+            "search",
+            "settings",
+            "shopping-cart",
+            "star",
+            "target",
+            "trending-down",
+            "trending-up",
+            "triangle-alert",
+            "upload",
+            "user",
+            "users",
+            "x"
+          ]
+        },
+        "size": {
+          "type": "string",
+          "enum": [
+            "small",
+            "medium",
+            "large"
+          ]
+        },
+        "tone": {
+          "type": "string",
+          "enum": [
+            "default",
+            "muted",
+            "positive",
+            "negative"
+          ]
+        },
+        "label": {
+          "description": "Accessible label when the icon conveys meaning on its own. Omit for decoration beside text.",
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "common_types.json#/$defs/DataBinding"
+            },
+            {
+              "$ref": "common_types.json#/$defs/FunctionCall",
+              "description": "Invokes a named function, combining common function properties with the catalog function definition."
+            }
+          ]
+        }
+      },
+      "required": [
+        "component",
+        "name"
       ],
       "unevaluatedProperties": false
     },
@@ -663,10 +910,22 @@ export const a2uiCatalogDefinition: Record<string, unknown> = {
           "$ref": "#/components/Grid"
         },
         {
+          "$ref": "#/components/Tabs"
+        },
+        {
           "$ref": "#/components/Heading"
         },
         {
           "$ref": "#/components/Text"
+        },
+        {
+          "$ref": "#/components/Image"
+        },
+        {
+          "$ref": "#/components/ImageGallery"
+        },
+        {
+          "$ref": "#/components/Icon"
         },
         {
           "$ref": "#/components/Stat"

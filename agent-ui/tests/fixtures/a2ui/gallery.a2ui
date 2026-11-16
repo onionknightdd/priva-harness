@@ -1,0 +1,7 @@
+$/title = "Illustrative image gallery"
+$/image = "http://127.0.0.1:5188/a2ui-media-fixtures/portrait.svg"
+$/description = "Illustrative portrait orientation image"
+$/caption = "Portrait"
+root = Tabs(tabs=[{title:"Gallery",child:gallery},{title:"Details",child:details}])
+gallery = ImageGallery(title=$/title, images=[{url:"sandbox:/a2ui-media-fixtures/landscape.svg",description:"Illustrative landscape orientation image",title:"Landscape"},{url:$/image,description:$/description,title:$/caption},{url:"http://127.0.0.1:5188/a2ui-media-fixtures/landscape.svg",description:"Another illustrative landscape image",title:"Landscape detail"}])
+details = Text(text="Illustrative gallery images. Selection stays local and survives tab switches.")

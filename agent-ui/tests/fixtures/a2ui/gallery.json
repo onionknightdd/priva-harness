@@ -1,0 +1,70 @@
+{
+  "format": "a2ui",
+  "version": "1.0",
+  "messages": [
+    {
+      "version": "v1.0",
+      "createSurface": {
+        "surfaceId": "main",
+        "catalogId": "https://priva.app/a2ui/catalog/v1",
+        "components": [
+          {
+            "id": "root",
+            "component": "Tabs",
+            "tabs": [
+              {
+                "title": "Gallery",
+                "child": "gallery"
+              },
+              {
+                "title": "Details",
+                "child": "details"
+              }
+            ]
+          },
+          {
+            "id": "gallery",
+            "component": "ImageGallery",
+            "title": {
+              "@path": "/title"
+            },
+            "images": [
+              {
+                "url": "sandbox:/a2ui-media-fixtures/landscape.svg",
+                "description": "Illustrative landscape orientation image",
+                "title": "Landscape"
+              },
+              {
+                "url": {
+                  "@path": "/image"
+                },
+                "description": {
+                  "@path": "/description"
+                },
+                "title": {
+                  "@path": "/caption"
+                }
+              },
+              {
+                "url": "http://127.0.0.1:5188/a2ui-media-fixtures/landscape.svg",
+                "description": "Another illustrative landscape image",
+                "title": "Landscape detail"
+              }
+            ]
+          },
+          {
+            "id": "details",
+            "component": "Text",
+            "text": "Illustrative gallery images. Selection stays local and survives tab switches."
+          }
+        ],
+        "dataModel": {
+          "title": "Illustrative image gallery",
+          "image": "http://127.0.0.1:5188/a2ui-media-fixtures/portrait.svg",
+          "description": "Illustrative portrait orientation image",
+          "caption": "Portrait"
+        }
+      }
+    }
+  ]
+}

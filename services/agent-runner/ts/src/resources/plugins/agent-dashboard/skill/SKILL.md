@@ -1,6 +1,6 @@
 ---
 name: agent-dashboard
-description: Show interactive dashboards, charts, cards, tables and forms inside conversation replies using the registered A2UI components.
+description: Show interactive dashboards, charts, cards, tables, forms, tabbed views, images, image galleries and icons inside conversation replies using the registered A2UI components.
 ---
 
 # Agent dashboard
@@ -26,6 +26,7 @@ Write the source directly over multiple lines. Do not URL-encode or Base64-encod
 - Define components with `id = Component(property=value, ...)` and assign exactly one `root`. References can appear before their definitions. Use `children=[first, second]` for containers.
 - The host creates a fresh `main` surface for each embed. Do not issue `surface(...)` or delete operations, select another surface, or refer to components in another embed.
 - Use only the components and properties in [resource/catalog.md](resource/catalog.md). Unknown properties are rejected. Read the relevant example before composing an unfamiliar component.
+- Only Image and ImageGallery accept image URLs: use an existing HTTP(S) image or `sandbox:/absolute/path`, with a required accessible description for each image. Use only image sources supplied by the user or verified in tool results. Do not invent image URLs or paths, or embed image bytes. Icon uses the catalog's Lucide names, not arbitrary SVG or image URLs.
 - Initialize bindings with `$/path = value`, then bind string properties with `text=$/path`. Only absolute initialized bindings and explicit children lists are supported. TextField and Select values must bind to initialized strings.
 - Keep each source under 64,000 characters and 200 components. Repeated subtrees are limited to 1,000 rendered nodes. Split larger results into independent embeds.
 
@@ -35,6 +36,11 @@ Write the source directly over multiple lines. Do not URL-encode or Base64-encod
 - [resource/charts.md](resource/charts.md): bar, line, area and donut charts with consistent units.
 - [resource/tables.md](resource/tables.md): string column labels and arrays of string/number cells.
 - [resource/interactions.md](resource/interactions.md): editable fields, choices and structured button events.
+- [resource/tabs.md](resource/tabs.md): related views in one container, with local tab switching and preserved form values.
+- [resource/media.md](resource/media.md): responsive images, accessible descriptions and the supported static Lucide icons.
+- [resource/gallery.md](resource/gallery.md): a local Coverflow gallery for 1 to 12 known images, with original-image previews.
 - [resource/dashboard.md](resource/dashboard.md): sales dashboard with heading, metrics and chart.
+
+Tabs switch locally without calling the model or sending a message. The selected tab and bound form values survive tab changes while the visual remains mounted; reloading the visual resets them to the first tab and the source's initial values.
 
 Buttons send a new user message with resolved form values; they do not execute code or call external APIs. For incoming `<priva-a2ui-action>` JSON, use `action.context` as the user's submitted choice. Its `pluginId`, `messageId` and `embedId` identify the originating visual. Answer normally or publish a complete new embed; earlier replies remain in history.

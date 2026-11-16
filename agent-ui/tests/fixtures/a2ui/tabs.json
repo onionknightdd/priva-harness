@@ -1,0 +1,206 @@
+{
+  "format": "a2ui",
+  "version": "1.0",
+  "messages": [
+    {
+      "version": "v1.0",
+      "createSurface": {
+        "surfaceId": "main",
+        "catalogId": "https://priva.app/a2ui/catalog/v1",
+        "components": [
+          {
+            "id": "root",
+            "component": "Tabs",
+            "tabs": [
+              {
+                "title": "Overview",
+                "child": "overview"
+              },
+              {
+                "title": "Regions",
+                "child": "regions"
+              },
+              {
+                "title": "Report",
+                "child": "report"
+              }
+            ]
+          },
+          {
+            "id": "overview",
+            "component": "Column",
+            "children": [
+              "heading",
+              "metrics",
+              "trend"
+            ]
+          },
+          {
+            "id": "heading",
+            "component": "Heading",
+            "text": "Q3 sales performance",
+            "subtitle": "Illustrative sales data across regional teams",
+            "eyebrow": "Commercial operations"
+          },
+          {
+            "id": "metrics",
+            "component": "Grid",
+            "children": [
+              "revenue",
+              "growth"
+            ],
+            "columns": 2
+          },
+          {
+            "id": "revenue",
+            "component": "Stat",
+            "label": "Total revenue",
+            "value": "$14.8M",
+            "delta": "+8.2%",
+            "caption": "vs $13.7M target",
+            "trend": "up"
+          },
+          {
+            "id": "growth",
+            "component": "Stat",
+            "label": "YoY growth",
+            "value": "14.2%",
+            "delta": "+2.1%",
+            "caption": "vs Q3 prior year",
+            "trend": "up"
+          },
+          {
+            "id": "trend",
+            "component": "LineChart",
+            "title": "Quarterly revenue",
+            "labels": [
+              "Q1",
+              "Q2",
+              "Q3",
+              "Q4"
+            ],
+            "series": [
+              {
+                "name": "Revenue",
+                "values": [
+                  10.2,
+                  12.1,
+                  14.8,
+                  16.3
+                ]
+              }
+            ],
+            "format": "currency",
+            "unit": "M"
+          },
+          {
+            "id": "regions",
+            "component": "Table",
+            "columns": [
+              "Region",
+              "Revenue",
+              "Target attainment"
+            ],
+            "rows": [
+              [
+                "North America",
+                "$6.1M",
+                "109%"
+              ],
+              [
+                "Europe",
+                "$4.3M",
+                "102%"
+              ],
+              [
+                "Asia Pacific",
+                "$3.2M",
+                "114%"
+              ],
+              [
+                "Latin America",
+                "$1.2M",
+                "109%"
+              ]
+            ],
+            "title": "Regional detail"
+          },
+          {
+            "id": "report",
+            "component": "Column",
+            "children": [
+              "reportHeading",
+              "title",
+              "region",
+              "submit"
+            ]
+          },
+          {
+            "id": "reportHeading",
+            "component": "Heading",
+            "text": "Regional report",
+            "subtitle": "Choose the next report to request"
+          },
+          {
+            "id": "title",
+            "component": "TextField",
+            "label": "Report title",
+            "value": {
+              "@path": "/title"
+            },
+            "placeholder": "Enter a title"
+          },
+          {
+            "id": "region",
+            "component": "Select",
+            "label": "Region",
+            "value": {
+              "@path": "/region"
+            },
+            "options": [
+              {
+                "label": "North America",
+                "value": "North America"
+              },
+              {
+                "label": "Europe",
+                "value": "Europe"
+              },
+              {
+                "label": "Asia Pacific",
+                "value": "Asia Pacific"
+              },
+              {
+                "label": "Latin America",
+                "value": "Latin America"
+              }
+            ]
+          },
+          {
+            "id": "submit",
+            "component": "Button",
+            "label": "Update report",
+            "action": {
+              "event": {
+                "name": "update_report",
+                "context": {
+                  "title": {
+                    "@path": "/title"
+                  },
+                  "region": {
+                    "@path": "/region"
+                  }
+                },
+                "userMessage": "Update the regional report"
+              }
+            }
+          }
+        ],
+        "dataModel": {
+          "title": "Q3 plan",
+          "region": "Europe"
+        }
+      }
+    }
+  ]
+}

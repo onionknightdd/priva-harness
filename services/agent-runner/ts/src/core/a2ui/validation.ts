@@ -14,6 +14,37 @@ function arrayValue(value: unknown): readonly unknown[] {
   return Array.isArray(value) ? value : []
 }
 
+function resolveStringBinding(value: unknown, surface: SurfaceModel, location: string): unknown {
+  const path = objectValue(value)?.['@path']
+  if (typeof path !== 'string') return value
+  const resolved = surface.dataModel.get<unknown>(path)
+  if (typeof resolved !== 'string') {
+    throw new A2uiValidationError(`Component ${location}: bind to an initialized string; ${path} does not contain a string.`)
+  }
+  return resolved
+}
+
+function isImageUrl(value: unknown): value is string {
+  if (typeof value !== 'string' || value !== value.trim() || /\p{Cc}/u.test(value)) return false
+  if (/^sandbox:/i.test(value)) {
+    try {
+      const path = decodeURIComponent(value.slice('sandbox:'.length)).replaceAll('\\', '/')
+      return !/\p{Cc}/u.test(path) && /^(?:\/(?!\/)|[a-z]:\/)/i.test(path)
+    } catch (error) {
+      if (error instanceof URIError) return false
+      throw error
+    }
+  }
+  if (!/^https?:\/\//i.test(value)) return false
+  try {
+    const url = new URL(value)
+    return url.hostname !== '' && (url.protocol === 'http:' || url.protocol === 'https:')
+  } catch (error) {
+    if (error instanceof TypeError) return false
+    throw error
+  }
+}
+
 function checkBindings(value: unknown, surface: SurfaceModel, componentId: string): void {
   if (Array.isArray(value)) {
     for (const child of value) checkBindings(child, surface, componentId)
@@ -57,9 +88,23 @@ export function validateA2uiSurface(surface: SurfaceModel): void {
     // Every directly bindable property in this catalog is a DynamicString.
     // JSON schema validates the binding expression, but cannot validate its data-model value.
     for (const [key, value] of Object.entries(properties)) {
-      const path = objectValue(value)?.['@path']
-      if (typeof path === 'string' && typeof surface.dataModel.get<unknown>(path) !== 'string') {
-        throw new A2uiValidationError(`Component ${component.id}.${key}: bind to an initialized string; ${path} does not contain a string.`)
+      resolveStringBinding(value, surface, `${component.id}.${key}`)
+    }
+    if (component.type === 'Image') {
+      const url = resolveStringBinding(properties['url'], surface, `${component.id}.url`)
+      if (!isImageUrl(url)) {
+        throw new A2uiValidationError(`Image ${component.id}: url must be an HTTP(S) URL or sandbox:/absolute/path to an existing image. Relative paths, file, data and blob URLs are not supported.`)
+      }
+    }
+    if (component.type === 'ImageGallery') {
+      for (const [index, item] of arrayValue(properties['images']).entries()) {
+        const image = objectValue(item)
+        const location = `${component.id}.images[${index}]`
+        for (const key of ['description', 'title']) resolveStringBinding(image?.[key], surface, `${location}.${key}`)
+        const url = resolveStringBinding(image?.['url'], surface, `${location}.url`)
+        if (!isImageUrl(url)) {
+          throw new A2uiValidationError(`ImageGallery ${location}: url must be an HTTP(S) URL or sandbox:/absolute/path to an existing image. Relative paths, file, data and blob URLs are not supported.`)
+        }
       }
     }
     if (component.type === 'Button') {

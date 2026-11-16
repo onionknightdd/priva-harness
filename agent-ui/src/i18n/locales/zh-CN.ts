@@ -473,6 +473,12 @@ export const zhCN = {
     dashboardRepairRequest: "请修复上一条回复中的看板 {{embedId}}。渲染器报告：{{error}}。请返回包含完整源码的修正版 Markdown 看板。",
     dashboardCompileFailed: "看板编译失败，请检查连接后重试。",
     canvasOpenPreview: "打开预览",
+    gallery: {
+      label: "图片集",
+      previous: "上一张图片",
+      next: "下一张图片",
+      position: "第 {{index}} 张，共 {{total}} 张",
+    },
     imageTools: {
       inputPending: "等待输入……",
       loading: "正在加载图片……",

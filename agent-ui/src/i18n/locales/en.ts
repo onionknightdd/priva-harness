@@ -474,6 +474,12 @@ export const en = {
     dashboardRepairRequest: "Fix dashboard {{embedId}} in your previous reply. The renderer reported: {{error}}. Return a complete corrected Markdown dashboard with its source.",
     dashboardCompileFailed: "The dashboard could not be compiled. Check the connection and try again.",
     canvasOpenPreview: "Open preview",
+    gallery: {
+      label: "Image gallery",
+      previous: "Previous image",
+      next: "Next image",
+      position: "Image {{index}} of {{total}}",
+    },
     imageTools: {
       inputPending: "Waiting for input…",
       loading: "Loading image…",

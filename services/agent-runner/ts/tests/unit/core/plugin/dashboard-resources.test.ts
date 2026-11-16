@@ -21,7 +21,7 @@ describe('Agent dashboard skill resources', () => {
     expect(metadata.description).toBeTypeOf('string')
   })
 
-  it.each(['SKILL.md', 'resource/cards.md', 'resource/charts.md', 'resource/tables.md', 'resource/interactions.md', 'resource/dashboard.md'])('compiles every complete example in %s against the real catalog', (file) => {
+  it.each(['SKILL.md', 'resource/cards.md', 'resource/charts.md', 'resource/tables.md', 'resource/interactions.md', 'resource/tabs.md', 'resource/media.md', 'resource/gallery.md', 'resource/dashboard.md'])('compiles every complete example in %s against the real catalog', (file) => {
     const document = readFileSync(path.join(skillDir, file), 'utf8')
     const examples = [...document.matchAll(/^```a2ui id=([a-z][a-z0-9-]{0,63})\n([\s\S]*?)\n```$/gmu)]
     expect(examples.length).toBeGreaterThan(0)

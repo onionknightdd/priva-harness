@@ -71,6 +71,45 @@ The host always creates the main surface: assign `root = Component(...)`; never 
     ],
     "unevaluatedProperties": false
   },
+  "Tabs": {
+    "type": "object",
+    "properties": {
+      "component": {
+        "const": "Tabs"
+      },
+      "tabs": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "\\S",
+              "description": "A short, nonblank literal tab title."
+            },
+            "child": {
+              "$ref": "common_types.json#/$defs/ComponentId",
+              "description": "The unique identifier for a component, used for both definitions and references within the same surface."
+            }
+          },
+          "required": [
+            "title",
+            "child"
+          ],
+          "additionalProperties": false
+        },
+        "minItems": 1,
+        "maxItems": 8
+      }
+    },
+    "required": [
+      "component",
+      "tabs"
+    ],
+    "unevaluatedProperties": false
+  },
   "Heading": {
     "type": "object",
     "properties": {
@@ -119,6 +158,214 @@ The host always creates the main surface: assign `root = Component(...)`; never 
     "required": [
       "component",
       "text"
+    ],
+    "unevaluatedProperties": false
+  },
+  "Image": {
+    "type": "object",
+    "properties": {
+      "component": {
+        "const": "Image"
+      },
+      "url": {
+        "description": "An existing image's HTTP(S) URL or sandbox:/absolute/path. No relative paths, data URLs or file URLs.",
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "$ref": "common_types.json#/$defs/DataBinding"
+          },
+          {
+            "$ref": "common_types.json#/$defs/FunctionCall",
+            "description": "Invokes a named function, combining common function properties with the catalog function definition."
+          }
+        ]
+      },
+      "description": {
+        "description": "Accessible text describing the image's content.",
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "$ref": "common_types.json#/$defs/DataBinding"
+          },
+          {
+            "$ref": "common_types.json#/$defs/FunctionCall",
+            "description": "Invokes a named function, combining common function properties with the catalog function definition."
+          }
+        ]
+      },
+      "fit": {
+        "type": "string",
+        "enum": [
+          "contain",
+          "cover"
+        ]
+      }
+    },
+    "required": [
+      "component",
+      "url",
+      "description"
+    ],
+    "unevaluatedProperties": false
+  },
+  "ImageGallery": {
+    "type": "object",
+    "properties": {
+      "component": {
+        "const": "ImageGallery"
+      },
+      "images": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "description": "An existing image's HTTP(S) URL or sandbox:/absolute/path. No relative paths, data URLs or file URLs.",
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "$ref": "common_types.json#/$defs/DataBinding"
+                },
+                {
+                  "$ref": "common_types.json#/$defs/FunctionCall",
+                  "description": "Invokes a named function, combining common function properties with the catalog function definition."
+                }
+              ]
+            },
+            "description": {
+              "description": "Accessible text describing the image's content.",
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "$ref": "common_types.json#/$defs/DataBinding"
+                },
+                {
+                  "$ref": "common_types.json#/$defs/FunctionCall",
+                  "description": "Invokes a named function, combining common function properties with the catalog function definition."
+                }
+              ]
+            },
+            "title": {
+              "$ref": "common_types.json#/$defs/DynamicString",
+              "description": "Represents a string"
+            }
+          },
+          "required": [
+            "url",
+            "description"
+          ],
+          "additionalProperties": false
+        },
+        "minItems": 1,
+        "maxItems": 12
+      },
+      "title": {
+        "$ref": "common_types.json#/$defs/DynamicString",
+        "description": "Represents a string"
+      }
+    },
+    "required": [
+      "component",
+      "images"
+    ],
+    "unevaluatedProperties": false
+  },
+  "Icon": {
+    "type": "object",
+    "properties": {
+      "component": {
+        "const": "Icon"
+      },
+      "name": {
+        "type": "string",
+        "enum": [
+          "activity",
+          "arrow-down",
+          "arrow-left",
+          "arrow-right",
+          "arrow-up",
+          "bell",
+          "calendar",
+          "chart-column",
+          "chart-line",
+          "chart-pie",
+          "check",
+          "circle-check",
+          "circle-help",
+          "circle-x",
+          "clock",
+          "credit-card",
+          "dollar-sign",
+          "download",
+          "file-text",
+          "folder",
+          "globe",
+          "heart",
+          "house",
+          "image",
+          "info",
+          "mail",
+          "map-pin",
+          "package",
+          "percent",
+          "search",
+          "settings",
+          "shopping-cart",
+          "star",
+          "target",
+          "trending-down",
+          "trending-up",
+          "triangle-alert",
+          "upload",
+          "user",
+          "users",
+          "x"
+        ]
+      },
+      "size": {
+        "type": "string",
+        "enum": [
+          "small",
+          "medium",
+          "large"
+        ]
+      },
+      "tone": {
+        "type": "string",
+        "enum": [
+          "default",
+          "muted",
+          "positive",
+          "negative"
+        ]
+      },
+      "label": {
+        "description": "Accessible label when the icon conveys meaning on its own. Omit for decoration beside text.",
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "$ref": "common_types.json#/$defs/DataBinding"
+          },
+          {
+            "$ref": "common_types.json#/$defs/FunctionCall",
+            "description": "Invokes a named function, combining common function properties with the catalog function definition."
+          }
+        ]
+      }
+    },
+    "required": [
+      "component",
+      "name"
     ],
     "unevaluatedProperties": false
   },

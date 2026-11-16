@@ -3565,8 +3565,98 @@ Zod 4 不降级。无 force、legacy-peer-deps、SDK patch 或协议版本改写
 组件目录的唯一源是 `a2ui/catalog-definition.ts`。生成器只导入 schema，不将
 React/DOM 引入 Runner；生成 `core/a2ui/catalog.generated.ts`，Skill 的组件目录同样
 由真实 catalog 生成并验证。支持 Column/Row/Grid、Heading/Text/Stat/Card/Badge/Table、
-Bar/Line/Area/Donut、Button/TextField/Select。模型直接赋值 `root`；host 为每个嵌入创建
+Bar/Line/Area/Donut、Button/TextField/Select、Tabs、Image、Icon 和 ImageGallery，共 20 个组件。模型直接赋值 `root`；host 为每个嵌入创建
 独立 `main` surface，不教授手动 `surface(...)` 或跨消息更新。
+
+2026-11-17：Agent dashboard 新增 Tabs，布局经用户确认，视觉参考
+[Animate UI Page Transition](https://animate-ui.com/docs/primitives/animate-ui/page-transition)。
+圆角细边框内为主题背景导航、灰色选中块；内容底色使用 `--background`，随浅色／深色主题保持中性背景。
+所有内容仍在对话容器内，内容高度随当前页签变化；长页签条内部横向滚动。
+模型使用 `Tabs(tabs=[{title:"概览",child:overview},{title:"明细",child:details}])`，
+1–8 项，标题为 1–80 字符的非空白字符串。`child` 使用官方 ComponentId 引用，
+沿用缺失引用、循环引用和节点数量限制；没有额外 MCP、动作或动画参数。
+
+```text
+对话容器
++------------------------------------------+
+| [概览]    趋势    明细                    | <- 导航保持原位
++------------------------------------------+
+| 当前页签的卡片 / 图表 / 表格 / 表单      | <- 按顺序横向 slide + fade
++------------------------------------------+
+
+模型 Tabs.tabs[].child -> 官方 catalog / 编译器 -> React DashboardTabs
+                                                   |
+                              Radix 页签语义 + Motion 局部 slide
+                                                   |
+                              仅内容层动画；隐藏页保留组件和表单状态
+```
+
+点击页签仅改变当前嵌入的本地选择，不发送用户消息。使用现有 Motion 实现双向
+60px slide 与淡入淡出，内容层受聊天滚动容器裁剪，不使用会覆盖底部输入框的页面级
+View Transition 快照。首次显示不播放页签切换动画，键盘和减少动态效果时立即切换。
+面板保持挂载，隐藏面板同时 `hidden` / `inert`，
+从键盘和辅助技术中移除；刷新历史后恢复首个页签及原始数据。
+完整模型示例见 Skill 的 `resource/tabs.md`。
+
+2026-11-17：Image / Icon 默认呈现经用户确认，组合在现有 Card / Row / Column / Tabs 内，
+保持对话宽度和中性主题表面。
+
+```text
+现有内容容器
++------------------------------------------+
+| [Icon] 标题或状态文字                    |
+|                                          |
+|               Image 图片                 |
+|         自适应宽度，点击放大             |
++------------------------------------------+
+
+Image.url -> HTTP(S) 图片地址 -----------------> 浏览器 img
+          -> sandbox:/绝对路径 -> 现有文件下载接口 -> 浏览器 img
+Icon.name -> catalog 41 个名称 -> 静态 Lucide 映射
+```
+
+`Image(url, description, fit?)` 必填图片来源和无障碍描述。默认 `contain` 等比完整显示，
+不超过容器宽度和 24rem 高度；`cover` 使用 16:9 预览框，可裁剪，放大仍显示原图。
+复用 Skeleton、错误重试和现有 Lightbox，加载完成淡入；减少动态效果时关闭淡入。
+图片懒加载并使用 `no-referrer`，绑定来源变化时重置预览状态。远程图片重试保留原 URL
+及签名参数；sandbox 图片复用下载接口的重试参数。编译器和渲染边界都检查图片来源，
+支持 HTTP(S) 和 `sandbox:/绝对路径`，不接受相对路径、file、blob、data URL；不新增代理或 MCP。
+
+`Icon(name, size?, tone?, label?)` 使用明确的 41 个 Lucide 名称；small / medium / large
+对应 16 / 20 / 32px，默认 medium，色调沿用 default / muted / positive / negative。
+传 label 时提供可访问图片语义，否则为文字旁的装饰。图标没有点击动作，不接受任意
+SVG 路径；静态映射由类型系统检查与模型目录一致，不引入全量图标动态分包。
+模型示例及来源规则见 Skill 的 `resource/media.md`。
+
+2026-11-17：ImageGallery 使用经用户确认的对话内 Coverflow 布局，视觉参考
+[Coverflow25](https://www.shadcnblocks.com/block/coverflow25)，使用项目已有 Motion 实现。
+中央图片正面突出，两侧图片向后倾斜；整个展示区受对话容器裁剪。背景使用应用主题，
+没有视口固定、纵向滚动接管或自动播放。
+
+```text
++--------------- 对话容器宽度 ---------------+
+| 图片集标题                                 |
+|  / 前图 /   [       当前图片       ]  \\ 后图 \\ |
+| 图片标题 / 说明                  < 02/07 > |
+| ========-------------------------------   |
++-------------------------------------------+
+
+模型 ImageGallery.images -> catalog / 编译校验 -> Motion Coverflow
+                                                 |
+                       本地选择 + Image 预览 -> 现有 Lightbox
+```
+
+`ImageGallery(images=[{url, description, title?}], title?)` 支持 1–12 张已知来源图片，
+图片来源及描述沿用 Image 的绑定和校验规则。标题可选；没有任意 CSS、动画参数或动作。
+预览使用统一横向画幅并允许裁剪，点击当前图片在 Lightbox 中查看完整原图。
+左右拖动、触控板双指横向滑动、前后按钮、侧边图片和键盘方向键切换；Home / End 到首尾；到边界停止，不循环。
+触控板横向滑动由 `wheel-gestures` 区分手指滑动与惯性：滑动中跟手，抬手（识别到惯性）
+即提交相邻一张，其后惯性不再前进；惯性中的新滑动或停顿后继续都基于已提交图片接续，
+不回跳。横向手势从首个事件起拦截，避免浏览器接管。
+单图不显示前后按钮。切换仅保存在当前组件，不调用模型；Tabs 中保留选择，重放历史从首图开始。
+拖动保留浏览器纵向滚动，触控板纵向滚动和缩放手势也保持浏览器原有行为；拖动结束不误触放大。
+减少动态效果和键盘操作立即切换。
+模型示例见 Skill 的 `resource/gallery.md`。
 
 动作字段与 `{version:1,pluginId:"agent-dashboard",messageId,embedId,action}` 来源封套
 保存为 `<priva-a2ui-action>` 提示后缀，通过现有会话队列发给模型。用户气泡只显示文案，
@@ -3604,6 +3694,28 @@ node --import tsx tests/fixtures/terminal/native-product-probe.ts dist/provider/
 检查手机宽度、深色、中文和减少动态效果。样例严格匹配真实编译器生成的 source 与
 canonical fixtures，不调用真实模型。`/tests/features/agent-message/a2ui-browser.html`
 继续提供独立组件、图表与响应式外观检查。
+
+Tabs 浏览器入口 `/tests/features/agent-message/a2ui-tabs-browser.html`，检查正反方向
+slide、静止导航、快速切换、表单值及 DOM 保留、键盘、面板可访问性和无横向溢出。
+在带底部输入框的聊天滚动容器中验证过渡不会越界覆盖输入区，长短页签切换不会拉伸内容。
+使用窄屏、深色及减少动态效果模式复测。
+Tabs 单元回归包含在上方 `a2ui-*.test.tsx` 命令内。
+
+图片和图标隔离验证（`agent-ui/`）：
+
+```sh
+npm run dev -- --config tests/features/agent-message/a2ui-media-browser.config.ts --host 127.0.0.1
+```
+
+打开 `http://127.0.0.1:5188/tests/features/agent-message/a2ui-media-browser.html`，验证图片加载、
+重试、Lightbox、Tabs 内状态、图标语义和浅深主题窄屏。独立服务仅提供合成图片 fixture，
+不调用模型、不访问真实工作区图片；媒体单元回归包含在上方 `a2ui-*.test.ts(x)` 命令内。
+
+同一隔离服务的 `/tests/features/agent-message/a2ui-gallery-browser.html` 验证 Coverflow：
+中央图与侧图、首尾及单图、拖动后不误开预览、快速反向切换、键盘、Lightbox、加载失败重试、
+合成触控板惯性流（长惯性只前进一张、惯性中连续滑动、停顿后继续不回跳）、
+Tabs 中保留选择、对话容器裁剪。追加 `?narrow&dark&zh&reduced-motion` 检查窄屏、深色、中文及
+减少动态效果；使用真实浏览器触控/指针输入补充手势验证。Gallery 单元回归包含在上方通配命令中。
 
 2026-10-24：生成回答中的柱状图、折线图和面积图通过
 `a2ui/viewport-chart-container.tsx` 提交受控尺寸。距聊天视口上下 400px 内

@@ -58,7 +58,7 @@ A2UI compiler and real canonical fixture verification, from the Runner directory
 - `node --import tsx tests/fixtures/a2ui/compile-http-probe.ts dist` (after build)
 - `TMPDIR=/tmp npx vitest run tests/integration/transport/websocket/terminal-plugins.test.ts tests/unit/provider/pi/pi-resource-loader.test.ts`
 
-The fixture generator compiles the sales dashboard, form actions, chart gallery and root tables;
+The fixture generator compiles the sales dashboard, form actions, chart gallery, root tables, tabbed views and media components;
 the frontend catalog generator and browser checks are documented in
 `docs/front-end-desgin.md`.
 
