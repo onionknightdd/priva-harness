@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { readFile, rename, rm, writeFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { z } from 'zod'
+import { hasErrorCode } from '../../core/util/errors.js'
 
 /** Native /clear changes the session key, while sockets and hook paths stay put. */
 export class TerminalBindings {
@@ -50,7 +51,7 @@ export class TerminalBindings {
       const parsed = z.record(z.string(), z.string().regex(/^[a-f0-9]{24}$/u)).parse(JSON.parse(await readFile(join(this.root, 'bindings.json'), 'utf8')) as unknown)
       return this.bindings ??= parsed
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      if (!hasErrorCode(error, 'ENOENT')) throw error
       return this.bindings ??= {}
     }
   }

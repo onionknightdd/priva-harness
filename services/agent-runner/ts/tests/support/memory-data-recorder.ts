@@ -1,5 +1,5 @@
 import type { DataRecorder } from '../../src/core/contract/data-recorder.js'
-import type { DataRecord } from '../../src/core/resource/data-store.js'
+import type { DataRecord } from '../../src/core/usage/data-store.js'
 
 export class MemoryDataRecorder implements DataRecorder {
   readonly records: DataRecord[] = []

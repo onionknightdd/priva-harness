@@ -87,6 +87,16 @@ const MIGRATIONS: readonly ((db: DatabaseSync) => void)[] = [
   (db) => {
     db.exec('ALTER TABLE run_fact ADD COLUMN cwd TEXT')
   },
+  // Audit rows expire before the facts that reference them. Without an index
+  // on each referencing column, every pruned audit row scans the fact tables
+  // to apply ON DELETE SET NULL.
+  (db) => {
+    db.exec(`
+      CREATE INDEX run_fact_started_audit  ON run_fact(started_audit_id);
+      CREATE INDEX run_fact_finished_audit ON run_fact(finished_audit_id);
+      CREATE INDEX tool_fact_audit         ON tool_fact(audit_id);
+    `)
+  },
 ]
 
 export const SCHEMA_VERSION = MIGRATIONS.length

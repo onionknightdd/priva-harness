@@ -7,7 +7,7 @@ import type {
   DataRetention,
   DataStoreLogger,
   DataStoreStatus,
-} from '../../core/resource/data-store.js'
+} from '../../core/usage/data-store.js'
 import type {
   AuditPage,
   AuditPageInput,
@@ -15,8 +15,9 @@ import type {
   UsageOverviewInput,
   UsageRangeInput,
   UsageRangeSummary,
-} from '../../core/resource/usage-overview.js'
+} from '../../core/usage/usage-overview.js'
 import type { DataWorkerInit, MainToWorkerMessage, WorkerToMainMessage } from './data-worker-protocol.js'
+import { errorMessage } from '../../core/util/errors.js'
 
 const DEFAULT_QUEUE_LIMIT = 10_000
 const DEFAULT_FLUSH_TIMEOUT_MS = 2_000
@@ -345,7 +346,7 @@ function workerEntryIsTypeScript(): boolean {
 }
 
 function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
+  return errorMessage(error)
 }
 
 function consoleLogger(): DataStoreLogger {

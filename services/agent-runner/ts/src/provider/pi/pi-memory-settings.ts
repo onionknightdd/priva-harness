@@ -3,6 +3,7 @@ import { join } from 'node:path'
 
 import { getAgentDir } from '@earendil-works/pi-coding-agent'
 import stripJsonComments from 'strip-json-comments'
+import { hasErrorCode } from '../../core/util/errors.js'
 
 /** Dependency adapter for pi-code's memory extension. Pi settings never touch
  * Claude settings or managed policy; Pi's own user/project hierarchy applies. */
@@ -18,7 +19,7 @@ export function* readSettingsChain(paths: readonly string[]): Generator<Record<s
   for (const path of paths) {
     let raw: string
     try { raw = readFileSync(path, 'utf8') } catch (error) {
-      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') continue
+      if (hasErrorCode(error, 'ENOENT')) continue
       throw error
     }
     const value: unknown = JSON.parse(stripJsonComments(raw, { trailingCommas: true }))

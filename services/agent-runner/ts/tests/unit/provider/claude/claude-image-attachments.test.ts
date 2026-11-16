@@ -5,7 +5,7 @@ import { expect, it } from 'vitest'
 import { materializeClaudeImages } from '../../../../src/provider/claude/session/claude-image-attachments.js'
 import { mapClaudeMessage } from '../../../../src/provider/claude/session/claude-session-store.js'
 import { replayClaudeSessionMessages } from '../../../../src/provider/claude/session/claude-thread-replay.js'
-import { foldThread } from '../../../../src/core/resource/fold-thread.js'
+import { foldThread } from '../../../../src/core/thread/fold-thread.js'
 
 it('projects an image-only native paste to a private attachment without duplicating files on replay', async () => {
   const root = await mkdtemp(join(tmpdir(), 'native-image-'))

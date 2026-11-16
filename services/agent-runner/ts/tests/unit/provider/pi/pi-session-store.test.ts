@@ -4,6 +4,7 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { foldThread } from '../../../../src/core/thread/fold-thread.js'
 import {
   messagesFromContextEntries,
   PiSessionStore,
@@ -64,6 +65,64 @@ describe('PiSessionStore', () => {
 
     await store.delete({ provider: 'pi', id: 'bb-1' })
     await expect(unlink(jsonlPath)).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('shares one scan between overlapping lookups and scans again for later ones', async () => {
+    const { opened } = fakeOpenedSession()
+    const manager = fakeManager(listed(jsonlPath), opened)
+    const listAll = vi.spyOn(manager, 'listAll')
+    const store = new PiSessionStore({ agentDir, sessionManager: manager })
+    const ref = { provider: 'pi', id: 'bb-1' } as const
+
+    await Promise.all([store.read(ref), store.read(ref), store.lastAssistantModel(ref), store.list({})])
+    expect(listAll).toHaveBeenCalledTimes(1)
+
+    await store.read(ref)
+    expect(listAll).toHaveBeenCalledTimes(2)
+  })
+
+  it('rescans when a lookup joined a scan that predates the session', async () => {
+    const { opened } = fakeOpenedSession()
+    let calls = 0
+    let finishFirstScan = (): void => undefined
+    const firstScan = new Promise<void>((resolve) => { finishFirstScan = resolve })
+    const manager: PiSessionManagerApi = {
+      list: () => Promise.resolve([]),
+      listAll: async () => {
+        calls += 1
+        if (calls > 1) return [listed(jsonlPath)]
+        await firstScan
+        return []
+      },
+      open: () => opened,
+    }
+    const store = new PiSessionStore({ agentDir, sessionManager: manager })
+    const earlier = store.list({})
+    await vi.waitFor(() => expect(calls).toBe(1))
+    const reading = store.read({ provider: 'pi', id: 'bb-1' })
+    finishFirstScan()
+
+    expect((await reading).ref.id).toBe('bb-1')
+    expect(await earlier).toEqual([])
+    expect(calls).toBe(2)
+  })
+
+  it('replays the whole branch in order while messages stay resume-faithful', async () => {
+    const entry = (id: string, content: string) => ({ type: 'message', id, message: { role: 'user', content } })
+    const compaction = { type: 'compaction', id: 'c1', summary: 'earlier turns', tokensBefore: 10, tokensAfter: 2, firstKeptEntryId: 'kept' }
+    const opened: PiOpenedSession = {
+      appendSessionInfo: () => undefined,
+      // The SDK resumes from the summary and omits what it covers.
+      buildContextEntries: () => [compaction, entry('kept', 'kept turn'), entry('after', 'after compaction')],
+      getBranch: () => [entry('old', 'summarised turn'), entry('kept', 'kept turn'), compaction, entry('after', 'after compaction')],
+    }
+    const store = new PiSessionStore({ agentDir, sessionManager: fakeManager(listed(jsonlPath), opened) })
+    const ref = { provider: 'pi', id: 'bb-1' } as const
+
+    expect((await store.messages(ref)).map((message) => message.uuid)).toEqual(['c1', 'kept', 'after'])
+    const thread = foldThread(await store.replay(ref))
+    expect(thread.map((message) => message.compact ? 'compact' : message.content))
+      .toEqual(['summarised turn', 'kept turn', 'compact', 'after compaction'])
   })
 
   it('rejects fork', async () => {
@@ -136,6 +195,35 @@ function fakeOpenedSession(): {
         appendSessionInfo(name)
       },
       buildContextEntries() {
+        return [
+          { type: 'message', id: 'e1', message: { role: 'user', content: 'hi' } },
+          {
+            type: 'message',
+            id: 'e2',
+            message: { role: 'assistant', model: 'm1', content: [] },
+          },
+          {
+            type: 'message',
+            id: 'e3',
+            message: { role: 'toolResult', toolCallId: 'call-1', toolName: 'bash' },
+          },
+          {
+            type: 'compaction',
+            id: 'e4',
+            summary: 'compacted',
+            tokensBefore: 10,
+            tokensAfter: 2,
+          },
+          {
+            type: 'custom_message',
+            id: 'e5',
+            customType: 'note',
+            content: 'keep me',
+          },
+          { type: 'custom', id: 'status' },
+        ]
+      },
+      getBranch() {
         return [
           { type: 'message', id: 'e1', message: { role: 'user', content: 'hi' } },
           {

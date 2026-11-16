@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { asRecord, stringField } from '../../core/event/json-record.js'
+import { asRecord, stringField } from '../../core/util/json-record.js'
 import type { InteractionQuestion, QuestionAnswer } from '../../core/resource/interaction.js'
 
 /** Reuse the existing question UI for MCP's primitive form fields. */

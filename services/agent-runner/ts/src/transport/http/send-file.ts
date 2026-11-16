@@ -8,6 +8,14 @@ export async function sendFile(request: FastifyRequest, reply: FastifyReply, fil
     dotfiles: 'allow', index: false, extensions: false, cacheControl: false,
     contentType: false,
   })
+  // A failed send (file removed meanwhile, unsatisfiable Range) carries an
+  // HTML body; answer in the API's own error shape instead of streaming it.
+  if (result.type === 'error') {
+    const status = result.statusCode
+    result.stream.destroy()
+    if (status === 416 && typeof result.headers['content-range'] === 'string') void reply.header('Content-Range', result.headers['content-range'])
+    return await reply.code(status).send({ detail: status === 404 ? 'File not found' : result.metadata.error.message })
+  }
   void reply.headers(result.headers)
   void reply.header('Content-Type', file.mimeType)
   void reply.header('Cache-Control', 'no-cache')

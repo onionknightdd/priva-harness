@@ -6,6 +6,7 @@ import {
   type ModelProfile,
   ModelProfileError,
 } from '../../core/resource/model-profile.js'
+import { isRecord } from '../../core/util/json-record.js'
 
 const DEFAULT_TIMEOUT_MS = 15_000
 const ANTHROPIC_VERSION = '2023-06-01'
@@ -442,6 +443,3 @@ function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError'
 }
 
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}

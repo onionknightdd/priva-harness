@@ -1,4 +1,4 @@
-import { asRecord, numberField, stringField } from '../../core/event/json-record.js'
+import { asRecord, numberField, stringField } from '../../core/util/json-record.js'
 import { workflowStatus } from '../../core/resource/workflow-status.js'
 import type { WorkflowAgent, WorkflowState } from '../../core/resource/workflow.js'
 

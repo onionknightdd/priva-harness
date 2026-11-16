@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { SessionStream } from '../../../../src/harness/session/session-stream.js'
-import type { ThreadMessage } from '../../../../src/core/resource/thread.js'
+import type { ThreadMessage } from '../../../../src/core/thread/thread.js'
 import type { StreamFrame } from '../../../../src/core/event/agent-event.js'
 
 const user = (id: string, content: string): ThreadMessage => ({ id, role: 'user', content, createdAt: '2026-10-14T00:00:00.000Z', status: 'complete' })

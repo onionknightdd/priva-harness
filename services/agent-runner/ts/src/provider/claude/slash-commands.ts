@@ -17,6 +17,7 @@ import {
 } from '../../core/resource/slash-command.js'
 import { PushableStream } from '../../core/stream/pushable-stream.js'
 import type { ToolDefinition } from '../../core/tool/define-tool.js'
+import { drainQuery, withTimeout } from './claude-query-control.js'
 import { resolveClaudeQueryOptions } from './claude-runtime.js'
 
 export type ClaudeSlashQuery = Pick<
@@ -87,6 +88,8 @@ export async function assembleClaudeSlashCommands(
   return intersectSlashCommands(assembled.sort(compareSlashCommands), CLAUDE_SLASH_COMMAND_WHITELIST)
 }
 
+const SLASH_LISTING_TIMEOUT_MS = 30_000
+
 export async function listClaudeSlashCommands(options: {
   readonly spec: ProviderRunSpec
   readonly globalConfigDir: string
@@ -106,11 +109,12 @@ export async function listClaudeSlashCommands(options: {
   })
   const drained = drainQuery(active)
   try {
-    await active.initializationResult()
-    const [commands, skills] = await Promise.all([
+    // A CLI that never initialises must not hold the request and its process.
+    await withTimeout(active.initializationResult(), SLASH_LISTING_TIMEOUT_MS, 'Claude slash command listing')
+    const [commands, skills] = await withTimeout(Promise.all([
       active.supportedCommands(),
       active.reloadSkills(),
-    ])
+    ]), SLASH_LISTING_TIMEOUT_MS, 'Claude slash command listing')
     return await assembleClaudeSlashCommands(
       commands,
       skills.skills,
@@ -199,15 +203,5 @@ async function pathExists(path: string): Promise<boolean> {
     return true
   } catch {
     return false
-  }
-}
-
-async function drainQuery(active: AsyncIterable<unknown>): Promise<void> {
-  try {
-    for await (const _message of active) {
-      void _message
-    }
-  } catch {
-    return
   }
 }

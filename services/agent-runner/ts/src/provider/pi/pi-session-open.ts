@@ -7,6 +7,7 @@ import { SessionManager } from '@earendil-works/pi-coding-agent'
 import type { ProviderRunSpec, SessionTarget } from '../../core/contract/agent-provider.js'
 import { SessionError } from '../../core/resource/session.js'
 import { piSessionBucketDir, piSessionsRoot } from './pi-paths.js'
+import { hasErrorCode } from '../../core/util/errors.js'
 
 export async function createPiSessionManager(
   agentDir: string,
@@ -60,9 +61,3 @@ async function findPiSession(
   throw new SessionError('session-not-found', 'Session not found')
 }
 
-function hasErrorCode(error: unknown, code: string): boolean {
-  return typeof error === 'object'
-    && error !== null
-    && 'code' in error
-    && error.code === code
-}

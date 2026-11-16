@@ -6,6 +6,7 @@ import { promisify } from 'node:util'
 import type { GitRepositoryService } from '../../core/contract/git-repository-service.js'
 import { GitRepositoryError, type GitAction, type GitCommit, type GitCommitFile, type GitDiff, type GitDiffArea, type GitRepository } from '../../core/resource/git-repository.js'
 import { parseBranches, parseChanges, parseCommitFiles, parseCommits } from './git-output.js'
+import { hasErrorCode } from '../../core/util/errors.js'
 
 const execFileAsync = promisify(execFile)
 const CONTENT_LIMIT = 256 * 1024
@@ -255,7 +256,7 @@ export class NodeGitRepositoryService implements GitRepositoryService {
         return bytesRead > CONTENT_LIMIT ? { text: null, binary: false, truncated: true } : decodeContent(buffer.subarray(0, bytesRead))
       } finally { await file.close() }
     } catch (error) {
-      if (hasCode(error, 'ENOENT')) return emptyContent()
+      if (hasErrorCode(error, 'ENOENT')) return emptyContent()
       throw error
     }
   }
@@ -293,8 +294,8 @@ export class NodeGitRepositoryService implements GitRepositoryService {
       return directory
     } catch (error) {
       if (error instanceof GitRepositoryError) throw error
-      if (hasCode(error, 'ENOENT') || hasCode(error, 'ENOTDIR')) throw new GitRepositoryError(404, 'Working directory not found', { cause: error })
-      if (hasCode(error, 'EACCES') || hasCode(error, 'EPERM')) throw new GitRepositoryError(403, 'Cannot access the working directory', { cause: error })
+      if (hasErrorCode(error, 'ENOENT') || hasErrorCode(error, 'ENOTDIR')) throw new GitRepositoryError(404, 'Working directory not found', { cause: error })
+      if (hasErrorCode(error, 'EACCES') || hasErrorCode(error, 'EPERM')) throw new GitRepositoryError(403, 'Cannot access the working directory', { cause: error })
       throw new GitRepositoryError(500, 'Could not read the working directory', { cause: error })
     }
   }
@@ -310,7 +311,7 @@ export class NodeGitRepositoryService implements GitRepositoryService {
         if (!within(context.root, resolved) || within(context.gitDirectory, resolved) || within(context.commonDirectory, resolved)) throw new GitRepositoryError(403, 'File path escapes the repository or points into Git administrative data')
         return
       } catch (error) {
-        if (!hasCode(error, 'ENOENT')) throw error
+        if (!hasErrorCode(error, 'ENOENT')) throw error
         const parent = dirname(target)
         if (parent === target) throw new GitRepositoryError(403, 'Invalid repository path')
         target = parent
@@ -336,15 +337,15 @@ export class NodeGitRepositoryService implements GitRepositoryService {
       })
       return { stdout, truncated: false }
     } catch (error) {
-      if (options.truncate && hasCode(error, 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') && error instanceof Error && 'stdout' in error && Buffer.isBuffer(error.stdout)) return { stdout: error.stdout.subarray(0, options.maxBuffer), truncated: true }
-      if (hasCode(error, 'ENOENT')) throw new GitRepositoryError(503, 'Git is unavailable. Install Git on the runner and retry.', { cause: error })
+      if (options.truncate && hasErrorCode(error, 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') && error instanceof Error && 'stdout' in error && Buffer.isBuffer(error.stdout)) return { stdout: error.stdout.subarray(0, options.maxBuffer), truncated: true }
+      if (hasErrorCode(error, 'ENOENT')) throw new GitRepositoryError(503, 'Git is unavailable. Install Git on the runner and retry.', { cause: error })
       if (error instanceof Error && 'killed' in error && error.killed) throw new GitRepositoryError(503, 'Git operation timed out. Check the repository or remote connection and refresh before retrying.', { cause: error })
       const stderr = error instanceof Error && 'stderr' in error && Buffer.isBuffer(error.stderr) ? error.stderr.toString('utf8')
         : error instanceof Error && 'stderr' in error && typeof error.stderr === 'string' ? error.stderr : ''
       // Keep diagnostics actionable while avoiding credentials embedded in remote URLs.
       const detail = stderr.trim().replace(/(https?:\/\/)[^\s/@]+:[^\s/@]+@/gu, '$1[redacted]@').slice(0, 2000)
       const cause = error instanceof Error ? Object.assign(error, { stderr }) : error
-      throw new GitRepositoryError(hasCode(error, 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') ? 413 : 409, detail || 'Git operation failed. Check repository access and retry.', { cause })
+      throw new GitRepositoryError(hasErrorCode(error, 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') ? 413 : 409, detail || 'Git operation failed. Check repository access and retry.', { cause })
     }
   }
 }
@@ -357,9 +358,8 @@ function within(root: string, path: string): boolean {
   const result = relative(root, path)
   return result !== '..' && !result.startsWith(`..${sep}`) && !isAbsolute(result)
 }
-function hasCode(error: unknown, code: string): boolean { return error instanceof Error && 'code' in error && error.code === code }
 async function exists(path: string): Promise<boolean> {
-  try { await stat(path); return true } catch (error) { if (hasCode(error, 'ENOENT')) return false; throw error }
+  try { await stat(path); return true } catch (error) { if (hasErrorCode(error, 'ENOENT')) return false; throw error }
 }
 function emptyContent(): Content { return { text: null, binary: false, truncated: false } }
 function decodeContent(buffer: Buffer): Content {

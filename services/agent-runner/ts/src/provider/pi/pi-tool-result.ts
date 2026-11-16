@@ -1,5 +1,5 @@
 import type { AgentEvent, ModelInvocation, ToolArtifact, ToolResultMetadata } from '../../core/event/agent-event.js'
-import { asRecord, numberField, stringField } from '../../core/event/json-record.js'
+import { asRecord, numberField, stringField } from '../../core/util/json-record.js'
 
 export function piToolResultMetadata(value: unknown): ToolResultMetadata {
   const result = asRecord(value)

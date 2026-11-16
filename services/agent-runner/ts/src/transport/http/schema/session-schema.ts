@@ -95,18 +95,6 @@ const sessionInfoSchema = {
   },
 } as const
 
-const sessionGroupSchema = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['cwd', 'pinned', 'sessions', 'has_more'],
-  properties: {
-    cwd: { type: 'string' },
-    pinned: { type: 'boolean' },
-    sessions: { type: 'array', items: sessionInfoSchema },
-    has_more: { type: 'boolean' },
-  },
-} as const
-
 const sessionIdParams = {
   type: 'object',
   additionalProperties: false,
@@ -155,8 +143,21 @@ export const listRunningSessionsSchema = {
     200: {
       type: 'object',
       additionalProperties: false,
-      required: ['running', 'warm'],
+      required: ['running', 'background', 'warm'],
       properties: {
+        // Task records are forwarded as the stream publishes them.
+        background: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['sessionId', 'tasks'],
+            properties: {
+              sessionId: { type: 'string' },
+              tasks: { type: 'array', items: { type: 'object', additionalProperties: true } },
+            },
+          },
+        },
         running: {
           type: 'array',
           items: {
@@ -419,8 +420,6 @@ export const archiveSessionSchema = {
     },
   },
 } as const
-
-export { sessionInfoSchema, sessionGroupSchema }
 
 export const workflowAgentSchema = {
   querystring: harnessQueryObject,

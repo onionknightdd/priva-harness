@@ -11,7 +11,7 @@ import {
   type RunFinishedRecord,
   type RunSource,
   type RunStartedRecord,
-} from '../../../../src/core/resource/data-store.js'
+} from '../../../../src/core/usage/data-store.js'
 import { SqliteDataStore } from '../../../../src/infrastructure/data/sqlite-data-store.js'
 import { SCHEMA_VERSION } from '../../../../src/infrastructure/data/sqlite-schema.js'
 
@@ -83,6 +83,7 @@ describe('SqliteDataStore', () => {
   it('upgrades a version-1 database by adding run_fact.cwd and keeps old rows unprojected', () => {
     store.close()
     const db = new DatabaseSync(path)
+    db.exec('DROP INDEX run_fact_started_audit; DROP INDEX run_fact_finished_audit; DROP INDEX tool_fact_audit')
     db.exec('ALTER TABLE run_fact DROP COLUMN cwd')
     db.exec('PRAGMA user_version = 1')
     db.exec(`INSERT INTO run_fact (run_id, started_utc, provider, model, source, prompt_chars, attachment_count, outcome)
@@ -93,6 +94,19 @@ describe('SqliteDataStore', () => {
     store.writeBatch([started('run-new')])
     const rows = raw().prepare('SELECT run_id, cwd FROM run_fact ORDER BY id').all() as { run_id: string; cwd: string | null }[]
     expect(rows).toEqual([{ run_id: 'legacy', cwd: null }, { run_id: 'run-new', cwd: '/work/demo' }])
+  })
+
+  it('indexes every audit reference so pruning audit rows does not scan the fact tables', () => {
+    const db = raw()
+    const plan = (table: string, column: string) => (db.prepare(`EXPLAIN QUERY PLAN SELECT 1 FROM ${table} WHERE ${column} = 1`).all() as { detail: string }[])
+      .map((row) => row.detail).join(' ')
+    try {
+      expect(plan('run_fact', 'started_audit_id')).toContain('USING COVERING INDEX run_fact_started_audit')
+      expect(plan('run_fact', 'finished_audit_id')).toContain('USING COVERING INDEX run_fact_finished_audit')
+      expect(plan('tool_fact', 'audit_id')).toContain('USING COVERING INDEX tool_fact_audit')
+    } finally {
+      db.close()
+    }
   })
 
   it('refuses a database written by a newer schema', () => {

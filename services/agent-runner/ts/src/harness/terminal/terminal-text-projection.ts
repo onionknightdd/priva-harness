@@ -1,8 +1,8 @@
 import type { TerminalTextDelta } from '../../core/contract/terminal-service.js'
-import { emptyAssistantMessage } from '../../core/resource/apply-stream-frame.js'
+import { emptyAssistantMessage } from '../../core/thread/apply-stream-frame.js'
 import { taskNotificationFields } from '../../core/resource/background-task.js'
-import { normalizeCompactCommandContent } from '../../core/resource/compact-command.js'
-import { textFromThreadBlocks, type ThreadBlock, type ThreadMessage } from '../../core/resource/thread.js'
+import { normalizeCompactCommandContent } from '../../core/thread/compact-command.js'
+import { textFromThreadBlocks, type ThreadBlock, type ThreadMessage } from '../../core/thread/thread.js'
 
 /** Display IDs differ from transcript IDs. Reconcile their ordered text prefixes. */
 export class TerminalTextProjection {

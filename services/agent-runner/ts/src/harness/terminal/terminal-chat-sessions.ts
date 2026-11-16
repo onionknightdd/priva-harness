@@ -14,9 +14,11 @@ import type { AgentEvent } from '../../core/event/agent-event.js'
 import { SessionError, sessionRefKey, type RunMode } from '../../core/resource/session.js'
 import { userTurnFromText, userTurnText, type UserTurn } from '../../core/run/user-turn.js'
 import type { SessionStream } from '../session/session-stream.js'
-import type { OpenedSessionTerminal, SessionTerminals, TerminalSize } from './session-terminals.js'
+import { DEFAULT_TERMINAL_SIZE, type OpenedSessionTerminal, type SessionTerminals, type TerminalSize } from './session-terminals.js'
 import { TerminalInteractions } from './terminal-interactions.js'
-import type { ThreadReplayItem } from '../../core/resource/thread.js'
+import type { ThreadReplayItem } from '../../core/thread/thread.js'
+import { errorMessage } from '../../core/util/errors.js'
+import { taskIsActive, taskIsInFlight } from '../../core/resource/background-task.js'
 
 interface PendingTurn { readonly runId: string; readonly turn: UserTurn; readonly spec: ProviderRunSpec }
 interface PendingConfiguration { readonly requestId: string; readonly spec: ProviderRunSpec }
@@ -242,7 +244,7 @@ export class TerminalChatSessions {
       void this.finish(chat, state.event === 'failure'
         ? { type: 'run.failed', message: state.message ?? 'Claude stopped with an API error' }
         : { type: 'run.completed', model: chat.active?.model ?? chat.model, durationMs: Date.now() - (chat.active?.startedAt ?? Date.now()) }, state.updatedAt)
-        .catch((error: unknown) => this.options.stream(ref).publish({ type: 'error', code: 'terminal.completion', message: error instanceof Error ? error.message : String(error) }))
+        .catch((error: unknown) => this.options.stream(ref).publish({ type: 'error', code: 'terminal.completion', message: errorMessage(error) }))
     }
   }
 
@@ -279,7 +281,7 @@ export class TerminalChatSessions {
     await this.event(next, state)
     try {
       if (nextSpec && (sourceSpec?.runMode !== nextSpec.runMode || sourceSpec?.systemInstructions !== nextSpec.systemInstructions)) {
-        await this.restartForMode(chat, nextSpec, { cols: 120, rows: 40 })
+        await this.restartForMode(chat, nextSpec, DEFAULT_TERMINAL_SIZE)
       }
     } finally {
       // Native commands already changed the transcript. Keep both views bound
@@ -352,7 +354,7 @@ export class TerminalChatSessions {
     const chat = this.chats.get(sessionRefKey(ref))
     if (chat?.nativeRequests.has(response.requestId)) {
       void this.options.terminals.respond(ref, response).catch((error: unknown) => {
-        this.options.stream(ref).publish({ type: 'error', code: 'permission.respond', message: error instanceof Error ? error.message : String(error) })
+        this.options.stream(ref).publish({ type: 'error', code: 'permission.respond', message: errorMessage(error) })
       })
       return true
     }
@@ -372,7 +374,7 @@ export class TerminalChatSessions {
         // Native manual rejection interrupts the loop without emitting Stop.
         // Do not await completion inside the transcript observer it refreshes.
         void this.recordInterrupted(chat).then(() => this.finish(chat, { type: 'run.aborted', message: 'Tool use rejected in terminal' }, chat.updatedAt))
-          .catch((error: unknown) => this.options.stream(ref).publish({ type: 'error', code: 'terminal.completion', message: error instanceof Error ? error.message : String(error) }))
+          .catch((error: unknown) => this.options.stream(ref).publish({ type: 'error', code: 'terminal.completion', message: errorMessage(error) }))
       }
     }
   }
@@ -402,6 +404,7 @@ export class TerminalChatSessions {
     await this.finish(chat, { type: 'run.failed', message: reason })
     await chat.releaseHistory?.()
     this.chats.delete(sessionRefKey(ref))
+    this.resourcesDirty.delete(sessionRefKey(ref))
   }
 
   async dispose(): Promise<void> {
@@ -511,19 +514,19 @@ export class TerminalChatSessions {
         if (!pending) return
         if ('requestId' in pending) {
           try { await this.applyConfiguration(chat, pending) }
-          catch (error) { this.failCommand(chat, pending, error instanceof Error ? error.message : String(error)) }
+          catch (error) { this.failCommand(chat, pending, errorMessage(error)) }
           continue
         }
         try {
           await this.inject(chat, pending)
         } catch (error) {
           if (chat.active?.runId === pending.runId && !chat.active.abort.signal.aborted) {
-            await this.finish(chat, { type: 'run.failed', message: error instanceof Error ? error.message : String(error) })
+            await this.finish(chat, { type: 'run.failed', message: errorMessage(error) })
           }
         }
       }
     } catch (error) {
-      for (const pending of chat.queue.splice(0)) this.failCommand(chat, pending, error instanceof Error ? error.message : String(error))
+      for (const pending of chat.queue.splice(0)) this.failCommand(chat, pending, errorMessage(error))
     } finally {
       chat.pumping = false
       if (!this.isBusy(chat) && chat.queue.length) void this.drain(chat)
@@ -546,7 +549,7 @@ export class TerminalChatSessions {
     try {
       await chat.telemetryRead
       const restarted = await this.options.terminals.configure(chat.ref, pending.spec,
-        { cols: 120, rows: 40, eventsUrl: this.options.eventsUrl(chat.ref) }, signal, false,
+        { ...DEFAULT_TERMINAL_SIZE, eventsUrl: this.options.eventsUrl(chat.ref) }, signal, false,
         !(chat.backgroundActive ?? this.options.stream(chat.ref).tasks.hasActive))
       applied = true
       chat.spec = pending.spec
@@ -560,7 +563,7 @@ export class TerminalChatSessions {
         // Opening restores native thinking. An explicit configuration request
         // must then apply the user's new choice, including a changed Profile.
         await this.options.terminals.configure(chat.ref, pending.spec,
-          { cols: 120, rows: 40, eventsUrl: this.options.eventsUrl(chat.ref) }, signal, false, false)
+          { ...DEFAULT_TERMINAL_SIZE, eventsUrl: this.options.eventsUrl(chat.ref) }, signal, false, false)
       }
       // A poll begun before configure may still contain the previous selection.
       await chat.telemetryRead
@@ -574,7 +577,7 @@ export class TerminalChatSessions {
       this.publishConfig(chat, pending.requestId)
     } catch (error) {
       if (previous && (applied || previous.model !== chat.spec?.model || previous.effort !== chat.spec.effort || previous.contextWindow !== chat.spec.contextWindow)) {
-        await this.restartForMode(chat, previous, { cols: 120, rows: 40 })
+        await this.restartForMode(chat, previous, DEFAULT_TERMINAL_SIZE)
         delete chat.status
         await this.waitForConfiguration(chat, AbortSignal.any([AbortSignal.timeout(30000), this.configurationAbort.signal]))
         await this.options.configured?.(chat.ref, previous, chat.model)
@@ -605,7 +608,7 @@ export class TerminalChatSessions {
       : pending.spec
     chat.spec = spec
     const active = await this.begin(chat, userTurnText(pending.turn), pending.runId, spec.model, false)
-    if (await this.options.terminals.configure(chat.ref, spec, { cols: 120, rows: 40, eventsUrl: this.options.eventsUrl(chat.ref) }, active.abort.signal,
+    if (await this.options.terminals.configure(chat.ref, spec, { ...DEFAULT_TERMINAL_SIZE, eventsUrl: this.options.eventsUrl(chat.ref) }, active.abort.signal,
       this.resourcesDirty.has(sessionRefKey(chat.ref)), !(chat.backgroundActive ?? this.options.stream(chat.ref).tasks.hasActive))) {
       chat.instanceId = ''; chat.updatedAt = 0; chat.awaitingReady = true; chat.telemetryOffset = 0
       this.resourcesDirty.delete(sessionRefKey(chat.ref))
@@ -673,7 +676,7 @@ export class TerminalChatSessions {
         final = { ...result, ...accounting, ...(costUsd === undefined ? {} : { costUsd }), ...(apiDurationMs === undefined ? {} : { apiDurationMs }) }
       }
     } catch (error) {
-      const message = `Could not synchronize terminal completion: ${error instanceof Error ? error.message : String(error)}`
+      const message = `Could not synchronize terminal completion: ${errorMessage(error)}`
       if (result.type === 'run.aborted') this.options.stream(chat.ref).publish({ type: 'error', code: 'terminal.completion', message }, active.runId)
       else final = { type: 'run.failed', message }
     } finally {
@@ -687,11 +690,14 @@ export class TerminalChatSessions {
 
   status(ref: SessionRef): TerminalStatus | undefined { return this.chats.get(sessionRefKey(ref))?.status }
 
+  /** Whether a terminal chat currently drives this session. */
+  has(ref: SessionRef): boolean { return this.chats.has(sessionRefKey(ref)) }
+
   async manageTasks(ref: SessionRef): Promise<void> {
     const chat = this.chats.get(sessionRefKey(ref))
     if (chat) delete chat.backgroundActive
     const stream = this.options.stream(ref)
-    for (const task of stream.tasks.list()) if (['pending', 'running', 'paused'].includes(task.status)) {
+    for (const task of stream.tasks.list()) if (taskIsInFlight(task)) {
       stream.publish({ type: 'task.updated', task: { ...task, status: 'unknown' } })
     }
     this.options.stream(ref).publish({ type: 'terminal.focus', reason: 'Manage background tasks in Claude Code' })
@@ -749,14 +755,14 @@ export class TerminalChatSessions {
               // coordinator, which replays the first resolution idempotently.
               if (chat.nativeRequests.size > 256) chat.nativeRequests.delete(chat.nativeRequests.values().next().value ?? '')
             }
-            if (event.type === 'tasks.snapshot') chat.backgroundActive = event.tasks.some((task) => !['completed', 'failed', 'cancelled'].includes(task.status))
+            if (event.type === 'tasks.snapshot') chat.backgroundActive = event.tasks.some(taskIsActive)
             ;(chat.active?.ledger ?? chat.lastLedger)?.observe(event)
             this.options.stream(chat.ref).publish(event, item.runId ?? chat.active?.runId)
             continue
           }
           chat.active?.interactions.native(event, 'hook')
           if (event.type === 'permission.resolved') continue
-          if (event.type === 'tasks.snapshot') chat.backgroundActive = event.tasks.some((task) => !['completed', 'failed', 'cancelled'].includes(task.status))
+          if (event.type === 'tasks.snapshot') chat.backgroundActive = event.tasks.some(taskIsActive)
           ;(chat.active?.ledger ?? chat.lastLedger)?.observe(event)
           // Child tools are projected by their owning transcript. An agent_id
           // alone is not a parent tool address and must not create main bubbles.
@@ -787,7 +793,7 @@ export class TerminalChatSessions {
           }
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
+        const message = errorMessage(error)
         if (message !== chat.monitorError) this.options.stream(chat.ref).publish({ type: 'error', code: 'terminal.telemetry', message })
         chat.monitorError = message
       }
@@ -825,7 +831,7 @@ export class TerminalChatSessions {
     chat.pumping = true
     chat.awaitingReady = true
     try {
-      await this.options.terminals.configure(chat.ref, chat.spec, { cols: 120, rows: 40, eventsUrl: this.options.eventsUrl(chat.ref) }, new AbortController().signal, true)
+      await this.options.terminals.configure(chat.ref, chat.spec, { ...DEFAULT_TERMINAL_SIZE, eventsUrl: this.options.eventsUrl(chat.ref) }, new AbortController().signal, true)
       chat.instanceId = ''; chat.updatedAt = 0; chat.telemetryOffset = 0; chat.awaitingReady = true
       this.resourcesDirty.delete(key)
     } finally { chat.pumping = false; void this.drain(chat) }
@@ -843,7 +849,7 @@ export class TerminalChatSessions {
         delete active.textError
         for (const delta of batch.deltas) if (delta.sessionId === chat.ref.id) this.options.stream(chat.ref).publishTerminalText(delta)
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
+        const message = errorMessage(error)
         if (active.textError !== message) this.options.stream(chat.ref).publish({ type: 'error', code: 'terminal.text', message })
         active.textError = message
       }
@@ -873,7 +879,7 @@ export class TerminalChatSessions {
           await this.reloadResources(chat, composer)
           delete chat.monitorError
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error)
+          const message = errorMessage(error)
           if (message !== chat.monitorError) this.options.stream(chat.ref).publish({ type: 'error', code: 'terminal.state', message })
           chat.monitorError = message
         }

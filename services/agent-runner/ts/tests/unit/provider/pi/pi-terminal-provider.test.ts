@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { appendFile, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
+import { appendFile, mkdtemp, rename, rm, stat, utimes, writeFile } from 'node:fs/promises'
 import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -114,6 +114,35 @@ it('restores pending startup questions on adoption without replaying completed a
   await writeFile(join(scratchDir, PI_TERMINAL_FILES.state), JSON.stringify({ instanceId: config?.instanceId, phase: 'idle', eventOffset: telemetry.offset }))
   await writeFile(join(scratchDir, PI_TERMINAL_FILES.control), JSON.stringify({ ...control, ready: true }))
   expect((await provider.readTerminalTelemetry(scratchDir, -1)).events).toEqual([])
+})
+
+it('follows the host between polls of a quiet terminal', async () => {
+  const { provider, scratchDir } = await setup()
+  const config = await readPiTerminalJson<PiTerminalLaunchConfig>(scratchDir, 'launch')
+  // Written long before the poll, the way the host leaves an idle terminal.
+  const settled = new Date(Date.now() - 60_000)
+  const write = async (file: 'state' | 'status', value: unknown) => {
+    const path = join(scratchDir, PI_TERMINAL_FILES[file]), next = `${path}.next`
+    await writeFile(next, JSON.stringify(value))
+    await utimes(next, settled, settled)
+    await rename(next, path)
+  }
+  const status = (effort: string) => ({ instanceId: config?.instanceId, sessionId: 'session', model: 'pi-model', cwd: '/work', effort })
+  const activity = JSON.stringify({ instanceId: config?.instanceId, sessionId: 'session', event: { type: 'terminal.focus', reason: 'look' } }) + '\n'
+  const events = join(scratchDir, PI_TERMINAL_FILES.events)
+  await write('state', { instanceId: config?.instanceId, sessionId: 'session', phase: 'idle', eventOffset: 0 })
+  await write('status', status('low'))
+  await writeFile(events, activity)
+
+  const first = await provider.readTerminalTelemetry(scratchDir, 0)
+  expect(first.events).toHaveLength(1)
+  expect(await provider.readTerminalTelemetry(scratchDir, first.offset)).toEqual({ offset: first.offset, events: [], status: status('low') })
+
+  await write('status', status('high'))
+  await appendFile(events, activity)
+  const next = await provider.readTerminalTelemetry(scratchDir, first.offset)
+  expect(next).toMatchObject({ offset: first.offset * 2, status: { effort: 'high' } })
+  expect(next.events).toHaveLength(1)
 })
 
 it('adopts only the current run after a telemetry history larger than one read batch', async () => {

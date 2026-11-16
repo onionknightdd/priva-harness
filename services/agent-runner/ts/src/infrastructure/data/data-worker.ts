@@ -2,6 +2,7 @@ import { parentPort, workerData } from 'node:worker_threads'
 
 import type { DataWorkerInit, MainToWorkerMessage, WorkerToMainMessage } from './data-worker-protocol.js'
 import { SqliteDataStore, type PruneJob } from './sqlite-data-store.js'
+import { errorMessage } from '../../core/util/errors.js'
 
 // Worker-thread entry. Owns the only SQLite connection so no synchronous
 // statement ever runs on the main thread. Messages arrive in order and are
@@ -25,7 +26,7 @@ function log(level: 'info' | 'warn' | 'error', message: string): void {
 }
 
 function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
+  return errorMessage(error)
 }
 
 const store = SqliteDataStore.open(init.dbPath)

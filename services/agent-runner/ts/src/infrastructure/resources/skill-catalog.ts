@@ -10,6 +10,7 @@ import { ResourceError, type ResourceGroup, type ResourceList, type ResourceQuer
 import { canonicalDirectory, containedFile, exists, inside, readText, record, resourceId, type ResourceFiles, strings } from './resource-files.js'
 import { type ProjectDirectories } from './project-directories.js'
 import { ancestors, claudePlugins, pluginComponentPaths, skillFiles, source, type ResourceEnvironment } from './resource-sources.js'
+import { hasErrorCode } from '../../core/util/errors.js'
 
 export class SkillCatalog {
   constructor(
@@ -109,7 +110,7 @@ export class SkillCatalog {
     if ((await lstat(root)).isSymbolicLink()) throw new ResourceError(403, 'Linked skill directories are read-only')
     const target = join(root, name)
     try { await mkdir(target) } catch (error) {
-      if (error instanceof Error && 'code' in error && error.code === 'EEXIST') throw new ResourceError(409, 'A skill with this folder name already exists')
+      if (hasErrorCode(error, 'EEXIST')) throw new ResourceError(409, 'A skill with this folder name already exists')
       throw error
     }
     try {

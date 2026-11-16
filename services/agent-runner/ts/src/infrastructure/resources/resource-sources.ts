@@ -1,6 +1,6 @@
 import { access, lstat, readdir } from 'node:fs/promises'
 import { constants } from 'node:fs'
-import { basename, dirname, join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 
 import { resolveSettings } from '@anthropic-ai/claude-agent-sdk'
 
@@ -96,6 +96,3 @@ export function pluginComponentPaths(plugin: ClaudePluginSource, key: string, de
   return [...new Set([defaultPath, ...configured])].map((path) => resolve(plugin.path, path)).filter((path) => inside(plugin.path, path))
 }
 
-export function sourceLabel(scope: ResourceScope, origin: ResourceOrigin, path: string): string {
-  return origin === 'package' || origin === 'plugin' ? basename(path) : `${scope === 'global' ? 'Global' : scope === 'local' ? 'Local' : 'Project'} · ${basename(dirname(path))}/${basename(path)}`
-}

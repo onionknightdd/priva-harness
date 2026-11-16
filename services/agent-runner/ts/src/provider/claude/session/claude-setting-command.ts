@@ -1,6 +1,6 @@
 import { stripVTControlCharacters } from 'node:util'
-import { asRecord, stringField, type JsonRecord } from '../../../core/event/json-record.js'
-import type { EffortChange, ModelChange } from '../../../core/resource/thread.js'
+import { asRecord, stringField, type JsonRecord } from '../../../core/util/json-record.js'
+import type { EffortChange, ModelChange } from '../../../core/thread/thread.js'
 
 /** A native caveat and parent chain distinguish local commands from pasted XML. */
 export class ClaudeSettingCommands {

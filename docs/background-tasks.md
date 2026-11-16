@@ -63,8 +63,23 @@ snapshots free of transient XML user bubbles and duplicate continuations.
 
 The sequence is session-wide. The in-memory replay buffer keeps 4,096 events.
 A matching `streamId` and retained sequence replay only newer events. A
-subscription with a cursor also sends a final snapshot to reconcile commands
-whose replies were lost. A stale cursor or process change resets via snapshot.
+subscription whose cursor was honoured also receives a final snapshot to
+reconcile commands whose replies were lost. A stale cursor or process change
+resets via `replay.gap` and one snapshot.
+
+The runner keeps a session's stream (thread, replay buffer, task state) in
+memory only while something uses it. Ten minutes after the last viewer, run,
+open question, in-flight task and driver (terminal chat, warm SDK runtime) are
+gone, the stream is released; the next subscription rebuilds it from the
+provider transcript and the saved task records and is answered like a process
+change: a new `streamId`, then a snapshot.
+
+```text
+subscribe ──► stream in memory? ──yes──► replay from cursor (+ final snapshot)
+                    │ no (never loaded, restarted, or released when idle)
+                    ▼
+        load transcript + saved tasks ──► new streamId ──► replay.gap + snapshot
+```
 The UI deduplicates streamed events and keeps unsent messages out of replay.
 Disconnect removes the subscriber; execution continues.
 
@@ -173,7 +188,19 @@ to different launch bubbles, that response uses the last delivery's owner.
 The Workspace Agent catalog joins notifications across the entire thread by
 tool/task identity, including notifications in independent turns. Selecting an
 older notification still displays that delivery's output after the agent resumes.
-Subagent frames retain their `parentToolUseId` routing. Lifecycle-only events
+Subagent frames retain their `parentToolUseId` routing. The Claude event mapper
+keeps the current message and the pending tool inputs per channel (the main
+thread, or one subagent's parent tool call), so a subagent frame arriving in
+the middle of a main-thread message cannot re-address the main thread's deltas.
+Progress from a product tool is attached to the running call of the tool that
+emitted it, and an interrupted turn stops that call through its own signal.
+
+```text
+main thread   message M: delta, delta .............. delta   -> messageId M
+subagent A    ............ message S (parent tool A) .....   -> messageId S, parentToolUseId A
+```
+
+Lifecycle-only events
 never move a human reply. Reconnect snapshots contain the same notification
 blocks and merged bubbles as the live stream.
 

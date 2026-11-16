@@ -2,7 +2,7 @@ import type { Activity } from "@/components/heatmap/calendar-heatmap"
 
 const USAGE_API_PREFIX = "/api/sandbox/usage"
 
-// Mirrors services/agent-runner/ts/src/core/resource/usage-overview.ts. Every
+// Mirrors services/agent-runner/ts/src/core/usage/usage-overview.ts. Every
 // number is derived server-side in the caller's time zone; the client only
 // formats and arranges it.
 export type UsageRangeDays = 7 | 30 | 365

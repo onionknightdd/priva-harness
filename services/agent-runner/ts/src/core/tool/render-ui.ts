@@ -4,6 +4,7 @@ import { INTERACTIVE_VISUALIZE_TOOL_NAME, STATIC_VISUALIZE_TOOL_NAME } from '../
 import { defineTool, stringToolArg, type ToolDefinition } from './define-tool.js'
 import { interactiveVisualizeSpec } from './interactive-visualize.spec.js'
 import { staticVisualizeSpec } from './static-visualize.spec.js'
+import { errorMessage } from '../util/errors.js'
 
 export function formatVisualizeDescription(spec: LibrarySpec, intro: readonly string[]): string {
   const childSignature = spec.components['Button'] === undefined
@@ -61,7 +62,7 @@ export function defineVisualizeTool(
         if (lines.length > 0) return Promise.resolve({ ok: false, text: lines.join('\n') })
         return Promise.resolve({ ok: true, text: lang })
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
+        const message = errorMessage(error)
         return Promise.resolve({ ok: false, text: `parse-failed: ${message}` })
       }
     },

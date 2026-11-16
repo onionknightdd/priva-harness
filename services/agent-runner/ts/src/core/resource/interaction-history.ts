@@ -1,4 +1,4 @@
-import { asRecord } from '../event/json-record.js'
+import { asRecord } from '../util/json-record.js'
 import { questionsSchema, type InteractionResolution, type QuestionAnswer } from './interaction.js'
 
 /** Native tool metadata keeps answers by question text, without the live request ID. */

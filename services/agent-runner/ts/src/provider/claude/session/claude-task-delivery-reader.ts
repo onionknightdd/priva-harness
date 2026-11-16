@@ -1,9 +1,10 @@
 import { open, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
-import { asRecord, isRecord, stringField } from '../../../core/event/json-record.js'
+import { asRecord, isRecord, stringField } from '../../../core/util/json-record.js'
 import type { ClaudeSdkMessage } from '../claude-event-mapper.js'
 import { claudeTaskNotificationRecord } from './claude-task-notification.js'
+import { hasErrorCode } from '../../../core/util/errors.js'
 
 /** The SDK's task_notification has no result or consumption identity. Read those from the native transcript. */
 export class ClaudeTaskDeliveryReader {
@@ -28,13 +29,13 @@ export class ClaudeTaskDeliveryReader {
     this.context = []
     this.consecutiveNotice = false
     this.contexts.clear()
-    try { this.offset = (await stat(path)).size } catch (error) { if (!missing(error)) throw error }
+    try { this.offset = (await stat(path)).size } catch (error) { if (!hasErrorCode(error, 'ENOENT')) throw error }
   }
 
   async forAssistant(messageId: string): Promise<readonly ClaudeSdkMessage[]> {
     if (!this.path) return []
     let file
-    try { file = await open(this.path, 'r') } catch (error) { if (missing(error)) return []; throw error }
+    try { file = await open(this.path, 'r') } catch (error) { if (hasErrorCode(error, 'ENOENT')) return []; throw error }
     try {
       const size = (await file.stat()).size
       if (size < this.offset) {
@@ -79,4 +80,3 @@ export class ClaudeTaskDeliveryReader {
   }
 }
 
-function missing(error: unknown): boolean { return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT' }

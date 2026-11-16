@@ -1,4 +1,4 @@
-import { open, readFile } from 'node:fs/promises'
+import { open, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import { createReadStream } from 'node:fs'
@@ -8,6 +8,12 @@ import type { ProviderRunSpec, SessionTarget } from '../../core/contract/agent-p
 import { EFFORT_LEVELS } from '../../core/contract/agent-provider.js'
 import type { TerminalActivity, TerminalSessionState, TerminalStatus, TerminalTelemetry } from '../../core/contract/terminal-service.js'
 import { interactionResponseSchema } from '../../core/resource/interaction.js'
+import { hasErrorCode } from '../../core/util/errors.js'
+import { PolledFiles } from '../../core/util/polled-files.js'
+
+// Telemetry is polled for every open terminal; the host rewrites these files
+// only when its state changes.
+const files = new PolledFiles()
 
 export const PI_TERMINAL_FILES = {
   launch: 'pi-launch.json', control: 'pi-control.json', state: 'pi-state.json',
@@ -39,8 +45,8 @@ export const piTerminalCommandSchema = z.discriminatedUnion('type', [
 export type PiTerminalCommand = z.infer<typeof piTerminalCommandSchema>
 
 export async function readPiTerminalJson<T>(scratchDir: string, file: keyof typeof PI_TERMINAL_FILES): Promise<T | undefined> {
-  try { return JSON.parse(await readFile(join(scratchDir, PI_TERMINAL_FILES[file]), 'utf8')) as T }
-  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined; throw error }
+  try { return await files.read(join(scratchDir, PI_TERMINAL_FILES[file]), (text) => JSON.parse(text) as T) }
+  catch (error) { if (hasErrorCode(error, 'ENOENT')) return undefined; throw error }
 }
 
 export async function requestPiTerminal(scratchDir: string, command: PiTerminalCommand, signal?: AbortSignal): Promise<void> {
@@ -69,10 +75,16 @@ export async function readPiTerminalTelemetry(scratchDir: string, offset: number
   const control = await readPiTerminalJson<{ ready?: boolean; instanceId: string }>(scratchDir, 'control')
   const startup = state?.phase === 'idle' && control?.instanceId === state.instanceId && control.ready !== true
   const status = rawStatus?.instanceId === state?.instanceId ? rawStatus : undefined
+  const quiet: TerminalTelemetry = { offset, events: [], ...(status ? { status } : {}) }
+  const eventsPath = join(scratchDir, PI_TERMINAL_FILES.events)
   let file
-  try { file = await open(join(scratchDir, PI_TERMINAL_FILES.events), 'r') }
-  catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error }
-  if (!file) return { offset, events: [], ...(status ? { status } : {}) }
+  try {
+    // A reader that already has a position and finds nothing appended needs
+    // only the log's size. Adopting a terminal (offset < 0) reads the log.
+    if (offset >= 0 && (await stat(eventsPath)).size === offset) return quiet
+    file = await open(eventsPath, 'r')
+  } catch (error) { if (!hasErrorCode(error, 'ENOENT')) throw error }
+  if (!file) return quiet
   try {
     const size = (await file.stat()).size
     // Skip only the bytes covered by the settled snapshot. A new turn may have
@@ -81,7 +93,7 @@ export async function readPiTerminalTelemetry(scratchDir: string, offset: number
     const settledOffset = adoptingSettled ? state.eventOffset : undefined
     if (adoptingSettled && (settledOffset === undefined || !Number.isSafeInteger(settledOffset) || settledOffset < 0 || settledOffset > size)) throw new Error('Pi terminal state has an invalid event offset')
     const start = settledOffset ?? (offset < 0 && state?.phase === 'running'
-      ? await latestRunOffset(join(scratchDir, PI_TERMINAL_FILES.events), size, state.instanceId)
+      ? await latestRunOffset(eventsPath, size, state.instanceId)
       : offset > size ? 0 : Math.max(0, offset))
     const bytes = Buffer.alloc(Math.min(size - start, 64 * 1024 * 1024))
     const { bytesRead } = await file.read(bytes, 0, bytes.length, start)

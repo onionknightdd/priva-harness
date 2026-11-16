@@ -1,5 +1,5 @@
 import type { Options, SDKControlGetContextUsageResponse, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import type { AgentEvent } from '../../../../src/core/event/agent-event.js'
 import { consumeRunEvents } from '../../../../src/harness/run/consume-run-events.js'
@@ -11,6 +11,7 @@ import {
 } from '../../../../src/provider/claude/claude-runtime.js'
 import { testRunSpec } from '../../../support/run-spec.js'
 import { userTurnFromText } from '../../../../src/core/run/user-turn.js'
+import { defineTool } from '../../../../src/core/tool/define-tool.js'
 
 describe('ClaudeRuntime stream input', () => {
   it('rejects Pi-only effort levels before calling the Claude SDK', () => {
@@ -44,6 +45,31 @@ describe('ClaudeRuntime stream input', () => {
     expect(options?.title).toBeUndefined()
     await runtime.release('dispose')
   })
+  it('reports product tool progress on the call that produced it', async () => {
+    const imageRead = defineTool({
+      name: 'image_read', description: 'Progress fixture', inputSchema: { type: 'object', properties: {} },
+      execute: (_args, context) => {
+        context.emitProgress?.('half')
+        return Promise.resolve({ ok: true, text: 'done' })
+      },
+    })
+    const runtime = new ClaudeRuntime(testRunSpec(), { kind: 'new', provider: 'claude' }, '/tmp/claude', ({ prompt, options }) =>
+      new FakeClaudeQuery(prompt, false, async function* () {
+        // Another tool starts after the image read and before its progress.
+        yield { type: 'assistant', session_id: 'sess-stream', message: { id: 'msg_1', content: [
+          { type: 'tool_use', id: 'read-1', name: 'mcp__agentWorkshop__image_read', input: {} },
+          { type: 'tool_use', id: 'bash-1', name: 'Bash', input: {} },
+        ] } } as unknown as SDKMessage
+        await productToolHandler(options, 'image_read')({}, {})
+      }), [imageRead])
+
+    const events = await collect(runtime.run({ text: 'look' }, { signal: new AbortController().signal }))
+    expect(events.filter((event) => event.type === 'tool.progress')).toEqual([
+      { type: 'tool.progress', id: 'read-1', channel: 'log', chunk: 'half' },
+    ])
+    await runtime.release('dispose')
+  })
+
   it('includes attached files in the actual SDK user message', async () => {
     let query: FakeClaudeQuery | undefined
     const runtime = new ClaudeRuntime(testRunSpec(), { kind: 'new', provider: 'claude' }, '/tmp/claude', ({ prompt, options }) => {
@@ -173,6 +199,32 @@ describe('ClaudeRuntime stream input', () => {
     await runtime.release('dispose')
   })
 
+  it('resumes the session in a new query after the previous process exits', async () => {
+    const started: Options[] = []
+    const runtime = new ClaudeRuntime(testRunSpec(), { kind: 'new', provider: 'claude', sessionId: 'sess-stream' }, '/tmp/claude', ({ prompt, options }) => {
+      started.push(options)
+      return new FakeClaudeQuery(prompt, started.length === 1)
+    })
+    const idle: AgentEvent[] = []
+    runtime.listenIdle((events) => idle.push(...events))
+
+    expect(await collect(runtime.run({ text: 'one' }, { signal: new AbortController().signal })))
+      .toEqual([expect.objectContaining({ type: 'run.completed' })])
+    await runtime.release('warm')
+    await vi.waitFor(() => expect(idle).toEqual([
+      expect.objectContaining({ type: 'run.failed', message: 'Claude session process ended unexpectedly' }),
+    ]))
+    expect(runtime.hasBackgroundTasks).toBe(false)
+
+    expect(await collect(runtime.run({ text: 'two' }, { signal: new AbortController().signal })))
+      .toEqual([expect.objectContaining({ type: 'run.completed' })])
+    expect(started).toHaveLength(2)
+    expect(started[0]).toMatchObject({ sessionId: 'sess-stream' })
+    expect(started[1]).toMatchObject({ resume: 'sess-stream' })
+    expect(started[1]?.sessionId).toBeUndefined()
+    await runtime.release('dispose')
+  })
+
   it('reads context usage from the live query after a turn', async () => {
     let query: FakeClaudeQuery | undefined
     const runtime = new ClaudeRuntime(
@@ -206,6 +258,16 @@ describe('ClaudeRuntime stream input', () => {
     await runtime.release('dispose')
   })
 })
+
+// The SDK keeps the handlers it was given on its in-process MCP server.
+function productToolHandler(options: Options, name: string): (args: unknown, extra: unknown) => Promise<unknown> {
+  const server = options.mcpServers?.['agentWorkshop'] as unknown as {
+    instance: { _registeredTools: Record<string, { handler(args: unknown, extra: unknown): Promise<unknown> }> }
+  } | undefined
+  const tool = server?.instance._registeredTools[name]
+  if (!tool) throw new Error(`Product tool ${name} is not registered`)
+  return (args, extra) => tool.handler(args, extra)
+}
 
 async function collect(events: AsyncIterable<AgentEvent>): Promise<AgentEvent[]> {
   const collected: AgentEvent[] = []
@@ -257,7 +319,12 @@ class FakeClaudeQuery implements ClaudeQuery {
   private readonly resolveTurnReady: () => void
   private readonly resolvePromptEnded: () => void
 
-  constructor(private readonly prompt: AsyncIterable<SDKUserMessage>) {
+  constructor(
+    private readonly prompt: AsyncIterable<SDKUserMessage>,
+    private readonly exitAfterFirstTurn = false,
+    // What the CLI reports for a turn before its result.
+    private readonly turnMessages: () => Iterable<SDKMessage> | AsyncIterable<SDKMessage> = () => [],
+  ) {
     let resolveTurnReady = (): void => undefined
     let resolvePromptEnded = (): void => undefined
     this.turnReady = new Promise((resolve) => {
@@ -274,6 +341,7 @@ class FakeClaudeQuery implements ClaudeQuery {
     for await (const message of this.prompt) {
       this.received.push(message)
       this.waitingForMore = false
+      yield* this.turnMessages()
       yield {
         type: 'result',
         subtype: 'success',
@@ -282,6 +350,8 @@ class FakeClaudeQuery implements ClaudeQuery {
       } as SDKMessage
       this.waitingForMore = true
       this.resolveTurnReady()
+      // Stands in for the CLI process exiting between turns.
+      if (this.exitAfterFirstTurn) break
     }
     this.waitingForMore = false
     this.resolvePromptEnded()

@@ -181,6 +181,16 @@ describe('/api/sandbox/agent/sessions', () => {
     })
   })
 
+  it('includes background tasks in /sessions/running', async () => {
+    const task = { taskId: 'task-1', kind: 'bash', status: 'running', description: 'build' } as const
+    sessionService.bindBackgroundReader((harness) => harness === 'claude' ? [{ sessionId: 'claude-1', tasks: [task] }] : [])
+    const response = parseJson(await server.inject({
+      method: 'GET',
+      url: '/api/sandbox/agent/sessions/running?harness=claude',
+    }))
+    expect(response['background']).toEqual([{ sessionId: 'claude-1', tasks: [task] }])
+  })
+
   it('returns resume-faithful pi messages including tool_result and compaction', async () => {
     const response = parseJson(await server.inject({
       method: 'GET',

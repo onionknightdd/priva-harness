@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { defaultDataRetention } from '../../../src/core/resource/data-store.js'
+import { defaultDataRetention } from '../../../src/core/usage/data-store.js'
 import { AgentHarness } from '../../../src/harness/agent-harness.js'
 import { WorkerDataRecorder } from '../../../src/infrastructure/data/worker-data-recorder.js'
 import { FakeAgentProvider } from '../../support/fake-agent-provider.js'

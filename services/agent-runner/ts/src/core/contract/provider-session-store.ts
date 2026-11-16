@@ -5,7 +5,7 @@ import type {
   ProviderSessionInfo,
   SessionMessage,
 } from '../resource/session.js'
-import type { ThreadReplayItem } from '../resource/thread.js'
+import type { ThreadReplayItem } from '../thread/thread.js'
 
 export interface SessionListQuery {
   readonly cwd?: string

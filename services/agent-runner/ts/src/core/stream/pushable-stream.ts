@@ -37,6 +37,13 @@ export class PushableStream<T> implements AsyncIterable<T> {
           this.waiters.push(resolve)
         })
       },
+      // A consumer that stops reading ends the stream, so later pushes are
+      // dropped instead of buffering for a reader that will never return.
+      return: (): Promise<IteratorResult<T>> => {
+        this.close()
+        this.items.length = 0
+        return Promise.resolve({ value: undefined, done: true })
+      },
     }
   }
 }

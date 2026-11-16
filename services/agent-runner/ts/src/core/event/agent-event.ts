@@ -3,7 +3,7 @@ import type { RunMode } from '../resource/session.js'
 import type { WorkflowState } from '../resource/workflow.js'
 import type { InteractionRequest, InteractionResolution } from '../resource/interaction.js'
 import type { BackgroundTask, TaskNotification, TaskReplyTarget } from '../resource/background-task.js'
-import type { ThreadMessage } from '../resource/thread.js'
+import type { ThreadMessage } from '../thread/thread.js'
 import type { EffortLevel } from '../contract/agent-provider.js'
 import type { ContextUsage } from '../resource/context-usage.js'
 export const STREAM_PROTOCOL_VERSION = 2 as const
@@ -30,7 +30,6 @@ export const STREAM_PROTOCOL_VERSION = 2 as const
 // Claude system.status compact_result              → session.compacted | session.compaction_failed
 // Claude compact continuation user                 → session.compacted { summary }
 // Pi compaction_start / compaction_end             → session.compacting / session.compacted / session.compaction_failed / session.compaction_cancelled
-
 
 // Raw provider components for one turn. input excludes cache traffic, so the
 // tokens the model actually processed are input + cacheRead + cacheWrite.
@@ -357,12 +356,6 @@ export function isRunResultEvent(
   event: AgentEvent,
 ): event is Extract<AgentEvent, { type: 'run.completed' | 'run.failed' | 'run.aborted' }> {
   return event.type === 'run.completed' || event.type === 'run.failed' || event.type === 'run.aborted'
-}
-
-export function isRunTerminalEvent(
-  event: AgentEvent,
-): event is Extract<AgentEvent, { type: 'run.failed' | 'run.aborted' | 'error' }> {
-  return event.type === 'run.failed' || event.type === 'run.aborted' || event.type === 'error'
 }
 
 export function sessionIdOf(event: AgentEvent): string | undefined {

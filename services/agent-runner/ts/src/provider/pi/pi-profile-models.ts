@@ -6,6 +6,7 @@ import { resolveCapabilityModel } from '../../core/resource/model-profile.js'
 import type { ImageToolProfile } from '../../core/tool/define-tool.js'
 import { CompatibleImageApi, type ImageApiUsage } from '../../core/tool/image-api.js'
 import { classifierImplementation, classifierModel } from '../../core/tool/classifier-api.js'
+import { errorMessage } from '../../core/util/errors.js'
 
 export const PI_IMAGE_PROVIDER_ID = 'priva-images'
 const IMAGE_API = 'priva-openai-images'
@@ -86,7 +87,7 @@ export function createPiImageProvider(profile: ImageToolProfile): ProviderImages
           ...(result.usage === undefined ? {} : { usage: nativeImageUsage(result.usage) }),
         }
       } catch (error) {
-        return { ...base, stopReason: options?.signal?.aborted === true ? 'aborted' : 'error', pricingKnown: false, errorMessage: error instanceof Error ? error.message : String(error) }
+        return { ...base, stopReason: options?.signal?.aborted === true ? 'aborted' : 'error', pricingKnown: false, errorMessage: errorMessage(error) }
       }
     },
   }

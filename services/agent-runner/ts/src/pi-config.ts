@@ -6,14 +6,14 @@ import { hasTrustRequiringProjectResources, ProjectTrustStore, SettingsManager, 
 
 import { ResourceError } from './core/resource/resource-catalog.js'
 import type { ResourceDiagnostic } from './core/resource/resource-catalog.js'
-import { asRecord } from './core/event/json-record.js'
+import { asRecord, isRecord } from './core/util/json-record.js'
+import { hasErrorCode } from './core/util/errors.js'
 
 const exposures = new Set(['codemode', 'deferred', 'direct', 'hidden', 'codemode-deferred'])
 const overrideKeys = new Set(['enabled', 'exposure', 'toolExposure'])
 const legacyServerKeys = new Set(['disabled', 'includeTools', 'excludeTools', 'toolPrefix', 'httpTransport', 'socket', 'lifecycle', 'inheritEnv', 'bearerToken', 'bearerTokenEnv', 'bearerTokenStore', 'requestHeadersCommand', 'headersHelper', 'authProvider', 'connectionTimeout'])
 const serverKeys = new Set(['command', 'args', 'env', 'cwd', 'url', 'type', 'headers', 'oauth', 'auth', 'description', 'enabled', 'exposure', 'toolExposure', 'timeout'])
 
-function isRecord(value: unknown): value is Record<string, unknown> { return asRecord(value) !== undefined }
 function record(value: unknown): Record<string, unknown> { return asRecord(value) ?? {} }
 
 /** Directory previews never connect servers or run credential commands. The native
@@ -21,7 +21,7 @@ function record(value: unknown): Record<string, unknown> { return asRecord(value
 export async function readPiMcpFile(path: string): Promise<Record<string, unknown>> {
   let raw: string
   try { raw = await readFile(path, 'utf8') } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return {}
+    if (hasErrorCode(error, 'ENOENT')) return {}
     throw error
   }
   let value: unknown
@@ -48,7 +48,7 @@ export async function ignoredPiMcpSources(cwd: string): Promise<ResourceDiagnost
       const value = asRecord(JSON.parse(await readFile(path, 'utf8')))
       if (Object.keys(record(value?.['mcpServers'] ?? value?.['mcp-servers'])).length) diagnostics.push({ path, message: 'This shared MCP source is not loaded by native Pi. Configure the required servers in the Pi global or project mcp.json; this file was not changed.' })
     } catch (error) {
-      if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) diagnostics.push({ path, message: 'Cannot inspect this shared MCP source; native Pi does not load it' })
+      if (!(hasErrorCode(error, 'ENOENT'))) diagnostics.push({ path, message: 'Cannot inspect this shared MCP source; native Pi does not load it' })
     }
   }
   return diagnostics

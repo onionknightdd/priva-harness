@@ -1,5 +1,6 @@
 import type { ModelProfile } from '../resource/model-profile.js'
 import { ModelProfileError } from '../resource/model-profile.js'
+import { asRecord } from '../util/json-record.js'
 
 export interface ImageBytes {
   readonly bytes: Uint8Array
@@ -362,11 +363,6 @@ function chatDeltaText(payload: unknown): string {
     ?? ''
 }
 
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : undefined
-}
 
 function stringField(record: Record<string, unknown> | undefined, key: string): string | undefined {
   const value = record?.[key]

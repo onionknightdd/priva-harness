@@ -1,7 +1,4 @@
-import type { InteractionResponse } from '../core/resource/interaction.js'
 import { randomUUID } from 'node:crypto'
-import { DEFAULT_CONTEXT_WINDOW } from '../core/resource/model-context.js'
-import { applyModelContext, splitModelContext } from '../core/resource/model-profile.js'
 
 import type {
   AgentProvider,
@@ -12,34 +9,37 @@ import type {
   SessionTarget,
   TurnContext,
 } from '../core/contract/agent-provider.js'
-import type { AgentEvent } from '../core/event/agent-event.js'
-import type { StreamFrame } from '../core/event/agent-event.js'
-import { emptyContextUsage } from '../core/resource/context-usage.js'
-import type { ContextUsage } from '../core/resource/context-usage.js'
 import type { DataRecorder } from '../core/contract/data-recorder.js'
-import type { RunSource } from '../core/resource/data-store.js'
-import { RunLedger } from './run/run-ledger.js'
-import { isRunResultEvent } from '../core/event/agent-event.js'
+import type { TerminalElicitation, TerminalQuestion, TerminalSessionState } from '../core/contract/terminal-service.js'
+import { isRunResultEvent, type AgentEvent, type StreamFrame } from '../core/event/agent-event.js'
+import { emptyContextUsage, type ContextUsage } from '../core/resource/context-usage.js'
+import type { RunSource } from '../core/usage/data-store.js'
+import { foldThread } from '../core/thread/fold-thread.js'
+import type { InteractionResponse } from '../core/resource/interaction.js'
+import { contextTagForWindow, DEFAULT_CONTEXT_WINDOW } from '../core/resource/model-context.js'
+import { applyModelContext, splitModelContext } from '../core/resource/model-profile.js'
+import { SessionError, sessionRefKey } from '../core/resource/session.js'
 import type { SlashCommand } from '../core/resource/slash-command.js'
-import type { UserTurn } from '../core/run/user-turn.js'
-import { SessionError } from '../core/resource/session.js'
-import { SessionRunModes } from './session/session-run-mode.js'
+import { userTurnFromText, type UserTurn } from '../core/run/user-turn.js'
+import { errorMessage } from '../core/util/errors.js'
 import { PLATFORM_INSTRUCTIONS } from './prompt/platform-instructions.js'
-import { foldThread } from '../core/resource/fold-thread.js'
-import { SessionStream } from './session/session-stream.js'
-import { sessionRefKey } from '../core/resource/session.js'
-import { userTurnFromText } from '../core/run/user-turn.js'
 import { consumeRunEvents } from './run/consume-run-events.js'
 import { EnvelopeStamper } from './run/envelope-stamper.js'
 import type { LiveRun } from './run/live-run.js'
 import type { LiveRunRegistry } from './run/live-run-registry.js'
+import { RunLedger } from './run/run-ledger.js'
 import { WarmRuntimePool } from './run/warm-runtime-pool.js'
+import { SessionRunModes } from './session/session-run-mode.js'
 import type { SessionService } from './session/session-service.js'
-import { TerminalHistoryMirror } from './terminal/terminal-history-mirror.js'
+import { SessionStream } from './session/session-stream.js'
+import { DEFAULT_TERMINAL_SIZE, type SessionTerminals, type TerminalSize } from './terminal/session-terminals.js'
 import { TerminalChatSessions } from './terminal/terminal-chat-sessions.js'
+import { TerminalHistoryMirror } from './terminal/terminal-history-mirror.js'
 import { readTerminalUsage, terminalUsageDelta } from './terminal/terminal-run-usage.js'
-import type { SessionTerminals, TerminalSize } from './terminal/session-terminals.js'
-import type { TerminalElicitation, TerminalQuestion, TerminalSessionState } from '../core/contract/terminal-service.js'
+
+const STREAM_REPLAY_LIMIT = 4096
+// How long a session nobody is viewing or running keeps its thread in memory.
+const STREAM_IDLE_MS = 10 * 60 * 1000
 
 export interface AgentHarnessOptions {
   readonly providers: Readonly<Record<ProviderId, AgentProvider>>
@@ -112,8 +112,30 @@ export class AgentHarness {
   sessionStream(ref: SessionRef): SessionStream {
     const key = sessionRefKey(ref)
     let stream = this.streams.get(key)
-    if (!stream) { stream = new SessionStream(ref, [], 4096, (tasks) => this.options.sessions?.saveBackgroundTasks(ref, tasks) ?? Promise.resolve()); this.streams.set(key, stream) }
+    if (!stream) {
+      stream = new SessionStream(ref, [], STREAM_REPLAY_LIMIT, (tasks) => this.options.sessions?.saveBackgroundTasks(ref, tasks) ?? Promise.resolve())
+      this.retainStream(key, stream)
+    }
     return stream
+  }
+
+  // Every session ever opened would otherwise keep its whole thread and replay
+  // buffer for the life of the process. A released stream leaves the session
+  // exactly as a restart would: its next viewer reloads it from the transcript.
+  private retainStream(key: string, stream: SessionStream): void {
+    const now = Date.now()
+    for (const [otherKey, other] of this.streams) {
+      if (now - other.lastActivityAt >= STREAM_IDLE_MS && other.dormant && !this.drives(other.session)) this.streams.delete(otherKey)
+    }
+    this.streams.set(key, stream)
+  }
+
+  /** Whether any in-memory driver or pending operation still refers to the session. */
+  private drives(ref: SessionRef): boolean {
+    const key = sessionRefKey(ref)
+    return this.terminalChats?.has(ref) === true || this.pool?.peek(ref) !== undefined
+      || this.liveRuns?.liveForSession(ref) !== undefined || this.terminalHistories.has(key)
+      || this.sdkSessions.has(key) || this.configuring.has(key) || this.openingTerminals.has(key) || this.loadingStreams.has(key)
   }
 
   async loadSessionStream(ref: SessionRef): Promise<SessionStream> {
@@ -127,9 +149,12 @@ export class AgentHarness {
         this.options.sessions?.thread(ref.provider, ref.id), this.options.sessions?.savedBackgroundTasks(ref),
         this.options.sessions?.configuration(ref),
       ])
-      const stream = this.streams.get(key) ?? new SessionStream(ref, history?.messages, 4096,
-        (tasks) => this.options.sessions?.saveBackgroundTasks(ref, tasks) ?? Promise.resolve(), tasks)
-      this.streams.set(key, stream)
+      let stream = this.streams.get(key)
+      if (!stream) {
+        stream = new SessionStream(ref, history?.messages, STREAM_REPLAY_LIMIT,
+          (tasks) => this.options.sessions?.saveBackgroundTasks(ref, tasks) ?? Promise.resolve(), tasks)
+        this.retainStream(key, stream)
+      }
       if (config && !stream.snapshot().config) stream.publish({ type: 'session.config', config })
       return stream
     })()
@@ -233,7 +258,7 @@ export class AgentHarness {
       const saved = await this.options.sessions?.configuration(ref)
       const contextWindow = saved?.contextWindow ?? DEFAULT_CONTEXT_WINDOW
       await this.openTerminal({ kind: 'resume', session: ref }, { ...spec, contextWindow,
-        model: applyModelContext(spec.model, contextWindow === 1_000_000 ? '1m' : null) }, { cols: 120, rows: 40 })
+        model: applyModelContext(spec.model, contextTagForWindow(contextWindow)) }, DEFAULT_TERMINAL_SIZE)
     }
     await this.terminalChats.configure(ref, await this.runModes.resolve({ kind: 'resume', session: ref }, spec), requestId)
   }
@@ -416,10 +441,9 @@ export class AgentHarness {
   ): Promise<ContextUsage> {
     spec = await this.runModes.resolve({ kind: 'resume', session: ref }, spec)
     const provider = this.options.providers[ref.provider]
-    const measure = contextUsageMeasureOf(provider)
-    if (measure !== undefined) {
+    if (provider.measureContextUsage !== undefined) {
       try {
-        return await measure(ref, spec)
+        return await provider.measureContextUsage(ref, spec)
       } catch {
         return emptyContextUsage()
       }
@@ -749,7 +773,7 @@ export class AgentHarness {
     await this.options.sessions.recordRunCompleted(session, {
       profileId: spec.profileId,
       modelId: splitModelContext(modelId).modelId ?? modelId,
-      context: spec.contextWindow === 1_000_000 ? '1m' : null,
+      context: contextTagForWindow(spec.contextWindow),
     })
   }
 }
@@ -773,15 +797,6 @@ function hasActiveInboundWork(events: readonly AgentEvent[]): boolean {
   })
 }
 
-function contextUsageMeasureOf(
-  provider: AgentProvider,
-): ((session: SessionRef, spec: ProviderRunSpec) => Promise<ContextUsage>) | undefined {
-  const measure = (provider as {
-    measureContextUsage?: (session: SessionRef, spec: ProviderRunSpec) => Promise<ContextUsage>
-  }).measureContextUsage
-  return typeof measure === 'function' ? measure.bind(provider) : undefined
-}
-
 function sessionRefOf(session: SessionTarget): SessionRef | undefined {
   if (session.kind === 'resume') return session.session
   if (session.kind === 'new' && session.sessionId !== undefined) {
@@ -793,6 +808,3 @@ function sessionRefOf(session: SessionTarget): SessionRef | undefined {
   return undefined
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}

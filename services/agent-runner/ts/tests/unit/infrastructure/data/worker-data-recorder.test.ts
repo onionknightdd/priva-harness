@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { defaultDataRetention, type DataRecord, type DataStoreLogger } from '../../../../src/core/resource/data-store.js'
+import { defaultDataRetention, type DataRecord, type DataStoreLogger } from '../../../../src/core/usage/data-store.js'
 import { SqliteDataStore } from '../../../../src/infrastructure/data/sqlite-data-store.js'
 import { WorkerDataRecorder, type WorkerDataRecorderOptions } from '../../../../src/infrastructure/data/worker-data-recorder.js'
 

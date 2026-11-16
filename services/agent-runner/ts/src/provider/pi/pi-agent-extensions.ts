@@ -55,7 +55,9 @@ function pluginLoader(cwd: string) {
         // Only substitute configuration dependencies. Storage, prompt, tools,
         // index limits and lifecycle remain the installed pi-code implementation.
         for (const name of ['config-dir', 'managed-settings', 'project-approval', 'settings-chain']) {
-          source = source.replace(`'./internal/${name}.ts'`, JSON.stringify(memorySettings))
+          const specifier = `'./internal/${name}.ts'`
+          if (!source.includes(specifier)) throw new Error(`pi-code memory imports changed (${name}); update the host memory settings`)
+          source = source.replace(specifier, JSON.stringify(memorySettings))
         }
       }
       return { code: transform({ ...options, source }) }

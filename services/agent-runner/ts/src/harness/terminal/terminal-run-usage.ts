@@ -1,7 +1,7 @@
 import type { ProviderSessionStore } from '../../core/contract/provider-session-store.js'
 import type { SessionRef } from '../../core/contract/agent-provider.js'
 import type { ModelTokenUsage, RunAccounting, TokenUsage } from '../../core/event/agent-event.js'
-import { asRecord, numberField, stringField } from '../../core/event/json-record.js'
+import { asRecord, numberField, stringField } from '../../core/util/json-record.js'
 import { SessionError } from '../../core/resource/session.js'
 
 export type TerminalUsageSnapshot = ReadonlyMap<string, { model: string; usage: TokenUsage }>

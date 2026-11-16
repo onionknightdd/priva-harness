@@ -3,7 +3,7 @@ import type { FastifyPluginCallback } from 'fastify'
 import type { ProviderId } from '../../../core/contract/agent-provider.js'
 import { SessionError } from '../../../core/resource/session.js'
 import type { SessionService, SessionView } from '../../../harness/session/session-service.js'
-import type { ThreadMessage } from '../../../core/resource/thread.js'
+import type { ThreadMessage } from '../../../core/thread/thread.js'
 import {
   addDirsSchema,
   archiveSessionSchema,

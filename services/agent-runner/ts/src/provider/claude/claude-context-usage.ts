@@ -6,6 +6,7 @@ import { emptyContextUsage, mapClaudeContextUsage } from '../../core/resource/co
 import type { ContextUsage } from '../../core/resource/context-usage.js'
 import { PushableStream } from '../../core/stream/pushable-stream.js'
 import type { ToolDefinition } from '../../core/tool/define-tool.js'
+import { drainQuery, withTimeout } from './claude-query-control.js'
 import { resolveClaudeQueryOptions } from './claude-runtime.js'
 import { PRODUCT_MCP_SERVER_NAME } from './tools/compile-custom-tools.js'
 
@@ -62,9 +63,9 @@ export async function measureClaudeContextUsage(options: {
   })
   const drained = drainQuery(active)
   try {
-    await withTimeout(active.initializationResult(), CONTEXT_USAGE_INIT_TIMEOUT_MS)
+    await withTimeout(active.initializationResult(), CONTEXT_USAGE_INIT_TIMEOUT_MS, 'context usage')
     const initial = mapClaudeContextUsage(
-      await withTimeout(active.getContextUsage(), CONTEXT_USAGE_READ_TIMEOUT_MS),
+      await withTimeout(active.getContextUsage(), CONTEXT_USAGE_READ_TIMEOUT_MS, 'context usage'),
     )
     if (tools.length === 0) return initial
     // Until the product MCP connects, Claude folds its tool schemas into
@@ -72,7 +73,7 @@ export async function measureClaudeContextUsage(options: {
     if (!(await waitForProductMcp(active))) return initial
     try {
       return mapClaudeContextUsage(
-        await withTimeout(active.getContextUsage(), CONTEXT_USAGE_READ_TIMEOUT_MS),
+        await withTimeout(active.getContextUsage(), CONTEXT_USAGE_READ_TIMEOUT_MS, 'context usage'),
       )
     } catch {
       return initial
@@ -92,7 +93,7 @@ async function waitForProductMcp(active: ClaudeContextQuery): Promise<boolean> {
   for (;;) {
     let statuses
     try {
-      statuses = await withTimeout(active.mcpServerStatus(), MCP_CONNECT_WAIT_TIMEOUT_MS)
+      statuses = await withTimeout(active.mcpServerStatus(), MCP_CONNECT_WAIT_TIMEOUT_MS, 'context usage')
     } catch {
       return false
     }
@@ -106,30 +107,4 @@ async function waitForProductMcp(active: ClaudeContextQuery): Promise<boolean> {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('context usage timed out')), ms)
-    promise.then(
-      (value) => {
-        clearTimeout(timer)
-        resolve(value)
-      },
-      (error: unknown) => {
-        clearTimeout(timer)
-        reject(error instanceof Error ? error : new Error(String(error)))
-      },
-    )
-  })
-}
-
-async function drainQuery(active: AsyncIterable<unknown>): Promise<void> {
-  try {
-    for await (const _message of active) {
-      void _message
-    }
-  } catch {
-    return
-  }
 }

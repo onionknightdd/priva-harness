@@ -3,6 +3,7 @@ import { loadWorkspaceImage } from './image-artifact.js'
 import { CompatibleImageApi } from './image-api.js'
 import { defineTool, stringListToolArg, stringToolArg } from './define-tool.js'
 import { requireImageModel, writeGeneratedImage } from './image-tool-shared.js'
+import { errorMessage } from '../util/errors.js'
 
 export const imageEditTool = defineTool({
   name: IMAGE_EDIT_TOOL_NAME,
@@ -70,7 +71,7 @@ export const imageEditTool = defineTool({
     } catch (error) {
       return {
         ok: false,
-        text: error instanceof Error ? error.message : String(error),
+        text: errorMessage(error),
       }
     }
   },

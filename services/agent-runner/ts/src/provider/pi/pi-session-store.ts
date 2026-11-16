@@ -1,4 +1,4 @@
-import { asRecord, stringField } from '../../core/event/json-record.js'
+import { asRecord, stringField } from '../../core/util/json-record.js'
 import { loadPiWorkflow, readPiWorkflowAgent, piWorkflowRoot } from './pi-workflow-files.js'
 import { userTurnSummary } from '../../core/run/user-turn.js'
 import { readdir, stat, unlink, rm } from 'node:fs/promises'
@@ -22,9 +22,10 @@ import {
   type SessionMessage,
   type SessionMessageType,
 } from '../../core/resource/session.js'
-import type { ThreadReplayItem } from '../../core/resource/thread.js'
+import type { ThreadReplayItem } from '../../core/thread/thread.js'
 import { replayPiSessionMessages } from './pi-thread-replay.js'
 import { piSessionBucketDir, piSessionsRoot } from './pi-paths.js'
+import { hasErrorCode } from '../../core/util/errors.js'
 
 export interface PiListedSession {
   readonly path: string
@@ -59,7 +60,10 @@ export interface PiAgentMessage {
 
 export interface PiOpenedSession {
   appendSessionInfo(name: string): void
+  /** What the model resumes with: the latest compaction, then the entries it kept. */
   buildContextEntries(): readonly PiContextEntry[]
+  /** Every entry on the active branch, oldest first, including those a compaction summarised. */
+  getBranch(): readonly PiContextEntry[]
 }
 
 export interface PiSessionManagerApi {
@@ -76,6 +80,7 @@ export interface PiSessionStoreOptions {
 export class PiSessionStore implements ProviderSessionStore {
   private readonly agentDir: string
   private readonly sessionManager: PiSessionManagerApi
+  private scanning: Promise<readonly PiListedSession[]> | undefined
 
   constructor(options: PiSessionStoreOptions) {
     this.agentDir = options.agentDir
@@ -116,8 +121,13 @@ export class PiSessionStore implements ProviderSessionStore {
     )
   }
 
+  // The thread shows the conversation as it happened. The resume context
+  // drops what a compaction summarised and puts that summary first, which
+  // would erase earlier turns and misplace the marker.
   async replay(ref: SessionRef, page?: SessionMessagePage): Promise<readonly ThreadReplayItem[]> {
-    const messages = await this.messages(ref, page)
+    const listed = await this.resolve(ref)
+    const opened = this.sessionManager.open(listed.path)
+    const messages = pageSessionMessages(messagesFromContextEntries(opened.getBranch(), listed.id), page)
     const hydrated = await Promise.all(messages.map(async (message) => {
       if (message.type !== 'tool_result') return message
       const inner = asRecord(message.message)
@@ -168,7 +178,15 @@ export class PiSessionStore implements ProviderSessionStore {
     return Promise.reject(new SessionError('invalid-request', 'Pi does not support fork'))
   }
 
-  private async listAllSessions(): Promise<readonly PiListedSession[]> {
+  // A scan parses every session file. Listing sessions looks up each one
+  // right after, so lookups that overlap share one scan instead of each
+  // starting their own.
+  private listAllSessions(): Promise<readonly PiListedSession[]> {
+    this.scanning ??= this.scanSessions().finally(() => { this.scanning = undefined })
+    return this.scanning
+  }
+
+  private async scanSessions(): Promise<readonly PiListedSession[]> {
     const root = piSessionsRoot(this.agentDir)
     let entries: Dirent[]
     try {
@@ -189,8 +207,10 @@ export class PiSessionStore implements ProviderSessionStore {
     if (ref.provider !== 'pi') {
       throw new SessionError('session-not-found', 'Session not found')
     }
-    const listed = await this.listAllSessions()
-    const found = listed.find((session) => session.id === ref.id)
+    const joined = this.scanning !== undefined
+    let found = (await this.listAllSessions()).find((session) => session.id === ref.id)
+    // A scan that was already under way can predate this session.
+    if (found === undefined && joined) found = (await this.listAllSessions()).find((session) => session.id === ref.id)
     if (found === undefined) {
       throw new SessionError('session-not-found', 'Session not found')
     }
@@ -346,9 +366,3 @@ const defaultPiSessionManager: PiSessionManagerApi = {
   },
 }
 
-function hasErrorCode(error: unknown, code: string): boolean {
-  return typeof error === 'object'
-    && error !== null
-    && 'code' in error
-    && error.code === code
-}

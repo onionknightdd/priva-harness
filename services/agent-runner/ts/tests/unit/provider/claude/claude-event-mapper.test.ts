@@ -258,6 +258,67 @@ describe('ClaudeEventMapper', () => {
     expect(main).not.toHaveProperty('parentToolUseId')
   })
 
+  it('keeps the main message while a subagent message arrives in the middle of it', () => {
+    const mapper = new ClaudeEventMapper()
+    const mainDelta = (text: string) => mapper.push({
+      type: 'stream_event',
+      event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text } },
+    })
+    mapper.push({ type: 'stream_event', event: { type: 'message_start', message: { id: 'msg_main' } } })
+    const before = mainDelta('Hel')
+    mapper.push({
+      type: 'assistant',
+      parent_tool_use_id: 'agent-1',
+      message: { id: 'msg_sub', content: [{ type: 'text', text: 'subagent' }] },
+    })
+    const after = mainDelta('lo')
+
+    expect(before.at(-1)).toMatchObject({ type: 'assistant.delta', messageId: 'msg_main', blockId: 'msg_main:0' })
+    expect(after).toEqual([{ type: 'assistant.delta', messageId: 'msg_main', blockId: 'msg_main:0', index: 0, text: 'lo' }])
+  })
+
+  it('routes tool input deltas to the tool at that index on the same channel', () => {
+    const mapper = new ClaudeEventMapper()
+    const start = (id: string, parent?: string) => mapper.push({
+      type: 'stream_event',
+      ...(parent === undefined ? {} : { parent_tool_use_id: parent }),
+      event: { type: 'content_block_start', index: 1, content_block: { type: 'tool_use', id, name: 'Bash', input: {} } },
+    })
+    const delta = (chunk: string, parent?: string) => mapper.push({
+      type: 'stream_event',
+      ...(parent === undefined ? {} : { parent_tool_use_id: parent }),
+      event: { type: 'content_block_delta', index: 1, delta: { type: 'input_json_delta', partial_json: chunk } },
+    })
+    start('main-tool')
+    start('sub-tool', 'agent-1')
+
+    expect(delta('{"command"')).toEqual([expect.objectContaining({ type: 'tool.input_delta', id: 'main-tool' })])
+    const nested = delta(':"ls"}', 'agent-1')
+    expect(nested).toEqual([expect.objectContaining({ type: 'tool.input_delta', id: 'sub-tool', parentToolUseId: 'agent-1' })])
+  })
+
+  it('names the running call of a tool until it returns or the turn ends', () => {
+    const mapper = new ClaudeEventMapper()
+    mapper.push({
+      type: 'assistant',
+      message: { id: 'm', content: [
+        { type: 'tool_use', id: 'read-1', name: 'mcp__agentWorkshop__image_read', input: {} },
+        { type: 'tool_use', id: 'bash-1', name: 'Bash', input: {} },
+      ] },
+    })
+    // A later tool does not take over another tool's progress.
+    expect(mapper.runningToolId('image_read')).toBe('read-1')
+    expect(mapper.runningToolId('image_gen')).toBeUndefined()
+
+    mapper.push({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'read-1', content: 'done' }] } })
+    expect(mapper.runningToolId('image_read')).toBeUndefined()
+    expect(mapper.runningToolId('bash')).toBe('bash-1')
+
+    // An interrupted turn leaves the call unanswered.
+    mapper.push({ type: 'result', subtype: 'success', session_id: 's', duration_ms: 1 })
+    expect(mapper.runningToolId('bash')).toBeUndefined()
+  })
+
   it('routes workflow task_* separately from Agent/Task sidechains', () => {
     const mapper = new ClaudeEventMapper()
     const workflow = mapper.push({

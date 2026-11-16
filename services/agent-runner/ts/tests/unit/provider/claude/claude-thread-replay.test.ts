@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { foldThread } from '../../../../src/core/resource/fold-thread.js'
+import { foldThread } from '../../../../src/core/thread/fold-thread.js'
 import { replayClaudeSessionMessages } from '../../../../src/provider/claude/session/claude-thread-replay.js'
 import type { SessionMessage } from '../../../../src/core/resource/session.js'
-import type { ThreadBlock } from '../../../../src/core/resource/thread.js'
+import type { ThreadBlock } from '../../../../src/core/thread/thread.js'
 import { mapClaudeMessage } from '../../../../src/provider/claude/session/claude-session-store.js'
 import { attachTranscriptToolUseResult, mergeSdkAndTranscriptMessages, toolUseResultsFromTranscriptLines, transcriptThreadRecords } from '../../../../src/provider/claude/session/claude-transcript.js'
 

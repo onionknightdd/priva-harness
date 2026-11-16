@@ -4,7 +4,9 @@ import { dirname, join } from 'node:path'
 import { parseDocument, stringify } from 'yaml'
 
 import { ResourceError } from '../../core/resource/resource-catalog.js'
-import { exists, isRecord, missing, readText, resourceId } from './resource-files.js'
+import { exists, missing, readText, resourceId } from './resource-files.js'
+import { hasErrorCode } from '../../core/util/errors.js'
+import { isRecord } from '../../core/util/json-record.js'
 
 export function parseMarkdown(content: string): { definition: Record<string, unknown>; prompt: string } {
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u.exec(content)
@@ -52,7 +54,7 @@ export class ResourceMarkdown {
         if (revision === undefined) {
           // Exclusive creation also protects against external writers between discovery and save.
           try { await link(temp, path) } catch (error) {
-            if (error instanceof Error && 'code' in error && error.code === 'EEXIST') throw new ResourceError(409, 'A file with this name already exists')
+            if (hasErrorCode(error, 'EEXIST')) throw new ResourceError(409, 'A file with this name already exists')
             throw error
           }
         } else await rename(temp, path)

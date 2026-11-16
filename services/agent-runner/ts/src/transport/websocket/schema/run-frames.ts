@@ -15,6 +15,7 @@ import {
   providerIdForHarness,
   type RunHarnessId,
 } from '../../../core/resource/run-harness.js'
+import { isRecord } from '../../../core/util/json-record.js'
 
 export interface InitFrame {
   readonly contextWindow?: ContextWindow
@@ -259,6 +260,3 @@ export function sessionTargetFromInit(frame: InitFrame): SessionTarget {
   return { kind: 'new', provider }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}

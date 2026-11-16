@@ -15,6 +15,7 @@ import { TmuxControlClient } from './tmux-control-client.js'
 import { hexKeyTokens } from './tmux-control-protocol.js'
 import { buildTmuxScreenSnapshot, TMUX_SCREEN_FORMAT, type TmuxScreenSnapshot } from './tmux-screen-snapshot.js'
 import { TerminalBindings } from './terminal-bindings.js'
+import { errorMessage } from '../../core/util/errors.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -23,6 +24,9 @@ const execFileAsync = promisify(execFile)
 const SESSION_NAME = 'main'
 const SOCKET_FILE = 'tmux.sock'
 const PASTE_BUFFER = 'priva-paste'
+const LAUNCH_ENV_FILE = 'launch-env.sh'
+// Sources the private environment file, then replaces the shell with the program.
+const LAUNCH_ENV_SCRIPT = '. "$1" && shift && exec "$@"'
 // send-keys -H spends three characters per byte; stay well under tmux's
 // per-command line limit.
 const MAX_INPUT_BYTES_PER_COMMAND = 2048
@@ -132,11 +136,9 @@ export class TmuxTerminalService implements TerminalService {
     await this.scratchDir(key)
     await rm(await this.socketPath(key), { force: true })
     // The server inherits the sanitised environment, so only the launch's
-    // own additions travel as session variables; host-terminal descriptors
-    // the provider copied from the runner process are dropped again here.
-    const envArgs = Object.entries(launch.env)
-      .filter(([name, value]) => !HOST_TERMINAL_VARIABLES.includes(name) && this.env[name] !== value)
-      .flatMap(([name, value]) => ['-e', `${name}=${value}`])
+    // own additions are set for the program; host-terminal descriptors the
+    // provider copied from the runner process are dropped again here.
+    const command = await this.launchCommand(key, launch, (name, value) => this.env[name] !== value)
     // Configure the server before creating its first pane: native TUIs check
     // mouse/focus support during startup, as well as the terminal type.
     const args = [
@@ -149,8 +151,7 @@ export class TmuxTerminalService implements TerminalService {
       'new-session', '-d', '-s', SESSION_NAME,
       '-x', String(launch.cols), '-y', String(launch.rows),
       '-c', launch.cwd,
-      ...envArgs,
-      '--', launch.command, ...launch.args,
+      '--', ...command,
     )
     try {
       await this.run(key, args)
@@ -164,9 +165,30 @@ export class TmuxTerminalService implements TerminalService {
   keyForTerminal(terminalId: string): Promise<string | undefined> { return this.bindings.keyFor(terminalId) }
 
   async restart(key: string, launch: TerminalLaunchSpec): Promise<void> {
-    const envArgs = Object.entries(launch.env).filter(([name]) => !HOST_TERMINAL_VARIABLES.includes(name)).flatMap(([name, value]) => ['-e', `${name}=${value}`])
+    const command = await this.launchCommand(key, launch, () => true)
     await this.configureKeyboard(key)
-    await this.run(key, ['respawn-pane', '-k', '-t', SESSION_NAME, '-c', launch.cwd, ...envArgs, '--', launch.command, ...launch.args])
+    await this.run(key, ['respawn-pane', '-k', '-t', SESSION_NAME, '-c', launch.cwd, '--', ...command])
+  }
+
+  /**
+   * The launch environment can carry model credentials, which must not appear
+   * in any process argument list. It is written to a private file in the
+   * terminal directory that the pane sources before starting the program.
+   */
+  private async launchCommand(
+    key: string,
+    launch: TerminalLaunchSpec,
+    include: (name: string, value: string) => boolean,
+  ): Promise<string[]> {
+    const entries = Object.entries(launch.env)
+      .filter(([name, value]) => !HOST_TERMINAL_VARIABLES.includes(name) && include(name, value))
+    const invalid = entries.find(([name]) => !/^[A-Za-z_][A-Za-z0-9_]*$/u.test(name))
+    if (invalid) throw new TerminalError('launch-failed', `Invalid terminal environment variable name: ${invalid[0]}`)
+    const path = join(await this.terminalDir(key), LAUNCH_ENV_FILE)
+    await rm(path, { force: true })
+    if (entries.length === 0) return [launch.command, ...launch.args]
+    await writeFile(path, entries.map(([name, value]) => `export ${name}=${shellQuote(value)}\n`).join(''), { mode: 0o600, flag: 'wx' })
+    return ['/bin/sh', '-c', LAUNCH_ENV_SCRIPT, 'sh', path, launch.command, ...launch.args]
   }
 
   async isAlive(key: string): Promise<boolean> {
@@ -194,14 +216,21 @@ export class TmuxTerminalService implements TerminalService {
       sessionName: SESSION_NAME,
       env: this.env,
     })
-    const directory = await this.terminalDir(key)
-    const viewers = this.attachments.get(directory) ?? new Set()
-    viewers.add(client)
-    this.attachments.set(directory, viewers)
-    const paneId = (await client.command(['list-panes', '-t', SESSION_NAME, '-F', '#{pane_id}']))[0]?.trim()
-    if (paneId === undefined || paneId === '') {
+    // An attached client keeps the idle sweep away from this terminal, so a
+    // failed attach must not leave one behind.
+    let viewers: Set<TmuxControlClient>
+    let paneId: string
+    try {
+      const directory = await this.terminalDir(key)
+      viewers = this.attachments.get(directory) ?? new Set()
+      const pane = (await client.command(['list-panes', '-t', SESSION_NAME, '-F', '#{pane_id}']))[0]?.trim()
+      if (pane === undefined || pane === '') throw new TerminalError('io-failure', 'Terminal has no pane')
+      paneId = pane
+      viewers.add(client)
+      this.attachments.set(directory, viewers)
+    } catch (error) {
       await client.close()
-      throw new TerminalError('io-failure', 'Terminal has no pane')
+      throw error
     }
     // Drop output before the snapshot boundary (already captured), then keep
     // every subsequent byte until the viewer subscribes after writing screen.
@@ -452,5 +481,9 @@ function clampDimension(value: number, min: number, max: number): number {
 }
 
 function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
+  return errorMessage(error)
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`
 }

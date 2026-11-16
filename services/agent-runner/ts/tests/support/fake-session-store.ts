@@ -11,7 +11,7 @@ import {
   type ProviderSessionInfo,
   type SessionMessage,
 } from '../../src/core/resource/session.js'
-import type { ThreadReplayItem } from '../../src/core/resource/thread.js'
+import type { ThreadReplayItem } from '../../src/core/thread/thread.js'
 import { replayClaudeSessionMessages } from '../../src/provider/claude/session/claude-thread-replay.js'
 import { replayPiSessionMessages } from '../../src/provider/pi/pi-thread-replay.js'
 

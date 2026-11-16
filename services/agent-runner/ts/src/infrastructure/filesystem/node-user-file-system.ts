@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { createReadStream, createWriteStream, type Stats } from 'node:fs'
+import { constants, createReadStream, createWriteStream, type Stats } from 'node:fs'
 import {
   type FileHandle,
   lstat,
@@ -48,6 +48,7 @@ import {
   type UserFilePreview,
   type UserFileUploadResult,
 } from '../../core/resource/user-file.js'
+import { errorMessage, hasErrorCode } from '../../core/util/errors.js'
 
 const DIRECTORY_STAT_CONCURRENCY = 32
 const TEXT_SNIFF_BYTES = 8192
@@ -473,7 +474,10 @@ export class NodeUserFileSystem implements UserFileSystem {
 
     let handle: FileHandle
     try {
-      handle = await open(canonicalPath, 'r')
+      // Opening a FIFO for reading blocks a thread-pool thread until a writer
+      // appears. Non-blocking mode returns at once and changes nothing for
+      // the regular files accepted below.
+      handle = await open(canonicalPath, constants.O_RDONLY | constants.O_NONBLOCK)
     } catch (error) {
       throw mapFileOpenError(error, canonicalPath)
     }
@@ -705,16 +709,7 @@ function isAccessError(error: unknown): boolean {
   return hasErrorCode(error, 'EACCES') || hasErrorCode(error, 'EPERM')
 }
 
-function hasErrorCode(error: unknown, code: string): boolean {
-  return typeof error === 'object'
-    && error !== null
-    && 'code' in error
-    && error.code === code
-}
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
 
 async function ignoreMissing(operation: () => Promise<void>): Promise<void> {
   try {

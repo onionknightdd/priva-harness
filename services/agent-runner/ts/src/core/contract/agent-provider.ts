@@ -78,6 +78,12 @@ export interface AgentRuntime {
   abort(reason?: string): Promise<void>
   getContextUsage(): Promise<ContextUsage>
   release(retention: 'warm' | 'dispose'): Promise<void>
+  /**
+   * Deliver events that arrive between turns, such as a background task
+   * finishing. Passing undefined detaches the listener. Absent when the
+   * runtime cannot produce events outside a turn.
+   */
+  listenIdle?(listener: ((events: readonly AgentEvent[]) => void) | undefined): void
 }
 
 export interface SlashCommandListRequest {
@@ -90,6 +96,11 @@ export interface AgentProvider {
   readonly sessions: ProviderSessionStore
   openSession(target: SessionTarget, spec: ProviderRunSpec): Promise<AgentRuntime>
   listSlashCommands(request: SlashCommandListRequest): Promise<readonly SlashCommand[]>
+  /**
+   * Measure a stored session's context without opening a full runtime.
+   * Absent when opening a session is already the cheapest way to read it.
+   */
+  measureContextUsage?(session: SessionRef, spec: ProviderRunSpec): Promise<ContextUsage>
   /**
    * Describe the provider's interactive TUI for a session terminal. Absent
    * when the provider has no terminal-hosted driver; the harness then

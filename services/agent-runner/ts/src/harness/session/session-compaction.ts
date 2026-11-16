@@ -1,6 +1,6 @@
 import type { AgentEvent } from '../../core/event/agent-event.js'
-import { isCompactCommandContent, isCompactTerminal, mergeCompactMarker, normalizeCompactCommandContent, type CompactMarker } from '../../core/resource/compact-command.js'
-import { textFromThreadBlocks, threadHasVisibleContent, type ThreadBlock, type ThreadMessage } from '../../core/resource/thread.js'
+import { isCompactCommandContent, isCompactTerminal, mergeCompactMarker, normalizeCompactCommandContent, type CompactMarker } from '../../core/thread/compact-command.js'
+import { textFromThreadBlocks, threadHasVisibleContent, type ThreadBlock, type ThreadMessage } from '../../core/thread/thread.js'
 
 interface Operation {
   message: ThreadMessage & { readonly compact: CompactMarker }

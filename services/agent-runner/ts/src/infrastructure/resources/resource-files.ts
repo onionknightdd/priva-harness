@@ -5,14 +5,13 @@ import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import stripJsonComments from 'strip-json-comments'
 
 import { ResourceError } from '../../core/resource/resource-catalog.js'
+import { hasErrorCode } from '../../core/util/errors.js'
+import { isRecord } from '../../core/util/json-record.js'
 
 export function resourceId(...parts: string[]): string {
   return createHash('sha256').update(JSON.stringify(parts)).digest('base64url').slice(0, 32)
 }
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
 export function record(value: unknown): Record<string, unknown> {
   return isRecord(value) ? value : {}
@@ -23,7 +22,7 @@ export function strings(value: unknown): string[] {
 }
 
 export function missing(error: unknown): boolean {
-  return error instanceof Error && 'code' in error && error.code === 'ENOENT'
+  return hasErrorCode(error, 'ENOENT')
 }
 
 export async function exists(path: string): Promise<boolean> {

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { SessionStream } from '../../../../src/harness/session/session-stream.js'
 import { TerminalTextProjection } from '../../../../src/harness/terminal/terminal-text-projection.js'
-import type { ThreadMessage } from '../../../../src/core/resource/thread.js'
+import type { ThreadMessage } from '../../../../src/core/thread/thread.js'
 
 // Reconnection snapshots include wall-clock timestamps as well as projected text.
 beforeEach(() => { vi.spyOn(Date, 'now').mockReturnValue(10) })

@@ -8,6 +8,7 @@ import {
   type SlashOrigin,
 } from '../../core/resource/slash-command.js'
 import { PI_BUILTIN_SLASH_COMMANDS } from './pi-builtin-slash-commands.js'
+import { piProjectTrusted } from '../../pi-config.js'
 
 export interface PiSlashResource {
   readonly name: string
@@ -55,7 +56,8 @@ export async function listPiSlashCommands(options: {
   const loader = new DefaultResourceLoader({
     cwd: options.cwd,
     agentDir: options.agentDir,
-    settingsManager: SettingsManager.create(options.cwd, options.agentDir),
+    // List what a session would load: project resources only when trusted.
+    settingsManager: SettingsManager.create(options.cwd, options.agentDir, { projectTrusted: piProjectTrusted(options.cwd, options.agentDir) }),
     noExtensions: true,
     noThemes: true,
     noContextFiles: true,

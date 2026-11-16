@@ -1,7 +1,7 @@
 import { PiInteractions } from './pi-interactions.js'
 import type { InteractionResponse } from '../../core/resource/interaction.js'
 import { createEventBus, type AgentSessionServices, type EventBus, type ExtensionUIContext, type InlineExtension, type SessionManager, type SessionStartEvent } from '@earendil-works/pi-coding-agent'
-import { asRecord, stringField } from '../../core/event/json-record.js'
+import { asRecord, stringField } from '../../core/util/json-record.js'
 import { taskStatus } from '../../core/resource/background-task.js'
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'

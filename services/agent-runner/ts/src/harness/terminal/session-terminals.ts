@@ -33,6 +33,9 @@ export interface TerminalSize {
   readonly eventsUrl?: string
 }
 
+/** Geometry for a terminal nobody is viewing yet; a viewer resizes it on attach. */
+export const DEFAULT_TERMINAL_SIZE: TerminalSize = { cols: 120, rows: 40 }
+
 export interface OpenedSessionTerminal {
   readonly session: SessionRef
   /** True when a terminal for this session was already running and was reused. */

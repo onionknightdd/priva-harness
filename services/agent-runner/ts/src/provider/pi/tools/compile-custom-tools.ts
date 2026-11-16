@@ -1,6 +1,6 @@
 import { defineTool as definePiTool } from '@earendil-works/pi-coding-agent'
 
-import { isRecord } from '../../../core/event/json-record.js'
+import { isRecord } from '../../../core/util/json-record.js'
 import type { ToolContext, ToolDefinition } from '../../../core/tool/define-tool.js'
 
 export function compilePiCustomTools(

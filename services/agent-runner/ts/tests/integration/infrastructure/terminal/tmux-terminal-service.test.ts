@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import type { TerminalLaunchSpec } from '../../../../src/core/contract/terminal-service.js'
 import { TmuxTerminalService } from '../../../../src/infrastructure/terminal/tmux-terminal-service.js'
-import { claudeComposer } from '../../../../src/provider/claude/claude-terminal-composer.js'
+import { claudeComposer } from '../../../../src/provider/claude/terminal/claude-terminal-composer.js'
 
 function tmuxAvailable(): boolean {
   try {
@@ -93,6 +93,28 @@ describe.skipIf(!tmuxAvailable())('TmuxTerminalService', () => {
     disable()
     await service.restart(key, shellLaunch(cwd))
     expect(keyboard()).toBe('on\ncsi-u')
+  })
+
+  it('keeps launch environment values out of every argument list on launch and restart', async () => {
+    const key = 'private-env'
+    const secret = "tok'en with $pecial \"chars\""
+    await service.ensure(key, shellLaunch(cwd, { env: { PS1: 'READY> ', PRIVA_SECRET: secret } }))
+    const socket = await service.socketPath(key)
+    const tmux = (args: string[]) => execFileSync('tmux', ['-S', socket, ...args], { encoding: 'utf8' }).trim()
+    const assertPrivate = async (expected: string) => {
+      await expect.poll(async () => await service.capture(key), { timeout: 5000 }).toContain('READY>')
+      await service.paste(key, 'printf "<%s>\\n" "$PRIVA_SECRET"')
+      await service.sendKeys(key, ['Enter'])
+      await expect.poll(async () => await service.capture(key), { timeout: 5000 }).toContain(`<${expected}>`)
+      expect(tmux(['display-message', '-p', '-t', 'main', '#{pane_start_command}'])).not.toContain('tok')
+      expect(tmux(['show-environment', '-t', 'main'])).not.toContain('PRIVA_SECRET')
+      expect(tmux(['show-environment', '-g'])).not.toContain('PRIVA_SECRET')
+      expect((await stat(join(socket, '..', 'launch-env.sh'))).mode & 0o777).toBe(0o600)
+    }
+    await assertPrivate(secret)
+
+    await service.restart(key, shellLaunch(cwd, { env: { PS1: 'READY> ', PRIVA_SECRET: 'rotated-tok' } }))
+    await assertPrivate('rotated-tok')
   })
 
   it('launches once, adopts on the second ensure, and streams input and output through an attachment', async () => {

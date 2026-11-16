@@ -56,6 +56,37 @@ describe('PiRuntime stream input', () => {
     await runtime.release('dispose')
   })
 
+  it('ends the run when Pi handles the prompt without starting a model turn', async () => {
+    const session = new FakePiAgentSession()
+    // An extension command such as /agents returns without any agent events.
+    session.prompt = (text: string) => { session.prompts.push(text); return Promise.resolve() }
+    const runtime = new PiRuntime(session)
+    const events: AgentEvent[] = []
+    for await (const event of runtime.run({ text: '/agents' }, { signal: new AbortController().signal })) events.push(event)
+    expect(session.prompts).toEqual(['/agents'])
+    expect(events).toEqual([expect.objectContaining({ type: 'run.completed', sessionId: 'pi-1' })])
+    await runtime.release('dispose')
+  })
+
+  it('awaits a notice for a background subagent but not for a foreground one', async () => {
+    const session = new FakePiAgentSession()
+    const runtime = new PiRuntime(session)
+    runtime.listenIdle(() => undefined)
+    await runtime.release('warm')
+
+    // Foreground: announced on the event bus, answered through its own tool call.
+    session.emit({ type: 'task.updated', task: { taskId: 'fg', kind: 'agent', status: 'running' } })
+    expect(runtime.hasBackgroundTasks).toBe(true)
+    session.emit({ type: 'task.notification', task: { taskId: 'fg', kind: 'agent', status: 'completed' } })
+    expect(runtime.hasBackgroundTasks).toBe(false)
+
+    // Background: the launching tool is recorded, and a notice message follows.
+    session.emit({ type: 'task.updated', task: { taskId: 'bg', kind: 'agent', status: 'running', toolUseId: 'tool-1' } })
+    session.emit({ type: 'task.notification', task: { taskId: 'bg', kind: 'agent', status: 'completed' } })
+    expect(runtime.hasBackgroundTasks).toBe(true)
+    await runtime.release('dispose')
+  })
+
   it('includes attached files in the actual Pi prompt', async () => {
     const session = new FakePiAgentSession()
     const runtime = new PiRuntime(session)

@@ -1,4 +1,4 @@
-import { asRecord, stringField } from '../../../core/event/json-record.js'
+import { asRecord, stringField } from '../../../core/util/json-record.js'
 import type { SessionMessage } from '../../../core/resource/session.js'
 
 // A sidechain without an owning Agent call must never become a main user turn.

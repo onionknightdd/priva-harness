@@ -1,4 +1,4 @@
-import { asRecord, isRecord, stringField, type JsonRecord } from '../../../core/event/json-record.js'
+import { asRecord, isRecord, stringField, type JsonRecord } from '../../../core/util/json-record.js'
 import { taskNotification } from '../../../core/resource/background-task.js'
 
 /** Queued-command attachments are consumed inputs; queue-operation records are only queue bookkeeping. */

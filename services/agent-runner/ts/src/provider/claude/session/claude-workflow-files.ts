@@ -1,8 +1,9 @@
 import { readFile, realpath } from 'node:fs/promises'
 import { dirname, join, sep } from 'node:path'
-import { asRecord, stringField, type JsonRecord } from '../../../core/event/json-record.js'
+import { asRecord, stringField, type JsonRecord } from '../../../core/util/json-record.js'
 import { SessionError } from '../../../core/resource/session.js'
 import type { WorkflowAgentDetail, WorkflowExecutionEntry } from '../../../core/resource/workflow.js'
+import { hasErrorCode } from '../../../core/util/errors.js'
 
 const RUN_ID = /^wf_[A-Za-z0-9_-]{1,64}$/u
 const AGENT_ID = /^[A-Za-z0-9_-]{1,80}$/u
@@ -112,7 +113,7 @@ async function readWithin(root: string, path: string): Promise<string | undefine
     }
     return await readFile(resolvedFile, 'utf8')
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+    if (hasErrorCode(error, 'ENOENT')) return undefined
     throw error
   }
 }

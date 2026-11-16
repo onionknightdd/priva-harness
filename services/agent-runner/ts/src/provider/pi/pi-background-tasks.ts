@@ -1,4 +1,4 @@
-import { asRecord, stringField } from '../../core/event/json-record.js'
+import { asRecord, stringField } from '../../core/util/json-record.js'
 import { taskStatus, type BackgroundTask } from '../../core/resource/background-task.js'
 import { piWorkflowToolResult } from './pi-workflow-data.js'
 

@@ -3,6 +3,7 @@ import { loadWorkspaceImage } from './image-artifact.js'
 import { CompatibleImageApi } from './image-api.js'
 import { defineTool, stringToolArg } from './define-tool.js'
 import { requireImageModel } from './image-tool-shared.js'
+import { errorMessage } from '../util/errors.js'
 
 export const imageReadTool = defineTool({
   name: IMAGE_READ_TOOL_NAME,
@@ -54,7 +55,7 @@ export const imageReadTool = defineTool({
     } catch (error) {
       return {
         ok: false,
-        text: error instanceof Error ? error.message : String(error),
+        text: errorMessage(error),
       }
     }
   },

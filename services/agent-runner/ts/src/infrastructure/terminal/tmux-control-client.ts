@@ -39,6 +39,7 @@ export class TmuxControlClient {
   private readonly outputListeners = new Set<(paneId: string, data: Uint8Array) => void>()
   private readonly exitListeners = new Set<(reason: string) => void>()
   private exited = false
+  private closing = false
   private stderr = ''
 
   private constructor(options: TmuxControlClientOptions) {
@@ -52,13 +53,20 @@ export class TmuxControlClient {
     this.child.stderr.on('data', (chunk: string) => { this.stderr = (this.stderr + chunk).slice(-4096) })
     this.child.once('close', () => { this.finish(this.stderr.trim() || 'tmux control client closed') })
     this.child.once('error', (error) => { this.finish(error.message) })
+    // A write that races the client's exit must end this client, not the process.
+    this.child.stdin.on('error', (error) => { this.finish(error.message) })
   }
 
   static async open(options: TmuxControlClientOptions): Promise<TmuxControlClient> {
     const client = new TmuxControlClient(options)
     // The first command doubles as the attach handshake: it fails fast when
     // the socket or session is gone instead of leaving a silent client.
-    await client.command(['display-message', '-p', '#{session_name}'])
+    try {
+      await client.command(['display-message', '-p', '#{session_name}'])
+    } catch (error) {
+      await client.close()
+      throw error
+    }
     return client
   }
 
@@ -83,7 +91,7 @@ export class TmuxControlClient {
    * stdout chunk. An await continuation is too late for this stream boundary.
    */
   commandBatch(commands: readonly (readonly string[])[], onComplete?: (replies: string[][]) => void): Promise<string[][]> {
-    if (this.exited) {
+    if (this.exited || this.closing) {
       return Promise.reject(new TerminalError('io-failure', 'tmux control client is closed'))
     }
     if (commands.length === 0) return Promise.resolve([])
@@ -122,10 +130,16 @@ export class TmuxControlClient {
   async close(): Promise<void> {
     if (this.exited) return
     const closed = new Promise<void>((resolve) => { this.exitListeners.add(() => { resolve() }) })
-    this.child.stdin.end('detach-client\n')
-    const timer = setTimeout(() => { this.child.kill('SIGTERM') }, 1000)
+    if (!this.closing) {
+      this.closing = true
+      this.child.stdin.end('detach-client\n')
+    }
+    // A client that ignores the detach is terminated, then killed.
+    const terminate = setTimeout(() => { this.child.kill('SIGTERM') }, 1000)
+    const kill = setTimeout(() => { this.child.kill('SIGKILL') }, 3000)
     await closed
-    clearTimeout(timer)
+    clearTimeout(terminate)
+    clearTimeout(kill)
   }
 
   private consume(chunk: Buffer): void {

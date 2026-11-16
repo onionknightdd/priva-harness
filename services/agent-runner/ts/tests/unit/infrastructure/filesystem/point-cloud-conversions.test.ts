@@ -136,6 +136,34 @@ describe('point-cloud conversion lifecycle', () => {
     await service.prepare(source(second))
     await vi.waitFor(async () => expect((await service?.get(b.id))?.status).toBe('ready'))
   })
+
+  it('does not count cancelled jobs toward the queue limit', async () => {
+    service = new PointCloudConversions({ files, assets, cacheDirectory: join(root, 'cache'),
+      run: async (_, signal) => { await aborted(signal) } })
+    const paths = await Promise.all(Array.from({ length: 7 }, async (_, index) => {
+      const path = join(root, `cloud-${String(index)}.las`)
+      await writeFile(path, `LAS ${String(index)}`)
+      return path
+    }))
+    const running = await service.prepare(source(paths[0] ?? ''))
+    await vi.waitFor(async () => expect((await service?.get(running.id))?.status).toBe('running'))
+    for (const path of paths.slice(1, 5)) {
+      const queued = await service.prepare(source(path))
+      await service.cancel(queued.id, queued.consumerId ?? '')
+    }
+    expect((await service.prepare(source(paths[5] ?? ''))).status).toBe('queued')
+  })
+
+  it('reports an unusable cache directory on the request and recovers once it is usable', async () => {
+    const blocked = join(root, 'blocked')
+    await writeFile(blocked, 'not a directory')
+    const path = join(root, 'cloud.las')
+    await writeFile(path, 'LAS')
+    service = new PointCloudConversions({ files, assets, cacheDirectory: join(blocked, 'cache'), run: () => Promise.resolve() })
+    await expect(service.prepare(source(path))).rejects.toThrow()
+    await rm(blocked)
+    expect(['queued', 'running', 'ready']).toContain((await service.prepare(source(path))).status)
+  })
 })
 
 async function writeCopc(path: string): Promise<void> {

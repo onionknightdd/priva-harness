@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import type { ProviderSessionStore } from '../../../../src/core/contract/provider-session-store.js'
-import type { ThreadReplayItem } from '../../../../src/core/resource/thread.js'
+import type { ThreadReplayItem } from '../../../../src/core/thread/thread.js'
 import { SessionError } from '../../../../src/core/resource/session.js'
 import { AgentHarness } from '../../../../src/harness/agent-harness.js'
 import { SessionStream } from '../../../../src/harness/session/session-stream.js'

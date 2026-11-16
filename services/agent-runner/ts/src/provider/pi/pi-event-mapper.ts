@@ -1,5 +1,5 @@
 import { BackgroundTasks } from '../../core/resource/background-task.js'
-import { TaskReplyTracker } from '../../core/resource/task-reply-tracker.js'
+import { TaskReplyTracker } from '../../core/thread/task-reply-tracker.js'
 import type { BackgroundTask } from '../../core/resource/background-task.js'
 import { piBackgroundLaunch, piTaskNotices } from './pi-background-tasks.js'
 import { piWorkflowToolResult } from './pi-workflow-data.js'
@@ -18,7 +18,7 @@ import {
   numberField,
   stringField,
   type JsonRecord,
-} from '../../core/event/json-record.js'
+} from '../../core/util/json-record.js'
 
 import { canonicalProductToolName, isReadToolName } from '../../core/event/tool-names.js'
 import { patchFromToolDetails } from '../../core/event/tool-patch.js'
@@ -87,10 +87,6 @@ export class PiEventMapper {
   constructor(private readonly options: PiEventMapperOptions) {
     this.startedAt = options.startedAt ?? Date.now()
     this.model = options.model
-  }
-
-  activeMessageId(): string {
-    return this.ensureMessageId()
   }
 
   latestToolId(): string | undefined {

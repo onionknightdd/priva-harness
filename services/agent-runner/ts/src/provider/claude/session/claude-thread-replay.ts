@@ -1,9 +1,9 @@
 import { taskNotification } from '../../../core/resource/background-task.js'
 import { questionResolutionFromToolResult } from '../../../core/resource/interaction-history.js'
 import { ClaudeEventMapper, type ClaudeSdkMessage } from '../claude-event-mapper.js'
-import { asRecord, isRecord, stringField } from '../../../core/event/json-record.js'
+import { asRecord, isRecord, stringField } from '../../../core/util/json-record.js'
 import type { SessionMessage } from '../../../core/resource/session.js'
-import type { ThreadReplayItem } from '../../../core/resource/thread.js'
+import type { ThreadReplayItem } from '../../../core/thread/thread.js'
 import { isSyntheticNoResponseAssistant } from './claude-transcript.js'
 import type { UserAttachment } from '../../../core/run/user-turn.js'
 import { claudePromptText } from '../claude-prompt-text.js'
@@ -90,6 +90,8 @@ export function replayClaudeSessionMessages(
         createdAt,
         event: {
           type: 'run.failed',
+          // An empty text or code is as uninformative as a missing one.
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
           message: text || message.apiError.code || 'Claude stopped with an API error',
         },
       })

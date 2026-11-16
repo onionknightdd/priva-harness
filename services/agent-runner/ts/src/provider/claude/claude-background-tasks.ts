@@ -1,6 +1,6 @@
 import type { AgentEvent } from '../../core/event/agent-event.js'
-import { asRecord, stringField } from '../../core/event/json-record.js'
-import { BackgroundTasks, taskKind, taskStatus, type BackgroundTask } from '../../core/resource/background-task.js'
+import { asRecord, stringField } from '../../core/util/json-record.js'
+import { BackgroundTasks, taskIsActive, taskKind, taskStatus, type BackgroundTask } from '../../core/resource/background-task.js'
 
 export class ClaudeBackgroundTasks {
   readonly state = new BackgroundTasks()
@@ -19,6 +19,12 @@ export class ClaudeBackgroundTasks {
       ...optional('outputFile', result['outputFile'] ?? result['rawOutputPath'] ?? launchOutputFile(output, id)),
     }
     return [{ type: 'task.updated', task: this.state.update(task) }]
+  }
+
+  /** The process that owned these tasks is gone, so none of them can still finish. */
+  abandon(): AgentEvent[] {
+    return this.state.list().filter(taskIsActive)
+      .map((task) => ({ type: 'task.updated', task: this.state.update({ ...task, status: 'cancelled' }) }))
   }
 
   push(raw: Record<string, unknown>, tools: ReadonlyMap<string, string>): AgentEvent[] {

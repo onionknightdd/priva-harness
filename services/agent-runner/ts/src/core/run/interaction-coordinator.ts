@@ -31,8 +31,9 @@ export class InteractionCoordinator {
           const oldest = this.settled.keys().next().value
           if (oldest) this.settled.delete(oldest)
         }
-        this.emit({ type: 'permission.resolved', resolution: result })
-        resolve(result)
+        // The suspended provider call must settle even if an observer throws.
+        try { this.emit({ type: 'permission.resolved', resolution: result }) }
+        finally { resolve(result) }
       }
       this.pending.set(request.requestId, { request, finish, ...(options.validate ? { validate: options.validate } : {}) })
       options.signal?.addEventListener('abort', cancel, { once: true })

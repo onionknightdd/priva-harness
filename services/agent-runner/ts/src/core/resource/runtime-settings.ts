@@ -2,12 +2,13 @@ import {
   isQueueBehavior,
   type QueueBehavior,
 } from '../contract/agent-provider.js'
-import { defaultDataRetention, type DataRetention } from './data-store.js'
+import { defaultDataRetention, type DataRetention } from '../usage/data-store.js'
 import {
   emptyModelProfileCollection,
   parseModelProfileCollection,
   type ModelProfileCollection,
 } from './model-profile.js'
+import { isRecord } from '../util/json-record.js'
 
 export const RUNTIME_SETTINGS_VERSION = 1
 
@@ -158,6 +159,3 @@ function assertOnlyStoredKeys(
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}

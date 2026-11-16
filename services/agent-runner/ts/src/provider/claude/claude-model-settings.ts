@@ -3,8 +3,9 @@ import { lstat, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import stripJsonComments from 'strip-json-comments'
 
-import { asRecord } from '../../core/event/json-record.js'
+import { asRecord } from '../../core/util/json-record.js'
 import { resolveClaudeDefaultModelEnv } from '../../core/resource/provider-run-env.js'
+import { hasErrorCode } from '../../core/util/errors.js'
 
 const writes = new Map<string, Promise<void>>()
 
@@ -25,7 +26,7 @@ async function updateModelSettings(path: string, model: string): Promise<void> {
     if (!parsed) throw new Error(`Expected a JSON object in ${path}`)
     settings = parsed
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    if (!hasErrorCode(error, 'ENOENT')) throw error
   }
   const env = asRecord(settings['env'])
   if (settings['env'] !== undefined && !env) throw new Error(`Expected an env object in ${path}`)

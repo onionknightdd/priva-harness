@@ -6,8 +6,9 @@ import {
 } from '@earendil-works/pi-coding-agent'
 
 import type { ModelInvocation, ToolArtifact } from '../../core/event/agent-event.js'
-import { asRecord, numberField } from '../../core/event/json-record.js'
+import { asRecord, numberField } from '../../core/util/json-record.js'
 import { writeGeneratedImage } from '../../core/tool/image-tool-shared.js'
+import { errorMessage } from '../../core/util/errors.js'
 
 interface ModelResult {
   readonly stopReason: string
@@ -72,7 +73,7 @@ export function createProductCodemodeExtension(): ExtensionFactory {
               calls[index] = {
                 ...invocation, status: signal?.aborted ? 'aborted' : 'failed',
                 durationMs: Math.max(0, performance.now() - startedAt),
-                error: error instanceof Error ? error.message : String(error),
+                error: errorMessage(error),
               }
               throw error
             } finally {
@@ -93,7 +94,7 @@ export function createProductCodemodeExtension(): ExtensionFactory {
                       invocationArtifacts.push(await saveImage(block))
                     }
                   } catch (error) {
-                    return { ...result, stopReason: 'error' as const, errorMessage: `Could not save generated image: ${error instanceof Error ? error.message : String(error)}` }
+                    return { ...result, stopReason: 'error' as const, errorMessage: `Could not save generated image: ${errorMessage(error)}` }
                   }
                   return result
                 }, () => invocationArtifacts)
@@ -120,7 +121,7 @@ export function createProductCodemodeExtension(): ExtensionFactory {
                 block.type === 'image' ? { type: 'image', ...await saveImage(block) } : block))
             } catch (error) {
               return { ...result, isError: true, content: [...result.content, {
-                type: 'text' as const, text: `Could not save Codemode image output: ${error instanceof Error ? error.message : String(error)}`,
+                type: 'text' as const, text: `Could not save Codemode image output: ${errorMessage(error)}`,
               }], details: details() }
             }
             const saved = artifacts.length ? [{ type: 'text' as const, text: `Workspace images:\n${artifacts.map((artifact) => artifact.path).join('\n')}` }] : []

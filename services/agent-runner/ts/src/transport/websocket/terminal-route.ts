@@ -12,6 +12,7 @@ import type { AgentHarness } from '../../harness/agent-harness.js'
 import type { ModelProfileService } from '../../harness/config/model-profile-service.js'
 import type { SessionTerminals } from '../../harness/terminal/session-terminals.js'
 import { buildRunSpec } from './run-spec.js'
+import { errorMessage } from '../../core/util/errors.js'
 
 export const TERMINAL_WEBSOCKET_PATH = '/api/sandbox/agent/ws/terminal'
 
@@ -56,7 +57,10 @@ const clientMessageSchema = z.object({
 
 export const terminalWebsocketRoutes: FastifyPluginCallback<TerminalRouteOptions> = (fastify, options, done) => {
   fastify.get(TERMINAL_WEBSOCKET_PATH, { websocket: true }, (socket, request) => {
-    void handleTerminalSocket(socket, request.query, options)
+    handleTerminalSocket(socket, request.query, options).catch((error: unknown) => {
+      request.log.error({ err: error }, 'Terminal socket failed')
+      if (socketOpen(socket)) socket.close(1011, 'io-failure')
+    })
   })
   done()
 }
@@ -96,7 +100,9 @@ async function handleTerminalSocket(socket: WebSocket, rawQuery: unknown, option
     if (socketOpen(socket)) socket.send(attachment.screen, { binary: true })
     attachment.onOutput((chunk) => { if (socketOpen(socket)) socket.send(chunk, { binary: true }) })
     attachment.onExit((reason) => {
-      void options.harness.terminalExited(currentSession, reason)
+      options.harness.terminalExited(currentSession, reason).catch((error: unknown) => {
+        sendJson(socket, { type: 'error', kind: 'io-failure', message: errorMessage(error) })
+      })
       sendJson(socket, { type: 'exit', reason })
       socket.close(1000, 'terminal exited')
     })
@@ -116,10 +122,14 @@ async function handleTerminalSocket(socket: WebSocket, rawQuery: unknown, option
       })
     }
     watchSession()
+    // One frame is written in several tmux commands; a later frame must not
+    // land between them.
+    let inputs = Promise.resolve()
     socket.on('message', (data, isBinary) => {
       if (isBinary) {
         const input = toBytes(data)
-        live.write(input).then(() => options.harness.terminalInput(currentSession, input)).catch((error: unknown) => { fail(socket, 'io-failure', describe(error)) })
+        inputs = inputs.then(() => live.write(input)).then(() => options.harness.terminalInput(currentSession, input))
+          .catch((error: unknown) => { fail(socket, 'io-failure', describe(error)) })
         return
       }
       const parsed = clientMessageSchema.safeParse(parseJson(toBytes(data)))
@@ -134,7 +144,19 @@ async function handleTerminalSocket(socket: WebSocket, rawQuery: unknown, option
 
 function fail(socket: WebSocket, kind: string, message: string): void {
   sendJson(socket, { type: 'error', kind, message })
-  if (socketOpen(socket)) socket.close(kind === 'invalid-request' ? 1008 : 1011, message.slice(0, 120))
+  if (socketOpen(socket)) socket.close(kind === 'invalid-request' ? 1008 : 1011, closeReason(message))
+}
+
+// A close reason is limited to 123 UTF-8 bytes; ws throws beyond that.
+function closeReason(message: string): string {
+  let reason = ''
+  let bytes = 0
+  for (const character of message) {
+    bytes += Buffer.byteLength(character)
+    if (bytes > 120) break
+    reason += character
+  }
+  return reason
 }
 
 function sendJson(socket: WebSocket, value: unknown): void {
@@ -161,5 +183,5 @@ function toBytes(data: WebSocket.RawData): Uint8Array {
 }
 
 function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
+  return errorMessage(error)
 }

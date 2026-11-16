@@ -8,6 +8,8 @@ import { rewriteProviderBaseUrl } from '../../../core/resource/run-harness.js'
 import type { AgentHarness } from '../../../harness/agent-harness.js'
 import type { AgentProfileService } from '../../../harness/config/agent-profile-service.js'
 import type { ModelProfileService } from '../../../harness/config/model-profile-service.js'
+import { errorMessage } from '../../../core/util/errors.js'
+import { contextWindowForTag } from '../../../core/resource/model-context.js'
 
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value)
@@ -45,10 +47,10 @@ export const subagentTestRoutes: FastifyPluginCallback<{
         for await (const frame of options.harness.run({ text }, { signal: controller.signal }, {
           provider: query.harness, cwd, model: query.harness === 'pi' ? resolved.modelId : resolved.model,
           baseUrl: rewriteProviderBaseUrl(resolved.profile.baseUrl, query.harness), authToken: resolved.profile.authToken,
-          profileId: resolved.profile.id, contextWindow: resolved.capabilities.context === '1m' ? 1_000_000 : 200_000, queueBehavior: profile.queueBehavior,
+          profileId: resolved.profile.id, contextWindow: contextWindowForTag(resolved.capabilities.context), queueBehavior: profile.queueBehavior,
         }, { source: 'subagent-test', keepRuntimeWarm: false })) yield `data: ${JSON.stringify(frame)}\n\n`
       } catch (error) {
-        if (!controller.signal.aborted) yield `data: ${JSON.stringify({ type: 'run.failed', message: error instanceof Error ? error.message : String(error) })}\n\n`
+        if (!controller.signal.aborted) yield `data: ${JSON.stringify({ type: 'run.failed', message: errorMessage(error) })}\n\n`
       } finally { reply.raw.off('close', abort); controller.abort() }
     }
     return reply.type('text/event-stream').header('Cache-Control', 'no-cache').header('X-Accel-Buffering', 'no').send(Readable.from(events()))

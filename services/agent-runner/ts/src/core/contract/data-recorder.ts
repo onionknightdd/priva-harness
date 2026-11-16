@@ -1,4 +1,4 @@
-import type { DataRecord } from '../resource/data-store.js'
+import type { DataRecord } from '../usage/data-store.js'
 
 // Fire-and-forget sink for usage and audit records. Implementations must
 // never throw and must never block the caller: recording is observability,

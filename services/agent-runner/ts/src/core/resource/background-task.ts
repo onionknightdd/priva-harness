@@ -42,6 +42,11 @@ export function taskIsActive(task: BackgroundTask): boolean {
   return !['completed', 'failed', 'cancelled'].includes(task.status)
 }
 
+/** Known to be in flight. Excludes `unknown`, which is neither settled nor observed running. */
+export function taskIsInFlight(task: BackgroundTask): boolean {
+  return task.status === 'pending' || task.status === 'running' || task.status === 'paused'
+}
+
 export function taskStatus(value: unknown): BackgroundTaskStatus {
   if (value === 'stopped' || value === 'killed' || value === 'cancelled' || value === 'aborted') return 'cancelled'
   if (value === 'error') return 'failed'
@@ -85,7 +90,10 @@ export class BackgroundTasks {
 
   list(): readonly BackgroundTask[] { return [...this.tasks.values()] }
   get(id: string): BackgroundTask | undefined { return this.tasks.get(id) }
-  get hasActive(): boolean { return this.list().some(taskIsActive) }
+  get hasActive(): boolean {
+    for (const task of this.tasks.values()) if (taskIsActive(task)) return true
+    return false
+  }
 }
 
 /** Only provider-originated notices are eligible. A person's XML remains ordinary text. */

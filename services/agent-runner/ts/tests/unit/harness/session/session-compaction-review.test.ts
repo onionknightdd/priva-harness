@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest'
 import { SessionCompaction } from '../../../../src/harness/session/session-compaction.js'
 import { SessionStream } from '../../../../src/harness/session/session-stream.js'
-import type { ThreadMessage } from '../../../../src/core/resource/thread.js'
+import type { ThreadMessage } from '../../../../src/core/thread/thread.js'
 
 const at = '2026-01-01T00:00:00.000Z'
 const user = (id: string, content = 'Continue'): ThreadMessage => ({ id, role: 'user', content, createdAt: at, status: 'complete' })

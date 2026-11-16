@@ -1,3 +1,4 @@
+import { isRecord } from '../util/json-record.js'
 export const MODEL_PROFILE_STORE_VERSION = 1
 export const MODEL_CONTEXT_1M = '1m'
 export const GENERATED_MODEL_PROFILE_ID_PATTERN = /^model-\d{8}[0-9a-f]{7}$/u
@@ -665,9 +666,6 @@ function randomEntropy(byteCount: number): Uint8Array {
   return bytes
 }
 
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
 function corruptStore(message: string, cause?: unknown): ModelProfileError {
   return cause === undefined

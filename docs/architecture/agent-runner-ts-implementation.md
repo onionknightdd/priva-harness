@@ -624,6 +624,53 @@ services/agent-runner/
 
 这是完整的目标目录树，并不意味着要在一开始就创建其中所有目录。只有在添加某个目录的首个实现文件时，才创建该目录。
 
+### 4.1 已落地的分组
+
+目标树是迁移提案；下面是当前实现里已经稳定下来的分组，新增文件按职责放入对应目录，
+不再堆进 `core/resource`。
+
+```text
+src/core/
+├── contract/   各层实现的端口（provider、session store、terminal、recorder…）
+├── event/      AgentEvent / StreamFrame 及工具事件的规范化
+├── thread/     会话线程模型：thread、apply-stream-frame、fold-thread、
+│               thinking-time、run-duration、compact-command、task-reply-tracker
+├── usage/      用量与审计：data-store 记录类型、local-time、usage-overview*、
+│               usage-range-builder
+├── resource/   其余领域类型：session、model-profile、runtime-settings、
+│               background-task、interaction、workflow、slash-command、文件 / git DTO
+├── run/        user-turn、interaction-coordinator
+├── stream/     async-queue、pushable-stream
+├── tool/       产品工具定义与实现
+├── config/     HarnessConfig 投影类型
+└── util/       无领域含义的共享助手：errors（errorMessage / hasErrorCode）、
+                json-record、paths（resolveInside）、recent-map、
+                polled-files（被高频轮询的小文件，变更后才重新读取和解析）
+
+src/provider/claude/
+├── terminal/   原生 TUI 驱动：launch、hooks、input、model、telemetry、text、
+│               composer、log（JSONL 日志的增量读取）
+├── session/    转录读取、回放、workflow 文件
+├── tools/      产品工具的 SDK MCP / stdio MCP 入口
+└── config-adapter/
+
+src/infrastructure/storage/private-file.ts
+                私有 JSON 文件共用的排他文件锁与原子替换；settings、session
+                metadata、model profile 三个 store 都经由它写入。
+```
+
+约定：
+
+- 判断错误码一律用 `core/util/errors.ts` 的 `hasErrorCode`，取错误文本用 `errorMessage`，
+  不在各文件内重写。
+- 记录类型守卫用 `core/util/json-record.ts`。
+- 被定时轮询的小文件（终端的 instance / status / state 等）用 `core/util/polled-files.ts`
+  的 `PolledFiles` 读取，返回的解析结果在多次读取间共享，按只读处理。
+- 上下文窗口与 profile 的 `1m` 标签互转用 `core/resource/model-context.ts` 的
+  `contextWindowForTag` / `contextTagForWindow`。
+- 可选的 provider 能力（`AgentRuntime.listenIdle`、`AgentProvider.measureContextUsage`）
+  声明在 `core/contract/agent-provider.ts`，harness 不做鸭子类型探测。
+
 ## 5. 依赖方向
 
 ```text

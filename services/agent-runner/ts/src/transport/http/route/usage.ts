@@ -1,7 +1,7 @@
 import type { FastifyPluginCallback } from 'fastify'
 
 import type { UsageReader } from '../../../core/contract/usage-reader.js'
-import { daysBetween, isValidLocalDate, isValidTimeZone } from '../../../core/resource/local-time.js'
+import { daysBetween, isValidLocalDate, isValidTimeZone } from '../../../core/usage/local-time.js'
 
 export const USAGE_ROUTE_PREFIX = '/api/sandbox/usage'
 

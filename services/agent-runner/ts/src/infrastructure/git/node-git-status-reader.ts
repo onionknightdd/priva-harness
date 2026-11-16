@@ -5,6 +5,7 @@ import { promisify } from 'node:util'
 
 import type { GitStatusReader } from '../../core/contract/git-status-reader.js'
 import { GitStatusError, type GitStatus } from '../../core/resource/git-status.js'
+import { hasErrorCode } from '../../core/util/errors.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -48,7 +49,7 @@ export class NodeGitStatusReader implements GitStatusReader {
       }
       return { cwd, root, branch, commit }
     } catch (error) {
-      if (hasCode(error, 'ENOENT')) {
+      if (hasErrorCode(error, 'ENOENT')) {
         throw new GitStatusError(503, 'Git is unavailable. Install Git on the runner and retry.', { cause: error })
       }
       throw new GitStatusError(500, 'Could not read Git status. Check repository access and retry.', { cause: error })
@@ -73,10 +74,10 @@ export class NodeGitStatusReader implements GitStatusReader {
       return cwd
     } catch (error) {
       if (error instanceof GitStatusError) throw error
-      if (hasCode(error, 'ENOENT') || hasCode(error, 'ENOTDIR')) {
+      if (hasErrorCode(error, 'ENOENT') || hasErrorCode(error, 'ENOTDIR')) {
         throw new GitStatusError(404, 'Working directory not found', { cause: error })
       }
-      if (hasCode(error, 'EACCES') || hasCode(error, 'EPERM')) {
+      if (hasErrorCode(error, 'EACCES') || hasErrorCode(error, 'EPERM')) {
         throw new GitStatusError(403, 'Cannot access the working directory', { cause: error })
       }
       throw new GitStatusError(500, 'Could not read the working directory', { cause: error })
@@ -103,9 +104,6 @@ function gitEnvironment(): NodeJS.ProcessEnv {
   return env
 }
 
-function hasCode(error: unknown, code: string): boolean {
-  return error instanceof Error && 'code' in error && error.code === code
-}
 
 function isGitExit(error: unknown, code: number): error is Error & { stderr?: unknown } {
   return error instanceof Error && 'code' in error && error.code === code

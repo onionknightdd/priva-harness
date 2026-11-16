@@ -7,7 +7,6 @@ import {
   createRuntimeConfig,
   defaultRuntimeHome,
   resolveRuntimeHome,
-  runtimeConfig,
   RUNTIME_HOME_ENV,
 } from '../../src/runtime-config.js'
 
@@ -16,6 +15,7 @@ describe('runtimeConfig', () => {
     const runtimeHome = join(homedir(), '.bambuddy')
 
     expect(defaultRuntimeHome()).toBe(runtimeHome)
+    const runtimeConfig = createRuntimeConfig(defaultRuntimeHome())
     expect(runtimeConfig).toEqual({
       runtimeHome,
       settingsFilePath: join(runtimeHome, 'bambuddy.settings.json'),

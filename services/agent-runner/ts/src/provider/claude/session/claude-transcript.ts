@@ -1,4 +1,4 @@
-import { asRecord, isRecord, stringField, type JsonRecord } from '../../../core/event/json-record.js'
+import { asRecord, isRecord, stringField, type JsonRecord } from '../../../core/util/json-record.js'
 import { claudeTaskNotificationRecord } from './claude-task-notification.js'
 import { ClaudeSettingCommands } from './claude-setting-command.js'
 

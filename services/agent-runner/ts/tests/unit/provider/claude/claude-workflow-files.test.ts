@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { extractWorkflowAgentDetail, hydrateWorkflowResult, readWorkflowAgentDetail } from '../../../../src/provider/claude/session/claude-workflow-files.js'
 import { mapClaudeMessage } from '../../../../src/provider/claude/session/claude-session-store.js'
 import { replayClaudeSessionMessages } from '../../../../src/provider/claude/session/claude-thread-replay.js'
-import { foldThread } from '../../../../src/core/resource/fold-thread.js'
+import { foldThread } from '../../../../src/core/thread/fold-thread.js'
 import { workflowLaunch, workflowSnapshot, workflowTranscript } from '../../../fixtures/claude-workflow.js'
 
 describe('workflow history and detail files', () => {

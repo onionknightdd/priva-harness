@@ -1,4 +1,4 @@
-import { asRecord } from '../../core/event/json-record.js'
+import { asRecord } from '../../core/util/json-record.js'
 import { taskStatus } from '../../core/resource/background-task.js'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { randomUUID } from 'node:crypto'
@@ -9,6 +9,7 @@ import type { WorkflowState } from '../../core/resource/workflow.js'
 import type { PiSessionEvent } from './pi-event-mapper.js'
 import { piWorkflowState, internalTool } from './pi-workflow-data.js'
 import { piWorkflowRoot, savePiWorkflow, loadPiWorkflow, type PiWorkflowTranscript } from './pi-workflow-files.js'
+import { errorMessage } from '../../core/util/errors.js'
 
 /** Owns plugin executions for one host session, including detached tool calls. */
 export class PiWorkflows {
@@ -198,7 +199,7 @@ export class PiWorkflows {
       this.delivered.add(runId)
       const result = run.result?.result
       void this.resultDelivery(state, (typeof result === 'string' ? result : result === undefined ? '' : JSON.stringify(result)).slice(0, 8000)).catch((error: unknown) => {
-        for (const listener of this.listeners) listener({ type: 'background_error', errorMessage: error instanceof Error ? error.message : String(error) })
+        for (const listener of this.listeners) listener({ type: 'background_error', errorMessage: errorMessage(error) })
       })
     }
     // Serialize snapshots; an older write must never overwrite terminal state.

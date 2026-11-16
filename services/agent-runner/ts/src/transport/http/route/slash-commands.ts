@@ -7,6 +7,7 @@ import type { SlashCommand } from '../../../core/resource/slash-command.js'
 import type { AgentHarness } from '../../../harness/agent-harness.js'
 import type { ModelProfileService } from '../../../harness/config/model-profile-service.js'
 import { listSlashCommandsSchema } from '../schema/slash-command-schema.js'
+import { contextWindowForTag } from '../../../core/resource/model-context.js'
 
 export const SLASH_COMMANDS_ROUTE = '/api/sandbox/agent/slash-commands'
 
@@ -71,7 +72,7 @@ async function listingRunSpec(
     baseUrl: rewriteProviderBaseUrl(resolved.profile.baseUrl, provider),
     authToken: resolved.profile.authToken,
     profileId: resolved.profile.id,
-    contextWindow: resolved.capabilities.context === '1m' ? 1_000_000 : 200_000,
+    contextWindow: contextWindowForTag(resolved.capabilities.context),
   }
 }
 

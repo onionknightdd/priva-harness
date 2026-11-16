@@ -101,4 +101,14 @@ describe('interaction coordinator', () => {
     await waiting
     expect(stream.snapshot().interactions).toEqual([])
   })
+
+  it('settles the waiting request even when an observer throws', async () => {
+    const coordinator = new InteractionCoordinator((event) => {
+      if (event.type === 'permission.resolved') throw new Error('observer failed')
+    })
+    const abort = new AbortController()
+    const waiting = coordinator.request({ kind: 'tool', tool: 'Bash' }, { signal: abort.signal })
+    expect(() => coordinator.cancelAll()).toThrow('observer failed')
+    expect(await waiting).toMatchObject({ decision: 'deny', reason: 'cancelled' })
+  })
 })

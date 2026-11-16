@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { mapClaudeMessage } from '../../../../src/provider/claude/session/claude-session-store.js'
 import { ownedSubagentMessages } from '../../../../src/provider/claude/session/claude-subagent-history.js'
 import { replayClaudeSessionMessages } from '../../../../src/provider/claude/session/claude-thread-replay.js'
-import { foldThread } from '../../../../src/core/resource/fold-thread.js'
+import { foldThread } from '../../../../src/core/thread/fold-thread.js'
 
 const map = (message: unknown) => mapClaudeMessage(message, 'session')
 const main = [map({ type: 'assistant', uuid: 'main', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'agent-call', name: 'Agent', input: {} }] } }),

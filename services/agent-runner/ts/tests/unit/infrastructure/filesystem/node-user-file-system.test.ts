@@ -1,4 +1,5 @@
 import { Buffer } from 'node:buffer'
+import { execFileSync } from 'node:child_process'
 import {
   mkdir,
   mkdtemp,
@@ -267,6 +268,13 @@ describe('NodeUserFileSystem', () => {
     expect(await readdir(staging)).toEqual([])
     await expect(readFile(join(workspace, 'large.txt'))).rejects.toMatchObject({ code: 'ENOENT' })
   })
+
+  it('rejects a named pipe at once instead of waiting for a writer', async () => {
+    const pipePath = join(workspace, 'pipe')
+    execFileSync('mkfifo', [pipePath])
+    await expect(fileSystem.previewFile(pipePath)).rejects.toMatchObject({ kind: 'file-not-found' })
+    await expect(fileSystem.inspectFile(pipePath)).rejects.toMatchObject({ kind: 'file-not-found' })
+  }, 2000)
 })
 
 function chunks(...values: string[]): AsyncIterable<Uint8Array> {

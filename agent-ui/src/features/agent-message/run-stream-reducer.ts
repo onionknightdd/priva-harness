@@ -136,11 +136,18 @@ export function applyThreadStreamFrame(
 ): AgentThreadMessage[] {
   if (frame.type === "task.updated" || frame.type === "task.notification" || frame.type === "tasks.snapshot") {
     const tasks = frame.task ? [frame.task] : frame.tasks ?? []
-    return messages.map((message) => ({ ...message, blocks: message.blocks?.map((block) => {
-      if (block.type !== "tool_use") return block
-      const task = tasks.find((task) => task.toolUseId === block.id)
-      return task ? { ...block, tool: { ...block.tool, id: block.id, name: block.name, status: "completed", backgroundTask: task } } : block
-    }) }))
+    // Every message is offered each task update, but only the one holding the
+    // task's tool call changes. The rest keep their identity, so the memoized
+    // message tree does not re-render the whole thread.
+    return messages.map((message) => {
+      const blocks = message.blocks
+      if (!blocks?.some((block) => block.type === "tool_use" && tasks.some((task) => task.toolUseId === block.id))) return message
+      return { ...message, blocks: blocks.map((block) => {
+        if (block.type !== "tool_use") return block
+        const task = tasks.find((task) => task.toolUseId === block.id)
+        return task ? { ...block, tool: { ...block.tool, id: block.id, name: block.name, status: "completed", backgroundTask: task } } : block
+      }) }
+    })
   }
   const workflowId = frame.workflowToolUseId ?? frame.parentToolUseId
   const owner = workflowId === undefined ? undefined : messages.find((message) =>
@@ -419,12 +426,11 @@ function syncTools(blocks: StreamBlock[], frame: StreamFrame): StreamBlock[] {
     return blocks
   }
 
-  const existingIndex = blocks.findIndex(
-    (block) => block.type === "tool_use" && block.id === id
-  )
+  const existingIndex = toolBlockIndex(blocks, frame, id)
+  const existing = existingIndex >= 0 ? blocks[existingIndex] : undefined
   const base: Extract<StreamBlock, { type: "tool_use" }> =
-    existingIndex >= 0 && blocks[existingIndex]?.type === "tool_use"
-      ? blocks[existingIndex]
+    existing?.type === "tool_use"
+      ? existing.id === id ? existing : { ...existing, id, blockId: frame.blockId ?? id }
       : {
           type: "tool_use",
           blockId: frame.blockId ?? id,
@@ -446,9 +452,6 @@ function syncTools(blocks: StreamBlock[], frame: StreamFrame): StreamBlock[] {
           ? "running"
           : "started",
     ...(nextInput === undefined ? {} : { input: nextInput }),
-    ...(isUsefulInput(frame.input) || base.tool?.inputRaw === undefined
-      ? {}
-      : { inputRaw: base.tool.inputRaw }),
     ...(kind === "tool.completed" ? { ok: frame.ok !== false, output: frame.output ?? "", ...(frame.tokens === undefined ? {} : { tokens: frame.tokens }), ...(frame.durationMs === undefined ? {} : { durationMs: frame.durationMs }) } : {}),
     ...(frame.status === undefined ? {} : { launchStatus: frame.status }),
     ...(frame.agentId === undefined ? {} : { agentId: frame.agentId }),
@@ -472,6 +475,18 @@ function syncTools(blocks: StreamBlock[], frame: StreamFrame): StreamBlock[] {
   const next = [...blocks]
   next[existingIndex] = nextBlock
   return next
+}
+
+// A provider can open a tool block before it knows the call's id. Until then
+// the block is addressed by its position in the message. The first frame that
+// carries the id claims that block, instead of adding a second card and
+// leaving a nameless one behind. Mirrors the runner's apply-stream-frame.ts.
+function toolBlockIndex(blocks: StreamBlock[], frame: StreamFrame, id: string): number {
+  const known = blocks.findIndex((block) => block.type === "tool_use" && block.id === id)
+  if (known >= 0 || frame.messageId === undefined || frame.index === undefined) return known
+  const announced = `${frame.messageId}:${frame.index}`
+  return blocks.findIndex((block) =>
+    block.type === "tool_use" && block.tool === undefined && block.id === announced && block.blockId === announced)
 }
 
 function appendText(
@@ -737,6 +752,11 @@ function parseToolInputJson(raw: string): unknown {
   const trimmed = raw.trim()
   if (trimmed === "") {
     return undefined
+  }
+  // Called for every streamed chunk. An object that has not been closed yet
+  // cannot parse, so the attempt over the whole buffer is skipped until it has.
+  if (trimmed.startsWith("{") && !trimmed.endsWith("}")) {
+    return extractPartialToolInput(trimmed)
   }
   try {
     return JSON.parse(trimmed) as unknown

@@ -1,4 +1,4 @@
-import { asRecord, numberField, stringField, type JsonRecord } from './json-record.js'
+import { asRecord, numberField, stringField, type JsonRecord } from '../util/json-record.js'
 
 /** Convert Claude FileEditOutput / FileWriteOutput hunks into unified diff. */
 export function unifiedDiffFromStructuredPatch(value: unknown): string {

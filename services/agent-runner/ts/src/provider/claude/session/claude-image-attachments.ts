@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
-import { asRecord, stringField } from '../../../core/event/json-record.js'
+import { asRecord, stringField } from '../../../core/util/json-record.js'
 import type { SessionMessage } from '../../../core/resource/session.js'
 import type { UserAttachment } from '../../../core/run/user-turn.js'
+import { hasErrorCode } from '../../../core/util/errors.js'
 
 /** A deterministic, disposable projection; the native transcript retains the bytes. */
 export async function materializeClaudeImages(message: SessionMessage, directory: string): Promise<readonly UserAttachment[]> {
@@ -23,7 +24,7 @@ export async function materializeClaudeImages(message: SessionMessage, directory
     await mkdir(directory, { recursive: true, mode: 0o700 })
     const path = join(directory, name)
     try { await writeFile(path, bytes, { flag: 'wx', mode: 0o600 }) }
-    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error }
+    catch (error) { if (!hasErrorCode(error, 'EEXIST')) throw error }
     attachments.push({ path, name: `Image ${attachments.length + 1}.${basename(path).split('.').at(-1) ?? extension}`, mimeType, size: bytes.length })
   }
   return attachments

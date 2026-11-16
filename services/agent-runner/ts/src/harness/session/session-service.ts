@@ -1,6 +1,6 @@
 import type { SessionConfiguration } from '../../core/event/agent-event.js'
 import type { BackgroundTask } from '../../core/resource/background-task.js'
-import { applyStreamFrame } from '../../core/resource/apply-stream-frame.js'
+import { applyStreamFrame } from '../../core/thread/apply-stream-frame.js'
 import { realpath, stat } from 'node:fs/promises'
 
 import type {
@@ -30,12 +30,14 @@ import {
   type SessionMetadataRecord,
   type SessionResponseModel,
 } from '../../core/resource/session.js'
-import { foldThread } from '../../core/resource/fold-thread.js'
-import type { ThreadMessage } from '../../core/resource/thread.js'
+import { foldThread } from '../../core/thread/fold-thread.js'
+import type { ThreadMessage } from '../../core/thread/thread.js'
 import type { ModelProfileService } from '../config/model-profile-service.js'
 import type { LiveRunRecord, LiveRunRegistry } from '../run/live-run-registry.js'
 import { SessionRunModes } from './session-run-mode.js'
 import { nextForkTitle, sessionStem } from './fork-session-title.js'
+import { contextWindowForTag } from '../../core/resource/model-context.js'
+import { taskIsInFlight } from '../../core/resource/background-task.js'
 
 export interface SessionServiceOptions {
   readonly providers: Readonly<Record<ProviderId, AgentProvider>>
@@ -143,7 +145,7 @@ export class SessionService {
     const selected = metadata.lastResponseModel
     if (!selected) return undefined
     const info = await this.provider(ref.provider).sessions.read(ref)
-    const contextWindow = selected.model.capabilities.context === '1m' ? 1_000_000 : 200_000
+    const contextWindow = contextWindowForTag(selected.model.capabilities.context)
     return {
       model: ref.provider === 'claude'
         ? applyModelContext(selected.model.id, selected.model.capabilities.context)
@@ -299,7 +301,7 @@ export class SessionService {
         return { ...restored, blocks: (restored.blocks ?? []).map((block) => {
           if (block.type !== 'tool_use' || !block.tool?.backgroundTask) return block
           const task = block.tool.backgroundTask
-          if (!['running', 'pending', 'paused'].includes(task.status)) return block
+          if (!taskIsInFlight(task)) return block
           return { ...block, tool: { ...block.tool, backgroundTask: { ...task, status: 'unknown' as const } } }
         }),
       } }),
@@ -478,7 +480,7 @@ export class SessionService {
         baseUrl: rewriteProviderBaseUrl(resolved.profile.baseUrl, ref.provider),
         authToken: resolved.profile.authToken,
         profileId: resolved.profile.id,
-        contextWindow: resolved.capabilities.context === '1m' ? 1_000_000 : 200_000,
+        contextWindow: contextWindowForTag(resolved.capabilities.context),
       }
     } catch {
       return undefined

@@ -1,4 +1,4 @@
-import { asRecord, isRecord, numberField, stringField, type JsonRecord } from './json-record.js'
+import { asRecord, isRecord, numberField, stringField, type JsonRecord } from '../util/json-record.js'
 
 /** Encode Claude FileReadOutput / Pi Read content as a tagged JSON view for the UI. */
 export function encodeReadView(value: unknown): string {

@@ -77,8 +77,8 @@ services/agent-runner/ts/src/
 |   |-- claude-system-prompt.ts           +  SDK 与 TUI 提示词适配
 |   |-- claude-tool-policy.ts             +  基础禁用项、Agent 精简项
 |   |-- claude-runtime.ts                   使用共享策略
-|   |-- claude-terminal-launch.ts           使用共享策略
-|   `-- claude-terminal-model.ts            启动配置与复用校验
+|   |-- terminal/claude-terminal-launch.ts  使用共享策略
+|   `-- terminal/claude-terminal-model.ts   启动配置与复用校验
 |-- infrastructure/session/json-session-metadata-store.ts
 |                                           事务内首次绑定与冲突检查
 `-- transport/websocket/                     校验、传递、错误映射

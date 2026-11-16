@@ -1,7 +1,7 @@
-import type { DataRecord, DataRetention, DataStoreStatus } from '../../core/resource/data-store.js'
+import type { DataRecord, DataRetention, DataStoreStatus } from '../../core/usage/data-store.js'
 import type {
   AuditPage, AuditPageInput, UsageOverview, UsageOverviewInput, UsageRangeInput, UsageRangeSummary,
-} from '../../core/resource/usage-overview.js'
+} from '../../core/usage/usage-overview.js'
 
 export interface DataWorkerInit {
   readonly dbPath: string

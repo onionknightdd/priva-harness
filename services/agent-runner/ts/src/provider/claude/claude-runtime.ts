@@ -4,7 +4,7 @@ import { claudeDisallowedTools } from './claude-tool-policy.js'
 import { InteractionCoordinator } from '../../core/run/interaction-coordinator.js'
 import { answersByQuestion, normalizeQuestions, type InteractionResponse } from '../../core/resource/interaction.js'
 import { taskNotification } from '../../core/resource/background-task.js'
-import { asRecord, stringField } from '../../core/event/json-record.js'
+import { asRecord, stringField } from '../../core/util/json-record.js'
 import { ClaudeTaskDeliveryReader } from './session/claude-task-delivery-reader.js'
 import type { SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { query, type CanUseTool, type Options, type Query, type Settings } from '@anthropic-ai/claude-agent-sdk'
@@ -33,8 +33,9 @@ import { toolsForVisualizeMode } from '../../core/tool/visualize-mode.js'
 import { imageToolsFromSpec } from '../../core/tool/image-tool-shared.js'
 import { ClaudeEventMapper } from './claude-event-mapper.js'
 import { claudeUserMessage } from './claude-user-message.js'
-import { compileClaudeCustomTools } from './tools/compile-custom-tools.js'
+import { compileClaudeCustomTools, type ToolProgressEmitter } from './tools/compile-custom-tools.js'
 import { assertClaudeEffort } from './claude-effort.js'
+import { errorMessage } from '../../core/util/errors.js'
 
 export const CLAUDE_DISABLED_SKILLS = [
   'dataviz',
@@ -69,6 +70,8 @@ export class ClaudeRuntime implements AgentRuntime {
   private readonly consumedNotices = new Set<string>()
   private abortController: AbortController | undefined
   private sessionId = ''
+  // Set once the CLI has reported the session, which is when it can be resumed.
+  private sessionEstablished = false
   private inTurn = false
   private idleListener: ((events: readonly AgentEvent[]) => void) | undefined
   private readonly startQuery: ClaudeQueryStart
@@ -95,27 +98,27 @@ export class ClaudeRuntime implements AgentRuntime {
   }
 
   async *run(turn: UserTurn, context: TurnContext): AsyncIterable<AgentEvent> {
-    this.inTurn = true
-    this.turnEnded = false
-    this.events = new AsyncQueue<AgentEvent>()
-    await this.deliveries.start(this.sessionId)
-    this.ensureQuery(turn)
-    this.mapper.beginUserTurn()
-    this.input?.push(claudeUserMessage(userTurnText(turn)))
-
+    const events = new AsyncQueue<AgentEvent>()
     const onAbort = (): void => {
       this.interactions.cancelAll()
-      void this.query?.interrupt()
+      // The run ends through the interrupted query's result, not this call.
+      this.query?.interrupt().catch(() => undefined)
     }
-    if (context.signal.aborted) onAbort()
-    else context.signal.addEventListener('abort', onAbort, { once: true })
-
+    this.inTurn = true
+    this.turnEnded = false
+    this.events = events
     try {
-      yield* this.events.iterate()
+      await this.deliveries.start(this.sessionId)
+      this.ensureQuery(turn)
+      this.mapper.beginUserTurn()
+      this.input?.push(claudeUserMessage(userTurnText(turn)))
+      if (context.signal.aborted) onAbort()
+      else context.signal.addEventListener('abort', onAbort, { once: true })
+      yield* events.iterate()
     } finally {
       this.inTurn = false
-      this.events.close()
-      this.events = undefined
+      events.close()
+      if (this.events === events) this.events = undefined
       context.signal.removeEventListener('abort', onAbort)
     }
   }
@@ -176,7 +179,9 @@ export class ClaudeRuntime implements AgentRuntime {
     const abortController = new AbortController()
     this.input = input
     this.abortController = abortController
-    const title = this.target.kind === 'new' && turn.text.trim() === '' && turn.attachments?.length
+    // A query that replaces one whose process died continues the same session.
+    const target: SessionTarget = this.sessionEstablished ? { kind: 'resume', session: this.session } : this.target
+    const title = target.kind === 'new' && turn.text.trim() === '' && turn.attachments?.length
       ? turn.attachments.map((file) => file.name).join(', ')
       : undefined
     const active = this.startQuery({
@@ -184,11 +189,11 @@ export class ClaudeRuntime implements AgentRuntime {
       options: {
         ...resolveClaudeQueryOptions(
           this.spec,
-          this.target,
+          target,
           abortController,
           toolsForVisualizeMode(this.tools, this.spec.visualizeMode),
           {
-            emitProgress: (chunk) => this.emitToolProgress(chunk),
+            emitProgress: (toolName, chunk) => this.emitToolProgress(toolName, chunk),
           },
         ),
         canUseTool: this.canUseTool,
@@ -216,17 +221,18 @@ export class ClaudeRuntime implements AgentRuntime {
         ? { behavior: 'allow', updatedInput: { ...input, answers: answersByQuestion(result) } }
         : { behavior: 'allow' }
     } catch (error) {
-      return { behavior: 'deny', message: `Invalid interaction request: ${error instanceof Error ? error.message : String(error)}` }
+      return { behavior: 'deny', message: `Invalid interaction request: ${errorMessage(error)}` }
     }
   }
 
   private async pump(active: ClaudeQuery): Promise<void> {
-    let failed = false
+    let failure: AgentEvent | undefined
     try {
       for await (const message of active) {
         const sessionId = sessionIdOf(message)
         if (sessionId !== undefined) {
           this.sessionId = sessionId
+          this.sessionEstablished = true
           await this.deliveries.start(sessionId)
         }
         if (message.type === 'system' && message.subtype === 'task_notification' && !message.ambient && !message.skip_transcript) this.pendingNotices.add(message.task_id)
@@ -241,7 +247,7 @@ export class ClaudeRuntime implements AgentRuntime {
         if (mainId && mainId !== this.lastMainMessageId) {
           this.lastMainMessageId = mainId
           // Monitor events can prompt a reply without a lifecycle notification.
-          for (const notice of await this.deliveries.forAssistant(mainId)) {
+          for (const notice of await this.readDeliveries(mainId)) {
             for (const event of this.mapper.push(notice)) {
               if (event.type === 'task.delivered') this.consumedNotices.add(event.task.taskId)
               deliveries.push(event)
@@ -269,25 +275,60 @@ export class ClaudeRuntime implements AgentRuntime {
         this.dispatch(mapped)
       }
     } catch (error) {
-      failed = true
-      const failure: AgentEvent = {
+      failure = {
         type: 'run.failed',
-        message: error instanceof Error ? error.message : String(error),
+        message: errorMessage(error),
         ...(this.sessionId === '' ? {} : { sessionId: this.sessionId }),
         model: this.spec.model,
       }
-      this.dispatch([failure])
     } finally {
       this.interactions.cancelAll()
-      if (!failed && this.query === active) this.dispatch([{ type: 'run.failed', message: 'Claude session process ended unexpectedly', model: this.spec.model }])
+      if (this.query === active) {
+        // The query ended without being released: its process is gone.
+        this.dispatch([
+          ...this.discardQuery(),
+          failure ?? { type: 'run.failed', message: 'Claude session process ended unexpectedly', model: this.spec.model },
+        ])
+      } else if (failure !== undefined) {
+        this.dispatch([failure])
+      }
       this.events?.close()
     }
   }
 
-  private emitToolProgress(chunk: string): void {
-    const mapper = this.mapper
+  // A lookup of delivered notices must not end the session it annotates.
+  private async readDeliveries(assistantId: string): ReturnType<ClaudeTaskDeliveryReader['forAssistant']> {
+    try {
+      return await this.deliveries.forAssistant(assistantId)
+    } catch {
+      return []
+    }
+  }
+
+  /**
+   * Forget a query whose process has exited so the next turn starts a new one
+   * instead of writing to a stream nobody reads. Whatever that process was
+   * still running or holding back went with it.
+   */
+  private discardQuery(): AgentEvent[] {
+    this.input?.close()
+    this.abortController?.abort()
+    this.query = undefined
+    this.input = undefined
+    this.abortController = undefined
+    this.heldResult = undefined
+    this.sessionStateAvailable = false
+    this.pendingNotices.clear()
+    this.consumedNotices.clear()
+    return this.mapper.backgroundTasks.abandon()
+  }
+
+  // The SDK does not tell a tool handler which call it serves, so progress is
+  // attached to the running call of that tool rather than to whichever tool
+  // happened to start last.
+  private emitToolProgress(toolName: string, chunk: string): void {
     const events = this.events
-    const toolId = mapper.latestToolId()
+    const toolId = this.mapper.runningToolId(toolName)
     if (events === undefined || toolId === undefined) return
     events.push({
       type: 'tool.progress',
@@ -316,7 +357,7 @@ export class ClaudeRuntime implements AgentRuntime {
 }
 
 export interface ClaudeToolEmitters {
-  readonly emitProgress?: (chunk: string) => void
+  readonly emitProgress?: ToolProgressEmitter
 }
 
 function mainAssistantId(message: SDKMessage): string | undefined {
@@ -367,8 +408,7 @@ export function resolveClaudeQueryOptions(
     session: { provider: 'claude', id: initialSessionId(target) },
     signal: abortController?.signal ?? new AbortController().signal,
     profile: imageToolsFromSpec(spec),
-    ...(emitters.emitProgress === undefined ? {} : { emitProgress: emitters.emitProgress }),
-  })
+  }, emitters.emitProgress)
   if (compiled.mcpServers !== undefined) {
     options.mcpServers = compiled.mcpServers
   }

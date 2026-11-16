@@ -31,8 +31,7 @@ export class FakeAgentProvider implements AgentProvider {
   lastRuntime: FakeAgentRuntime | undefined
   delayMs = 0
   contextUsage: ContextUsage = emptyContextUsage()
-  measureContextUsage: ((session: SessionRef, spec: ProviderRunSpec) => Promise<ContextUsage>) | undefined =
-    undefined
+  measureContextUsage?: (session: SessionRef, spec: ProviderRunSpec) => Promise<ContextUsage>
   terminalLaunch?: (target: SessionTarget, spec: ProviderRunSpec, context: TerminalLaunchContext) => Promise<TerminalLaunchSpec>
 
   constructor(id: ProviderId, events: readonly AgentEvent[], sessions = new FakeSessionStore()) {

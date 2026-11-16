@@ -8,7 +8,7 @@ import type {
   RunFinishedRecord,
   RunStartedRecord,
   ToolRecord,
-} from '../../core/resource/data-store.js'
+} from '../../core/usage/data-store.js'
 import {
   USAGE_RANGE_DAYS,
   type AuditCountRow,
@@ -22,11 +22,12 @@ import {
   type UsageOverviewInput,
   type UsageRangeInput,
   type UsageRangeSummary,
-} from '../../core/resource/usage-overview.js'
-import { shiftDate } from '../../core/resource/local-time.js'
-import { buildUsageOverview } from '../../core/resource/usage-overview-builder.js'
-import { buildUsageRange } from '../../core/resource/usage-range-builder.js'
+} from '../../core/usage/usage-overview.js'
+import { shiftDate } from '../../core/usage/local-time.js'
+import { buildUsageOverview } from '../../core/usage/usage-overview-builder.js'
+import { buildUsageRange } from '../../core/usage/usage-range-builder.js'
 import { migrateSchema } from './sqlite-schema.js'
+import { errorMessage } from '../../core/util/errors.js'
 
 const MCP_TOOL_SERVER = /^mcp__([a-zA-Z0-9_-]+)__/
 const PRUNE_CHUNK_ROWS = 2000
@@ -141,7 +142,7 @@ export class SqliteDataStore {
           this.db.exec('RELEASE record')
           rejected += 1
           if (errors.length < MAX_REPORTED_ERRORS) {
-            errors.push(`${record.kind}: ${error instanceof Error ? error.message : String(error)}`)
+            errors.push(`${record.kind}: ${errorMessage(error)}`)
           }
         }
       }
@@ -256,27 +257,28 @@ export class SqliteDataStore {
     }
   }
 
+  // The widest range covers a year, which can be hundreds of thousands of tool
+  // rows. Each query is stepped row by row as the builder folds it, so the
+  // rows are never all in memory at once.
   overview(input: UsageOverviewInput, retention: DataRetention): UsageOverview {
     const now = input.now ?? new Date()
     // One extra day of slack so a local day straddling UTC midnight is complete.
     const since = new Date(now.getTime() - (Math.max(...USAGE_RANGE_DAYS) + 1) * 86_400_000).toISOString()
-    const runs = this.finishedRunsSince(since)
     const models = this.db.prepare(`
       SELECT r.started_utc AS startedUtc, m.model, m.input_tokens AS inputTokens, m.output_tokens AS outputTokens,
              m.cache_read_tokens AS cacheReadTokens, m.cache_write_tokens AS cacheWriteTokens, m.cost_usd AS costUsd
         FROM run_model_usage m JOIN run_fact r ON r.id = m.run_fact_id
-       WHERE r.started_utc >= ?`).all(since) as unknown as RunModelRow[]
-    const tools = (this.db.prepare(`
-      SELECT ts_utc AS tsUtc, tool_name AS toolName, mcp_server AS mcpServer, ok, duration_ms AS durationMs
-        FROM tool_fact WHERE ts_utc >= ?`).all(since) as unknown as (Omit<ToolFactRow, 'ok'> & { ok: number })[])
-      .map((row) => ({ ...row, ok: row.ok === 1 }))
+       WHERE r.started_utc >= ?`).iterate(since) as unknown as Iterable<RunModelRow>
     const audits = this.db.prepare(`
       SELECT ts_utc AS tsUtc, action, target,
              json_extract(details, '$.decision') AS decision, json_extract(details, '$.reason') AS reason
         FROM audit_event
        WHERE ts_utc >= ? AND action IN ('skill.invoked', 'permission.resolved', 'session.compacted')`)
-      .all(since) as unknown as AuditCountRow[]
-    return buildUsageOverview({ runs, models, tools, audits }, input, retention.factRetentionDays)
+      .iterate(since) as unknown as Iterable<AuditCountRow>
+    return buildUsageOverview(
+      { runs: this.finishedRunsSince(since), models, tools: this.toolFactsSince(since), audits },
+      input, retention.factRetentionDays,
+    )
   }
 
   range(input: UsageRangeInput): UsageRangeSummary {
@@ -287,14 +289,23 @@ export class SqliteDataStore {
     return buildUsageRange(this.finishedRunsSince(since, until), input)
   }
 
-  private finishedRunsSince(since: string, until?: string): RunFactRow[] {
+  private finishedRunsSince(since: string, until?: string): Iterable<RunFactRow> {
     const upper = until === undefined ? '' : ' AND started_utc < ?'
     const params = until === undefined ? [since] : [since, until]
     return this.db.prepare(`
       SELECT started_utc AS startedUtc, session_id AS sessionId, cwd, outcome, failure_code AS failureCode,
              duration_ms AS durationMs, model, input_tokens AS inputTokens, output_tokens AS outputTokens,
              cache_read_tokens AS cacheReadTokens, cache_write_tokens AS cacheWriteTokens, cost_usd AS costUsd
-        FROM run_fact WHERE started_utc >= ?${upper} AND outcome != 'running'`).all(...params) as unknown as RunFactRow[]
+        FROM run_fact WHERE started_utc >= ?${upper} AND outcome != 'running'`).iterate(...params) as unknown as Iterable<RunFactRow>
+  }
+
+  private *toolFactsSince(since: string): Generator<ToolFactRow> {
+    const rows = this.db.prepare(`
+      SELECT ts_utc AS tsUtc, tool_name AS toolName, mcp_server AS mcpServer, ok, duration_ms AS durationMs
+        FROM tool_fact WHERE ts_utc >= ?`).iterate(since) as unknown as Iterable<Omit<ToolFactRow, 'ok'> & { ok: number }>
+    for (const row of rows) {
+      yield { tsUtc: row.tsUtc, toolName: row.toolName, mcpServer: row.mcpServer, ok: row.ok === 1, durationMs: row.durationMs }
+    }
   }
 
   auditPage(input: AuditPageInput): AuditPage {

@@ -1,4 +1,4 @@
-import { asRecord, numberField, stringField, type JsonRecord } from '../event/json-record.js'
+import { asRecord, numberField, stringField, type JsonRecord } from '../util/json-record.js'
 
 export const CONTEXT_USAGE_CATEGORY_IDS = [
   'systemPrompt',

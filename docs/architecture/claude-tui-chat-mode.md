@@ -71,7 +71,7 @@ harness/terminal/session-terminals.ts   SessionTerminals：{provider,id} → 终
         │  provider.terminalLaunch(target, spec, {scratchDir, cols, rows})
         ▼                                            ▲
 core/contract/terminal-service.ts       TerminalService 端口   provider/claude/
-        ▲                                                       claude-terminal-launch.ts
+        ▲                                                       terminal/claude-terminal-launch.ts
         │                                                       claude-executable.ts
 infrastructure/terminal/                                        claude-project-trust.ts
   tmux-terminal-service.ts   一会话一 tmux server（私有 socket）
@@ -91,6 +91,20 @@ infrastructure/terminal/                                        claude-project-t
 `terminals/bindings.json` 保存会话键到目录的映射；更新串行执行，以独立临时文件原子替换。
 runner 重启后读取映射并通过 `has-session` 认领 pane。同目录保存启动配置和 hooks 文件。
 文件权限为 0600、目录 0700；凭证留在运行目录内，不进入 argv。
+
+启动环境变量（含模型端点凭证）同样不经过任何进程的参数表：`TmuxTerminalService`
+把 launch 的变量写成同目录下 0600 的 `launch-env.sh`，pane 以
+`/bin/sh -c '. "$1" && shift && exec "$@"' sh <launch-env.sh> <program> <args…>`
+启动，shell 读入变量后 `exec` 成目标程序。首次启动与 `respawn-pane` 重启走同一条路径；
+变量不写入 tmux 的 session / global environment，因此也不会被 `show-environment` 读到。
+
+```text
+ensure / restart
+   +-- write  <terminalDir>/launch-env.sh   (0600, export NAME='value' ...)
+   +-- tmux new-session | respawn-pane -- /bin/sh -c '. "$1" && shift && exec "$@"' sh launch-env.sh claude ...
+                                              |
+                                              +-- exec claude   (env 已就位，argv 中只有文件路径)
+```
 
 新会话在启动前分配 UUID 并通过 `--session-id` 交给 Claude，因此 `SessionRef` 与
 转录文件名一致。fork 预分配独立 UUID，并使用 `--resume <source> --fork-session
@@ -468,6 +482,18 @@ native transcript -----------------> 文本前缀按顺序对齐 ----> SessionSt
 
 每个 UserPromptSubmit 清空当前轮次的临时增量日志，随后发布 prompt 状态。热路径只运行
 shell 追加，不等待网络，也不启动 Node relay；读端只提交完整 UTF-8 JSON 行的字节游标。
+
+遥测与增量文本对每个已打开的终端按 80ms 轮询，终端多数时间是安静的。日志没有新字节时
+只比较文件大小，不打开文件。instance、run-spec、status 这些小文件经
+`core/util/polled-files.ts` 读取：文件没有被替换或改写就复用上一次解析的结果，
+最近 1 秒内改过的文件仍然重读，避免时间戳粒度不足时漏掉一次改写。Pi 的 state、
+status、control 文件和事件日志采用同样的方式。
+
+```text
+80ms 轮询 -> 日志大小 == 游标 且 小文件未变 -> 只做 stat，返回空批次
+          -> 日志有新字节               -> 读取新增的完整记录
+          -> 小文件被替换 / 改写         -> 重新读取并解析这一个文件
+```
 消息按 message_id / index 去重并等待连续片段。Display ID 与转录 ID 不同，不能直接
 按 ID 合并：`TerminalTextProjection` 在当前用户轮次内按文本顺序消费已落盘前缀，
 保留未落盘的尾部。历史刷新、空 final、工具后的第二段回答、断线快照均走同一投影。

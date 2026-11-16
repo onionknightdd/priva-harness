@@ -2,7 +2,8 @@ export const MODEL_EXTENSIONS = new Set(['glb', 'gltf', 'obj', 'stl', '3mf', 'pl
 export const POINT_CLOUD_EXTENSIONS = new Set(['ply', 'pcd', 'las', 'laz'])
 
 export function modelExtension(name: string): string {
-  return name.slice(name.lastIndexOf('.') + 1).toLowerCase()
+  const dot = name.lastIndexOf('.')
+  return dot <= 0 ? '' : name.slice(dot + 1).toLowerCase()
 }
 
 export function isModelFile(name: string): boolean {

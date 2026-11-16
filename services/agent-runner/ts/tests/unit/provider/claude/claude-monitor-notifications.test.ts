@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { taskNotification } from '../../../../src/core/resource/background-task.js'
-import { foldThread } from '../../../../src/core/resource/fold-thread.js'
+import { foldThread } from '../../../../src/core/thread/fold-thread.js'
 import { ClaudeBackgroundTasks } from '../../../../src/provider/claude/claude-background-tasks.js'
 import { ClaudeEventMapper } from '../../../../src/provider/claude/claude-event-mapper.js'
 import { mapClaudeMessage } from '../../../../src/provider/claude/session/claude-session-store.js'

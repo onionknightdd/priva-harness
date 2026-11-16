@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { productTools } from '../../../src/core/tool/product-tools.js'
+import { toolsForVisualizeMode } from '../../../src/core/tool/visualize-mode.js'
 import { defineTool } from '../../../src/core/tool/define-tool.js'
 import {
   PRODUCT_MCP_TOOL_TIMEOUT_MS,
@@ -16,7 +17,7 @@ const context = {
 
 describe('compile custom tools', () => {
   it('compiles product tools into a Claude SDK MCP server and aliases', () => {
-    const compiled = compileClaudeCustomTools(productTools, context)
+    const compiled = compileClaudeCustomTools(toolsForVisualizeMode(productTools, false), context)
     expect(compiled.toolAliases).toEqual({
       visualize: 'mcp__agentWorkshop__visualize',
       canvas: 'mcp__agentWorkshop__canvas',
@@ -31,6 +32,33 @@ describe('compile custom tools', () => {
         timeout: PRODUCT_MCP_TOOL_TIMEOUT_MS,
       },
     })
+  })
+
+  it('stops a Claude tool with its own call and names the tool in its progress', async () => {
+    const progress: [string, string][] = []
+    let aborted: boolean | undefined
+    const definition = defineTool({
+      name: 'image_read', description: 'Signal fixture', inputSchema: { type: 'object', properties: {} },
+      execute: (_args, toolContext) => {
+        aborted = toolContext.signal.aborted
+        toolContext.emitProgress?.('half')
+        return Promise.resolve({ ok: true, text: 'done' })
+      },
+    })
+    const compiled = compileClaudeCustomTools([definition], context, (toolName, chunk) => progress.push([toolName, chunk]))
+    // The SDK keeps the handlers it was given on its MCP server instance.
+    const server = compiled.mcpServers?.['agentWorkshop'] as unknown as {
+      instance: { _registeredTools: Record<string, { handler(args: unknown, extra: unknown): Promise<unknown> }> }
+    }
+    const registered = server.instance._registeredTools['image_read']
+    if (!registered) throw new Error('Tool fixture did not register')
+    const call = new AbortController()
+    call.abort()
+
+    // The query-wide signal in `context` is still live; only this call was interrupted.
+    await expect(registered.handler({}, { signal: call.signal })).resolves.toMatchObject({ isError: false })
+    expect(aborted).toBe(true)
+    expect(progress).toEqual([['image_read', 'half']])
   })
 
   it('compiles visualize into a Pi custom tool that echoes jsx', async () => {

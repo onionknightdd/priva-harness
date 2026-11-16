@@ -21,14 +21,6 @@ const ORIGIN_RANK: Readonly<Record<SlashOrigin, number>> = {
   project: 2,
 }
 
-export function isSlashKind(value: unknown): value is SlashKind {
-  return typeof value === 'string' && (SLASH_KINDS as readonly string[]).includes(value)
-}
-
-export function isSlashOrigin(value: unknown): value is SlashOrigin {
-  return typeof value === 'string' && (SLASH_ORIGINS as readonly string[]).includes(value)
-}
-
 export function compareSlashCommands(left: SlashCommand, right: SlashCommand): number {
   return left.name.localeCompare(right.name)
 }

@@ -4,13 +4,14 @@ import type { InteractionRequest } from '../../core/resource/interaction.js'
 import { randomUUID } from 'node:crypto'
 import type { SessionRef } from '../../core/contract/agent-provider.js'
 import { STREAM_PROTOCOL_VERSION, isRunResultEvent, type AgentEvent, type StreamFrame, type SessionConfiguration } from '../../core/event/agent-event.js'
-import { BackgroundTasks, taskIsActive, taskNotificationReplyTarget, type BackgroundTask } from '../../core/resource/background-task.js'
-import { applyStreamFrame, emptyAssistantMessage } from '../../core/resource/apply-stream-frame.js'
-import { settledRunDuration } from '../../core/resource/run-duration.js'
-import { freezeMessageThinking, stampMessageThinkingTimes } from '../../core/resource/thinking-time.js'
-import { taskReplyOwner, type ThreadMessage } from '../../core/resource/thread.js'
-import { isCompactCommandContent } from '../../core/resource/compact-command.js'
+import { type BackgroundTask, BackgroundTasks, taskIsActive, taskIsInFlight, taskNotificationReplyTarget } from '../../core/resource/background-task.js'
+import { applyStreamFrame, emptyAssistantMessage } from '../../core/thread/apply-stream-frame.js'
+import { settledRunDuration } from '../../core/thread/run-duration.js'
+import { freezeMessageThinking, stampMessageThinkingTimes } from '../../core/thread/thinking-time.js'
+import { taskReplyOwner, type ThreadMessage } from '../../core/thread/thread.js'
+import { isCompactCommandContent } from '../../core/thread/compact-command.js'
 import { SessionCompaction } from './session-compaction.js'
+import { errorMessage } from '../../core/util/errors.js'
 
 /** A session owns replay, task identity, and the rendered snapshot across response turns. */
 export class SessionStream {
@@ -27,6 +28,8 @@ export class SessionStream {
   private terminalText: TerminalTextProjection | undefined
   private readonly runTargets = new Map<string, string>()
   private writes = Promise.resolve()
+  private pendingWrites = 0
+  private touchedAt = Date.now()
   private config: SessionConfiguration | undefined
   private readonly runningTools = new Set<string>()
   private readonly nativeTasks = new Map<string, string>()
@@ -42,7 +45,7 @@ export class SessionStream {
       if (block.type !== 'tool_use' || !block.tool?.backgroundTask) return block
       const saved = { ...block.tool.backgroundTask, ...this.tasks.get(block.tool.backgroundTask.taskId) }
       const task = this.tasks.update({ ...saved,
-        status: ['running', 'pending', 'paused'].includes(saved.status) ? 'unknown' : saved.status })
+        status: taskIsInFlight(saved) ? 'unknown' : saved.status })
       return { ...block, tool: { ...block.tool, backgroundTask: task } }
     }) }))
     this.nativeHistory = this.messages
@@ -119,20 +122,35 @@ export class SessionStream {
     const frame = { ...this.frame(normalized, ++this.seq, runId), ...(messageTargetId ? { messageTargetId } : {}),
       ...(compact ? { compactMessage: compact.compactMessage,
         ...(compact.compactAfterMessageId ? { compactAfterMessageId: compact.compactAfterMessageId } : {}) } : {}) }
+    this.touchedAt = frame.ts
     this.reduce(frame)
     this.buffer.push(frame)
     if (this.buffer.length > this.limit) this.buffer.shift()
     for (const listener of this.listeners) listener(frame)
     if (this.saveTasks && (event.type === 'task.updated' || event.type === 'task.notification' || event.type === 'task.delivered' || event.type === 'tasks.snapshot')) {
       const tasks = this.tasks.list()
+      this.pendingWrites += 1
       this.writes = this.writes.then(() => this.saveTasks?.(tasks)).catch((error: unknown) => {
-        this.publish({ type: 'error', code: 'task.persistence', message: `Could not save background task state: ${error instanceof Error ? error.message : String(error)}` })
-      })
+        this.publish({ type: 'error', code: 'task.persistence', message: `Could not save background task state: ${errorMessage(error)}` })
+      }).finally(() => { this.pendingWrites -= 1 })
     }
     return frame
   }
 
   async flush(): Promise<void> { await this.writes }
+
+  /** When this stream last published a frame or gained or lost a viewer. */
+  get lastActivityAt(): number { return this.touchedAt }
+
+  /**
+   * True when nothing depends on this object staying in memory: no viewer,
+   * run, open question, in-flight task or unsaved task state. Its thread can
+   * then be rebuilt from the provider transcript and the saved task records.
+   */
+  get dormant(): boolean {
+    return this.listeners.size === 0 && this.activeRunId === undefined && this.interactions.size === 0
+      && this.pendingWrites === 0 && !this.tasks.list().some(taskIsInFlight)
+  }
 
   startTerminalTurn(runId: string, model: string, user: ThreadMessage, nativePrompt: boolean, structured = false): void {
     if (structured) {
@@ -207,6 +225,7 @@ export class SessionStream {
   /** Snapshot and cursor are captured synchronously with listener registration. */
   subscribe(listener: (frame: StreamFrame) => void, cursor?: { streamId: string; seq: number }): () => void {
     this.listeners.add(listener)
+    this.touchedAt = Date.now()
     const firstSeq = this.buffer[0]?.seq ?? this.seq + 1
     if (cursor?.streamId === this.streamId && cursor.seq >= firstSeq - 1 && cursor.seq <= this.seq) {
       const replay = this.buffer.filter((frame) => frame.seq > cursor.seq)
@@ -215,7 +234,10 @@ export class SessionStream {
       if (cursor) listener(this.frame({ type: 'replay.gap', firstSeq, lastSeq: this.seq }, this.seq))
       listener(this.snapshot())
     }
-    return () => this.listeners.delete(listener)
+    return () => {
+      this.touchedAt = Date.now()
+      return this.listeners.delete(listener)
+    }
   }
 
   snapshot(): StreamFrame & { type: 'session.snapshot' } {

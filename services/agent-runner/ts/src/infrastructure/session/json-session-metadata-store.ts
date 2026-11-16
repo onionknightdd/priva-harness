@@ -1,18 +1,9 @@
-import { randomUUID } from 'node:crypto'
-import {
-  chmod,
-  mkdir,
-  open,
-  readFile,
-  rename,
-  stat,
-  unlink,
-  type FileHandle,
-} from 'node:fs/promises'
-import { basename, dirname, join, resolve } from 'node:path'
+import { readFile } from 'node:fs/promises'
+import { join, resolve } from 'node:path'
 
 import type { SessionRef } from '../../core/contract/agent-provider.js'
 import type { SessionMetadataRepository } from '../../core/contract/session-metadata-repository.js'
+import type { BackgroundTask } from '../../core/resource/background-task.js'
 import {
   assertRunMode,
   isRunMode,
@@ -25,11 +16,11 @@ import {
   type SessionRecap,
   type StoredLastResponseModel,
 } from '../../core/resource/session.js'
+import { hasErrorCode } from '../../core/util/errors.js'
+import { withExclusiveFileLock, writePrivateFileAtomically } from '../storage/private-file.js'
 
 const STORE_FILE_NAME = 'session-metadata.json'
-const STORE_LOCK_WAIT_MS = 10_000
-const STORE_LOCK_STALE_MS = 30_000
-const LOCK_RETRY_MS = 25
+const STORE_LOCK = { waitMs: 10_000, staleMs: 30_000 } as const
 const STORE_VERSION = 2
 
 export interface JsonSessionMetadataStoreOptions {
@@ -84,6 +75,10 @@ export class JsonSessionMetadataStore implements SessionMetadataRepository {
   }
 
   async tagColors(tags: readonly string[]): Promise<Readonly<Record<string, number>>> {
+    // Listing sessions asks for colors every time; only a tag seen for the
+    // first time needs a slot reserved and written.
+    const current = (await this.readDocument()).tagColors
+    if (Object.keys(reserveTagColors(current, tags)).length === Object.keys(current).length) return current
     return await this.transact((document) => {
       const reserved = reserveTagColors(document.tagColors, tags)
       return {
@@ -144,14 +139,12 @@ export class JsonSessionMetadataStore implements SessionMetadataRepository {
     },
   ): Promise<T> {
     try {
-      await ensurePrivateDirectory(this.runtimeHome)
       return await withExclusiveFileLock(
         this.storeLockPath,
-        STORE_LOCK_WAIT_MS,
-        STORE_LOCK_STALE_MS,
+        STORE_LOCK,
         async () => {
           const transaction = operation(await this.readUnlocked())
-          await this.writeUnlocked(transaction.document)
+          await writePrivateFileAtomically(this.filePath, `${JSON.stringify(transaction.document, null, 2)}\n`)
           return transaction.result
         },
       )
@@ -160,15 +153,10 @@ export class JsonSessionMetadataStore implements SessionMetadataRepository {
     }
   }
 
+  // Writes replace the file atomically, so a read needs no lock.
   private async readDocument(): Promise<SessionMetadataDocument> {
     try {
-      await ensurePrivateDirectory(this.runtimeHome)
-      return await withExclusiveFileLock(
-        this.storeLockPath,
-        STORE_LOCK_WAIT_MS,
-        STORE_LOCK_STALE_MS,
-        async () => await this.readUnlocked(),
-      )
+      return await this.readUnlocked()
     } catch (error) {
       throw mapStoreError(error, 'read')
     }
@@ -190,35 +178,14 @@ export class JsonSessionMetadataStore implements SessionMetadataRepository {
       throw new SessionError('io-failure', `Could not parse ${STORE_FILE_NAME}`, { cause: error })
     }
     const document = parseDocument(parsed)
-    if (document.version < STORE_VERSION) {
-      const upgraded = { ...document, version: STORE_VERSION, sessions: Object.fromEntries(
-        Object.entries(document.sessions).map(([key, flags]) => [key, key.startsWith('claude:') ? { ...flags, runMode: 'code' } : flags]),
-      ) }
-      await this.writeUnlocked(upgraded)
-      return upgraded
-    }
-    return document
+    // The upgrade is deterministic, so it is applied on every read and
+    // persisted by the next write.
+    if (document.version >= STORE_VERSION) return document
+    return { ...document, version: STORE_VERSION, sessions: Object.fromEntries(
+      Object.entries(document.sessions).map(([key, flags]) => [key, key.startsWith('claude:') ? { ...flags, runMode: 'code' } : flags]),
+    ) }
   }
 
-  private async writeUnlocked(document: SessionMetadataDocument): Promise<void> {
-    const temporaryPath = join(
-      dirname(this.filePath),
-      `.${basename(this.filePath)}.${process.pid}.${randomUUID()}.tmp`,
-    )
-    let handle: FileHandle | undefined
-    try {
-      handle = await open(temporaryPath, 'wx', 0o600)
-      await handle.writeFile(`${JSON.stringify(document, null, 2)}\n`, 'utf8')
-      await handle.sync()
-      await handle.close()
-      handle = undefined
-      await rename(temporaryPath, this.filePath)
-      await chmod(this.filePath, 0o600)
-    } finally {
-      await handle?.close()
-      await removeIfPresent(temporaryPath)
-    }
-  }
 }
 
 function emptyDocument(): SessionMetadataDocument {
@@ -351,77 +318,7 @@ function omitKey<T>(record: Record<string, T>, key: string): Record<string, T> {
   )
 }
 
-async function withExclusiveFileLock<T>(
-  lockPath: string,
-  waitMs: number,
-  staleMs: number,
-  operation: () => Promise<T>,
-): Promise<T> {
-  await ensurePrivateDirectory(dirname(lockPath))
-  const deadline = Date.now() + waitMs
-  let handle: FileHandle | undefined
-
-  while (handle === undefined) {
-    try {
-      handle = await open(lockPath, 'wx', 0o600)
-    } catch (error) {
-      if (!hasErrorCode(error, 'EEXIST')) throw error
-      if (await removeStaleLock(lockPath, staleMs)) continue
-      if (Date.now() >= deadline) {
-        throw new SessionError('io-failure', `Timed out waiting for lock: ${basename(lockPath)}`)
-      }
-      await delay(LOCK_RETRY_MS)
-    }
-  }
-
-  try {
-    return await operation()
-  } finally {
-    await handle.close()
-    await removeIfPresent(lockPath)
-  }
-}
-
-async function removeStaleLock(lockPath: string, staleMs: number): Promise<boolean> {
-  try {
-    const lockStats = await stat(lockPath)
-    if (Date.now() - lockStats.mtimeMs <= staleMs) return false
-    await unlink(lockPath)
-    return true
-  } catch (error) {
-    if (hasErrorCode(error, 'ENOENT')) return true
-    throw error
-  }
-}
-
-async function ensurePrivateDirectory(path: string): Promise<void> {
-  await mkdir(path, { recursive: true, mode: 0o700 })
-  await chmod(path, 0o700)
-}
-
-async function removeIfPresent(path: string): Promise<void> {
-  try {
-    await unlink(path)
-  } catch (error) {
-    if (!hasErrorCode(error, 'ENOENT')) throw error
-  }
-}
-
 function mapStoreError(error: unknown, operation: string): SessionError {
   if (error instanceof SessionError) return error
   return new SessionError('io-failure', `Could not ${operation} session metadata`, { cause: error })
 }
-
-function hasErrorCode(error: unknown, code: string): boolean {
-  return typeof error === 'object'
-    && error !== null
-    && 'code' in error
-    && error.code === code
-}
-
-async function delay(milliseconds: number): Promise<void> {
-  await new Promise((resolve) => {
-    setTimeout(resolve, milliseconds)
-  })
-}
-import type { BackgroundTask } from '../../core/resource/background-task.js'

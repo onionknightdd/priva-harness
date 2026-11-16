@@ -1,10 +1,11 @@
 import { readFile, mkdir, rename, writeFile, realpath } from 'node:fs/promises'
 import { createHash, randomUUID } from 'node:crypto'
 import { join, sep } from 'node:path'
-import { asRecord, stringField } from '../../core/event/json-record.js'
+import { asRecord, stringField } from '../../core/util/json-record.js'
 import type { WorkflowAgentDetail, WorkflowExecutionEntry, WorkflowState } from '../../core/resource/workflow.js'
 import { SessionError } from '../../core/resource/session.js'
 import { internalTool, renderWorkflowValue } from './pi-workflow-data.js'
+import { hasErrorCode } from '../../core/util/errors.js'
 
 export interface PiWorkflowTranscript {
   readonly id: string
@@ -47,7 +48,7 @@ export async function loadPiWorkflow(agentDir: string, sessionId: string, runId:
     }
     return raw as PiWorkflowRecord
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+    if (hasErrorCode(error, 'ENOENT')) return undefined
     throw error
   }
 }

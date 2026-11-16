@@ -53,6 +53,33 @@ describe('AgentHarness', () => {
     } finally { finish(); await harness.disposePool() }
   })
 
+  it('releases the stream of a session nothing uses and keeps viewed or running ones', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    const harness = new AgentHarness({ providers: { claude: new FakeAgentProvider('claude', []), pi: new FakeAgentProvider('pi', []) }, cwd: '/tmp' })
+    const ref = (id: string) => ({ provider: 'claude', id }) as const
+    const unused = harness.sessionStream(ref('unused'))
+    const viewed = harness.sessionStream(ref('viewed'))
+    const stopViewing = viewed.subscribe(() => undefined)
+    const running = harness.sessionStream(ref('running'))
+    running.publish({ type: 'run.started', model: 'm' }, 'run-1')
+
+    vi.setSystemTime(Date.now() + 11 * 60 * 1000)
+    // Opening another session is what triggers the sweep.
+    harness.sessionStream(ref('opened-later'))
+    expect(harness.sessionStream(ref('unused'))).not.toBe(unused)
+    expect(harness.sessionStream(ref('viewed'))).toBe(viewed)
+    expect(harness.sessionStream(ref('running'))).toBe(running)
+
+    // A stream that just lost its last viewer stays for the idle period.
+    stopViewing()
+    harness.sessionStream(ref('opened-after-viewer-left'))
+    expect(harness.sessionStream(ref('viewed'))).toBe(viewed)
+    vi.setSystemTime(Date.now() + 11 * 60 * 1000)
+    harness.sessionStream(ref('opened-last'))
+    expect(harness.sessionStream(ref('viewed'))).not.toBe(viewed)
+    expect(harness.sessionStream(ref('running'))).toBe(running)
+  })
+
   it('emits run.started, forwards provider events, and releases the runtime', async () => {
     const provider = new FakeAgentProvider('claude', [
       {

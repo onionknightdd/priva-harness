@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 
+import { resolveInside } from '../util/paths.js'
 import type { ImageBytes } from './image-api.js'
 
 export const IMAGE_DIRECTORY_NAME = '.images'
@@ -48,30 +49,15 @@ export function imageArtifactFileName(bytes: Uint8Array, mime: string): string {
 }
 
 export function resolveImageArtifactPath(cwd: string, fileName: string): string {
-  const imageDir = path.resolve(cwd, IMAGE_DIRECTORY_NAME)
-  const filePath = path.resolve(imageDir, fileName)
-  const relative = path.relative(imageDir, filePath)
-  if (relative === '' || relative.startsWith('..') || path.isAbsolute(relative)) {
-    throw new Error('image path must stay inside .images')
-  }
+  const filePath = resolveInside(path.resolve(cwd, IMAGE_DIRECTORY_NAME), fileName)
+  if (filePath === undefined) throw new Error('image path must stay inside .images')
   return filePath
 }
 
 export function resolveWorkspaceFilePath(cwd: string, raw: string): string {
-  const root = path.resolve(cwd)
-  const filePath = path.isAbsolute(raw) ? path.resolve(raw) : path.resolve(root, raw)
-  const relative = path.relative(root, filePath)
-  if (relative === '' || relative.startsWith('..') || path.isAbsolute(relative)) {
-    throw new Error('path must stay inside the workspace')
-  }
+  const filePath = resolveInside(cwd, raw)
+  if (filePath === undefined) throw new Error('path must stay inside the workspace')
   return filePath
-}
-
-export function splitImagePaths(raw: string): string[] {
-  return raw
-    .split(/[\n,]+/)
-    .map((item) => item.trim())
-    .filter((item) => item !== '')
 }
 
 export async function loadWorkspaceImage(cwd: string, rawPath: string): Promise<ImageBytes> {

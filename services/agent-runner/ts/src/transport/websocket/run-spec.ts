@@ -1,5 +1,5 @@
 import type { RunMode } from '../../core/resource/session.js'
-import { DEFAULT_CONTEXT_WINDOW, type ContextWindow } from '../../core/resource/model-context.js'
+import { contextTagForWindow, type ContextWindow, DEFAULT_CONTEXT_WINDOW } from '../../core/resource/model-context.js'
 import { applyModelContext } from '../../core/resource/model-profile.js'
 import { isClaudeEffortLevel, type EffortLevel, type ProviderRunSpec } from '../../core/contract/agent-provider.js'
 import {
@@ -44,7 +44,7 @@ export async function buildRunSpec(services: RunSpecServices, request: RunSpecRe
     ...(request.runMode === undefined ? {} : { runMode: request.runMode }),
     provider: providerIdForHarness(request.harness),
     model: request.harness === 'claude'
-      ? applyModelContext(resolved.modelId, contextWindow === 1_000_000 ? '1m' : null)
+      ? applyModelContext(resolved.modelId, contextTagForWindow(contextWindow))
       : resolved.modelId,
     baseUrl,
     authToken: resolved.profile.authToken,

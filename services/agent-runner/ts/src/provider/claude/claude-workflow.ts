@@ -1,5 +1,5 @@
 import { workflowStatus } from '../../core/resource/workflow-status.js'
-import { asRecord, numberField, stringField, type JsonRecord } from '../../core/event/json-record.js'
+import { asRecord, numberField, stringField, type JsonRecord } from '../../core/util/json-record.js'
 import type { WorkflowAgent, WorkflowPhase, WorkflowState } from '../../core/resource/workflow.js'
 
 /** One state per tool invocation; task-only updates resolve through the launch result. */

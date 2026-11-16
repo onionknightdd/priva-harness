@@ -7,6 +7,7 @@ import type { UserFileSystem } from '../../core/contract/user-file-system.js'
 import { ResourceError } from '../../core/resource/resource-catalog.js'
 import type { UserFileInfo } from '../../core/resource/user-file.js'
 import { isCopc } from './node-model-assets.js'
+import { errorMessage, hasErrorCode } from '../../core/util/errors.js'
 
 const GIB = 1024 ** 3
 const PIPELINE_VERSION = 'pdal-2.9.3-copc-v1'
@@ -41,18 +42,17 @@ export class PointCloudConversions implements PointClouds {
   private readonly queue: Job[] = []
   private readonly maxSourceBytes: number
   private readonly maxCacheBytes: number
-  private readonly initialize: Promise<void>
+  private initializing: Promise<void> | undefined
   private worker: Promise<void> | undefined
   private closing = false
 
   constructor(private readonly options: PointCloudConversionOptions) {
     this.maxSourceBytes = options.maxSourceBytes ?? 2 * GIB
     this.maxCacheBytes = options.maxCacheBytes ?? 2 * GIB
-    this.initialize = this.initializeCache()
   }
 
   async prepare(source: ModelSource): Promise<PointCloudJob> {
-    await this.initialize
+    await this.ready()
     if (this.closing) throw new ResourceError(503, 'Point-cloud converter is stopping')
     const input = await this.options.assets.inspect(source)
     if (input.pointCloud === null) throw new ResourceError(415, 'Only PLY, PCD, LAS and LAZ point clouds can be converted')
@@ -65,7 +65,7 @@ export class PointCloudConversions implements PointClouds {
     // Concurrent requests for the same source share the same conversion.
     const concurrent = this.jobs.get(id)
     if (concurrent !== existing && concurrent !== undefined) return this.subscribe(concurrent)
-    if (!input.pointCloud.copc && !cached && this.queue.length >= 4) throw new ResourceError(429, 'Point-cloud conversion queue is full; retry after a job finishes')
+    if (!input.pointCloud.copc && !cached && this.queue.filter((queued) => queued.status === 'queued').length >= 4) throw new ResourceError(429, 'Point-cloud conversion queue is full; retry after a job finishes')
     this.trimJobHistory()
     const job: Job = { id, source, input, controller: new AbortController(), consumers: new Set(), status: 'queued' }
     if (input.pointCloud.copc || cached) {
@@ -82,12 +82,12 @@ export class PointCloudConversions implements PointClouds {
   }
 
   async get(id: string): Promise<PointCloudJob> {
-    await this.initialize
+    await this.ready()
     return this.publicJob(this.find(id))
   }
 
   async cancel(id: string, consumerId: string): Promise<PointCloudJob> {
-    await this.initialize
+    await this.ready()
     const job = this.find(id)
     if (job.consumers.delete(consumerId) && job.consumers.size === 0 && (job.status === 'queued' || job.status === 'running')) {
       job.status = 'cancelled'
@@ -97,7 +97,7 @@ export class PointCloudConversions implements PointClouds {
   }
 
   async asset(id: string): Promise<UserFileInfo> {
-    await this.initialize
+    await this.ready()
     const job = this.find(id)
     if (job.status !== 'ready' || job.output === undefined) throw new ResourceError(409, 'Point cloud is not ready')
     this.leases.set(id, (this.leases.get(id) ?? 0) + 1)
@@ -134,7 +134,7 @@ export class PointCloudConversions implements PointClouds {
       }
     }
     await this.worker
-    await this.initialize
+    await this.initializing?.catch(() => undefined)
   }
 
   private startWorker(): void {
@@ -180,7 +180,7 @@ export class PointCloudConversions implements PointClouds {
         clearTimeout(timeout)
         try { await rm(directory, { recursive: true, force: true }) } catch (error) {
           job.status = 'failed'
-          job.error = `Could not clean conversion files: ${error instanceof Error ? error.message : String(error)}`
+          job.error = `Could not clean conversion files: ${errorMessage(error)}`
         }
       }
     }
@@ -231,6 +231,16 @@ export class PointCloudConversions implements PointClouds {
         else resolve()
       })
     })
+  }
+
+  // Started by the first request, not at construction: an unusable cache
+  // directory must fail that request, not the runner, and is retried later.
+  private ready(): Promise<void> {
+    this.initializing ??= this.initializeCache().catch((error: unknown) => {
+      this.initializing = undefined
+      throw error
+    })
+    return this.initializing
   }
 
   private async initializeCache(): Promise<void> {
@@ -285,7 +295,7 @@ export class PointCloudConversions implements PointClouds {
 
 async function exists(path: string): Promise<boolean> {
   try { return (await stat(path)).isFile() } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return false
+    if (hasErrorCode(error, 'ENOENT')) return false
     throw error
   }
 }

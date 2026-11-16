@@ -28,14 +28,6 @@ export function canApplyWarmRunSpec(
     && current.promptSuggestions === next.promptSuggestions
 }
 
-export interface IdleWatchable {
-  listenIdle(listener: ((events: readonly AgentEvent[]) => void) | undefined): void
-}
-
-function isIdleWatchable(runtime: AgentRuntime): runtime is AgentRuntime & IdleWatchable {
-  return typeof (runtime as unknown as IdleWatchable).listenIdle === 'function'
-}
-
 interface WarmLease {
   readonly runtime: AgentRuntime
   readonly spec: ProviderRunSpec
@@ -64,7 +56,7 @@ export class WarmRuntimePool {
   private readonly idle = new Map<string, WarmLease>()
   private readonly busy = new Set<AgentRuntime>()
   private readonly overflow = new Set<AgentRuntime>()
-  private readonly invalidated = new Set<AgentRuntime>()
+  private readonly invalidated = new WeakSet<AgentRuntime>()
   private resourceGeneration = 0
 
   constructor(options: WarmRuntimePoolOptions = {}) {
@@ -124,8 +116,8 @@ export class WarmRuntimePool {
     }
     this.busy.add(runtime)
     if (overflow) this.overflow.add(runtime)
-    if (isIdleWatchable(runtime) && this.onIdleEvents) {
-      runtime.listenIdle((events) => this.onIdleEvents?.(runtime, spec, runtime.session, events))
+    if (this.onIdleEvents) {
+      runtime.listenIdle?.((events) => this.onIdleEvents?.(runtime, spec, runtime.session, events))
     }
     return runtime
   }
@@ -184,8 +176,8 @@ export class WarmRuntimePool {
     }
     this.idle.set(key, lease)
     armExpiry()
-    if (isIdleWatchable(runtime) && this.onIdleEvents) {
-      runtime.listenIdle((events) => {
+    if (this.onIdleEvents) {
+      runtime.listenIdle?.((events) => {
         lease.idleSince = this.now()
         if (this.idle.get(key) === lease) armExpiry()
         this.onIdleEvents?.(runtime, spec, session, events)
@@ -261,7 +253,7 @@ export class WarmRuntimePool {
     this.idle.delete(key)
     this.invalidated.delete(lease.runtime)
     this.clearTimer(lease)
-    if (isIdleWatchable(lease.runtime)) lease.runtime.listenIdle(undefined)
+    lease.runtime.listenIdle?.(undefined)
     await lease.runtime.release('dispose')
   }
 

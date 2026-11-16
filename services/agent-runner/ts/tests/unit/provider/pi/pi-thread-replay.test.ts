@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { foldThread } from '../../../../src/core/resource/fold-thread.js'
+import { foldThread } from '../../../../src/core/thread/fold-thread.js'
 import { replayPiSessionMessages } from '../../../../src/provider/pi/pi-thread-replay.js'
 import type { SessionMessage } from '../../../../src/core/resource/session.js'
 

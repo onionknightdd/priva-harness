@@ -1,15 +1,15 @@
-import { TaskReplyTracker } from '../../core/resource/task-reply-tracker.js'
+import { TaskReplyTracker } from '../../core/thread/task-reply-tracker.js'
 import { piWorkflowToolResult } from './pi-workflow-data.js'
 import { piBackgroundLaunch, piTaskNotices } from './pi-background-tasks.js'
 import { BackgroundTasks } from '../../core/resource/background-task.js'
 import { questionResolutionFromToolResult } from '../../core/resource/interaction-history.js'
-import { asRecord, isRecord, stringField } from '../../core/event/json-record.js'
+import { asRecord, isRecord, stringField } from '../../core/util/json-record.js'
 import { isReadToolName } from '../../core/event/tool-names.js'
 import { patchFromToolDetails } from '../../core/event/tool-patch.js'
 import { encodeReadView } from '../../core/event/tool-read.js'
 import type { AgentEvent, ContentBlock } from '../../core/event/agent-event.js'
 import type { SessionMessage } from '../../core/resource/session.js'
-import type { ThreadReplayItem } from '../../core/resource/thread.js'
+import type { ThreadReplayItem } from '../../core/thread/thread.js'
 import { piToolResultMetadata, replayPiNestedTools } from './pi-tool-result.js'
 
 export function replayPiSessionMessages(messages: readonly SessionMessage[]): ThreadReplayItem[] {

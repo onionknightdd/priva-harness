@@ -18,6 +18,8 @@ import {
   sessionTargetFromInit,
   type AbortFrame,
 } from './schema/run-frames.js'
+import { errorMessage } from '../../core/util/errors.js'
+import { DEFAULT_TERMINAL_SIZE } from '../../harness/terminal/session-terminals.js'
 
 export const SESSION_WEBSOCKET_PATH = '/api/sandbox/agent/ws/session'
 
@@ -52,14 +54,13 @@ function handleRunSocket(socket: WebSocket, options: RunRouteOptions): void {
     if (closed) { await stopTerminalHistory(); return }
     subscribe(options.harness.sessionStream(ref))
   }
-  const subscribe = (next: SessionStream, cursor?: { streamId: string; seq: number }, liveRunId?: string) => {
+  const subscribe = (next: SessionStream, cursor?: { streamId: string; seq: number }) => {
     unsubscribe?.()
     stream = next
     // SessionStream synchronously delivers history before returning the live subscription.
     let replaying = true
     unsubscribe = next.subscribe((frame) => {
-      const replay = replaying && frame.runId !== liveRunId
-      if (socketOpen(socket)) socket.send(encodeEvent(replay ? { ...frame, replay: true } : frame))
+      if (socketOpen(socket)) socket.send(encodeEvent(replaying ? { ...frame, replay: true } : frame))
       if (frame.type === 'session.rebound') {
         commands = commands.then(() => followRebind({ ...next.session, id: frame.nextSessionId }))
           .catch((error: unknown) => { sendError(socket, String(error), '', next.session.provider, 'session.subscribe') })
@@ -88,7 +89,8 @@ function handleRunSocket(socket: WebSocket, options: RunRouteOptions): void {
       if (closed) return
       subscribe(next, frame.streamId ? { streamId: frame.streamId, seq: frame.sinceSeq } : undefined)
       // A reconnect also reconciles starts whose command response was lost.
-      if (frame.streamId && socketOpen(socket)) socket.send(encodeEvent(next.snapshot()))
+      // A cursor from another stream already received a snapshot from subscribe.
+      if (frame.streamId === next.streamId && socketOpen(socket)) socket.send(encodeEvent(next.snapshot()))
       return
     }
     if (frame.type === 'permission.respond') {
@@ -113,13 +115,16 @@ function handleRunSocket(socket: WebSocket, options: RunRouteOptions): void {
         const ref = { provider: frame.harness, id: frame.sessionId }
         if (!stream) {
           stopTerminalHistory = await options.harness.observeTerminalSession(ref)
-          subscribe(await options.harness.loadSessionStream(ref))
+          if (closed) { await stopTerminalHistory(); return }
+          const next = await options.harness.loadSessionStream(ref)
+          if (!socketOpen(socket)) return
+          subscribe(next)
         }
         if (await options.harness.abortTerminal(ref, frame.runId)) return
       }
       const live = resolveLive(options.harness, frame)
       if (live && (live.provider !== frame.harness || (stream && live.sessionId !== stream.session.id))) throw new Error('Run belongs to another session')
-      if (!stream && live?.sessionId) subscribe(options.harness.sessionStream({ provider: live.provider, id: live.sessionId }))
+      if (!stream && !closed && live?.sessionId) subscribe(options.harness.sessionStream({ provider: live.provider, id: live.sessionId }))
       live?.abort.abort()
       return
     }
@@ -145,7 +150,7 @@ function handleRunSocket(socket: WebSocket, options: RunRouteOptions): void {
     // Every UI conversation starts with its native driver. Opening
     // the Terminal view later only attaches a viewer to this same process.
     const opened = await options.harness.openTerminal(sessionTargetFromInit(frame), spec,
-      { cols: 120, rows: 40, ...(frame.theme ? { colorScheme: frame.theme } : {}) })
+      { ...DEFAULT_TERMINAL_SIZE, ...(frame.theme ? { colorScheme: frame.theme } : {}) })
     const next = options.harness.sessionStream(opened.session)
     if (socketOpen(socket) && stream !== next) subscribe(next)
     await stopTerminalHistory?.()
@@ -155,7 +160,7 @@ function handleRunSocket(socket: WebSocket, options: RunRouteOptions): void {
   }
   socket.on('message', (data) => {
     commands = commands.then(() => handle(data)).catch((error: unknown) => {
-      sendError(socket, error instanceof Error ? error.message : String(error), commandRunId, stream?.session.provider ?? commandHarness, commandType, commandRequestId)
+      sendError(socket, errorMessage(error), commandRunId, stream?.session.provider ?? commandHarness, commandType, commandRequestId)
     })
   })
 }

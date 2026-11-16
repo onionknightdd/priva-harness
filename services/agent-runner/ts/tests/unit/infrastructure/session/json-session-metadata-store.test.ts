@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -89,5 +89,16 @@ describe('JsonSessionMetadataStore', () => {
     expect((await store.get({ provider: 'pi', id: ref.id })).backgroundTasks).toEqual([])
     await store.delete(ref)
     expect((await store.get(ref)).backgroundTasks).toEqual([])
+  })
+
+  it('rewrites the store for a new tag color only, not for colors it already holds', async () => {
+    expect(await store.tagColors(['work'])).toHaveProperty('work')
+    const written = await stat(store.filePath)
+    expect(await store.tagColors(['work', 'WORK'])).toEqual(await store.tagColors([]))
+    const unchanged = await stat(store.filePath)
+    expect([unchanged.ino, unchanged.mtimeMs]).toEqual([written.ino, written.mtimeMs])
+
+    expect(Object.keys(await store.tagColors(['home'])).sort()).toEqual(['home', 'work'])
+    expect((await stat(store.filePath)).ino).not.toBe(written.ino)
   })
 })

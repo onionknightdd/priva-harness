@@ -7,7 +7,7 @@ import { z } from 'zod'
 
 import type { ToolContext, ToolDefinition } from '../../../core/tool/define-tool.js'
 import { productTools } from '../../../core/tool/product-tools.js'
-import { readClaudeTerminalState } from '../claude-terminal-hooks.js'
+import { readClaudeTerminalState } from '../terminal/claude-terminal-hooks.js'
 
 export interface NativeProductConfig {
   readonly cwd: string

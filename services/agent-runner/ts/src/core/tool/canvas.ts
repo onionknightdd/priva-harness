@@ -3,6 +3,8 @@ import path from 'node:path'
 
 import { CANVAS_TOOL_NAME } from '../event/tool-names.js'
 import { defineTool, stringToolArg } from './define-tool.js'
+import { errorMessage } from '../util/errors.js'
+import { resolveInside } from '../util/paths.js'
 
 const CANVAS_DIRECTORY_NAME = '.canvas'
 const DEFAULT_CANVAS_FILE_NAME = 'canvas.html'
@@ -80,7 +82,7 @@ export const canvasTool = defineTool({
     } catch (error) {
       return {
         ok: false,
-        text: error instanceof Error ? error.message : String(error),
+        text: errorMessage(error),
       }
     }
   },
@@ -119,12 +121,8 @@ export function canvasFileName(raw: string): string {
 }
 
 export function resolveCanvasFilePath(cwd: string, fileName: string): string {
-  const canvasDir = path.resolve(cwd, CANVAS_DIRECTORY_NAME)
-  const filePath = path.resolve(canvasDir, fileName)
-  const relative = path.relative(canvasDir, filePath)
-  if (relative === '' || relative.startsWith('..') || path.isAbsolute(relative)) {
-    throw new Error('canvas path must stay inside .canvas')
-  }
+  const filePath = resolveInside(path.resolve(cwd, CANVAS_DIRECTORY_NAME), fileName)
+  if (filePath === undefined) throw new Error('canvas path must stay inside .canvas')
   return filePath
 }
 

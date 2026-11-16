@@ -34,7 +34,7 @@ import { PiProvider } from './provider/pi/pi-provider.js'
 import { resolvePiThinkingCapability } from './provider/pi/pi-thinking-levels.js'
 import { PiSessionStore } from './provider/pi/pi-session-store.js'
 import { CodingAgentSessionFactory } from './provider/pi/pi-session-factory.js'
-import { defaultDataRetention, type DataRetention, type DataStoreLogger } from './core/resource/data-store.js'
+import { defaultDataRetention, type DataRetention, type DataStoreLogger } from './core/usage/data-store.js'
 import type { RuntimeSettingsStore } from './core/contract/runtime-settings.js'
 import { productTools } from './core/tool/product-tools.js'
 import {
@@ -43,6 +43,7 @@ import {
   RUNTIME_HOME_ENV,
 } from './runtime-config.js'
 import { buildHttpServer } from './transport/http/server.js'
+import { errorMessage } from './core/util/errors.js'
 
 const DEFAULT_PORT = 8001
 
@@ -162,14 +163,30 @@ export async function startServer(): Promise<void> {
   const port = parsePort(process.env['PORT'])
   const host = process.env['HOST'] ?? '0.0.0.0'
 
+  // Every step runs even when an earlier one fails, so a terminal error
+  // cannot cost the usage records still buffered in the recorder.
   const close = async (): Promise<void> => {
-    await agentHarness.disposePool()
-    await sessionTerminals.dispose()
-    await dataRecorder.close()
-    await server.close()
+    const failures: unknown[] = []
+    for (const step of [
+      () => agentHarness.disposePool(),
+      () => sessionTerminals.dispose(),
+      () => dataRecorder.close(),
+      () => server.close(),
+    ]) {
+      try { await step() } catch (error) { failures.push(error) }
+    }
+    if (failures.length > 0) throw new AggregateError(failures, 'Shutdown did not complete cleanly')
   }
-  process.once('SIGINT', () => { void close() })
-  process.once('SIGTERM', () => { void close() })
+  // A second signal must not dispose everything again while the first runs.
+  let closing: Promise<void> | undefined
+  const shutdown = (signal: NodeJS.Signals): void => {
+    closing ??= close().catch((error: unknown) => {
+      server.log.error({ err: error }, `Shutdown after ${signal} failed`)
+      process.exitCode = 1
+    })
+  }
+  process.once('SIGINT', shutdown)
+  process.once('SIGTERM', shutdown)
 
   await server.listen({ host, port })
 }
@@ -184,7 +201,7 @@ async function readDataRetention(
     return (await settings.read()).dataRetention
   } catch (error) {
     log.error(`data store: could not read dataRetention settings, using defaults: ${
-      error instanceof Error ? error.message : String(error)}`)
+      errorMessage(error)}`)
     return defaultDataRetention()
   }
 }

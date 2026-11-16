@@ -9,7 +9,7 @@ import { isRunResultEvent } from '../../core/event/agent-event.js'
 import type { TerminalActivity, TerminalSessionState, TerminalStatus } from '../../core/contract/terminal-service.js'
 import { mapPiContextUsage } from '../../core/resource/context-usage.js'
 import { isContextWindow } from '../../core/resource/model-context.js'
-import { asRecord } from '../../core/event/json-record.js'
+import { asRecord } from '../../core/util/json-record.js'
 import { loadWorkspaceImage } from '../../core/tool/image-artifact.js'
 import { productTools } from '../../core/tool/product-tools.js'
 import { CodingAgentSessionFactory, type SdkPiAgentSession } from './pi-session-factory.js'
@@ -17,6 +17,7 @@ import { createPiSessionManager } from './pi-session-open.js'
 import { PiEventMapper, type PiSessionEvent } from './pi-event-mapper.js'
 import { PI_BUILTIN_SLASH_COMMANDS } from './pi-builtin-slash-commands.js'
 import { PI_TERMINAL_FILES, piTerminalCommandSchema, type PiTerminalCommand, type PiTerminalLaunchConfig, type PiTerminalState } from './pi-terminal-protocol.js'
+import { errorMessage } from '../../core/util/errors.js'
 
 /** One owner for the native session, terminal renderer and structured Chat commands. */
 async function main(): Promise<void> {
@@ -56,7 +57,9 @@ async function main(): Promise<void> {
     if (!sessionId) return
     const activity: TerminalActivity = { sessionId, instanceId: config.instanceId, cwd: current?.services.cwd ?? spec.cwd,
       ...(activeRunId ? { runId: activeRunId } : {}), event }
-    const line = `${JSON.stringify(activity)}\n`
+    // Readers split this log into lines; U+2028 and U+2029 are line breaks to
+    // some of them but not to JSON, so they are written escaped.
+    const line = `${JSON.stringify(activity).replace(/[\u2028\u2029]/gu, (separator) => separator === '\u2028' ? '\\u2028' : '\\u2029')}\n`
     appendFileSync(join(config.scratchDir, PI_TERMINAL_FILES.events), line, { mode: 0o600 })
     eventOffset += Buffer.byteLength(line)
   }
@@ -210,7 +213,7 @@ async function main(): Promise<void> {
       // Extension commands may complete without starting a model turn.
       if (current === session && !session.isStreaming) finish({ type: 'run.completed', model: session.native.model?.id ?? spec.model, durationMs: 0 }, runId)
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = errorMessage(error)
       finish(name === 'compact' && manualCompactionCancelled
         ? { type: 'run.aborted', message }
         : { type: 'run.failed', code: name === 'compact' ? 'compaction_failed' : 'provider_error', message }, runId)
@@ -246,7 +249,7 @@ async function main(): Promise<void> {
   }
   const server = createServer((request, response) => {
     void serve(request, response, config.token, command).catch((error: unknown) => {
-      response.writeHead(400, { 'content-type': 'text/plain' }).end(error instanceof Error ? error.message : String(error))
+      response.writeHead(400, { 'content-type': 'text/plain' }).end(errorMessage(error))
     })
   })
   await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve) })

@@ -3,7 +3,8 @@ import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 
 import type { TerminalColorScheme } from '../../core/contract/terminal-service.js'
-import { asRecord } from '../../core/event/json-record.js'
+import { asRecord } from '../../core/util/json-record.js'
+import { hasErrorCode } from '../../core/util/errors.js'
 
 export interface ClaudeTerminalPreflight {
   readonly cwd: string
@@ -54,7 +55,7 @@ async function updateClaudeProjectTrust(configFilePath: string, preflight: Claud
   try {
     config = asRecord(JSON.parse(await readFile(configFilePath, 'utf8')) as unknown) ?? {}
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    if (!hasErrorCode(error, 'ENOENT')) throw error
   }
   const projects = asRecord(config['projects']) ?? {}
   const project = asRecord(projects[preflight.cwd]) ?? {}

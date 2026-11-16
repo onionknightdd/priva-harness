@@ -49,6 +49,10 @@ import { resourceRoutes } from './route/resources.js'
 import { subagentTestRoutes } from './route/subagent-test.js'
 import { terminalEventRoutes } from './route/terminal-events.js'
 
+// Covers the largest accepted client frame (queued input and desktop input are
+// both capped at 8 MiB) with headroom for its JSON envelope.
+const MAX_WEBSOCKET_FRAME_BYTES = 16 * 1024 * 1024
+
 export interface BuildHttpServerOptions {
   readonly computer?: ComputerConfig
   readonly modelAssets?: ModelAssets
@@ -122,6 +126,13 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
       return
     }
 
+    // Malformed bodies, unsupported media types and exceeded limits are
+    // rejected by Fastify and its plugins with their own client status.
+    if (isClientError(error)) {
+      void reply.code(error.statusCode).send({ detail: error.message })
+      return
+    }
+
     request.log.error({ err: error }, 'Unhandled HTTP request error')
     void reply.code(500).send({ detail: 'Internal server error' })
   })
@@ -147,7 +158,7 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
     void server.register(gitRepositoryRoutes, { service: options.gitRepositoryService })
   }
   const recorder = options.recorder
-  void server.register(websocket)
+  void server.register(websocket, { options: { maxPayload: MAX_WEBSOCKET_FRAME_BYTES } })
   void server.register(computerRoutes, options.computer === undefined ? {} : { computer: options.computer })
   void server.register(modelProfileRoutes, { service: options.modelProfileService,
     ...(options.piEffortLevels ? { piEffortLevels: options.piEffortLevels } : {}),
@@ -201,6 +212,12 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
   }
 
   return server
+}
+
+function isClientError(error: unknown): error is Error & { statusCode: number } {
+  if (!(error instanceof Error) || !('statusCode' in error)) return false
+  const status = error.statusCode
+  return typeof status === 'number' && status >= 400 && status < 500
 }
 
 function isValidationError(error: unknown): error is Error & { validation: unknown } {

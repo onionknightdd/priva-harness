@@ -1,6 +1,6 @@
 import { ClaudeBackgroundTasks } from './claude-background-tasks.js'
 import { taskNotification } from '../../core/resource/background-task.js'
-import { TaskReplyTracker } from '../../core/resource/task-reply-tracker.js'
+import { TaskReplyTracker } from '../../core/thread/task-reply-tracker.js'
 import { ClaudeWorkflows } from './claude-workflow.js'
 import type {
   AgentEvent,
@@ -18,7 +18,7 @@ import {
   numberField,
   stringField,
   type JsonRecord,
-} from '../../core/event/json-record.js'
+} from '../../core/util/json-record.js'
 import {
   canonicalProductToolName,
   isAgentName,
@@ -32,7 +32,8 @@ import { encodeReadView } from '../../core/event/tool-read.js'
 import {
   compactSummaryBody,
   isCompactContinuationContent,
-} from '../../core/resource/compact-command.js'
+} from '../../core/thread/compact-command.js'
+import { RecentMap } from '../../core/util/recent-map.js'
 import { isSyntheticNoResponseAssistant } from './session/claude-transcript.js'
 
 export interface ClaudeSdkMessage {
@@ -68,19 +69,28 @@ interface PendingTool {
   readonly name: string
 }
 
+const RETAINED_MESSAGES = 256
+
 export class ClaudeEventMapper {
   private sessionId: string | undefined
   private model: string | undefined
   private messageSeq = 0
-  private currentMessageId: string | undefined
-  private readonly pendingByIndex = new Map<number, PendingTool>()
+  // The main thread and every subagent stream interleave on one connection.
+  // Each has its own current message and its own block indexes, so both are
+  // tracked per channel: the parent tool call of a subagent, or the main thread.
+  private mainMessageId: string | undefined
+  private readonly agentMessageIds = new RecentMap<string, string>(RETAINED_MESSAGES)
+  private readonly pendingByIndex = new RecentMap<string, PendingTool>(RETAINED_MESSAGES)
   private readonly indexByToolId = new Map<string, number>()
   private readonly tools = new Map<string, string>()
   private readonly started = new Set<string>()
-  private readonly startedBlocks = new Set<string>()
-  private readonly blocksByMessage = new Map<string, Map<number, ContentBlock>>()
+  // Block state is only consulted while its message is still being assembled.
+  // A warm runtime maps messages for hours, so only recent ones are kept.
+  private readonly startedBlocks = new RecentMap<string, true>(RETAINED_MESSAGES * 8)
+  private readonly blocksByMessage = new RecentMap<string, Map<number, ContentBlock>>(RETAINED_MESSAGES)
   private readonly agentIdByParent = new Map<string, string>()
-  private lastToolId: string | undefined
+  // Tool calls that have started and not yet returned, oldest first.
+  private readonly runningTools = new Map<string, string>()
   private readonly workflows = new ClaudeWorkflows()
   readonly backgroundTasks = new ClaudeBackgroundTasks()
   private readonly replies = new TaskReplyTracker()
@@ -93,12 +103,12 @@ export class ClaudeEventMapper {
   // Call whenever a new query() starts: its counters begin at zero again.
   resetUsageBaseline(): void { this.usageBaseline = emptyUsageBaseline() }
 
-  activeMessageId(): string {
-    return this.ensureMessageId()
-  }
-
-  latestToolId(): string | undefined {
-    return this.lastToolId
+  /** The most recently started call of `toolName` that has not returned yet. */
+  runningToolId(toolName: string): string | undefined {
+    const wanted = normalizeToolName(toolName)
+    let found: string | undefined
+    for (const [id, name] of this.runningTools) if (name === wanted) found = id
+    return found
   }
 
   push(message: ClaudeSdkMessage): AgentEvent[] {
@@ -150,7 +160,7 @@ export class ClaudeEventMapper {
     if (type === 'message_start') {
       const nested = asRecord(event['message'])
       const id = nested === undefined ? undefined : stringField(nested, 'id')
-      this.currentMessageId = id ?? this.ensureMessageId()
+      this.ensureMessageId(channel, id)
       const model = nested === undefined ? undefined : stringField(nested, 'model')
       if (model !== undefined) this.model = model
       return []
@@ -165,20 +175,20 @@ export class ClaudeEventMapper {
     if (block === undefined) return []
     const index = numberField(raw, 'index') ?? 0
     const blockType = stringField(block, 'type') ?? 'unknown'
-    const messageId = this.ensureMessageId()
+    const messageId = this.ensureMessageId(channel)
     const kind = kindFromBlockType(blockType)
 
     if (blockType === 'tool_use') {
       const id = stringField(block, 'id')
       if (id === undefined) return []
       const name = normalizeToolName(stringField(block, 'name') ?? 'unknown')
-      this.pendingByIndex.set(index, { id, name })
+      this.pendingByIndex.set(pendingKey(channel, index), { id, name })
       this.indexByToolId.set(id, index)
       this.tools.set(id, name)
-      this.lastToolId = id
       const events = this.emitBlockStart(messageId, id, index, 'tool_use', channel)
       if (this.started.has(id)) return events
       this.started.add(id)
+      this.runningTools.set(id, name)
       events.push(this.toolStarted(messageId, id, index, name, block['input'], channel))
       const workflowName = workflowNameFrom(block['input'])
       if (isWorkflowName(name)) {
@@ -209,7 +219,7 @@ export class ClaudeEventMapper {
     const delta = asRecord(raw['delta'])
     if (delta === undefined) return []
     const index = numberField(raw, 'index') ?? 0
-    const messageId = this.ensureMessageId()
+    const messageId = this.ensureMessageId(channel)
     const deltaType = stringField(delta, 'type')
 
     if (deltaType === 'text_delta') {
@@ -233,7 +243,7 @@ export class ClaudeEventMapper {
     if (deltaType === 'input_json_delta') {
       const chunk = stringField(delta, 'partial_json')
       if (chunk === undefined || chunk === '') return []
-      const pending = this.pendingByIndex.get(index)
+      const pending = this.pendingByIndex.get(pendingKey(channel, index))
       if (pending === undefined) return []
       return [
         withChannel(
@@ -266,7 +276,7 @@ export class ClaudeEventMapper {
     if (message === undefined) return []
     const model = stringField(message, 'model')
     if (model !== undefined) this.model = model
-    const messageId = this.ensureMessageId(stringField(message, 'id'))
+    const messageId = this.ensureMessageId(channel, stringField(message, 'id'))
     const events: AgentEvent[] = []
     const incoming: ContentBlock[] = []
 
@@ -314,7 +324,6 @@ export class ClaudeEventMapper {
       if (id === undefined) continue
       const name = normalizeToolName(stringField(block, 'name') ?? this.tools.get(id) ?? 'unknown')
       this.tools.set(id, name)
-      this.lastToolId = id
       const toolIndex =
         this.indexByToolId.get(id) ??
         nextFreeToolIndex(this.blocksByMessage.get(messageId), index, id)
@@ -329,6 +338,7 @@ export class ClaudeEventMapper {
       })
       if (!this.started.has(id)) {
         this.started.add(id)
+        this.runningTools.set(id, name)
         events.push(...this.emitBlockStart(messageId, id, toolIndex, 'tool_use', channel))
         events.push(this.toolStarted(messageId, id, toolIndex, name, block['input'], channel))
         const workflowName = workflowNameFrom(block['input'])
@@ -378,8 +388,9 @@ export class ClaudeEventMapper {
       const output = blocks.map((block) => stringField(block, 'text') ?? '').join('\n\n')
       if (output.trim() !== '') {
         const index = this.indexByToolId.get(sourceToolId)
+        this.runningTools.delete(sourceToolId)
         return [withChannel({
-          type: 'tool.completed', messageId: this.ensureMessageId(), blockId: sourceToolId,
+          type: 'tool.completed', messageId: this.ensureMessageId(channel), blockId: sourceToolId,
           ...(index === undefined ? {} : { index }),
           id: sourceToolId, name: this.tools.get(sourceToolId) ?? 'Skill', ok: true, output,
         }, channel)]
@@ -412,8 +423,9 @@ export class ClaudeEventMapper {
       if (launch?.agentId !== undefined) {
         this.agentIdByParent.set(id, launch.agentId)
       }
-      const messageId = this.ensureMessageId()
+      const messageId = this.ensureMessageId(channel)
       const index = this.indexByToolId.get(id)
+      this.runningTools.delete(id)
       events.push(
         withChannel(
           {
@@ -546,6 +558,8 @@ export class ClaudeEventMapper {
   }
 
   private mapResult(message: ClaudeSdkMessage): AgentEvent {
+    // A call the turn left unanswered (an interrupt) will never return.
+    this.runningTools.clear()
     const sessionId = omitEmpty(message.session_id ?? this.sessionId)
     const model = this.model ?? 'unknown'
     const durationMs = message.duration_ms ?? 0
@@ -685,7 +699,7 @@ export class ClaudeEventMapper {
   ): AgentEvent[] {
     const key = `${messageId}:${index}:${kind}`
     if (this.startedBlocks.has(key)) return []
-    this.startedBlocks.add(key)
+    this.startedBlocks.set(key, true)
     return [
       withChannel(
         { type: 'assistant.block_start', messageId, blockId, index, kind },
@@ -712,14 +726,14 @@ export class ClaudeEventMapper {
     return [...existing.values()].sort((left, right) => left.index - right.index)
   }
 
-  private ensureMessageId(preferred?: string): string {
-    if (preferred !== undefined && preferred !== '') {
-      this.currentMessageId = preferred
-      return preferred
+  private ensureMessageId(channel: EventChannel, preferred?: string): string {
+    const current = channel.parentToolUseId === undefined ? this.mainMessageId : this.agentMessageIds.get(channel.parentToolUseId)
+    const id = preferred !== undefined && preferred !== '' ? preferred : current ?? `msg_${(this.messageSeq += 1)}`
+    if (id !== current) {
+      if (channel.parentToolUseId === undefined) this.mainMessageId = id
+      else this.agentMessageIds.set(channel.parentToolUseId, id)
     }
-    if (this.currentMessageId !== undefined) return this.currentMessageId
-    this.currentMessageId = `msg_${(this.messageSeq += 1)}`
-    return this.currentMessageId
+    return id
   }
 
   private channelOf(message: ClaudeSdkMessage): EventChannel {
@@ -749,6 +763,10 @@ export class ClaudeEventMapper {
     const nestedModel = nested === undefined ? undefined : stringField(nested, 'model')
     if (nestedModel !== undefined) this.model = nestedModel
   }
+}
+
+function pendingKey(channel: EventChannel, index: number): string {
+  return `${channel.parentToolUseId ?? ''}#${String(index)}`
 }
 
 function withChannel<T extends AgentEvent>(event: T, channel: EventChannel): T {
@@ -947,13 +965,10 @@ function parseAgentLaunch(
   const agentId =
     (result === undefined ? undefined : stringField(result, 'agentId') ?? stringField(result, 'agent_id')) ??
     (parsed === undefined ? undefined : stringField(parsed, 'agentId') ?? stringField(parsed, 'agent_id'))
-  const rawStatus =
+  const status =
     (result === undefined ? undefined : stringField(result, 'status')) ??
     (parsed === undefined ? undefined : stringField(parsed, 'status')) ??
-    (output.includes('async_launched') || output.includes('async_launched')
-      ? 'async_launched'
-      : undefined)
-  const status = rawStatus === 'async_launched' ? 'async_launched' : rawStatus
+    (output.includes('async_launched') ? 'async_launched' : undefined)
   if (agentId === undefined && status === undefined) return undefined
   return {
     ...(agentId === undefined ? {} : { agentId }),

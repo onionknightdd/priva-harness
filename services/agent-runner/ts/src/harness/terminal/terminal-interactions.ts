@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from 'node:util'
 import type { TerminalQuestion } from '../../core/contract/terminal-service.js'
 import type { AgentEvent } from '../../core/event/agent-event.js'
 import type { InteractionRequest, InteractionResolution } from '../../core/resource/interaction.js'
-import { asRecord } from '../../core/event/json-record.js'
+import { asRecord } from '../../core/util/json-record.js'
 import { terminalElicitationForm } from './terminal-elicitation.js'
 
 type InteractionEvent = Extract<AgentEvent, { type: 'permission.requested' | 'permission.resolved' }>

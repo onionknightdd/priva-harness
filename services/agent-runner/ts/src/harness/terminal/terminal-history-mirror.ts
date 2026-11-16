@@ -1,8 +1,9 @@
 import type { ProviderSessionStore } from '../../core/contract/provider-session-store.js'
-import { foldThread } from '../../core/resource/fold-thread.js'
+import { foldThread } from '../../core/thread/fold-thread.js'
 import { SessionError } from '../../core/resource/session.js'
 import type { SessionStream } from '../session/session-stream.js'
-import type { ThreadReplayItem } from '../../core/resource/thread.js'
+import type { ThreadReplayItem } from '../../core/thread/thread.js'
+import { errorMessage } from '../../core/util/errors.js'
 
 /** One native transcript observer shared by all viewers of a terminal. */
 export class TerminalHistoryMirror {
@@ -58,7 +59,7 @@ export class TerminalHistoryMirror {
         // Claude creates a new transcript only after the first user message.
         if (error instanceof SessionError && error.kind === 'session-not-found') continue
         this.stream.publish({ type: 'error', code: 'terminal.history',
-          message: `Could not sync terminal messages: ${error instanceof Error ? error.message : String(error)}` })
+          message: `Could not sync terminal messages: ${errorMessage(error)}` })
       }
     }
   }

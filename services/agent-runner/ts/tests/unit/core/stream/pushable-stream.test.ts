@@ -41,4 +41,17 @@ describe('PushableStream', () => {
       /can only be iterated once/u,
     )
   })
+
+  it('ends the stream and drops buffered values when the consumer stops reading', async () => {
+    const stream = new PushableStream<number>()
+    const iterator = stream[Symbol.asyncIterator]()
+    stream.push(1)
+    stream.push(2)
+    expect(await iterator.next()).toEqual({ value: 1, done: false })
+
+    await iterator.return?.()
+    stream.push(3)
+
+    expect(await iterator.next()).toEqual({ value: undefined, done: true })
+  })
 })

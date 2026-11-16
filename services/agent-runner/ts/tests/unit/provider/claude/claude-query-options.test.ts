@@ -7,6 +7,7 @@ import {
   resolveClaudeQuerySettings,
 } from '../../../../src/provider/claude/claude-runtime.js'
 import { productTools } from '../../../../src/core/tool/product-tools.js'
+import { toolsForVisualizeMode } from '../../../../src/core/tool/visualize-mode.js'
 import { PRODUCT_MCP_TOOL_TIMEOUT_MS } from '../../../../src/provider/claude/tools/compile-custom-tools.js'
 
 const spec = {
@@ -220,7 +221,7 @@ describe('resolveClaudeQueryOptions', () => {
       spec,
       { kind: 'new', provider: 'claude' },
       undefined,
-      productTools,
+      toolsForVisualizeMode(productTools, false),
     )
     expect(options.toolAliases).toEqual({
       visualize: 'mcp__agentWorkshop__visualize',

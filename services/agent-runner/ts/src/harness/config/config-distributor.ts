@@ -7,6 +7,7 @@ import type {
   ConfigProjectionContext,
   ProviderConfigAdapter,
 } from '../../core/contract/provider-config-adapter.js'
+import { errorMessage } from '../../core/util/errors.js'
 
 export class ConfigDistributor implements ConfigDistributorPort {
   constructor(private readonly adapters: readonly ProviderConfigAdapter[]) {}
@@ -32,6 +33,3 @@ export class ConfigDistributor implements ConfigDistributorPort {
   }
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}

@@ -12,10 +12,7 @@ import {
   ModelProfileError,
 } from '../../core/resource/model-profile.js'
 import { RuntimeSettingsError } from '../../core/resource/runtime-settings.js'
-import {
-  ensurePrivateDirectory,
-  withExclusiveFileLock,
-} from '../settings/json-runtime-settings-store.js'
+import { withExclusiveFileLock } from '../storage/private-file.js'
 
 const PROBE_LOCK_WAIT_MS = 45_000
 const PROBE_LOCK_STALE_MS = 60_000
@@ -87,11 +84,9 @@ export class JsonModelProfileStore implements ModelProfileStore {
       .digest('hex')
     const lockPath = join(this.capabilityLockDirectory, `${digest}.lock`)
     try {
-      await ensurePrivateDirectory(this.capabilityLockDirectory)
       return await withExclusiveFileLock(
         lockPath,
-        PROBE_LOCK_WAIT_MS,
-        PROBE_LOCK_STALE_MS,
+        { waitMs: PROBE_LOCK_WAIT_MS, staleMs: PROBE_LOCK_STALE_MS },
         operation,
       )
     } catch (error) {

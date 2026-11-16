@@ -142,16 +142,6 @@ export function sessionRefKey(ref: SessionRef): string {
   return `${ref.provider}:${ref.id}`
 }
 
-export function parseSessionRefKey(key: string): SessionRef | undefined {
-  const separator = key.indexOf(':')
-  if (separator <= 0 || separator === key.length - 1) return undefined
-  const provider = key.slice(0, separator)
-  const id = key.slice(separator + 1)
-  if (provider !== 'claude' && provider !== 'pi') return undefined
-  if (id === '') return undefined
-  return { provider, id }
-}
-
 export function emptySessionMetadata(): SessionMetadataRecord {
   return {
     backgroundTasks: [],

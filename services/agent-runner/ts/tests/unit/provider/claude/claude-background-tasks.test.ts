@@ -5,7 +5,7 @@ import { BackgroundTasks, taskNotification } from '../../../../src/core/resource
 import { mergeSdkAndTranscriptMessages } from '../../../../src/provider/claude/session/claude-transcript.js'
 import { mapClaudeMessage } from '../../../../src/provider/claude/session/claude-session-store.js'
 import { replayClaudeSessionMessages } from '../../../../src/provider/claude/session/claude-thread-replay.js'
-import { foldThread } from '../../../../src/core/resource/fold-thread.js'
+import { foldThread } from '../../../../src/core/thread/fold-thread.js'
 
 const xml = '<task-notification>\n<task-id>job</task-id>\n<tool-use-id>tool</tool-use-id>\n<status>completed</status>\n<summary>done</summary>\n<output-file>/tmp/job.output</output-file>\n</task-notification>'
 const origin = { kind: 'task-notification' }

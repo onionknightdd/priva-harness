@@ -3620,6 +3620,21 @@ display / white-space，并验证 Enter / Space 激活；不将 jsdom 当作像�
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/sandbox-markdown-links.test.ts agent-ui/tests/features/agent-message/assistant-markdown.test.tsx
 ```
 
+流式帧归并有两份实现：前端的 `agent-message/run-stream-reducer.ts` 用于实时视图，Runner 的
+`core/thread/apply-stream-frame.ts` 用于会话快照，规则修改时两边同步。回归用 Runner 的
+SessionStream 与真实 Pi 事件映射同时驱动两份实现，覆盖：工具调用 id 晚于块开始到达时
+只保留一张工具卡片、流式工具输入的部分解析、后台任务更新只改动持有该工具调用的消息
+（其余消息保持对象引用，不重新渲染）；不启动浏览器：
+
+```text
+SessionStream.publish(event) -> frame -> applyThreadStreamFrame -> 实时消息
+                             -> snapshot().messages ------------> 两者的工具卡片一致
+```
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/run-stream-reducer.test.ts
+```
+
 会话页头截断使用 Node 测试覆盖 160px 边界、后缀占位、不同字符宽度、组合字符与 emoji，
 不启动浏览器：
 

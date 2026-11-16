@@ -5,7 +5,7 @@ import type {
   UsageOverviewInput,
   UsageRangeInput,
   UsageRangeSummary,
-} from '../resource/usage-overview.js'
+} from '../usage/usage-overview.js'
 
 export interface UsageReader {
   overview(input: UsageOverviewInput): Promise<UsageOverview>

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
-import type { ThreadMessage } from "../../../../services/agent-runner/ts/src/core/resource/thread.ts"
-import { foldThread } from "../../../../services/agent-runner/ts/src/core/resource/fold-thread.ts"
+import type { ThreadMessage } from "../../../../services/agent-runner/ts/src/core/thread/thread.ts"
+import { foldThread } from "../../../../services/agent-runner/ts/src/core/thread/fold-thread.ts"
 import { SessionStream } from "../../../../services/agent-runner/ts/src/harness/session/session-stream.ts"
 import { replayPiSessionMessages } from "../../../../services/agent-runner/ts/src/provider/pi/pi-thread-replay.ts"
 import type { SessionMessage } from "../../../../services/agent-runner/ts/src/core/resource/session.ts"

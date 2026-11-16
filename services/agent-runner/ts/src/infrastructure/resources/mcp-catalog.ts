@@ -2,10 +2,11 @@ import { join } from 'node:path'
 
 import { ResourceError, type McpDetail, type McpSummary, type McpToolState, type ResourceList, type ResourceQuery, type ResourceSource, type ResourceScope } from '../../core/resource/resource-catalog.js'
 import { ClaudeMcpPolicy, claudeMcpSettingsPath, claudeMcpToolName } from './claude-mcp-policy.js'
-import { canonicalDirectory, isRecord, record, resourceId, type ResourceFiles, strings } from './resource-files.js'
+import { canonicalDirectory, record, resourceId, type ResourceFiles, strings } from './resource-files.js'
 import { type ProjectDirectories } from './project-directories.js'
 import { claudePlugins, pluginComponentPaths, source, type ResourceEnvironment } from './resource-sources.js'
 import { ignoredPiMcpSources, isPiMcpOverride, piMcpToolExposure, piProjectTrusted, readPiMcpFile, validatePiMcpDefinition } from '../../pi-config.js'
+import { isRecord } from '../../core/util/json-record.js'
 
 interface McpBinding {
   source: ResourceSource

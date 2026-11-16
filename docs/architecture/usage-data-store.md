@@ -41,7 +41,7 @@ SQLite 数据库。本文记录已确认的设计决策和当前实现范围；�
 
 ## 记录类型
 
-`src/core/resource/data-store.ts` 定义 `DataRecord`：
+`src/core/usage/data-store.ts` 定义 `DataRecord`：
 
 | kind | 审计 action | 事实表动作 |
 | --- | --- | --- |
@@ -54,7 +54,7 @@ SQLite 数据库。本文记录已确认的设计决策和当前实现范围；�
 `run.finished` / `run.session` 找不到对应的 `running` 行时（例如 `run.started`
 被满队列丢弃），审计行照常写入，事实表不动，worker 记 warn。
 
-## Schema（`PRAGMA user_version = 2`）
+## Schema（`PRAGMA user_version = 3`）
 
 ```
 audit_event      id, ts_utc, action, session_id, run_id, target, details(JSON)
@@ -77,7 +77,9 @@ meta             key, value          (last_prune_utc)
   缓存命中率 = `cache_read / 处理量`，均在查询时计算。`cost_usd` 为 `NULL` 表示无报价，不是 0。
 - 迁移只向前：`src/infrastructure/data/sqlite-schema.ts` 里按位置追加函数，`user_version` 记录已应用数量。
   v2 给 `run_fact` 加 `cwd`（运行时的工作目录，即侧栏意义上的"项目"）；`RunLedger` 从 `spec.cwd`
-  写入，旧行保持 NULL。
+  写入，旧行保持 NULL。v3 给 `run_fact.started_audit_id`、`run_fact.finished_audit_id`、`tool_fact.audit_id`
+  建索引：审计行先于事实行过期，没有索引时每删一行审计都要全表扫描事实表来执行 `SET NULL`，
+  清理事务会阻塞唯一的 SQLite 线程。
 - 建库时 `auto_vacuum = INCREMENTAL`（必须在任何表存在之前设置），之后 `journal_mode = WAL`、
   `synchronous = NORMAL`、`foreign_keys = ON`。
 
@@ -107,7 +109,7 @@ meta             key, value          (last_prune_utc)
 ## 代码位置
 
 ```
-src/core/resource/data-store.ts             记录类型、保留期默认值、状态与日志接口
+src/core/usage/data-store.ts             记录类型、保留期默认值、状态与日志接口
 src/core/contract/data-recorder.ts          DataRecorder { record(record): void }
 src/infrastructure/data/sqlite-schema.ts    DDL 与迁移
 src/infrastructure/data/sqlite-data-store.ts 同步存储（writeBatch / reconcileRunning / createPruneJob / status）
@@ -116,10 +118,10 @@ src/infrastructure/data/worker-data-recorder.ts 主线程代理（队列、重�
 src/infrastructure/data/data-worker-protocol.ts 主线程 ↔ worker 消息
 src/harness/run/run-ledger.ts               每次 run 的 started / session / finished 记账与事件流审计
 src/transport/http/route-audit.ts           路由层成功请求的审计助手
-src/core/resource/local-time.ts             UTC → 调用方时区的本地日期 / 小时
-src/core/resource/usage-overview.ts         查询输入 / 输出与行类型
-src/core/resource/usage-overview-builder.ts 行 → 概览的纯聚合
-src/core/resource/usage-range-builder.ts    行 → 任意本地日期区间摘要的纯聚合
+src/core/usage/local-time.ts             UTC → 调用方时区的本地日期 / 小时
+src/core/usage/usage-overview.ts         查询输入 / 输出与行类型
+src/core/usage/usage-overview-builder.ts 行 → 概览的纯聚合
+src/core/usage/usage-range-builder.ts    行 → 任意本地日期区间摘要的纯聚合
 src/core/contract/usage-reader.ts           UsageReader { overview, range, auditPage }
 src/transport/http/route/usage.ts           GET /api/sandbox/usage/overview | /range | /audit
 tests/unit/infrastructure/data/             存储与 worker 的单元测试
@@ -277,8 +279,12 @@ GET /api/sandbox/usage/audit?limit=<1..200>&before=<id>&action=<前缀>&session_
 ```
 
 - `tz` 必填且必须是合法的 IANA 时区，否则 422。SQL 只按 `ts_utc >= now − 366d` 取行；
-  `core/resource/usage-overview-builder.ts` 用 `Intl.DateTimeFormat` 把每行折成该时区的本地日期和小时，
+  `core/usage/usage-overview-builder.ts` 用 `Intl.DateTimeFormat` 把每行折成该时区的本地日期和小时，
   再算 7 / 30 / 365 天窗口、heatmap、streak、高峰时段。所有日历逻辑都在这个纯函数里，测试不需要数据库。
+- 概览覆盖一年，工具行可以有几十万条。四个查询都用 `iterate()` 逐行交给 builder，builder 对每个
+  序列只按顺序读一遍，所以这些行不会同时留在内存里。工具行和审计行只需要判断是否落在最宽窗口内：
+  本地日期与同一时刻的 UTC 日期最多相差一天，UTC 日期距窗口两端超过一天的行直接计入，
+  只有两端各一天内的行才用时区折算。run 和模型行要按本地日期、小时分桶，仍逐行折算。
 - `processedTokens = input + cacheRead + cacheWrite + output`；`costUsd` 为窗口内有报价的 run 之和，
   一个都没有时为 `null`，并另给 `runsWithoutCost` 让前端标注"部分成本未知"。
 - `models` 按 `processedTokens` 降序并给出 `share`；`dailyModels` 只覆盖 `days` 天；`tools` 取前 10
@@ -288,7 +294,7 @@ GET /api/sandbox/usage/audit?limit=<1..200>&before=<id>&action=<前缀>&session_
 - `retentionDays` 随响应返回（即 `factRetentionDays`），365 天窗口在 UI 上应表述为"近一年"而不是"全部"。
 - `range` 为概览卡片服务：`from` / `to` 是调用方时区的本地日期（含两端），必须是真实日期、`from <= to`、
   跨度不超过 3660 天，否则 422。SQL 取 `started_utc` 落在 `[from − 1d, to + 2d)` 的已结束 run，
-  `core/resource/usage-range-builder.ts` 再精确折成本地日期。返回 token 分项与 `processedTokens`、
+  `core/usage/usage-range-builder.ts` 再精确折成本地日期。返回 token 分项与 `processedTokens`、
   `costUsd` / `runsWithoutCost`、`runs` 及三种终态、`activeSessions`、`activeDays`、`projects`
   （`run_fact.cwd` 去重；v2 之前的行 cwd 为 NULL、不计入）、`peakDay`（并列取最早一天）、
   `longestStreak`（区间内最长连续活跃天及其起止）。前端的 7 / 30 / 365 天预设只是三组 from / to。

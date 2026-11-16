@@ -2,6 +2,7 @@ import { IMAGE_GEN_TOOL_NAME } from '../event/tool-names.js'
 import { CompatibleImageApi } from './image-api.js'
 import { defineTool, stringToolArg } from './define-tool.js'
 import { requireImageModel, writeGeneratedImage } from './image-tool-shared.js'
+import { errorMessage } from '../util/errors.js'
 
 export const imageGenTool = defineTool({
   name: IMAGE_GEN_TOOL_NAME,
@@ -54,7 +55,7 @@ export const imageGenTool = defineTool({
     } catch (error) {
       return {
         ok: false,
-        text: error instanceof Error ? error.message : String(error),
+        text: errorMessage(error),
       }
     }
   },

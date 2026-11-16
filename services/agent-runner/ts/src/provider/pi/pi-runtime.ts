@@ -3,8 +3,8 @@ import { extname } from 'node:path'
 import { DEFAULT_CONTEXT_WINDOW, type ContextWindow } from '../../core/resource/model-context.js'
 
 import type { InteractionResponse } from '../../core/resource/interaction.js'
-import { BackgroundTasks, taskIsActive } from '../../core/resource/background-task.js'
-import { asRecord, stringField } from '../../core/event/json-record.js'
+import { BackgroundTasks, taskIsActive, type BackgroundTask } from '../../core/resource/background-task.js'
+import { asRecord, stringField } from '../../core/util/json-record.js'
 import { piTaskNotices } from './pi-background-tasks.js'
 import type {
   AgentRuntime,
@@ -21,10 +21,11 @@ import { isRunResultEvent } from '../../core/event/agent-event.js'
 import {
   compactInstructionsOf,
   isCompactCommandContent,
-} from '../../core/resource/compact-command.js'
+} from '../../core/thread/compact-command.js'
 import { userTurnText, type UserTurn } from '../../core/run/user-turn.js'
 import { AsyncQueue } from '../../core/stream/async-queue.js'
 import { PiEventMapper, type PiSessionEvent } from './pi-event-mapper.js'
+import { errorMessage } from '../../core/util/errors.js'
 
 export interface PiAgentSession {
   initialize?(): Promise<void>
@@ -72,8 +73,8 @@ export class PiRuntime implements AgentRuntime {
       const mapped: AgentEvent[] = event.type === 'permission.requested' || event.type === 'permission.resolved'
         ? [event as AgentEvent] : this.mapper?.push(event) ?? []
       for (const frame of mapped) if (frame.type === 'task.updated' || frame.type === 'task.notification') {
-        this.tasks.update(frame.task)
-        if (frame.type === 'task.notification' && !this.deliveredNotices.has(frame.task.taskId)) this.pendingNotices.add(frame.task.taskId)
+        const task = this.tasks.update(frame.task)
+        if (frame.type === 'task.notification' && noticeFollows(task) && !this.deliveredNotices.has(task.taskId)) this.pendingNotices.add(task.taskId)
       }
       if (event.type === 'message_end') for (const task of piTaskNotices(event.message)) this.consumedNotices.add(task.taskId)
       if (event.type === 'tool_execution_start' && event.toolName === 'get_subagent_result' && event.toolCallId) {
@@ -138,13 +139,20 @@ export class PiRuntime implements AgentRuntime {
         return
       }
       await this.send(turn)
+      // An extension command can handle the prompt without starting a model
+      // turn; then no settle event follows and the prompt's return ends the run.
+      if (!this.turnEnded && !this.agentSession.isStreaming) {
+        this.turnEnded = true
+        this.events?.push({ type: 'run.completed', sessionId: this.agentSession.sessionId, model: this.agentSession.modelId, durationMs: 0 })
+        this.events?.close()
+      }
     })().then(
       () => undefined,
       (error: unknown) => {
         if (!finished) {
           this.events?.push({
             type: 'run.failed',
-            message: error instanceof Error ? error.message : String(error),
+            message: errorMessage(error),
             sessionId: this.agentSession.sessionId,
             model: this.agentSession.modelId,
           })
@@ -244,7 +252,7 @@ export class PiRuntime implements AgentRuntime {
         durationMs: 0,
       })
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = errorMessage(error)
       this.events?.push(compaction.cancelled
         ? { type: 'run.aborted', sessionId: this.agentSession.sessionId, model: this.agentSession.modelId, message }
         : { type: 'run.failed', sessionId: this.agentSession.sessionId, model: this.agentSession.modelId, code: 'compaction_failed', message })
@@ -260,6 +268,13 @@ export class PiRuntime implements AgentRuntime {
     await this.agentSession.abort()
     await this.agentSession.prompt(text, images)
   }
+}
+
+// Every subagent announces its completion on the event bus, but only one
+// launched in the background, which records its launching tool, is followed
+// by a notice message. A foreground subagent answers through its tool call.
+function noticeFollows(task: BackgroundTask): boolean {
+  return task.kind !== 'agent' || task.toolUseId !== undefined
 }
 
 export interface PiImageContent { type: 'image'; data: string; mimeType: string }

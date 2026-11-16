@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { userTurnFromText, userTurnSummary, userTurnText } from '../../../../src/core/run/user-turn.js'
-import { foldThread } from '../../../../src/core/resource/fold-thread.js'
+import { foldThread } from '../../../../src/core/thread/fold-thread.js'
 import type { SessionMessage } from '../../../../src/core/resource/session.js'
 import { replayClaudeSessionMessages } from '../../../../src/provider/claude/session/claude-thread-replay.js'
 import { replayPiSessionMessages } from '../../../../src/provider/pi/pi-thread-replay.js'

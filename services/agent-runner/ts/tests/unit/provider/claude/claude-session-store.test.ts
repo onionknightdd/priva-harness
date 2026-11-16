@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { describe, expect, it, vi } from 'vitest'
 
-import { foldThread } from '../../../../src/core/resource/fold-thread.js'
+import { foldThread } from '../../../../src/core/thread/fold-thread.js'
 import {
   ClaudeSessionStore,
   lastAssistantFromTranscriptLines,
@@ -35,6 +35,31 @@ describe('ClaudeSessionStore', () => {
       await expect.poll(() => changed.mock.calls.length).toBeGreaterThan(afterMain)
     } finally {
       stop()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('finds the last assistant model from the end of a transcript, however far back it is', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'priva-claude-last-model-'))
+    try {
+      const directory = join(root, 'projects', '-work')
+      const file = join(directory, 'sess-1.jsonl')
+      await mkdir(directory, { recursive: true })
+      const assistant = JSON.stringify({ type: 'assistant', timestamp: '2026-01-02T00:00:00.000Z', message: { model: 'claude-real' } })
+      const filler = JSON.stringify({ type: 'user', message: { role: 'user', content: 'x'.repeat(100_000) } })
+      const store = new ClaudeSessionStore({ globalConfigDir: root, sdk: fakeClaudeSdk() })
+      const ref = { provider: 'claude', id: 'sess-1' } as const
+
+      await writeFile(file, `${assistant}\n`)
+      expect(await store.lastAssistantModel(ref)).toMatchObject({ modelId: 'claude-real' })
+
+      // The assistant record now lies several read windows before the end.
+      await writeFile(file, `${assistant}\n${Array.from({ length: 12 }, () => filler).join('\n')}\n`)
+      expect(await store.lastAssistantModel(ref)).toMatchObject({ modelId: 'claude-real' })
+
+      await writeFile(file, `${filler}\n`)
+      expect(await store.lastAssistantModel(ref)).toBeUndefined()
+    } finally {
       await rm(root, { recursive: true, force: true })
     }
   })

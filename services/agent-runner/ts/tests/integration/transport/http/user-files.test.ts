@@ -174,6 +174,22 @@ describe('/api/sandbox/files', () => {
     expect(Buffer.byteLength(download.body)).toBe(size)
   })
 
+  it('answers an unsatisfiable Range and a malformed JSON body in the API error shape', async () => {
+    await writeFile(join(workspace, 'small.txt'), 'abc')
+    const range = await server.inject({
+      method: 'GET', url: '/api/sandbox/files/download?path=small.txt', headers: { range: 'bytes=999-' },
+    })
+    expect(range.statusCode).toBe(416)
+    expect(range.headers['content-type']).toContain('application/json')
+    expect(parseJson(range.body)).toHaveProperty('detail')
+
+    const malformed = await server.inject({
+      method: 'POST', url: '/api/sandbox/files/exists', headers: { 'content-type': 'application/json' }, payload: '{"paths":',
+    })
+    expect(malformed.statusCode).toBe(400)
+    expect(parseJson(malformed.body)).toHaveProperty('detail')
+  })
+
   it('keeps directory navigation within WORKSPACE_DIR', async () => {
     await mkdir(join(workspace, 'project'))
     const nested = await server.inject({ method: 'GET', url: '/api/sandbox/files/list?path=project' })

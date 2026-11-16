@@ -1,4 +1,4 @@
-import { applyStreamFrame, emptyAssistantMessage } from '../../../../src/core/resource/apply-stream-frame.js'
+import { applyStreamFrame, emptyAssistantMessage } from '../../../../src/core/thread/apply-stream-frame.js'
 import { describe, expect, it } from 'vitest'
 import { ClaudeWorkflows } from '../../../../src/provider/claude/claude-workflow.js'
 import { ClaudeEventMapper, type ClaudeSdkMessage } from '../../../../src/provider/claude/claude-event-mapper.js'

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { nativeClaudeAvailable, nativeClaudeFixture, modelMessage } from '../../../fixtures/terminal/claude-tui-fixture.js'
-import type { DataRecord } from '../../../../src/core/resource/data-store.js'
+import type { DataRecord } from '../../../../src/core/usage/data-store.js'
 
 describe.skipIf(!nativeClaudeAvailable())('native Claude product capabilities', () => {
   it('projects a native background task and opens its native management UI without claiming it was stopped', async () => {

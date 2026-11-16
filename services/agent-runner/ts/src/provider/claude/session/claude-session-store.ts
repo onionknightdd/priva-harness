@@ -1,7 +1,7 @@
 import { userTurnSummary } from '../../../core/run/user-turn.js'
 import { ownedSubagentMessages } from "./claude-subagent-history.js"
 import { hydrateWorkflowResult, readWorkflowAgentDetail } from './claude-workflow-files.js'
-import { readFile, readdir, stat } from 'node:fs/promises'
+import { open, readFile, readdir, stat } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { materializeClaudeImages } from './claude-image-attachments.js'
 
@@ -23,7 +23,8 @@ import {
   type SessionMessage,
   type SessionMessageType,
 } from '../../../core/resource/session.js'
-import type { ThreadReplayItem } from '../../../core/resource/thread.js'
+import type { ThreadReplayItem } from '../../../core/thread/thread.js'
+import { RecentMap } from '../../../core/util/recent-map.js'
 import {
   attachTranscriptToolUseResult,
   EMPTY_TOOL_USE_RESULTS,
@@ -32,6 +33,7 @@ import {
   transcriptThreadRecords,
 } from './claude-transcript.js'
 import { replayClaudeSessionMessages } from './claude-thread-replay.js'
+import { hasErrorCode } from '../../../core/util/errors.js'
 
 export interface ClaudeSessionSdk {
   listSessions(options?: { dir?: string }): Promise<readonly ClaudeSdkSessionInfo[]>
@@ -72,6 +74,18 @@ export interface ClaudeSessionStoreOptions {
   readonly sdk?: ClaudeSessionSdk
 }
 
+// A parsed transcript holds every record of a session, so only the few being
+// viewed are kept. The last-model lookup keeps one small entry per session.
+const CACHED_TRANSCRIPTS = 8
+const CACHED_LAST_MODELS = 1024
+const LAST_MODEL_TAIL_BYTES = 256 * 1024
+
+interface LastModelCache {
+  readonly mtimeMs: number
+  readonly size: number
+  readonly lastAssistant: LastAssistantModel | undefined
+}
+
 interface TranscriptFileCache {
   readonly mtimeMs: number
   readonly size: number
@@ -83,7 +97,8 @@ interface TranscriptFileCache {
 export class ClaudeSessionStore implements ProviderSessionStore {
   private readonly sdk: ClaudeSessionSdk
   private readonly globalConfigDir: string
-  private readonly transcriptCache = new Map<string, TranscriptFileCache>()
+  private readonly transcriptCache = new RecentMap<string, TranscriptFileCache>(CACHED_TRANSCRIPTS)
+  private readonly lastModelCache = new RecentMap<string, LastModelCache>(CACHED_LAST_MODELS)
 
   constructor(options: ClaudeSessionStoreOptions) {
     this.globalConfigDir = options.globalConfigDir
@@ -163,13 +178,13 @@ export class ClaudeSessionStore implements ProviderSessionStore {
       try {
         const children = join(dirname(path), ref.id, 'subagents')
         const names = await readdir(children).catch((error: unknown) => {
-          if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+          if (hasErrorCode(error, 'ENOENT')) return []
           throw error
         })
         const files = [path, ...names.filter((name) => name.endsWith('.jsonl')).map((name) => join(children, name))]
         const signature = JSON.stringify(await Promise.all(files.map(async (file) => {
           try { const info = await stat(file); return [file, info.mtimeMs, info.size] }
-          catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [file]; throw error }
+          catch (error) { if (hasErrorCode(error, 'ENOENT')) return [file]; throw error }
         })))
         if (isWatching() && signature !== previous) { previous = signature; changed() }
       } finally { checking = false }
@@ -288,8 +303,29 @@ export class ClaudeSessionStore implements ProviderSessionStore {
     return await this.loadTranscript(transcriptPath)
   }
 
+  // Listing sessions asks this for every session, so it reads only the end
+  // of the transcript, widening backwards until an assistant record is found.
   private async lastAssistantFromTranscript(path: string): Promise<LastAssistantModel | undefined> {
-    return (await this.loadTranscript(path)).lastAssistant
+    const stats = await stat(path)
+    const cached = this.lastModelCache.get(path) ?? this.transcriptCache.get(path)
+    if (cached?.mtimeMs === stats.mtimeMs && cached.size === stats.size) return cached.lastAssistant
+    const file = await open(path, 'r')
+    let lastAssistant: LastAssistantModel | undefined
+    try {
+      for (let length = Math.min(stats.size, LAST_MODEL_TAIL_BYTES); ; length = Math.min(stats.size, length * 4)) {
+        const bytes = Buffer.alloc(length)
+        const { bytesRead } = await file.read(bytes, 0, length, stats.size - length)
+        const lines = bytes.subarray(0, bytesRead).toString('utf8').split('\n')
+        // The window can begin inside a record; that fragment is not a line.
+        if (length < stats.size) lines.shift()
+        lastAssistant = lastAssistantFromTranscriptLines(lines, stats.mtimeMs)
+        if (lastAssistant !== undefined || length >= stats.size) break
+      }
+    } finally {
+      await file.close()
+    }
+    this.lastModelCache.set(path, { mtimeMs: stats.mtimeMs, size: stats.size, lastAssistant })
+    return lastAssistant
   }
 
   private async loadTranscript(path: string): Promise<TranscriptFileCache> {

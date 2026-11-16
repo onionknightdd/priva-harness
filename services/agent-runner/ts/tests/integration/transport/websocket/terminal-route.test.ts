@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { ProviderRunSpec, SessionTarget } from '../../../../src/core/contract/agent-provider.js'
 import type { TerminalLaunchContext, TerminalLaunchSpec } from '../../../../src/core/contract/terminal-service.js'
-import type { ThreadReplayItem } from '../../../../src/core/resource/thread.js'
+import type { ThreadReplayItem } from '../../../../src/core/thread/thread.js'
 import { AgentHarness } from '../../../../src/harness/agent-harness.js'
 import { LiveRunRegistry } from '../../../../src/harness/run/live-run-registry.js'
 import { SessionTerminals } from '../../../../src/harness/terminal/session-terminals.js'

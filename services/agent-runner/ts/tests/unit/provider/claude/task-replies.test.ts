@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { foldThread } from '../../../../src/core/resource/fold-thread.js'
+import { foldThread } from '../../../../src/core/thread/fold-thread.js'
 import { ClaudeEventMapper } from '../../../../src/provider/claude/claude-event-mapper.js'
 import { mapClaudeMessage } from '../../../../src/provider/claude/session/claude-session-store.js'
 import { replayClaudeSessionMessages } from '../../../../src/provider/claude/session/claude-thread-replay.js'

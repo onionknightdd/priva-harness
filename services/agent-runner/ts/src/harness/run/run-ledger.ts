@@ -1,10 +1,11 @@
 import type { ProviderRunSpec, SessionTarget } from '../../core/contract/agent-provider.js'
 import type { DataRecorder } from '../../core/contract/data-recorder.js'
 import type { AgentEvent } from '../../core/event/agent-event.js'
-import { asRecord, stringField } from '../../core/event/json-record.js'
-import type { RunFinishedRecord, RunSource } from '../../core/resource/data-store.js'
+import { asRecord, stringField } from '../../core/util/json-record.js'
+import type { RunFinishedRecord, RunSource } from '../../core/usage/data-store.js'
 import type { InteractionRequest } from '../../core/resource/interaction.js'
 import type { UserTurn } from '../../core/run/user-turn.js'
+import { errorMessage } from '../../core/util/errors.js'
 
 const PROMPT_PREVIEW_CHARS = 200
 const TOOL_OUTPUT_PREVIEW_CHARS = 200
@@ -177,7 +178,7 @@ export class RunLedger {
   crashed(error: unknown): void {
     this.finish(
       { outcome: 'failed', failureCode: 'runtime_crash' },
-      { message: error instanceof Error ? error.message : String(error) },
+      { message: errorMessage(error) },
     )
   }
 
