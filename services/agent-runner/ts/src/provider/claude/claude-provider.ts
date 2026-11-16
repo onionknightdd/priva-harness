@@ -16,7 +16,6 @@ import {
 import type { ContextUsage } from '../../core/resource/context-usage.js'
 import type { SlashCommand } from '../../core/resource/slash-command.js'
 import type { ToolDefinition } from '../../core/tool/define-tool.js'
-import { toolsForVisualizeMode } from '../../core/tool/visualize-mode.js'
 import { measureClaudeContextUsage } from './claude-context-usage.js'
 import { resolveBundledClaudeExecutable } from './claude-executable.js'
 import { claudeGlobalConfigFilePath } from './claude-paths.js'
@@ -92,7 +91,7 @@ export class ClaudeProvider implements AgentProvider {
     return listClaudeSlashCommands({
       spec: { ...request.spec, cwd: request.cwd, provider: 'claude' },
       globalConfigDir: this.options.globalConfigDir,
-      tools: toolsForVisualizeMode(this.options.tools ?? [], request.spec.visualizeMode),
+      tools: this.options.tools ?? [],
       ...(this.options.startQuery === undefined ? {} : { startQuery: this.options.startQuery }),
     })
   }
@@ -113,7 +112,7 @@ export class ClaudeProvider implements AgentProvider {
       this.options.globalConfigFilePath ?? claudeGlobalConfigFilePath(),
       { cwd: spec.cwd, apiKey: spec.authToken, ...(context.colorScheme === undefined ? {} : { colorScheme: context.colorScheme }) },
     )
-    const launch = await claudeTerminalLaunch({ target, spec, executable, context, tools: toolsForVisualizeMode(this.options.tools ?? [], spec.visualizeMode) })
+    const launch = await claudeTerminalLaunch({ target, spec, executable, context, tools: this.options.tools ?? [] })
     await saveClaudeModelSettings(this.options.globalConfigDir, spec.model)
     return launch
   }
@@ -131,7 +130,7 @@ export class ClaudeProvider implements AgentProvider {
     return measureClaudeContextUsage({
       spec,
       sessionId: session.id,
-      tools: toolsForVisualizeMode(this.options.tools ?? [], spec.visualizeMode),
+      tools: this.options.tools ?? [],
     })
   }
 }

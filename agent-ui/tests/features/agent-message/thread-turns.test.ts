@@ -98,6 +98,28 @@ describe("turnStickyParts", () => {
       { user: null, working }
     )
   })
+
+  it("keeps expanded compaction and other session markers out of the sticky layer", () => {
+    const working = { ...message("reply", "assistant", "continuing"), status: "streaming" as const }
+    const markers: AgentThreadMessage[] = [
+      { ...message("auto-compact", "user", ""), compact: { phase: "compacted", summary: "Long summary\n".repeat(111) } },
+      message("manual-compact", "user", "/compact"),
+      message("reset", "user", "/clear"),
+      { ...message("model", "user", ""), modelChange: { model: "opus" } },
+      { ...message("effort", "user", ""), effortChange: { effort: "high" } },
+    ]
+    for (const marker of markers) {
+      const turn = groupThreadTurns([marker, working])[0]!
+      assert.equal(turn.user, marker, "the marker remains in the document flow")
+      assert.deepEqual(turnStickyParts(turn), { user: null, working }, marker.id)
+      assert.deepEqual(turnStickyParts({ ...turn, replies: [{ ...working, status: "complete" }] }), { user: null, working: null }, marker.id)
+    }
+  })
+
+  it("continues to freeze attachment-only user messages", () => {
+    const user = { ...message("attachment", "user", ""), attachments: [{ name: "shot.png", path: "/tmp/shot.png", mimeType: "image/png", size: 12 }] }
+    assert.deepEqual(turnStickyParts({ id: user.id, user, replies: [] }), { user, working: null })
+  })
 })
 
 describe("reuseThreadTurns", () => {

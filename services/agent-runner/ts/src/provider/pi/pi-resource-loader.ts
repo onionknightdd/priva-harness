@@ -1,9 +1,10 @@
+import { resolveBuiltinPlugins } from '../../core/plugin/builtin-plugins.js'
 import { createMcpExtension, createToolSearchExtension, DefaultPackageManager, DefaultResourceLoader, type ExtensionFactory, type EventBus, type InlineExtension, type SettingsManager } from '@earendil-works/pi-coding-agent'
 import { assertNativePiMcpConfiguration } from '../../pi-config.js'
 import { piMemoryModule, piSubagentFactory, piCodeRoot, subagentsRoot } from './pi-agent-extensions.js'
 import { createProductCodemodeExtension } from './pi-codemode-extension.js'
 
-export async function createPiResourceLoader(cwd: string, agentDir: string, settingsManager: SettingsManager, eventBus?: EventBus, hostExtensions: InlineExtension[] = [], appendSystemPrompt: readonly string[] = []): Promise<DefaultResourceLoader> {
+export async function createPiResourceLoader(cwd: string, agentDir: string, settingsManager: SettingsManager, eventBus?: EventBus, hostExtensions: InlineExtension[] = [], appendSystemPrompt: readonly string[] = [], enabledPluginIds: readonly string[] = []): Promise<DefaultResourceLoader> {
   const configured = [...settingsManager.getExtensionPaths(), ...settingsManager.getPackages().map((entry) => typeof entry === 'string' ? entry : entry.source)]
   if (configured.some((entry) => /(?:^|[/\\:]|npm:)pi-mcp-adapter(?:[/\\@]|$)/u.test(entry))) throw new Error('Remove pi-mcp-adapter from Pi settings before starting native MCP; the adapter replaces native /mcp support')
   const manager = new DefaultPackageManager({ cwd, agentDir, settingsManager })
@@ -30,6 +31,7 @@ export async function createPiResourceLoader(cwd: string, agentDir: string, sett
     cwd, agentDir, settingsManager, ...(eventBus ? { eventBus } : {}),
     noExtensions: true,
     additionalExtensionPaths: extensionPaths,
+    additionalSkillPaths: resolveBuiltinPlugins(enabledPluginIds).map((plugin) => plugin.skillDir),
     extensionFactories,
     ...(appendSystemPrompt.length > 0 ? { appendSystemPrompt: [...appendSystemPrompt] } : {}),
   })

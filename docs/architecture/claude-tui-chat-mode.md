@@ -194,9 +194,9 @@ tmux 的 `capture-pane -P` 不暴露其未完成的 UTF-8 字符。若快照后�
 未带 `sessionId` 时创建新会话终端并在 `ready` 中返回 id；带 `sessionId` 时
 `--resume`。同一会话第二个查看者收到 `adopted: true`，不会重复启动。
 终端 WebSocket 使用 `view` 打开意图，认领已有进程时保留实际提示词和工具配置；
-客户端待确认的 `visualizeMode` 不触发重启，也不因当前回答运行中而拒绝查看者。
+客户端待确认的 `enabledPluginIds` 不触发重启，也不因当前回答运行中而拒绝查看者。
 不可变的 Agent / Code 模式仍进行冲突校验。`run.start` 和明确的 `session.configure`
-继续负责应用配置，后者等待当前回答结束；前端切换 visualize 不重建查看者连接。
+继续负责应用配置，后者等待当前回答结束；前端切换 Dashboard 插件 不重建查看者连接。
 
 ```text
 /ws/terminal -> open(view) -> 认领实际配置 -> attach
@@ -642,9 +642,19 @@ TMPDIR=/tmp npm test -- --run tests/integration/transport/websocket/terminal-cha
 ### 4.16 产品工具与配置注入
 
 `ClaudeProvider.terminalLaunch` 将现有 `productTools` 编译为私有 stdio MCP 配置，
-通过 `--mcp-config product-mcp.json` 加入原生 CLI。`visualize`、`canvas`、`static_visualize`、
-`interactive_visualize`、`image_gen`、`image_read`、`image_edit` 复用现有实现；没有另开 SDK 对话。
-可视化回答开关会改写系统提示并重启 CLI：关闭时只注册 `visualize`，打开时改为两个 OpenUI 工具。
+通过 `--mcp-config product-mcp.json` 加入原生 CLI。`visualize`、`canvas`、
+`image_gen`、`image_read`、`image_edit` 复用现有实现；没有另开 SDK 对话。
+Agent dashboard 通过 `--plugin-dir` 加载随源码分发的 Skill，开关只改变 `enabledPluginIds`，
+不改写系统提示、不切换产品 MCP 工具。变更等待当前回答结束后重建并 resume CLI；
+查看者连接保持挂载。`render_ui` 已删除，不迁移旧工具历史。
+模型输出同消息 Markdown 引用与 Express 代码块；前端经普通 HTTP 编译后绘制。
+按钮动作沿现有用户消息通道回传，不新增 MCP callback 服务。
+
+```text
+Dashboard Switch -> enabledPluginIds -> --plugin-dir -> Skill + 示例
+                                            |
+                     Markdown 引用 + 同消息源码 -> HTTP 编译 -> 内联看板
+```
 
 ```text
 UI 模型 / effort / 图片模型 / 建议设置 -> buildRunSpec -> ClaudeProvider.terminalLaunch

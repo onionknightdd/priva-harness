@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { ProviderRunSpec, SessionTarget } from '../../core/contract/agent-provider.js'
 import type { TerminalLaunchContext, TerminalLaunchSpec } from '../../core/contract/terminal-service.js'
+import { WHITEBOARD_ENDPOINT_ENV } from '../../core/tool/whiteboard.js'
 import { PI_TERMINAL_FILES, type PiTerminalLaunchConfig } from './pi-terminal-protocol.js'
 
 export async function piTerminalLaunch(agentDir: string, target: SessionTarget, spec: ProviderRunSpec, context: TerminalLaunchContext): Promise<TerminalLaunchSpec> {
@@ -21,5 +22,6 @@ export async function piTerminalLaunch(agentDir: string, target: SessionTarget, 
   const source = import.meta.url.endsWith('.ts')
   return { command: process.execPath,
     args: [...(source ? ['--import', import.meta.resolve('tsx')] : []), fileURLToPath(new URL(source ? './pi-terminal-host.ts' : './pi-terminal-host.js', import.meta.url)), path],
-    cwd: spec.cwd, env: { PI_CODING_AGENT_DIR: agentDir, PI_SKIP_VERSION_CHECK: '1' }, cols: context.cols, rows: context.rows }
+    cwd: spec.cwd, env: { PI_CODING_AGENT_DIR: agentDir, PI_SKIP_VERSION_CHECK: '1',
+      ...(process.env[WHITEBOARD_ENDPOINT_ENV] ? { [WHITEBOARD_ENDPOINT_ENV]: process.env[WHITEBOARD_ENDPOINT_ENV] } : {}) }, cols: context.cols, rows: context.rows }
 }

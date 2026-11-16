@@ -12,8 +12,8 @@ const TERMINAL_STATUSES = new Set([
 
 export const VISUALIZE_TOOL_NAME = 'visualize'
 export const CANVAS_TOOL_NAME = 'canvas'
-export const STATIC_VISUALIZE_TOOL_NAME = 'static_visualize'
-export const INTERACTIVE_VISUALIZE_TOOL_NAME = 'interactive_visualize'
+export const WHITEBOARD_READ_TOOL_NAME = 'whiteboard_read'
+export const WHITEBOARD_WRITE_TOOL_NAME = 'whiteboard_write'
 export const IMAGE_GEN_TOOL_NAME = 'image_gen'
 export const IMAGE_READ_TOOL_NAME = 'image_read'
 export const IMAGE_EDIT_TOOL_NAME = 'image_edit'
@@ -21,8 +21,8 @@ export const IMAGE_EDIT_TOOL_NAME = 'image_edit'
 const PRODUCT_TOOL_NAMES = new Set([
   VISUALIZE_TOOL_NAME,
   CANVAS_TOOL_NAME,
-  STATIC_VISUALIZE_TOOL_NAME,
-  INTERACTIVE_VISUALIZE_TOOL_NAME,
+  WHITEBOARD_READ_TOOL_NAME,
+  WHITEBOARD_WRITE_TOOL_NAME,
   IMAGE_GEN_TOOL_NAME,
   IMAGE_READ_TOOL_NAME,
   IMAGE_EDIT_TOOL_NAME,
@@ -43,11 +43,6 @@ export function isVisualizeToolName(name: string): boolean {
 
 export function isCanvasToolName(name: string): boolean {
   return canonicalProductToolName(name) === CANVAS_TOOL_NAME
-}
-
-export function isRenderUiToolName(name: string): boolean {
-  const canonical = canonicalProductToolName(name)
-  return canonical === STATIC_VISUALIZE_TOOL_NAME || canonical === INTERACTIVE_VISUALIZE_TOOL_NAME
 }
 
 export function isImageGenToolName(name: string): boolean {

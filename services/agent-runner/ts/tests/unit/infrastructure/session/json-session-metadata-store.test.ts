@@ -31,6 +31,16 @@ describe('JsonSessionMetadataStore', () => {
     expect(JSON.parse(await readFile(store.filePath, 'utf8'))).toMatchObject({ version: 2, tagColors: { work: 2 } })
   })
 
+  it('persists per-session plugin selection and restores an explicit disabled selection', async () => {
+    const ref = { provider: 'claude', id: 'dashboard' } as const
+    expect((await store.get(ref)).enabledPluginIds).toEqual([])
+    await store.upsert(ref, { enabledPluginIds: ['agent-dashboard'] })
+    const restarted = new JsonSessionMetadataStore({ runtimeHome })
+    expect((await restarted.get(ref)).enabledPluginIds).toEqual(['agent-dashboard'])
+    await restarted.upsert(ref, { enabledPluginIds: [] })
+    expect((await store.get(ref)).enabledPluginIds).toEqual([])
+  })
+
   it('allows only one of two conflicting concurrent first bindings', async () => {
     const ref = { provider: 'claude', id: 'race' } as const
     const other = new JsonSessionMetadataStore({ runtimeHome })

@@ -1,7 +1,6 @@
 "use client"
 
 import {
-  Check,
   ChevronDown,
   FileScan,
   LoaderCircle,
@@ -24,12 +23,13 @@ import { OverflowMarquee } from "@/components/motion/overflow-marquee"
 import { CodeBlock } from "@/components/agents/code-block"
 import type { AgentCodeLanguage } from "@/components/agents/agent-code"
 import { StatusGlyphSwap } from "@/components/agents/status-glyph-swap"
+import { ToolResultStatusIndicator } from "@/components/agents/tool-result"
 import { Lightbox } from "@/components/interior/lightbox"
 import { SPRING_SWAP } from "@/lib/ease"
 import { focusRing } from "@/lib/surfaces"
 import { cn } from "@/lib/utils"
 
-export type FileReadStatus = "streaming" | "complete"
+export type FileReadStatus = "streaming" | "complete" | "error"
 
 export type FileReadView =
   | { kind: "text"; content: string; startLine: number }
@@ -84,9 +84,6 @@ export function FileRead({
   const [internalOpen, setInternalOpen] = useState(defaultOpen)
   const currentOpen = open ?? internalOpen
   const streaming = status === "streaming"
-  // `previousStatus` is committed in an effect, so this is true only on the
-  // render where streaming ends — the one frame the check should pop in.
-  const settled = previousStatus.current === "streaming" && !streaming
   const kind = view?.kind ?? (imageHint ? "image" : "text")
   const imageSrc =
     view?.kind === "image" ? `data:${view.mime};base64,${view.b64}` : undefined
@@ -106,7 +103,7 @@ export function FileRead({
     let closeTimer: number | undefined
     if (
       previousStatus.current === "streaming" &&
-      status === "complete" &&
+      status !== "streaming" &&
       collapseOnComplete
     ) {
       const delay = reduce ? 0 : collapseDelayMs
@@ -135,6 +132,7 @@ export function FileRead({
       className={cn("w-full min-w-0 text-ui", className)}
     >
       <div className="group/item relative flex w-fit max-w-full min-h-0 items-center gap-1"
+        data-tool-status={streaming ? "running" : status === "error" ? "error" : "success"}
         onPointerEnter={(event) => { if (event.pointerType === "mouse" && window.matchMedia("(hover: hover)").matches) setHeaderHovered(true) }}
         onPointerLeave={() => setHeaderHovered(false)}>
         <button
@@ -154,7 +152,7 @@ export function FileRead({
             aria-hidden="true"
             className="me-[0.25em] block size-[1em] shrink-0 text-muted-foreground/70"
           />
-          <span className="flex min-w-0 flex-1 items-center gap-2 leading-none">
+          <span data-tool-text className="flex min-w-0 flex-1 items-center gap-2 leading-none">
             {tool ? (
               <span className="shrink-0 font-normal text-muted-foreground/70">
                 {typeof tool === "string" || typeof tool === "number" ? (
@@ -170,20 +168,18 @@ export function FileRead({
               {typeof file === "string" ? <OverflowMarquee active={headerHovered}>{file}</OverflowMarquee> : file}
             </span>
           </span>
-          <StatusGlyphSwap
-            swapKey={status}
-            pop={settled && !reduce}
-            className="size-[1em] shrink-0 text-muted-foreground/60"
-          >
-            {streaming ? (
+          {streaming ? (
+            <StatusGlyphSwap
+              swapKey={status}
+              pop={false}
+              className="size-[1em] shrink-0 text-muted-foreground/60"
+            >
               <LoaderCircle
                 aria-label={t("toolCard.readingFile")}
                 className={cn("size-[1em]", !reduce && "animate-spin-fast")}
               />
-            ) : (
-              <Check aria-label={t("toolCard.fileRead")} className="size-[1em]" />
-            )}
-          </StatusGlyphSwap>
+            </StatusGlyphSwap>
+          ) : status === "error" ? <ToolResultStatusIndicator status="error" /> : null}
           <motion.span
             aria-hidden="true"
             animate={{ rotate: currentOpen ? 180 : 0 }}
@@ -207,7 +203,7 @@ export function FileRead({
               <CodeBlock
                 code={view.content}
                 language={language}
-                status={status}
+                status={streaming ? "streaming" : "complete"}
                 showHeader={false}
                 startLine={view.startLine}
                 maxHeight={maxHeight}

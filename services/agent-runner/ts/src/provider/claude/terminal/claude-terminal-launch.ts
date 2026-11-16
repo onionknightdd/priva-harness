@@ -1,3 +1,4 @@
+import { resolveBuiltinPlugins } from '../../../core/plugin/builtin-plugins.js'
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
@@ -56,6 +57,7 @@ export async function claudeTerminalLaunch(input: ClaudeTerminalLaunchInput): Pr
     '--model', spec.model,
     '--permission-mode', 'bypassPermissions',
     '--settings', settingsPath,
+    ...resolveBuiltinPlugins(spec.enabledPluginIds ?? []).flatMap((plugin) => ['--plugin-dir', plugin.rootDir]),
     ...await writeNativeProductConfig(context.scratchDir, target, spec, input.tools ?? []),
     '--disallowedTools', claudeDisallowedTools(spec.runMode).join(','),
     ...claudeSystemPromptArgs(spec),

@@ -339,6 +339,8 @@ function getFileRenderKind(
   const extension = preview.name.split(".").at(-1)?.toLocaleLowerCase()
   const mediaType = preview.mime_type.toLocaleLowerCase()
 
+  if (/\.board\.json$/i.test(preview.name)) return "whiteboard"
+
   if (getModelFormat(preview.name)) return "model"
 
   if (

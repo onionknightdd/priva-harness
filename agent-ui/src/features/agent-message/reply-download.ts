@@ -20,7 +20,7 @@ export function assistantReplyMarkdown(message: AgentThreadMessage): string {
 
 export function assistantReplyHasImage(message: AgentThreadMessage): boolean {
   return assistantTimeline(message).some((section) => assistantPieces(section.message).some((piece) =>
-    piece.kind === "visual" || (piece.kind === "answer" && piece.text.trim() !== "")))
+    piece.kind === "answer" && piece.text.trim() !== ""))
 }
 
 /** UTC stamp so the same message keeps one name in every timezone. */

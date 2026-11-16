@@ -89,7 +89,7 @@ export type SessionTerminalViewProps = {
   contextWindow: ContextWindow
   effort: AgentRunEffort
   sessionId: string
-  visualizeMode?: boolean
+  enabledPluginIds?: readonly string[]
   /** Hidden views keep their terminal and socket alive; only the surface is collapsed. */
   hidden: boolean
   onSessionRebound?: (sessionId: string) => void
@@ -102,7 +102,7 @@ export function SessionTerminalView({
   effort,
   contextWindow,
   sessionId,
-  visualizeMode,
+  enabledPluginIds,
   hidden,
   onSessionRebound,
 }: SessionTerminalViewProps) {
@@ -213,7 +213,7 @@ export function SessionTerminalView({
         cols: terminal.cols,
         rows: terminal.rows,
         theme: resolvedTheme === "dark" ? "dark" : "light",
-        ...(visualizeMode === undefined ? {} : { visualizeMode }),
+        ...(enabledPluginIds === undefined ? {} : { enabledPluginIds }),
       },
       {
         onOutput: (chunk) => terminal.write(chunk),
@@ -238,7 +238,7 @@ export function SessionTerminalView({
       if (sessionRef.current === session) sessionRef.current = null
     }
     // `hidden` only affects focus and is read at ready time; `resolvedTheme`
-    // is read at launch only, a running TUI keeps its theme. `visualizeMode`
+    // is read at launch only, a running TUI keeps its theme. `enabledPluginIds`
     // is also a connection snapshot: session.configure applies later changes
     // without dropping the viewer socket or clearing its screen.
     // eslint-disable-next-line react-hooks/exhaustive-deps

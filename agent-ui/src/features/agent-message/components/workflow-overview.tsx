@@ -3,6 +3,7 @@ import { ArrowLeftIcon, ChevronDownIcon, BotIcon, LayersIcon, SquareArrowOutUpRi
 import { motion, useReducedMotionConfig } from "motion/react"
 import { useTranslation } from "react-i18next"
 import { AgentDisclosure } from "@/components/agents/agent-disclosure"
+import { ToolResultStatusIndicator } from "@/components/agents/tool-result"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Collapsible, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -34,19 +35,20 @@ export function WorkflowOverview({ workflow, onOpenAgent }: { workflow: Workflow
   const completed = workflow.agents.filter((agent) => agent.state === "completed").length
   const animate = !reduce && !keyboard
   const percentage = workflow.agents.length ? Math.round(completed / workflow.agents.length * 100) : 0
+  const status = workflow.status === "failed" ? "error" : workflow.status === "completed" ? "success" : workflow.status === "running" ? "running" : undefined
   return (
     <LiveTextScope>
     <Collapsible open={open} onOpenChange={setOpen} className={cn("@container my-2 min-w-0", reduce && "[&_*]:transition-none [&_*]:animate-none")}
       onPointerDownCapture={() => setKeyboard(false)} onKeyDownCapture={() => setKeyboard(true)}>
       <Card data-testid="workflow-overview" className="gap-0 rounded-lg border border-border bg-background py-0 shadow-none ring-0">
         <CollapsibleTrigger className={cn("flex w-full items-center gap-2 rounded-t-lg aria-[expanded=false]:rounded-b-lg bg-muted/40 px-3 py-2 text-left transition-colors duration-150 hover:bg-muted/60", focusRing)}>
-          <div className="min-w-0 flex-1">
+          <div data-tool-status={status} className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-              <span className="inline-flex min-w-0 items-center gap-1.5 text-sm font-medium"><WorkflowIcon aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" /><span className="min-w-0 break-words">{workflow.name ?? t("agentMessage.workflow")}</span></span>
-              {workflow.summary ? <TooltipHint content={workflow.summary}><span className="min-w-0 flex-1 basis-40 truncate text-xs text-muted-foreground">{workflow.summary}</span></TooltipHint> : null}
+              <span className="inline-flex min-w-0 items-center gap-1.5 text-sm font-medium"><WorkflowIcon aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" /><span data-tool-text="" className="min-w-0 break-words">{workflow.name ?? t("agentMessage.workflow")}</span></span>
+              {workflow.summary ? <TooltipHint content={workflow.summary}><span data-tool-text="" className="min-w-0 flex-1 basis-40 truncate text-xs text-muted-foreground">{workflow.summary}</span></TooltipHint> : null}
             </div>
-            <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-              <span className={workflowStatusColor[workflow.status]}>{t(`agentMessage.workflowUI.status.${workflow.status}`)}</span>
+            <div data-tool-text="" className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+              {workflow.status !== "failed" && workflow.status !== "completed" ? <span className={workflowStatusColor[workflow.status]}>{t(`agentMessage.workflowUI.status.${workflow.status}`)}</span> : null}
               <span>{workflow.detailsUnavailable && !workflow.agents.length ? t("agentMessage.workflowUI.noMetrics") : <StableText pieces={slottedPieces(t, "agentMessage.workflowUI.stats", { phases: workflow.phases.length, agents: workflow.agents.length })} />}</span>
               {workflow.agents.length ? <span><StableText pieces={[{ id: "value", text: String(percentage), count: true }, { id: "suffix", text: "%" }]} /></span> : null}
               {workflow.durationMs !== undefined ? <span>{workflowDuration(workflow.durationMs)}</span> : null}
@@ -54,6 +56,7 @@ export function WorkflowOverview({ workflow, onOpenAgent }: { workflow: Workflow
               {workflow.totalToolCalls !== undefined ? <span><StableText pieces={countPhrasePieces(t, "agentMessage.workflowUI.toolCalls", workflow.totalToolCalls, "tools")} /></span> : null}
             </div>
           </div>
+          {workflow.status === "failed" ? <ToolResultStatusIndicator status="error" /> : null}
           <ChevronDownIcon aria-hidden="true" className={cn("size-3.5 shrink-0 transition-transform duration-150 ease-out", open && "rotate-180", !animate && "transition-none")} />
         </CollapsibleTrigger>
         <AgentDisclosure open={open} className={!animate ? "transition-none" : undefined}>

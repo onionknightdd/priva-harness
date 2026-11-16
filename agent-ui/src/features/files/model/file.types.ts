@@ -10,6 +10,7 @@ export type FileRenderKind =
   | "pdf"
   | "presentation"
   | "spreadsheet"
+  | "whiteboard"
 
 export type PreviewFile = {
   id: string

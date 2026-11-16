@@ -1,9 +1,9 @@
+import { whiteboardToolKind } from "./whiteboard-tools"
 import type { TFunction } from "i18next"
 
 import type { StreamBlock, ToolCard } from "./agent-message-data"
 import { isCanvasTool } from "./canvas-html"
 import { isImageEditTool, isImageGenTool, isImageReadTool } from "./image-tools"
-import { isGeneratedVisualTool } from "./render-ui/lang"
 import { isTaskBoardTool } from "./task-plan"
 import { isVisualizeTool } from "./visualize-jsx"
 
@@ -105,6 +105,10 @@ export function toolItemStatusLabel(
         : "agentMessage.toolItem.visualizeDone"
     )
   }
+  const boardKind = whiteboardToolKind(name)
+  if (boardKind) return t(running
+    ? (boardKind === "read" ? "agentMessage.toolItem.whiteboardReadRunning" : "agentMessage.toolItem.whiteboardWriteRunning")
+    : "agentMessage.toolItem.whiteboardDone")
   if (isCanvasTool(name)) {
     return t(
       running
@@ -150,6 +154,8 @@ export function toolItemStatusLabel(
 }
 
 export function classifyToolName(name: string): ToolActivityKind {
+  if (whiteboardToolKind(name) === "read") return "read"
+  if (whiteboardToolKind(name) === "write") return "write"
   if (isReadTool(name)) return "read"
   if (isEditTool(name)) return "edit"
   if (isWriteTool(name)) return "write"
@@ -173,7 +179,7 @@ export function countToolActivity(
   const counts = emptyToolActivityCounts()
   for (const block of blocks) {
     if (block.type !== "tool_use") continue
-    if (isTaskBoardTool(block.name) || isStructuredOutputTool(block.name) || isGeneratedVisualTool(block.name)) continue
+    if (isTaskBoardTool(block.name) || isStructuredOutputTool(block.name)) continue
     const kind = classifyToolName(block.name)
     if (isToolRunning(block.tool)) {
       counts[kind].running += 1

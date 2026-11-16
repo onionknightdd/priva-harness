@@ -34,7 +34,7 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, ResizeObserver: Resi
 const React = await import("react")
 const { act, useRef, useEffect, StrictMode } = React
 const { createRoot } = await import("react-dom/client")
-const { useChartDimensions } = await import("../../../src/features/agent-message/render-ui/use-chart-dimensions.ts")
+const { useChartDimensions } = await import("../../../src/features/agent-message/a2ui/use-chart-dimensions.ts")
 after(() => dom.window.close())
 
 async function mount(top = 100) {

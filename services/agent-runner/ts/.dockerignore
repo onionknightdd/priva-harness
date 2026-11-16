@@ -12,6 +12,8 @@
 !src/**
 !tests/
 !tests/**
+!scripts/
+!scripts/**
 **/.env*
 **/*.local
 **/*.pem

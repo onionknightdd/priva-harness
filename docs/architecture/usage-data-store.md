@@ -68,7 +68,7 @@ tool_fact        id, audit_id, run_id, ts_utc, tool_use_id, tool_name, mcp_serve
 meta             key, value          (last_prune_utc)
 ```
 
-- `source ∈ {web, subagent-test, channel, scheduled}`，`outcome ∈ {running, completed, failed, aborted}`，
+- `source ∈ {web, api, subagent-test, channel, scheduled}`，`outcome ∈ {running, completed, failed, aborted}`，
   `failure_code ∈ {max_turns, max_budget, api_error, auth_error, compaction_failed, provider_error,
   transport_error, runtime_crash, unknown}`，均有 `CHECK` 约束。
 - 事实表指向 `audit_event` 的外键是 `ON DELETE SET NULL`：审计 90 天先于事实 365 天过期，
@@ -77,8 +77,9 @@ meta             key, value          (last_prune_utc)
   缓存命中率 = `cache_read / 处理量`，均在查询时计算。`cost_usd` 为 `NULL` 表示无报价，不是 0。
 - 迁移只向前：`src/infrastructure/data/sqlite-schema.ts` 里按位置追加函数，`user_version` 记录已应用数量。
   v2 给 `run_fact` 加 `cwd`（运行时的工作目录，即侧栏意义上的"项目"）；`RunLedger` 从 `spec.cwd`
-  写入，旧行保持 NULL。v3 给 `run_fact.started_audit_id`、`run_fact.finished_audit_id`、`tool_fact.audit_id`
-  建索引：审计行先于事实行过期，没有索引时每删一行审计都要全表扫描事实表来执行 `SET NULL`，
+  写入，旧行保持 NULL。v3 重建 `run_fact`，让 `source` 可以是 `api`。v4 在重建之后给
+  `run_fact.started_audit_id`、`run_fact.finished_audit_id`、`tool_fact.audit_id` 建索引：
+  审计行先于事实行过期，没有索引时每删一行审计都要全表扫描事实表来执行 `SET NULL`，
   清理事务会阻塞唯一的 SQLite 线程。
 - 建库时 `auto_vacuum = INCREMENTAL`（必须在任何表存在之前设置），之后 `journal_mode = WAL`、
   `synchronous = NORMAL`、`foreign_keys = ON`。
@@ -169,7 +170,9 @@ Pi 的自动压缩成功、失败或取消只更新会话 marker，继续收集�
 ```
 
 **来源**：`AgentRunOptions.source: RunSource` 为必填，`run-route.ts` 传 `'web'`，
-`subagent-test.ts` 传 `'subagent-test'`；`'channel'`、`'scheduled'` 已预留在类型中。
+`subagent-test.ts` 传 `'subagent-test'`，Agent API（`harness/agent-api`）传 `'api'`；
+`'channel'`、`'scheduled'` 已预留在类型中。第 3 次迁移为 `'api'` 重建了 `run_fact`
+（SQLite 不能修改 CHECK），重建前先暂存 `run_model_usage`，避免删除旧表时被级联删除。
 
 ## harness 采集：`RunLedger`
 

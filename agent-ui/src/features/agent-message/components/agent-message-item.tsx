@@ -36,7 +36,7 @@ import { AssistantProcess } from "./assistant-process"
 import { assistantTimeline } from "../assistant-timeline"
 import { TaskNotificationCard } from "./task-notification-card"
 import { CompactSessionMarker } from "./compact-session-marker"
-import { GeneratedVisual } from "../render-ui/generated-visual"
+import { cn } from "@/lib/utils"
 import { assistantPieces } from "../assistant-pieces"
 import { AssistantMarkdown } from "./assistant-markdown"
 import { AgentMessageDownloadAction } from "./assistant-download-action"
@@ -253,7 +253,7 @@ export const AgentMessageItem = React.memo(function AgentMessageItem({
     >
       {isError ? (
         <motion.div
-          className="flex w-fit max-w-full flex-col items-start gap-1"
+          className={cn("flex flex-col items-start gap-1", message.role === "assistant" ? "mx-auto w-full max-w-3xl" : "w-fit max-w-full")}
           initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}
@@ -291,12 +291,12 @@ export const AgentMessageItem = React.memo(function AgentMessageItem({
             />
           </MessageContent>}
           {message.role === "assistant" && message.status === "complete" ? (
-            <MotionMessageActions layout="position" layoutDependency={false}>
+            <div className="mx-auto w-full max-w-3xl"><MotionMessageActions layout="position" layoutDependency={false}>
               <AgentMessageCopyAction text={message.role === "assistant" ? assistantTimeline(message).map((section) => section.message.content).filter(Boolean).join("\n\n") : message.content} />
               <AgentMessageSplitAction message={message} />
               <AgentMessageDownloadAction message={message} />
               <AgentMessageRelativeTime createdAt={message.createdAt} />
-            </MotionMessageActions>
+            </MotionMessageActions></div>
           ) : null}
         </>
       )}
@@ -333,7 +333,7 @@ function AssistantStreamBody({
   const sections = assistantTimeline(message)
   return <div className="flex flex-col gap-3">
     {sections.map((section, index) => <motion.div key={section.id} layout="position" layoutDependency={false} className="flex flex-col gap-3">
-      {section.notification ? <TaskNotificationCard notification={section.notification} /> : null}
+      {section.notification ? <div className="mx-auto w-full max-w-3xl"><TaskNotificationCard notification={section.notification} /></div> : null}
       <AssistantSegment message={section.message} isStreaming={isStreaming && index === sections.length - 1}
         hideProcessHeader={hideProcessHeader || index > 0} />
     </motion.div>)}
@@ -358,15 +358,14 @@ function AssistantSegment({
   return (
     <div className="flex flex-col gap-3">
       {showIdleHeader ? (
-        <AssistantProcess message={message} isStreaming={isStreaming} hideHeader={hideProcessHeader} />
+        <div className="mx-auto w-full max-w-3xl"><AssistantProcess message={message} isStreaming={isStreaming} hideHeader={hideProcessHeader} /></div>
       ) : null}
       {pieces.map((piece, index) => {
         if (piece.kind === "process") {
           const header = processIndex === 0 ? hideProcessHeader : true
           processIndex += 1
           return (
-            <AssistantProcess
-              key={`process-${index}`}
+            <div key={`process-${index}`} className="mx-auto w-full max-w-3xl"><AssistantProcess
               message={{
                 ...message,
                 blocks: piece.blocks,
@@ -376,21 +375,15 @@ function AssistantSegment({
               }}
               isStreaming={isStreaming}
               hideHeader={header}
-            />
-          )
-        }
-        if (piece.kind === "visual") {
-          return (
-            <div key={piece.block.id} data-reply="" className="min-w-0">
-              <GeneratedVisual block={piece.block} />
-            </div>
+            /></div>
           )
         }
         if (piece.text.trim() === "") return null
         return (
-          <motion.div key={`answer-${index}`} data-reply="" layout="position" layoutDependency={false} className="min-w-0">
+          <motion.div key={`answer-${index}`} data-reply="" layout="position" layoutDependency={false} className="mx-auto w-full min-w-0 max-w-3xl">
             <QuoteSelectable>
               <AssistantMarkdown
+                messageId={message.transcriptUuid ?? message.id}
                 className="[&_p]:[line-height:1.5em] [&_p+p]:mt-[2px]"
                 animated={isStreaming && !shouldReduceMotion}
                 isAnimating={isStreaming}

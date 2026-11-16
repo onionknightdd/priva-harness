@@ -1,0 +1,4316 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Agent API v1",
+  "$defs": {
+    "ContentBlock": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "text"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "image"
+            },
+            "image_path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "image_url": {
+              "type": "string",
+              "minLength": 1
+            },
+            "media_type": {
+              "type": "string",
+              "minLength": 1
+            },
+            "alt": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "file"
+            },
+            "file_path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "media_type": {
+              "type": "string",
+              "minLength": 1
+            },
+            "size": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "type",
+            "file_path",
+            "name",
+            "media_type",
+            "size"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "json"
+            },
+            "value": {}
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Session": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^ses_[0-9A-Za-z]+$"
+        },
+        "harness": {
+          "type": "string",
+          "enum": [
+            "claude",
+            "pi"
+          ]
+        },
+        "workdir": {
+          "type": "string"
+        },
+        "run_mode": {
+          "type": "string",
+          "enum": [
+            "agent",
+            "code"
+          ]
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "settings": {
+          "type": "object",
+          "properties": {
+            "model": {
+              "type": "string",
+              "minLength": 1
+            },
+            "effort": {
+              "type": "string",
+              "enum": [
+                "off",
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ]
+            },
+            "context_window": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "const": 200000
+                },
+                {
+                  "type": "number",
+                  "const": 1000000
+                }
+              ]
+            }
+          },
+          "required": [
+            "model",
+            "context_window"
+          ],
+          "additionalProperties": false
+        },
+        "status": {
+          "type": "object",
+          "properties": {
+            "state": {
+              "type": "string",
+              "enum": [
+                "idle",
+                "running",
+                "requires_action"
+              ]
+            },
+            "stop_reason": {
+              "type": "string",
+              "enum": [
+                "end_turn",
+                "cancelled",
+                "interrupted",
+                "error",
+                "max_turns",
+                "budget_exceeded"
+              ]
+            },
+            "interaction_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^int_[0-9A-Za-z]+$"
+              }
+            },
+            "active_tasks": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "state",
+            "active_tasks"
+          ],
+          "additionalProperties": false
+        },
+        "driver": {
+          "type": "string",
+          "enum": [
+            "sdk",
+            "terminal",
+            "none"
+          ]
+        },
+        "agent": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "name": {
+              "type": "string"
+            },
+            "release": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "release"
+          ],
+          "additionalProperties": false
+        },
+        "last_event_seq": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        }
+      },
+      "required": [
+        "id",
+        "status",
+        "last_event_seq",
+        "created_at",
+        "updated_at"
+      ],
+      "additionalProperties": false
+    },
+    "SessionSnapshot": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^ses_[0-9A-Za-z]+$"
+        },
+        "harness": {
+          "type": "string",
+          "enum": [
+            "claude",
+            "pi"
+          ]
+        },
+        "workdir": {
+          "type": "string"
+        },
+        "run_mode": {
+          "type": "string",
+          "enum": [
+            "agent",
+            "code"
+          ]
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "settings": {
+          "type": "object",
+          "properties": {
+            "model": {
+              "type": "string",
+              "minLength": 1
+            },
+            "effort": {
+              "type": "string",
+              "enum": [
+                "off",
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ]
+            },
+            "context_window": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "const": 200000
+                },
+                {
+                  "type": "number",
+                  "const": 1000000
+                }
+              ]
+            }
+          },
+          "required": [
+            "model",
+            "context_window"
+          ],
+          "additionalProperties": false
+        },
+        "status": {
+          "type": "object",
+          "properties": {
+            "state": {
+              "type": "string",
+              "enum": [
+                "idle",
+                "running",
+                "requires_action"
+              ]
+            },
+            "stop_reason": {
+              "type": "string",
+              "enum": [
+                "end_turn",
+                "cancelled",
+                "interrupted",
+                "error",
+                "max_turns",
+                "budget_exceeded"
+              ]
+            },
+            "interaction_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^int_[0-9A-Za-z]+$"
+              }
+            },
+            "active_tasks": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "state",
+            "active_tasks"
+          ],
+          "additionalProperties": false
+        },
+        "driver": {
+          "type": "string",
+          "enum": [
+            "sdk",
+            "terminal",
+            "none"
+          ]
+        },
+        "agent": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "name": {
+              "type": "string"
+            },
+            "release": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "release"
+          ],
+          "additionalProperties": false
+        },
+        "last_event_seq": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "active_run": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Run"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "queued_runs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Run"
+          }
+        },
+        "interactions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Interaction"
+          }
+        },
+        "tasks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Task"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "status",
+        "last_event_seq",
+        "created_at",
+        "updated_at",
+        "active_run",
+        "queued_runs",
+        "interactions",
+        "tasks"
+      ],
+      "additionalProperties": false
+    },
+    "Run": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^run_[0-9A-Za-z]+$"
+        },
+        "thread_id": {
+          "type": "string",
+          "pattern": "^thr_[0-9A-Za-z]+$"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "queued",
+            "in_progress",
+            "completed",
+            "failed",
+            "cancelled",
+            "interrupted"
+          ]
+        },
+        "position": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "input": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "user_message"
+                    },
+                    "message_id": {
+                      "type": "string",
+                      "pattern": "^msg_[0-9A-Za-z]+$"
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "api",
+                        "web",
+                        "terminal"
+                      ]
+                    },
+                    "content": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/ContentBlock"
+                      }
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "message_id",
+                    "source",
+                    "content"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "task_result"
+                    },
+                    "task_id": {
+                      "type": "string",
+                      "pattern": "^task_[0-9A-Za-z]+$"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "running",
+                        "paused",
+                        "completed",
+                        "failed",
+                        "cancelled",
+                        "unknown"
+                      ]
+                    },
+                    "summary": {
+                      "type": "string"
+                    },
+                    "event": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "task_id",
+                    "status"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "agent_task"
+                    },
+                    "item_id": {
+                      "type": "string",
+                      "pattern": "^itm_[0-9A-Za-z]+$"
+                    },
+                    "prompt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "item_id",
+                    "prompt"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "inbox_message"
+                    },
+                    "from": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "coordinator",
+                            "peer"
+                          ]
+                        },
+                        "thread_id": {
+                          "type": "string",
+                          "pattern": "^thr_[0-9A-Za-z]+$"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "content": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/ContentBlock"
+                      }
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "from",
+                    "content"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stop_reason": {
+          "type": "string",
+          "enum": [
+            "end_turn",
+            "cancelled",
+            "interrupted",
+            "error",
+            "max_turns",
+            "budget_exceeded"
+          ]
+        },
+        "output_text": {
+          "type": "string"
+        },
+        "interrupted_by": {
+          "type": "object",
+          "properties": {
+            "message_id": {
+              "type": "string",
+              "pattern": "^msg_[0-9A-Za-z]+$"
+            }
+          },
+          "required": [
+            "message_id"
+          ],
+          "additionalProperties": false
+        },
+        "error": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "minLength": 1
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "additionalProperties": false
+        },
+        "usage": {
+          "type": "object",
+          "properties": {
+            "input_tokens": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "output_tokens": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "cache_read_tokens": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "cache_write_tokens": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "cost_usd": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "input_tokens",
+            "output_tokens"
+          ],
+          "additionalProperties": false
+        },
+        "context": {
+          "type": "object",
+          "properties": {
+            "used_tokens": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "limit_tokens": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "used_tokens",
+            "limit_tokens"
+          ],
+          "additionalProperties": false
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "completed_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        }
+      },
+      "required": [
+        "id",
+        "status",
+        "input",
+        "created_at"
+      ],
+      "additionalProperties": false
+    },
+    "RunWithItems": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^run_[0-9A-Za-z]+$"
+        },
+        "thread_id": {
+          "type": "string",
+          "pattern": "^thr_[0-9A-Za-z]+$"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "queued",
+            "in_progress",
+            "completed",
+            "failed",
+            "cancelled",
+            "interrupted"
+          ]
+        },
+        "position": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "input": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "user_message"
+                    },
+                    "message_id": {
+                      "type": "string",
+                      "pattern": "^msg_[0-9A-Za-z]+$"
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "api",
+                        "web",
+                        "terminal"
+                      ]
+                    },
+                    "content": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/ContentBlock"
+                      }
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "message_id",
+                    "source",
+                    "content"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "task_result"
+                    },
+                    "task_id": {
+                      "type": "string",
+                      "pattern": "^task_[0-9A-Za-z]+$"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "running",
+                        "paused",
+                        "completed",
+                        "failed",
+                        "cancelled",
+                        "unknown"
+                      ]
+                    },
+                    "summary": {
+                      "type": "string"
+                    },
+                    "event": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "task_id",
+                    "status"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "agent_task"
+                    },
+                    "item_id": {
+                      "type": "string",
+                      "pattern": "^itm_[0-9A-Za-z]+$"
+                    },
+                    "prompt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "item_id",
+                    "prompt"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "inbox_message"
+                    },
+                    "from": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "coordinator",
+                            "peer"
+                          ]
+                        },
+                        "thread_id": {
+                          "type": "string",
+                          "pattern": "^thr_[0-9A-Za-z]+$"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "content": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/ContentBlock"
+                      }
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "from",
+                    "content"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stop_reason": {
+          "type": "string",
+          "enum": [
+            "end_turn",
+            "cancelled",
+            "interrupted",
+            "error",
+            "max_turns",
+            "budget_exceeded"
+          ]
+        },
+        "output_text": {
+          "type": "string"
+        },
+        "interrupted_by": {
+          "type": "object",
+          "properties": {
+            "message_id": {
+              "type": "string",
+              "pattern": "^msg_[0-9A-Za-z]+$"
+            }
+          },
+          "required": [
+            "message_id"
+          ],
+          "additionalProperties": false
+        },
+        "error": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "minLength": 1
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "additionalProperties": false
+        },
+        "usage": {
+          "type": "object",
+          "properties": {
+            "input_tokens": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "output_tokens": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "cache_read_tokens": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "cache_write_tokens": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "cost_usd": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "input_tokens",
+            "output_tokens"
+          ],
+          "additionalProperties": false
+        },
+        "context": {
+          "type": "object",
+          "properties": {
+            "used_tokens": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "limit_tokens": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "used_tokens",
+            "limit_tokens"
+          ],
+          "additionalProperties": false
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "completed_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Item"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "status",
+        "input",
+        "created_at",
+        "items"
+      ],
+      "additionalProperties": false
+    },
+    "Item": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^itm_[0-9A-Za-z]+$"
+            },
+            "created_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "completed_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "type": {
+              "type": "string",
+              "const": "message"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "in_progress",
+                "completed"
+              ]
+            },
+            "content": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ContentBlock"
+              }
+            }
+          },
+          "required": [
+            "id",
+            "type",
+            "status",
+            "content"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^itm_[0-9A-Za-z]+$"
+            },
+            "created_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "completed_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "type": {
+              "type": "string",
+              "const": "reasoning"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "in_progress",
+                "completed"
+              ]
+            },
+            "text": {
+              "type": "string"
+            },
+            "duration_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "type",
+            "status"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^itm_[0-9A-Za-z]+$"
+            },
+            "created_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "completed_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "type": {
+              "type": "string",
+              "const": "tool_call"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "running",
+                "completed",
+                "failed",
+                "declined",
+                "cancelled"
+              ]
+            },
+            "tool": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "command",
+                    "file_read",
+                    "file_edit",
+                    "search",
+                    "web",
+                    "mcp",
+                    "question",
+                    "image",
+                    "visualize",
+                    "workflow",
+                    "other"
+                  ]
+                },
+                "server": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "name",
+                "kind"
+              ],
+              "additionalProperties": false
+            },
+            "input": {},
+            "output": {
+              "type": "object",
+              "properties": {
+                "content": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/ContentBlock"
+                  }
+                },
+                "is_error": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "content",
+                "is_error"
+              ],
+              "additionalProperties": false
+            },
+            "task_id": {
+              "type": "string",
+              "pattern": "^task_[0-9A-Za-z]+$"
+            },
+            "model_calls": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "operation": {
+                    "type": "string",
+                    "enum": [
+                      "classify",
+                      "generate_images"
+                    ]
+                  },
+                  "model": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "running",
+                      "completed",
+                      "failed",
+                      "cancelled"
+                    ]
+                  },
+                  "duration_ms": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "usage": {
+                    "type": "object",
+                    "properties": {
+                      "input_tokens": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "output_tokens": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "cache_read_tokens": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "cache_write_tokens": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "cost_usd": {
+                        "type": "number",
+                        "minimum": 0
+                      }
+                    },
+                    "required": [
+                      "input_tokens",
+                      "output_tokens"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "error": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "operation",
+                  "model",
+                  "status"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "duration_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "type",
+            "status",
+            "tool"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^itm_[0-9A-Za-z]+$"
+            },
+            "created_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "completed_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "type": {
+              "type": "string",
+              "const": "subagent"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "running",
+                "completed",
+                "failed",
+                "cancelled"
+              ]
+            },
+            "agent": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "additionalProperties": false
+            },
+            "thread_id": {
+              "type": "string",
+              "pattern": "^thr_[0-9A-Za-z]+$"
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "foreground",
+                "background"
+              ]
+            },
+            "input": {
+              "type": "object",
+              "properties": {
+                "prompt": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "prompt"
+              ],
+              "additionalProperties": false
+            },
+            "output": {
+              "type": "object",
+              "properties": {
+                "content": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/ContentBlock"
+                  }
+                },
+                "is_error": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "content",
+                "is_error"
+              ],
+              "additionalProperties": false
+            },
+            "task_id": {
+              "type": "string",
+              "pattern": "^task_[0-9A-Za-z]+$"
+            },
+            "usage": {
+              "type": "object",
+              "properties": {
+                "input_tokens": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "output_tokens": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "cache_read_tokens": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "cache_write_tokens": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "cost_usd": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "input_tokens",
+                "output_tokens"
+              ],
+              "additionalProperties": false
+            },
+            "duration_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "type",
+            "status",
+            "agent",
+            "thread_id",
+            "mode",
+            "input"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^itm_[0-9A-Za-z]+$"
+            },
+            "created_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "completed_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "type": {
+              "type": "string",
+              "const": "compaction"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "in_progress",
+                "completed",
+                "failed",
+                "cancelled"
+              ]
+            },
+            "trigger": {
+              "type": "string",
+              "enum": [
+                "auto",
+                "manual"
+              ]
+            },
+            "summary": {
+              "type": "string"
+            },
+            "context": {
+              "type": "object",
+              "properties": {
+                "tokens_before": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "tokens_after": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "id",
+            "type",
+            "status",
+            "trigger"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^itm_[0-9A-Za-z]+$"
+            },
+            "created_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "completed_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "type": {
+              "type": "string",
+              "const": "context_reset"
+            },
+            "status": {
+              "type": "string",
+              "const": "completed"
+            },
+            "reason": {
+              "type": "string",
+              "const": "clear"
+            }
+          },
+          "required": [
+            "id",
+            "type",
+            "status",
+            "reason"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Task": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^task_[0-9A-Za-z]+$"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "shell",
+            "agent",
+            "workflow",
+            "monitor",
+            "other"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "running",
+            "paused",
+            "completed",
+            "failed",
+            "cancelled",
+            "unknown"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "thread_id": {
+          "type": "string",
+          "pattern": "^thr_[0-9A-Za-z]+$"
+        },
+        "origin": {
+          "type": "object",
+          "properties": {
+            "run_id": {
+              "type": "string",
+              "pattern": "^run_[0-9A-Za-z]+$"
+            },
+            "item_id": {
+              "type": "string",
+              "pattern": "^itm_[0-9A-Za-z]+$"
+            }
+          },
+          "required": [
+            "run_id"
+          ],
+          "additionalProperties": false
+        },
+        "workflow": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "phases": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "index": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "title": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "index",
+                  "title"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "agents": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  },
+                  "phase_index": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "thread_id": {
+                    "type": "string",
+                    "pattern": "^thr_[0-9A-Za-z]+$"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "pending",
+                      "running",
+                      "completed",
+                      "failed",
+                      "cancelled",
+                      "paused",
+                      "skipped",
+                      "unknown"
+                    ]
+                  },
+                  "last_tool": {
+                    "type": "string"
+                  },
+                  "tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "duration_ms": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "label",
+                  "status"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "phases",
+            "agents"
+          ],
+          "additionalProperties": false
+        },
+        "last_event": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            }
+          },
+          "required": [
+            "text",
+            "created_at"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "summary": {
+              "type": "string"
+            },
+            "output_path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "summary"
+          ],
+          "additionalProperties": false
+        },
+        "usage": {
+          "type": "object",
+          "properties": {
+            "total_tokens": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "total_tokens"
+          ],
+          "additionalProperties": false
+        },
+        "stop_requested": {
+          "type": "boolean"
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "completed_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "status",
+        "stop_requested"
+      ],
+      "additionalProperties": false
+    },
+    "Interaction": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^int_[0-9A-Za-z]+$"
+            },
+            "run_id": {
+              "type": "string",
+              "pattern": "^run_[0-9A-Za-z]+$"
+            },
+            "thread_id": {
+              "type": "string",
+              "pattern": "^thr_[0-9A-Za-z]+$"
+            },
+            "item_id": {
+              "type": "string",
+              "pattern": "^itm_[0-9A-Za-z]+$"
+            },
+            "title": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "expires_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "resolved"
+              ]
+            },
+            "resolution": {
+              "type": "object",
+              "properties": {
+                "decision": {
+                  "type": "string",
+                  "enum": [
+                    "allow",
+                    "deny"
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "enum": [
+                    "answered",
+                    "skipped",
+                    "timeout",
+                    "cancelled",
+                    "unattended"
+                  ]
+                },
+                "answers": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "object",
+                    "properties": {
+                      "selected": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "selected",
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "decision",
+                "reason"
+              ],
+              "additionalProperties": false
+            },
+            "type": {
+              "type": "string",
+              "const": "approval"
+            },
+            "tool": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "command",
+                    "file_read",
+                    "file_edit",
+                    "search",
+                    "web",
+                    "mcp",
+                    "question",
+                    "image",
+                    "visualize",
+                    "workflow",
+                    "other"
+                  ]
+                },
+                "server": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "name",
+                "kind"
+              ],
+              "additionalProperties": false
+            },
+            "input": {}
+          },
+          "required": [
+            "id",
+            "expires_at",
+            "status",
+            "type",
+            "tool"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^int_[0-9A-Za-z]+$"
+            },
+            "run_id": {
+              "type": "string",
+              "pattern": "^run_[0-9A-Za-z]+$"
+            },
+            "thread_id": {
+              "type": "string",
+              "pattern": "^thr_[0-9A-Za-z]+$"
+            },
+            "item_id": {
+              "type": "string",
+              "pattern": "^itm_[0-9A-Za-z]+$"
+            },
+            "title": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "expires_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "resolved"
+              ]
+            },
+            "resolution": {
+              "type": "object",
+              "properties": {
+                "decision": {
+                  "type": "string",
+                  "enum": [
+                    "allow",
+                    "deny"
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "enum": [
+                    "answered",
+                    "skipped",
+                    "timeout",
+                    "cancelled",
+                    "unattended"
+                  ]
+                },
+                "answers": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "object",
+                    "properties": {
+                      "selected": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "selected",
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "decision",
+                "reason"
+              ],
+              "additionalProperties": false
+            },
+            "type": {
+              "type": "string",
+              "const": "question"
+            },
+            "questions": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "question": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "header": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "options": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "description": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "description"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "multi_select": {
+                    "type": "boolean"
+                  },
+                  "allow_custom": {
+                    "type": "boolean"
+                  },
+                  "multiline": {
+                    "type": "boolean"
+                  },
+                  "initial_text": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "question",
+                  "header",
+                  "options",
+                  "multi_select",
+                  "allow_custom",
+                  "multiline",
+                  "initial_text"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "id",
+            "expires_at",
+            "status",
+            "type",
+            "questions"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^int_[0-9A-Za-z]+$"
+            },
+            "run_id": {
+              "type": "string",
+              "pattern": "^run_[0-9A-Za-z]+$"
+            },
+            "thread_id": {
+              "type": "string",
+              "pattern": "^thr_[0-9A-Za-z]+$"
+            },
+            "item_id": {
+              "type": "string",
+              "pattern": "^itm_[0-9A-Za-z]+$"
+            },
+            "title": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "expires_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "resolved"
+              ]
+            },
+            "resolution": {
+              "type": "object",
+              "properties": {
+                "decision": {
+                  "type": "string",
+                  "enum": [
+                    "allow",
+                    "deny"
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "enum": [
+                    "answered",
+                    "skipped",
+                    "timeout",
+                    "cancelled",
+                    "unattended"
+                  ]
+                },
+                "answers": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "object",
+                    "properties": {
+                      "selected": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "selected",
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "decision",
+                "reason"
+              ],
+              "additionalProperties": false
+            },
+            "type": {
+              "type": "string",
+              "const": "open_url"
+            },
+            "url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "server": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "id",
+            "expires_at",
+            "status",
+            "type",
+            "url"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "UserMessage": {
+      "type": "object",
+      "properties": {
+        "parts": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "text"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "text"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "image"
+                  },
+                  "image_url": {
+                    "type": "string",
+                    "pattern": "^data:[^,;]+(?:;[^,;]+)*;base64,"
+                  },
+                  "image_path": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "file"
+                  },
+                  "file_path": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "file_data": {
+                    "type": "string",
+                    "pattern": "^data:[^,;]+(?:;[^,;]+)*;base64,"
+                  },
+                  "filename": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        }
+      },
+      "required": [
+        "parts"
+      ],
+      "additionalProperties": false
+    },
+    "CreateSessionBody": {
+      "type": "object",
+      "properties": {
+        "harness": {
+          "type": "string",
+          "enum": [
+            "claude",
+            "pi"
+          ]
+        },
+        "workdir": {
+          "type": "string"
+        },
+        "run_mode": {
+          "type": "string",
+          "enum": [
+            "agent",
+            "code"
+          ]
+        },
+        "settings": {
+          "type": "object",
+          "properties": {
+            "model": {
+              "type": "string",
+              "minLength": 1
+            },
+            "effort": {
+              "type": "string",
+              "enum": [
+                "off",
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ]
+            },
+            "context_window": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "const": 200000
+                },
+                {
+                  "type": "number",
+                  "const": 1000000
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "message": {
+          "$ref": "#/$defs/UserMessage"
+        },
+        "delivery": {
+          "type": "string",
+          "enum": [
+            "follow-up",
+            "steer",
+            "interrupt"
+          ]
+        },
+        "response": {
+          "type": "string",
+          "enum": [
+            "accepted",
+            "wait",
+            "stream"
+          ]
+        },
+        "allow_interrupt": {
+          "type": "boolean"
+        },
+        "stream_options": {
+          "type": "object",
+          "properties": {
+            "deltas": {
+              "type": "boolean"
+            },
+            "threads": {
+              "type": "string",
+              "enum": [
+                "all",
+                "main"
+              ]
+            },
+            "native": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "SendMessageBody": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "$ref": "#/$defs/UserMessage"
+        },
+        "delivery": {
+          "type": "string",
+          "enum": [
+            "follow-up",
+            "steer",
+            "interrupt"
+          ]
+        },
+        "response": {
+          "type": "string",
+          "enum": [
+            "accepted",
+            "wait",
+            "stream"
+          ]
+        },
+        "allow_interrupt": {
+          "type": "boolean"
+        },
+        "stream_options": {
+          "type": "object",
+          "properties": {
+            "deltas": {
+              "type": "boolean"
+            },
+            "threads": {
+              "type": "string",
+              "enum": [
+                "all",
+                "main"
+              ]
+            },
+            "native": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "PatchSessionBody": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "settings": {
+          "type": "object",
+          "properties": {
+            "model": {
+              "type": "string",
+              "minLength": 1
+            },
+            "effort": {
+              "type": "string",
+              "enum": [
+                "off",
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ]
+            },
+            "context_window": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "const": 200000
+                },
+                {
+                  "type": "number",
+                  "const": 1000000
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "InteractionResponseBody": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "decision": {
+              "type": "string",
+              "const": "allow"
+            },
+            "answers": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "selected": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "selected",
+                  "text"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "decision"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "decision": {
+              "type": "string",
+              "const": "deny"
+            }
+          },
+          "required": [
+            "decision"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ClientCommand": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "request_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "type": {
+              "type": "string",
+              "const": "message.send"
+            },
+            "idempotency_key": {
+              "type": "string",
+              "minLength": 1
+            },
+            "message": {
+              "$ref": "#/$defs/UserMessage"
+            },
+            "delivery": {
+              "type": "string",
+              "enum": [
+                "follow-up",
+                "steer",
+                "interrupt"
+              ]
+            },
+            "allow_interrupt": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "request_id",
+            "type",
+            "message"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "request_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "type": {
+              "type": "string",
+              "const": "run.cancel"
+            },
+            "run_id": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "request_id",
+            "type",
+            "run_id"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "request_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "type": {
+              "type": "string",
+              "const": "interaction.respond"
+            },
+            "interaction_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "decision": {
+              "type": "string",
+              "enum": [
+                "allow",
+                "deny"
+              ]
+            },
+            "answers": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "selected": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "selected",
+                  "text"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "request_id",
+            "type",
+            "interaction_id",
+            "decision"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "request_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "type": {
+              "type": "string",
+              "const": "task.stop"
+            },
+            "task_id": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "request_id",
+            "type",
+            "task_id"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "request_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "type": {
+              "type": "string",
+              "const": "settings.update"
+            },
+            "settings": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "effort": {
+                  "type": "string",
+                  "enum": [
+                    "off",
+                    "minimal",
+                    "low",
+                    "medium",
+                    "high",
+                    "xhigh",
+                    "max"
+                  ]
+                },
+                "context_window": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "const": 200000
+                    },
+                    {
+                      "type": "number",
+                      "const": 1000000
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "request_id",
+            "type",
+            "settings"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Capabilities": {
+      "type": "object",
+      "properties": {
+        "api_version": {
+          "type": "string",
+          "const": "v1"
+        },
+        "harnesses": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "claude",
+              "pi"
+            ]
+          }
+        },
+        "defaults": {
+          "type": "object",
+          "properties": {
+            "harness": {
+              "type": "string",
+              "enum": [
+                "claude",
+                "pi"
+              ]
+            },
+            "model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "harness",
+            "model"
+          ],
+          "additionalProperties": false
+        },
+        "profiles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "label": {
+                "type": "string"
+              },
+              "default_model": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "image_input_models": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "label",
+              "default_model",
+              "image_input_models"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "agent": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "name": {
+              "type": "string"
+            },
+            "release": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "description": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "release"
+          ],
+          "additionalProperties": false
+        },
+        "limits": {
+          "type": "object",
+          "properties": {
+            "max_upload_bytes": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "max_inline_bytes": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "max_queued_runs": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "max_wait_seconds": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "max_upload_bytes",
+            "max_inline_bytes",
+            "max_queued_runs",
+            "max_wait_seconds"
+          ],
+          "additionalProperties": false
+        },
+        "features": {
+          "type": "object",
+          "properties": {
+            "websocket": {
+              "type": "boolean"
+            },
+            "native_events": {
+              "type": "boolean"
+            },
+            "interactions": {
+              "type": "boolean"
+            },
+            "task_stop": {
+              "type": "boolean"
+            },
+            "settings_update": {
+              "type": "boolean"
+            },
+            "deliveries": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "follow-up",
+                  "steer",
+                  "interrupt"
+                ]
+              }
+            }
+          },
+          "required": [
+            "websocket",
+            "native_events",
+            "interactions",
+            "task_stop",
+            "settings_update",
+            "deliveries"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "api_version",
+        "limits",
+        "features"
+      ],
+      "additionalProperties": false
+    },
+    "SessionCreated": {
+      "type": "object",
+      "properties": {
+        "session": {
+          "$ref": "#/$defs/Session"
+        },
+        "message": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^msg_[0-9A-Za-z]+$"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "run": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^run_[0-9A-Za-z]+$"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "queued",
+                    "in_progress"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "status"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "$ref": "#/$defs/Run"
+            }
+          ]
+        },
+        "interactions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Interaction"
+          }
+        },
+        "last_event_seq": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "session"
+      ],
+      "additionalProperties": false
+    },
+    "PublishedSessionCreated": {
+      "type": "object",
+      "properties": {
+        "session": {
+          "$ref": "#/$defs/Session"
+        },
+        "token": {
+          "type": "string",
+          "minLength": 1
+        },
+        "token_expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        }
+      },
+      "required": [
+        "session",
+        "token",
+        "token_expires_at"
+      ],
+      "additionalProperties": false
+    },
+    "SessionUpdated": {
+      "type": "object",
+      "properties": {
+        "session": {
+          "$ref": "#/$defs/Session"
+        },
+        "settings_change": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^chg_[0-9A-Za-z]+$"
+            },
+            "status": {
+              "type": "string",
+              "const": "pending"
+            }
+          },
+          "required": [
+            "id",
+            "status"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "session"
+      ],
+      "additionalProperties": false
+    },
+    "SessionsPage": {
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Session"
+          }
+        },
+        "next_cursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "data",
+        "next_cursor"
+      ],
+      "additionalProperties": false
+    },
+    "RunsPage": {
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RunWithItems"
+          }
+        },
+        "next_cursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "data",
+        "next_cursor"
+      ],
+      "additionalProperties": false
+    },
+    "MessageAccepted": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^msg_[0-9A-Za-z]+$"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "run": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^run_[0-9A-Za-z]+$"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "queued",
+                "in_progress"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "status"
+          ],
+          "additionalProperties": false
+        },
+        "last_event_seq": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "message",
+        "run",
+        "last_event_seq"
+      ],
+      "additionalProperties": false
+    },
+    "MessageResult": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^msg_[0-9A-Za-z]+$"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "run": {
+          "$ref": "#/$defs/Run"
+        },
+        "interactions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Interaction"
+          }
+        },
+        "last_event_seq": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "message",
+        "run",
+        "interactions",
+        "last_event_seq"
+      ],
+      "additionalProperties": false
+    },
+    "RunResult": {
+      "type": "object",
+      "properties": {
+        "run": {
+          "$ref": "#/$defs/Run"
+        },
+        "interactions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Interaction"
+          }
+        }
+      },
+      "required": [
+        "run",
+        "interactions"
+      ],
+      "additionalProperties": false
+    },
+    "FileUploaded": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^file_[0-9A-Za-z]+$"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "media_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "id",
+        "path",
+        "name",
+        "media_type",
+        "size"
+      ],
+      "additionalProperties": false
+    },
+    "RunCancelAccepted": {
+      "type": "object",
+      "properties": {
+        "run": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^run_[0-9A-Za-z]+$"
+            },
+            "status": {
+              "type": "string",
+              "const": "cancelling"
+            }
+          },
+          "required": [
+            "id",
+            "status"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "run"
+      ],
+      "additionalProperties": false
+    },
+    "InteractionAccepted": {
+      "type": "object",
+      "properties": {
+        "interaction": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^int_[0-9A-Za-z]+$"
+            },
+            "status": {
+              "type": "string",
+              "const": "submitted"
+            }
+          },
+          "required": [
+            "id",
+            "status"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "interaction"
+      ],
+      "additionalProperties": false
+    },
+    "TaskStopAccepted": {
+      "type": "object",
+      "properties": {
+        "task": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^task_[0-9A-Za-z]+$"
+            },
+            "status": {
+              "type": "string",
+              "minLength": 1
+            },
+            "stop_requested": {
+              "type": "boolean",
+              "const": true
+            }
+          },
+          "required": [
+            "id",
+            "status",
+            "stop_requested"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "task"
+      ],
+      "additionalProperties": false
+    },
+    "DurableEvent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "seq": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "created_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "run_id": {
+              "type": "string",
+              "pattern": "^run_[0-9A-Za-z]+$"
+            },
+            "thread_id": {
+              "type": "string",
+              "pattern": "^thr_[0-9A-Za-z]+$"
+            },
+            "type": {
+              "type": "string",
+              "const": "session.status_changed"
+            },
+            "status": {
+              "type": "object",
+              "properties": {
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "idle",
+                    "running",
+                    "requires_action"
+                  ]
+                },
+                "stop_reason": {
+                  "type": "string",
+                  "enum": [
+                    "end_turn",
+                    "cancelled",
+                    "interrupted",
+                    "error",
+                    "max_turns",
+                    "budget_exceeded"
+                  ]
+                },
+                "interaction_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^int_[0-9A-Za-z]+$"
+                  }
+                },
+                "active_tasks": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "state",
+                "active_tasks"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "seq",
+            "created_at",
+            "type",
+            "status"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "seq": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "created_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "run_id": {
+              "type": "string",
+              "pattern": "^run_[0-9A-Za-z]+$"
+            },
+            "thread_id": {
+              "type": "string",
+              "pattern": "^thr_[0-9A-Za-z]+$"
+            },
+            "type": {
+              "type": "string",
+              "const": "session.settings_changed"
+            },
+            "settings": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "effort": {
+                  "type": "string",
+                  "enum": [
+                    "off",
+                    "minimal",
+                    "low",
+                    "medium",
+                    "high",
+                    "xhigh",
+                    "max"
+                  ]
+                },
+                "context_window": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "const": 200000
+                    },
+                    {
+                      "type": "number",
+                      "const": 1000000
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "model",
+                "context_window"
+              ],
+              "additionalProperties": false
+            },
+            "source": {
+              "type": "string",
+              "enum": [
+                "api",
+                "web",
+                "native_command"
+              ]
+            },
+            "change_id": {
+              "type": "string",
+              "pattern": "^chg_[0-9A-Za-z]+$"
+            }
+          },
+          "required": [
+            "seq",
+            "created_at",
+            "type",
+            "settings",
+            "source"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "seq": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "created_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "run_id": {
+              "type": "string",
+              "pattern": "^run_[0-9A-Za-z]+$"
+            },
+            "thread_id": {
+              "type": "string",
+              "pattern": "^thr_[0-9A-Za-z]+$"
+            },
+            "type": {
+              "type": "string",
+              "const": "session.error"
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retry": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "retrying",
+                        "exhausted",
+                        "terminal"
+                      ]
+                    },
+                    "attempt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "max_attempts": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "next_retry_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ],
+                  "additionalProperties": false
+                },
+                "change_id": {
+                  "type": "string",
+                  "pattern": "^chg_[0-9A-Za-z]+$"
+                },
+                "interaction_id": {
+                  "type": "string",
+                  "pattern": "^int_[0-9A-Za-z]+$"
+                }
+              },
+              "required": [
+                "code",
+                "message"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "seq",
+            "created_at",
+            "type",
+            "error"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "seq": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "created_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "run_id": {
+              "type": "string",
+              "pattern": "^run_[0-9A-Za-z]+$"
+            },
+            "thread_id": {
+              "type": "string",
+              "pattern": "^thr_[0-9A-Za-z]+$"
+            },
+            "type": {
+              "type": "string",
+              "const": "run.queued"
+            },
+            "run": {
+              "$ref": "#/$defs/Run"
+            }
+          },
+          "required": [
+            "seq",
+            "created_at",
+            "type",
+            "run"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "seq": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "created_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "run_id": {
+              "type": "string",
+              "pattern": "^run_[0-9A-Za-z]+$"
+            },
+            "thread_id": {
+              "type": "string",
+              "pattern": "^thr_[0-9A-Za-z]+$"
+            },
+            "type": {
+              "type": "string",
+              "const": "run.started"
+            },
+            "run": {
+              "$ref": "#/$defs/Run"
+            }
+          },
+          "required": [
+            "seq",
+            "created_at",
+            "type",
+            "run"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "seq": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "created_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "run_id": {
+              "type": "string",
+              "pattern": "^run_[0-9A-Za-z]+$"
+            },
+            "thread_id": {
+              "type": "string",
+              "pattern": "^thr_[0-9A-Za-z]+$"
+            },
+            "type": {
+              "type": "string",
+              "const": "run.updated"
+            },
+            "run": {
+              "$ref": "#/$defs/Run"
+            }
+          },
+          "required": [
+            "seq",
+            "created_at",
+            "type",
+            "run"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "seq": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "created_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "run_id": {
+              "type": "string",
+              "pattern": "^run_[0-9A-Za-z]+$"
+            },
+            "thread_id": {
+              "type": "string",
+              "pattern": "^thr_[0-9A-Za-z]+$"
+            },
+            "type": {
+              "type": "string",
+              "const": "run.completed"
+            },
+            "run": {
+              "$ref": "#/$defs/Run"
+            }
+          },
+          "required": [
+            "seq",
+            "created_at",
+            "type",
+            "run"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "seq": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "created_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "run_id": {
+              "type": "string",
+              "pattern": "^run_[0-9A-Za-z]+$"
+            },
+            "thread_id": {
+              "type": "string",
+              "pattern": "^thr_[0-9A-Za-z]+$"
+            },
+            "type": {
+              "type": "string",
+              "const": "item.started"
+            },
+            "item": {
+              "$ref": "#/$defs/Item"
+            }
+          },
+          "required": [
+            "seq",
+            "created_at",
+            "type",
+            "item"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "seq": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "created_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "run_id": {
+              "type": "string",
+              "pattern": "^run_[0-9A-Za-z]+$"
+            },
+            "thread_id": {
+              "type": "string",
+              "pattern": "^thr_[0-9A-Za-z]+$"
+            },
+            "type": {
+              "type": "string",
+              "const": "item.updated"
+            },
+            "item": {
+              "$ref": "#/$defs/Item"
+            }
+          },
+          "required": [
+            "seq",
+            "created_at",
+            "type",
+            "item"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "seq": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "created_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "run_id": {
+              "type": "string",
+              "pattern": "^run_[0-9A-Za-z]+$"
+            },
+            "thread_id": {
+              "type": "string",
+              "pattern": "^thr_[0-9A-Za-z]+$"
+            },
+            "type": {
+              "type": "string",
+              "const": "item.completed"
+            },
+            "item": {
+              "$ref": "#/$defs/Item"
+            }
+          },
+          "required": [
+            "seq",
+            "created_at",
+            "type",
+            "item"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "seq": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "created_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "run_id": {
+              "type": "string",
+              "pattern": "^run_[0-9A-Za-z]+$"
+            },
+            "thread_id": {
+              "type": "string",
+              "pattern": "^thr_[0-9A-Za-z]+$"
+            },
+            "type": {
+              "type": "string",
+              "const": "interaction.requested"
+            },
+            "interaction": {
+              "$ref": "#/$defs/Interaction"
+            }
+          },
+          "required": [
+            "seq",
+            "created_at",
+            "type",
+            "interaction"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "seq": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "created_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "run_id": {
+              "type": "string",
+              "pattern": "^run_[0-9A-Za-z]+$"
+            },
+            "thread_id": {
+              "type": "string",
+              "pattern": "^thr_[0-9A-Za-z]+$"
+            },
+            "type": {
+              "type": "string",
+              "const": "interaction.resolved"
+            },
+            "interaction": {
+              "$ref": "#/$defs/Interaction"
+            }
+          },
+          "required": [
+            "seq",
+            "created_at",
+            "type",
+            "interaction"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "seq": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "created_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "run_id": {
+              "type": "string",
+              "pattern": "^run_[0-9A-Za-z]+$"
+            },
+            "thread_id": {
+              "type": "string",
+              "pattern": "^thr_[0-9A-Za-z]+$"
+            },
+            "type": {
+              "type": "string",
+              "const": "task.started"
+            },
+            "task": {
+              "$ref": "#/$defs/Task"
+            }
+          },
+          "required": [
+            "seq",
+            "created_at",
+            "type",
+            "task"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "seq": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "created_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "run_id": {
+              "type": "string",
+              "pattern": "^run_[0-9A-Za-z]+$"
+            },
+            "thread_id": {
+              "type": "string",
+              "pattern": "^thr_[0-9A-Za-z]+$"
+            },
+            "type": {
+              "type": "string",
+              "const": "task.updated"
+            },
+            "task": {
+              "$ref": "#/$defs/Task"
+            }
+          },
+          "required": [
+            "seq",
+            "created_at",
+            "type",
+            "task"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "seq": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "created_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "run_id": {
+              "type": "string",
+              "pattern": "^run_[0-9A-Za-z]+$"
+            },
+            "thread_id": {
+              "type": "string",
+              "pattern": "^thr_[0-9A-Za-z]+$"
+            },
+            "type": {
+              "type": "string",
+              "const": "task.completed"
+            },
+            "task": {
+              "$ref": "#/$defs/Task"
+            }
+          },
+          "required": [
+            "seq",
+            "created_at",
+            "type",
+            "task"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "EphemeralEvent": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "item.delta"
+            },
+            "run_id": {
+              "type": "string",
+              "pattern": "^run_[0-9A-Za-z]+$"
+            },
+            "thread_id": {
+              "type": "string",
+              "pattern": "^thr_[0-9A-Za-z]+$"
+            },
+            "item_id": {
+              "type": "string",
+              "pattern": "^itm_[0-9A-Za-z]+$"
+            },
+            "delta": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "text"
+                    },
+                    "index": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "text": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "text"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "input_json"
+                    },
+                    "text": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "text"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "output"
+                    },
+                    "stream": {
+                      "type": "string",
+                      "enum": [
+                        "stdout",
+                        "stderr"
+                      ]
+                    },
+                    "text": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "stream",
+                    "text"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "run_id",
+            "item_id",
+            "delta"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "item.updated"
+            },
+            "resync": {
+              "type": "boolean",
+              "const": true
+            },
+            "run_id": {
+              "type": "string",
+              "pattern": "^run_[0-9A-Za-z]+$"
+            },
+            "thread_id": {
+              "type": "string",
+              "pattern": "^thr_[0-9A-Za-z]+$"
+            },
+            "item": {
+              "$ref": "#/$defs/Item"
+            }
+          },
+          "required": [
+            "type",
+            "resync",
+            "run_id",
+            "item"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "native"
+            },
+            "thread_id": {
+              "type": "string",
+              "pattern": "^thr_[0-9A-Za-z]+$"
+            },
+            "harness": {
+              "type": "string",
+              "enum": [
+                "claude",
+                "pi"
+              ]
+            },
+            "source": {
+              "type": "string",
+              "enum": [
+                "sdk",
+                "transcript",
+                "hook",
+                "display",
+                "status_line",
+                "host"
+              ]
+            },
+            "refs": {
+              "type": "object",
+              "properties": {
+                "run_id": {
+                  "type": "string",
+                  "pattern": "^run_[0-9A-Za-z]+$"
+                },
+                "item_id": {
+                  "type": "string",
+                  "pattern": "^itm_[0-9A-Za-z]+$"
+                }
+              },
+              "additionalProperties": false
+            },
+            "event": {}
+          },
+          "required": [
+            "type",
+            "harness",
+            "source",
+            "event"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Event": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DurableEvent"
+        },
+        {
+          "$ref": "#/$defs/EphemeralEvent"
+        }
+      ]
+    },
+    "ErrorBody": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "invalid_request",
+                "authentication",
+                "permission",
+                "not_found",
+                "conflict",
+                "rate_limit",
+                "unavailable",
+                "internal"
+              ]
+            },
+            "code": {
+              "type": "string",
+              "minLength": 1
+            },
+            "message": {
+              "type": "string"
+            },
+            "param": {
+              "type": "string"
+            },
+            "request_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "last_event_seq": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "type",
+            "code",
+            "message",
+            "request_id"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "error"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

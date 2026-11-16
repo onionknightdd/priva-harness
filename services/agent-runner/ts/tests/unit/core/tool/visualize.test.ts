@@ -44,8 +44,8 @@ describe('visualize tool', () => {
     expect(productTools.map((tool) => tool.name)).toEqual([
       VISUALIZE_TOOL_NAME,
       'canvas',
-      'static_visualize',
-      'interactive_visualize',
+      'whiteboard_read',
+      'whiteboard_write',
       'image_gen',
       'image_read',
       'image_edit',

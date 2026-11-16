@@ -119,6 +119,25 @@ export class AgentHarness {
     return stream
   }
 
+  /** The stream only if something already loaded it; never creates an empty one. */
+  loadedSessionStream(ref: SessionRef): SessionStream | undefined {
+    return this.streams.get(sessionRefKey(ref))
+  }
+
+  /**
+   * Which driver currently writes the session. A live terminal owns it even
+   * while idle; an SDK runtime owns it while running or kept warm in the pool.
+   */
+  async sessionActivity(ref: SessionRef): Promise<{ readonly driver: 'sdk' | 'terminal' | 'none'; readonly running: boolean }> {
+    if (await this.terminals?.isAlive(ref)) {
+      const chat = this.terminalChats?.list(ref.provider).find((item) => item.ref.id === ref.id)
+      return { driver: 'terminal', running: chat?.runId !== undefined }
+    }
+    const running = this.liveForSession(ref) !== undefined
+    if (running || this.sdkSessions.has(sessionRefKey(ref)) || this.pool?.peek(ref) !== undefined) return { driver: 'sdk', running }
+    return { driver: 'none', running: false }
+  }
+
   // Every session ever opened would otherwise keep its whole thread and replay
   // buffer for the life of the process. A released stream leaves the session
   // exactly as a restart would: its next viewer reloads it from the transcript.
@@ -203,6 +222,7 @@ export class AgentHarness {
       resolveRebound: async (source, next, reason, spec) => {
         const base = { ...spec }
         delete base.runMode
+        if (reason === 'resume') base.enabledPluginIds = (await this.options.sessions?.configuration(next))?.enabledPluginIds ?? []
         const target: SessionTarget = reason === 'resume' ? { kind: 'resume', session: next }
           : { kind: 'fork', source, sessionId: next.id }
         return this.runModes.resolve(target, base)
@@ -237,6 +257,10 @@ export class AgentHarness {
   async openTerminal(target: SessionTarget, spec: ProviderRunSpec, size: TerminalSize, intent: 'run' | 'view' = 'run') {
     if (!this.terminalChats) throw new SessionError('invalid-request', 'Terminal driver is unavailable')
     const resolved = target.kind === 'resume' ? target : { ...target, sessionId: target.sessionId ?? randomUUID() }
+    if (intent === 'view' && target.kind === 'resume' && this.options.sessions) {
+      const saved = await this.options.sessions.configuration(target.session)
+      spec = { ...spec, enabledPluginIds: saved?.enabledPluginIds ?? [] }
+    }
     const key = sessionRefKey(resolved.kind === 'resume' ? resolved.session : { provider: spec.provider, id: resolved.sessionId })
     this.openingTerminals.set(key, (this.openingTerminals.get(key) ?? 0) + 1)
     try { return await this.terminalChats.open(resolved, await this.runModes.resolve(resolved, spec), size, intent) }
@@ -291,6 +315,7 @@ export class AgentHarness {
         this.sessionStream(ref).publish({ type: 'session.config', requestId, config: {
           model: spec.model, cwd: spec.cwd, contextWindow: spec.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
           context,
+          enabledPluginIds: spec.enabledPluginIds ?? [],
           ...(spec.runMode ? { runMode: spec.runMode } : {}),
           ...(spec.profileId ? { profileId: spec.profileId } : {}), ...(spec.effort ? { effort: spec.effort } : {}),
         } })
@@ -546,6 +571,7 @@ export class AgentHarness {
       try {
         yield stamper.stamp({ type: 'session.config', config: {
           model: spec.model, cwd: spec.cwd, contextWindow: spec.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
+          enabledPluginIds: spec.enabledPluginIds ?? [],
           ...(spec.runMode ? { runMode: spec.runMode } : {}), context: await runtime.getContextUsage(),
           ...(spec.profileId ? { profileId: spec.profileId } : {}), ...(spec.effort ? { effort: spec.effort } : {}),
         } })
@@ -772,6 +798,7 @@ export class AgentHarness {
     if (this.options.sessions === undefined || spec.profileId === undefined) return
     await this.options.sessions.recordRunCompleted(session, {
       profileId: spec.profileId,
+      enabledPluginIds: spec.enabledPluginIds ?? [],
       modelId: splitModelContext(modelId).modelId ?? modelId,
       context: contextTagForWindow(spec.contextWindow),
     })

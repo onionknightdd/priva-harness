@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
 import { productTools } from '../../../src/core/tool/product-tools.js'
-import { toolsForVisualizeMode } from '../../../src/core/tool/visualize-mode.js'
 import { defineTool } from '../../../src/core/tool/define-tool.js'
 import {
   PRODUCT_MCP_TOOL_TIMEOUT_MS,
@@ -17,10 +16,12 @@ const context = {
 
 describe('compile custom tools', () => {
   it('compiles product tools into a Claude SDK MCP server and aliases', () => {
-    const compiled = compileClaudeCustomTools(toolsForVisualizeMode(productTools, false), context)
+    const compiled = compileClaudeCustomTools(productTools, context)
     expect(compiled.toolAliases).toEqual({
       visualize: 'mcp__agentWorkshop__visualize',
       canvas: 'mcp__agentWorkshop__canvas',
+      whiteboard_read: 'mcp__agentWorkshop__whiteboard_read',
+      whiteboard_write: 'mcp__agentWorkshop__whiteboard_write',
       image_gen: 'mcp__agentWorkshop__image_gen',
       image_read: 'mcp__agentWorkshop__image_read',
       image_edit: 'mcp__agentWorkshop__image_edit',

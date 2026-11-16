@@ -6,7 +6,7 @@ import { JSDOM } from "jsdom"
 import type { StreamBlock } from "../../../src/features/agent-message/agent-message-data.ts"
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost", pretendToBeVisual: true })
-for (const key of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "Element", "Node", "NodeFilter", "DocumentFragment", "ShadowRoot", "SVGElement", "Event", "KeyboardEvent", "MouseEvent", "PointerEvent", "FocusEvent", "DOMRect", "MutationObserver", "getComputedStyle"]) {
+for (const key of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "Element", "Node", "Document", "CSSStyleSheet", "customElements", "NodeFilter", "DocumentFragment", "ShadowRoot", "SVGElement", "Event", "KeyboardEvent", "MouseEvent", "PointerEvent", "FocusEvent", "DOMRect", "MutationObserver", "getComputedStyle"]) {
   Object.defineProperty(globalThis, key, { configurable: true, value: dom.window[key as keyof typeof dom.window] })
 }
 Object.assign(globalThis, {
@@ -36,6 +36,8 @@ after(() => { hooks.deregister(); dom.window.close() })
 const React = await import("react")
 const { act } = React
 const { createRoot } = await import("react-dom/client")
+const { renderToStaticMarkup } = await import("react-dom/server")
+const { QiRectangleTerminalAi } = await import("qingicon-react")
 const { I18nextProvider, initReactI18next } = await import("react-i18next")
 const i18n = (await import("i18next")).createInstance()
 const { en } = await import("../../../src/i18n/locales/en.ts")
@@ -73,6 +75,11 @@ test("the real tool dispatcher renders the MCP icon, compact title and normal in
   const view = await mount()
   try {
     assert.equal(view.title().getAttribute("aria-expanded"), "false")
+    assert.equal(view.title().dataset.toolStatus, "success")
+    assert.equal(view.title().textContent, "GitHub:list_issues", "success adds no status label")
+    assert.equal(view.title().querySelectorAll("svg").length, 1, "only the disclosure chevron accompanies the MCP icon")
+    assert.ok(!view.title().querySelector('[data-slot="tool-error-indicator"]'))
+    assert.ok(!view.title().querySelector('[data-slot="badge"]'))
     assert.ok(view.title().textContent!.includes("GitHub:list_issues"))
     assert.ok(!view.title().textContent!.includes("mcp__"))
     const icon = view.host.querySelector<HTMLElement>('[data-slot="mcp-tool-icon"]')!
@@ -89,6 +96,10 @@ test("the real tool dispatcher renders the MCP icon, compact title and normal in
 test("running MCP calls show input deltas and update the output without changing the title", async () => {
   const view = await mount({ ...completed, input: {}, tool: { ...completed.tool!, status: "started", inputRaw: '{"query":"hel', output: undefined } })
   try {
+    assert.equal(view.title().getAttribute("aria-expanded"), "false")
+    assert.equal(view.title().dataset.toolStatus, "running")
+    assert.ok(view.title().querySelector('[aria-label="Running"] .lucide-loader-circle'))
+    await view.open()
     assert.equal(view.title().getAttribute("aria-expanded"), "true")
     assert.equal(view.host.querySelector("pre")!.textContent, '{"query":"hel')
     await view.update({ ...completed, tool: { ...completed.tool!, status: "running", inputRaw: '{"query":"hello"}', output: "first\nsecond" } })
@@ -102,11 +113,31 @@ test("errors preserve their raw output and localize only the input/output labels
   const error = '{"error":"Denied <detail>"}\noriginal message'
   const view = await mount({ ...completed, tool: { ...completed.tool!, ok: false, output: error } }, "zh-CN")
   try {
+    assert.equal(view.title().dataset.toolStatus, "error")
+    assert.equal(view.title().querySelector(".sr-only")?.textContent, "失败")
+    const indicators = view.title().querySelectorAll('[data-slot="tool-error-indicator"]')
+    assert.equal(indicators.length, 1, "failure adds exactly one filled indicator")
+    assert.equal(indicators[0].getAttribute("role"), "img")
+    assert.equal(indicators[0].getAttribute("aria-label"), "失败")
+    const glyph = indicators[0].querySelector("svg.lucide-circle-x-filled")
+    assert.ok(glyph)
+    assert.equal(glyph.children.length, 1)
+    assert.equal(glyph.querySelector("path")?.getAttribute("fill"), "currentColor")
+    assert.equal(glyph.querySelector("path")?.getAttribute("stroke"), "none")
+    assert.equal(glyph.querySelector("path")?.getAttribute("fill-rule"), "evenodd")
+    assert.equal(view.title().querySelectorAll("svg").length, 2, "failure keeps the disclosure chevron beside its filled indicator")
+    const originalIcon = view.title().querySelector('[data-slot="mcp-tool-icon"]')
+    assert.ok(originalIcon)
+    assert.ok(!originalIcon.closest("[data-tool-text]"), "the MCP mask stays outside failure text coloring")
+    assert.ok(!view.title().querySelector('[data-slot="badge"]'))
     await view.open()
     assert.deepEqual([...view.host.querySelectorAll("dt")].map((item) => item.textContent), ["输入", "输出"])
     assert.equal(view.host.querySelector('[role="alert"]')!.textContent, error)
     assert.ok(view.host.querySelector('[data-state="error"]'))
     assert.ok(view.title().textContent!.includes("GitHub:list_issues"))
+    await view.update(completed)
+    assert.equal(view.title().dataset.toolStatus, "success")
+    assert.ok(!view.title().querySelector('[data-slot="tool-error-indicator"]'), "successful retry removes the alert")
   } finally { await view.close() }
 })
 
@@ -125,7 +156,12 @@ test("copy includes the displayed input and output, and absent input creates no 
 test("native Bash keeps its terminal card while an external tool named Read uses the MCP card", async () => {
   const native = await mount({ ...completed, name: "Bash", input: undefined, tool: { ...completed.tool!, name: "Bash", output: "" } })
   try {
-    assert.ok(native.host.querySelector(".lucide-square-terminal"))
+    const terminal = native.title().querySelector("svg")
+    assert.ok(terminal)
+    const expected = document.createElement("div")
+    expected.innerHTML = renderToStaticMarkup(<QiRectangleTerminalAi />)
+    assert.equal(terminal.innerHTML, expected.querySelector("svg")!.innerHTML, "native Bash retains the Qing terminal glyph")
+    assert.equal(terminal.getAttribute("aria-hidden"), "true")
     assert.equal(native.host.querySelector('[data-slot="mcp-tool-icon"]'), null)
   } finally { await native.close() }
   const external = await mount({ ...completed, name: "mcp__files__Read" })
@@ -169,6 +205,8 @@ test("computer titles follow complete streaming arguments and preserve normal ou
   const view = await mount(block, "zh-CN")
   try {
     assert.ok(view.title().textContent!.includes("正在网页中执行鼠标操作"))
+    assert.equal(view.title().getAttribute("aria-expanded"), "false")
+    await view.open()
     assert.equal(view.host.querySelector("pre")!.textContent, '{"action":"scroll",')
     assert.ok(view.host.querySelector('[aria-busy="true"]'))
     await view.update({ ...block, tool: { ...block.tool!, inputRaw: '{"action":"scroll","delta_y":200}', status: "running" } })
@@ -176,6 +214,11 @@ test("computer titles follow complete streaming arguments and preserve normal ou
     await view.update({ ...block, tool: { ...block.tool!, inputRaw: undefined, input: { action: "right_click" }, status: "completed", ok: false, output: "Original computer error" } })
     assert.ok(view.title().textContent!.includes("正在右键点击网页元素"))
     assert.ok(view.host.querySelector('[data-state="error"]'))
+    assert.equal(view.title().dataset.toolStatus, "error")
+    assert.equal(view.title().querySelector(".sr-only")?.textContent, "失败")
+    assert.equal(view.title().querySelectorAll('[data-slot="tool-error-indicator"] .lucide-circle-x-filled').length, 1)
+    assert.equal(view.title().getAttribute("aria-expanded"), "false", "completion retains the existing auto-collapse behavior")
+    await view.open()
     assert.equal(view.host.querySelector('[role="alert"]')!.textContent, "Original computer error")
     assert.ok(view.host.querySelector(".lucide-mouse-pointer-click"))
   } finally { await view.close() }

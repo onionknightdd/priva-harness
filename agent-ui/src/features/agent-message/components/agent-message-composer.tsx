@@ -29,7 +29,7 @@ import {
 import { useComposerMentionListing } from "../use-composer-mention"
 import { useSlashCommandCatalog } from "../use-slash-command-catalog"
 import { ComposerAttachMenu } from "./composer-attach-menu"
-import { VisualizeModeButton } from "./visualize-mode-button"
+import { DashboardPluginSwitch } from "./dashboard-plugin-switch"
 import { ComposerAttachmentChips } from "./composer-attachment-chips"
 import { ComposerModelSelector, COMPOSER_MODEL_TRIGGER_MAX_CLASS, type ComposerEffort } from "./composer-model-selector"
 import { ComposerMentionMenu } from "./composer-mention-menu"
@@ -311,8 +311,8 @@ export function AgentMessageComposer({
   onContextWindowChange,
   onSubmit,
   onStop,
-  visualizeMode = false,
-  onVisualizeModeChange,
+  dashboardEnabled = false,
+  onDashboardEnabledChange,
 }: {
   compact?: boolean
   attachments: ComposerAttachment[]
@@ -341,8 +341,8 @@ export function AgentMessageComposer({
   onContextWindowChange: (window: ContextWindow) => void
   onSubmit: () => void
   onStop: () => void
-  visualizeMode?: boolean
-  onVisualizeModeChange?: (active: boolean) => void
+  dashboardEnabled?: boolean
+  onDashboardEnabledChange?: (active: boolean) => void
 }) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
@@ -835,8 +835,8 @@ export function AgentMessageComposer({
               className="pointer-events-auto flex h-8 items-center pr-1 pl-2.5"
             >
               <ComposerAttachMenu onFilesSelected={onFilesSelected} />
-              {onVisualizeModeChange ? (
-                <VisualizeModeButton active={visualizeMode} onChange={onVisualizeModeChange} />
+              {onDashboardEnabledChange ? (
+                <DashboardPluginSwitch active={dashboardEnabled} pending={configurationPending} onChange={onDashboardEnabledChange} />
               ) : null}
             </motion.div>
             <div className="min-w-0 flex-1" />

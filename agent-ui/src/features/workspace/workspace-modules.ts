@@ -1,5 +1,6 @@
 import {
   FilesIcon,
+  PanelsTopLeftIcon,
   ListTodoIcon,
   MonitorIcon,
   PackageIcon,
@@ -10,6 +11,7 @@ import {
 export const WORKSPACE_MODULE_IDS = [
   "tasks",
   "files",
+  "whiteboard",
   "computer",
   "terminal",
   "artifacts",
@@ -35,6 +37,7 @@ export const WORKSPACE_MODULES: WorkspaceModule[] = [
     labelKey: "workspace.home.files",
     icon: FilesIcon,
   },
+  { id: "whiteboard", labelKey: "whiteboard.title", icon: PanelsTopLeftIcon },
   {
     id: "computer",
     labelKey: "workspace.home.computer",

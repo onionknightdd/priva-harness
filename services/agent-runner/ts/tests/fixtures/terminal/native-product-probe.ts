@@ -15,7 +15,9 @@ try {
   await writeFile(config, JSON.stringify({ cwd: root, sessionId: 'before', tools: ['visualize', 'canvas', 'image_gen', 'image_read', 'image_edit'] }), { mode: 0o600 })
   await client.connect(new StdioClientTransport({ command: process.execPath,
     args: [resolve(process.argv[2] ?? 'dist/provider/claude/tools/native-product-server.js'), config], stderr: 'inherit' }))
-  assert.equal((await client.listTools()).tools.length, 5)
+  const listed = (await client.listTools()).tools
+  assert.equal(listed.length, 5)
+  assert.ok(!listed.some((tool) => tool.name === 'render_ui'))
   const visual = await client.callTool({ name: 'visualize', arguments: { jsx: '<button>native</button>' } })
   assert.equal(visual.isError, false)
   assert.ok(JSON.stringify(visual.content).includes('<button>native</button>'))
@@ -24,7 +26,7 @@ try {
   const canvas = await client.callTool({ name: 'canvas', arguments: { html: '<html>native artifact</html>', name: 'probe' } })
   assert.equal(canvas.isError, false)
   assert.equal(await readFile(join(next, '.canvas/probe.html'), 'utf8'), '<html>native artifact</html>')
-  process.stdout.write('Native product MCP: compiled entry, JSX and rebound workspace passed\n')
+  process.stdout.write('Native product MCP: compiled entry, no render_ui, JSX and rebound workspace passed\n')
 } finally {
   await client.close()
   await rm(root, { recursive: true, force: true })

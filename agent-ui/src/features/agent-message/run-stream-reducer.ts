@@ -25,7 +25,7 @@ const STREAM_PROTOCOL_VERSION = 2
 export type StreamFrame = ToolResultMetadata & {
   replay?: true
   prompts?: string[]
-  config?: { contextWindow: ContextWindow; runMode?: "agent" | "code"; model: string; profileId?: string; effort?: AgentRunEffort; effortLevels?: readonly AgentRunEffort[]; cwd: string; context: ContextUsage }
+  config?: { contextWindow: ContextWindow; runMode?: "agent" | "code"; model: string; profileId?: string; effort?: AgentRunEffort; effortLevels?: readonly AgentRunEffort[]; cwd: string; context: ContextUsage; enabledPluginIds: string[] }
   runningToolIds?: string[]
   nextSessionId?: string
   driver?: "terminal"
@@ -738,7 +738,7 @@ function extractPartialToolInput(raw: string): Record<string, unknown> | undefin
     "contents",
     "old_string",
     "new_string",
-    "lang",
+    "source",
   ] as const) {
     const value = extractJsonStringField(raw, field)
     if (value !== undefined) {

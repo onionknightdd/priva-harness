@@ -1,3 +1,4 @@
+import { enabledPluginIdsSchema } from './schema/plugin-selection.js'
 import type { FastifyPluginCallback } from 'fastify'
 import type { WebSocket } from 'ws'
 import { z } from 'zod'
@@ -11,8 +12,8 @@ import type { AgentProfileService } from '../../harness/config/agent-profile-ser
 import type { AgentHarness } from '../../harness/agent-harness.js'
 import type { ModelProfileService } from '../../harness/config/model-profile-service.js'
 import type { SessionTerminals } from '../../harness/terminal/session-terminals.js'
-import { buildRunSpec } from './run-spec.js'
 import { errorMessage } from '../../core/util/errors.js'
+import { buildRunSpec } from '../../harness/config/run-spec.js'
 
 export const TERMINAL_WEBSOCKET_PATH = '/api/sandbox/agent/ws/terminal'
 
@@ -46,7 +47,10 @@ const querySchema = z.object({
   cols: z.coerce.number().int().min(20).max(500).default(120),
   rows: z.coerce.number().int().min(5).max(300).default(40),
   theme: z.enum(['light', 'dark']).optional(),
-  visualizeMode: z.enum(['true', 'false']).optional(),
+  enabledPluginIds: z.string().optional().transform((value, context) => {
+    try { return value === undefined ? [] : JSON.parse(value) as unknown }
+    catch { context.addIssue({ code: 'custom', message: 'enabledPluginIds must be a JSON array' }); return z.NEVER }
+  }).pipe(enabledPluginIdsSchema),
 })
 
 const clientMessageSchema = z.object({
@@ -71,7 +75,7 @@ async function handleTerminalSocket(socket: WebSocket, rawQuery: unknown, option
     fail(socket, 'invalid-request', query.error.issues.map((issue) => issue.message).join('; '))
     return
   }
-  const { harness, sessionId, cwd, model, effort, contextWindow, cols, rows, theme, runMode, visualizeMode } = query.data
+  const { harness, sessionId, cwd, model, effort, contextWindow, cols, rows, theme, runMode, enabledPluginIds } = query.data
   const provider = providerIdForHarness(harness)
   const target: SessionTarget = sessionId === undefined
     ? { kind: 'new', provider }
@@ -84,7 +88,7 @@ async function handleTerminalSocket(socket: WebSocket, rawQuery: unknown, option
     const spec = await buildRunSpec(options, {
       harness, model, cwd, ...(runMode ? { runMode } : {}), ...(effort === undefined ? {} : { effort }),
       ...(contextWindow === undefined ? {} : { contextWindow }),
-      ...(visualizeMode === undefined ? {} : { visualizeMode: visualizeMode === 'true' }),
+      enabledPluginIds,
     })
     const opened = await options.harness.openTerminal(target, spec, { cols, rows, ...(theme === undefined ? {} : { colorScheme: theme }) }, 'view')
     let currentSession = opened.session

@@ -1055,9 +1055,25 @@ Markdown Mermaid block -> MermaidRenderBoundary -> rendered diagram
                          notice + original source
 ```
 
-开发环境遇到 `504 Outdated Optimize Dep` 时，先重启 Vite 并使用 `npm run dev -- --force`
-重建依赖缓存，再刷新浏览器。独立验证服务需使用单独的 `cacheDir`，避免覆盖正在运行的
-开发服务缓存；优先复用已经运行的开发服务。
+开发环境的依赖缓存按端口隔离为 `node_modules/.vite-<port>`，例如 `5173` 与 `15173`
+不会再覆盖彼此的优化依赖。Vite 配置钩子在合并 CLI 端口后选择缓存；明确配置的
+fixture `cacheDir` 优先保留。默认 `strictPort: true`，避免端口自动递增却仍复用原端口
+缓存；生产构建维持 Vite 默认缓存。白板使用的 React Flow 与 Animate UI Slot / motion
+在启动时预优化，减少第一次打开预览时的依赖重建。已打开的旧页面遇到
+`504 Outdated Optimize Dep` 时刷新页面获取当前模块地址；需要强制重建时使用
+`npm run dev -- --force`。优先复用已经运行的开发服务。
+
+```text
+Vite :5173  -> node_modules/.vite-5173
+Vite :15173 -> node_modules/.vite-15173
+显式 fixture cacheDir -> 保留指定目录
+```
+
+配置回归使用真实 Vite `resolveConfig` 验证端口合并、缓存隔离、显式覆盖与生产路径：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/vite-config.test.ts
+```
 
 ### 工作状态加载动效
 
@@ -1342,6 +1358,27 @@ WebSocket 订阅同步补发的历史帧携带 `replay: true`；新发起回复�
 映射到 1.7 的包根 ESM 入口；运行时只导入公开包入口。
 
 ### Workspace 标签切换性能
+
+2026-11-15：Workspace 顶部模块的内容切换采用
+[Animate UI Page Transition 的 zoom](https://animate-ui.com/docs/primitives/animate-ui/page-transition)：
+旧内容在 200ms 内放大到 1.04 并淡出，新内容从 0.94 在 400ms 内缩放、淡入，
+直接复用 Animate UI 的 `ease.leave` / `ease.out`。本地
+`components/animate-ui/primitives/animate-ui/page-transition.tsx` 使用浏览器
+View Transition API，适用于项目当前 React 19.2；上游路由组件要求 React 19.3。
+仅内容区域生成快照，按现有圆角裁剪，标签栏继续原有展开弹簧。首次显示不播放；
+快速切换取消旧过渡并显示最后选项；键盘操作、隐藏面板和不支持该 API 的浏览器直接切换，
+减少动态效果时只淡入淡出。文件面板保留原 DOM、编辑和滚动状态；电脑、白板在内容
+切换提交时立即卸载，退出动画由快照完成。
+
+```text
+Tab -> capture old panel -> commit new panel -> zoom old/new snapshots
+                            Files stays mounted; Computer / Whiteboard unmount
+Tab bar / chat -> live UI outside the snapshots
+```
+
+浏览器回归：打开 `/tests/components/motion/workspace-tabs-browser.html`，点击
+**Run workspace tab checks**。验证缩放关键帧、文件输入保留、电脑卸载、连续切换和圆角裁剪；
+追加 `?dark&narrow&reduced-motion` 检查深色、窄容器和减少动态效果。
 
 2026-09-12：「任务和活动」与「文件」互切时，保留挂载的文件浏览器不得随
 tab 切换或 Shell 重渲染而重新执行。`WorkspaceTabs` 用 `useMemo` 固定
@@ -2894,20 +2931,21 @@ TUI /effort / Composer 思考强度选择 -> 原生命令与确认 -> effortChan
 
 snapshot.runningToolIds 恢复等待工具结束的状态。TUI 产生的内嵌图片从转录映射到现有附件卡片，
 产品 MCP 的 visualize / canvas / 图片别名继续使用既有工具卡片。
-打开可视化回答后，`static_visualize` 和 `interactive_visualize` 替换 `visualize`，并画在随后正文的上方，不进入进度折叠。工具结果为失败，或调用已经结束但程序仍有校验错误时，不显示。
+Agent dashboard 作为随源码分发的 Skill 加载。模型在 Markdown 中输出图片式引用与同消息
+A2UI Express 代码块；前端在引用处绘制，不再从工具结果提取看板。所有看板与正文共用
+对话阅读列，完整定义到达前显示准备状态，编译错误提供明确原因和「让助手修复」。
 
-可视化回答开关通过 `session.configure` 应用；开关变化不重建已挂载的终端连接，也不清屏。
-首次查看或手动重连已有终端时沿用运行进程的实际配置，不把尚未确认的开关值当作启动配置。
-当前回答结束后再应用排队的配置；失败则恢复最近一次成功的开关值和本地偏好，保留错误提示，
-不因恢复状态再次发出配置请求。连续切换按请求确认处理，旧请求失败不覆盖新选择；
-原生 `/clear` 重绑定保留确认基线，切换到另一聊天时隔离旧请求的结果。
+Composer 使用彩色 Dashboard 图标与小号 BeUI Switch，Skill 过程行复用同一彩色图标。
+开关只改变 `enabledPluginIds`，不注入产品系统提示、不切换 MCP 工具。
+服务端确认前保留实际状态并禁用重复点击；当前回答结束后应用排队配置，失败保留
+最近一次确认的状态。终端查看连接保持挂载，重连和切换聊天读取会话实际插件配置。
 
 ```text
-visualize 开关 -> session.configure -> 等当前回答结束 -> 应用 / 确认
-                       |                                  |
-                       +-> 失败 -> 恢复开关与本地偏好      +-> 更新确认值
-终端预览 ----------------------------------------------------> 保持连接
-首次查看 / 手动重连 -> 认领已有进程的实际配置 -> 附加预览
+Dashboard Switch -> session.configure -> 当前回答结束 -> 原生 Skill 加载 / 卸载
+                         |                                  |
+                         +-> 失败 -> 保留实际开关状态       +-> ACK 更新开关
+终端预览 ----------------------------------------------------> 保持查看连接
+历史 Markdown -> 原有 A2UI 渲染（不受开关影响）
 ```
 
 ```text
@@ -2994,11 +3032,26 @@ Context Usage               ×
 
 相同 marker 的完成状态不会被滞后的快照退回“压缩中”；新压缩具有独立身份。
 沿用 `CompactSessionMarker` 的 200ms 淡入与摘要展开动效、主题 token 和
-减少动态效果设置，不新增页面区域。定向状态和组件回归从仓库根目录运行：
+减少动态效果设置，不新增页面区域。压缩、重置、模型和力度 marker 属于普通文档流，
+即使底层消息角色为 `user` 也不进入 StickyFreeze。摘要展开后正常占位，随滚动离开，
+不会以吸顶层遮住后续回复；它的高度也不计入流式工作状态的吸顶偏移。只有真实用户
+气泡（包括附件消息）继续吸顶。
+
+```text
+用户气泡                   -> StickyFreeze -> 工作状态排在气泡下
+压缩 / 重置 / 设置 marker  -> 普通文档流  -> 工作状态仍从页头下吸顶
+压缩展开：marker + 完整摘要 -> 后续回复顺排，摘要随滚动离开
+```
+
+定向状态和组件回归从仓库根目录运行：
 
 ```sh
-./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/compact-lifecycle.test.ts agent-ui/tests/features/agent-message/compact-session-stream.test.ts agent-ui/tests/features/agent-message/slash-command-envelope.test.ts agent-ui/tests/features/agent-message/snapshot-messages.test.ts agent-ui/tests/features/agent-message/compact-session-marker.test.tsx
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/compact-lifecycle.test.ts agent-ui/tests/features/agent-message/compact-session-stream.test.ts agent-ui/tests/features/agent-message/slash-command-envelope.test.ts agent-ui/tests/features/agent-message/snapshot-messages.test.ts agent-ui/tests/features/agent-message/compact-session-marker.test.tsx agent-ui/tests/features/agent-message/thread-turns.test.ts agent-ui/tests/features/agent-message/user-message-rail.test.ts agent-ui/tests/features/agent-message/sticky-freeze.test.ts
 ```
+
+浏览器回归打开 `/tests/features/agent-message/compact-thread-browser.html`。使用真实
+消息线程和隔离会话数据，检查长压缩摘要展开 / 收起、滚到最新回复时没有遮挡、流式
+工作状态的位置，以及普通用户气泡继续吸顶；同时检查深色、窄屏和减少动态效果。
 
 ### 文件 / Git 双视图
 
@@ -3233,7 +3286,7 @@ App TooltipProvider -> 首次悬浮 1s -> 连续切换 0ms
 | DOCX / PPTX | [document-renderer](../agent-ui/src/features/files/preview/renderers/document-renderer.tsx)、[presentation-renderer](../agent-ui/src/features/files/preview/renderers/presentation-renderer.tsx) | @silurus/ooxml 渲染文档内容，应用外框使用项目 token |
 | HTML 元素协助 | [html-assist](../agent-ui/src/features/files/html-assist/)，原生 DOM + `@medv/finder@4.0.2` | 复用 Office 批次与 SelectionActionsPopover；iframe 内运行 picker，父页面显示主题化外框和提问 |
 | HTML / JSX 生成内容 | [html-renderer](../agent-ui/src/features/files/preview/renderers/html-renderer.tsx)、[visualize-sandbox](../agent-ui/src/features/agent-message/visualize-sandbox) | iframe 中的内容；JSX 沙箱另有 Button、Badge、Card、Progress、Separator 简化实现，传入主题颜色但不共享主应用全部字号、圆角与交互 |
-| 可视化回答 | [render-ui/library](../agent-ui/src/features/agent-message/render-ui/library.tsx)、[generated-visual](../agent-ui/src/features/agent-message/render-ui/generated-visual.tsx) | 开关打开后，`static_visualize` / `interactive_visualize` 的 OpenUI Lang 画在随后正文上方。工具结果为失败，或调用已经结束但程序仍有校验错误时，不显示。这一块使用 OpenUI 自带色彩主题，主题变量只注入到生成结果上。柱状图和折线图默认在柱顶和数据点上方标出数值，首尾数值留在图内。折线上相距过近的数值会挪到点的旁边，仍然显示。数值和刻度文字跟随 OpenUI 主题在深色和浅色之间切换。环形图使用 BeUI Donut Chart，分段按示例色循环：蓝、青、绿、黄。面积图是带坐标轴和图例的堆叠面积图，系列颜色使用 shadcn 图表文档的多色色板。按钮发下一轮 |
+| 可视化回答 | [A2UI catalog](../agent-ui/src/features/agent-message/a2ui/catalog.tsx)、[MarkdownA2ui](../agent-ui/src/features/agent-message/markdown-a2ui.tsx) | Skill 教模型嵌入 Markdown；完整 source 经普通 HTTP 编译为官方 A2UI 消息，使用 shadcn 卡片、表单和 Recharts；所有看板与正文同宽；按钮动作作为下一轮用户消息 |
 
 消息共用的 `MessageResponse` 通过 `createMathPlugin({ singleDollarTextMath: true })`
 启用单美元符号行内公式（如 `$E = mc^2$`），同时保留 `$$...$$` 行内及独立公式。
@@ -3430,32 +3483,132 @@ Shift+Tab、Esc、已有草稿、重复快照、断线重连和原生会话重�
 
 在 `agent-ui/` 目录运行：
 
-- 安装依赖：`OPENUI_TELEMETRY_DISABLED=1 npm ci`（`@openuidev/react-lang` 依赖的 `@openuidev/lang-core` 默认在 postinstall 向 PostHog 上报安装信息）
+- 安装依赖：`npm ci`
 - 启动开发：`npm run dev`
 - 静态分析：`npm run lint`
 - 生产构建：`npm run build`
 - 预览生产构建：`npm run preview`
 
-`render_ui` 库变更后，在 `agent-ui/` 重新生成后端 spec：
+### A2UI 可视化回答
 
-```sh
-../services/agent-runner/ts/node_modules/.bin/tsx --tsconfig tsconfig.app.json scripts/generate-render-ui-spec.ts
+2026-11-15：先完成销售 Dashboard 隔离验证，再替换 OpenUI。2026-11-16 按用户修正，
+所有可视化（含 Dashboard）与正文保持对话容器宽度，不再单独加宽。视觉参考
+[A2UI Playground](https://a2ui.open.bot/)：分层标题、浅点阵底、留白、等高 KPI 卡、
+圆角图表卡、橙/青双系列。基础组件复用项目 shadcn/ui，图表复用 Recharts，
+组件共享 `a2ui/a2ui.css` 中的视觉 token，表面和文字读取应用主题。
+
+2026-11-16：改为内置 `agent-dashboard` Skill，产品名 **Agent dashboard**。
+源码、示例及模型指引在 `services/agent-runner/ts/src/resources/plugins/agent-dashboard/`。
+开关只加载 / 卸载该 Skill；不注入系统提醒，不提供 `render_ui` MCP 工具，不迁移旧工具历史。
+
+```text
+彩色图标 + Switch -> enabledPluginIds -> Claude plugins / --plugin-dir
+                                     -> Pi additionalSkillPaths
+                                             |
+                                      Skill + resource 示例
+                                             |
+模型 Markdown 回复（图片式引用 + 同消息 Express 源码）
+                     |
+     原始 Markdown AST，确认闭合 fence -> 普通 HTTP /api/sandbox/a2ui/compile
+                     |                         |
+                     |             官方编译器 + 结构 / 数据校验
+                     |                         |
+                     +---- 引用处绘制 <---- canonical A2UI messages
+                                |
+                  官方 MessageProcessor + React A2uiSurface
+                                |
+                    shadcn / Recharts / 表单
+                                |
+           messageId + embedId + action -> 下一轮用户消息
+
+对话容器（最大 48rem，所有内容统一宽度）
++------------------------------------------+
+| 回答正文                                 |
+| Heading / subtitle                       |
+| [ KPI ] [ KPI ]                          |
+| [ KPI ] [ KPI ]                          |
+| [ 图表 / 表格，宽度跟随对话容器 ]        |
+| [操作按钮] [操作按钮]                    |
+| 后续正文                                 |
++------------------------------------------+
+窄屏 KPI 变为一列；表格内部横向滚动。
 ```
 
-回归（仓库根目录）：
+同一条助手消息中的写法：
+
+````markdown
+![区域销售](a2ui:regional-sales)
+
+```a2ui id=regional-sales
+root = Table(columns=["地区", "销售额"], rows=[["欧洲", 4200000]], title="区域销售")
+```
+````
+
+引用独占一段，ID 在同一消息中唯一，匹配 `[a-z][a-z0-9-]{0,63}`。
+代码块随原始消息保存，复制和 Markdown 下载保留完整源码；渲染时隐藏关联代码块。
+解析器使用 `mdast-util-from-markdown` 检查原始 fence，不能把 Streamdown 自动补全当作
+模型已经输出完整。缺失、重复或无效 ID 显示可读错误；修复按钮只在用户点击后发下一轮。
+完整 source 的编译结果缓存，后续正文流入不会重置表单。刷新历史重新编译，同样不依赖文件。
+
+表格列保留 `6rem` 最小宽度，避免短中文状态被长说明挤成逐字竖排；列数较多或
+窄屏空间不足时只在表格内部横向滚动，外层仍与对话正文对齐。
+
+前端固定 `@a2ui/react` / `@a2ui/web_core` 0.14.0，后端固定 `@a2ui/agent`
+0.0.2 / core 0.14.0；消息版本为 `v1.0`，HTTP 返回
+`{format:"a2ui",version:"1.0",messages:[...]}`。不混用 0.15：该 React 发布包与
+markdown-it 的 core peer 不一致，且 agent 0.1.0 的消息版本写法已变化。
+`zod-v3` 是官方 Zod 3.25.76 的显式 npm alias，供 A2UI schema 使用；应用原有
+Zod 4 不降级。无 force、legacy-peer-deps、SDK patch 或协议版本改写。
+升级时必须同时验证两个安装树及真实编译→官方 schema→渲染→动作的链路。
+
+组件目录的唯一源是 `a2ui/catalog-definition.ts`。生成器只导入 schema，不将
+React/DOM 引入 Runner；生成 `core/a2ui/catalog.generated.ts`，Skill 的组件目录同样
+由真实 catalog 生成并验证。支持 Column/Row/Grid、Heading/Text/Stat/Card/Badge/Table、
+Bar/Line/Area/Donut、Button/TextField/Select。模型直接赋值 `root`；host 为每个嵌入创建
+独立 `main` surface，不教授手动 `surface(...)` 或跨消息更新。
+
+动作字段与 `{version:1,pluginId:"agent-dashboard",messageId,embedId,action}` 来源封套
+保存为 `<priva-a2ui-action>` 提示后缀，通过现有会话队列发给模型。用户气泡只显示文案，
+历史恢复保留结构化字段；重放不自动触发动作。提交期间按钮禁用，传输失败明确显示。
+关闭插件只影响后续 Skill 加载，已读 Skill 仍可能留在模型历史，历史看板继续显示。
+原有独立 JSX `visualize` 与其他产品工具不受开关影响。
+
+目录变更后，仓库根目录生成后端 catalog，再生成真实编译的浏览器 fixtures：
 
 ```sh
-./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/render-ui-lang.test.ts agent-ui/tests/features/agent-message/render-ui-spec.test.ts agent-ui/tests/features/agent-message/render-ui-tool-item.test.tsx
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json agent-ui/scripts/generate-a2ui-catalog.ts
+cd services/agent-runner/ts
+node --import tsx scripts/generate-dashboard-catalog.ts
+node --import tsx tests/fixtures/a2ui/generate-sales-dashboard.ts
 ```
 
-浏览器打开 `/tests/features/agent-message/render-ui-browser.html`，点击 **Stream next line**，确认半截程序先出现标题，写完后三张卡并排、图表在下一行。追加 `?dark` 看深色。把窗口收到 390px，三张卡仍在同一行里收缩。
+前端回归（仓库根目录）：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/a2ui-*.test.ts agent-ui/tests/features/agent-message/a2ui-*.test.tsx agent-ui/tests/features/agent-message/ui-action.test.ts
+```
+
+后端回归（`services/agent-runner/ts/`）：
+
+```sh
+TMPDIR=/tmp npx vitest run tests/unit/core/a2ui tests/unit/core/plugin tests/integration/transport/http/a2ui.test.ts
+npm run build
+node --import tsx tests/fixtures/terminal/native-product-probe.ts dist/provider/claude/tools/native-product-server.js
+```
+
+浏览器入口 `/tests/features/agent-message/a2ui-thread-browser.html`：点击 **Run conversation checks**，
+验证真实消息线程中的 Markdown 引用与隐藏源码、同宽布局、插件确认开关、表单动作、
+原始闭合 fence、缺失/重复 ID、显式修复与历史重放。追加 `?narrow&dark&zh&reduced-motion`
+检查手机宽度、深色、中文和减少动态效果。样例严格匹配真实编译器生成的 source 与
+canonical fixtures，不调用真实模型。`/tests/features/agent-message/a2ui-browser.html`
+继续提供独立组件、图表与响应式外观检查。
 
 2026-10-24：生成回答中的柱状图、折线图和面积图通过
-`render-ui/viewport-chart-container.tsx` 提交受控尺寸。距聊天视口上下 400px 内
+`a2ui/viewport-chart-container.tsx` 提交受控尺寸。距聊天视口上下 400px 内
 仍连续接收尺寸；更远的图表只记录最新尺寸，接近视口或获得键盘焦点时同步。
-保留图表实例、固定高度、现有 320ms 动画和标签避让规则。离屏冻结期间裁剪
+保留图表实例与受控高度，减少动态效果时关闭图表动画。离屏冻结期间裁剪
 旧尺寸的 SVG，避免它撑宽聊天滚动区域。图表模型、渲染函数与主题配置保持稳定；
-保留父组件的原有更新行为，避免改变数值标签避让缓存的重置时机。
+悬停和可访问数据表提供精确数值。
 
 ```text
 容器 resize -> 可见 / 临近视口 -> 提交尺寸 -> 原有图表与动画
@@ -3511,13 +3664,13 @@ Workspace 拖动时，分隔条同步更新实时宽度与 `aria-valuenow`，相
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/workspace/workspace-resize.test.tsx agent-ui/tests/features/sidebar/header/harness-default-width.test.tsx
 ```
 
-可视化开关与终端连接回归（仓库根目录）：
+Dashboard 插件开关与终端连接回归（仓库根目录）：
 
 ```sh
-./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/visualize-mode-configuration.test.tsx agent-ui/tests/features/agent-message/session-terminal-view.test.tsx agent-ui/tests/features/agent-message/session-connection.test.ts agent-ui/tests/features/agent-message/terminal-session.test.ts agent-ui/tests/features/agent-message/session-view-context.test.tsx
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/dashboard-plugin-configuration.test.tsx agent-ui/tests/features/agent-message/session-terminal-view.test.tsx agent-ui/tests/features/agent-message/session-connection.test.ts agent-ui/tests/features/agent-message/terminal-session.test.ts agent-ui/tests/features/agent-message/session-view-context.test.tsx
 ```
 
-使用隔离 DOM / WebSocket 检查 Claude、Pi 开关失败回滚、连续请求确认、断线失败、
+使用隔离 DOM / WebSocket 检查 Claude、Pi 开关确认后生效、加载失败保留状态与重复点击禁用、断线失败、
 原生重绑定及跨会话隔离；检查已挂载终端切换时不断连、不清屏、继续接收输出，
 以及显式重连采用最新开关值。测试不连接真实模型或桌面，不替代原生会话集成验证。
 
@@ -3712,6 +3865,36 @@ Workspace 路径、并排 / 对比的中文标签、50% 边界、快速正反向
 
 ```sh
 ./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/image-edit-tool-item.test.tsx agent-ui/tests/features/agent-message/image-tool-data.test.ts
+```
+
+工具行状态（2026-11-15）：执行成功不附加勾号、成功图标或完成徽标；失败时工具名、
+文件名、输入摘要和元信息统一显示错误红色，并在文本后添加红色填充圆形、叉形镂空的
+错误图标；叉形区域真实透明，透出所在表面。原有工具图标、展开箭头和操作按钮保持原色。运行中、暂停、取消和未知
+状态保留现有反馈。错误图标带本地化的可访问名称及 `sr-only` 文案。
+
+```text
+运行中 -> 工具名称 + 内容 + 原有运行指示
+成功   -> 工具名称 + 内容
+失败   -> [原色工具图标] 工具名称 + 内容（红色文本） (x) [原色展开箭头]
+```
+
+规则覆盖普通工具、MCP、Codemode 及嵌套模型调用、图片、Skill、文件读写、Canvas、
+白板，以及 Agent / Workflow / 后台任务工具入口。工作流展开后的阶段进度、计数和
+导航状态保留原有语义。FileRead / FileDiff 显式接收 `error`，调用层不再把失败折为完成。
+各入口只在工具标题区域设置 `data-tool-status`，用 `data-tool-text` 标记文本容器；共享
+CSS 仅以 `--tool-error-foreground` 覆盖这些文本与链接悬停色，不改变图标或展开输出。
+末尾错误图标复用 `ToolResultStatusIndicator`，大小为 14px，同样读取该文本色 token；通过 Lucide
+图标工厂生成单个 `fill="currentColor"`、`fill-rule="evenodd"` 的圆形与叉孔路径，
+不使用背景色覆盖来模拟镂空。
+浅色为 `oklch(0.55 0.2 20)`，深色复用 `--status-error`；在聊天与工作区表面验证文字
+对比度至少 4.5:1。原有展开、复制、预览、运行动态效果及减少动态效果设置保持可用。
+
+浏览器回归：打开 `/tests/components/agents/tool-status-browser.html`，点击运行检查；
+追加 `?zh&dark&reduced-motion`，并在 390px 视口验证状态切换、重试、深浅主题、
+真实文件链接和悬停、对比度及窄屏。DOM 回归（仓库根目录）：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/agent-message/canvas-tool-item.test.tsx agent-ui/tests/features/agent-message/task-tool-status.test.tsx agent-ui/tests/features/agent-message/mcp-tool-item.test.tsx agent-ui/tests/features/agent-message/codemode-tool-item.test.tsx agent-ui/tests/features/agent-message/image-edit-tool-item.test.tsx
 ```
 
 Agent 步骤长输入回归：打开 `/tests/components/agents/tool-result-browser.html`，点击
@@ -4045,3 +4228,140 @@ Codemode [状态]
 点击 Start calls / Complete calls 检查运行到完成；展开 JavaScript 与 MCP 子行，
 确认 JSON 结果、图片灯箱、取消行和历史摘要提示。追加 `?zh&dark&reduced-motion`
 及 `&mobile=390` 的真实 390px iframe 检查中文、深色、减少动态效果和无横向溢出。
+
+
+### Whiteboard（2026-11-13）
+
+按确认的视觉样张与后续入口调整，Agent Workspace 增加「白板」Tab，展示完整
+React Flow 画布并实时接收 Agent 绘制。工具卡片保持单行，不提供折叠展开；点击
+历史卡片打开相应白板，实时工具调用自动打开白板 Tab。文件浏览器也识别
+`*.board.json`，源码和下载内容跟随预览收到的最新快照。
+Workspace 白板的懒加载由共享 `PreviewRendererBoundary` 隔离；模块或渲染失败时
+只在白板面板显示本地化错误与「刷新页面」，聊天和其他 Workspace 操作保持可用。
+刷新由用户点击触发，不自动重载；React.lazy 已缓存的导入失败需要重新加载文档。
+
+```text
+工具行「打开预览」 -> 白板面板 -> Suspense -> WhiteboardRenderer
+                       |
+                 加载 / 渲染异常
+                       v
+             局部提示 + 刷新页面；聊天仍可交互
+```
+
+浏览器回归入口 `/tests/features/workspace/whiteboard-preview-browser.html` 使用真实工具行、
+Workspace 和白板 Renderer，接口与 WebSocket 使用隔离数据。正常打开须出现 React Flow
+节点；拦截白板 renderer 模块请求以模拟导入失败时，局部提示、刷新按钮和聊天交互
+仍可用。追加 `?zh&dark` 验证本地化错误。
+
+白板与 HTML Canvas 复用普通工具行的状态规则：运行指示保持原样，成功不附加状态标记，
+失败时工具名与文件名使用主题适配的错误红色，文本后显示镂空错误图标；左侧工具图标
+保持原色，并保留屏幕阅读器状态文案。
+失败时不把原始错误 JSON 或堆栈作为独立正文，也不另放进悬浮提示。
+失败项不提供预览操作。
+
+```text
+[白板] 文件名 (x)         <- 失败：图标原色、文本红色、末尾镂空错误图标
+[白板] 文件名 打开预览    <- 成功：无额外状态标记
+```
+
+白板统一保存在 `<cwd>/.whiteboard/<当前会话ID>/`。文件名由 Agent 根据内容主题
+生成并通过必填的 `path` 显式传入，例如 `login-flow.board.json`；后续修改复用
+同一路径，没有默认文件名。工具输入的短路径相对该会话目录；实时导航、历史恢复和
+工具卡片使用同一规则解析，完成结果使用 Runner 返回的规范化绝对路径。
+实时事件尚无会话 ID 或有效路径时不打开猜测白板。每个会话可有多个白板文件，
+Workspace 记住各会话当前查看的一个路径；不同会话使用相同文件名时也分别保存。
+左上角以当前文件名作为下拉切换器，列出当前 session 目录及子目录中的全部
+`.board.json` 文件，仅显示去掉 `.json` 后缀的文件名（如 `login-flow.board`）；完整路径作为悬停提示区分同名文件。首次进入、
+切换路径、展开菜单和首次收到已保存的新白板版本时刷新目录，revision 0 的占位
+快照不会提前消耗刷新机会，旧 session 的响应不会覆盖当前列表。没有已选文件时
+打开目录中的首项；手动切换不重播绘制。加载中或文件失败时也保留文件切换入口。
+
+```text
+Agent 工具调用 -> 单行工具卡片 -> Agent Workspace [白板]
+                                      |
+                                      v
+                    文件名切换 / 状态 / 适应画面 / 缩放 / 删除 / 下载
+                    React Flow：绘制、移动、调整大小、编辑
+```
+
+下载菜单位于删除按钮右侧，提供 PNG 与 PDF。导出整个白板内容范围并保留元素
+当前显示状态，不受当前缩放或平移影响；绘制中的内容使用完成态快照，导出不推进
+直播动画。临时绘制框、笔尖、工具栏、小地图与选区不进入文件。PDF 使用按白板
+宽高比生成的完整单页，四周留白，不按 A4 切片，超大画布等比缩小以避免页面裁切。
+
+```text
+宽屏：[flow.board v] [状态]            [适应] [− 100% +] [删除] [下载 v]
+                                                               PNG / PDF
+窄屏：[flow.board v] [状态]
+      [适应] [− 100% +] [删除] [下载 v]
+      +----------------- 白板画布 -----------------+
+```
+
+画布采用 `@xyflow/react`。八种元素和十二种形状的具体字段、持久化、协作上下文和
+沙箱协议见 [whiteboard](architecture/whiteboard.md)。无常驻外轮廓、明度渐变、锐利
+接触阴影，数据库和队列保留完整椭圆端面边线。新 Agent 元素沿路径绘制并显现填色
+和文字；整体绘制速度为原来的 1/2（时长加倍），笔迹、箭头、标签及提示框保持同步。
+历史快照和用户修改不重复进场。Workspace 按会话及文件路径记录已展示内容；切到其他
+Tab 后再由 Agent 自动打开同一文件时，不重播整板，首次打开未展示的新文件仍可播放
+首个快照。合并节点时保留 React Flow 的测量数据，避免无关内容更新或某个元素绘制
+结束导致连线卸载重建；节点改尺寸仍由 ResizeObserver 更新端口。
+每批新增 ID 按动画时间错开 70ms，上限 700ms；半速下实际为 140ms、1.4s，没有同时
+绘制数量上限。减少动态效果时立即显示。窄 Workspace
+容器保留相同操作，按容器宽度紧凑排布。
+
+连线使用固定种子的 Rough.js 笔迹，同一元素重渲染时不随机变化；对齐端口之间
+保留轻微弧度，同侧端口保留回流路线。箭头和标签随笔迹进度出现。手绘笔迹使用
+D3 Catmull–Rom 曲线连接采样点，支持样张中的橙色下划线、圈注和紫色波浪线。
+连线标签使用不透明的卡片底色，标签层始终位于连线之上，包括节点选中或拖动时。
+
+新元素实际开始绘制时显示临时协作提示：外围是 `rgb(96,165,250)` 虚线框和同色
+6% 不透明度的淡蓝填充。右下角使用 [Animate UI Cursor](https://animate-ui.com/docs/primitives/animate-ui/cursor)
+的光标及跟随标签，标签显示 `Bambuddy`，浅色模式为白字，深色模式为 `#071e40`。
+光标固定在外框当前右下角，标签保持画布坐标中右移 16px、下移 24px 的偏移；
+外框、光标和标签同帧更新，不增加弹簧滞后或独立进场缩放。不再显示左上角 Tab。
+外框固定左上角，从 16 × 16px
+沿对角线展开到完整边界；有路径的元素跟随实际笔迹进度，表格、文字与 HTML 跟随
+当前显现动画的整体进度。只缩放外框及填色，虚线线宽、光标尺寸和标签字号保持稳定；
+暂停、减速、重播时同步，完成后移除。
+表格在同一轮追加行时，从当前外框尺寸继续展开，不因新行动画重新计时而回缩。
+节点、手绘笔迹和连线均使用画布覆盖层；连线框覆盖完整曲线及标签，HTML 和表格不会裁剪
+提示框，框也不接收鼠标或键盘事件。等待队列中的元素不提前显示；该元素全部 CSS
+动画完成后移除，包括箭头标签和表格最后一行。状态栏与实际动画同步，删除、切板、
+取消和减少动态效果不会留下提示框。提示仅存在于客户端，不写入 `.board.json`。
+
+```text
+         + - - - - - - - - - +
+         :  淡蓝底 / 绘制元素  :
+         + - - - - - - - - - +  ↖ Cursor
+                                  [Bambuddy]
+等待 -> 动画开始 / 左上角小框 -> 随进度向右下展开 -> 所有动画完成 / 移除提示
+```
+
+使用本地受控 Cursor 适配，坐标由绘制进度对应的 MotionValue 驱动，仅保留淡入。
+在 Motion 的 update 阶段采样实际笔迹并更新外框，光标与标签在同一帧完成位置渲染，
+暂停、seek、变速时均保持同步；不监听或隐藏用户的真实鼠标。偏移使用画布坐标，
+缩放时不会混用屏幕坐标。
+
+回归从仓库根目录运行：
+
+```sh
+./services/agent-runner/ts/node_modules/.bin/tsx --tsconfig agent-ui/tsconfig.app.json --test agent-ui/tests/features/whiteboard/*.test.ts agent-ui/tests/features/agent-message/whiteboard-tools.test.ts agent-ui/tests/features/agent-message/canvas-tool-item.test.tsx agent-ui/tests/features/file-browser/file-preview.test.tsx agent-ui/tests/features/workspace/workspace-whiteboard-navigation.test.tsx
+```
+
+浏览器检查：启动前端开发服务后打开
+`/tests/features/whiteboard/whiteboard-browser.html`，点击 **Run whiteboard checks**。
+**Stream Agent drawing** 逐批演示绘制；`?dark&narrow` 检查深色和窄容器。
+**Preview drawing frames** 暂停在绘制中途，便于检查虚线框、淡蓝底和右下角光标。
+检查包含曲线路径、回流方向、新笔迹实际绘制进度，以及提示框的开始/结束、延迟、
+对角缩放与笔迹逐帧同步、光标跟随右下角、标签固定偏移及尺寸、用户鼠标保持正常、
+回流曲线与标签边界、HTML/表格裁剪、长表格最后一行、删除、取消和重置清理。
+同一绘制 cue 中追加表格行后，提示保留到新行完成；窄高角色形状也验证超出节点
+尺寸的真实轮廓仍被完整包围。同一元素替换为新 revision 的 cue 时重新绘制，
+延迟期间隐藏旧框，旧 cue 完成不会提前清除新 cue。
+浏览器模拟 `prefers-reduced-motion: reduce` 后再运行相同检查，验证立即显示结果且无提示框。
+
+导出回归打开 `/tests/features/whiteboard/whiteboard-export-browser.html`，点击
+**Run export checks**。页面生成 PNG/PDF 下载链接与图片预览，检查负坐标、四角
+标记、超框图形、回流线、HTML 当前状态、内部滚动状态和绘制中导出。追加 `?dark`
+检查深色，`?huge` 检查超大画布等比缩小及 PDF 单页尺寸上限；下载 PDF 后用
+`pdfinfo` 和 `pdftoppm` 确认单页及四周内容完整。

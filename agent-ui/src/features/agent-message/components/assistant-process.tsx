@@ -1,3 +1,4 @@
+import { whiteboardToolKind } from "../whiteboard-tools"
 import { isQuestionTool } from "../interaction-data"
 import { QuestionSummary } from "./interaction-card"
 import { BackgroundTaskCard } from "./background-task-card"
@@ -24,6 +25,7 @@ import { FileRead } from "@/components/agents/file-read"
 import {
   ToolResult,
   ToolResultOutput,
+  ToolResultStatusIndicator,
   type ToolResultStatus,
 } from "@/components/agents/tool-result"
 import { MessageResponse } from "@/components/ai-elements/message"
@@ -81,8 +83,7 @@ import { isCanvasTool } from "../canvas-html"
 import { externalMcpToolName } from "../mcp-tool-data"
 import { isVisualizeTool } from "../visualize-jsx"
 import { isImageEditTool, isImageGenTool, isImageReadTool } from "../image-tools"
-import { isHiddenGeneratedVisual } from "../render-ui/lang"
-import { finishedProgramRejected } from "../render-ui/visual-program"
+import { AgentDashboardIcon } from "./agent-dashboard-icon"
 import { ImageGenToolItem, ImageReadToolItem } from "./image-tool-item"
 import { ImageEditToolItem } from "./image-edit-tool-item"
 
@@ -333,7 +334,6 @@ export function ToolItem({
   block: Extract<StreamBlock, { type: "tool_use" }>
   blocks?: readonly StreamBlock[]
 }) {
-  if (isHiddenGeneratedVisual(block) || finishedProgramRejected(block)) return null
   if (block.name === "codemode") {
     return <CodemodeToolItem block={block}>
       {blocks.filter((child): child is Extract<StreamBlock, { type: "tool_use" }> => child.type === "tool_use" && codemodeParent(child, blocks) === block.id)
@@ -355,7 +355,7 @@ export function ToolItem({
   if (isVisualizeTool(block.name)) {
     return <VisualizeToolItem block={block} />
   }
-  if (isCanvasTool(block.name)) {
+  if (isCanvasTool(block.name) || whiteboardToolKind(block.name)) {
     return <CanvasToolItem block={block} />
   }
   if (isImageGenTool(block.name)) {
@@ -390,11 +390,13 @@ function SkillToolItem({ block }: { block: Extract<StreamBlock, { type: "tool_us
   const input = usefulToolInput(block.tool?.input) ?? usefulToolInput(block.input)
   const status = toolResultStatus(block.tool)
   const output = block.tool?.output?.trim() ?? ""
+  const skill = stringInput(input, "skill") ?? ""
+  const dashboard = skill === "agent-dashboard" || skill === "agent-dashboard:agent-dashboard"
   return (
     <ToolResult
       tool={t(status === "running" ? "agentMessage.toolItem.skillRunning" : "agentMessage.toolItem.skillDone")}
-      title={stringInput(input, "skill") ?? ""}
-      icon={<ScrollTextIcon className="size-[1em]" />}
+      title={dashboard ? "Agent dashboard" : skill}
+      icon={dashboard ? <AgentDashboardIcon className="size-[1em]" /> : <ScrollTextIcon className="size-[1em]" />}
       status={status}
       defaultOpen={false}
       maxHeight={280}
@@ -413,16 +415,17 @@ function GenericToolItem({
 }) {
   const { t } = useTranslation()
   const tool = block.tool
-  const running = isToolRunning(tool)
-  const { label, variant } = toolBadge(tool, t)
+  const status = toolResultStatus(tool)
+  const running = status === "running"
   const output = tool?.output
 
   return (
     <ProcessRow
       icon={<WrenchIcon />}
       title={toolItemStatusLabel(block.name, running, t)}
-      badge={label}
-      badgeVariant={variant}
+      toolStatus={status}
+      badge={running ? t(tool?.launchStatus === "async_launched" ? "agentMessage.runInBackground" : "agentMessage.toolRunning") : undefined}
+      badgeVariant={tool?.launchStatus === "async_launched" ? "outline" : "secondary"}
       defaultOpen={false}
     >
       {output ? (
@@ -648,7 +651,7 @@ function WriteToolItem({
       tool={toolItemStatusLabel(block.name, running, t)}
       file={<ToolFileName path={filePath} status={status} />}
       lines={lines}
-      status={running ? "streaming" : "complete"}
+      status={running ? "streaming" : status === "error" ? "error" : "complete"}
       language={languageFromPath(filePath)}
       icon={
         <FilePlusCornerIcon
@@ -692,7 +695,7 @@ function EditToolItem({
       tool={toolItemStatusLabel(block.name, running, t)}
       file={<ToolFileName path={filePath} status={status} />}
       lines={lines}
-      status={running ? "streaming" : "complete"}
+      status={running ? "streaming" : status === "error" ? "error" : "complete"}
       language={languageFromPath(filePath)}
       icon={
         <FilePenLineIcon
@@ -735,7 +738,7 @@ function ReadToolItem({
       file={<ToolFileName path={filePath} status={status} />}
       imageHint={isImageFilePath(filePath)}
       view={view}
-      status={running ? "streaming" : "complete"}
+      status={running ? "streaming" : status === "error" ? "error" : "complete"}
       language={languageFromPath(filePath)}
       defaultOpen={false}
       collapseOnComplete
@@ -775,6 +778,7 @@ function ProcessItemGroup({
 function ProcessRow({
   icon,
   title,
+  toolStatus,
   badge,
   badgeVariant = "outline",
   defaultOpen = false,
@@ -782,6 +786,7 @@ function ProcessRow({
 }: {
   icon?: React.ReactNode
   title: React.ReactNode
+  toolStatus?: ToolResultStatus
   badge?: React.ReactNode
   badgeVariant?: "secondary" | "outline" | "destructive"
   defaultOpen?: boolean
@@ -799,8 +804,9 @@ function ProcessRow({
         </ItemMedia>
       ) : null}
       <ItemContent className="min-w-0 flex-none">
-        <ItemTitle className="text-ui font-normal">{title}</ItemTitle>
+        <ItemTitle data-tool-text={toolStatus ? true : undefined} className="text-ui font-normal">{title}</ItemTitle>
       </ItemContent>
+      {toolStatus === "error" ? <ToolResultStatusIndicator status="error" /> : null}
       {showActions ? (
         <ItemActions>
           {badge ? <Badge variant={badgeVariant}>{badge}</Badge> : null}
@@ -816,6 +822,7 @@ function ProcessRow({
     return (
       <Item
         size="sm"
+        data-tool-status={toolStatus}
         className="w-fit max-w-full bg-transparent px-0 py-0.5 text-ui hover:bg-transparent"
       >
         {header}
@@ -831,6 +838,7 @@ function ProcessRow({
     >
       <Item
         size="sm"
+        data-tool-status={toolStatus}
         className="w-fit max-w-full cursor-pointer bg-transparent px-0 py-0.5 text-left text-ui hover:bg-transparent aria-expanded:bg-transparent"
         render={<CollapsibleTrigger />}
       >
@@ -943,20 +951,4 @@ function toolResultStatus(tool: ToolCard | undefined): ToolResultStatus {
     return "error"
   }
   return "success"
-}
-
-function toolBadge(
-  tool: ToolCard | undefined,
-  t: (key: string) => string
-): { label: string; variant: "secondary" | "outline" | "destructive" } {
-  if (tool?.launchStatus === "async_launched") {
-    return { label: t("agentMessage.runInBackground"), variant: "outline" }
-  }
-  if (tool?.status === "completed") {
-    if (tool.ok === false) {
-      return { label: t("agentMessage.toolFailed"), variant: "destructive" }
-    }
-    return { label: t("agentMessage.toolCompleted"), variant: "outline" }
-  }
-  return { label: t("agentMessage.toolRunning"), variant: "secondary" }
 }

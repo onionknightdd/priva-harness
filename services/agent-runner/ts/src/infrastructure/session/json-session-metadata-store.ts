@@ -1,3 +1,4 @@
+import { normalizeEnabledPluginIds } from '../../core/plugin/builtin-plugins.js'
 import { readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 
@@ -34,6 +35,7 @@ interface StoredSessionFlags {
   readonly tags?: readonly string[]
   readonly addDirs?: readonly string[]
   readonly runMode?: string
+  readonly enabledPluginIds?: readonly string[]
 }
 
 interface SessionMetadataDocument {
@@ -102,6 +104,7 @@ export class JsonSessionMetadataStore implements SessionMetadataRepository {
         tags: patch.tags === undefined ? current.tags : [...patch.tags],
         addDirs: patch.addDirs === undefined ? current.addDirs : [...patch.addDirs],
         runMode: patch.runMode ?? current.runMode,
+        enabledPluginIds: patch.enabledPluginIds === undefined ? current.enabledPluginIds : [...patch.enabledPluginIds],
         recap: patch.recap === undefined ? current.recap : patch.recap,
         lastResponseModel: patch.lastResponseModel === undefined
           ? current.lastResponseModel
@@ -234,6 +237,7 @@ function recordFromDocument(document: SessionMetadataDocument, key: string): Ses
     tags,
     addDirs,
     runMode,
+    enabledPluginIds: normalizeEnabledPluginIds(stored?.enabledPluginIds),
     recap,
     lastResponseModel,
   }
@@ -262,6 +266,7 @@ function writeRecord(
         archived: record.flags.archived,
         tags: [...record.tags],
         addDirs: [...record.addDirs],
+        enabledPluginIds: [...record.enabledPluginIds],
         ...(record.runMode === null ? {} : { runMode: record.runMode }),
       },
     },

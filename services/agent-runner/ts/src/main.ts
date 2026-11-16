@@ -1,10 +1,12 @@
-import { mkdir } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
+import { mkdir, rename, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 import { readComputerConfig } from './computer-config.js'
 
+import { AgentApiService } from './harness/agent-api/agent-api-service.js'
 import { AgentHarness } from './harness/agent-harness.js'
 import { AgentProfileService } from './harness/config/agent-profile-service.js'
 import { ConfigDistributor } from './harness/config/config-distributor.js'
@@ -12,6 +14,9 @@ import { ModelProfileService } from './harness/config/model-profile-service.js'
 import { LiveRunRegistry } from './harness/run/live-run-registry.js'
 import { SessionService } from './harness/session/session-service.js'
 import { SessionTerminals } from './harness/terminal/session-terminals.js'
+import { JsonAgentApiSessionRegistry } from './infrastructure/agent-api/json-agent-api-session-registry.js'
+import { JsonlAgentApiEventStore } from './infrastructure/agent-api/jsonl-agent-api-event-store.js'
+import { NodeAgentApiWorkspace } from './infrastructure/agent-api/node-agent-api-workspace.js'
 import { WorkerDataRecorder } from './infrastructure/data/worker-data-recorder.js'
 import { JsonSessionMetadataStore } from './infrastructure/session/json-session-metadata-store.js'
 import { NodeModelAssets } from './infrastructure/filesystem/node-model-assets.js'
@@ -37,6 +42,7 @@ import { CodingAgentSessionFactory } from './provider/pi/pi-session-factory.js'
 import { defaultDataRetention, type DataRetention, type DataStoreLogger } from './core/usage/data-store.js'
 import type { RuntimeSettingsStore } from './core/contract/runtime-settings.js'
 import { productTools } from './core/tool/product-tools.js'
+import { WHITEBOARD_ENDPOINT_ENV } from './core/tool/whiteboard.js'
 import {
   createRuntimeConfig,
   resolveRuntimeHome,
@@ -52,6 +58,8 @@ export async function startServer(): Promise<void> {
   const runtimeConfig = createRuntimeConfig(
     resolveRuntimeHome(process.env[RUNTIME_HOME_ENV]),
   )
+  const whiteboardEndpointFile = join(runtimeConfig.runtimeHome, 'whiteboard-endpoint.json')
+  process.env[WHITEBOARD_ENDPOINT_ENV] = whiteboardEndpointFile
   const claudeConfigDir = claudeGlobalDir()
   const piConfigDir = piGlobalDir()
   const initialDirectory = process.env['WORKSPACE_DIR'] ?? homedir()
@@ -123,6 +131,17 @@ export async function startServer(): Promise<void> {
   })
   sessionService.bindWarmListing((harness) => agentHarness.listWarm(harness))
   sessionService.bindContextUsageReader((ref, spec) => agentHarness.readContextUsage(ref, spec))
+  const agentApi = new AgentApiService({
+    providers,
+    harness: agentHarness,
+    sessions: sessionService,
+    registry: new JsonAgentApiSessionRegistry(runtimeConfig.agentApiSessionsDir),
+    events: new JsonlAgentApiEventStore(runtimeConfig.agentApiSessionsDir),
+    workspace: new NodeAgentApiWorkspace(fileSystem),
+    modelProfiles: modelProfileService,
+    agentProfiles: agentProfileService,
+    reportError: (error) => { dataLog.error(`agent api: ${error instanceof Error ? error.stack ?? error.message : String(error)}`) },
+  })
   const configDistributor = new ConfigDistributor([
     new ClaudeConfigAdapter(),
     new PiConfigAdapter(),
@@ -151,6 +170,7 @@ export async function startServer(): Promise<void> {
     piEffortLevels: (modelId) => resolvePiThinkingCapability(modelId).effortLevels,
     agentProfileService,
     agentHarness,
+    agentApi,
     sessionTerminals,
     sessionService,
     configDistributor,
@@ -168,6 +188,7 @@ export async function startServer(): Promise<void> {
   const close = async (): Promise<void> => {
     const failures: unknown[] = []
     for (const step of [
+      () => agentApi.dispose(),
       () => agentHarness.disposePool(),
       () => sessionTerminals.dispose(),
       () => dataRecorder.close(),
@@ -189,6 +210,13 @@ export async function startServer(): Promise<void> {
   process.once('SIGTERM', shutdown)
 
   await server.listen({ host, port })
+  const address = server.server.address()
+  if (!address || typeof address === 'string') throw new Error('Runner did not bind a network address')
+  const boundHost = address.address === '::' ? '::1' : address.address === '0.0.0.0' ? '127.0.0.1' : address.address
+  const endpointHost = address.family === 'IPv6' ? `[${boundHost}]` : boundHost
+  const temporaryEndpoint = `${whiteboardEndpointFile}.${randomUUID()}.tmp`
+  await writeFile(temporaryEndpoint, JSON.stringify({ url: `http://${endpointHost}:${address.port}` }), { mode: 0o600, flag: 'wx' })
+  await rename(temporaryEndpoint, whiteboardEndpointFile)
 }
 
 // Retention is read once at boot. A broken settings file must not keep the

@@ -134,6 +134,7 @@ export interface SessionThreadView {
 }
 
 export interface RecordRunCompletedInput {
+  readonly enabledPluginIds?: readonly string[]
   readonly profileId: string
   readonly modelId: string
   readonly context: '1m' | null
@@ -154,6 +155,7 @@ export class SessionService {
       cwd: info.cwd ?? this.options.activeCwd,
       ...(metadata.runMode ? { runMode: metadata.runMode } : {}),
       contextWindow,
+      enabledPluginIds: metadata.enabledPluginIds,
       context: { ...emptyContextUsage(), limit: contextWindow },
     }
   }
@@ -432,6 +434,7 @@ export class SessionService {
     const current = await this.options.metadata.get(ref)
     await this.options.metadata.upsert(ref, {
       ...(ref.provider === 'pi' && current.runMode === null ? { runMode: 'agent' as const } : {}),
+      enabledPluginIds: input.enabledPluginIds ?? [],
       lastResponseModel: {
         profileId: input.profileId,
         model: {
@@ -469,6 +472,7 @@ export class SessionService {
   private async resolveContextUsageSpec(ref: SessionRef): Promise<ProviderRunSpec | undefined> {
     const info = await this.provider(ref.provider).sessions.read(ref)
     const cwd = info.cwd !== null && info.cwd !== '' ? info.cwd : this.options.activeCwd
+    const metadata = await this.options.metadata.get(ref)
     const reference = await this.contextUsageModelReference(ref)
     if (reference === undefined) return undefined
     try {
@@ -476,6 +480,7 @@ export class SessionService {
       return {
         cwd,
         provider: ref.provider,
+        enabledPluginIds: metadata.enabledPluginIds,
         model: ref.provider === 'pi' ? resolved.modelId : resolved.model,
         baseUrl: rewriteProviderBaseUrl(resolved.profile.baseUrl, ref.provider),
         authToken: resolved.profile.authToken,

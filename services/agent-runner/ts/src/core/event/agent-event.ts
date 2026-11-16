@@ -153,6 +153,7 @@ export interface BlockAddress {
 }
 
 export interface SessionConfiguration {
+  readonly enabledPluginIds: readonly string[]
   readonly contextWindow: ContextWindow
   readonly runMode?: RunMode
   readonly model: string

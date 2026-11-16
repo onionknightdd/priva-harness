@@ -15,7 +15,7 @@ frontend-specific guidance there instead of duplicating it in this file.
 The TypeScript Agent Runner lives in `services/agent-runner/ts/`. Use npm and
 run the following commands from that directory:
 
-- Install dependencies: `OPENUI_TELEMETRY_DISABLED=1 npm ci`
+- Install dependencies: `npm ci`
 - Start development: `npm run dev`
 - Run static analysis: `npm run lint`
 - Run strict type checking: `npm run typecheck`
@@ -50,6 +50,25 @@ To verify the compiled Claude native product MCP entry point after building:
 
 - `node --import tsx tests/fixtures/terminal/native-product-probe.ts dist/provider/claude/tools/native-product-server.js`
 
+A2UI compiler and real canonical fixture verification, from the Runner directory:
+
+- `TMPDIR=/tmp npx vitest run tests/unit/core/a2ui tests/unit/core/plugin tests/integration/transport/http/a2ui.test.ts`
+- `node --import tsx tests/fixtures/a2ui/generate-sales-dashboard.ts`
+- `node --import tsx scripts/generate-dashboard-catalog.ts` (after regenerating the frontend catalog)
+- `node --import tsx tests/fixtures/a2ui/compile-http-probe.ts dist` (after build)
+- `TMPDIR=/tmp npx vitest run tests/integration/transport/websocket/terminal-plugins.test.ts tests/unit/provider/pi/pi-resource-loader.test.ts`
+
+The fixture generator compiles the sales dashboard, form actions, chart gallery and root tables;
+the frontend catalog generator and browser checks are documented in
+`docs/front-end-desgin.md`.
+
+Whiteboard native tool / live WebSocket verification uses an isolated Runner and
+workspace (no real model calls). From `services/agent-runner/ts/`:
+
+- `node --import tsx tests/fixtures/whiteboard/native-whiteboard-probe.ts`
+- After building: `node --import tsx tests/fixtures/whiteboard/native-whiteboard-probe.ts dist/provider/claude/tools/native-product-server.js`
+- `TMPDIR=/tmp npx vitest run tests/unit/harness/whiteboard/whiteboard-service.test.ts tests/integration/transport/http/whiteboards.test.ts tests/unit/provider/whiteboard-native-launch.test.ts`
+
 The Debian 13 / minikube development environment is documented in
 [docs/development/debian-minikube.md](docs/development/debian-minikube.md).
 From the repository root, build and deploy with
@@ -71,6 +90,17 @@ For real desktop MCP model verification, run from the Runner directory:
 For models without image input, use
 `node --import tsx tests/deployment/computer-model-smoke.ts claude http://127.0.0.1:15173 PROFILE_ID --text-only`.
 This performs visible desktop actions and preserves its proof file and editor window.
+
+The third-party Agent API (`/api/agent/v1/...`, HTTP / SSE / WebSocket) follows
+[docs/architecture/agent-api-v1.md](docs/architecture/agent-api-v1.md), with
+request and event examples in
+[docs/api/agent-api-v1-examples.md](docs/api/agent-api-v1-examples.md) and the
+companion Cursor canvas
+[docs/api/agent-runner-api-io-examples.canvas.tsx](docs/api/agent-runner-api-io-examples.canvas.tsx);
+read them before implementing or changing it. The examples document's payloads are
+validated by the backend tests; after changing the contract, regenerate the JSON
+Schema from `services/agent-runner/ts/` with
+`npx vitest run tests/unit/core/agent-api/json-schema.test.ts -u`.
 
 Usage statistics and audit records are stored in SQLite; before touching
 recording, retention, or the `dataRetention` setting, read

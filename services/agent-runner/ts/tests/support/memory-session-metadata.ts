@@ -43,6 +43,7 @@ export class MemorySessionMetadataRepository implements SessionMetadataRepositor
       tags: patch.tags === undefined ? current.tags : [...patch.tags],
       addDirs: patch.addDirs === undefined ? current.addDirs : [...patch.addDirs],
       runMode: patch.runMode ?? current.runMode,
+        enabledPluginIds: patch.enabledPluginIds === undefined ? current.enabledPluginIds : [...patch.enabledPluginIds],
       recap: patch.recap === undefined ? current.recap : patch.recap,
       lastResponseModel: patch.lastResponseModel === undefined
         ? current.lastResponseModel

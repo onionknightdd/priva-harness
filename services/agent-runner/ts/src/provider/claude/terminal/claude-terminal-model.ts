@@ -21,7 +21,7 @@ function selection(spec: ProviderRunSpec) {
   assertClaudeEffort(spec.effort)
   const contextWindow = spec.contextWindow ?? DEFAULT_CONTEXT_WINDOW
   return { model: spec.model, contextWindow, ...(spec.effort ? { effort: spec.effort } : {}),
-    profile: createHash('sha256').update(JSON.stringify([spec.baseUrl, spec.authToken, spec.imageTools, spec.promptSuggestions, spec.runMode, spec.systemInstructions, contextWindow])).digest('hex') }
+    profile: createHash('sha256').update(JSON.stringify([spec.baseUrl, spec.authToken, spec.imageTools, spec.promptSuggestions, spec.runMode, spec.systemInstructions, spec.enabledPluginIds ?? [], contextWindow])).digest('hex') }
 }
 
 export async function saveClaudeTerminalSelection(scratchDir: string, spec: ProviderRunSpec): Promise<void> {

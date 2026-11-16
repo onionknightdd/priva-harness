@@ -2,7 +2,7 @@ import { defineTool, ExtensionEditorComponent, type ExtensionUIContext, type Ext
 import { z } from 'zod'
 import type { AgentEvent } from '../../core/event/agent-event.js'
 import { InteractionCoordinator } from '../../core/run/interaction-coordinator.js'
-import { answersByQuestion, normalizeQuestions, questionsSchema, type InteractionRequest, type InteractionResponse } from '../../core/resource/interaction.js'
+import { answersByQuestion, interactionDenialText, normalizeQuestions, questionsSchema, type InteractionRequest, type InteractionResponse } from '../../core/resource/interaction.js'
 
 /** Pi's RPC surface delegates native extension dialogs to the same WebUI inbox. */
 export class PiInteractions {
@@ -50,7 +50,7 @@ export class PiInteractions {
         kind: 'question', tool: 'ask_user_question', toolUseId, input: parsed,
         questions: normalizeQuestions(parsed.questions),
       }, signal ? { signal } : {})
-      if (result.decision === 'deny') throw new Error(`User interaction ${result.reason}. Continue without an answer; this is not agreement.`)
+      if (result.decision === 'deny') throw new Error(`${interactionDenialText(result.reason)}. Continue without an answer; this is not agreement.`)
       const answers = answersByQuestion(result)
       return {
         content: [{ type: 'text' as const, text: JSON.stringify({ answers }) }],

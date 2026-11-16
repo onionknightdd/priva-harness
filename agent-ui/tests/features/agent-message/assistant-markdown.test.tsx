@@ -7,7 +7,7 @@ import { compile } from "tailwindcss"
 import type { AgentMessageStatus, AgentThreadMessage } from "../../../src/features/agent-message/agent-message-data.ts"
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost", pretendToBeVisual: true })
-for (const key of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "Element", "Node", "NodeFilter", "DocumentFragment", "ShadowRoot", "SVGElement", "Event", "KeyboardEvent", "MouseEvent", "PointerEvent", "FocusEvent", "DOMRect", "MutationObserver", "getComputedStyle", "AbortController", "AbortSignal"]) {
+for (const key of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "Element", "Node", "NodeFilter", "Document", "DocumentFragment", "ShadowRoot", "CSSStyleSheet", "customElements", "CustomEvent", "SVGElement", "Event", "KeyboardEvent", "MouseEvent", "PointerEvent", "FocusEvent", "DOMRect", "MutationObserver", "getComputedStyle", "AbortController", "AbortSignal"]) {
   Object.defineProperty(globalThis, key, { configurable: true, value: dom.window[key as keyof typeof dom.window] })
 }
 Object.assign(globalThis, {

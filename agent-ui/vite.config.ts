@@ -7,6 +7,18 @@ import { build as esbuildBuild } from "esbuild"
 import { defineConfig, type Plugin } from "vite"
 import { htmlAssistRuntime } from "./scripts/html-assist-runtime-plugin.ts"
 
+function isolatedDevCache(): Plugin {
+  return {
+    name: "isolated-dev-cache",
+    apply: "serve",
+    config(config) {
+      // CLI options have been merged by this hook; fixture caches stay explicit.
+      if (config.cacheDir) return
+      return { cacheDir: `node_modules/.vite-${config.server?.port ?? 5173}` }
+    },
+  }
+}
+
 function materialIconThemeAssets(): Plugin {
   const sourceDirectory = path.resolve(
     import.meta.dirname,
@@ -82,6 +94,7 @@ function visualizeSandboxRuntime(): Plugin {
 
 export default defineConfig({
   plugins: [
+    isolatedDevCache(),
     react(),
     tailwindcss(),
     materialIconThemeAssets(),
@@ -89,6 +102,8 @@ export default defineConfig({
     htmlAssistRuntime(),
   ],
   server: {
+    // A fallback port would otherwise share the originally requested cache.
+    strictPort: true,
     proxy: {
       "/api": {
         target: process.env.AGENT_RUNNER_URL ?? "http://127.0.0.1:8001",
@@ -104,6 +119,9 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: [
+      "@xyflow/react",
+      "@animate-ui/react/primitives/slot",
+      "@animate-ui/react/utils/motion",
       "@headless-tree/core",
       "@headless-tree/react",
       "react-resizable-panels",

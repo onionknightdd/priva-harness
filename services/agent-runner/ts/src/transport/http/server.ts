@@ -1,3 +1,5 @@
+import { WhiteboardService } from '../../harness/whiteboard/whiteboard-service.js'
+import { whiteboardRoutes } from './route/whiteboards.js'
 import multipart from '@fastify/multipart'
 import websocket from '@fastify/websocket'
 import Fastify, {
@@ -28,12 +30,14 @@ import {
 } from '../../core/resource/runtime-settings.js'
 import { SessionError, type SessionErrorKind } from '../../core/resource/session.js'
 import { UserFileError, type UserFileErrorKind } from '../../core/resource/user-file.js'
+import type { AgentApiService } from '../../harness/agent-api/agent-api-service.js'
 import type { AgentHarness } from '../../harness/agent-harness.js'
 import type { AgentProfileService } from '../../harness/config/agent-profile-service.js'
 import type { ConfigDistributor } from '../../harness/config/config-distributor.js'
 import type { ModelProfileService } from '../../harness/config/model-profile-service.js'
 import type { SessionService } from '../../harness/session/session-service.js'
 import type { SessionTerminals } from '../../harness/terminal/session-terminals.js'
+import { agentApiRoutes, SANDBOX_AGENT_API_PREFIX } from '../agent-api/agent-api-routes.js'
 import { runWebsocketRoutes } from '../websocket/run-route.js'
 import { computerRoutes } from '../websocket/computer-route.js'
 import { terminalWebsocketRoutes } from '../websocket/terminal-route.js'
@@ -48,6 +52,7 @@ import { userFileRoutes } from './route/user-files.js'
 import { resourceRoutes } from './route/resources.js'
 import { subagentTestRoutes } from './route/subagent-test.js'
 import { terminalEventRoutes } from './route/terminal-events.js'
+import { a2uiRoutes } from './route/a2ui.js'
 
 // Covers the largest accepted client frame (queued input and desktop input are
 // both capped at 8 MiB) with headroom for its JSON envelope.
@@ -64,6 +69,7 @@ export interface BuildHttpServerOptions {
   readonly piEffortLevels?: (modelId: string) => readonly EffortLevel[]
   readonly agentProfileService: AgentProfileService
   readonly agentHarness?: AgentHarness
+  readonly agentApi?: AgentApiService
   readonly sessionTerminals?: SessionTerminals
   readonly sessionService?: SessionService
   readonly configDistributor?: ConfigDistributor
@@ -147,6 +153,7 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
     },
   })
   void server.register(userFileRoutes, { fileSystem: options.userFileSystem })
+  void server.register(a2uiRoutes)
   if (options.modelAssets !== undefined) {
     void server.register(modelAssetRoutes, { assets: options.modelAssets,
       ...(options.pointClouds === undefined ? {} : { pointClouds: options.pointClouds }) })
@@ -159,6 +166,7 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
   }
   const recorder = options.recorder
   void server.register(websocket, { options: { maxPayload: MAX_WEBSOCKET_FRAME_BYTES } })
+  void server.register(whiteboardRoutes, { service: new WhiteboardService() })
   void server.register(computerRoutes, options.computer === undefined ? {} : { computer: options.computer })
   void server.register(modelProfileRoutes, { service: options.modelProfileService,
     ...(options.piEffortLevels ? { piEffortLevels: options.piEffortLevels } : {}),
@@ -180,6 +188,9 @@ export function buildHttpServer(options: BuildHttpServerOptions): FastifyInstanc
   }
   if (options.usageReader !== undefined) {
     void server.register(usageRoutes, { reader: options.usageReader })
+  }
+  if (options.agentApi !== undefined) {
+    void server.register(agentApiRoutes, { service: options.agentApi, prefix: SANDBOX_AGENT_API_PREFIX })
   }
   if (options.agentHarness !== undefined) {
     void server.register(runWebsocketRoutes, {

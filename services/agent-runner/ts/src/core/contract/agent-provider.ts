@@ -58,8 +58,8 @@ export interface ProviderRunSpec {
   readonly effort?: EffortLevel
   readonly queueBehavior?: QueueBehavior
   readonly promptSuggestions?: boolean
-  /** When true, replace JSX visualize with the OpenUI component tools. */
-  readonly visualizeMode?: boolean
+  /** Product plugins available to this session; omitted means none. */
+  readonly enabledPluginIds?: readonly string[]
   readonly classifier?: ClassifierRunConfig
   readonly imageTools?: ImageToolProfile
 }

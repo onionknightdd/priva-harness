@@ -33,8 +33,9 @@ describe('SessionService last_response_model', () => {
       modelProfiles, liveRuns: new LiveRunRegistry(), activeCwd: '/tmp' })
     expect(await service.configuration(ref)).toBeUndefined()
     for (const context of ['1m', null] as const) {
-      await service.recordRunCompleted(ref, { profileId: profile.id, modelId: 'm', context })
+      await service.recordRunCompleted(ref, { profileId: profile.id, modelId: 'm', context, enabledPluginIds: ['agent-dashboard'] })
       expect(await service.configuration(ref)).toMatchObject({
+        enabledPluginIds: ['agent-dashboard'],
         model: harness === 'claude' && context ? 'm[1m]' : 'm',
         contextWindow: context ? 1000000 : 200000, profileId: profile.id,
       })

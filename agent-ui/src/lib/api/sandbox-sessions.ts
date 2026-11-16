@@ -3,6 +3,7 @@ import type { MessageAttachment } from "@/features/agent-message/message-attachm
 import type { InteractionResolution } from "@/features/agent-message/interaction-data"
 import type { CompactMarker } from "@/features/agent-message/slash-command-envelope"
 import { attachmentMessageSummary } from "@/features/agent-message/message-attachment-text"
+import { uiActionMessageSummary } from "@/features/agent-message/ui-action"
 const SESSION_API_PREFIX = "/api/sandbox/agent/sessions"
 
 export type AgentRunHarness = "claude" | "pi"
@@ -115,10 +116,10 @@ async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
 function mapSession(session: SessionInfoResponse): SessionInfo {
   return {
     sessionId: session.session_id,
-    summary: attachmentMessageSummary(session.summary ?? ""),
+    summary: uiActionMessageSummary(attachmentMessageSummary(session.summary ?? "")),
     lastModified: session.last_modified,
     customTitle: session.custom_title,
-    firstPrompt: session.first_prompt === null ? null : attachmentMessageSummary(session.first_prompt),
+    firstPrompt: session.first_prompt === null ? null : uiActionMessageSummary(attachmentMessageSummary(session.first_prompt)),
     cwd: session.cwd,
     tag: session.tag,
     tags: session.tags ?? [],

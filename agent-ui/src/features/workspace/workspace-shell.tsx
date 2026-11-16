@@ -9,6 +9,7 @@ import {
 
 import { WorkspaceDensityBridge } from "./workspace-density"
 import { WorkspaceWorkflowProvider } from "./workspace-workflow-context"
+import { WorkspaceWhiteboardProvider } from "./workspace-whiteboard-context"
 import { WorkspaceFilesProvider } from "./workspace-files-context"
 import { WorkspaceSidebar } from "./workspace-sidebar"
 import { WorkspacePanelButtons } from "./workspace-toggle"
@@ -127,6 +128,7 @@ export function WorkspaceShell({
       stateCookieName="workspace_state"
     >
       <WorkspaceFilesProvider onShowChat={onShowChat}>
+        <WorkspaceWhiteboardProvider>
         <WorkspaceWorkflowProvider>
         <WorkspaceDensityBridge
           maximized={maximized}
@@ -157,6 +159,7 @@ export function WorkspaceShell({
           )}
         </WorkspaceDensityBridge>
         </WorkspaceWorkflowProvider>
+        </WorkspaceWhiteboardProvider>
       </WorkspaceFilesProvider>
     </SidebarProvider>
   )

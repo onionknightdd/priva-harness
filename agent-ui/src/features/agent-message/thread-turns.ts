@@ -1,4 +1,5 @@
 import type { AgentThreadMessage } from "./agent-message-data"
+import { isUserMessageBubble } from "./user-message-rail"
 
 export type ThreadTurn = {
   id: string
@@ -132,7 +133,7 @@ export function turnStickyParts(turn: ThreadTurn): {
   working: AgentThreadMessage | null
 } {
   return {
-    user: turn.user,
+    user: turn.user && isUserMessageBubble(turn.user) ? turn.user : null,
     working:
       turn.replies.find((message) => message.status === "streaming") ?? null,
   }

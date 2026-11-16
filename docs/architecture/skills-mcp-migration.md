@@ -41,6 +41,52 @@ SDK 不会自动加载这些内建扩展。`pi-mcp-adapter` 依赖和它提供�
 skill 已移除；若用户 Pi settings 仍配置 adapter，启动会给出移除提示，避免它接管
 原生 `/mcp`。Runner 不自动修改用户配置、不继续读取旧 adapter 来源。
 
+## 随源码分发的产品插件
+
+2026-11-16：内置资源放在 Runner 源码目录中，每个产品能力自有目录。
+
+```text
+services/agent-runner/ts/src/resources/plugins/
+└── agent-dashboard/
+    ├── plugin.json                  产品 id / name / description / icon
+    ├── .claude-plugin/plugin.json   Claude 原生 skills 路径声明
+    └── skill/
+        ├── SKILL.md                 Markdown 引用与 Express 写法
+        └── resource/
+            ├── catalog.md          从组件 schema 生成
+            ├── cards.md
+            ├── charts.md
+            ├── tables.md
+            ├── interactions.md
+            └── dashboard.md
+
+源码 resources/plugins -> build 复制 -> dist/resources/plugins
+                            |
+enabledPluginIds -> 内置 registry -> Claude SDK plugins / CLI --plugin-dir
+                                 -> Pi additionalSkillPaths
+```
+
+目录约定为 `resources/plugins/<resource-name>/{skill|mcp}`，只创建实际使用的类型。
+Agent dashboard 只有 Skill，不提供 MCP。`plugin.json` 是产品元数据来源；Claude
+manifest 仅声明原生插件名与 `./skill`，不复制展示元数据。registry 在开发和生产使用
+相同相对路径；构建显式复制 Markdown 和 JSON，Docker 同时包含构建脚本与资源。
+
+第一版的 Composer 开关只选择 `agent-dashboard`，通过 `enabledPluginIds` 写入会话
+配置与元数据。SDK 重建缓存和原生终端 resume 均包含该选择；空闲后应用，后端 ACK
+之后 UI 才改变。关闭后原生 Skill 目录不再包含它，但不能擦除模型已读的历史内容。
+不把 Skill 内容硬编码为系统提醒，不更改用户全局或项目的原生 Skill 配置目录。
+
+模型输出 `![标题](a2ui:id)` 与同消息的 `a2ui id=id` fenced source；前端经普通 HTTP
+编译后在引用处渲染。源文本随回复保存；动作通过用户消息队列回传。
+`render_ui` 工具已删除，旧调用和历史不迁移。完整协议与浏览器验证见
+[前端 A2UI 规范](../front-end-desgin.md#a2ui-可视化回答)。
+
+原生加载回归使用本地模拟模型，实际调用 Skill 并检查关闭后同会话不可用：
+
+```sh
+TMPDIR=/tmp npx vitest run tests/integration/transport/websocket/terminal-plugins.test.ts tests/unit/provider/pi/pi-resource-loader.test.ts
+```
+
 ## 发现与执行分开
 
 ```text
