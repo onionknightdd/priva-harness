@@ -3599,7 +3599,8 @@ node --import tsx tests/fixtures/terminal/native-product-probe.ts dist/provider/
 
 浏览器入口 `/tests/features/agent-message/a2ui-thread-browser.html`：点击 **Run conversation checks**，
 验证真实消息线程中的 Markdown 引用与隐藏源码、同宽布局、插件确认开关、表单动作、
-原始闭合 fence、缺失/重复 ID、显式修复与历史重放。追加 `?narrow&dark&zh&reduced-motion`
+原始闭合 fence、缺失/重复 ID、显式修复与历史重放，以及回复图片导出完整绘制 dashboard
+（克隆节点不重播 `@starting-style` 入场与 Streamdown 逐字淡入）。追加 `?narrow&dark&zh&reduced-motion`
 检查手机宽度、深色、中文和减少动态效果。样例严格匹配真实编译器生成的 source 与
 canonical fixtures，不调用真实模型。`/tests/features/agent-message/a2ui-browser.html`
 继续提供独立组件、图表与响应式外观检查。

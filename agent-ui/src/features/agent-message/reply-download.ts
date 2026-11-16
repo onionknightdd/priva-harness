@@ -92,8 +92,7 @@ export async function downloadAssistantReply(
   if (nodes.length === 0) throw new Error("empty reply")
   const fileName = assistantReplyFileName(message.createdAt, format === "pdf" ? "pdf" : "png")
   if (format === "png") {
-    const captured = await captureReply(nodes)
-    downloadBlob(fileName, captured.blob)
+    downloadBlob(fileName, await captureReplyImage(nodes))
     return
   }
   downloadBlob(fileName, await renderReplyPdf(nodes))
@@ -108,7 +107,7 @@ function layoutReplyPages(roots: readonly HTMLElement[]) {
   return { columnWidth, limit, atoms, pages }
 }
 
-async function captureReply(nodes: HTMLElement[]) {
+export async function captureReplyImage(nodes: HTMLElement[]) {
   const stage = mountReplyStage(nodes)
   try {
     return await captureStage(stage)
@@ -121,11 +120,15 @@ async function captureStage(stage: HTMLElement) {
   const { domToBlob } = await import("modern-screenshot")
   const width = stage.scrollWidth
   const height = stage.scrollHeight
-  const blob = await domToBlob(stage, {
+  return domToBlob(stage, {
     scale: replyCaptureScale(width, height),
     backgroundColor: stage.style.backgroundColor,
   })
-  return { blob, backgroundColor: stage.style.backgroundColor }
+}
+
+/** Clones are new elements: `@starting-style` entries and Streamdown token fades replay from transparent. */
+function settleStage(stage: HTMLElement) {
+  for (const animation of stage.getAnimations({ subtree: true })) animation.finish()
 }
 
 function mountReplyStage(nodes: HTMLElement[]) {
@@ -137,6 +140,7 @@ function mountReplyStage(nodes: HTMLElement[]) {
   copyStageText(stage, column)
   for (const node of nodes) stage.append(cloneReplyNode(node))
   document.body.append(stage.parentElement ?? stage)
+  settleStage(stage)
   return stage
 }
 
@@ -277,6 +281,7 @@ function mountReplyPage(
     for (const target of removed) target.remove()
   })
   document.body.append(stage.parentElement ?? stage)
+  settleStage(stage)
   return stage
 }
 
@@ -288,7 +293,7 @@ async function renderReplyPdf(roots: HTMLElement[]) {
   for (const [start, end] of pages) {
     const stage = mountReplyPage(roots, atoms, atoms.slice(start, end), columnWidth, background)
     try {
-      shots.push((await captureStage(stage)).blob)
+      shots.push(await captureStage(stage))
     } finally {
       stage.parentElement?.remove()
     }

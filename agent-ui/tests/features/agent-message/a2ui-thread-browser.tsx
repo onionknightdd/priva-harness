@@ -11,7 +11,7 @@ import { DashboardPluginSwitch } from "@/features/agent-message/components/dashb
 import { SessionViewProvider } from "@/features/agent-message/session-view-context"
 import { UiActionProvider } from "@/features/agent-message/ui-action-context"
 import { parseUiActionMessage } from "@/features/agent-message/ui-action"
-import { assistantReplyMarkdown } from "@/features/agent-message/reply-download"
+import { assistantReplyMarkdown, captureReplyImage, replyElements } from "@/features/agent-message/reply-download"
 import type { AgentThreadMessage } from "@/features/agent-message/agent-message-data"
 import i18n from "@/i18n"
 import "@/index.css"
@@ -119,6 +119,26 @@ async function until(condition: () => boolean, label: string) {
   const deadline = performance.now() + 6000
   while (!condition()) { if (performance.now() > deadline) throw new Error(label); await nextFrame() }
 }
+/** Tallest band of rows painted only in the export background, as a share of the image height. */
+async function blankBandRatio(blob: Blob) {
+  const bitmap = await createImageBitmap(blob)
+  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
+  const context = canvas.getContext("2d")!
+  context.drawImage(bitmap, 0, 0)
+  const { data } = context.getImageData(0, 0, bitmap.width, bitmap.height)
+  const background = data.slice(0, 3)
+  let longest = 0, run = 0
+  for (let y = 0; y < bitmap.height; y += 1) {
+    let blank = true
+    for (let x = 0; x < bitmap.width && blank; x += 1) {
+      const offset = (y * bitmap.width + x) * 4
+      blank = [0, 1, 2].every((channel) => Math.abs(data[offset + channel] - background[channel]) <= 2)
+    }
+    run = blank ? run + 1 : 0
+    longest = Math.max(longest, run)
+  }
+  return longest / bitmap.height
+}
 for (const scenario of ["table", "sales", "form"] as const) document.getElementById(scenario)!.addEventListener("click", () => changeScenario(scenario))
 for (const phase of ["completed", "pending", "invalid", "missing", "duplicate"] as const) document.getElementById(phase)!.addEventListener("click", () => changePhase(phase))
 document.getElementById("width")!.addEventListener("click", () => { host.style.width = host.clientWidth > 500 ? "390px" : "min(100%,1280px)" })
@@ -166,6 +186,8 @@ async function runChecks() {
     await nextFrame()
     const dashboard = checkColumn("sales")
     check("compiled metrics and bars survive history replay", host.querySelectorAll(".a2ui-stat").length === 4 && host.querySelectorAll(".recharts-bar-rectangle").length === 8)
+    const exported = await captureReplyImage(replyElements(dashboard.closest<HTMLElement>("[data-reply-scope]")!))
+    check("image export paints the dashboard without replaying its entrance", await blankBandRatio(exported) < 0.1)
     const priorActions = actions.length
     dashboard.querySelector<HTMLButtonElement>(".a2ui-action button")!.click()
     await until(() => actions.length === priorActions + 1, "Dashboard action was not delivered")
