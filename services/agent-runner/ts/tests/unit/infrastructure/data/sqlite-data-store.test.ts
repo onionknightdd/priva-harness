@@ -113,6 +113,9 @@ describe('SqliteDataStore', () => {
     store.writeBatch([started('run-old'), finished('run-old', NOW.toISOString(), { byModel: { 'gpt-x': { input: 1, output: 2 } } })])
     store.close()
     const db = new DatabaseSync(path)
+    // The fixture was already migrated, so the later audit index is present.
+    // A real version-2 database never had it; drop it before replaying from there.
+    db.exec('DROP INDEX IF EXISTS tool_fact_audit')
     db.exec('PRAGMA user_version = 2')
     db.close()
     store = SqliteDataStore.open(path)
