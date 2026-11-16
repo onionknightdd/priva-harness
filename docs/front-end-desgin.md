@@ -3496,6 +3496,7 @@ Shift+Tab、Esc、已有草稿、重复快照、断线重连和原生会话重�
 [A2UI Playground](https://a2ui.open.bot/)：分层标题、浅点阵底、留白、等高 KPI 卡、
 圆角图表卡、橙/青双系列。基础组件复用项目 shadcn/ui，图表复用 Recharts，
 组件共享 `a2ui/a2ui.css` 中的视觉 token，表面和文字读取应用主题。
+折线图的数据点显式填充对应系列的线条色，浅色和深色主题均使用实心点；悬停点沿用系列颜色。
 
 2026-11-16：改为内置 `agent-dashboard` Skill，产品名 **Agent dashboard**。
 源码、示例及模型指引在 `services/agent-runner/ts/src/resources/plugins/agent-dashboard/`。

@@ -76,7 +76,7 @@ export function CartesianChart({ kind, ...props }: ChartProps & { kind: "bar" | 
   if (kind === "bar") {
     chart = <BarChart {...common} barCategoryGap="28%" barGap={8}>{axes}{series.map((item, index) => <Bar key={index} name={item.name} dataKey={`s${index}`} fill={colors[index % colors.length]} radius={[5, 5, 0, 0]} maxBarSize={38} isAnimationActive={false} />)}</BarChart>
   } else if (kind === "line") {
-    chart = <LineChart {...common}>{axes}{series.map((item, index) => <Line key={index} name={item.name} dataKey={`s${index}`} stroke={colors[index % colors.length]} strokeWidth={2.5} dot={{ r: 3, strokeWidth: 0 }} activeDot={{ r: 5 }} isAnimationActive={false} />)}</LineChart>
+    chart = <LineChart {...common}>{axes}{series.map((item, index) => <Line key={index} name={item.name} dataKey={`s${index}`} stroke={colors[index % colors.length]} strokeWidth={2.5} dot={{ r: 3, fill: colors[index % colors.length], strokeWidth: 0 }} activeDot={{ r: 5 }} isAnimationActive={false} />)}</LineChart>
   } else {
     chart = <AreaChart {...common}><defs>{series.map((_, index) => <linearGradient key={index} id={`${gradientId}-${index}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={colors[index % colors.length]} stopOpacity={0.28} /><stop offset="100%" stopColor={colors[index % colors.length]} stopOpacity={0.02} /></linearGradient>)}</defs>{axes}{series.map((item, index) => <Area key={index} name={item.name} dataKey={`s${index}`} stroke={colors[index % colors.length]} fill={`url(#${gradientId}-${index})`} strokeWidth={2.5} isAnimationActive={false} />)}</AreaChart>
   }
