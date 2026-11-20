@@ -5,7 +5,7 @@ import { BUILTIN_PLUGIN_IDS, normalizeEnabledPluginIds, resolveBuiltinPlugins } 
 
 describe('built-in plugin registry', () => {
   it('resolves the selected resource and Claude native adapter from packaged metadata', () => {
-    expect(BUILTIN_PLUGIN_IDS).toEqual(['agent-dashboard'])
+    expect(BUILTIN_PLUGIN_IDS).toEqual(['agent-dashboard', 'computer-use'])
     const [plugin] = resolveBuiltinPlugins(['agent-dashboard'])
     if (plugin === undefined) throw new Error('Missing dashboard plugin')
     expect(plugin).toMatchObject({ id: 'agent-dashboard', name: 'Agent dashboard', icon: 'dashboard' })

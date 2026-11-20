@@ -75,8 +75,12 @@ COPY docker/priva-browser.desktop /usr/local/share/applications/priva-browser.de
 COPY docker/chromium-flags /etc/chromium.d/priva-desktop
 COPY docker/configure-computer.mjs /opt/agent-runner/docker/configure-computer.mjs
 COPY docker/skills/computer-desktop /opt/agent-runner/docker/skills/computer-desktop
+COPY --chmod=755 docker/install-chatgpt-cua-runtime.sh /usr/local/bin/install-chatgpt-cua-runtime
+RUN /usr/local/bin/install-chatgpt-cua-runtime "$TARGETARCH"
 
 ENV HOME=/data/home \
+    PRIVA_CUA_RUNTIME=/opt/cua_node \
+    PRIVA_CUA_SKILLS=/opt/chatgpt-cua-skills \
     RUNTIME_HOME_DIR=/data/runtime \
     WORKSPACE_DIR=/data/workspace \
     CLAUDE_CONFIG_DIR=/data/home/.claude \

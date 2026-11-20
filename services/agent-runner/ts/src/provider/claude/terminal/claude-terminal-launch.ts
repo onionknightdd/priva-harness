@@ -1,4 +1,5 @@
-import { resolveBuiltinPlugins } from '../../../core/plugin/builtin-plugins.js'
+import { resolveSessionPluginResources } from '../../../core/plugin/session-plugin-resources.js'
+import { computerMcpServers } from '../../../core/plugin/computer-use.js'
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
@@ -44,22 +45,23 @@ export async function claudeTerminalLaunch(input: ClaudeTerminalLaunchInput): Pr
   const { target, spec, context } = input
   assertClaudeEffort(spec.effort)
   const settingsPath = join(context.scratchDir, SETTINGS_FILE)
+  const computerServers = computerMcpServers(spec.enabledPluginIds ?? [])
   const bridge = context.eventsUrl === undefined ? undefined : await writeClaudeTerminalHooks(context.scratchDir, context.eventsUrl)
   await saveClaudeTerminalSelection(context.scratchDir, spec)
   await writeFile(settingsPath, JSON.stringify({
-    ...resolveClaudeQuerySettings(spec),
+    ...bridge,
+    ...resolveClaudeQuerySettings(spec, Object.keys(computerServers), bridge?.hooks),
     skipDangerousModePermissionPrompt: true,
     ...(spec.promptSuggestions === undefined ? {} : { promptSuggestionEnabled: spec.promptSuggestions }),
-    ...bridge,
   }, null, 2), { mode: 0o600 })
   const args = [
     ...sessionArgs(target),
     '--model', spec.model,
     '--permission-mode', 'bypassPermissions',
     '--settings', settingsPath,
-    ...resolveBuiltinPlugins(spec.enabledPluginIds ?? []).flatMap((plugin) => ['--plugin-dir', plugin.rootDir]),
-    ...await writeNativeProductConfig(context.scratchDir, target, spec, input.tools ?? []),
-    '--disallowedTools', claudeDisallowedTools(spec.runMode).join(','),
+    ...resolveSessionPluginResources(spec.enabledPluginIds ?? []).flatMap((plugin) => ['--plugin-dir', plugin.rootDir]),
+    ...await writeNativeProductConfig(context.scratchDir, target, spec, input.tools ?? [], computerServers),
+    '--disallowedTools', claudeDisallowedTools(spec.runMode, Object.keys(computerServers)).join(','),
     ...claudeSystemPromptArgs(spec),
     ...(spec.effort === undefined ? [] : ['--effort', spec.effort]),
   ]

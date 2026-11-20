@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 
 import type { StreamBlock } from "../../../src/features/agent-message/agent-message-data.ts"
-import { computerToolTitleKey, isLiveComputerToolStart } from "../../../src/features/agent-message/computer-tool-data.ts"
+import { computerToolTitleKey, isLiveComputerToolStart, isLiveCuaAppSelection } from "../../../src/features/agent-message/computer-tool-data.ts"
 import { externalMcpToolName, mcpToolInputText } from "../../../src/features/agent-message/mcp-tool-data.ts"
 import { zhCN } from "../../../src/i18n/locales/zh-CN.ts"
 
@@ -26,6 +26,34 @@ test("computer navigation ignores history, replay, progress and tools from other
   for (const name of [undefined, "Bash", "mcp__other__list_apps", "mcp__computer_extra__list_apps", "mcp__computer__", "computer__list_apps"]) {
     assert.equal(isLiveComputerToolStart({ ...start, name }), false, name)
   }
+})
+
+test("only an explicit native CUA selection on a live call can open the Pod desktop", () => {
+  const pending = new Set<string>()
+  const start = { type: "tool.started", name: "mcp__cua_repl__js", id: "call" }
+  const native = { code: 'await cua.computer.launch_app({app:"org.xfce.mousepad.desktop"});' }
+  for (const code of [
+    'let editor = await cua.getApp({windowId: 17});', "const app = await cua.getApp('Mousepad')", native.code,
+  ]) {
+    assert.equal(isLiveCuaAppSelection({ ...start, input: { code } }, pending), true, code)
+    assert.equal(isLiveCuaAppSelection({ ...start, type: "tool.updated", input: { code } }, pending), false)
+  }
+  for (const input of [
+    { completion_summary: "Opened Mousepad" }, { title: "Show the desktop" }, { code: 123 },
+    { code: "await cua.getState();" }, { code: 'await cua.getBrowser({id:"chrome"});' },
+    { code: "await app.click(1);" }, { code: "nodeRepl.write('await cua.getApp(\"Mousepad\")')" },
+    { code: "// await cua.getApp('Mousepad');" }, { code: "if (false) await cua.getApp('Mousepad');" },
+  ]) assert.equal(isLiveCuaAppSelection({ ...start, input }, pending), false)
+  for (const name of ["mcp__node_repl__js", "mcp__registered_computers__calculator_check", "mcp__other__js"]) {
+    assert.equal(isLiveCuaAppSelection({ ...start, name, input: native }, pending), false)
+  }
+  for (const type of ["session.snapshot", "tool.completed"]) {
+    isLiveCuaAppSelection({ ...start, input: {} }, pending)
+    isLiveCuaAppSelection({ type, id: start.id }, pending)
+    assert.equal(isLiveCuaAppSelection({ ...start, type: "tool.updated", input: native }, pending), false)
+  }
+  assert.equal(isLiveCuaAppSelection({ ...start, replay: true, input: native }, pending), false)
+  assert.equal(isLiveCuaAppSelection({ ...start, type: "tool.updated", input: native }, pending), false)
 })
 
 test("parses the server between the first separators and tool after the last separator", () => {

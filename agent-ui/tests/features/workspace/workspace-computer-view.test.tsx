@@ -51,8 +51,8 @@ async function mount() {
   return { host, update, close: async () => { await act(async () => root.unmount()); host.remove() } }
 }
 
-test("Computer is an enabled Workspace module between files and future modules", () => {
-  assert.deepEqual(WORKSPACE_MODULES.slice(0, 3).map((module) => module.id), ["tasks", "files", "computer"])
+test("Computer follows Whiteboard in the enabled Workspace modules", () => {
+  assert.deepEqual(WORKSPACE_MODULES.slice(0, 4).map((module) => module.id), ["tasks", "files", "whiteboard", "computer"])
   assert.equal(WORKSPACE_MODULES.find((module) => module.id === "computer")?.disabled, undefined)
 })
 

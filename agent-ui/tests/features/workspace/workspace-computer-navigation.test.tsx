@@ -152,6 +152,23 @@ for (const [harness, width] of [["claude", 1280], ["pi", 390]] as const) test(`$
     await act(async () => reconnected.frame({ ...tool, id: "future", blockId: "future", seq: 10, name: "mcp__computer__future_tool" }))
     assert.equal(controls.tabs.activeTabId, "computer")
     assert.equal(opened(), true)
+    await act(async () => controls.tabs.setActiveTabId("tasks"))
+    const selectApp = { ...tool, id: "select", blockId: "select", name: "mcp__cua_repl__js" }
+    const input = { code: "let editor = await cua.getApp({windowId: 42});", title: "Opening Mousepad" }
+    await act(async () => {
+      reconnected.frame({ ...selectApp, seq: 11, input, name: "mcp__node_repl__js" })
+      reconnected.frame({ ...selectApp, seq: 12, input, name: "mcp__registered_computers__calculator_check" })
+      reconnected.frame({ ...selectApp, seq: 13, id: "inventory", input: { code: "await cua.getState();" } })
+    })
+    assert.equal(controls.tabs.activeTabId, "tasks", "runtime inventory, general JS and remote actions leave tabs alone")
+    await act(async () => {
+      reconnected.frame({ ...selectApp, seq: 14, input: {} })
+      reconnected.frame({ ...selectApp, seq: 15, type: "tool.updated", input })
+    })
+    assert.equal(controls.tabs.activeTabId, "computer", "complete arguments identify the native window")
+    await act(async () => controls.tabs.setActiveTabId("tasks"))
+    await act(async () => reconnected.frame({ ...selectApp, seq: 16, type: "tool.updated", input }))
+    assert.equal(controls.tabs.activeTabId, "tasks", "the same call cannot steal focus again")
     assert.deepEqual(unexpected, [])
   } finally {
     await act(async () => root.unmount())

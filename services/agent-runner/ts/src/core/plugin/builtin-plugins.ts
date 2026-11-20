@@ -2,6 +2,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
+import { computerUseEnabled } from './computer-use.js'
 
 const pluginMetadataSchema = z.object({
   id: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/u),
@@ -48,8 +49,10 @@ export function normalizeEnabledPluginIds(value: unknown): string[] {
   return [...new Set(ids)].sort()
 }
 
-export function resolveBuiltinPlugins(ids: readonly string[]): readonly BuiltinPlugin[] {
-  return normalizeEnabledPluginIds(ids).map((id) => {
+export function resolveBuiltinPlugins(ids: readonly string[], env: NodeJS.ProcessEnv = process.env): readonly BuiltinPlugin[] {
+  const selected = normalizeEnabledPluginIds(ids)
+  if (!selected.includes('computer-use') && computerUseEnabled(selected, env)) selected.push('computer-use')
+  return selected.map((id) => {
     const plugin = builtinPlugins.find((candidate) => candidate.id === id)
     if (plugin === undefined) throw new Error(`Unknown built-in plugin: ${id}`)
     return plugin

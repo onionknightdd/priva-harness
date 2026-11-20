@@ -171,6 +171,33 @@ test("native Bash keeps its terminal card while an external tool named Read uses
   } finally { await external.close() }
 })
 
+test("the CUA JS card shows its action title and only displays a completion summary after success", async () => {
+  const name = "mcp__cua_repl__js"
+  const tool = { ...completed.tool!, name, status: "running" as const }
+  const block = { ...completed, name, tool, input: { code: "await cua.getState();", title: "Reading available apps" } }
+  const view = await mount(block)
+  try {
+    assert.ok(view.title().textContent!.includes("Reading available apps"))
+    assert.equal(view.title().getAttribute("aria-expanded"), "false")
+    await view.update({ ...block, tool: { ...tool, inputRaw: '{"title":"Reading' } })
+    assert.ok(view.title().textContent!.includes("cua_repl:js"))
+    const summary = { ...block, input: { completion_summary: "Verified editor input" } }
+    await view.update(summary)
+    assert.ok(!view.title().textContent!.includes("Verified editor input"))
+    await view.update({ ...summary, tool: { ...tool, status: "completed", ok: false, output: "refused" } })
+    assert.ok(!view.title().textContent!.includes("Verified editor input"))
+    assert.equal(view.title().dataset.toolStatus, "error")
+    await view.update({ ...summary, tool: { ...tool, status: "completed", ok: true } })
+    assert.equal(view.title().textContent, "Verified editor input")
+    await view.open()
+    assert.equal(view.host.querySelector("pre")?.textContent, JSON.stringify(summary.input, null, 2))
+    for (const other of ["node_repl", "registered_computers"]) {
+      await view.update({ ...block, name: `mcp__${other}__js` })
+      assert.ok(view.title().textContent!.includes(`${other}:js`))
+    }
+  } finally { await view.close() }
+})
+
 test("computer tools use localized action titles and the shared pointer icon through the real dispatcher", async () => {
   const view = await mount({ ...completed, name: "mcp__computer__list_apps" }, "zh-CN")
   try {

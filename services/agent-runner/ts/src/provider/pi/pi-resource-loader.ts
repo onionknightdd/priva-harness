@@ -1,4 +1,5 @@
-import { resolveBuiltinPlugins } from '../../core/plugin/builtin-plugins.js'
+import { resolveSessionPluginResources } from '../../core/plugin/session-plugin-resources.js'
+import { computerMcpServers } from '../../core/plugin/computer-use.js'
 import { createMcpExtension, createToolSearchExtension, DefaultPackageManager, DefaultResourceLoader, type ExtensionFactory, type EventBus, type InlineExtension, type SettingsManager } from '@earendil-works/pi-coding-agent'
 import { assertNativePiMcpConfiguration } from '../../pi-config.js'
 import { piMemoryModule, piSubagentFactory, piCodeRoot, subagentsRoot } from './pi-agent-extensions.js'
@@ -16,6 +17,11 @@ export async function createPiResourceLoader(cwd: string, agentDir: string, sett
   const nativeMcp: ExtensionFactory = async (api) => {
     // Factories run again on /reload, before native MCP can connect these files.
     await assertNativePiMcpConfiguration(cwd, agentDir, settingsManager.isProjectTrusted())
+    for (const [name, server] of Object.entries(computerMcpServers(enabledPluginIds))) {
+      api.registerMcpServer(name, { ...server, exposure: 'direct', toolExposure: {
+        turn_ended: 'hidden', ...(name === 'cua_repl' ? { js_add_node_module_dir: 'hidden' as const } : {}),
+      } })
+    }
     await createMcpExtension()(api)
   }
   await assertNativePiMcpConfiguration(cwd, agentDir, settingsManager.isProjectTrusted())
@@ -31,7 +37,7 @@ export async function createPiResourceLoader(cwd: string, agentDir: string, sett
     cwd, agentDir, settingsManager, ...(eventBus ? { eventBus } : {}),
     noExtensions: true,
     additionalExtensionPaths: extensionPaths,
-    additionalSkillPaths: resolveBuiltinPlugins(enabledPluginIds).map((plugin) => plugin.skillDir),
+    additionalSkillPaths: resolveSessionPluginResources(enabledPluginIds).map((plugin) => plugin.skillDir),
     extensionFactories,
     ...(appendSystemPrompt.length > 0 ? { appendSystemPrompt: [...appendSystemPrompt] } : {}),
   })

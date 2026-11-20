@@ -27,14 +27,14 @@ form.set('directory', '/data/workspace')
 form.set('file', new Blob([''], { type: 'text/plain' }), filename)
 const upload = await fetch(`${origin}/api/sandbox/files/upload`, { method: 'POST', body: form })
 assert.ok(upload.ok, `Cannot prepare empty editor fixture: ${upload.status}`)
-const prompt = `Validate the computer MCP through this Runner session. Read the computer-desktop skill first.
-Use only the computer MCP for desktop actions and for writing the proof content; do not use shell, file-write tools, scripts, or terminal commands to write it.
-1. Call get_desktop_state${textOnly ? ` with screenshot_out_file="/data/workspace/computer-proof-${nonce}.png" (this is a text-only model; use accessibility trees with include_screenshot:false for further observations)` : ' and inspect its screenshot'}.
-2. Call launch_app with name="mousepad", additional_arguments=["--disable-server",${JSON.stringify(proofPath)}]. This unique file is currently empty. Do not change other windows or files.
-3. Discover its actual pid/window through list_windows. Use foreground input without element_token to type this exact text, then press Ctrl+S to save:
+const prompt = `Use the Runner's original cua_repl.js to operate the Xfce desktop in the Computer tab.
+Start with cua.getState() and use the Linux instructions returned by the tool. Use only the CUA desktop API for interaction with applications.
+Open the existing empty file ${proofPath} in Mousepad using its graphical Open dialog or the file manager. Verify its unique filename in the target window before editing.
+Enter this exact text through the window and save via the graphical application:
 ${JSON.stringify(expected)}
-4. Inspect the editor${textOnly ? ' with get_window_state(include_screenshot:false)' : ''} and confirm the Chinese text and nonce. Leave this saved window open so the person can see it in the Computer tab. Reply briefly.
-Do not claim success if a tool refuses or input is incomplete. Do not browse external sites or access credentials.`
+Read the edit back from the window's accessibility state.${textOnly ? ' Use text accessibility state for observations.' : ' Inspect a screenshot of that window as well.'}
+Leave the saved proof window visible. Finish the computer task using cua_repl.js with a completion_summary.
+Use the original CUA application API for the entire edit. File and shell tools would invalidate this test.`
 const url = new URL('/api/sandbox/agent/ws/session', origin)
 url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
 const ws = new WebSocket(url)
@@ -81,17 +81,15 @@ try {
   console.log(JSON.stringify({ harness, sessionId, model: profile.default_model, textOnly, proofPath }))
 }
 const successful = [...calls.values()].filter((call) => call.ok)
-// Saving may use press_key, hotkey, or an accessible Save control. The exact
-// persisted file below proves the result without prescribing a GUI route.
-for (const name of ['get_desktop_state', 'launch_app', 'type_text']) {
-  assert.ok(successful.some((call) => call.name === `mcp__computer__${name}`
-    || (typeof call.input === 'object' && call.input !== null
-      && (call.name === 'mcp__computer' || (call.name === 'mcp' && 'server' in call.input && call.input.server === 'computer'))
-      && 'tool' in call.input && [name, `computer_${name}`].includes(String(call.input.tool)))), `Missing successful computer MCP call: ${name}`)
-}
-assert.ok(!successful.some((call) => /^(bash|write|edit|writefile|editfile|apply_patch)$/iu.test(call.name)), 'Proof must be written by desktop MCP')
+const uiCalls = successful.filter((call) => call.name === 'mcp__cua_repl__js')
+assert.ok(uiCalls.some((call) => typeof call.input === 'object' && call.input !== null && 'code' in call.input),
+  'Expected a successful original cua_repl.js desktop operation')
+assert.ok(uiCalls.some((call) => typeof call.input === 'object' && call.input !== null && 'completion_summary' in call.input),
+  'Expected the original CUA completion summary')
+assert.ok(!successful.some((call) => /^(bash|write|edit|writefile|editfile|apply_patch|mcp__node_repl__js)$/iu.test(call.name)),
+  'The proof file must be written through the CUA desktop API')
 const response = await fetch(`${origin}/api/sandbox/files/preview?path=${encodeURIComponent(proofPath)}`)
 assert.equal(response.status, 200)
 const file = await response.json() as { content: string }
 assert.equal(file.content, expected, 'Saved editor text must match all Unicode characters and the nonce')
-console.log('Runner model → computer MCP → Mousepad → saved Unicode proof passed')
+console.log('Runner model → original CUA/Sky → Mousepad → saved Unicode proof passed')

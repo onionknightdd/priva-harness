@@ -6,9 +6,16 @@ import type { ProviderRunSpec, SessionTarget } from '../../../core/contract/agen
 import type { ToolDefinition } from '../../../core/tool/define-tool.js'
 import { WHITEBOARD_ENDPOINT_ENV } from '../../../core/tool/whiteboard.js'
 import type { NativeProductConfig } from './native-product-server.js'
+import { computerMcpServers } from '../../../core/plugin/computer-use.js'
 
-export async function writeNativeProductConfig(scratchDir: string, target: SessionTarget, spec: ProviderRunSpec, tools: readonly ToolDefinition[]): Promise<string[]> {
-  if (!tools.length) return []
+export async function writeNativeProductConfig(scratchDir: string, target: SessionTarget, spec: ProviderRunSpec, tools: readonly ToolDefinition[],
+  computerServers: ReturnType<typeof computerMcpServers> = computerMcpServers(spec.enabledPluginIds ?? [])): Promise<string[]> {
+  if (!tools.length && !Object.keys(computerServers).length) return []
+  const mcpPath = join(scratchDir, 'product-mcp.json')
+  if (!tools.length) {
+    await writeFile(mcpPath, JSON.stringify({ mcpServers: computerServers }), { mode: 0o600 })
+    return ['--mcp-config', mcpPath]
+  }
   const source = import.meta.url.endsWith('.ts')
   const entry = fileURLToPath(new URL(`./native-product-server.${source ? 'ts' : 'js'}`, import.meta.url))
   const configPath = join(scratchDir, 'product-tools.json')
@@ -16,8 +23,7 @@ export async function writeNativeProductConfig(scratchDir: string, target: Sessi
     sessionId: target.kind === 'resume' ? target.session.id : target.sessionId ?? '',
     tools: tools.map((tool) => tool.name), ...(spec.imageTools ? { profile: spec.imageTools } : {}) }
   await writeFile(configPath, JSON.stringify(config), { mode: 0o600 })
-  const mcpPath = join(scratchDir, 'product-mcp.json')
-  await writeFile(mcpPath, JSON.stringify({ mcpServers: { agentWorkshop: {
+  await writeFile(mcpPath, JSON.stringify({ mcpServers: { ...computerServers, agentWorkshop: {
     type: 'stdio', command: process.execPath,
     args: [...(source ? ['--import', createRequire(import.meta.url).resolve('tsx')] : []), entry, configPath],
     alwaysLoad: true, timeout: 600000,

@@ -5,6 +5,7 @@
 !tsconfig.json
 !tsconfig.build.json
 !eslint.config.js
+!vitest.config.mjs
 !docker-entrypoint.sh
 !docker/
 !docker/**

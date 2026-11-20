@@ -26,7 +26,7 @@ import { contextUsageFromApi, emptyContextUsage, type ContextUsage } from "./con
 import { applyThreadStreamFrame, mergeSnapshotMessages, type StreamFrame } from "./run-stream-reducer"
 import { updatePromptSuggestion, type PromptSuggestion } from "./prompt-suggestion"
 import { baseModelReference, DEFAULT_CONTEXT_WINDOW, type ContextWindow } from "./model-context"
-import { isLiveComputerToolStart } from "./computer-tool-data"
+import { isLiveComputerToolStart, isLiveCuaAppSelection } from "./computer-tool-data"
 import { createLiveWhiteboardNavigation, type WhiteboardNavigation } from "./live-whiteboard-navigation"
 import { restoreUiActionMessage } from "./ui-action"
 import { DASHBOARD_PLUGIN_ID } from "./dashboard-plugin"
@@ -78,6 +78,7 @@ export function useAgentMessage({ onComputerToolStarted, onWhiteboardToolActivit
   const nativeConfigRef = React.useRef<string | undefined>(undefined)
   const latestConfigRef = React.useRef<StreamFrame["config"]>(undefined)
   const whiteboardNavigation = React.useRef(createLiveWhiteboardNavigation())
+  const pendingCuaCalls = React.useRef(new Set<string>())
   const configurationRequestRef = React.useRef<string | undefined>(undefined)
   const configurationPromiseRef = React.useRef<Promise<void> | undefined>(undefined)
   const readySessionRef = React.useRef<string | null>(null)
@@ -94,7 +95,7 @@ export function useAgentMessage({ onComputerToolStarted, onWhiteboardToolActivit
   const receiveRef = React.useRef<(frame: StreamFrame) => void>(() => undefined)
   receiveRef.current = (frame) => {
     if (frame.type === 'terminal.focus') { setView('terminal'); return }
-    if (isLiveComputerToolStart(frame)) onComputerToolStarted?.()
+    if (isLiveComputerToolStart(frame) || isLiveCuaAppSelection(frame, pendingCuaCalls.current)) onComputerToolStarted?.()
     setInteractions((current) => updateInteractions(current, frame))
     const id = frame.sessionId ?? connectionRef.current?.sessionId
     const whiteboardCwd = frame.config?.cwd ?? latestConfigRef.current?.cwd ?? runCwd
@@ -166,6 +167,7 @@ export function useAgentMessage({ onComputerToolStarted, onWhiteboardToolActivit
     if (frame.type === "session.state" || frame.type === "error") return
     setMessages((current) => applyThreadStreamFrame(current, frame.runId ?? "", frame))
     if (["run.completed", "run.failed", "run.aborted"].includes(frame.type ?? "")) {
+      pendingCuaCalls.current.clear()
       if (frame.runId) pendingIdsRef.current.delete(frame.runId)
       setActiveRunId((current) => current === frame.runId ? null : current)
       if (id) { endLiveSession(id); refreshContext(id) }
@@ -203,6 +205,7 @@ export function useAgentMessage({ onComputerToolStarted, onWhiteboardToolActivit
         setMessages((current) => current.filter((message) => pendingIdsRef.current.has(message.id) || pendingIdsRef.current.has(message.id.replace(/:user$/, ''))))
         setInteractions([])
         whiteboardNavigation.current.reset()
+        pendingCuaCalls.current.clear()
         setSuggestion(null)
         setContextUsage(emptyContextUsage())
       },
@@ -224,6 +227,7 @@ export function useAgentMessage({ onComputerToolStarted, onWhiteboardToolActivit
     nativeConfigRef.current = undefined
     latestConfigRef.current = undefined
     whiteboardNavigation.current.reset()
+    pendingCuaCalls.current.clear()
     configurationRequestRef.current = undefined
     configurationPromiseRef.current = undefined
     readySessionRef.current = null
