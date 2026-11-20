@@ -6,7 +6,7 @@ import { ToolResult } from "@/components/agents/tool-result"
 import { cn } from "@/lib/utils"
 
 import type { StreamBlock } from "../agent-message-data"
-import { computerToolTitleKey } from "../computer-tool-data"
+import { computerToolTitleKey, cuaToolTitle } from "../computer-tool-data"
 import { mcpToolInputText, type McpToolName } from "../mcp-tool-data"
 import { StructuredResult } from "./codemode-tool-item"
 import { isToolRunning } from "../tool-activity"
@@ -24,7 +24,8 @@ export function McpToolItem({
     : isToolRunning(tool) ? "running" : tool?.ok === false ? "error" : "success"
   const input = mcpToolInputText(block)
   const titleKey = computerToolTitleKey(name, input)
-  const title = titleKey && i18n.exists(titleKey) ? t(titleKey) : `${name.serverName}:${name.toolName}`
+  const title = cuaToolTitle(block.name, input, status === "success" && tool?.status === "completed")
+    ?? (titleKey && i18n.exists(titleKey) ? t(titleKey) : `${name.serverName}:${name.toolName}`)
   const output = tool?.output
   const copyText = [input, output].filter((text) => text !== undefined && text !== "").join("\n\n")
 

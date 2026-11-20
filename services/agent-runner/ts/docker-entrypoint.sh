@@ -15,12 +15,15 @@ fi
 
 desktop_pid=
 runner_pid=
+computer_pid=
 cleanup() {
   trap - EXIT
+  [[ -z "$computer_pid" ]] || kill -TERM "$computer_pid" 2>/dev/null || true
   [[ -z "$runner_pid" ]] || kill -TERM "$runner_pid" 2>/dev/null || true
   [[ -z "$desktop_pid" ]] || kill -TERM "$desktop_pid" 2>/dev/null || true
   [[ -z "$runner_pid" ]] || wait "$runner_pid" 2>/dev/null || true
   [[ -z "$desktop_pid" ]] || wait "$desktop_pid" 2>/dev/null || true
+  [[ -z "$computer_pid" ]] || wait "$computer_pid" 2>/dev/null || true
 }
 trap cleanup EXIT
 trap 'exit 143' TERM
@@ -44,13 +47,24 @@ done
 # Seed native MCP settings before either provider can start a session.
 node /opt/agent-runner/docker/configure-computer.mjs
 
+if [[ -n "${PRIVA_COMPUTER_HOST_KEY:-}" || -n "${PRIVA_COMPUTER_DEVICES:-}" ]]; then
+  node /opt/agent-runner/dist/infrastructure/computer/cli.js serve \
+    --host-key "${PRIVA_COMPUTER_HOST_KEY:?Set PRIVA_COMPUTER_HOST_KEY to the broker key file}" \
+    --devices "${PRIVA_COMPUTER_DEVICES:?Set PRIVA_COMPUTER_DEVICES to the enrolled device registry}" \
+    --bind-address "${PRIVA_COMPUTER_BIND_ADDRESS:-127.0.0.1}" \
+    --port "${PRIVA_COMPUTER_PORT:-2222}" &
+  computer_pid=$!
+fi
+
 # tsx watch can restart the Runner without closing windows or the session bus.
 "$@" &
 runner_pid=$!
 result=0
-wait -n -p finished_pid "$desktop_pid" "$runner_pid" || result=$?
-if [[ "$finished_pid" = "$desktop_pid" && "$result" = 0 ]]; then
-  echo 'Desktop supervisor exited while the Runner was active.' >&2
+children=("$desktop_pid" "$runner_pid")
+[[ -z "$computer_pid" ]] || children+=("$computer_pid")
+wait -n -p finished_pid "${children[@]}" || result=$?
+if [[ "$finished_pid" != "$runner_pid" && "$result" = 0 ]]; then
+  echo 'A configured desktop service exited while the Runner was active.' >&2
   result=1
 fi
 exit "$result"

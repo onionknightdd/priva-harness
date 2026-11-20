@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { z } from 'zod'
+import type { Settings } from '@anthropic-ai/claude-agent-sdk'
 
 import type { TerminalSessionState } from '../../../core/contract/terminal-service.js'
 import { hasErrorCode } from '../../../core/util/errors.js'
@@ -39,7 +40,7 @@ export async function recordClaudeTerminalState(scratchDir: string, state: Termi
 }
 
 /** Command hooks also work for SessionStart, which does not support HTTP hooks. */
-export async function writeClaudeTerminalHooks(scratchDir: string, eventsUrl: string) {
+export async function writeClaudeTerminalHooks(scratchDir: string, eventsUrl: string): Promise<Pick<Settings, 'statusLine' | 'hooks'>> {
   const instanceId = randomUUID()
   await writeFile(join(scratchDir, INSTANCE_FILE), instanceId, { mode: 0o600 })
   // A new process must not inherit an exited/running state from its predecessor.

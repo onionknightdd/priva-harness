@@ -1,7 +1,8 @@
-import { resolveBuiltinPlugins } from '../../core/plugin/builtin-plugins.js'
+import { resolveSessionPluginResources } from '../../core/plugin/session-plugin-resources.js'
+import { computerMcpServers } from '../../core/plugin/computer-use.js'
 import { claudeSystemPrompt } from './claude-system-prompt.js'
 import { DEFAULT_CONTEXT_WINDOW } from '../../core/resource/model-context.js'
-import { claudeDisallowedTools } from './claude-tool-policy.js'
+import { claudeDisallowedTools, claudeReplWorkers } from './claude-tool-policy.js'
 import { InteractionCoordinator } from '../../core/run/interaction-coordinator.js'
 import { answersByQuestion, interactionDenialText, normalizeQuestions, type InteractionResponse } from '../../core/resource/interaction.js'
 import { taskNotification } from '../../core/resource/background-task.js'
@@ -377,13 +378,14 @@ export function resolveClaudeQueryOptions(
   emitters: ClaudeToolEmitters = {},
 ): Options {
   assertClaudeEffort(spec.effort)
+  const computerServers = computerMcpServers(spec.enabledPluginIds ?? [])
   const options: Options = {
     cwd: spec.cwd,
-    plugins: resolveBuiltinPlugins(spec.enabledPluginIds ?? []).map((plugin) => ({ type: 'local' as const, path: plugin.rootDir })),
+    plugins: resolveSessionPluginResources(spec.enabledPluginIds ?? []).map((plugin) => ({ type: 'local' as const, path: plugin.rootDir })),
     model: spec.model,
     agentProgressSummaries: true,
     allowDangerouslySkipPermissions: true,
-    disallowedTools: claudeDisallowedTools(spec.runMode),
+    disallowedTools: claudeDisallowedTools(spec.runMode, Object.keys(computerServers)),
     enableFileCheckpointing: true,
     forwardSubagentText: true,
     includePartialMessages: true,
@@ -392,7 +394,7 @@ export function resolveClaudeQueryOptions(
     promptSuggestions: spec.promptSuggestions !== false,
     systemPrompt: claudeSystemPrompt(spec),
     settingSources: ['user', 'project', 'local'],
-    settings: resolveClaudeQuerySettings(spec),
+    settings: resolveClaudeQuerySettings(spec, Object.keys(computerServers)),
     env: resolveClaudeQueryEnv(spec),
     ...(abortController === undefined ? {} : { abortController }),
   }
@@ -411,8 +413,8 @@ export function resolveClaudeQueryOptions(
     signal: abortController?.signal ?? new AbortController().signal,
     profile: imageToolsFromSpec(spec),
   }, emitters.emitProgress)
-  if (compiled.mcpServers !== undefined) {
-    options.mcpServers = compiled.mcpServers
+  if (compiled.mcpServers !== undefined || Object.keys(computerServers).length > 0) {
+    options.mcpServers = { ...compiled.mcpServers, ...computerServers }
   }
   if (compiled.toolAliases !== undefined) {
     options.toolAliases = compiled.toolAliases
@@ -435,8 +437,25 @@ export function resolveClaudeQueryOptions(
 
 export function resolveClaudeQuerySettings(
   spec: Pick<ProviderRunSpec, 'provider' | 'model' | 'baseUrl' | 'authToken'>,
+  computerServers: readonly string[] = [],
+  existingHooks?: Settings['hooks'],
 ): Settings {
+  const hooks = { ...existingHooks }
+  const workers = claudeReplWorkers(computerServers)
+  if (workers.length) {
+    for (const event of ['Stop', 'SubagentStop'] as const) {
+      hooks[event] = [...(hooks[event] ?? []), { hooks: workers.map((server) => ({
+        type: 'mcp_tool', server, tool: 'turn_ended',
+        input: {
+          hook_event_name: '${hook_event_name}',
+          session_id: event === 'Stop' ? '${session_id}' : '${agent_id}',
+          turn_id: '${prompt_id}',
+        },
+      })) }]
+    }
+  }
   return {
+    ...(Object.keys(hooks).length ? { hooks } : {}),
     crossSessionInbound: 'accept',
     enableAllProjectMcpServers: true,
     skillOverrides: Object.fromEntries(

@@ -13,7 +13,8 @@ Claude / Pi -> computer MCP -> Xfce :99 <- noVNC <- Agent UI
 ```
 
 Discover the server's available tools and their schemas before using them. In Pi,
-the `mcp` tool can discover and call the server's tools. Observe the desktop or
+use `codemode` to call the discovered `mcp__computer__*` tools. Forward the
+MCP image block with `image(block)` when inspecting a screenshot. Observe the desktop or
 target window before acting; use fresh screenshots and accessibility state to
 check the result and refresh element handles when the interface changes.
 

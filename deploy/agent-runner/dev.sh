@@ -104,7 +104,7 @@ case "${1:-help}" in
     "${KUBE[@]}" exec deployment/agent-runner -- node --import tsx tests/deployment/desktop-smoke.ts
     ;;
   verify-computer)
-    "${KUBE[@]}" exec deployment/agent-runner -- node --import tsx tests/deployment/computer-mcp-smoke.ts
+    "${KUBE[@]}" exec deployment/agent-runner -- node --import tsx tests/deployment/original-linux-desktop.ts
     ;;
   import-models)
     if [[ $# -lt 2 || $# -gt 3 ]]; then echo 'Usage: dev.sh import-models /path/to/bambuddy.settings.json [--connect-host-models]' >&2; exit 1; fi

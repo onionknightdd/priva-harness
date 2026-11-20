@@ -1347,6 +1347,20 @@ Session WebSocket -> tool.started (computer, live) -> open Workspace -> computer
 HTTP history ------------------------------------> update messages only
 ```
 
+本地 `mcp__cua_repl__js` 也能操作 Pod 桌面。它同时支持浏览器，因此只有当前
+会话实时发出的原生应用选择或启动才会打开电脑标签。按完整的单句输入识别
+`await cua.getApp("应用名")`、`let app = await cua.getApp({windowId: 42})`
+或 `await cua.computer.launch_app({app: "org.xfce.mousepad.desktop"})`。
+若 `tool.started` 先到，等同次 `tool.updated` 携带明确参数后打开一次。
+历史回放、通用 `node_repl`、设备服务 `registered_computers`、环境清单、浏览器调用、
+只操作已有变量的代码及完成摘要都保留当前标签。后续操作仍可通过已打开的电脑标签查看。
+
+```text
+Live cua_repl.js start -> named native app / window -> Workspace computer
+                       -> unclear input -> tool.updated -> named native app / window
+                       -> inventory / browser / summary -> current tab
+```
+
 WebSocket 订阅同步补发的历史帧携带 `replay: true`；新发起回复在订阅建立前产生的帧
 仍作为当前调用交付。导航由 `use-agent-message` 的事件回调触发，复用连接的序号去重与
 会话代际校验，不从渲染后的消息列表推导。`useOpenWorkspaceTab` 使用独立的动作 context，
@@ -2371,6 +2385,10 @@ mcp__computer__tool + complete arguments
 安装分别显示。参数尚未完成或类型无效时显示该工具的基础动作标题，完整后更新。
 主聊天和 Workspace Agent 过程视图共用既有工具卡入口，状态、折叠、输入输出、复制、
 标题跑马灯及减少动态效果沿用 `ToolResult`。
+
+`mcp__cua_repl__js` 的卡片从完整输入读取 `title`，完成汇总调用成功后显示
+`completion_summary`。尚无标题、输入仍不完整或汇总失败时保留 `cua_repl:js`；
+标题按工具提供的语言显示。动作和完成汇总共用既有 MCP 图标与折叠卡片。
 
 ### 图片工具卡片
 
@@ -3796,7 +3814,8 @@ Workspace 电脑连接与视图生命周期回归（仓库根目录）：
 
 覆盖同源 WS/WSS、不可用 / HTTP / 握手错误、断线自动重连、取消重试、拒绝响应停止重试、延迟响应和懒加载的取消、
 关闭 Workspace / 切标签 / 页面隐藏时清理连接、恢复可见时重连及中英文状态；
-实时 computer 调用打开桌面 / 移动端面板，历史、重复事件与重连补发不切换标签。
+实时 computer 调用与原版 CUA 的原生应用选择打开桌面 / 移动端面板，历史、
+重复事件、重连补发、浏览器、通用 JS 与远端设备调用保留当前标签。
 这些 DOM 与协议边界测试不替代 Debian 桌面真实连接、鼠标键盘和触摸的浏览器验证。
 
 模型选择器的原生回传、effort、问答后重新挂载及延迟 profile 加载回归（仓库根目录）：
@@ -3870,7 +3889,8 @@ Workspace 电脑连接与视图生命周期回归（仓库根目录）：
 不读取或修改真实会话。
 
 外部 MCP 工具名称解析、内置工具分流、流式输入、输出与错误、复制及中英文展示回归，
-包含 Computer 工具统一图标、动作标题、参数细化、安装预览与未知工具展示，
+包含 Computer 工具统一图标、动作标题、参数细化、安装预览、未知工具展示及
+原版 CUA 工具的动作标题、成功摘要与失败状态，
 使用 Node/jsdom，不启动浏览器：
 
 ```sh

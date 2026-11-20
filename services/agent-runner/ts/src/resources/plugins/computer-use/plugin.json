@@ -1,0 +1,6 @@
+{
+  "id": "computer-use",
+  "name": "Computer Use",
+  "description": "Connect to registered computers and operate the configured local desktop.",
+  "icon": "monitor"
+}

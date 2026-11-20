@@ -172,7 +172,7 @@ try {
   }
 }
 
-// Exercise the actual Pi resource adapter without making a model request.
+// Exercise the same Pi codemode tool a session uses, with a real MCP PNG.
 const agentDir = getAgentDir()
 const settingsManager = SettingsManager.create(cwd, agentDir)
 const resourceLoader = await createPiResourceLoader(cwd, agentDir, settingsManager)
@@ -180,12 +180,24 @@ assert.deepEqual(resourceLoader.getExtensions().errors, [])
 const { session } = await createAgentSession({ cwd, agentDir, settingsManager, resourceLoader, sessionManager: SessionManager.inMemory(cwd) })
 try {
   await session.bindExtensions({ mode: 'rpc' })
-  const mcp = session.agent.state.tools.find((tool) => tool.name === 'mcp')
-  assert.ok(mcp, 'Pi must load its native MCP adapter')
-  const result = await mcp.execute('computer-deployment-screenshot', {
-    server: 'computer', tool: 'get_desktop_state', args: { max_image_dimension: 900 },
-  }, AbortSignal.timeout(30_000))
-  assert.ok(result.content.some((item) => item.type === 'image'), 'The desktop screenshot must reach Pi through its MCP adapter')
+  const toolName = 'mcp__computer__get_desktop_state'
+  const deadline = Date.now() + 15_000
+  while (Date.now() < deadline && !session.getAllTools().some((tool) => tool.name === toolName)) await delay(50)
+  assert.ok(session.getAllTools().some((tool) => tool.name === toolName), 'Pi must discover the native desktop MCP')
+  const codemode = session.agent.state.tools.find((tool) => tool.name === 'codemode')
+  assert.ok(codemode, 'Pi must expose codemode')
+  const id = 'computer-deployment-screenshot'
+  const code = `const result = await tools.${toolName}({max_image_dimension: 900});
+    for (const block of result.content) if (block.type === 'image') image(block); else if (result.isError) text(block);`
+  // Pi associates nested MCP calls with the issuing assistant message.
+  session.agent.state.messages = [...session.agent.state.messages, {
+    role: 'assistant', content: [{ type: 'toolCall', id, name: 'codemode', arguments: { code } }],
+    api: 'openai-responses', provider: 'fixture', model: 'fixture', stopReason: 'toolUse', timestamp: Date.now(),
+    usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+  }]
+  const result = await codemode.execute(id, { code }, AbortSignal.timeout(30_000))
+  assert.ok(result.content.some((item) => item.type === 'image' && item.mimeType === 'image/png'),
+    result.content.filter((item) => item.type === 'text').map((item) => item.text).join('\n'))
 } finally {
   await session.abort()
   await session.extensionRunner.emit({ type: 'session_shutdown', reason: 'quit' })
@@ -193,4 +205,4 @@ try {
 }
 
 console.log(JSON.stringify({ providers: ['claude', 'pi'], serverVersion, toolCount,
-  checks: ['effective native MCP definitions', 'persistent stdio MCP connection', 'desktop PNG', 'isolated Mousepad launch', 'foreground Chinese input', 'GUI save and exact file comparison', 'owned window cleanup', 'Pi resource adapter screenshot'] }, null, 2))
+  checks: ['effective native MCP definitions', 'persistent stdio MCP connection', 'desktop PNG', 'isolated Mousepad launch', 'foreground Chinese input', 'GUI save and exact file comparison', 'owned window cleanup', 'Pi codemode MCP screenshot'] }, null, 2))

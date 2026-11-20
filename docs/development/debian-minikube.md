@@ -31,10 +31,9 @@ Node debugger     -> 127.0.0.1:19229 --forward--> inspector 127.0.0.1:9229
 
 Agent 的 shell、读写文件和子进程都在 Debian 容器里。仅代码编辑、Vite 和端口转发在
 Mac 上；访问 Mac 的模型服务只是推理 API 请求。没有挂载 Mac 的工作区、HOME、Docker
-socket 或 Kubernetes 凭证。桌面属于 Debian 13 容器，不会操作 Mac 桌面，也不验证真实
-Debian 宿主机的桌面会话。镜像安装固定版本 Cua Driver，并通过 Claude/Pi 原生 MCP
-配置提供电脑工具；Agent UI 可实时查看与手动输入。容器共享 Linux VM 的内核，
-不等同于 Debian 宿主机/完整 systemd。
+socket 或 Kubernetes 凭证。默认桌面属于 Debian 13 容器。Runner 镜像内的原版
+`node_repl`、`cua_repl` 和 Sky 控制同一 Xfce，Agent UI 通过 noVNC 显示同一块桌面。
+需要接入 Mac 时，托盘通过单独登记的 SSH 设备连接提供状态和计算器检查。[本机与远程的调用路径](../architecture/computer-use-migration.md#已经运行的-runner-和托盘)
 
 ## 初次启动
 
@@ -553,6 +552,15 @@ Cua 0.34.1 的 targeted AT-SPI `type_text(element_token)` 对非 ASCII 文本有
 AT-SPI 中文输入报告为通过，也不能把本次验证视为 GNOME Wayland 兼容性认证。
 
 ## Runner 原生 Computer MCP 集成
+
+当前镜像在 `/opt/cua_node` 提供对应 CPU 架构的原版运行包。Claude 和 Pi 从 Runner 会话配置启动两个 MCP 服务，`node_repl` 面向 Runner 工作区，`cua_repl` 通过 Sky 驱动 Xfce。首次使用按工具返回的 Linux 说明选择原生应用。执行 `bash deploy/agent-runner/dev.sh verify-computer` 会打开独立测试文档，经原版 worker 输入和读回，再关闭测试窗口。提供已有目录给容器内的 `tests/deployment/original-linux-desktop.ts` 可保留截图库返回的原始图像及 PNG 副本。[当前实测与迁移对照](../architecture/computer-use-migration.md)
+
+```text
+Claude / Pi -> cua_repl -> NodeREPL -> Sky -> Xfce :99 <- x11vnc <- Agent UI
+            -> node_repl -> Runner workspace
+```
+
+### 既有 Cua Driver 方案与历史验证
 
 本节取代上述专项验证阶段的手工 PVC 安装方式。主环境继续使用 Debian 13 / Xfce / X11，
 GNOME 实验目录独立保留。镜像内固定安装官方 Cua Driver **0.34.1**，按 Docker

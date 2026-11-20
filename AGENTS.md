@@ -80,7 +80,7 @@ Apply the pinned Colloid-Dark GTK / Xfwm theme and Colloid icons to the desktop
 HOME volume with `bash deploy/agent-runner/dev.sh theme-colloid`.
 Run its Linux-only deployment probe with `bash deploy/agent-runner/dev.sh verify`.
 Run only the desktop probe with `bash deploy/agent-runner/dev.sh verify-desktop`.
-Run the Cua MCP integration probe with `bash deploy/agent-runner/dev.sh verify-computer`.
+Run the original NodeREPL, CUA and Sky integration probe with `bash deploy/agent-runner/dev.sh verify-computer`.
 It performs visible input in its own temporary editor window; run desktop probes serially.
 For opt-in real model verification through the forwarded UI, run from the Runner
 directory: `node --import tsx tests/deployment/model-smoke.ts claude` (or `pi`).
@@ -90,6 +90,23 @@ For real desktop MCP model verification, run from the Runner directory:
 For models without image input, use
 `node --import tsx tests/deployment/computer-model-smoke.ts claude http://127.0.0.1:15173 PROFILE_ID --text-only`.
 This performs visible desktop actions and preserves its proof file and editor window.
+
+For Computer Use and its registered-device integration, run from
+`services/agent-runner/ts/`:
+
+- `TMPDIR=/tmp npx vitest run tests/unit/infrastructure/computer tests/unit/scripts/computer-use tests/unit/core/plugin`
+- `node scripts/computer-use/probe.mjs inventory` (Mac with the installed desktop runtime)
+- `node scripts/computer-use/probe.mjs runtime` (Mac, checks generic REPL persistence and unified API initialization without accessing a desktop app)
+- `node --import tsx tests/fixtures/resources/original-computer-surface-probe.ts /absolute/path/to/cua_node` (starts the original workers for all three configured surfaces and checks their exposed APIs)
+- `PRIVA_CUA_RUNTIME=/absolute/path/to/cua_node node --import tsx tests/deployment/original-linux-desktop.ts` (Linux Xfce, obtains the observed text and real window image over the original Sky worker)
+- `node --import tsx tests/fixtures/resources/original-computer-skills-probe.ts /absolute/path/to/verified-original-skills dist` (after build, checks discovery of all five original skills in Claude and Pi; with `PRIVA_COMPUTER_DIR` it also lists connected devices through Pi)
+- `node --import tsx tests/fixtures/resources/original-computer-skills-probe.ts /opt/chatgpt-cua-skills dist linux` (checks the three skills included in the Linux image with both providers)
+- `PRIVA_CUA_SKILLS=/opt/chatgpt-cua-skills node --import tsx tests/fixtures/resources/original-computer-surface-probe.ts /opt/cua_node standalone-linux` (uses the staged platform skill and the generic original NodeREPL to list Xfce windows)
+- `node --import tsx tests/deployment/computer-device-smoke.ts status DEVICE_ID` (inside the Runner Pod after build and device registration)
+- `node --import tsx tests/deployment/computer-device-smoke.ts calculator DEVICE_ID` (reads back a real calculation on the registered Mac)
+
+The [Computer Use migration guide](docs/architecture/computer-use-migration.md)
+documents the local Xfce runtime and the separately provisioned Mac tray.
 
 The third-party Agent API (`/api/agent/v1/...`, HTTP / SSE / WebSocket) follows
 [docs/architecture/agent-api-v1.md](docs/architecture/agent-api-v1.md), with

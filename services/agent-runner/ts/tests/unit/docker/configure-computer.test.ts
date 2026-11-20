@@ -42,13 +42,139 @@ describe('container computer MCP bootstrap', () => {
     piDir = join(root, 'pi')
     claudePath = join(claudeDir, '.claude.json')
     piPath = join(piDir, 'mcp.json')
-    env = { ...process.env, ...desktopEnv, HOME: root, CLAUDE_CONFIG_DIR: claudeDir, PI_CODING_AGENT_DIR: piDir,
+    env = { ...desktopEnv, HOME: root, PATH: process.env['PATH'], CLAUDE_CONFIG_DIR: claudeDir, PI_CODING_AGENT_DIR: piDir,
       ANTHROPIC_API_KEY: 'do-not-copy-model-credentials' }
   })
 
   afterEach(async () => { vi.unstubAllEnvs(); await rm(root, { recursive: true, force: true }) })
 
   const configure = () => execute(process.execPath, [bootstrap], { env })
+
+  async function mountRuntime(surfaces?: string): Promise<void> {
+    const runtime = join(root, 'runtime')
+    env['PRIVA_CUA_RUNTIME'] = runtime
+    if (surfaces) env['CUA_REPL_ENABLED_SURFACES'] = surfaces
+    await json(join(runtime, 'manifest.json'), { arch: process.arch, platform: process.platform })
+    const paths = ['bin/node', 'bin/node_repl', 'lib/node_modules/@oai/cua-repl/bin/cua-repl.mjs']
+    if (surfaces !== 'browser') {
+      const driverPath = 'bin/sky'
+      paths.push(driverPath)
+      env['OAI_SKY_LINUX_BIN'] = join(runtime, driverPath)
+    }
+    for (const path of paths) {
+      await mkdir(dirname(join(runtime, path)), { recursive: true })
+      await writeFile(join(runtime, path), '', { mode: 0o700 })
+    }
+  }
+
+  it.each([undefined, 'browser,computer'])('skips both old providers in a fresh HOME with original computer surface %s', async (surfaces) => {
+    await mountRuntime(surfaces)
+    delete env['DISPLAY']
+    await configure()
+    await configure()
+    expect(await readdir(root)).toEqual(['runtime'])
+  })
+
+  it.each(['browser', 'remote'])('keeps Xfce MCP and skill for %s-only deployments', async (mode) => {
+    if (mode === 'browser') await mountRuntime('browser')
+    else {
+      env['PRIVA_COMPUTER_HOST_KEY'] = join(root, 'host-key-fixture')
+      env['PRIVA_COMPUTER_DEVICES'] = 'fixture-device'
+    }
+    await configure()
+    for (const [file, directory] of [[claudePath, claudeDir], [piPath, piDir]] as const) {
+      expect(await readJson(file)).toMatchObject({ mcpServers: { computer: { command: '/usr/local/bin/cua-driver' } } })
+      expect(await readFile(join(directory, 'skills/computer-desktop/SKILL.md'), 'utf8')).toContain('Xfce')
+    }
+  })
+
+  it.each(['codemode', 'eager'])('retires only the exact Runner resources from a %s HOME', async (piMode) => {
+    await configure()
+    const sourceSkill = await readFile(resolve('docker/skills/computer-desktop/SKILL.md'), 'utf8')
+    const oldSkill = sourceSkill.replace(
+      "use `codemode` to call the discovered `mcp__computer__*` tools. Forward the\nMCP image block with `image(block)` when inspecting a screenshot.",
+      "the `mcp` tool can discover and call the server's tools.",
+    )
+    if (piMode === 'eager') expect(oldSkill).not.toBe(sourceSkill)
+    for (const [file, dir] of [[claudePath, claudeDir], [piPath, piDir]] as const) {
+      const current = await readJson(file)
+      const servers = current['mcpServers'] as Record<string, Record<string, unknown>>
+      if (file === piPath && piMode === 'eager') {
+        const computer = servers['computer']
+        assert.ok(computer)
+        delete computer['exposure']
+        computer['lifecycle'] = 'eager'
+        await writeFile(join(dir, 'skills/computer-desktop/SKILL.md'), oldSkill)
+      }
+      await json(file, { ...current, preference: 17, mcpServers: { other: { command: 'other' }, ...servers } })
+      const otherSkill = join(dir, 'skills/other/SKILL.md')
+      await mkdir(dirname(otherSkill))
+      await writeFile(otherSkill, 'keep')
+    }
+    await mountRuntime()
+    await configure()
+    for (const [file, dir] of [[claudePath, claudeDir], [piPath, piDir]] as const) {
+      expect(await readJson(file)).toEqual({ preference: 17, mcpServers: { other: { command: 'other' } } })
+      expect(await readdir(join(dir, 'skills/computer-desktop'))).toEqual([])
+      expect(await readFile(join(dir, 'skills/other/SKILL.md'), 'utf8')).toBe('keep')
+    }
+    const before = await stat(piPath)
+    await configure()
+    expect((await stat(piPath)).mtimeMs).toBe(before.mtimeMs)
+  })
+
+  it('keeps user edits, Claude JSONC comments, and customized or extended skill directories byte-for-byte', async () => {
+    await configure()
+    const claude = (await readFile(claudePath, 'utf8')).replace('{', '{\n  // Keep my settings')
+    await writeFile(claudePath, claude)
+    const pi = (await readFile(piPath, 'utf8')).replace('":99"', '":47"')
+    await writeFile(piPath, pi)
+    const claudeSkill = join(claudeDir, 'skills/computer-desktop/SKILL.md')
+    const piSkill = join(piDir, 'skills/computer-desktop/SKILL.md')
+    await writeFile(claudeSkill, 'My desktop skill')
+    const originalSkill = await readFile(piSkill)
+    await writeFile(join(dirname(piSkill), 'notes.md'), 'my notes')
+    await mountRuntime()
+    const { stderr } = await configure()
+    expect(stderr).toContain('Keeping user-managed desktop MCP')
+    expect(stderr).toContain('Keeping customized desktop skill')
+    expect(await readFile(claudePath, 'utf8')).toBe(claude)
+    expect(await readFile(piPath, 'utf8')).toBe(pi)
+    expect(await readFile(claudeSkill, 'utf8')).toBe('My desktop skill')
+    expect(await readFile(piSkill)).toEqual(originalSkill)
+    expect(await readFile(join(dirname(piSkill), 'notes.md'), 'utf8')).toBe('my notes')
+  })
+
+  it('leaves every existing resource intact when the provisioned runtime fails descriptor validation', async () => {
+    await configure()
+    const paths = [claudePath, piPath, ...[claudeDir, piDir].map((dir) => join(dir, 'skills/computer-desktop/SKILL.md'))]
+    const before = await Promise.all(paths.map((path) => readFile(path)))
+    await mountRuntime()
+    await json(join(root, 'runtime/manifest.json'), { platform: process.platform, arch: 'invalid-architecture' })
+    await expect(configure()).rejects.toThrow('this Runner needs')
+    expect(await Promise.all(paths.map((path) => readFile(path)))).toEqual(before)
+  })
+
+  it('preserves duplicate keys, exact numbers, and linked skill directories during takeover', async () => {
+    await configure()
+    const claude = (await readFile(claudePath, 'utf8')).replace('{', '{"preference": 1, "preference": 2,')
+    const pi = (await readFile(piPath, 'utf8')).replace('{', '{"userNumber": 9007199254740993,')
+    await writeFile(claudePath, claude)
+    await writeFile(piPath, pi)
+    const skillDirectory = join(piDir, 'skills/computer-desktop')
+    const saved = await readFile(join(skillDirectory, 'SKILL.md'))
+    const target = join(root, 'shared-skill')
+    await mkdir(target)
+    await writeFile(join(target, 'SKILL.md'), saved)
+    await rm(skillDirectory, { recursive: true })
+    await symlink(target, skillDirectory, 'dir')
+    await mountRuntime()
+    const { stderr } = await configure()
+    expect(stderr).toContain('Keeping linked or customized skill directory')
+    expect(await readFile(claudePath, 'utf8')).toBe(claude)
+    expect(await readFile(piPath, 'utf8')).toBe(pi)
+    expect(await readFile(join(target, 'SKILL.md'))).toEqual(saved)
+  })
 
   it('seeds discoverable native MCP entries and skills for both providers without leaking model credentials', async () => {
     await configure()
