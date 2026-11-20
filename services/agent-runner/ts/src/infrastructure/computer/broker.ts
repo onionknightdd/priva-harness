@@ -7,8 +7,8 @@ import ssh2, { type Connection, type ServerChannel } from 'ssh2'
 import { errorMessage, hasErrorCode } from '../../core/util/errors.js'
 import { withExclusiveFileLock } from '../storage/private-file.js'
 import {
-  clientRequestSchema, controlPath, deviceIdSchema, deviceReplySchema, frame, helloSchema, readFrames,
-  type ComputerMethod, type DeviceInfo,
+  clientRequestSchema, controlPath, deviceIdSchema, deviceMessageSchema, EXIT_LINE, frame, helloSchema, readLines,
+  WORKER_LINE, WORKER_LINE_BYTES, type DeviceInfo, type DeviceMethod,
 } from './protocol.js'
 
 interface BrokerOptions {
@@ -41,13 +41,21 @@ interface Pending {
   reject: (error: Error) => void
 }
 
+/** Where a device's worker output goes: the local client that opened it. */
+interface WorkerSink {
+  line(line: string): void
+  exit(reason: string): void
+}
+
 class Device {
   private pending?: Pending
+  private worker?: WorkerSink
+  private opening = false
   private online = true
 
   constructor(readonly info: DeviceInfo, private readonly channel: ServerChannel) {}
 
-  call(method: ComputerMethod): Promise<unknown> {
+  request(method: DeviceMethod): Promise<unknown> {
     if (!this.online) return Promise.reject(new Error('Device is offline'))
     if (this.pending) return Promise.reject(new Error('Device is busy'))
     return new Promise((resolve, reject) => {
@@ -61,18 +69,51 @@ class Device {
     })
   }
 
-  receive(value: unknown): void {
-    const result = deviceReplySchema.parse(value)
+  /** A desktop has one user at a time, so a device runs one worker. */
+  async openWorker(sink: WorkerSink): Promise<void> {
+    if (this.worker || this.opening) throw new Error('Device is in use by another session')
+    this.opening = true
+    try {
+      await this.request('open')
+      this.worker = sink
+    } finally { this.opening = false }
+  }
+
+  writeWorker(sink: WorkerSink, line: string): void {
+    if (this.worker === sink && this.online) this.channel.write(`${WORKER_LINE}${line}\n`)
+  }
+
+  closeWorker(sink: WorkerSink): void {
+    if (this.worker !== sink) return
+    delete this.worker
+    if (this.online) this.channel.write(frame({ type: 'close' }))
+  }
+
+  receive(line: string): void {
+    if (line.startsWith(WORKER_LINE)) {
+      this.worker?.line(line.slice(WORKER_LINE.length))
+      return
+    }
+    const message = deviceMessageSchema.parse(JSON.parse(line))
+    if (message.type === 'worker-exit') {
+      const worker = this.worker
+      delete this.worker
+      worker?.exit(message.reason)
+      return
+    }
     const pending = this.pending
-    if (pending?.id !== result.id) throw new Error('Unexpected device response')
+    if (pending?.id !== message.id) throw new Error('Unexpected device response')
     clearTimeout(pending.timer)
     delete this.pending
-    if (result.ok) pending.resolve(result.value)
-    else pending.reject(new Error(result.error))
+    if (message.ok) pending.resolve(message.value)
+    else pending.reject(new Error(message.error))
   }
 
   disconnect(message: string): void {
     this.online = false
+    const worker = this.worker
+    delete this.worker
+    worker?.exit(message)
     if (!this.pending) return
     clearTimeout(this.pending.timer)
     this.pending.reject(new Error(message))
@@ -146,15 +187,15 @@ export async function startComputerBroker(options: BrokerOptions): Promise<{ por
           channel.once('end', () => { detach(); connection.end() })
           channel.once('close', () => { detach(); connection.end() })
           channel.on('error', () => { detach(); connection.end() })
-          readFrames(channel, (message) => {
-            if (device) return device.receive(message)
-            const hello = helloSchema.parse(message)
+          readLines(channel, (line) => {
+            if (device) return device.receive(line)
+            const hello = helloSchema.parse(JSON.parse(line))
             if (devices.has(deviceId)) throw new Error('Device is already connected')
             device = new Device({ deviceId, platform: hello.platform, name: hello.name }, channel)
             devices.set(deviceId, device)
             clearTimeout(deadline)
             channel.write(frame({ type: 'ready', deviceId }))
-          }, () => { detach(); connection.end() })
+          }, () => { detach(); connection.end() }, WORKER_LINE_BYTES)
         })
       })
     })
@@ -166,10 +207,13 @@ export async function startComputerBroker(options: BrokerOptions): Promise<{ por
     socket.once('error', () => socket.destroy())
     socket.setTimeout(32_000, () => socket.destroy())
     let requested = false
-    readFrames(socket, (message) => {
+    // Set once this connection carries a device's worker stream.
+    let stream: { device: Device; sink: WorkerSink } | undefined
+    readLines(socket, (line) => {
+      if (stream) { stream.device.writeWorker(stream.sink, line); return }
       if (requested) throw new Error('One request per connection')
       requested = true
-      const request = clientRequestSchema.parse(message)
+      const request = clientRequestSchema.parse(JSON.parse(line))
       const respond = (response: unknown) => { if (!socket.destroyed) socket.end(frame(response)) }
       if (request.method === 'list') {
         respond({ id: request.id, ok: true, value: [...devices.values()].map((device) => device.info) })
@@ -177,11 +221,26 @@ export async function startComputerBroker(options: BrokerOptions): Promise<{ por
       }
       const device = devices.get(request.deviceId)
       if (!device) { respond({ id: request.id, ok: false, error: 'Device is offline' }); return }
-      void device.call(request.method).then(
-        (value) => respond({ id: request.id, ok: true, value }),
-        (error: unknown) => respond({ id: request.id, ok: false, error: errorMessage(error) }),
-      )
-    }, () => socket.destroy())
+      if (request.method === 'status') {
+        void device.request('status').then(
+          (value) => respond({ id: request.id, ok: true, value }),
+          (error: unknown) => respond({ id: request.id, ok: false, error: errorMessage(error) }),
+        )
+        return
+      }
+      const sink: WorkerSink = {
+        line: (output) => { if (!socket.destroyed) socket.write(`${output}\n`) },
+        exit: (reason) => { if (!socket.destroyed) socket.end(`${EXIT_LINE}${reason}\n`) },
+      }
+      socket.once('close', () => device.closeWorker(sink))
+      void device.openWorker(sink).then(() => {
+        if (socket.destroyed) { device.closeWorker(sink); return }
+        // The worker stays open for as long as the session keeps this connection.
+        socket.setTimeout(0)
+        socket.write(frame({ id: request.id, ok: true, value: {} }))
+        stream = { device, sink }
+      }, (error: unknown) => respond({ id: request.id, ok: false, error: errorMessage(error) }))
+    }, () => socket.destroy(), WORKER_LINE_BYTES)
   })
   local.maxConnections = 64
   async function close(): Promise<void> {

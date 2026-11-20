@@ -171,7 +171,7 @@ test("native Bash keeps its terminal card while an external tool named Read uses
   } finally { await external.close() }
 })
 
-test("the CUA JS card shows its action title and only displays a completion summary after success", async () => {
+test("a Computer Use js card shows the title the model gave it, with the pointer icon for desktop servers", async () => {
   const name = "mcp__cua_repl__js"
   const tool = { ...completed.tool!, name, status: "running" as const }
   const block = { ...completed, name, tool, input: { code: "await cua.getState();", title: "Reading available apps" } }
@@ -179,74 +179,33 @@ test("the CUA JS card shows its action title and only displays a completion summ
   try {
     assert.ok(view.title().textContent!.includes("Reading available apps"))
     assert.equal(view.title().getAttribute("aria-expanded"), "false")
+    assert.equal(view.host.querySelector(".lucide-mouse-pointer-click")?.getAttribute("aria-hidden"), "true")
+    assert.equal(view.host.querySelector('[data-slot="mcp-tool-icon"]'), null)
+    // Until the streamed arguments are complete, the card falls back to the tool name.
     await view.update({ ...block, tool: { ...tool, inputRaw: '{"title":"Reading' } })
     assert.ok(view.title().textContent!.includes("cua_repl:js"))
-    const summary = { ...block, input: { completion_summary: "Verified editor input" } }
-    await view.update(summary)
-    assert.ok(!view.title().textContent!.includes("Verified editor input"))
-    await view.update({ ...summary, tool: { ...tool, status: "completed", ok: false, output: "refused" } })
-    assert.ok(!view.title().textContent!.includes("Verified editor input"))
+    await view.update({ ...block, tool: { ...tool, status: "completed", ok: false, output: "refused" } })
+    assert.ok(view.title().textContent!.includes("Reading available apps"))
     assert.equal(view.title().dataset.toolStatus, "error")
-    await view.update({ ...summary, tool: { ...tool, status: "completed", ok: true } })
-    assert.equal(view.title().textContent, "Verified editor input")
     await view.open()
-    assert.equal(view.host.querySelector("pre")?.textContent, JSON.stringify(summary.input, null, 2))
-    for (const other of ["node_repl", "registered_computers"]) {
-      await view.update({ ...block, name: `mcp__${other}__js` })
-      assert.ok(view.title().textContent!.includes(`${other}:js`))
-    }
-  } finally { await view.close() }
-})
+    assert.equal(view.host.querySelector("pre")?.textContent, JSON.stringify(block.input, null, 2))
+    assert.equal(view.host.querySelector('[role="alert"]')!.textContent, "refused")
 
-test("computer tools use localized action titles and the shared pointer icon through the real dispatcher", async () => {
-  const view = await mount({ ...completed, name: "mcp__computer__list_apps" }, "zh-CN")
-  try {
-    for (const [toolName, label] of [
-      ["list_apps", "正在查看桌面应用"],
-      ["list_windows", "正在查看窗口"],
-      ["launch_app", "正在启动应用"],
-    ]) {
-      await view.update({ ...completed, name: `mcp__computer__${toolName}` })
-      assert.ok(view.title().textContent!.includes(label))
-      assert.ok(!view.title().textContent!.includes("computer:"))
-      assert.equal(view.host.querySelector(".lucide-mouse-pointer-click")?.getAttribute("aria-hidden"), "true")
-      assert.equal(view.host.querySelector('[data-slot="mcp-tool-icon"]'), null)
-    }
-    await act(async () => { await i18n.changeLanguage("en") })
-    assert.ok(view.title().textContent!.includes("Launching an app"))
-    await view.update({ ...completed, name: "mcp__computer__future_tool" })
-    assert.ok(view.title().textContent!.includes("computer:future_tool"))
+    // A registered computer is a desktop too; the general JS worker is not.
+    await view.update({ ...block, name: "mcp__registered_computers__js" })
+    assert.ok(view.title().textContent!.includes("Reading available apps"))
     assert.ok(view.host.querySelector(".lucide-mouse-pointer-click"))
-    await view.update({ ...completed, name: "mcp__other__list_apps" })
-    assert.ok(view.title().textContent!.includes("other:list_apps"))
+    await view.update({ ...block, name: "mcp__node_repl__js" })
+    assert.ok(view.title().textContent!.includes("Reading available apps"))
+    assert.equal(view.host.querySelector(".lucide-mouse-pointer-click"), null)
+    assert.ok(view.host.querySelector('[data-slot="mcp-tool-icon"]'))
+
+    // Other tools of the same servers, and other servers, keep the plain name and icon.
+    await view.update({ ...block, name: "mcp__cua_repl__js_reset" })
+    assert.ok(view.title().textContent!.includes("cua_repl:js_reset"))
+    await view.update({ ...block, name: "mcp__other__js" })
+    assert.ok(view.title().textContent!.includes("other:js"))
     assert.ok(view.host.querySelector('[data-slot="mcp-tool-icon"]'))
     assert.equal(view.host.querySelector(".lucide-mouse-pointer-click"), null)
-  } finally { await view.close() }
-})
-
-test("computer titles follow complete streaming arguments and preserve normal output and status behavior", async () => {
-  const block: ToolBlock = {
-    ...completed, name: "mcp__computer__browser_pointer", input: { action: "hover" },
-    tool: { ...completed.tool!, status: "started", input: { action: "drag" }, inputRaw: '{"action":"scroll",', output: undefined },
-  }
-  const view = await mount(block, "zh-CN")
-  try {
-    assert.ok(view.title().textContent!.includes("正在网页中执行鼠标操作"))
-    assert.equal(view.title().getAttribute("aria-expanded"), "false")
-    await view.open()
-    assert.equal(view.host.querySelector("pre")!.textContent, '{"action":"scroll",')
-    assert.ok(view.host.querySelector('[aria-busy="true"]'))
-    await view.update({ ...block, tool: { ...block.tool!, inputRaw: '{"action":"scroll","delta_y":200}', status: "running" } })
-    assert.ok(view.title().textContent!.includes("正在滚动网页内容"))
-    await view.update({ ...block, tool: { ...block.tool!, inputRaw: undefined, input: { action: "right_click" }, status: "completed", ok: false, output: "Original computer error" } })
-    assert.ok(view.title().textContent!.includes("正在右键点击网页元素"))
-    assert.ok(view.host.querySelector('[data-state="error"]'))
-    assert.equal(view.title().dataset.toolStatus, "error")
-    assert.equal(view.title().querySelector(".sr-only")?.textContent, "失败")
-    assert.equal(view.title().querySelectorAll('[data-slot="tool-error-indicator"] .lucide-circle-x-filled').length, 1)
-    assert.equal(view.title().getAttribute("aria-expanded"), "false", "completion retains the existing auto-collapse behavior")
-    await view.open()
-    assert.equal(view.host.querySelector('[role="alert"]')!.textContent, "Original computer error")
-    assert.ok(view.host.querySelector(".lucide-mouse-pointer-click"))
   } finally { await view.close() }
 })

@@ -80,7 +80,7 @@ Apply the pinned Colloid-Dark GTK / Xfwm theme and Colloid icons to the desktop
 HOME volume with `bash deploy/agent-runner/dev.sh theme-colloid`.
 Run its Linux-only deployment probe with `bash deploy/agent-runner/dev.sh verify`.
 Run only the desktop probe with `bash deploy/agent-runner/dev.sh verify-desktop`.
-Run the original NodeREPL, CUA and Sky integration probe with `bash deploy/agent-runner/dev.sh verify-computer`.
+Run the `computer-use` plugin's Linux desktop probe with `bash deploy/agent-runner/dev.sh verify-computer`.
 It performs visible input in its own temporary editor window; run desktop probes serially.
 For opt-in real model verification through the forwarded UI, run from the Runner
 directory: `node --import tsx tests/deployment/model-smoke.ts claude` (or `pi`).
@@ -91,22 +91,25 @@ For models without image input, use
 `node --import tsx tests/deployment/computer-model-smoke.ts claude http://127.0.0.1:15173 PROFILE_ID --text-only`.
 This performs visible desktop actions and preserves its proof file and editor window.
 
-For Computer Use and its registered-device integration, run from
+For the `computer-use` plugin and its registered-device integration, read
+[docs/architecture/computer-use-migration.md](docs/architecture/computer-use-migration.md)
+before changing the plugin directory, the plugin MCP declaration, the device
+service in `src/infrastructure/computer/` or the macOS tray. Run from
 `services/agent-runner/ts/`:
 
-- `TMPDIR=/tmp npx vitest run tests/unit/infrastructure/computer tests/unit/scripts/computer-use tests/unit/core/plugin`
-- `node scripts/computer-use/probe.mjs inventory` (Mac with the installed desktop runtime)
-- `node scripts/computer-use/probe.mjs runtime` (Mac, checks generic REPL persistence and unified API initialization without accessing a desktop app)
-- `node --import tsx tests/fixtures/resources/original-computer-surface-probe.ts /absolute/path/to/cua_node` (starts the original workers for all three configured surfaces and checks their exposed APIs)
-- `PRIVA_CUA_RUNTIME=/absolute/path/to/cua_node node --import tsx tests/deployment/original-linux-desktop.ts` (Linux Xfce, obtains the observed text and real window image over the original Sky worker)
-- `node --import tsx tests/fixtures/resources/original-computer-skills-probe.ts /absolute/path/to/verified-original-skills dist` (after build, checks discovery of all five original skills in Claude and Pi; with `PRIVA_COMPUTER_DIR` it also lists connected devices through Pi)
-- `node --import tsx tests/fixtures/resources/original-computer-skills-probe.ts /opt/chatgpt-cua-skills dist linux` (checks the three skills included in the Linux image with both providers)
-- `PRIVA_CUA_SKILLS=/opt/chatgpt-cua-skills node --import tsx tests/fixtures/resources/original-computer-surface-probe.ts /opt/cua_node standalone-linux` (uses the staged platform skill and the generic original NodeREPL to list Xfce windows)
-- `node --import tsx tests/deployment/computer-device-smoke.ts status DEVICE_ID` (inside the Runner Pod after build and device registration)
-- `node --import tsx tests/deployment/computer-device-smoke.ts calculator DEVICE_ID` (reads back a real calculation on the registered Mac)
+- `TMPDIR=/tmp npx vitest run tests/unit/core/plugin tests/unit/infrastructure/computer tests/integration/infrastructure/computer tests/integration/resources`
+- `bash scripts/computer-use/copy-runtime.sh` (copies the `cua_node` runtime of the local ChatGPT desktop app into the plugin's `mcp/runtime/<platform>-<arch>`; pass another `cua_node` directory to copy a different platform. The copy is git-ignored)
+- `node --import tsx tests/fixtures/resources/computer-use-probe.ts runtime` (starts the plugin's three MCP servers from the copied runtime; does not touch any application)
+- `node --import tsx tests/fixtures/resources/computer-use-probe.ts session Calculator` (macOS; real Claude SDK session against a local model fixture that opens the named application without an approval prompt, reads its window and sends no input. Without an application name it lists the desktop instead, which is the form to use on Linux)
+- `COMPUTER_USE_PROBE_APP=Calculator TMPDIR=/tmp npx vitest run tests/integration/transport/websocket/terminal-computer-use.test.ts` (opt-in; the same read-only check through the full Runner and the native Claude terminal. Skipped without the variable)
+- `node --import tsx tests/fixtures/resources/computer-use-pi-probe.ts` (real Pi session; checks the skills, offered and hidden tools and lists applications. Pass an application name to also open it and read its window)
+- `node --import tsx tests/deployment/computer-use-linux-desktop.ts` (inside the Linux desktop container; types into its own Mousepad window through the plugin's `cua_repl`, reads it back, takes a screenshot and closes it)
+- `node --import tsx tests/deployment/computer-device-smoke.ts status DEVICE_ID` (where the device service runs, after a computer registered)
+- `node --import tsx tests/deployment/computer-device-smoke.ts app DEVICE_ID Calculator` (opens the application on the registered computer through its own worker and reads its window; sends no input)
 
-The [Computer Use migration guide](docs/architecture/computer-use-migration.md)
-documents the local Xfce runtime and the separately provisioned Mac tray.
+The macOS tray lives in `apps/computer-tray-macos/`. From the repository root:
+`swift build --package-path apps/computer-tray-macos`,
+`apps/computer-tray-macos/test.sh` and `apps/computer-tray-macos/build-app.sh`.
 
 The third-party Agent API (`/api/agent/v1/...`, HTTP / SSE / WebSocket) follows
 [docs/architecture/agent-api-v1.md](docs/architecture/agent-api-v1.md), with

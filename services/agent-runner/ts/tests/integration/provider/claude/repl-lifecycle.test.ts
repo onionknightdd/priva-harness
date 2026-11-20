@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import Fastify from 'fastify'
 import { expect, it, vi } from 'vitest'
-import * as computer from '../../../../src/core/plugin/computer-use.js'
+import * as pluginMcp from '../../../../src/core/plugin/plugin-mcp.js'
 import { PushableStream } from '../../../../src/core/stream/pushable-stream.js'
 import { resolveBundledClaudeExecutable } from '../../../../src/provider/claude/claude-executable.js'
 import { resolveClaudeQueryOptions } from '../../../../src/provider/claude/claude-runtime.js'
@@ -32,9 +32,10 @@ it.skipIf(!executable).each(['sdk', 'cli'])('%s sends cleanup on the connected R
   const log = join(root, 'requests.jsonl')
   await mkdir(config)
   const fixture = fileURLToPath(new URL('../../../fixtures/terminal/repl-lifecycle-server.ts', import.meta.url))
-  const servers = Object.fromEntries(workers.map((server) => [server, { type: 'stdio' as const, command: process.execPath,
-    args: ['--import', createRequire(import.meta.url).resolve('tsx'), fixture, log, server], env: {} }]))
-  const registration = vi.spyOn(computer, 'computerMcpServers').mockReturnValue(servers)
+  const servers = workers.map((name) => ({ name, command: process.execPath,
+    args: ['--import', createRequire(import.meta.url).resolve('tsx'), fixture, log, name], env: {},
+    hiddenTools: ['turn_ended'], turnEndTool: 'turn_ended' }))
+  const registration = vi.spyOn(pluginMcp, 'enabledPluginMcpServers').mockReturnValue(servers)
   const model = Fastify()
   const advertised = new Set<string>()
   const bridgeEvents: string[] = []

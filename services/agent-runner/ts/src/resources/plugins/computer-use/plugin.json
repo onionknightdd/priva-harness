@@ -1,6 +1,6 @@
 {
   "id": "computer-use",
   "name": "Computer Use",
-  "description": "Connect to registered computers and operate the configured local desktop.",
+  "description": "Read and operate desktop applications on the computer this session runs on.",
   "icon": "monitor"
 }

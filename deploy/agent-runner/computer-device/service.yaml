@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-runner-computer
+  namespace: priva-harness-dev
+spec:
+  type: ClusterIP
+  selector:
+    app: priva-harness-runner
+  ports:
+    - name: device-ssh
+      protocol: TCP
+      port: 2222
+      targetPort: 2222

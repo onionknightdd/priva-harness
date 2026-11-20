@@ -1,237 +1,232 @@
-# Agent Runner Computer Use 组件对照
+# Computer Use 的实现
 
-本文记录 2026-11-20 核对的本机 Codex 实现，以及 Runner 迁移需要交付的组件。第一版的本地目标是 Runner Pod 内现有的 Xfce 桌面，远程目标先实现 macOS。远程 Linux 和 Windows 沿用同一设备协议，按各自平台产物和实机结果发布。
+2026-11-21 重做。Computer Use 是 Runner 的一个内置插件，与 `agent-dashboard` 同级同结构。它复用 ChatGPT 桌面应用里的原版运行包 `cua_node`：`node_repl` 提供持久的 JS 会话，`@oai/cua` 提供统一的桌面 API，Sky 负责读控件树、截图和发送输入。Runner 只做三件事：声明入口、把入口交给 Claude 和 Pi、把远程电脑的 worker 接进来。
 
-## 对照基准
+此前按环境变量启用、同时支持三套入口的实现，以及旧的 Cua Driver，已全部删除。
 
-```text
-本机 Codex
-  模型
-    +-- 通用 node_repl.js                         通用 JS 入口
-    |
-    +-- cua_repl.js                               计算器用的 MCP 入口
-          -> cua_node/bin/node_repl               持久 JS worker
-          -> @oai/cua/tinyskyAlt                  预加载全局 cua
-               +-- 原生应用 -> sky RPC -> @oai/sky/service -> 原生服务 -> 应用
-               +-- 浏览器   -> browser RPC -> @oai/browser-desktop/service
-          <- 控件树、文本、图片、错误
-
-  桌面宿主管理应用权限、锁屏任务授权和任务结束通知
-```
-
-计算器实测有三次模型工具调用。第一次 `getApp("Calculator")` 取得窗口和初始控件树。第二次复用同一个应用对象，按控件编号点击四次，再用 `getAXState()` 读到表达式和结果。第三次提交 `completion_summary`。同一次任务另有 macOS 系统日志确认临时解锁及重新锁屏。浏览器路由、显式截图和 `js_reset` 有配置或接口依据，此次计算没有使用它们。
-
-## 插件、MCP 入口与可选功能
-
-以下状态取自本机 ChatGPT.app 随包插件目录、Codex 插件缓存、用户配置中的插件启用项和当次调用记录。随包清单说明功能可以提供；配置说明宿主选择了哪些入口；实际调用记录能确定一次任务走了哪条路径。
+## 整体结构
 
 ```text
-本机已配置的入口                                工具或服务
-unified-computer-use  ----------------------> cua_repl.js  ----> Sky（计算器实测）
-computer-use skill / 独立浏览器 skills ------> node_repl.js ----> Sky 或浏览器服务
-用户配置另列 mcp_servers.computer-use -------> SkyComputerUseClient mcp
-
-随包的可选入口
-computer-history ---------------------------> computer-history MCP
-record-and-replay --------------------------> event-stream MCP
+Agent UI「＋」菜单勾选 Computer Use
+        │ enabledPluginIds
+        ▼
+内置插件 registry ── plugin.json + skills/* + mcp/servers.json
+        │
+        ├─ Claude SDK   plugins + mcpServers + Stop / SubagentStop 钩子
+        ├─ Claude TUI   --plugin-dir + --mcp-config + 同样的钩子
+        └─ Pi           additionalSkillPaths + registerMcpServer
+                │
+   ┌────────────┼──────────────────────────────┐
+   ▼            ▼                              ▼
+cua_repl     node_repl                 registered_computers
+   │            │                              │ 私有 Unix socket
+mcp/cua-repl.mjs   通用 JS，                设备服务（SSH 子系统）
+   │               会话工作区                    │ SSH 通道
+node_repl worker                            Mac 托盘
+   │                                            │
+Sky ─> 本机桌面                        同一个 cua-repl.mjs ─> Sky ─> Mac 应用
+（Pod 里是 Xfce :99，
+  本机开发时是这台 Mac）
 ```
 
-| 名称 | 本机观察 | 对 Runner 的意义 |
+「本机」指运行当前会话的那台机器：部署环境里是 Runner Pod 自己的 Xfce，本地开发时是开发者的 Mac。远程电脑永远通过 `registered_computers` 操作，并且每次调用都带设备 ID。
+
+## 插件目录
+
+```text
+services/agent-runner/ts/src/resources/plugins/computer-use/
+├── plugin.json                           id / name / description / icon
+├── .claude-plugin/plugin.json            skills: ./skills
+├── skills/
+│   ├── computer-use/SKILL.md             本机桌面入口、目标与结果验证
+│   └── registered-computers/SKILL.md     远程设备发现、选择与断线处理
+└── mcp/
+    ├── servers.json                      三个 MCP 服务的声明
+    ├── cua-repl.mjs                      cua_repl 的启动入口
+    └── runtime/<平台>-<架构>/             cua_node 运行包（不入库）
+```
+
+`servers.json` 的字段含义见 [随源码分发的产品插件](skills-mcp-migration.md#随源码分发的产品插件)。provider 代码只遍历「已启用插件声明的服务」，不出现具体的服务名；隐藏工具和结束钩子都从声明里取。
+
+| MCP 服务 | 启动的程序 | 提供给模型的工具 | 宿主专用工具 |
+|---|---|---|---|
+| `cua_repl` | 运行包的 Node 执行 `mcp/cua-repl.mjs` | `js`、`js_reset` | `turn_ended`、`js_add_node_module_dir` |
+| `node_repl` | 运行包的 `bin/node_repl` | `js`、`js_reset`、`js_add_node_module_dir` | `turn_ended` |
+| `registered_computers` | Runner 模块 `infrastructure/computer/device-mcp` | `list_devices`、`device_status`、`js`、`js_reset` | `turn_ended` |
+
+Claude 的 Stop 和 SubagentStop 钩子会调用每个服务的 `turn_ended`。Pi 目前只在会话关闭时断开 MCP 连接，逐轮的结束通知没有映射。
+
+## 启动入口 `cua-repl.mjs`
+
+运行包自带一个启动器 `@oai/cua-repl`。我们没有直接用它，而是用同一个包生成同样的启动环境，再做两处改动：
+
+```text
+宿主（Claude / Pi / 远程托盘）
+        │ MCP stdio
+   mcp/cua-repl.mjs ── 去掉完成摘要
+        │              替宿主声明支持表单确认；没有字段的确认直接回 accept
+        │              其余消息原样转发
+   bin/node_repl ── 预加载 @oai/cua/tinyskyAlt，创建全局 cua
+```
+
+- **去掉完成摘要**：自带启动器固定开启它，这让 `js` 工具的输入 schema 顶层出现 `oneOf`。Claude 不向模型提供这样的工具，实测即使去掉所有禁用规则，模型也拿不到 `mcp__cua_repl__js`。去掉后模型不再需要提交 `completion_summary`。
+- **使用应用不询问用户**：macOS 上 worker 在使用每个应用前，会向 MCP 客户端发一个没有表单字段的确认请求。产品决定所有入口都不询问，由入口直接接受。Pi 的 MCP 客户端只应答 `ping` 和 `roots/list`（核对到 1.6.0），本来也无法应答。应答不带持久化选项：桌面服务把「始终允许」存在 `~/Library/Group Containers/2DC432GLL2.com.openai.sky.CUAService/…/ComputerUseAppApprovals.json`，按 macOS 用户共享，ChatGPT 桌面应用也会读到。
+
+入口只需要一个参数，即运行包目录；worker 用到的 Node、模块目录和受信代码路径都由它从这个目录推出。因此本机会话和远程托盘用的是同一个文件。
+
+被接受的是 worker 发出的所有是/否确认。运行时里「录制电脑音频」的确认也属于这一类，目前没有开启音频所以触发不到。桌面服务自身按策略禁止的应用仍然打不开。运行时在首次调用时返回的确认策略文档只是给模型的指引，不是强制拦截。
+
+## 运行包
+
+运行包是 ChatGPT 桌面应用的 `cua_node` 目录，每个平台一份，约 210 到 270 MB，其中 `bin/node` 超过 100 MB。它不进入 git，路径已加入 `.gitignore`；长期怎么存放尚未决定。
+
+| 平台 | 来源 | 放置方式 |
 |---|---|---|
-| `unified-computer-use` | 配置已启用。插件声明 `cua_repl` 和结束钩子，计算器的三次调用均走此入口 | 首版桌面操作对齐这一条，保留结果及中断语义 |
-| `computer-use` 插件、`node_repl` MCP | 插件配置已启用，清单注册 skill。另有通用 `mcp_servers.node_repl` 配置，指向 `cua_node/bin/node_repl`。统一运行时可对已接管的平台隐藏旧 skill 提示 | 保留通用 JS 能力，按所选入口提供一致的初始化说明。不要据插件开关推断模型同时加载了两套 skill |
-| `computer-use` 原生 MCP（与插件同名） | 用户配置还启用了 `mcp_servers.computer-use`，启动声明为 `SkyComputerUseClient mcp`。从本机客户端的安装目录独立发起 MCP 元数据探测，两次独立探测均超时，第二次在 MCP initialize 阶段等待了 12 秒。 | 记录为并行入口。公司项目若有直接消费者，需要独立完成握手验证。此前的计算器调用走统一入口。 |
-| `browser`、`chrome` | 两个插件均配置启用。`browser` 指导使用内置浏览器，`chrome` 指导使用用户 Chrome，并随包提供扩展的本地通信宿主。两份插件清单的结束钩子指向 `node_repl.turn_ended`，统一插件的钩子指向 `cua_repl.turn_ended` | 浏览器验收区分内置浏览器、Chrome 扩展连接与原生窗口操作。按实际 worker 分派结束通知；插件启用状态不能证明扩展当前已连接 |
-| `computer-history`、`record-and-replay` | 应用随附两个独立插件。前者声明 `computer-history` MCP，提供用户启用后的近期活动查询；后者声明 `event-stream` MCP，将用户主动演示的操作转为可复用 skill。本机配置未列出其启用项，此次会话也未暴露这两个 MCP | 作为可选产品功能另列；首版控制桌面、返回截图、验证临时解锁均无须采集用户活动历史 |
+| macOS 本地开发 | `/Applications/ChatGPT.app/Contents/Resources/cua_node` | `bash scripts/computer-use/copy-runtime.sh` 复制到 `mcp/runtime/darwin-arm64/` |
+| Linux 镜像 | 官方 deb `chatgpt_26.1111.71704`，SHA-256 固定 | `docker/install-chatgpt-cua-runtime.sh` 放到 `/opt/cua_node`，在源码树和编译产物的插件目录各建一个 `mcp/runtime/linux-<架构>` 链接 |
+| 远程 Mac | 那台 Mac 上安装并且正在运行的 ChatGPT 桌面应用 | 托盘直接使用，不复制 |
 
-相邻功能也有明确归属。`codex-app-tools` 提供 `codex_app` 客户端管理工具；`messages` 是随包的消息应用专用 MCP；`cloud-environment` 面向附加到 Codex 聊天的云电脑。Appshots 是桌面宿主主动附加前台窗口截图与文本的功能。这些功能均未出现在计算器工具调用链中。Locked Use 对应 macOS 系统授权插件 `CodexComputerUseAuthorizationPlugin.bundle` 和辅助应用 `CUALockScreenGuardian.app`，单独验收。[Appshots 官方说明](https://learn.chatgpt.com/docs/appshots) · [Locked Use 官方说明](https://learn.chatgpt.com/docs/computer-use#locked-use)
+当前平台的运行包不存在时，启用插件的会话启动失败，错误里给出应放置的目录。镜像构建的下载源可以用 `CUA_RUNTIME_REPOSITORY` 换成镜像站，校验值不变。`dev.sh sync` 不同步本机的运行包，也不删除 Pod 里的链接；Docker 构建上下文同样排除它。
 
-本机复核入口为 ChatGPT.app 下的 `Contents/Resources/plugins/openai-bundled/.agents/plugins/marketplace.json`、同目录树内各插件的 `.codex-plugin/plugin.json` 与 `.mcp.json`、生效缓存中的统一插件清单，以及 `~/.codex/config.toml` 中相应的 `plugins` 和 `mcp_servers` 条目。浏览器后端的配置值为 `chrome,iab,mcpapps`。`mcpapps` 是侧栏浏览器后端标识。`edge` 与 `dot` 是工具接口可识别的其他目标名称，本机这份后端配置只列出前三项。此次未读取个人活动历史或查询后台录制状态。
+macOS 上实际执行操作的是 ChatGPT 桌面应用安装并已授权的 Sky 服务，而且 ChatGPT 必须正在运行，否则所有桌面操作失败。原因和后续处理见 [待办：Mac 脱离 ChatGPT](#待办mac-脱离-chatgpt)。Linux 没有这个依赖。
 
-### 随包清单复核与迁移缺口
+## 启用
 
-本机 ChatGPT.app 版本为 `26.1111.71704`（build `29030`）。其 `openai-bundled` 市场列出 **11 个插件**。与桌面和浏览器控制相关的四个启用项是 `unified-computer-use`、`computer-use`、`browser`、`chrome`。另有两个可选桌面功能 `computer-history`、`record-and-replay`。余下五项是 `codex-app-tools`、`messages`、`latex`、`deep-research`、`visualize`。其中 `codex-app-tools` 和 `visualize` 也在本机启用，`messages` 的启动命令也用到 Mac 原生客户端，服务的是独立的消息工具。其他市场安装的 `cloud-environment` 0.2.1 提供 `cloud-desktop`、`cloud-environment-runtime` 两份技能，依赖单独的云环境连接器。此次计算器使用本机原生窗体。
+插件是否启用只由会话的 `enabledPluginIds` 决定，环境变量不再隐式启用任何东西。界面上它是 Composer 左侧「＋」菜单「插件」分组里的一个勾选项，详见 [前端规范](../front-end-desgin.md)。勾选状态要等服务端确认后才改变；在已有会话里勾选，当前回答结束后生效。
 
-| 在 Runner 验收时容易漏掉的部分 | 本机证据与验收边界 |
-|---|---|
-| 统一入口的动态配置 | `unified-computer-use` 随包仅有 manifest 和占位 MCP 配置，没有独立 SKILL.md。桌面宿主生成的有效清单才配置了 `browser,computer` 和 `sky`、`browser` 两个服务。复制随包目录后需要分别验证原生应用与浏览器。|
-| 五份独立 skill | 对应目录名为 `computer-use`、`control-in-app-browser`、`control-chrome`、`computer-history`、`record-and-replay`。把文件送入 Pod、让 Claude/Pi 加载它们、让其依赖的宿主服务执行动作，是三个可分别验证的结果。 |
-| 轮次结束钩子 | 统一插件把 `Stop`、`Interrupt`、`SubagentStop` 发给 `cua_repl.turn_ended`。两种独立浏览器插件把相应事件发给 `node_repl.turn_ended`。子代理事件使用该子代理的 ID。模型提交的 `completion_summary` 和宿主发送的结束通知各有调用方。 |
-| 浏览器客户端、后端和宿主 | 独立浏览器插件包含 `browser-client.mjs`、`browser-service.mjs`、API 文档和资源。Chrome 另带 `extension-host/macos/arm64/ChatGPT for Chrome`。迁移时分别验证浏览器扩展连接、原生消息宿主、目标平台依赖、内置浏览器及侧栏的实际提供方。 |
-| Node 及原生应用版本 | `cua_node/manifest.json` 指定 `darwin-arm64`、Node `24.22.1-cua.1`、归档版本 `local`。Mac 原生分发还涉及服务、客户端、安装器、Guardian 和系统授权插件。系统实际安装的授权插件 Info.plist 显示 `0.1.0`（build `799`）。平台包、系统安装状态及第三方托盘的授权须逐项核验。 |
+## 首次调用返回的文档
 
-在这台 Mac 上还独立验证了两个不操作界面的行为。通用 `node_repl` 在连续两次工具调用间保留了 JS 变量，统一 `cua_repl` 完成预加载且 `typeof cua.getApp` 返回 `function`。这两项可通过运行包探针复验。官方将锁屏临时解锁限定在 ChatGPT 发起的受信任 Computer Use 轮次。Runner 的托盘使用本机已解锁的桌面进行独立验证。[运行包探针](../../services/agent-runner/ts/scripts/computer-use/probe.mjs) · [官方 Locked Use 说明](https://learn.chatgpt.com/docs/computer-use#locked-use)
+`cua_repl` 在每个会话的第一次调用（以及 `js_reset` 之后的第一次）会返回约两万字符的平台文档：接口、流程、截图读取和确认策略。这是原版运行时的行为，取代了 Codex 旧入口里的那份 skill；之后的调用只返回界面状态。我们的 `computer-use` skill 只写运行时不知道的内容。
 
-当前参考实现的远端入口为 `registered_computers`。真实菜单栏应用已从 Mac 主动注册到 minikube Pod。Pi 经该 MCP 列出了在线 Mac，设备状态查询返回控制台已锁。五个原版 skill 打包后的 95 份资源（含五份 Runner 生成的 Claude 插件清单）已在该 Linux Pod 内逐项核对 SHA-256。Claude SDK 和 Pi 原生加载器已分别发现全部五份 skill，Claude TUI 生成的五个插件路径与 SDK 一致。该验证只读取插件命令及说明。此前计算器显示 `2` 的验证发生在 Codex 自己的 `cua_repl` 上。Runner 操作远程 Mac 计算器仍等桌面解锁。Linux 原版驱动、浏览器与可选桌面服务的验收结果见下表。[Runner 端设备验收探针](../../services/agent-runner/ts/tests/deployment/computer-device-smoke.ts)
+平台之间有一处实测差异：macOS 可以用名称直接打开应用，`cua.getApp("Calculator")`；Linux 必须先取清单，再用窗口 ID，`cua.getApp({ windowId })`，传名称会被拒绝。运行时自带的 Linux 工具描述没有体现这一点，skill 里写明了。各平台都可用的起手式是 `await cua.getState()`。
 
-Runner 还自带 `computer-desktop` skill 和 `computer` MCP。它们对应现有 Pod Xfce 的 Cua Driver。本次在隔离的 Linux arm64 Pod 验证了该驱动 0.34.1 的 62 个工具、桌面 PNG、中文输入及 Pi 经 `codemode` 读取真实截图。这套检查可在迁移前后核对桌面归属。其他针对办公软件的入口（如 `excel-live-control`、`codex_document_control`）服务于各自已连接的文档会话。桌面菜单中能选到一个应用，并不足以说明该应用的专用连接器参与过操作。
+## 远程设备
 
-## 组件清单
+一台登记过的 Mac 运行的是和本机会话完全相同的桌面 worker，它的 MCP 消息经 SSH 通道原样送到 Runner。
 
-| 组件 | Codex 本机依据与职责 | Runner 的交付方式 |
+```text
+会话 ── js(deviceId, code) ──> registered_computers（Runner 进程，MCP 服务端 + MCP 客户端）
+                                   │ 私有 Unix socket：open 成功后承载 worker 的 MCP 行
+                                   ▼
+                               设备服务（broker）── 一台设备同一时刻一个 worker
+                                   │ SSH 子系统 priva-computer
+                                   ▼
+                               Mac 托盘 ── 启停 worker，锁屏即停
+                                   │ 管道
+                               cua-repl.mjs ─> node_repl ─> Sky ─> Mac 应用
+```
+
+设备通道上每条消息占一行：
+
+| 方向 | 消息 | 含义 |
 |---|---|---|
-| 插件打包与启动 | `unified-computer-use` 26.1111.71704 声明 MCP 和宿主钩子。桌面宿主根据选中的 `cua_node` 运行包生成有效清单，配置 worker、模块目录和可用能力 | 新建 Runner 内置 `computer-use` 插件。把本机已安装运行包作为外部依赖发现，校验版本、平台、可执行文件和服务入口。仓库提交接线代码、配置模板和探针 |
-| 通用 NodeREPL | 引擎为 `node_repl`，使用配套 Node 和模块目录；跨调用保留变量并处理异步代码、文本和图片输出 | 提供 Runner 工作区的 `node_repl` MCP。按会话管理 worker 和重置，不让通用 REPL 因用户选择远端桌面而移到 Mac |
-| CUA MCP | `@oai/cua-repl` 0.1.5 提供启动逻辑、模板和说明；实际生效的 MCP 服务名为 `cua_repl`，直接启动配置好的 `node_repl` | 复用同版本运行包。模型入口为 `js`、`js_reset`；`turn_ended` 留给宿主。Claude/Pi 面向同一工具契约 |
-| 统一 JS API | `@oai/cua` 0.2.7 的 `tinyskyAlt` 预加载入口创建全局 `cua`。应用对象与控件编号由执行端管理 | 复用原 API 与平台说明。验收应包括发现应用/窗口、读取完整与增量控件树、截图、按元素或坐标点击、键盘/文本、滚动、拖动及平台支持的其他操作 |
-| 原生桌面服务 | 可信服务名 `sky` 映射到 `@oai/sky/service` 0.7.21。Mac 端经本机 IPC 到 `SkyComputerUseService`；Linux 适配器需要匹配平台的 `sky_linux` 原生进程 | Mac 优先使用本机已有的原版 JS 与原生包，验证由公司托盘合法启动和使用的路径。Pod 需单独取得和验证 Linux worker、原生驱动及桌面连接 |
-| 浏览器服务 | `browser` 映射到 `@oai/browser-desktop/service` 0.1.1。此机器的配置列有 Chrome、内置浏览器 IAB 和 MCP Apps | 原生方式操作浏览器窗口与 `cua.getTab()` / DOM 操作分别验收。只有目标宿主提供的浏览器连接能够注册；Codex 的 IAB 和侧栏归桌面宿主管理 |
-| Skill 与首次使用说明 | 独立的 `computer-use` skill 描述通用 NodeREPL 手动导入 Sky 的用法。统一入口通过预加载、工具描述和平台 Markdown 提供说明 | Runner 提供一份指导统一入口的 skill。保留运行包提供的 API 说明、截图/坐标规则及状态刷新规则，避免模型对同一个 worker 重复初始化 |
-| 结果与生命周期 | `nodeRepl.write`、图片输出、状态差异与错误返回模型；`completion_summary` 表示界面任务完成。Stop、Interrupt、SubagentStop 分别通知 `turn_ended` | 保留文本和 MCP image 内容块、错误、取消和结果摘要。轮次结束释放本轮控制权；重置使 JS 引用失效；会话销毁或断线清理 worker。聊天与同一会话的 TUI 共用绑定 |
-| 系统权限与 Locked Use | macOS 桌面宿主负责系统权限、按应用授权与受信任轮次；Locked Use 另外涉及本机授权插件和屏幕保护组件 `CUALockScreenGuardian` | 托盘报告设备在线、应用是否获准、锁屏及当前任务可用性。本机已有插件和成功的 Codex 解锁记录；第三方宿主可用的授权入口仍需独立核验。[官方 Locked Use 说明](https://learn.chatgpt.com/docs/computer-use#locked-use) |
+| 托盘 → Runner | `{"type":"hello","version":2,"name":…,"platform":"darwin"}` | 登记；设备 ID 由 SSH 公钥决定 |
+| Runner → 托盘 | `{"type":"ready","deviceId":…}` | 登记完成 |
+| Runner → 托盘 | `{"type":"request","id":…,"method":"status"}` | 查询是否解锁、运行包版本 |
+| Runner → 托盘 | `{"type":"request","id":…,"method":"open"}` | 启动 worker |
+| 托盘 → Runner | `{"type":"result","id":…,"ok":…}` | 上面两种请求的回执 |
+| 双向 | 以 `=` 开头的行 | worker 的一条 MCP 消息，原样透传 |
+| Runner → 托盘 | `{"type":"close"}` | 会话结束，停止 worker |
+| 托盘 → Runner | `{"type":"worker-exit","reason":…}` | worker 结束及原因 |
 
-核对时，运行包位于 ChatGPT.app 的 `Contents/Resources/cua_node`，统一插件生效配置位于 Codex 插件缓存的 `unified-computer-use/<version>/.mcp.json`，原生服务位于 Codex 的 `computer-use/Codex Computer Use.app`。配套 `@oai/cua-repl/README.md` 解释了匹配版本的清单、预加载和生命周期。当前本机的 `node_repl` 为 macOS arm64 Mach-O，已安装的 JS 模块含 Linux 适配代码，未携带 Linux 原生驱动。配套的 Linux 二进制另随官方 Debian 包分发，实测见下表。
+控制消息很小；worker 行带截图，单行上限 32 MiB。SSH 用户名固定为 `device`，只接受这个子系统，拒绝 shell、exec、SFTP、PTY 和端口转发。
 
-## Linux 原版运行包实测
+`registered_computers` 的每个 `js` 调用都必须带 `deviceId`，所以输入不可能落到别的桌面上。它为每台设备保持一个 worker：
 
-OpenAI 的 Debian ARM64 桌面预览包 `chatgpt` 版本 `26.1111.71704` 包含 Linux 原生 `bin/node_repl`、`@oai/cua-repl` 和 `@oai/sky/bin/linux/sky_linux_arm64`，另有 Linux ARM64 的 Chrome 原生消息宿主。实测包 SHA-256 为 `f0550dee1f99127d357ad760aef739c557d49bd67728d2f105d00a7a4780f740`。官方把面向用户的 Linux 桌面 Computer Use 列为预览版尚未支持；下列结果描述 Runner 对随包组件的实测。[Linux 桌面包及支持范围](https://learn.chatgpt.com/docs/linux/linux-app#compatibility-and-limitations)
+- **断线**：设备锁屏、断开或 worker 退出时，正在进行的调用带着原因失败，并说明动作结果未知；下一次调用告知 JavaScript 绑定已丢失，再下一次才重新启动 worker。
+- **设备忙**：另一个会话正在使用时，`open` 被拒绝。
+- **没有设备服务**：`list_devices` 明确说明，而不是报连接错误。
 
-| 入口 | Debian 13 / arm64 实测 |
+设备服务由容器入口在设置了 `PRIVA_COMPUTER_HOST_KEY` 和 `PRIVA_COMPUTER_DEVICES` 时启动，配置步骤见 [Mac 设备接入 Runner](../../deploy/agent-runner/computer-device/README.md)；托盘见 [Priva Computer for macOS](../../apps/computer-tray-macos/README.md)。托盘连接本身就是 Mac 主人的同意，连接后使用应用不再逐个询问。
+
+## 待办：Mac 脱离 ChatGPT
+
+**尚未实现。在完成之前，Mac 上使用 Computer Use（本机会话和托盘）要求 ChatGPT 桌面应用保持运行。**
+
+2026-11-21 把一台 Mac 登记到 Pod 后发现：退出 ChatGPT，所有桌面操作（包括列应用）都返回 `Computer Use server error -10005: codex app-server exited before returning a response`。
+
+```text
+现状（macOS）                                    Linux（不受影响）
+node_repl ─ Sky JS 客户端                        node_repl ─ Sky JS 代码
+      │ Unix socket，7 种请求                          │ 子进程，stdio 每行一条 JSON
+      ▼                                                ▼
+Codex Computer Use.app（独立常驻，持有系统权限）  sky_linux_<架构> server（只连 X11）
+      │ 每个请求先读策略和登录状态
+      ▼
+codex app-server（只在 ChatGPT 运行时找得到）
+
+目标（macOS 托盘）
+node_repl ─ Sky JS 客户端                        （不变，模型看到的 cua API 不变）
+      │ 私有 Unix socket，同样 7 种请求
+      ▼
+托盘内的适配层 ─ cua-driver（内置）─ 应用         权限记在 Priva Computer 名下
+```
+
+问题有三处，都只在 macOS：
+
+- **依赖 ChatGPT 运行**：Sky 服务处理每个请求前都启动 `codex app-server`，读取组织策略（`configRequirements/read`、`config/read`）和登录状态（`getAuthStatus`、`account/read`）。它找 `codex` 的途径实测有三个：正在运行的 ChatGPT、`CODEX_CLI_PATH`、`PATH`。ChatGPT 退出后都找不到。
+- **依赖 ChatGPT 安装和它的版本**：托盘直接使用 `/Applications/ChatGPT.app` 里的 `cua_node`。ChatGPT 自动更新会整个替换它（当天从 Sky 0.7.21 换成了 0.7.24）。
+- **权限不在托盘名下**：辅助功能和屏幕录制记在 `Codex Computer Use`（`com.openai.sky.CUAService`）名下，托盘自己不持有。
+
+Linux 的 Sky 是 worker 自己拉起的命令行子进程，没有策略、账号和授权这一层，镜像里也没有 `codex`，所以不受影响，保持不变。
+
+已定的方向：保留 OpenAI 的 `cua` API 和 `cua_repl` / `node_repl` 这套形式，Mac 托盘底下的原生服务换成内置的 [cua-driver](https://github.com/trycua/cua/tree/main/libs/cua-driver)（MIT），由托盘里的一层适配把 Sky 的 7 种请求翻译成 cua-driver 调用。Linux 不换。
+
+当天已验证、可以直接作为依据的事实：
+
+| 事实 | 结果 |
 |---|---|
-| 通用 NodeREPL | 从 Runner 的运行配置启动原版 MCP，在连续两次工具调用之间保留绑定，`js_reset` 后确认绑定已清空。 |
-| 独立 Linux Computer Use skill | Linux 版原文位于 `@oai/sky/docs/skills/oai_sky_lib/linux/SKILL.md`。显式选用这份技能时，Runner 为工作区的通用 `node_repl` 注册 Sky 服务；在 Xfce 实测使用原文指定的 `import("@oai/sky")` 和 `sky.list_windows()`，读到了真实窗口列表。普通工作区 JS 使用默认配置。 |
-| 随镜像发布的技能 | 仓库标准构建成功后，用该镜像重启了隔离的 minikube Runner 容器。`/opt/chatgpt-cua-skills` 直接来自镜像。非 root 用户核对了 browser、chrome、Linux computer-use 的 88 个文件。Claude SDK 和 Pi 均枚举到三份技能，Claude CLI 的插件目录与 SDK 完全一致。 |
-| 统一 CUA | `computer`、`browser`、`browser,computer` 三种设置分别成功预加载对应 API。 |
-| 原生 Xfce | 原版 Sky 在隔离的 Runner Pod 的 `:99` 桌面启动 Mousepad，同一 MCP worker 输入文本后从可访问性树读回，取得原始 JPEG 窗口截图并确认窗口关闭。全过程以 Pod 自己的桌面权限运行。 |
-| 浏览器 | 独立 browser-only worker 的 `cua.getState()` 返回空浏览器列表，`errors` 明确指出缺少 Codex 宿主的 `session_id` 和 `turn_id`。Chrome 原生消息宿主已随包提供，实际浏览器会话与扩展授权仍需由其宿主建立。[Chrome 扩展说明](https://learn.chatgpt.com/docs/chrome-extension) |
-| 生命周期 | 在真实 Claude SDK 与 CLI 中，`Stop` 和 `SubagentStop` 均送达同一会话的测试 MCP worker，携带 Claude 实际的会话或子代理 ID 和 prompt ID。测试中 SDK 主动中断流式推理时没有触发结束通知。Pi 1.2.0 的 `agent_settled` 提供 `aborted`，缺少顶层 `turn_id`。当前 Pi 适配会随会话关闭 MCP 连接，尚未将正常结束、中断和独立子会话结束映射到逐轮 `turn_ended`。[Claude 实测](../../services/agent-runner/ts/tests/integration/provider/claude/repl-lifecycle.test.ts) · [Pi 适配](../../services/agent-runner/ts/src/provider/pi/pi-resource-loader.ts) |
-| 公网以外的设备接入 | 同集群的独立客户端通过真实 ClusterIP、固定主机公钥和 OpenSSH 进入注册子系统，在正常 Runner 镜像中看到设备在线。该传输测试使用临时设备身份。Mac 托盘的实机测试使用已登记的 Mac 身份。 |
+| 运行时是否接受非 OpenAI 的桌面服务 | 接受。`SKY_CUA_SERVICE_NATIVE_PIPE_PATH` 指向私有 socket，一个假服务就让 `listApps`、`getApp`、`getAXState`、`click`、`typeText` 走通，对端身份不被校验 |
+| socket 协议 | 4 字节小端长度头 + JSON-RPC；`ping` 核对版本 `CodexComputerUseIPC-5`；`request` 带 `requestType`，共 7 种：`ListApps`、`AppPolicy`、`AppStart`、`AppGetSkyshot`、`AppPerformAction`、`StartAudioRecording`、`StopAudioRecording`（前缀 `ComputerUseIPC`，后缀 `Request`） |
+| 只保留 Sky、用替身代替 `codex` 是否可行 | 可行：`PATH` 里一个只回答上述 5 个方法的替身，11 项操作的结果与真 Codex CLI 相同。没有采用，因为权限仍记在 OpenAI 的服务名下 |
+| 引擎速度（Pod 内读同一个窗口的控件树和截图） | Sky 约 360 ms，cua-driver 0.34.1 约 350 ms，没有差别 |
+| 最初直接使用 cua-driver 的 MCP 为什么慢 | 它暴露 62 个工具，定义合计约 190 KB，每次模型请求都携带，而且每个动作一次模型往返。慢在形式，不在引擎 |
 
-## 已经运行的 Runner 和托盘
+开始实现前要先验证的：
 
-```text
-Claude SDK / TUI 或 Pi SDK / TUI
-                |
-        Runner 内置 computer-use 插件
-                +-- node_repl -> Pod 工作区的持久 JS worker
-                +-- cua_repl  -> Pod 内 worker -> Sky -> Xfce :99 <- noVNC
-                +-- registered_computers -> Pod 内设备服务
-                                                |
-                         +----------------------+ 已由 Mac 主动建立的 SSH 连接
-                         v
-                     Mac 菜单栏应用
-                         +-- device_status    -> 控制台锁屏状态、原包版本
-                         +-- calculator_check -> 本机原版 CUA -> Calculator
+- cua-driver 内置或由托盘拉起后，系统是否把辅助功能和屏幕录制记在 Priva Computer 名下，能否读到并操作一个应用。
+- 7 种请求能否完整对应：控件树的文本和编号、截图、选中文字、粘贴、次要动作。录音可以不做。
+- 固定 cua-driver 的版本（当天最新是 0.55.0，三天发了三个版本）。
+- 托盘需要一个固定的签名身份。现在是临时签名，每次重新构建系统都当成新应用，授权要重来。
+- 运行包要随托盘一起打包，不再读取 `/Applications/ChatGPT.app`。
+
+本机 Mac 会话（不经托盘）是否也改用托盘里的服务，尚未决定。
+
+## 验证
+
+以下均为 2026-11-21 实际运行的结果。
+
+| 环境 | 检查 | 结果 |
+|---|---|---|
+| macOS 本机 | Claude SDK 会话（本地模型替身）打开计算器 | 无审批请求，返回 39 行控件树，宿主专用工具未提供给模型，skill 已列出 |
+| macOS 本机 | 完整 Runner + Claude TUI 打开计算器 | 通过，无审批卡片也无终端对话框 |
+| macOS 本机 | Pi 会话打开计算器 | 通过，返回 39 行控件树 |
+| macOS 本机 | 远程链路：本地设备服务 + 托盘（真实 SSH）+ `registered_computers` | 设备登记，读到运行包版本，打开计算器返回 39 行控件树，绑定跨调用保留；会话结束后托盘停止了 worker |
+| Linux arm64 镜像 | 用改后的 Dockerfile 构建并启动 | 镜像内没有 Cua Driver 和旧环境变量，插件目录里的运行包链接存在 |
+| Linux arm64 镜像 | `computer-use-linux-desktop.ts` | 在 Mousepad 输入含中文的文本，从控件树读回，取得 640 × 480 截图，保存后文件一致，窗口已关闭 |
+| Linux arm64 镜像 | Claude SDK 会话与 Pi 会话取应用清单 | 均通过，三个服务的工具可见性正确 |
+| minikube 开发环境 | 部署新镜像后运行 `dev.sh verify-computer`、Claude SDK 会话与 Pi 会话取应用清单 | 均通过 |
+| minikube 开发环境 | 把这台 Mac 登记到 Pod 的设备服务，从 Pod 内运行 `computer-device-smoke.ts app` | 设备登记，读到运行包版本，打开计算器返回 39 行控件树。ChatGPT 当时在运行 |
+| 自动化测试 | 插件、provider、设备服务、启动入口的单元与集成测试 | 通过；设备服务的测试使用真实 OpenSSH 客户端 |
+| macOS 托盘 | `apps/computer-tray-macos/test.sh` | 8 项通过，含 4 MiB 消息、锁屏停止 worker 及其子进程 |
+
+没有验证的部分：
+
+- 用真实模型从界面发起并完成一次桌面任务。后端链路已用模型替身验证，界面只验证了勾选项。
+- amd64 镜像。下载和校验路径存在，没有运行。
+- 集群外的 Mac 经公司内网入口接入。远程链路验证过两种：同一台 Mac 上的本地设备服务，以及这台 Mac 经端口转发登记到 minikube 的 Pod。
+- ChatGPT 未运行时的 macOS。此时所有桌面操作失败，见 [待办：Mac 脱离 ChatGPT](#待办mac-脱离-chatgpt)。
+- Mac 锁屏时的行为只在托盘的夹具测试里验证，没有真实锁屏。
+- 全量 `npm test` 在开发机上不是绿的：四十多个 tmux、TUI 和 git 集成测试超时，未改动的 HEAD 同样如此。
+
+## 命令
+
+确切命令维护在 [AGENTS.md](../../AGENTS.md)。常用的几个，从 `services/agent-runner/ts/` 运行：
+
+```sh
+bash scripts/computer-use/copy-runtime.sh
+node --import tsx tests/fixtures/resources/computer-use-probe.ts runtime
+node --import tsx tests/fixtures/resources/computer-use-probe.ts session Calculator
+node --import tsx tests/fixtures/resources/computer-use-pi-probe.ts Calculator
+node --import tsx tests/deployment/computer-device-smoke.ts app DEVICE_ID Calculator
 ```
-
-新镜像默认使用 `/opt/cua_node` 的原版运行包，启用 `computer` 桌面。在全新 ARM64 Pod 上，正常镜像入口启动了 Xfce、Runner HTTP 和已配置的 SSH 设备服务。原版 worker 在 Mousepad 输入含中文和随机标记的文本，从可访问性树读回并保存，经文件核对一致。worker 返回 640 × 480 的窗口截图并关闭测试窗口。真实 Mac 托盘通过这个 Pod 的 SSH 入口注册，Pi 列出该设备，设备状态回传了 Node `24.22.1-cua.1`、CUA REPL `0.1.5`、CUA `0.2.7` 和 Sky `0.7.21`。在锁屏状态发起的计算器请求返回需要解锁的错误，远程结果仍待实测。
-
-镜像安装器从同一 Linux Debian 包提取运行时和三份原版 skill：两个浏览器插件的技能及 Linux 版 `computer-use`。默认只启用统一桌面；选择独立入口时使用 `PRIVA_CUA_ENABLED_SKILLS`。Mac 安装可另导出包含五份 skill 的快照。两种 `computer-use` 同名，但 Linux 文档使用 `list_windows` / `get_window_state`，Mac 文档使用 `get_app_state`。Runner 在把独立技能交给本机 worker 前校验平台。统一入口会略过其已覆盖的旧技能。浏览器插件的扩展通信宿主需要独立部署。构建脚本在 arm64 和 amd64 Debian 环境均已校验运行包并启动原版 Node，原版桌面输入与读回的实机结果来自 arm64。[安装脚本](../../services/agent-runner/ts/docker/install-chatgpt-cua-runtime.sh) · [技能选择规则](../../services/agent-runner/ts/src/core/plugin/session-plugin-resources.ts)
-
-### 公司项目后续接入项
-
-下表包含后续设计。当前远端协议提供登记、查询和固定计算器验证。会话级通用目标路由、远端画面和其他操作系统客户端尚待实现。
-
-| 交付件 | 责任及验收重点 |
-|---|---|
-| Claude/Pi 插件适配 | 复用内置插件目录。Claude 覆盖 SDK 与 CLI 的本地插件入口；Pi 通过原生 MCP 扩展注册服务并加载 skill。Web Chat、TUI 和程序化会话使用相同的目标与工具配置。[内置插件](../../services/agent-runner/ts/src/core/plugin/builtin-plugins.ts) · [Pi 加载器](../../services/agent-runner/ts/src/provider/pi/pi-resource-loader.ts) |
-| SSH 接入与设备注册 | Mac 托盘主动连接；沙箱从已认证的设备身份确定归属并记录在线连接。稳定设备 ID、显示名称、平台和运行包版本与临时连接分开管理。开发环境默认发布 Runner HTTP；有设备接入需求时可以单独部署 SSH ClusterIP Service。[现有部署](../../deploy/agent-runner/minikube.yaml) |
-| 会话路由和 MCP 代理 | 将 `computerTarget` 存入会话配置、恢复路径和 warm-runtime 身份。远端 `cua_repl` 转发给绑定设备上的同一个 worker，以保持原生 API 和跨调用对象。设备切换使旧引用失效；离线时向该会话报告目标不可用。[会话元数据](../../services/agent-runner/ts/src/core/resource/session.ts) · [运行时缓存](../../services/agent-runner/ts/src/harness/run/warm-runtime-pool.ts) |
-| Mac 托盘参考应用 | 管理连接、设备注册、运行包发现、worker 生命周期、本机授权、活动会话展示和本地停止。公司项目可复用这部分协议和行为。Windows、Linux 远端客户端日后实现同一协议，各自上报实际支持能力 |
-| 控制并发和故障处理 | 同一桌面上的输入由设备端协调。取消、重复请求、断线、Pod 重建与托盘退出均可测试。动作已执行而回执丢失时记录“结果未知”，重新观察后再决定下一步 |
-| Agent UI 与旧部署切换 | 更新旧 `mcp__computer__*` 工具识别、动作标题、目标选择以及画面归属。对照现有 Cua Driver 的桌面、浏览器及图像用例逐项验收；用新旧 PVC 验证，只清理可认定为 Runner 生成的旧项。[现有 Computer 集成](../development/debian-minikube.md#runner-原生-computer-mcp-集成) · [旧配置生成器](../../services/agent-runner/ts/docker/configure-computer.mjs) |
-
-## 剩余验收
-
-1. **远程 Mac 计算器。** 在设备正常解锁时，从 Runner 的 `registered_computers.calculator_check` 发起检查。成功需要 Mac 原版 CUA 读到 Calculator 显示的表达式和结果，再通过现有 SSH 连接返回。
-2. **浏览器和可选服务。** 有对应宿主接入时，分别验证 Chrome 扩展、内置浏览器、侧栏浏览器。历史和演示录制服务各自需要提供此功能的 Mac 客户端与用户授权。
-3. **宿主和平台等价性。** 分别验证 provider 取消、恢复及子会话清理，正式环境的会话目标与画面归属，以及远程 Windows、远程 Linux 的平台适配。第三方托盘使用 Locked Use 的能力需要宿主提供受支持的接入方式。
-
-## 本机 Xfce 上线与提交文件
-
-2026-11-20，现有 `agent-runner` Deployment 已切换到与测试 Pod 相同的镜像 `priva-harness/agent-runner:cua-linux-skills-261120`。沿用 `runner-data` PVC 和原 Agent UI 地址。业务 Pod 默认注册 `node_repl`、`cua_repl`，Xfce 使用 `:99`，远程设备 SSH 入口关闭。实际通过 Agent UI 的 HTTP 和 RFB 握手验证，并通过原版 `cua_repl` 在业务桌面输入中文、从控件树读回、保存、截图及关闭测试窗口。
-
-```text
-Agent UI -> agent-runner Service -> 业务 Runner Pod
-                                      +-- cua_repl -> Sky -> Xfce :99
-                                      +-- node_repl -> Pod 工作区
-```
-
-以下是相对 Git 基线 `1565d11` 的提交范围，按仓库根目录列出。`M` 表示修改，`A` 表示新增。复现这次已验证的交付共 **58 个文件**，包括 Runner 目录 46 个、Agent UI 7 个、部署脚本 1 个及文档 4 个。下面列出全部路径。
-
-前 19 个文件负责本机运行时打包、原版技能和 Claude/Pi 接入。已单独验证将这 19 个文件叠加到基线可编译，并能在默认配置生成两个本机 MCP。当前共享插件还保留可选设备分支；显式选择设备插件会引用 `device-mcp.js`。要保留这个已验证版本的全部配置与测试，可连同其余 Runner 文件一起提交。
-
-### Runner 本机运行核心（19）
-
-```text
-M  services/agent-runner/ts/.dockerignore
-M  services/agent-runner/ts/Dockerfile
-M  services/agent-runner/ts/docker/configure-computer.mjs
-A  services/agent-runner/ts/docker/install-chatgpt-cua-runtime.sh
-A  services/agent-runner/ts/scripts/computer-use/stage-linux-sky-skill.ts
-A  services/agent-runner/ts/scripts/computer-use/stage-skills.ts
-M  services/agent-runner/ts/src/core/plugin/builtin-plugins.ts
-A  services/agent-runner/ts/src/core/plugin/computer-use.ts
-A  services/agent-runner/ts/src/core/plugin/original-computer-skills.ts
-A  services/agent-runner/ts/src/core/plugin/session-plugin-resources.ts
-M  services/agent-runner/ts/src/provider/claude/claude-runtime.ts
-M  services/agent-runner/ts/src/provider/claude/claude-tool-policy.ts
-M  services/agent-runner/ts/src/provider/claude/terminal/claude-terminal-hooks.ts
-M  services/agent-runner/ts/src/provider/claude/terminal/claude-terminal-launch.ts
-M  services/agent-runner/ts/src/provider/claude/tools/native-product-launch.ts
-M  services/agent-runner/ts/src/provider/pi/pi-resource-loader.ts
-A  services/agent-runner/ts/src/resources/plugins/computer-use/.claude-plugin/plugin.json
-A  services/agent-runner/ts/src/resources/plugins/computer-use/plugin.json
-A  services/agent-runner/ts/src/resources/plugins/computer-use/skill/SKILL.md
-```
-
-### Runner 镜像中的设备支持与旧驱动基线（13）
-
-```text
-M  services/agent-runner/ts/docker-entrypoint.sh
-M  services/agent-runner/ts/docker/skills/computer-desktop/SKILL.md
-M  services/agent-runner/ts/package-lock.json
-M  services/agent-runner/ts/package.json
-A  services/agent-runner/ts/scripts/computer-use/calculator
-A  services/agent-runner/ts/scripts/computer-use/calculator-state.ts
-A  services/agent-runner/ts/scripts/computer-use/probe.mjs
-A  services/agent-runner/ts/src/infrastructure/computer/broker.ts
-A  services/agent-runner/ts/src/infrastructure/computer/cli.ts
-A  services/agent-runner/ts/src/infrastructure/computer/client.ts
-A  services/agent-runner/ts/src/infrastructure/computer/device-mcp.ts
-A  services/agent-runner/ts/src/infrastructure/computer/protocol.ts
-M  services/agent-runner/ts/tests/deployment/computer-mcp-smoke.ts
-```
-
-### Runner 测试与部署探针（14）
-
-```text
-A  services/agent-runner/ts/tests/deployment/computer-device-smoke.ts
-M  services/agent-runner/ts/tests/deployment/computer-model-smoke.ts
-A  services/agent-runner/ts/tests/deployment/original-linux-desktop.ts
-A  services/agent-runner/ts/tests/fixtures/resources/original-computer-skills-probe.ts
-A  services/agent-runner/ts/tests/fixtures/resources/original-computer-surface-probe.ts
-A  services/agent-runner/ts/tests/fixtures/terminal/repl-lifecycle-server.ts
-A  services/agent-runner/ts/tests/integration/provider/claude/repl-lifecycle.test.ts
-M  services/agent-runner/ts/tests/unit/core/plugin/builtin-plugins.test.ts
-A  services/agent-runner/ts/tests/unit/core/plugin/computer-use.test.ts
-M  services/agent-runner/ts/tests/unit/docker/configure-computer.test.ts
-A  services/agent-runner/ts/tests/unit/infrastructure/computer/broker.test.ts
-A  services/agent-runner/ts/tests/unit/scripts/computer-use/calculator-state.test.ts
-A  services/agent-runner/ts/tests/unit/scripts/computer-use/stage-linux-sky-skill.test.ts
-A  services/agent-runner/ts/tests/unit/scripts/computer-use/stage-skills.test.ts
-```
-
-### Agent UI 与前端测试（7）
-
-```text
-M  agent-ui/src/features/agent-message/components/mcp-tool-item.tsx
-M  agent-ui/src/features/agent-message/computer-tool-data.ts
-M  agent-ui/src/features/agent-message/use-agent-message.ts
-M  agent-ui/tests/features/agent-message/mcp-tool-data.test.ts
-M  agent-ui/tests/features/agent-message/mcp-tool-item.test.tsx
-M  agent-ui/tests/features/workspace/workspace-computer-navigation.test.tsx
-M  agent-ui/tests/features/workspace/workspace-computer-view.test.tsx
-```
-
-### 部署命令与仓库文档（5）
-
-```text
-M  AGENTS.md
-M  deploy/agent-runner/dev.sh
-A  docs/architecture/computer-use-migration.md
-M  docs/development/debian-minikube.md
-M  docs/front-end-desgin.md
-```
-
-远程 Mac 托盘在 `apps/computer-tray-macos/` 下另有 12 个文件，SSH 接入的 `deploy/agent-runner/computer-device/README.md` 和 `service.yaml` 也可随远程功能单独交付。`deploy/agent-runner/minikube.yaml` 此次没有源码改动。日常使用仓库流程时先 `bash deploy/agent-runner/dev.sh build`，再 `bash deploy/agent-runner/dev.sh deploy`，以便集群取得最新的 `debian13-dev` 镜像。

@@ -2,6 +2,7 @@ import { updateInteractions, type InteractionRequest, type InteractionResponse }
 import * as React from "react"
 import { useTranslation } from "react-i18next"
 import { useTheme } from "next-themes"
+import { COMPUTER_USE_PLUGIN_ID, DASHBOARD_PLUGIN_ID } from "@/features/settings/agent-preferences"
 import { useAgentPreferences } from "@/features/settings/agent-preferences-context"
 import { useSessionView } from './session-view-context'
 import {
@@ -26,10 +27,9 @@ import { contextUsageFromApi, emptyContextUsage, type ContextUsage } from "./con
 import { applyThreadStreamFrame, mergeSnapshotMessages, type StreamFrame } from "./run-stream-reducer"
 import { updatePromptSuggestion, type PromptSuggestion } from "./prompt-suggestion"
 import { baseModelReference, DEFAULT_CONTEXT_WINDOW, type ContextWindow } from "./model-context"
-import { isLiveComputerToolStart, isLiveCuaAppSelection } from "./computer-tool-data"
+import { isLiveCuaAppSelection } from "./computer-tool-data"
 import { createLiveWhiteboardNavigation, type WhiteboardNavigation } from "./live-whiteboard-navigation"
 import { restoreUiActionMessage } from "./ui-action"
-import { DASHBOARD_PLUGIN_ID } from "./dashboard-plugin"
 
 const AWAITING_NATIVE_EFFORT_LEVELS: readonly AgentRunEffort[] = []
 
@@ -95,7 +95,7 @@ export function useAgentMessage({ onComputerToolStarted, onWhiteboardToolActivit
   const receiveRef = React.useRef<(frame: StreamFrame) => void>(() => undefined)
   receiveRef.current = (frame) => {
     if (frame.type === 'terminal.focus') { setView('terminal'); return }
-    if (isLiveComputerToolStart(frame) || isLiveCuaAppSelection(frame, pendingCuaCalls.current)) onComputerToolStarted?.()
+    if (isLiveCuaAppSelection(frame, pendingCuaCalls.current)) onComputerToolStarted?.()
     setInteractions((current) => updateInteractions(current, frame))
     const id = frame.sessionId ?? connectionRef.current?.sessionId
     const whiteboardCwd = frame.config?.cwd ?? latestConfigRef.current?.cwd ?? runCwd
@@ -373,9 +373,9 @@ export function useAgentMessage({ onComputerToolStarted, onWhiteboardToolActivit
     configurationPromiseRef.current = configured
     void configured.finally(() => { if (configurationPromiseRef.current === configured) configurationPromiseRef.current = undefined })
   }, [sessionReady, runHarnessId, runSessionId, runCwd, inputSuggestions, enabledPluginIds, ensureConnection, storeEnabledPluginIds])
-  const changeDashboardEnabled = React.useCallback((next: boolean) => {
+  const changePluginEnabled = React.useCallback((pluginId: string, next: boolean) => {
     if (!sessionReady || configurationRequestRef.current) return
-    const nextPluginIds = next ? [...new Set([...enabledPluginIds, DASHBOARD_PLUGIN_ID])] : enabledPluginIds.filter((id) => id !== DASHBOARD_PLUGIN_ID)
+    const nextPluginIds = next ? [...new Set([...enabledPluginIds, pluginId])] : enabledPluginIds.filter((id) => id !== pluginId)
     if (!runSessionId) { storeEnabledPluginIds(nextPluginIds); return }
     if (!modelReference || !runHarnessId) {
       setConnectionError(t("agentMessage.dashboardPluginUnavailable"))
@@ -383,6 +383,8 @@ export function useAgentMessage({ onComputerToolStarted, onWhiteboardToolActivit
     }
     synchronizeSelection(modelReference, effort, contextWindow, nextPluginIds)
   }, [sessionReady, enabledPluginIds, storeEnabledPluginIds, modelReference, runHarnessId, runSessionId, synchronizeSelection, effort, contextWindow, t])
+  const changeDashboardEnabled = React.useCallback((next: boolean) => changePluginEnabled(DASHBOARD_PLUGIN_ID, next), [changePluginEnabled])
+  const changeComputerUseEnabled = React.useCallback((next: boolean) => changePluginEnabled(COMPUTER_USE_PLUGIN_ID, next), [changePluginEnabled])
   const changeModelReference = React.useCallback((model: string | null, source?: "user", nextEffort = effort) => {
     const reference = model === null ? null : baseModelReference(model)
     setModelReference(reference)
@@ -458,6 +460,7 @@ export function useAgentMessage({ onComputerToolStarted, onWhiteboardToolActivit
     canSubmit: Boolean(sessionReady && !configurationPending && !interactions.length && (draft.trim() || slashCommand || attachments.length) && readyComposerAttachments(attachments) !== null && modelReference && runHarnessId && runCwd.trim()),
     modelReady: Boolean(modelReference && runHarnessId), slashCommand, setDraft: updateDraft, setSlashCommand,
     setModelReference: changeModelReference, setEffort: changeEffort, setContextWindow: changeContextWindow,
-    enabledPluginIds: selectedPluginIds, dashboardEnabled: selectedPluginIds.includes(DASHBOARD_PLUGIN_ID), setDashboardEnabled: changeDashboardEnabled, sendFollowUp, submit, stop,
+    enabledPluginIds: selectedPluginIds, dashboardEnabled: selectedPluginIds.includes(DASHBOARD_PLUGIN_ID), setDashboardEnabled: changeDashboardEnabled,
+    computerUseEnabled: selectedPluginIds.includes(COMPUTER_USE_PLUGIN_ID), setComputerUseEnabled: changeComputerUseEnabled, sendFollowUp, submit, stop,
   }
 }

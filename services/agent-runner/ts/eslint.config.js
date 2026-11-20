@@ -13,11 +13,13 @@ const layerRestrictions = (...groups) => [
 
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'coverage/**'],
+    ignores: ['dist/**', 'coverage/**', 'src/resources/plugins/*/mcp/runtime/**'],
   },
   eslint.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
   ...tseslint.configs.stylisticTypeChecked,
+  // Plugin launch scripts run on the plugin runtime's own Node, outside the TypeScript project.
+  { files: ['src/resources/plugins/**/*.mjs'], ...tseslint.configs.disableTypeChecked },
   {
     files: ['**/*.ts'],
     languageOptions: {

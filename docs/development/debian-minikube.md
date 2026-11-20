@@ -33,7 +33,7 @@ Agent 的 shell、读写文件和子进程都在 Debian 容器里。仅代码编
 Mac 上；访问 Mac 的模型服务只是推理 API 请求。没有挂载 Mac 的工作区、HOME、Docker
 socket 或 Kubernetes 凭证。默认桌面属于 Debian 13 容器。Runner 镜像内的原版
 `node_repl`、`cua_repl` 和 Sky 控制同一 Xfce，Agent UI 通过 noVNC 显示同一块桌面。
-需要接入 Mac 时，托盘通过单独登记的 SSH 设备连接提供状态和计算器检查。[本机与远程的调用路径](../architecture/computer-use-migration.md#已经运行的-runner-和托盘)
+需要接入 Mac 时，托盘通过单独登记的 SSH 设备连接，把那台 Mac 的桌面 worker 提供给会话。[本机与远程的调用路径](../architecture/computer-use-migration.md#整体结构)
 
 ## 初次启动
 
@@ -473,180 +473,53 @@ HTTP 403；不信任客户端的 `X-Forwarded-Host`/`X-Forwarded-Proto`。Origin
 两项均等待权限事件超时。复测说明这些原有终端/MCP 场景仍有不稳定行为，不能视为
 已经修复，也不能将 Linux 完整测试报告为通过。本轮没有扩大范围修改终端逻辑。
 
-## Cua MCP 专项验证（2026-10-12）
+## Computer Use 插件
 
-第二阶段只验证 Cua Driver 直接控制同一 Debian 桌面，未把电脑工具接入 Runner
-的 Agent，也未增加接管、交还、聊天独占或自动暂停 UI。第一阶段的电脑标签可独立使用。
-
-```text
-Codex 中的 MCP 协议客户端
-  | stdio / kubectl exec -i
-  v
-Cua Driver 0.34.1 mcp --direct       Agent UI「电脑」
-  | AT-SPI / X11 输入、截图                 ^
-  v                                      | noVNC / WebSocket
-同一 Xvfb :99 / Xfce 桌面 -> x11vnc -> Runner :8001
-```
-
-实测使用官方 `cua-driver-rs-v0.34.1` 的 Linux arm64 binary archive，SHA-256：
-`1c839d35401bbdea20f3e1cf50ace926ef17be6f32cea7e821b02b263c4933dc`。
-解压在 PVC 的 `/data/tools/cua-driver/0.34.1/`，Pod 重建后仍保留；未写入 Mac 的
-全局 Codex MCP 配置，也未安装 Cua Spaces 或浏览器扩展。Cua 使用容器现有
-`DISPLAY`、`XAUTHORITY` 和 session D-Bus，不需要新增监听端口。
-
-本次 Codex 通过标准 MCP TypeScript Client 建立持久 stdio 连接，实际执行
-`initialize`、`tools/list` 和 `tools/call`，读取 MCP image 内容观察画面。测试不是
-使用 shell/xdotool 替代 Cua 输入。任意支持 stdio MCP 的客户端可以使用以下启动器：
-
-```json
-{
-  "mcpServers": {
-    "debian-computer": {
-      "command": "bash",
-      "args": ["/absolute/path/to/priva-harness/deploy/agent-runner/cua-mcp.sh"]
-    }
-  }
-}
-```
-
-上面的项目路径需替换为实际绝对路径。启动器默认选择 `minikube` context 和
-`priva-harness-dev` namespace，可通过 `MINIKUBE_PROFILE`、`RUNNER_NAMESPACE`
-覆盖；它只启动 MCP 进程，不启动 Agent 任务。启动器现已随文末的 Runner 集成改为
-调用镜像内的 `/usr/local/bin/cua-driver`，需要部署包含 Cua 的新镜像。
-上文 `/data/tools` 是本次专项验证的历史安装位置；当前启动器不再依赖该副本。
-
-| 实测项目 | 结果 |
-| --- | --- |
-| `tools/list` | 返回 62 个工具；不是对全部 62 个工具的通过认证 |
-| 应用与窗口发现 | `list_apps`、`list_windows` 识别 Chromium、Thunar 和 Mousepad |
-| 桌面观察 | `get_desktop_state` 返回真实 1440×900 PNG；`get_window_state` 返回窗口 PNG 和 AT-SPI 元素句柄 |
-| 桌面软件 | `launch_app` 启动 Mousepad；通过元素句柄点击保存对话框的 Save |
-| 全桌面坐标 | `click(scope: desktop)` 点击浏览器地址栏，配合桌面按键、输入完成导航 |
-| 中英文输入 | 不传 `element_token` 的前台 `type_text` 完整写入英文、换行和中文，并通过保存文件的逐字比较确认 |
-| 实时观看 | Agent UI 同时显示 Cua 的窗口变化、输入结果和带 `debian-validation` 标签的光标 |
-| 人工远程操作 | noVNC 中点击、逐键输入、滚动、拖动窗口、Control 保存、切换标签重连均验证；手机视口验证全宽画面，未验证手机软键盘/IME |
-| 双向观察 | 在 Agent UI 输入 `ui ok` 后，Cua 的 AT-SPI 读取同一编辑器立即返回该内容 |
-
-验证文件保留在容器 `/data/workspace/cua-mcp-validation-2026-10-12.txt`，可从
-Agent UI 文件标签或桌面编辑器检查。该专项验证时屏幕为 1440×900，后续主环境已改为
-1920×1080；桌面重载与 Runner
-源码重载的行为不同，前者会关闭应用，后者已验证保留窗口。
-
-### 已知限制：前台输入与上游中文截断
-
-Xvfb 无法动态加入虚拟输入设备，Cua 的部分后台按键会返回
-`background_unavailable`；当前专用桌面验证明确使用 `delivery_mode: "foreground"`
-或 `scope: "desktop"`。这是同一个桌面的输入，不具备人工/Agent 互斥；本阶段按用户
-要求没有实现控制权管理。
-
-Cua 0.34.1 的 targeted AT-SPI `type_text(element_token)` 对非 ASCII 文本有已知
-截断问题：[上游 issue #4754](https://github.com/trycua/cua/issues/4754)。本次输入
-89 个 Unicode 码点、115 个 UTF-8 字节，实际只保存前 89 字节，恰好停在
-`中文输入验证：`。根因见固定版本
-[native.rs:2797](https://github.com/trycua/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/libs/cua-driver/rust/crates/platform-linux/src/atspi/native.rs#L2797)：
-将字符数量传给要求字节长度的 AT-SPI InsertText。这不是 noVNC 或 Runner 传输截断。
-
-本次已验证的路径是先聚焦准确窗口，再调用 **不带 `element_token`** 的前台输入，
-并在操作后重新截图/读取、保存后核对文件内容。只增加 `foreground` 而仍保留
-`element_token` 不足以避开该路径。未修改或构建第三方 Driver，因此不能把默认
-AT-SPI 中文输入报告为通过，也不能把本次验证视为 GNOME Wayland 兼容性认证。
-
-## Runner 原生 Computer MCP 集成
-
-当前镜像在 `/opt/cua_node` 提供对应 CPU 架构的原版运行包。Claude 和 Pi 从 Runner 会话配置启动两个 MCP 服务，`node_repl` 面向 Runner 工作区，`cua_repl` 通过 Sky 驱动 Xfce。首次使用按工具返回的 Linux 说明选择原生应用。执行 `bash deploy/agent-runner/dev.sh verify-computer` 会打开独立测试文档，经原版 worker 输入和读回，再关闭测试窗口。提供已有目录给容器内的 `tests/deployment/original-linux-desktop.ts` 可保留截图库返回的原始图像及 PNG 副本。[当前实测与迁移对照](../architecture/computer-use-migration.md)
+镜像里的桌面操作由内置的 `computer-use` 插件提供，结构和启用方式见
+[Computer Use 的实现](../architecture/computer-use-migration.md)。会话勾选该插件后，Claude 和
+Pi 得到三个 MCP 服务；不勾选时，会话里没有任何桌面工具。
 
 ```text
-Claude / Pi -> cua_repl -> NodeREPL -> Sky -> Xfce :99 <- x11vnc <- Agent UI
-            -> node_repl -> Runner workspace
+Agent UI「＋」菜单勾选 Computer Use -> enabledPluginIds
+        |
+Claude / Pi -> cua_repl             -> node_repl worker -> Sky -> Xfce :99 <- x11vnc <- Agent UI
+            -> node_repl            -> Runner 工作区里的通用 JS
+            -> registered_computers -> 设备服务 -> 已登记的 Mac
 ```
 
-### 既有 Cua Driver 方案与历史验证
+镜像构建时，`docker/install-chatgpt-cua-runtime.sh` 下载固定版本的 ChatGPT Linux 包，校验
+SHA-256 后把其中的 `cua_node` 放到 `/opt/cua_node`，并在源码树和编译产物的插件目录里各建一个
+`mcp/runtime/linux-<架构>` 链接指向它。下载源可以用构建参数 `CUA_RUNTIME_REPOSITORY` 换成
+镜像站，校验值不变：
 
-本节取代上述专项验证阶段的手工 PVC 安装方式。主环境继续使用 Debian 13 / Xfce / X11，
-GNOME 实验目录独立保留。镜像内固定安装官方 Cua Driver **0.34.1**，按 Docker
-`TARGETARCH` 选择 arm64 或 amd64 archive，验证 SHA-256 与 `--version`。二进制放在
-`/opt/cua-driver/0.34.1/`，入口为 `/usr/local/bin/cua-driver`；没有修改第三方源码。
-新建空 PVC 也可以完成配置，不再依赖 `/data/tools` 中曾经手工安装的副本。
-
-```text
-容器入口 -> 检查旧 Pod 的 Chromium singleton 链接
-               |
-               v
-           启动 supervisor -> 桌面就绪
-                                 |
-                                 v
-                         configure-computer.mjs -> 启动 Runner
-                            |                     |
-                            +-> Claude 原生 MCP <-+-> Claude SDK / TUI
-                            `-> Pi 原生 MCP <-----+-> Pi Codemode / TUI
-                                                       |
-                                              stdio MCP / computer
-                                                       |
-                                               Cua Driver mcp --direct
-                                                       |
-                                                   Xfce :99
-                                                       |
-Agent UI「电脑」 <- noVNC / WebSocket <- Runner :8001 <- x11vnc :5900
+```sh
+CUA_RUNTIME_REPOSITORY=http://host.docker.internal:8765 bash deploy/agent-runner/dev.sh build
 ```
 
-启动入口在 supervisor 和 Chromium 启动前检查持久 HOME 中的 singleton 链接。
-此处理依赖当前**单副本、单 PVC、`Recreate` 更新**的独占部署约束：旧 Pod 已结束，
-新 Pod 的 hostname 改变，但 Chromium 留在 PVC 的锁仍记录旧 hostname/PID。
-只有锁为合法符号链接、hostname 与当前容器不同、指向 `/tmp` 的 socket 目标已消失，
-并且当前没有 Chromium 进程时，才移除 `SingletonLock`、`SingletonSocket` 和
-`SingletonCookie` 的链接；不会跟随链接删除目标，也不会删除书签、登录状态或用户配置。
-
-当前 hostname 的锁、仍存在的 socket 目标、活跃 Chromium 或普通同名文件均保留，
-检查进程失败也不会继续清理。该逻辑只在容器入口执行，不在浏览器 launcher 或 Runner
-热重载时执行；它不是跨 Pod 共享浏览器 profile 的协调机制，不能用于多个实例同时
-挂载同一 HOME 的部署。未满足确认条件的异常锁仍由 Chromium 报错，不强制解锁。
-
-集成复用现有 MCP 发现、配置、执行和图片返回能力；没有新增 Runner API、控制服务或
-网络监听端口。Cua 是 provider 启动的 stdio 子进程；HTTP 资源检查器也可能为一次
-检查创建独立短连接。需要使用 window/element token 的连续操作必须保持同一 MCP 会话。
-
-桌面就绪后、Runner 启动前运行 `node /opt/agent-runner/docker/configure-computer.mjs`：
-
-| 原生配置 | 新增内容 |
-| --- | --- |
-| `$CLAUDE_CONFIG_DIR/.claude.json` | `mcpServers.computer`，stdio，`alwaysLoad: true` |
-| `$PI_CODING_AGENT_DIR/mcp.json` | `mcpServers.computer`，`exposure: codemode` |
-| 两个目录各自的 `skills/computer-desktop/SKILL.md` | 工具发现、前台输入、中文限制、结果核对及共享桌面说明 |
-
-命令均为 `/usr/local/bin/cua-driver`，参数 `mcp --direct`；显式传入 DISPLAY、
-XAUTHORITY、DBUS_SESSION_BUS_ADDRESS、XDG_RUNTIME_DIR、XDG_CURRENT_DESKTOP、
-XDG_SESSION_TYPE，以免 provider 的子进程环境过滤遗漏桌面连接信息。
-脚本只补缺失项，保留同名用户 MCP、原生启停策略、其他配置和已有 skill；新文件原子
-写入且权限为 0600。非法 JSON 或链接配置报错，不会用默认值覆盖。删除 MCP 后重建
-Pod 会重新补入；若需长期停用，请使用 provider 原生禁用策略。Pi 1.2 使用严格 JSON
-及 `enabled: false`；旧 adapter 的 `lifecycle`、`disabled` 等字段会阻止启动并提示
-重新配置，原文件不自动迁移或覆盖。
-
-在 Agent UI 的 MCP 资源页可查看 `computer`；部署后新建 Claude 或 Pi 聊天即可使用。
-已有会话需要通过现有资源刷新流程重新载入；仅在旧聊天继续发消息不保证已加载新配置。
-选用支持图像输入的模型才能直接理解截图。文本模型仍可调用提供 AT-SPI 树的工具，
-但不能把保存了截图文件视为模型看到了图像。
-
-本轮仍保持现有电脑界面。**没有自动控制权互斥、聊天独占、接管／交还按钮或暂停续跑
-状态机**；一次只在一个聊天运行桌面任务，人工输入前先停止该回合。
+`dev.sh sync` 不会把本机的运行包同步进 Pod，也不会删除 Pod 里的那个链接。此前镜像里的
+Cua Driver（`computer` MCP、`computer-desktop` skill、容器启动时写入全局 MCP 配置的脚本）
+已于 2026-11-21 删除，镜像不再包含 `/usr/local/bin/cua-driver`。
 
 ### 验证命令
 
-不调用模型的真实 Linux MCP 探针（会短暂打开自己的编辑器并输入）：
+不调用模型的 Linux 桌面探针，会短暂打开自己的编辑器并输入：
 
 ```sh
 bash deploy/agent-runner/dev.sh verify-computer
 ```
 
-真实模型端到端探针，从 Runner 目录运行；先建空白 fixture 文件，再要求模型仅通过
-电脑 MCP 打开编辑器、输入包含中文和唯一 nonce 的内容、保存，最后经文件 API 逐字
-核对。保留会话、证明文件和已保存的窗口，便于在电脑 tab 检查。两个 provider 必须
+它用会话相同的方式启动插件声明的 `cua_repl`，在 Mousepad 里输入含中文的文本，从控件树读回，
+取得窗口截图，保存后逐字核对文件，再关闭测试窗口。
+
+真实模型端到端探针，从 Runner 目录运行。它在会话里启用 `computer-use` 插件，先建空白文件，
+再要求模型只通过 `cua_repl` 打开编辑器、输入包含中文和唯一 nonce 的内容并保存，最后经文件
+API 逐字核对。保留会话、证明文件和已保存的窗口，便于在电脑 tab 检查。两个 provider 必须
 串行运行，避免向同一桌面同时输入。
 
 ```sh
 node --import tsx tests/deployment/computer-model-smoke.ts claude
 node --import tsx tests/deployment/computer-model-smoke.ts pi
-# 文本模型：截图写文件，后续依赖 AT-SPI；不声称模型已读取截图。
+# 文本模型：只依赖控件树；不声称模型已读取截图。
 node --import tsx tests/deployment/computer-model-smoke.ts claude http://127.0.0.1:15173 PROFILE_ID --text-only
 ```
 
@@ -654,34 +527,6 @@ node --import tsx tests/deployment/computer-model-smoke.ts claude http://127.0.0
 minikube 的内存。本机 7 GiB 节点同时运行其他服务、Xfce 和 GNOME 实验时，在运行中的
 Runner Pod 再执行 ESLint 曾触及节点内存上限并导致 API/画面连接超时；停止该检查进程
 后服务恢复。此现象不应通过重启整个集群或修改无关工作负载来掩盖。
-
-### 本轮验证记录（2026-10-12）
-
-实际构建和部署的平台为 Linux arm64；amd64 下载与校验路径已实现，未在本轮执行
-amd64 桌面验证。最终部署镜像的 OCI index 为
-`sha256:744fe7aa922a858dce4a395c57499002a91b9a4ba4537dc744a38e33720cd8f8`。
-
-| 检查 | 实际结果 |
-| --- | --- |
-| macOS 静态检查与构建 | `npm run lint`、`npm run typecheck`、`npm run build` 通过 |
-| 新增启动配置与 Chromium 锁测试 | 2 个文件、21 项测试通过 |
-| Debian 独立容器 | 静态检查、类型检查、构建和 10 项配置测试通过；最终镜像另执行 11 项锁清理测试通过 |
-| 既有编译产物探针 | Pi MCP、Pi subagent model、Claude native product 三项通过 |
-| 后端完整测试 | 当次 147 个文件、832 项中 831 项通过；既有 terminal-elicitation 超时，隔离重跑该文件 2/2 通过，未把整套报告为全绿 |
-| 最终部署的真实 Cua MCP | 原生配置发现、62 个工具发现、PNG、独立 Mousepad、中文前台输入、GUI 保存逐字比较和自有窗口清理通过；Pi adapter 图像块保留通过 |
-| 重建后浏览器 | 启动日志确认清理旧 Pod singleton 链接；MCP 识别真实 `about:blank - Chromium` 窗口，电脑 tab 也显示正常浏览器 |
-| Claude 真实模型 | 通过 Runner 的原生 Claude 会话调用 MCP，使用文本模型与 AT-SPI 完成中文输入和 GUI 保存；证明文件逐字比较通过 |
-| Pi 真实图像模型 | 最终镜像上的完整探针退出 0；图像模型收到桌面截图，通过 MCP 输入中文、GUI 保存，文件逐字比较通过 |
-
-Claude 的通过会话为 `9a18d66a-b2ad-4009-8069-f9c756beabad`，证明文件为
-`/data/workspace/computer-proof-claude-9f58e17c-2fe8-4fc2-9e3d-7ccaf29ded61.txt`。
-Pi 的通过会话为 `01a12c31-3438-7055-a890-7d74d4708255`，证明文件为
-`/data/workspace/computer-proof-pi-30c2b83d-e3a1-444f-8240-d65e1e17d3ca.txt`；该窗口保留
-在电脑 tab，后续重建 Pod 会关闭窗口，但文件仍在 PVC。模型有过无效工具参数并重试
-成功，验证通过不代表每次工具调用或每个模型都能一次成功。
-本轮还发现一个配置的 DeepSeek 模型在 Pi 的 OpenAI API 路径返回 404；这次失败发生
-在调用电脑工具之前，不能算作该模型的桌面验证通过。
-
 
 ### 3D 预览与点云转换（2026-11-04）
 

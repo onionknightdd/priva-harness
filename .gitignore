@@ -30,3 +30,6 @@ lerna-debug.log*
 *.local
 *.pem
 *.key
+
+# Computer Use runtime copied from the desktop app; how it is stored is undecided
+services/agent-runner/ts/src/resources/plugins/*/mcp/runtime/

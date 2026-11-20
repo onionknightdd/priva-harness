@@ -287,3 +287,27 @@ test("a disconnected existing session keeps its confirmed switch but cannot disp
     assert.equal(view.socket!.sent.some((frame) => frame.type === "run.start"), false)
   } finally { await view.close() }
 })
+
+test("Computer Use loads beside the dashboard after the runner confirms, and can be unloaded on its own", async () => {
+  const view = await mount({ enabled: true })
+  const stored = () => JSON.parse(dom.window.localStorage.getItem(AGENT_PREFERENCES_STORAGE_KEY)!).enabledPluginIds
+  try {
+    await act(async () => view.state().setComputerUseEnabled(true))
+    const [request] = view.socket!.configurations()
+    assert.deepEqual(request?.enabledPluginIds, ["agent-dashboard", "computer-use"])
+    assert.equal(view.state().computerUseEnabled, false, "wait for the runner before showing the check")
+    await view.reply({ type: "session.config", requestId: request!.requestId, config: { ...config, enabledPluginIds: ["agent-dashboard", "computer-use"] } })
+    assert.equal(view.state().computerUseEnabled, true)
+    assert.equal(view.state().dashboardEnabled, true)
+    assert.deepEqual(stored(), ["agent-dashboard", "computer-use"])
+    await act(async () => view.state().setComputerUseEnabled(false))
+    assert.deepEqual(view.socket!.configurations()[1]?.enabledPluginIds, ["agent-dashboard"])
+  } finally { await view.close() }
+})
+
+test("stored plugin preferences keep the product plugins and drop anything else", async () => {
+  const { parseAgentPreferences } = await import("../../../src/features/settings/agent-preferences.ts")
+  assert.deepEqual(parseAgentPreferences({ enabledPluginIds: ["computer-use", "retired-plugin", "agent-dashboard", "computer-use"] }).enabledPluginIds,
+    ["agent-dashboard", "computer-use"])
+  assert.deepEqual(parseAgentPreferences({ enabledPluginIds: "computer-use" }).enabledPluginIds, [])
+})

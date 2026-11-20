@@ -15,6 +15,7 @@ case "${1:-help}" in
     docker build --platform "linux/$arch" \
       --build-arg "DEBIAN_MIRROR=${DEBIAN_MIRROR:-https://deb.debian.org}" \
       --build-arg "NPM_REGISTRY=${NPM_REGISTRY:-https://registry.npmjs.org}" \
+      --build-arg "CUA_RUNTIME_REPOSITORY=${CUA_RUNTIME_REPOSITORY:-https://persistent.oaistatic.com/codex-app-prod/linux/deb}" \
       --tag "$IMAGE" "$RUNNER"
     ;;
   deploy)
@@ -42,10 +43,11 @@ case "${1:-help}" in
     fi
     stage=$("${KUBE[@]}" exec "$pod" -- mktemp -d /tmp/runner-sync.XXXXXX)
     trap '"${KUBE[@]}" exec "$pod" -- rm -rf "$stage"' EXIT
-    COPYFILE_DISABLE=1 tar --format=ustar -C "$RUNNER" --exclude='.env*' --exclude='*.local' --exclude='*.pem' --exclude='*.key' --exclude=node_modules -cf - src tests tsconfig.json tsconfig.build.json eslint.config.js |
+    # Plugin runtimes are platform binaries: the local one never goes to the Pod, and the Pod keeps its own.
+    COPYFILE_DISABLE=1 tar --format=ustar -C "$RUNNER" --exclude='.env*' --exclude='*.local' --exclude='*.pem' --exclude='*.key' --exclude=node_modules --exclude='src/resources/plugins/*/mcp/runtime' -cf - src tests tsconfig.json tsconfig.build.json eslint.config.js |
       "${KUBE[@]}" exec -i "$pod" -- tar -xf - -C "$stage"
     "${KUBE[@]}" exec "$pod" -- sh -eu -c '
-      rsync -rc --delete "$1/src/" /opt/agent-runner/src/
+      rsync -rc --delete --filter="protect resources/plugins/*/mcp/runtime/***" "$1/src/" /opt/agent-runner/src/
       rsync -rc --delete "$1/tests/" /opt/agent-runner/tests/
       rsync -c "$1/tsconfig.json" "$1/tsconfig.build.json" "$1/eslint.config.js" /opt/agent-runner/
     ' sh "$stage"
@@ -104,7 +106,7 @@ case "${1:-help}" in
     "${KUBE[@]}" exec deployment/agent-runner -- node --import tsx tests/deployment/desktop-smoke.ts
     ;;
   verify-computer)
-    "${KUBE[@]}" exec deployment/agent-runner -- node --import tsx tests/deployment/original-linux-desktop.ts
+    "${KUBE[@]}" exec deployment/agent-runner -- node --import tsx tests/deployment/computer-use-linux-desktop.ts
     ;;
   import-models)
     if [[ $# -lt 2 || $# -gt 3 ]]; then echo 'Usage: dev.sh import-models /path/to/bambuddy.settings.json [--connect-host-models]' >&2; exit 1; fi

@@ -1,0 +1,30 @@
+{
+  "cua_repl": {
+    "command": "${runtime}/bin/node",
+    "args": ["${plugin}/mcp/cua-repl.mjs", "${runtime}"],
+    "inheritEnv": [
+      "DISPLAY",
+      "XAUTHORITY",
+      "DBUS_SESSION_BUS_ADDRESS",
+      "XDG_RUNTIME_DIR",
+      "XDG_SESSION_TYPE",
+      "XDG_CURRENT_DESKTOP"
+    ],
+    "hiddenTools": ["js_add_node_module_dir"],
+    "turnEndTool": "turn_ended"
+  },
+  "node_repl": {
+    "command": "${runtime}/bin/node_repl",
+    "env": {
+      "NODE_REPL_NODE_PATH": "${runtime}/bin/node",
+      "NODE_REPL_NODE_MODULE_DIRS": "${runtime}/lib/node_modules",
+      "NODE_REPL_TRUSTED_CODE_PATHS": "${runtime}/lib/node_modules"
+    },
+    "turnEndTool": "turn_ended"
+  },
+  "registered_computers": {
+    "runnerModule": "infrastructure/computer/device-mcp",
+    "inheritEnv": ["PRIVA_COMPUTER_DIR"],
+    "turnEndTool": "turn_ended"
+  }
+}

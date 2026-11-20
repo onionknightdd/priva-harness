@@ -1,3 +1,4 @@
+import type { PluginMcpServer } from '../../core/plugin/plugin-mcp.js'
 import type { RunMode } from '../../core/resource/session.js'
 
 export const CLAUDE_DISALLOWED_TOOLS = [
@@ -10,13 +11,21 @@ export const CLAUDE_AGENT_DISALLOWED_TOOLS = [
   'EnterPlanMode', 'ExitPlanMode', 'EnterWorktree', 'ExitWorktree', 'ReportFindings',
 ] as const
 
-export function claudeReplWorkers(servers: readonly string[]): string[] {
-  return servers.filter((name) => name === 'cua_repl' || name === 'node_repl')
+/**
+ * Plugin MCP servers in the shape Claude's SDK options and --mcp-config share.
+ * A plugin the session enabled is meant to be used, and its skill names the
+ * tools directly, so they are never deferred behind tool search.
+ */
+export function claudePluginMcpServers(servers: readonly PluginMcpServer[]): Record<string, {
+  type: 'stdio'; command: string; args: string[]; env: Record<string, string>; alwaysLoad: true
+}> {
+  return Object.fromEntries(servers.map((server) => [server.name, {
+    type: 'stdio' as const, command: server.command, args: [...server.args], env: { ...server.env }, alwaysLoad: true as const,
+  }]))
 }
 
-export function claudeDisallowedTools(mode: RunMode | undefined, computerServers: readonly string[] = []): string[] {
+export function claudeDisallowedTools(mode: RunMode | undefined, pluginServers: readonly PluginMcpServer[] = []): string[] {
   if (!mode) throw new Error('Claude requires a resolved session mode')
   return [...CLAUDE_DISALLOWED_TOOLS, ...(mode === 'agent' ? CLAUDE_AGENT_DISALLOWED_TOOLS : []),
-    ...(computerServers.includes('cua_repl') ? ['mcp__cua_repl__js_add_node_module_dir'] : []),
-    ...claudeReplWorkers(computerServers).map((worker) => `mcp__${worker}__turn_ended`)]
+    ...pluginServers.flatMap((server) => server.hiddenTools.map((tool) => `mcp__${server.name}__${tool}`))]
 }

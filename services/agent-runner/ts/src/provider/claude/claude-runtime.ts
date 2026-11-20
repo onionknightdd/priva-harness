@@ -1,8 +1,8 @@
-import { resolveSessionPluginResources } from '../../core/plugin/session-plugin-resources.js'
-import { computerMcpServers } from '../../core/plugin/computer-use.js'
+import { resolveBuiltinPlugins } from '../../core/plugin/builtin-plugins.js'
+import { enabledPluginMcpServers, type PluginMcpServer } from '../../core/plugin/plugin-mcp.js'
 import { claudeSystemPrompt } from './claude-system-prompt.js'
 import { DEFAULT_CONTEXT_WINDOW } from '../../core/resource/model-context.js'
-import { claudeDisallowedTools, claudeReplWorkers } from './claude-tool-policy.js'
+import { claudeDisallowedTools, claudePluginMcpServers } from './claude-tool-policy.js'
 import { InteractionCoordinator } from '../../core/run/interaction-coordinator.js'
 import { answersByQuestion, interactionDenialText, normalizeQuestions, type InteractionResponse } from '../../core/resource/interaction.js'
 import { taskNotification } from '../../core/resource/background-task.js'
@@ -378,14 +378,14 @@ export function resolveClaudeQueryOptions(
   emitters: ClaudeToolEmitters = {},
 ): Options {
   assertClaudeEffort(spec.effort)
-  const computerServers = computerMcpServers(spec.enabledPluginIds ?? [])
+  const pluginServers = enabledPluginMcpServers(spec.enabledPluginIds ?? [])
   const options: Options = {
     cwd: spec.cwd,
-    plugins: resolveSessionPluginResources(spec.enabledPluginIds ?? []).map((plugin) => ({ type: 'local' as const, path: plugin.rootDir })),
+    plugins: resolveBuiltinPlugins(spec.enabledPluginIds ?? []).map((plugin) => ({ type: 'local' as const, path: plugin.rootDir })),
     model: spec.model,
     agentProgressSummaries: true,
     allowDangerouslySkipPermissions: true,
-    disallowedTools: claudeDisallowedTools(spec.runMode, Object.keys(computerServers)),
+    disallowedTools: claudeDisallowedTools(spec.runMode, pluginServers),
     enableFileCheckpointing: true,
     forwardSubagentText: true,
     includePartialMessages: true,
@@ -394,7 +394,7 @@ export function resolveClaudeQueryOptions(
     promptSuggestions: spec.promptSuggestions !== false,
     systemPrompt: claudeSystemPrompt(spec),
     settingSources: ['user', 'project', 'local'],
-    settings: resolveClaudeQuerySettings(spec, Object.keys(computerServers)),
+    settings: resolveClaudeQuerySettings(spec, pluginServers),
     env: resolveClaudeQueryEnv(spec),
     ...(abortController === undefined ? {} : { abortController }),
   }
@@ -413,8 +413,8 @@ export function resolveClaudeQueryOptions(
     signal: abortController?.signal ?? new AbortController().signal,
     profile: imageToolsFromSpec(spec),
   }, emitters.emitProgress)
-  if (compiled.mcpServers !== undefined || Object.keys(computerServers).length > 0) {
-    options.mcpServers = { ...compiled.mcpServers, ...computerServers }
+  if (compiled.mcpServers !== undefined || pluginServers.length > 0) {
+    options.mcpServers = { ...compiled.mcpServers, ...claudePluginMcpServers(pluginServers) }
   }
   if (compiled.toolAliases !== undefined) {
     options.toolAliases = compiled.toolAliases
@@ -437,15 +437,16 @@ export function resolveClaudeQueryOptions(
 
 export function resolveClaudeQuerySettings(
   spec: Pick<ProviderRunSpec, 'provider' | 'model' | 'baseUrl' | 'authToken'>,
-  computerServers: readonly string[] = [],
+  pluginServers: readonly PluginMcpServer[] = [],
   existingHooks?: Settings['hooks'],
 ): Settings {
   const hooks = { ...existingHooks }
-  const workers = claudeReplWorkers(computerServers)
-  if (workers.length) {
+  // A stateful plugin server learns that a turn or subagent stopped from the host, never from the model.
+  const stateful = pluginServers.flatMap((server) => server.turnEndTool ? [{ server: server.name, tool: server.turnEndTool }] : [])
+  if (stateful.length) {
     for (const event of ['Stop', 'SubagentStop'] as const) {
-      hooks[event] = [...(hooks[event] ?? []), { hooks: workers.map((server) => ({
-        type: 'mcp_tool', server, tool: 'turn_ended',
+      hooks[event] = [...(hooks[event] ?? []), { hooks: stateful.map(({ server, tool }) => ({
+        type: 'mcp_tool', server, tool,
         input: {
           hook_event_name: '${hook_event_name}',
           session_id: event === 'Stop' ? '${session_id}' : '${agent_id}',

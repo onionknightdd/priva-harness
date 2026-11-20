@@ -1,42 +1,59 @@
+// Checks a registered computer through the Runner's device service, the way a session reaches it.
+// Run where the device service runs, with PRIVA_COMPUTER_DIR set when it is not the default.
+//
+//   computer-device-smoke.ts status DEVICE_ID              availability and installed runtime
+//   computer-device-smoke.ts app DEVICE_ID APPLICATION     also opens APPLICATION on that computer
+//                                                          and reads its window. It sends no input.
 import assert from 'node:assert/strict'
-import { resolve } from 'node:path'
 import { Client } from '@modelcontextprotocol/client'
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio'
 import { z } from 'zod'
+import { resolvePluginMcpServers } from '../../src/core/plugin/plugin-mcp.js'
+import { resolveBuiltinPlugins } from '../../src/core/plugin/builtin-plugins.js'
 
-// Run inside the Runner Pod. The calculator mode performs input on the enrolled Mac.
-const [mode, deviceId, entry = 'dist/infrastructure/computer/device-mcp.js', ...extra] = process.argv.slice(2)
-if (!deviceId || extra.length || (mode !== 'status' && mode !== 'calculator')) {
-  throw new Error('Usage: computer-device-smoke.ts status|calculator DEVICE_ID [COMPILED_MCP_ENTRY]')
+const [mode, deviceId, application, ...extra] = process.argv.slice(2)
+if (!deviceId || extra.length > 0 || !((mode === 'status' && application === undefined) || (mode === 'app' && application !== undefined))) {
+  throw new Error('Usage: computer-device-smoke.ts status DEVICE_ID | app DEVICE_ID APPLICATION')
 }
+
+// Only the device server is started; it does not need this machine's own desktop runtime.
+const [plugin] = resolveBuiltinPlugins(['computer-use'])
+const declaration = plugin?.mcpServers['registered_computers']
+assert.ok(plugin && declaration, 'The computer-use plugin does not declare registered_computers')
+const [launch] = resolvePluginMcpServers([{ ...plugin, mcpServers: { registered_computers: declaration } }])
+assert.ok(launch)
+
 const client = new Client({ name: 'computer-device-smoke', version: '1.0.0' })
-async function call(name: string, args: Record<string, string> = {}): Promise<unknown> {
-  const result = await client.callTool({ name, arguments: args })
-  const content = result.content[0]
-  if (content?.type !== 'text') throw new Error(`${name} produced no text result`)
-  if (result.isError) throw new Error(`${name}: ${content.text}`)
-  return JSON.parse(content.text)
+async function call(name: string, args: Record<string, string> = {}): Promise<string> {
+  const result = await client.callTool({ name, arguments: args }, { timeout: 120_000 })
+  const content = result.content as { type: string; text?: string }[]
+  const text = content.map((part) => part.text ?? '').join('\n')
+  if (result.isError) throw new Error(`${name}: ${text.slice(0, 1024)}`)
+  return text
 }
 try {
-  const directory = process.env['PRIVA_COMPUTER_DIR']
-  await client.connect(new StdioClientTransport({
-    command: process.execPath, args: [resolve(entry)], env: directory ? { PRIVA_COMPUTER_DIR: directory } : {},
-  }))
+  await client.connect(new StdioClientTransport({ command: launch.command, args: [...launch.args], stderr: 'inherit',
+    env: { PATH: process.env['PATH'] ?? '', ...launch.env } }))
   const names = (await client.listTools()).tools.map((tool) => tool.name)
-  for (const name of ['list_devices', 'device_status', 'calculator_check']) assert.ok(names.includes(name), name)
-  const devices = z.array(z.object({ deviceId: z.string(), platform: z.string() })).parse(await call('list_devices'))
-  assert.ok(devices.some((item) => item.deviceId === deviceId && item.platform === 'darwin'), 'Requested Mac is offline')
+  for (const name of ['list_devices', 'device_status', 'js', 'js_reset']) assert.ok(names.includes(name), name)
+  const devices = z.array(z.object({ deviceId: z.string(), platform: z.string() })).parse(JSON.parse(await call('list_devices')))
+  assert.ok(devices.some((item) => item.deviceId === deviceId && item.platform === 'darwin'), 'The requested computer is not connected')
   const version = z.string().min(1)
   const status = z.object({
     platform: z.literal('darwin'), unlocked: z.boolean(),
     runtime: z.object({ target: version, node: version, cuaRepl: version, cua: version, sky: version }).optional(),
-  }).parse(await call('device_status', { deviceId }))
+  }).parse(JSON.parse(await call('device_status', { deviceId })))
   console.log(JSON.stringify({ deviceId, status }))
-  if (mode === 'calculator') {
-    assert.ok(status.runtime, 'The Mac tray must identify the installed local runtime to verify the original worker')
-    const result = await call('calculator_check', { deviceId })
-    assert.deepEqual(result, { deviceId, expression: '1+1', result: '2' })
-    console.log(JSON.stringify(result))
+  if (application !== undefined) {
+    assert.ok(status.unlocked, 'Unlock the computer before opening an application on it')
+    assert.ok(status.runtime, 'The computer has no desktop runtime installed')
+    const opened = await call('js', { deviceId, title: `Opening ${application}`, code: `let app = await cua.getApp(${JSON.stringify(application)});` })
+    const interfaceLines = opened.split('\n').filter((line) => /^\s*\d+\s+\S/u.test(line))
+    assert.ok(interfaceLines.length > 0, 'The computer returned no application interface')
+    // The binding lives in that computer's worker and survives into the next call.
+    const again = await call('js', { deviceId, title: 'Reading it again', code: 'nodeRepl.write(String((await app.getAXState({disableDiffing:true})).length));' })
+    assert.match(again.trim().split('\n').at(-1) ?? '', /^\d+$/u, 'The worker did not keep the application binding')
+    console.log(JSON.stringify({ application, interfaceLines: interfaceLines.length, firstLine: interfaceLines[0]?.trim().slice(0, 120), bindingKept: true }))
   }
 } finally {
   await client.close()

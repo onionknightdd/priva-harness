@@ -18,4 +18,4 @@ const document = [
   '```',
   '',
 ].join('\n')
-await writeFile(new URL('../src/resources/plugins/agent-dashboard/skill/resource/catalog.md', import.meta.url), document)
+await writeFile(new URL('../src/resources/plugins/agent-dashboard/skills/agent-dashboard/resource/catalog.md', import.meta.url), document)

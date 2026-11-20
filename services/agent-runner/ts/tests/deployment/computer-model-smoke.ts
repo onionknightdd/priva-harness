@@ -33,7 +33,7 @@ Open the existing empty file ${proofPath} in Mousepad using its graphical Open d
 Enter this exact text through the window and save via the graphical application:
 ${JSON.stringify(expected)}
 Read the edit back from the window's accessibility state.${textOnly ? ' Use text accessibility state for observations.' : ' Inspect a screenshot of that window as well.'}
-Leave the saved proof window visible. Finish the computer task using cua_repl.js with a completion_summary.
+Leave the saved proof window visible.
 Use the original CUA application API for the entire edit. File and shell tools would invalidate this test.`
 const url = new URL('/api/sandbox/agent/ws/session', origin)
 url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -58,7 +58,7 @@ try {
     ws.once('close', () => { finish(new Error('WebSocket closed before completion')) })
     ws.once('open', () => {
       ws.send(JSON.stringify({ type: 'run.start', harness, model: `${profile.id}:${profile.default_model}`,
-        cwd: '/data/workspace', runId: nonce, text: prompt, effort: 'low', promptSuggestions: false }))
+        cwd: '/data/workspace', runId: nonce, text: prompt, effort: 'low', promptSuggestions: false, enabledPluginIds: ['computer-use'] }))
     })
     ws.on('message', (raw: Buffer) => {
       const frame = JSON.parse(raw.toString('utf8')) as StreamFrame
@@ -84,8 +84,6 @@ const successful = [...calls.values()].filter((call) => call.ok)
 const uiCalls = successful.filter((call) => call.name === 'mcp__cua_repl__js')
 assert.ok(uiCalls.some((call) => typeof call.input === 'object' && call.input !== null && 'code' in call.input),
   'Expected a successful original cua_repl.js desktop operation')
-assert.ok(uiCalls.some((call) => typeof call.input === 'object' && call.input !== null && 'completion_summary' in call.input),
-  'Expected the original CUA completion summary')
 assert.ok(!successful.some((call) => /^(bash|write|edit|writefile|editfile|apply_patch|mcp__node_repl__js)$/iu.test(call.name)),
   'The proof file must be written through the CUA desktop API')
 const response = await fetch(`${origin}/api/sandbox/files/preview?path=${encodeURIComponent(proofPath)}`)

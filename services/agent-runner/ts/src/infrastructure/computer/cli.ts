@@ -7,7 +7,7 @@ import { z } from 'zod'
 import { errorMessage } from '../../core/util/errors.js'
 import { startComputerBroker } from './broker.js'
 import { ComputerClient } from './client.js'
-import { computerDirectory, deviceIdSchema, methodSchema } from './protocol.js'
+import { computerDirectory, deviceIdSchema } from './protocol.js'
 
 async function privateFile(path: string): Promise<Buffer> {
   const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
@@ -44,9 +44,9 @@ async function main(args: string[]): Promise<void> {
   }
   const client = new ComputerClient()
   if (command === 'list' && !rest.length) console.log(JSON.stringify(await client.list()))
-  else if (command === 'request' && rest.length === 2) {
-    console.log(JSON.stringify(await client.request(deviceIdSchema.parse(rest[0]), methodSchema.parse(rest[1]))))
-  } else throw new Error('Expected serve, list, or request DEVICE status|calculator-check')
+  else if (command === 'status' && rest.length === 1) {
+    console.log(JSON.stringify(await client.status(deviceIdSchema.parse(rest[0]))))
+  } else throw new Error('Expected serve, list, or status DEVICE')
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

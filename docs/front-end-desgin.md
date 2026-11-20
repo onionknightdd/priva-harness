@@ -1336,8 +1336,10 @@ noVNC 只在电脑标签首次连接时加载；此面板不使用 `keepMounted`
 画布可通过 Tab 聚焦，Control + Alt + Escape 将焦点退回面板，之后可用 Shift+Tab 返回
 标签栏。鼠标与触摸使用 noVNC 原生处理；本首版没有另设手机软件键盘或剪贴板工具栏。
 
-2026-10-12：当前会话实时收到任意 `mcp__computer__*` 的 `tool.started` 时，自动展开
-Agent Workspace 并选中「电脑」，包括子 Agent 调用与新增工具。桌面打开侧栏，窄屏打开
+2026-11-21：当前会话实时收到一次 `mcp__cua_repl__js` 调用，且其完整输入是选择原生应用的
+单条语句（`cua.getApp(...)` 或 `cua.computer.launch_app(...)`）时，自动展开
+Agent Workspace 并选中「电脑」，包括子 Agent 调用。`node_repl`、`registered_computers` 和其他
+服务的调用不触发：通用 JS 不操作桌面，已登记的电脑是另一台机器。桌面打开侧栏，窄屏打开
 现有全宽抽屉，沿用既有切换动效。已打开时保持当前面板；手动关闭或切走后，下一次新调用
 会再次打开。HTTP 历史、`session.snapshot`、工具输入 / 结果更新与重连补发均不触发导航。
 
@@ -2366,29 +2368,23 @@ mcp__github__list_issues
        输出 ...
 ```
 
-2026-10-12：`computer` 服务的 62 个 Cua Driver 0.34.1 工具采用已确认的中英文
-动作标题，统一使用 Lucide `MousePointerClick`（`mouse-pointer-click`），图标继承
-工具行尺寸和文本颜色并设置 `aria-hidden`。中文标题采用“正在…”：`list_apps` 为
-“正在查看桌面应用”，`list_windows` 为“正在查看窗口”，`launch_app` 为“正在启动应用”。
-其他服务继续使用通用 MCP 标题与图标；未知 `computer` 工具保留真实工具名和统一光标图标。
-标题文案来自 `computerTool` 翻译，调用原名和输入输出保持原值。
+2026-11-21：Computer Use 插件的工具卡沿用通用 MCP 卡片。`mcp__cua_repl__js`、
+`mcp__registered_computers__js` 和 `mcp__node_repl__js` 从完整输入读取模型填写的 `title`
+作为标题；输入尚未完整或没有标题时保留 `服务名:工具名`。操作桌面的两个服务（`cua_repl`、
+`registered_computers`）使用 Lucide `MousePointerClick`，图标继承工具行尺寸和文本颜色并设置
+`aria-hidden`；`node_repl` 和其他服务使用通用 MCP 图标。调用原名和输入输出保持原值。
 
 ```text
-mcp__computer__tool + complete arguments
-  -> computer-tool-data -> localized action title
-  -> [MousePointerClick] 正在查看桌面应用 [状态] [展开]
+mcp__cua_repl__js + 完整输入里的 title
+  -> computer-tool-data -> 卡片标题
+  -> [MousePointerClick] 正在打开计算器 [状态] [展开]
        输入 { ... }
        输出 ...
 ```
 
-光标显隐、网页对话框、网页鼠标操作和组件安装按明确参数细化文案；安装预览与实际
-安装分别显示。参数尚未完成或类型无效时显示该工具的基础动作标题，完整后更新。
 主聊天和 Workspace Agent 过程视图共用既有工具卡入口，状态、折叠、输入输出、复制、
-标题跑马灯及减少动态效果沿用 `ToolResult`。
-
-`mcp__cua_repl__js` 的卡片从完整输入读取 `title`，完成汇总调用成功后显示
-`completion_summary`。尚无标题、输入仍不完整或汇总失败时保留 `cua_repl:js`；
-标题按工具提供的语言显示。动作和完成汇总共用既有 MCP 图标与折叠卡片。
+标题跑马灯及减少动态效果沿用 `ToolResult`。旧 Cua Driver 的 `mcp__computer__*` 工具及其
+逐个翻译的动作标题已随该驱动删除。
 
 ### 图片工具卡片
 
@@ -2957,6 +2953,25 @@ Composer 使用彩色 Dashboard 图标与小号 BeUI Switch，Skill 过程行复
 开关只改变 `enabledPluginIds`，不注入产品系统提示、不切换 MCP 工具。
 服务端确认前保留实际状态并禁用重复点击；当前回答结束后应用排队配置，失败保留
 最近一次确认的状态。终端查看连接保持挂载，重连和切换聊天读取会话实际插件配置。
+
+2026-11-21：Computer Use 插件放在 Composer 左侧「＋」菜单的「插件」分组里，是一个可勾选项，
+不占底栏。它与 Dashboard 开关共用同一条 `enabledPluginIds` 配置链路：点击只发出配置请求，
+勾选状态在服务端确认后才改变，等待期间该项禁用，失败时保留上次确认的状态。菜单在勾选后
+保持打开。浏览器偏好只保留 `agent-dashboard` 和 `computer-use` 两个插件 ID。
+
+```text
+[＋] 点击后向上弹出
+┌────────────────────┐
+│ 文件                │
+│   📎 上传附件       │
+│ ────────────────── │
+│ 插件                │
+│ ✓ 🖥 Computer Use   │  未加载时无勾；应用中禁用
+│ ────────────────── │
+│ MCP                 │
+│   🔌 暂未开放       │
+└────────────────────┘
+```
 
 ```text
 Dashboard Switch -> session.configure -> 当前回答结束 -> 原生 Skill 加载 / 卸载

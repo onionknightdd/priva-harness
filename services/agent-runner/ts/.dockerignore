@@ -15,6 +15,8 @@
 !tests/**
 !scripts/
 !scripts/**
+# Plugin runtimes copied for local development stay out of the context; the image installs its own.
+src/resources/plugins/*/mcp/runtime
 **/.env*
 **/*.local
 **/*.pem

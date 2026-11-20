@@ -78,6 +78,8 @@ export function AgentMessage({
   onStop,
   dashboardEnabled = false,
   onDashboardEnabledChange,
+  computerUseEnabled = false,
+  onComputerUseEnabledChange,
   onContinue,
 }: {
   /** Collapsed while the terminal view owns the screen; state and the socket stay alive. */
@@ -114,6 +116,8 @@ export function AgentMessage({
   onStop: () => void
   dashboardEnabled?: boolean
   onDashboardEnabledChange?: (active: boolean) => void
+  computerUseEnabled?: boolean
+  onComputerUseEnabledChange?: (active: boolean) => void
   onContinue?: (message: string) => void | Promise<void>
 }) {
   const { t } = useTranslation()
@@ -329,6 +333,8 @@ export function AgentMessage({
           onStop={onStop}
           dashboardEnabled={dashboardEnabled}
           onDashboardEnabledChange={onDashboardEnabledChange}
+          computerUseEnabled={computerUseEnabled}
+          onComputerUseEnabledChange={onComputerUseEnabledChange}
         />}
         <div className="mt-1 flex items-center gap-1.5">
           <div className="flex min-w-0 flex-1 items-center gap-1.5">

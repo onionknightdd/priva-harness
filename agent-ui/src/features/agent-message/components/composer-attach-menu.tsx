@@ -1,10 +1,11 @@
 import * as React from "react"
-import { PaperclipIcon, PlusIcon, PlugIcon } from "lucide-react"
+import { MonitorIcon, PaperclipIcon, PlusIcon, PlugIcon } from "lucide-react"
 import { useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
 import {
   Menu,
+  MenuCheckboxItem,
   MenuGroup,
   MenuGroupLabel,
   MenuItem,
@@ -21,8 +22,15 @@ const COMPOSER_ATTACH_LABEL_CLASS =
 
 export function ComposerAttachMenu({
   onFilesSelected,
+  computerUseEnabled = false,
+  pluginChangePending = false,
+  onComputerUseEnabledChange,
 }: {
   onFilesSelected: (files: File[]) => void
+  computerUseEnabled?: boolean
+  /** The runner has not confirmed the last plugin change yet. */
+  pluginChangePending?: boolean
+  onComputerUseEnabledChange?: (active: boolean) => void
 }) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
@@ -83,6 +91,25 @@ export function ComposerAttachMenu({
               {t("agentMessage.attachUpload")}
             </MenuItem>
           </MenuGroup>
+          {onComputerUseEnabledChange ? (
+            <>
+              <MenuSeparator />
+              <MenuGroup>
+                <MenuGroupLabel className={COMPOSER_ATTACH_LABEL_CLASS}>
+                  {t("agentMessage.attachPluginGroup")}
+                </MenuGroupLabel>
+                {/* The check follows the runner's confirmation, not the click. */}
+                <MenuCheckboxItem
+                  checked={computerUseEnabled}
+                  disabled={pluginChangePending}
+                  onCheckedChange={(checked) => onComputerUseEnabledChange(checked)}
+                >
+                  <MonitorIcon />
+                  {t("agentMessage.computerUsePlugin")}
+                </MenuCheckboxItem>
+              </MenuGroup>
+            </>
+          ) : null}
           <MenuSeparator />
           <MenuGroup>
             <MenuGroupLabel className={COMPOSER_ATTACH_LABEL_CLASS}>

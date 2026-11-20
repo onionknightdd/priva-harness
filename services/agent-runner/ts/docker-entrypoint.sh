@@ -44,9 +44,6 @@ for _ in {1..150}; do
 done
 [[ "$ready" = true ]] || { echo 'Desktop did not become ready within 30 seconds.' >&2; exit 1; }
 
-# Seed native MCP settings before either provider can start a session.
-node /opt/agent-runner/docker/configure-computer.mjs
-
 if [[ -n "${PRIVA_COMPUTER_HOST_KEY:-}" || -n "${PRIVA_COMPUTER_DEVICES:-}" ]]; then
   node /opt/agent-runner/dist/infrastructure/computer/cli.js serve \
     --host-key "${PRIVA_COMPUTER_HOST_KEY:?Set PRIVA_COMPUTER_HOST_KEY to the broker key file}" \

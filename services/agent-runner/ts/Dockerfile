@@ -36,10 +36,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && mkdir -p /opt/agent-runner /data \
     && chown node:node /opt/agent-runner /data
 
-ARG TARGETARCH
-COPY --chmod=755 docker/install-cua-driver.sh /usr/local/bin/install-cua-driver
-RUN /usr/local/bin/install-cua-driver "$TARGETARCH"
-
 # Debian's tmux 3.5a lacks bracket_paste_flag and cannot initialize the
 # Runner's manual window sizing. Pin the version used by the terminal tests.
 RUN curl --fail --location --retry 3 --connect-timeout 15 --max-time 180 \
@@ -73,14 +69,13 @@ COPY --chmod=755 docker/clear-stale-browser-locks.sh /usr/local/bin/clear-stale-
 COPY docker/supervisord.conf /etc/agent-runner/supervisord.conf
 COPY docker/priva-browser.desktop /usr/local/share/applications/priva-browser.desktop
 COPY docker/chromium-flags /etc/chromium.d/priva-desktop
-COPY docker/configure-computer.mjs /opt/agent-runner/docker/configure-computer.mjs
-COPY docker/skills/computer-desktop /opt/agent-runner/docker/skills/computer-desktop
+# The computer-use plugin finds its runtime inside its own directory; this links the Linux one there.
+ARG TARGETARCH
+ARG CUA_RUNTIME_REPOSITORY=https://persistent.oaistatic.com/codex-app-prod/linux/deb
 COPY --chmod=755 docker/install-chatgpt-cua-runtime.sh /usr/local/bin/install-chatgpt-cua-runtime
-RUN /usr/local/bin/install-chatgpt-cua-runtime "$TARGETARCH"
+RUN /usr/local/bin/install-chatgpt-cua-runtime "$TARGETARCH" "$CUA_RUNTIME_REPOSITORY"
 
 ENV HOME=/data/home \
-    PRIVA_CUA_RUNTIME=/opt/cua_node \
-    PRIVA_CUA_SKILLS=/opt/chatgpt-cua-skills \
     RUNTIME_HOME_DIR=/data/runtime \
     WORKSPACE_DIR=/data/workspace \
     CLAUDE_CONFIG_DIR=/data/home/.claude \

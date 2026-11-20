@@ -16,7 +16,7 @@ const [plugin] = registry.resolveBuiltinPlugins(['agent-dashboard'])
 assert.ok(plugin)
 assert.equal(plugin.rootDir, path.join(buildDirectory, 'resources/plugins/agent-dashboard'))
 const examples: { resource: string; source: string }[] = []
-for (const resource of ['plugin.json', '.claude-plugin/plugin.json', 'skill/SKILL.md', ...['catalog', 'cards', 'charts', 'tables', 'interactions', 'tabs', 'media', 'gallery', 'dashboard'].map((name) => `skill/resource/${name}.md`)]) {
+for (const resource of ['plugin.json', '.claude-plugin/plugin.json', 'skills/agent-dashboard/SKILL.md', ...['catalog', 'cards', 'charts', 'tables', 'interactions', 'tabs', 'media', 'gallery', 'dashboard'].map((name) => `skills/agent-dashboard/resource/${name}.md`)]) {
   const actual: string = await readFile(path.join(plugin.rootDir, resource), 'utf8')
   const expected: string = await readFile(new URL(`../../../src/resources/plugins/agent-dashboard/${resource}`, import.meta.url), 'utf8')
   assert.equal(actual, expected, `Packaged resource differs: ${resource}`)
@@ -25,7 +25,7 @@ for (const resource of ['plugin.json', '.claude-plugin/plugin.json', 'skill/SKIL
     examples.push({ resource, source: match[1] })
   }
 }
-assert.ok(examples.some((example) => example.resource === 'skill/resource/gallery.md'))
+assert.ok(examples.some((example) => example.resource === 'skills/agent-dashboard/resource/gallery.md'))
 
 const server = Fastify()
 await server.register(routes.a2uiRoutes)

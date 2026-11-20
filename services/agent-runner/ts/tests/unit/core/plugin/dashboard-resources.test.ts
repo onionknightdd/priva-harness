@@ -8,7 +8,8 @@ import { resolveBuiltinPlugins } from '../../../../src/core/plugin/builtin-plugi
 
 const plugin = resolveBuiltinPlugins(['agent-dashboard'])[0]
 if (plugin === undefined) throw new Error('Missing dashboard skill')
-const skillDir = plugin.skillDir
+const [skillDir] = plugin.skillDirs
+if (skillDir === undefined) throw new Error('Missing dashboard skill directory')
 
 describe('Agent dashboard skill resources', () => {
   it('provides valid native skill frontmatter', () => {

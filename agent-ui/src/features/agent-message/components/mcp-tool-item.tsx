@@ -6,7 +6,7 @@ import { ToolResult } from "@/components/agents/tool-result"
 import { cn } from "@/lib/utils"
 
 import type { StreamBlock } from "../agent-message-data"
-import { computerToolTitleKey, cuaToolTitle } from "../computer-tool-data"
+import { DESKTOP_MCP_SERVERS, replToolTitle } from "../computer-tool-data"
 import { mcpToolInputText, type McpToolName } from "../mcp-tool-data"
 import { StructuredResult } from "./codemode-tool-item"
 import { isToolRunning } from "../tool-activity"
@@ -18,14 +18,12 @@ export function McpToolItem({
   block: Extract<StreamBlock, { type: "tool_use" }>
   name: McpToolName
 }) {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const tool = block.tool
   const status = tool?.backgroundTask?.status === "failed" ? "error"
     : isToolRunning(tool) ? "running" : tool?.ok === false ? "error" : "success"
   const input = mcpToolInputText(block)
-  const titleKey = computerToolTitleKey(name, input)
-  const title = cuaToolTitle(block.name, input, status === "success" && tool?.status === "completed")
-    ?? (titleKey && i18n.exists(titleKey) ? t(titleKey) : `${name.serverName}:${name.toolName}`)
+  const title = replToolTitle(block.name, input) ?? `${name.serverName}:${name.toolName}`
   const output = tool?.output
   const copyText = [input, output].filter((text) => text !== undefined && text !== "").join("\n\n")
 
@@ -33,7 +31,7 @@ export function McpToolItem({
     <ToolResult
       tool={null}
       title={title}
-      icon={name.serverName === "computer" ? (
+      icon={DESKTOP_MCP_SERVERS.includes(name.serverName) ? (
         <MousePointerClick aria-hidden="true" className="size-[1em]" />
       ) : (
         <span

@@ -1,5 +1,5 @@
-import { resolveSessionPluginResources } from '../../../core/plugin/session-plugin-resources.js'
-import { computerMcpServers } from '../../../core/plugin/computer-use.js'
+import { resolveBuiltinPlugins } from '../../../core/plugin/builtin-plugins.js'
+import { enabledPluginMcpServers } from '../../../core/plugin/plugin-mcp.js'
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
@@ -45,12 +45,12 @@ export async function claudeTerminalLaunch(input: ClaudeTerminalLaunchInput): Pr
   const { target, spec, context } = input
   assertClaudeEffort(spec.effort)
   const settingsPath = join(context.scratchDir, SETTINGS_FILE)
-  const computerServers = computerMcpServers(spec.enabledPluginIds ?? [])
+  const pluginServers = enabledPluginMcpServers(spec.enabledPluginIds ?? [])
   const bridge = context.eventsUrl === undefined ? undefined : await writeClaudeTerminalHooks(context.scratchDir, context.eventsUrl)
   await saveClaudeTerminalSelection(context.scratchDir, spec)
   await writeFile(settingsPath, JSON.stringify({
     ...bridge,
-    ...resolveClaudeQuerySettings(spec, Object.keys(computerServers), bridge?.hooks),
+    ...resolveClaudeQuerySettings(spec, pluginServers, bridge?.hooks),
     skipDangerousModePermissionPrompt: true,
     ...(spec.promptSuggestions === undefined ? {} : { promptSuggestionEnabled: spec.promptSuggestions }),
   }, null, 2), { mode: 0o600 })
@@ -59,9 +59,9 @@ export async function claudeTerminalLaunch(input: ClaudeTerminalLaunchInput): Pr
     '--model', spec.model,
     '--permission-mode', 'bypassPermissions',
     '--settings', settingsPath,
-    ...resolveSessionPluginResources(spec.enabledPluginIds ?? []).flatMap((plugin) => ['--plugin-dir', plugin.rootDir]),
-    ...await writeNativeProductConfig(context.scratchDir, target, spec, input.tools ?? [], computerServers),
-    '--disallowedTools', claudeDisallowedTools(spec.runMode, Object.keys(computerServers)).join(','),
+    ...resolveBuiltinPlugins(spec.enabledPluginIds ?? []).flatMap((plugin) => ['--plugin-dir', plugin.rootDir]),
+    ...await writeNativeProductConfig(context.scratchDir, target, spec, input.tools ?? [], pluginServers),
+    '--disallowedTools', claudeDisallowedTools(spec.runMode, pluginServers).join(','),
     ...claudeSystemPromptArgs(spec),
     ...(spec.effort === undefined ? [] : ['--effort', spec.effort]),
   ]

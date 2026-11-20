@@ -34,6 +34,11 @@ export type AgentPreferences = {
   enabledPluginIds: readonly string[]
 }
 
+export const DASHBOARD_PLUGIN_ID = "agent-dashboard"
+export const COMPUTER_USE_PLUGIN_ID = "computer-use"
+/** Product plugins a chat can load. The runner rejects any other id. */
+export const PRODUCT_PLUGIN_IDS: readonly string[] = [DASHBOARD_PLUGIN_ID, COMPUTER_USE_PLUGIN_ID]
+
 export const DEFAULT_AGENT_PREFERENCES: AgentPreferences = {
   defaultHarness: DEFAULT_HARNESS_ID,
   lastHarnessId: DEFAULT_HARNESS_ID,
@@ -124,7 +129,7 @@ export function parseAgentPreferences(raw: unknown): AgentPreferences {
       typeof raw["inputSuggestions"] === "boolean"
         ? raw["inputSuggestions"]
         : DEFAULT_AGENT_PREFERENCES.inputSuggestions,
-    enabledPluginIds: Array.isArray(raw["enabledPluginIds"]) && raw["enabledPluginIds"].includes("agent-dashboard") ? ["agent-dashboard"] : [],
+    enabledPluginIds: Array.isArray(raw["enabledPluginIds"]) ? PRODUCT_PLUGIN_IDS.filter((id) => (raw["enabledPluginIds"] as unknown[]).includes(id)) : [],
     queueBehavior: DEFAULT_AGENT_PREFERENCES.queueBehavior,
   }
 }

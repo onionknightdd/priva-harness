@@ -1,8 +1,0 @@
-#!/bin/sh
-set -eu
-if [ "$#" -ne 0 ]; then
-  echo 'calculator accepts no arguments' >&2
-  exit 2
-fi
-# The tray calls this helper only for its active, unlocked local desktop.
-exec /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node "$(dirname "$0")/probe.mjs" calculator

@@ -25,8 +25,8 @@ const hooks = registerHooks({
 })
 const history: AgentThreadMessage = {
   id: "old-run", role: "assistant", content: "", createdAt: "2026-10-12T00:00:00Z", status: "complete",
-  blocks: [{ type: "tool_use", id: "old-tool", blockId: "old-tool", index: 0, name: "mcp__computer__list_apps",
-    tool: { id: "old-tool", name: "mcp__computer__list_apps", status: "completed", output: "done" } }],
+  blocks: [{ type: "tool_use", id: "old-tool", blockId: "old-tool", index: 0, name: "mcp__cua_repl__js",
+    tool: { id: "old-tool", name: "mcp__cua_repl__js", status: "completed", output: "done" } }],
 }
 const originalFetch = globalThis.fetch
 const originalSocket = globalThis.WebSocket
@@ -117,7 +117,9 @@ for (const [harness, width] of [["claude", 1280], ["pi", 390]] as const) test(`$
     const socket = Socket.instances.at(-1)!
     assert.equal(socket.sent[0]?.harness, harness)
     await act(async () => socket.frame({ type: "session.snapshot", seq: 1, messages: [history], tasks: [], activeRunId: "old-run" }))
-    const tool: StreamFrame = { type: "tool.started", runId: "run", id: "tool", messageId: "message", blockId: "tool", name: "mcp__computer__list_apps" }
+    // Selecting an application through cua_repl is what shows this workspace's desktop.
+    const input = { code: "let editor = await cua.getApp({windowId: 42});", title: "Opening Mousepad" }
+    const tool: StreamFrame = { type: "tool.started", runId: "run", id: "tool", messageId: "message", blockId: "tool", name: "mcp__cua_repl__js", input }
     await act(async () => socket.frame({ ...tool, seq: 2, replay: true }))
     assert.equal(opened(), false, "running snapshots and replay do not navigate")
 
@@ -128,7 +130,7 @@ for (const [harness, width] of [["claude", 1280], ["pi", 390]] as const) test(`$
     await act(async () => {
       socket.frame({ ...tool, id: "live", seq: 3 })
       socket.frame({ type: "tool.input_delta", id: "live", seq: 4, chunk: "{}" })
-      socket.frame({ ...tool, seq: 5, name: "mcp__other__list_apps" })
+      socket.frame({ ...tool, seq: 5, name: "mcp__other__js" })
     })
     assert.equal(opened(), false, "duplicates, input streaming and other servers do not reopen")
     await act(async () => socket.frame({ ...tool, id: "nested", blockId: "nested", seq: 6, parentToolUseId: "agent" }))
@@ -149,15 +151,14 @@ for (const [harness, width] of [["claude", 1280], ["pi", 390]] as const) test(`$
       reconnected.frame({ ...tool, seq: 9, replay: true })
     })
     assert.equal(controls.tabs.activeTabId, "tasks", "replay cannot steal the selected tab, even around snapshots")
-    await act(async () => reconnected.frame({ ...tool, id: "future", blockId: "future", seq: 10, name: "mcp__computer__future_tool" }))
+    await act(async () => reconnected.frame({ ...tool, id: "future", blockId: "future", seq: 10 }))
     assert.equal(controls.tabs.activeTabId, "computer")
     assert.equal(opened(), true)
     await act(async () => controls.tabs.setActiveTabId("tasks"))
-    const selectApp = { ...tool, id: "select", blockId: "select", name: "mcp__cua_repl__js" }
-    const input = { code: "let editor = await cua.getApp({windowId: 42});", title: "Opening Mousepad" }
+    const selectApp = { ...tool, id: "select", blockId: "select" }
     await act(async () => {
       reconnected.frame({ ...selectApp, seq: 11, input, name: "mcp__node_repl__js" })
-      reconnected.frame({ ...selectApp, seq: 12, input, name: "mcp__registered_computers__calculator_check" })
+      reconnected.frame({ ...selectApp, seq: 12, input, name: "mcp__registered_computers__js" })
       reconnected.frame({ ...selectApp, seq: 13, id: "inventory", input: { code: "await cua.getState();" } })
     })
     assert.equal(controls.tabs.activeTabId, "tasks", "runtime inventory, general JS and remote actions leave tabs alone")

@@ -313,6 +313,8 @@ export function AgentMessageComposer({
   onStop,
   dashboardEnabled = false,
   onDashboardEnabledChange,
+  computerUseEnabled = false,
+  onComputerUseEnabledChange,
 }: {
   compact?: boolean
   attachments: ComposerAttachment[]
@@ -343,6 +345,8 @@ export function AgentMessageComposer({
   onStop: () => void
   dashboardEnabled?: boolean
   onDashboardEnabledChange?: (active: boolean) => void
+  computerUseEnabled?: boolean
+  onComputerUseEnabledChange?: (active: boolean) => void
 }) {
   const { t } = useTranslation()
   const shouldReduceMotion = Boolean(useReducedMotion())
@@ -834,7 +838,12 @@ export function AgentMessageComposer({
               transition={transition}
               className="pointer-events-auto flex h-8 items-center pr-1 pl-2.5"
             >
-              <ComposerAttachMenu onFilesSelected={onFilesSelected} />
+              <ComposerAttachMenu
+                onFilesSelected={onFilesSelected}
+                computerUseEnabled={computerUseEnabled}
+                pluginChangePending={configurationPending}
+                onComputerUseEnabledChange={onComputerUseEnabledChange}
+              />
               {onDashboardEnabledChange ? (
                 <DashboardPluginSwitch active={dashboardEnabled} pending={configurationPending} onChange={onDashboardEnabledChange} />
               ) : null}

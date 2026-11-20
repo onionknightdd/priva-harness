@@ -90,6 +90,8 @@ export function AgentMessagePage() {
       onStop={agentMessage.stop}
       dashboardEnabled={agentMessage.dashboardEnabled}
       onDashboardEnabledChange={agentMessage.setDashboardEnabled}
+      computerUseEnabled={agentMessage.computerUseEnabled}
+      onComputerUseEnabledChange={agentMessage.setComputerUseEnabled}
       onContinue={agentMessage.sendFollowUp}
     />
     </>

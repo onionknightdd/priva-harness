@@ -47,29 +47,72 @@ skill 已移除；若用户 Pi settings 仍配置 adapter，启动会给出移�
 
 ```text
 services/agent-runner/ts/src/resources/plugins/
-└── agent-dashboard/
-    ├── plugin.json                  产品 id / name / description / icon
-    ├── .claude-plugin/plugin.json   Claude 原生 skills 路径声明
-    └── skill/
-        ├── SKILL.md                 Markdown 引用与 Express 写法
-        └── resource/
-            ├── catalog.md          从组件 schema 生成
-            ├── cards.md
-            ├── charts.md
-            ├── tables.md
-            ├── interactions.md
-            └── dashboard.md
+├── agent-dashboard/
+│   ├── plugin.json                  产品 id / name / description / icon
+│   ├── .claude-plugin/plugin.json   Claude 原生 skills 路径声明
+│   └── skills/
+│       └── agent-dashboard/
+│           ├── SKILL.md             Markdown 引用与 Express 写法
+│           └── resource/            catalog.md 从组件 schema 生成，其余为示例
+└── computer-use/
+    ├── plugin.json
+    ├── .claude-plugin/plugin.json
+    ├── skills/
+    │   ├── computer-use/SKILL.md          本机桌面入口、目标与结果验证
+    │   └── registered-computers/SKILL.md  远程设备发现、选择与断线处理
+    └── mcp/
+        ├── servers.json             MCP 声明：命令、环境变量、宿主专用工具
+        ├── cua-repl.mjs             启动 cua_repl 的薄入口
+        └── runtime/<平台>-<架构>/    从 ChatGPT 桌面应用复制的 cua_node（不入库）
 
 源码 resources/plugins -> build 复制 -> dist/resources/plugins
                             |
-enabledPluginIds -> 内置 registry -> Claude SDK plugins / CLI --plugin-dir
-                                 -> Pi additionalSkillPaths
+enabledPluginIds -> 内置 registry -> Claude SDK plugins + mcpServers
+                                 -> Claude CLI --plugin-dir + --mcp-config
+                                 -> Pi additionalSkillPaths + registerMcpServer
 ```
 
-目录约定为 `resources/plugins/<resource-name>/{skill|mcp}`，只创建实际使用的类型。
-Agent dashboard 只有 Skill，不提供 MCP。`plugin.json` 是产品元数据来源；Claude
-manifest 仅声明原生插件名与 `./skill`，不复制展示元数据。registry 在开发和生产使用
-相同相对路径；构建显式复制 Markdown 和 JSON，Docker 同时包含构建脚本与资源。
+目录约定为 `resources/plugins/<resource-name>/{skills|mcp}`，只创建实际使用的类型。
+一个插件可以有多个 Skill，每个放在 `skills/<名称>/SKILL.md`，目录名与 frontmatter 的
+`name` 一致。Agent dashboard 只有 Skill；Computer Use 另外声明 MCP。`plugin.json` 是
+产品元数据来源；Claude manifest 仅声明原生插件名与 `./skills`，不复制展示元数据。
+registry 在开发和生产使用相同相对路径，构建整体复制插件目录。
+
+2026-11-21：插件可以在 `mcp/servers.json` 声明 MCP 服务，三个 provider 入口都从这一份
+声明生成原生配置，provider 代码里不出现具体的服务名。
+
+| 字段 | 含义 |
+|---|---|
+| `command`、`args`、`env` | 启动命令。`${plugin}` 展开为插件目录，`${runtime}` 展开为 `mcp/runtime/<平台>-<架构>` |
+| `runnerModule` | 代替 `command`：Runner 自己的一个 MCP 服务模块（相对源码根、不带扩展名），用 Runner 的 Node 启动 |
+| `inheritEnv` | 从 Runner 进程转发的环境变量名，只转发已设置的 |
+| `hiddenTools` | 只给宿主用的工具，不提供给模型 |
+| `turnEndTool` | 轮次或子代理结束时由宿主调用的工具，自动隐藏 |
+
+插件是否启用只由会话的 `enabledPluginIds` 决定，环境变量不再隐式启用任何插件。使用了
+`${runtime}` 而当前平台的运行包不存在时，会话启动失败并给出应放置的目录。
+
+`cua_repl` 由 `mcp/cua-repl.mjs` 启动，它在运行包自带启动器的基础上做两件事：
+
+```text
+Claude SDK / Claude TUI / Pi
+        │ MCP stdio
+   mcp/cua-repl.mjs ── 去掉完成摘要；替宿主声明支持表单确认；
+        │              对没有字段的确认直接回 accept，其余消息原样转发
+   runtime/<平台>/bin/node_repl ─> Sky 服务 ─> 应用
+```
+
+- **去掉完成摘要**：自带启动器固定开启它，这会让 `js` 工具的输入 schema 顶层出现 `oneOf`，
+  Claude 不向模型提供这样的工具。入口复用同一个包生成的启动环境，只去掉这一项。
+- **应用使用免审批**：macOS 上 worker 在使用每个应用前会向 MCP 客户端发确认请求。产品决定
+  所有入口都不询问用户，入口直接接受。Pi 的 MCP 客户端只应答 `ping` 和 `roots/list`
+  （核对到 1.6.0），本来也无法应答。应答不带持久化选项：桌面服务把「始终允许」存在按 macOS
+  用户共享的文件里，其他宿主（包括 ChatGPT 桌面应用）也会读到。
+
+这意味着 **任何会话在 macOS 上使用应用都不经用户确认**，被接受的是 worker 发出的所有是/否
+确认。桌面服务自身按策略禁止的应用仍然打不开；模型侧的确认策略文档仍由运行时在首次调用时
+返回。Linux 桌面没有按应用确认这一步。Claude 的插件 MCP 服务以 `alwaysLoad` 注册，工具不会
+被延迟加载。
 
 第一版的 Composer 开关只选择 `agent-dashboard`，通过 `enabledPluginIds` 写入会话
 配置与元数据。SDK 重建缓存和原生终端 resume 均包含该选择；空闲后应用，后端 ACK
